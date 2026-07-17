@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=neural+network&topics%5B%5D=a&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="neural network" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox"  class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox"  class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox" checked class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox"  class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox"  class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox"  class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f">Files <span class="badge badge-primary">59222</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=e">Editions <span class="badge badge-primary">150337</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=s">Series <span class="badge badge-primary">11</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=a">Authors <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=p">Publishers <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=neural+network&topics%5B%5D=a&curtab=w">Works <span class="badge badge-primary">0</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=109239468,110193495,111414279,9797908,110027664,10440399,15171080,27162709,28618068,40922782,44651763,72854142,90625984,94439095,111273685,111289128,9798401,9886694,9886913,11397849,13125870,14246289,20135991,25909621,28284800,28617997,29843217,32004009,32619713,38576161,41207281,43509311,45444225,46521653,46576607,48956781,49538362,53664508,54624547,55971576,57351960,57397708,60554823,60554842,60845028,60936939,61169916,61169923,61169925,61299617,61299624,61350756,61350757,61382808,61409978,61542097,62004046,62004055,62004057,63051551,63051552,63051553,63051560,63520226,63520228,63520241,63942568,65903195,70165708,77827992,78683241,79451454,85111935,85378066,87671218,87811217,89897425,90422128,90813232,94447786,95397439,95441180,95677835,96040999,110252233,9797951,9798061,9886644,11398057,14246606,21089470,23527598,28426066,37800316,38680261,43754610,61873341,66174120,73722812,77193460,83950083,85445783,87229007,89239189,89977825,94754340,111714876,71902283,89189585,89479527,94551878,95382304,95441167,110158118,9797744,9797745,9797766,9797778,9797789,9797800,9797809,9797829,9797854,9797856,9797863,9797867,9797873,9797877,9797879,9797894,9797905,9797906,9797917,9797920,9797958,9797966,9797970,9797979,9798024,9798030,9798031,9798035,9798047,9798051,9798056,9798087,9798093,9798096,9798101,9798117,9798119,9798131,9798139,9798144,9798148,9798154,9798156,9798168,9798202,9798219,9798224,9798227,9798235,9798252,9798259,9798274,9798281,9798285,9798286,9798334,9798338,9798340,9798366,9798369,9798382,9798387,9798393,9798407,9798408,9798423,9886567,9886575,9886576,9886577,9886587,9886588,9886595,9886600,9886608,9886611,9886612,9886621,9886627,9886631,9886646,9886650,9886654,9886664,9886669,9886676,9886688,9886709,9886713,9886729,9886739,9886749,9886757,9886758,9886770,9886777,9886785,9886788,9886792,9886798,9886803,9886814,9886818,9886820,9886823,9886825,9886850,9886858,9886859,9886862,9886868,9886873,9886874,9886878,9886880,9886881,9886886,9886888,9886891,9886893,9886895,9886896,9886897,9886907,9886910,9886911,9886915,9886919,9886935,9886936,9886937,9886938,9886944,9886950,9886953,9886954,9886964,9886965,9886966,9886969,9886986,9886989,9886990,9886999,9887002,9887004,9887012,9887019,9887028,9887035,9887066,9887067,9887071,9887084,9887097,9887102,9887109,9887114,9887134,9887142,9887143,9887148,9887152,9887162,9887171,9887179,9887192,9887197,9887208,9887209,9887216,9887229,9887237,9887261,9887264,9887271,9887283,9887284,9887295,9887297,9887327,9887335,9887336,9887340,9887348,9887353,9887357,9887378,9887381,9887391,9887394,10440264,10440284,10440307,10440321,10440347,10440351,10440363,10440365,10440375,10440376,10440398,10440412,10440414,10440416,10440424,10440433,10440438,10440451,10440462,10440469,10440502,10440510,10440526,10440529,10440530,10440560,10440571,10440577,11396960,11396969,11396980,11396984,11396995,11397011,11397018,11397020,11397029,11397041,11397059,11397075,11397090,11397093,11397140,11397154,11397163,11397166,11397174,11397187,11397193,11397197,11397215,11397216,11397228,11397229,11397235,11397236,11397242,11397244,11397249,11397262,11397268,11397279,11397280,11397284,11397288,11397293,11397301,11397319,11397372,11397377,11397380,11397387,11397392,11397414,11397416,11397428,11397437,11397446,11397451,11397453,11397482,11397485,11397499,11397510,11397511,11397522,11397529,11397609,11397610,11397612,11397616,11397619,11397624,11397663,11397671,11397674,11397695,11397703,11397705,11397708,11397710,11397742,11397743,11397744,11397748,11397761,11397764,11397766,11397770,11397781,11397790,11397797,11397828,11397832,11397853,11397860,11397864,11397867,11397877,11397879,11397891,11397892,11397893,11397898,11397907,11397911,11397926,11397927,11397930,11397931,11397947,11397948,11397959,11397962,11397975,11397981,11397994,11397995,11398001,11398008,11398009,11398013,11398018,11398020,11398026,11398035,11398036,11398056,11398078,11398108,11398110,12459572,12467987,12619421,12622981,12622985,12638868,13124542,13125868,13125874,13125875,13125878,13125881,13125882,13125883,13125917,13125924,13125925,13125927,13125966,13126044,13126046,13126072,13126073,13126080,13126127,13126133,13126241,13126242,13126243,13126310,13126418,13126422,13126522,13126523,13126565,13126573,13126625,13126632,13126633,13126683,13126686,13130652,13130653,13130656,13131527,13132445,13132447,13132448,13134851,13134852,13134853,13134855,13134856,13134858,13166741,13166743,13166745,13234124,13234125,13234127,13398182,13398183,13481950,13481953,13481961,13481968,13481969,13485324,13485326,13817593,14246279,14246280,14246282,14246285,14246292,14246303,14246306,14246317,14246323,14246326,14246335,14246347,14246348,14246350,14246355,14246362,14246363,14246364,14246366,14246371,14246372,14246374,14246378,14246390,14246394,14246397,14246401,14246403,14246415,14246416,14246418,14246420,14246438,14246440,14246443,14246444,14246451,14246452,14246466,14246470,14246475,14246476,14246479,14246480,14246483,14246484,14246486,14246489,14246514,14246525,14246527,14246532,14246537,14246538,14246545,14246547,14246548,14246549,14246552,14246553,14246556,14246559,14246561,14246571,14246572,14246580,14246581,14246582,14246588,14246591,14246598,14246601,14246607,14246608,14246610,14246618,14246619,14246622,14246627,14246628,14246630,14246633,14246634,14246643,14246650,14246653,14246663,14246672,14246679,14246680,14246682,14246689,14246691,14246697,14246703,14246707,14246711,14246713,14246715,14246716,14246718,14246721,14246724,14246726,14246727,14246732,14246739,14246762,14246766,14246770,14246779,14246797,14246798,14246800,14246805,14246807,14246809,14246811,14246813,14246814,14246816,14246818,14246819,14246821,14246823,14246827,14246828,14246832,14246833,14246834,14246851,14246858,14246860,14246861,14246869,14246871,14246886,14246891,14246896,14246897,14246899,14246908,14246909,14246910,14246916,14246919,14246921,14246925,14246938,14246940,14246943,14246945,14246953,14246960,14246963,14246964,14246973,14246980,14246982,14246987,14246990,14246992,14246993,14247009,14247017,14247018,14247019,14247026,14247028,14247030,14247039,14247045,14247046,14247047,14659196,14659221,14659222,14659232,14659238,14659241,14659244,14659257,14659278,14659281,14659293,14659297,14659302,14659305,14659310,14659313,14659322,14659349,14659352,14659359,14659362,14659384,14659385,14659392,14659411,14659413,14659416,14659423,14659438,14659453,14979789,14979792,14979797,15171047,15171054,15171056,15171063,15171065,15171082,15171085,15171086,15171101,15171106,15171124,15171128,15171129,15171138,15171144,15171154,15171170,15171171,15171176,15171178,15171192,15171195,15171196,15171198,15171202,15171204,15171206,15171215,15171239,15171247,15171253,15171261,15171264,15171284,15171286,15171308,15171310,15171315,15171319,15171320,15171325,15171333,15171334,15171341,15171353,15171354,15171355,15470468,15470473,15470478,15470500,15470523,15470546,17503389,17503403,17503451,17503515,17503517,17503528,17503538,17503550,17503556,17503558,17503559,17503564,17503566,17503570,17595265,17595300,17595367,17595445,17595670,17595683,17595810,17595979,17596006,17596732,17596888,17615878,17616365,17616386,17628787,17647625,17647981,17680732,17680851,17680962,17681121,17681173,17681553,17681666,17682891,17683044,17692042,17692057,17692263,17693005,17713033,17713590,17730221,17731501,17761211,17765647,17803991,17804001,17804005,17804006,17804008,17857240,18114542,18118025,19254023,19254031,19254041,19254042,19254058,20135889,20135908,20135912,20135937,20135946,20135996,21084875,21084877,21084888,21084895,21084896,21084900,21084918,21084932,21084937,21084939,21089467,21089529,21089719,21089764,21538865,21938594,22039716,22054499,22062667,22063899,22066166,22066340,22066887,22067494,22073115,22075909,22076132,23527616,24833786,24944900,24976949,24978388,24998660,25023129,25023190,25027799,25029583,25092840,25099741,25100262,25109464,25111056,25132789,25136164,25141400,25151179,25151283,25151340,25151413,25158321,25164456,25164473,25165243,25165307,25191647,25251105,25252565,25258936,25273835,25284483,25309857,25324537,25334065,25556896,25556902,25672109,25848147,25850518,25909546,25909548,25909560,25909564,25909566,25909585,25909586,25909592,25909611,25909614,25909619,25909625,25909628,25909642,25909646,25909649,25909652,25909660,25909661,25909662,25909663,25909669,25909685,25909687,25909700,27162696,27162717,27162725,27162728,27162729,27162762,27303332,27304025,27307440,27327944,27342647,27352471,27371047,27382799,27385107,27385842,27386688,27386881,27386932,27386978,27386983,27387020,27388627,27408109,27416057,27421189,27421435,27424303,27427443,27447781,27468096,27469698,27488948,27588792,27611119,27630012,27630707,27645631,27645639,27662316,27676430,27676447,27676453,27676867,27685162,27687208,27703467,27706949,27707005,27707263,27711313,27711883,27722480,27755263,27761434,27789391,27795869,27804717,27824358,27831145,27831880,27858761,27860544,27866620,27883186,27883656,27887791,27910624,27936201,27948389,27953526,27971686,27974374,27974912,27979238,27991847,28006505,28013897,28014443,28020275,28032288,28034231,28056535,28067380,28075169,28106025,28107170,28109570,28117528,28117612,28117627,28126960,28142638,28155952,28162068,28166137,28167684,28168171,28174975,28176630,28176637,28177817,28178313,28214847,28222302,28236230,28244410,28248105,28272720,28282307,28297800,28317233,28317362,28318640,28396971,28426031,28426052,28426054,28426063,28426069,28426081,28426089,28426093,28426098,28509514,28517245,28522304,28522374,28525186,28525209,28583289,28617942,28617944,28617961,28617967,28617971,28617982,28618008,28618015,28618022,28618025,28618047,28618062,28618091,28618099,28618100,28618104,28618109,28618126,28618136,28618138,28618144,28618148,28618155,28618157,28618163,28618185,28618191,28618198,28618201,28618207,28618208,28618211,28618219,28618220,28618222,28618230,28618239,28618240,28618242,28618245,28618264,28618273,28618275,28618278,28618280,28618284,28618289,28618291,28618307,28618316,28618317,28618323,28618326,28618333,28618334,28618335,28618344,28618345,28618355,28618361,28618374,28618376,28618379,28618380,28618381,28618383,28618384,28618385,28618443,28618450,28618461,28618463,28618468,28618474,28618480,28618483,28618486,28618514,28618518,28618576,28618579,28618581,28618589,28618592,28618605,28618610,28618615,28618632,28618655,28697722,28698806,28702943,28703238,28711844,28721039,28759870,28846852,28852082,28852140,29005058,29012090,29013898,29019096,29023102,29031415,29033312,29046981,29093187,29093667,29098243,29099248,29099306,29103789,29106645,29113741,29142811,29149482,29149714,29151602,29166580,29180026,29199251,29204133,29210401,29214321,29228261,29284244,29284281,29286853,29474901,29516513,29517680,29532088,29532326,29534897,29535776,29538044,29540512,29555654,29561237,29562271,29597378,29611048,29623817,29628384,29633063,29658661,29700457,29701011,29703400,29712692,29748831,29748944,29748955,29749026,29800548,29830029,29842988,29845564,29853875,29871775,29878259,29880835,29881347,29884986,29889910,29904642,29929729,29945810,29961542,30165516,31691214,32572647,32589391,32594239,32595261,32609665,32624905,32626827,32653328,32673745,32742720,32754139,32759215,34435033,34435051,34435096,34435104,34435107,34458481,34458493,34509168,34509171,34509176,34554521,34562233,34570278,34583424,34591834,34603280,34608821,34657118,34669189,34681265,34721693,34722827,34729100,34735004,35075765,35082167,35138067,35150774,35154100,35160829,35172209,35225752,35418666,35452492,35474942,35575710,35613782,35630953,35688573,35688874,35695387,35709849,35725523,35731126,35731876,35733622,35741635,35770005,36039865,36247060,36275642,36328152,36344390,36357497,36364470,36404119,36433816,36435332,36486033,36486852,36609247,36697664,36782506,36888437,36945551,37110963,37159404,37190720,37259734,37265392,37295854,37305711,37348613,37356881,37388863,37391005,37409242,37448474,37453534,37529989,37538407,37557238,37557360,37560481,37592106,37624938,37643429,37645066,37655580,37670907,37671971,37680245,37722322,37735501,37737823,37739207,37739240,37743469,37749689,37751585,37753300,37755360,37758153,37758657,37760931,37765063,37772996,37779776,37784265,37784951,37791200,37795422,37808288,37829987,37832136,37834491,37835510,37843028,37851798,37852976,37858158,37866892,37880972,37885843,37888494,37892673,37898990,37911550,37918017,37935601,37937830,37939715,37945459,37947813,37952206,37958996,37959873,37968600,37987560,37989715,37991411,38015040,38015737,38018315,38024107,38033906,38036027,38036076,38038125,38040450,38044103,38053917,38059526,38073165,38076091,38089215,38094187,38109220,38113940,38117575,38123210,38130539,38144925,38160962,38160995,38165969,38180482,38195860,38230669,38231023,38245276,38265896,38283276,38290393,38305337,38318486,38553269,38560193,38566718,38573272,38576455,38579885,38584110,38584698,38588600,38591845,38594960,38605036,38612838,38613105,38613301,38614948,38622687,38627889,38629278,38629759,38629987,38632504,38633034,38646248,38649766,38658573,38659724,38662444,38665033,38678289,38679762,38680592,38695671,38696246,38697182,38698432,38705018,38707743,38707951,38716474,38719050,38741709,38743621,38758463,38760808,38761624,38779804,38795111,38797219,38808313,38810409,38810477,38810913,38823067,38831848,38844170,38846947,38849982,38855857,38866499,38869891,38872991,38891008,38895371,38900374,38903569,38906772,38924604,38939285,38972114,38980909,38994236,39015593,39023701,39041045,39066764,39111478,39113555,39126330,39180250,39180895,39196207,39196338,39196390,39218071,39219572,39246765,39266775,39424433,39495203,39497197,39501200,39881297,39894878,39928240,39946311,39946314,39946349,39958233,39976676,39979528,39986513,39987636,39997087,40012144,40045578,40054733,40058326,40059628,40068047,40072744,40097664,40153048,40185675,40193627,40198123,40244330,40258879,40263484,40308744,40362538,40381544,40434370,40436365,40440292,40465737,40470153,40475037,40492318,40565250,40565428,40591059,40593538,40599343,40705489,40710841,40786887,40788868,40793829,40797820,40831185,40841687,40848487,40863974,40916487,40932848,40933157,40937697,40944820,40962660,40964950,40970038,40993515,41001277,41019274,41048458,41077137,41098701,41119197,41142875,41167496,41227616,41260764,41261213,41270303,41276362,41304411,41364159,41364311,41374238,41376266,41383793,41427828,41475826,41507975,41564217,41612579,41691784,41725725,41736509,41740867,41751843,41763579,41780403,41788405,41792876,41793486,41801104,41806347,41820110,41826883,41852366,41869365,41874328,41895499,41911780,41915060,41934721,41940583,41945286,41959086,41964305,41964945,42000248,42081153,42150158,42227182,42240815,42270453,42294824,42295999,42328186,42377449,42740649,42756951,42986827,42988831,42992979,42998622,43013096,43014732,43016917,43017564,43017959,43020089,43031470,43032492,43032981,43043998,43061214,43066595,43077148,43084202,43087536,43098788,43099152,43101681,43102394,43108347,43110480,43115246,43116692,43119940,43126757,43126766,43127613,43132290,43132741,43135697,43137810,43140570,43140734,43141573,43151048,43151062,43154680,43163159,43167530,43169711,43176878,43183326,43185361,43188888,43192514,43192958,43194064,43203761,43204389,43206481,43213900,43220399,43228276,43240120,43244193,43245248,43246380,43250031,43255462,43264850,43271467,43285491,43285991,43287660,43300812,43302827,43320384,43345847,43357771,43358508,43367979,43376805,43378041,43398587,43398759,43407160,43417510,43418991,43449817,43449825,43489725,43490408,43492198,43495956,43500559,43507058,43507610,43507709,43508144,43530239,43531597,43533353,43537210,43541577,43542910,43546068,43558480,43563060,43570632,43603131,43637728,43656305,43722272,43780830,43786843,43796632,43796863,43805510,43807253,43810170,43813400,43886799,43890713,43890910,43900469,43902705,43927234,43945168,44022260,44023984,44025563,44093590,44112728,44161910,44162164,44200078,44213268,44232576,44242692,44285265,44431701,44581157,44689620,44779803,44902995,45047523,45126630,45201879,45206319,45259355,45392628,45428354,45451779,45452359,45464490,45464510,45464513,45464515,45464526,45464528,45464530,45464532,45478278,45478290,45478294,45599608,45658779,45672377,45700264,45712876,45769232,45774923,45926421,45940639,45944454,46013937,46025313,46185236,46192868,46314434,46349604,46470914,46530010,46560757,46568700,46661142,46865570,46912284,47470156,47470158,47470160,47750298,47750303,47783113,47783114,47783124,47897034,47897037,47897038,47897040,47897041,47897042,47897050,47948074,48222956,48734375,49058887,49123769,49143349,49194114,49222739,49267951,49583909,49593060,49593062,49701049,49770792,49825133,49949331,49981232,49981266,49981295,49981309,50091680,50125743,50133271,50256270,50264741,50352018,50559614,50616407,50799037,50894622,51141639,51275625,51287513,51287530,51287549,51287552,51287559,51287572,51287575,51287621,51287663,51287710,51287727,51287738,51287745,51287801,51287803,51308262,51308269,51314690,51328046,51328052,51346759,51346933,51346942,51346947,51346953,51346978,51368813,51372474,51381931,51395956,51417625,51417629,51417647,51447208,51462146,51462150,51500437,51500440,51512320,51512329,51531166,51532419,51545516,51574809,51582672,51611236,51611237,51616472,51616475,51630497,51630501,51703694,51715804,51818034,51825396,51852400,51852403,51925013,51938597,51954255,52022571,52026375,52030559,52092461,52274706,52274709,52409782,52629130,52702657,52978432,52978433,52984106,53403593,53560752,53703418,53799898,53913492,54043643,54044998,54202014,54287891,54443273,54506053,54507353,54625853,54670588,54704465,54710779,54857445,54860636,54861308,54887077,54888122,55080742,55220463,55247909,55307851,55312476,55497384,55578285,55614291,55752047,55825685,55859126,55859129,55915705,55947300,55999184,56022470,56054981,56124171,56145783,56167003,56213500,56213501,56353383,56816932"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b><a href="series.php?id=43033">Neural Network World   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-03/2025-08-03; ID: 109239468<br>10.0000%2Fproquest%2F1788567347" href="edition.php?id=94545178"><i> vol. 26 iss. 2</i></a> pp.111—128</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-03/2025-08-03; ID: 109239468<br>10.0000%2Fproquest%2F1788567347" href="edition.php?id=94545178">ASSESSMENT OF PARKINSON'S DISEASE PROGRESSION USING NEURAL NETWORK AND ANFIS MODELS <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-03/2025-08-03; ID: 109239468<br>10.0000%2Fproquest%2F1788567347" href="edition.php?id=94545178"><i><font color="green">DOI: 10.14311/nnw.2016.26.006</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 88512769</span></nobr>
+
+</td>
+<td>Hlavica, J. (author);Prauzek, M. (author);Peterek, T. (author);Musilek, P. (author)</td>
+<td>Czech Technical University in Prague - Central Library</td>
+<td><nobr>2016</nobr></td>
+<td>English</td>
+<td>19</td>
+<td><nobr><a href="/file.php?id=109239468">689 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=1c2b1f1eb1dd569013231dfe79008d4f&downloadname=10.14311/nnw.2016.26.006"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.14311/nnw.2016.26.006"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/1c2b1f1eb1dd569013231dfe79008d4f"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/1c2b1f1eb1dd569013231dfe79008d4f"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/1c2b1f1eb1dd569013231dfe79008d4f?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=43033">Neural Network World   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-04/2025-08-04; ID: 110193495<br>10.0000%2Fproquest%2F1564435990" href="edition.php?id=94545230"><i> vol. 24 iss. 4</i></a> pp.421—432</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-04/2025-08-04; ID: 110193495<br>10.0000%2Fproquest%2F1564435990" href="edition.php?id=94545230">TIME SERIES PREDICTION USING CONVOLUTION SUM DISCRETE PROCESS NEURAL NETWORK <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-04/2025-08-04; ID: 110193495<br>10.0000%2Fproquest%2F1564435990" href="edition.php?id=94545230"><i><font color="green">DOI: 10.14311/nnw.2014.24.025</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 89465773</span></nobr>
+
+</td>
+<td>Gang, Ding (author);Da, Lei (author);Shisheng, Zhong (author)</td>
+<td>Czech Technical University in Prague - Central Library</td>
+<td><nobr>2014</nobr></td>
+<td>English</td>
+<td>13</td>
+<td><nobr><a href="/file.php?id=110193495">310 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9a77e1cb3df8303cdc3e4d15cb8f607d&downloadname=10.14311/nnw.2014.24.025"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.14311/nnw.2014.24.025"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/9a77e1cb3df8303cdc3e4d15cb8f607d"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/9a77e1cb3df8303cdc3e4d15cb8f607d"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9a77e1cb3df8303cdc3e4d15cb8f607d?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=43033">Neural Network World   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111414279<br>nnw.2022.32.018" href="edition.php?id=156048226"><i> vol. 32 iss. 6</i></a> pp.301—318</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111414279<br>nnw.2022.32.018" href="edition.php?id=156048226">Tooth segmentation in 3D cone-beam CT images using deep convolutional neural network <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111414279<br>nnw.2022.32.018" href="edition.php?id=156048226"><i><font color="green">DOI: 10.14311/nnw.2022.32.018</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 90486989</span></nobr>
+
+</td>
+<td>Khan, Shahid (author);Mukati, Altaf (author);Rizvi, Syed Sajjad Hussain (author);Yazdanie, Nazia (author)</td>
+<td>Czech Technical University in Prague - Central Library</td>
+<td><nobr>2022</nobr></td>
+<td>English</td>
+<td>18</td>
+<td><nobr><a href="/file.php?id=111414279">1 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=047ad4fee38ed8cc890aca7a2f7c2738&downloadname=10.14311/nnw.2022.32.018"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.14311/nnw.2022.32.018"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/047ad4fee38ed8cc890aca7a2f7c2738"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/047ad4fee38ed8cc890aca7a2f7c2738"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/047ad4fee38ed8cc890aca7a2f7c2738?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9797908<br>" href="edition.php?id=9549539"><i> 2006-jan vol. 19 iss. 1</i></a> pp.1—7</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9797908<br>" href="edition.php?id=9549539">NEURAL NETWORKS: The Official Journal of the International Neural Network Society, European Neural Network Society, and Japanese Network Society <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9797908<br>" href="edition.php?id=9549539"><i><font color="green">DOI: 10.1016/j.neunet.2005.10.002</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 3129545</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr>2006 January</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=9797908">64 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=66e07c666f95d0be4504c905e8391227&downloadname=10.1016/j.neunet.2005.10.002"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/j.neunet.2005.10.002"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/66e07c666f95d0be4504c905e8391227"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/66e07c666f95d0be4504c905e8391227"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/66e07c666f95d0be4504c905e8391227?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=1">[Undefined series for scimag]   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-04/2025-08-04; ID: 110027664<br>10.0000%2Fieeexplore.ieee.org%2F4600907" href="edition.php?id=153062023"><i></i></a> pp.243—248</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-08-04/2025-08-04; ID: 110027664<br>10.0000%2Fieeexplore.ieee.org%2F4600907" href="edition.php?id=153062023">EXPERIMENTAL KOHONEN NEURAL NETWORK MIXDES 2008 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal">j</a></span> 
+<span class="badge badge-secondary"">a 89299963</span></nobr>
+
+</td>
+<td>Kohonen, Experimental (author);Network, Neural (author);Network, Kohonen Neural (author)</td>
+<td></td>
+<td><nobr>2008</nobr></td>
+<td></td>
+<td>6</td>
+<td><nobr><a href="/file.php?id=110027664">527 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=5b599ef5583a1f9cae3971c01d5470d9&downloadname=10.0000/5b599ef5583a1f9cae3971c01d5470d9"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.0000/5b599ef5583a1f9cae3971c01d5470d9"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/5b599ef5583a1f9cae3971c01d5470d9"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/5b599ef5583a1f9cae3971c01d5470d9"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/5b599ef5583a1f9cae3971c01d5470d9?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 10440399<br>" href="edition.php?id=10192038"><i> 2007-may vol. 20 iss. 4</i></a> pp.454—461</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 10440399<br>" href="edition.php?id=10192038">Reducing uncertainties in neural network Jacobians and improving accuracy of neural network emulations with NN ensemble approaches <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 10440399<br>" href="edition.php?id=10192038"><i><font color="green">DOI: 10.1016/j.neunet.2007.04.008</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 3772044</span></nobr>
+
+</td>
+<td>Vladimir M. Krasnopolsky</td>
+<td></td>
+<td><nobr>2007 May</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=10440399">686 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8dd52c0d095690135c82c62fb17e9f7e&downloadname=10.1016/j.neunet.2007.04.008"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/j.neunet.2007.04.008"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/8dd52c0d095690135c82c62fb17e9f7e"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/8dd52c0d095690135c82c62fb17e9f7e"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/8dd52c0d095690135c82c62fb17e9f7e?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 15171080<br>" href="edition.php?id=14932712"><i> 1988-jan vol. 1 iss. supp-S1</i></a> pp.123—0</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 15171080<br>" href="edition.php?id=14932712">Gensep: A multiple neural network learning system with modifiable network topology: Douglas L. Reilly, Christopher Scofield, Leon N Cooper, C. Elbaum. Nestor Inc., One Richmond Square Providence, Rhode Island 02906 and Center for Neural Science, Brown University, Providence, Rhode Island 02912 USA <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 15171080<br>" href="edition.php?id=14932712"><i><font color="green">DOI: 10.1016/0893-6080(88)90162-1</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 8513113</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr>1988 January</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=15171080">62 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=cd4dd0071ae0a9e3d87c5cdfb9f7e436&downloadname=10.1016/0893-6080(88)90162-1"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/0893-6080(88)90162-1"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/cd4dd0071ae0a9e3d87c5cdfb9f7e436"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/cd4dd0071ae0a9e3d87c5cdfb9f7e436"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/cd4dd0071ae0a9e3d87c5cdfb9f7e436?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=9240">IEEE Transactions on Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 27162709<br>" href="edition.php?id=27006947"><i> 2011-oct vol. 22 iss. 10</i></a> pp.1676—1684</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 27162709<br>" href="edition.php?id=27006947">Zhang Neural Network Versus Gradient Neural Network for Solving Time-Varying Linear Inequalities <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 27162709<br>" href="edition.php?id=27006947"><i><font color="green">DOI: 10.1109/tnn.2011.2163318</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 20587679</span></nobr>
+
+</td>
+<td>Lin Xiao; Yunong Zhang</td>
+<td></td>
+<td><nobr>2011 October</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=27162709">601 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=a20f9b047a8b21deea17711eb5aab477&downloadname=10.1109/tnn.2011.2163318"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1109/tnn.2011.2163318"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/a20f9b047a8b21deea17711eb5aab477"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/a20f9b047a8b21deea17711eb5aab477"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/a20f9b047a8b21deea17711eb5aab477?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28618068<br>" href="edition.php?id=28465438"><i> 2013-feb 08 vol. 23 iss. S1</i></a> pp.231—246</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28618068<br>" href="edition.php?id=28465438">Comparison of multi-objective evolutionary neural network, adaptive neuro-fuzzy inference system and bootstrap-based neural network for flood forecasting <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28618068<br>" href="edition.php?id=28465438"><i><font color="green">DOI: 10.1007/s00521-013-1344-8</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 22071893</span></nobr>
+
+</td>
+<td>Amal Kant, Pranmohan K. Suman, Brijesh K. Giri…</td>
+<td></td>
+<td><nobr>2013 February 08</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=28618068">1 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=471f22de3d4b485c82fa223d8f3956ad&downloadname=10.1007/s00521-013-1344-8"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-013-1344-8"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/471f22de3d4b485c82fa223d8f3956ad"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/471f22de3d4b485c82fa223d8f3956ad"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/471f22de3d4b485c82fa223d8f3956ad?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=9240">IEEE Transactions on Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-01-26/2021-07-20; ID: 40922782<br>" href="edition.php?id=40896944"><i> 2007-nov vol. 18 iss. 6</i></a> pp.1645—1657</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-01-26/2021-07-20; ID: 40922782<br>" href="edition.php?id=40896944">The Hierarchical Fast Learning Artificial Neural Network (HieFLANN)—An Autonomous Platform for Hierarchical Neural Network Construction <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-01-26/2021-07-20; ID: 40922782<br>" href="edition.php?id=40896944"><i><font color="green">DOI: 10.1109/tnn.2007.900231</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 34507646</span></nobr>
+
+</td>
+<td>Tay, A.L.P.; Zurada, J.M.; Lai-Ping Wong, ; Jian Xu,  </td>
+<td></td>
+<td><nobr>2007 November</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=40922782">1 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=c4de48a0cb8c7c7cbc55965a31e181e3&downloadname=10.1109/tnn.2007.900231"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1109/tnn.2007.900231"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/c4de48a0cb8c7c7cbc55965a31e181e3"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/c4de48a0cb8c7c7cbc55965a31e181e3"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/c4de48a0cb8c7c7cbc55965a31e181e3?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18018">Network Computation in Neural Systems   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-03-27/2021-07-21; ID: 44651763<br>" href="edition.php?id=44674895"><i> 1998-jan vol. 9 iss. 4</i></a> pp.513—530</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-03-27/2021-07-21; ID: 44651763<br>" href="edition.php?id=44674895">Hypothetical neural mechanism that may play a role in mental rotation: an attractor neural network model <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-03-27/2021-07-21; ID: 44651763<br>" href="edition.php?id=44674895"><i><font color="green">DOI: 10.1088/0954-898x_9_4_007</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 38285957</span></nobr>
+
+</td>
+<td>Beňušková, Ľubica ;Eštok, Slavomír</td>
+<td></td>
+<td><nobr>1998 January</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=44651763">437 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=460dfbe0ec93b587b90e9a4b40eaecdb&downloadname=10.1088/0954-898x_9_4_007"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1088/0954-898x_9_4_007"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/460dfbe0ec93b587b90e9a4b40eaecdb"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/460dfbe0ec93b587b90e9a4b40eaecdb"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/460dfbe0ec93b587b90e9a4b40eaecdb?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-11-06/2021-07-21; ID: 72854142<br>" href="edition.php?id=73192870"><i> 2017-nov 01 vol. 31 iss. 7</i></a> pp.2979—2993</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-11-06/2021-07-21; ID: 72854142<br>" href="edition.php?id=73192870">Artificial neural network based screening of cervical cancer using a hierarchical modular neural network architecture (HMNNA) and novel benchmark uterine cervix cancer database <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-11-06/2021-07-21; ID: 72854142<br>" href="edition.php?id=73192870"><i><font color="green">DOI: 10.1007/s00521-017-3246-7</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 66935340</span></nobr>
+
+</td>
+<td>Ali, Mehbob; Sarwar, Abid; Sharma, Vinod; Suri, Jyotsna </td>
+<td></td>
+<td><nobr>2017 November 01</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=72854142">2 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8f85fa5618afd608d60121ee687b75df&downloadname=10.1007/s00521-017-3246-7"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-017-3246-7"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/8f85fa5618afd608d60121ee687b75df"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/8f85fa5618afd608d60121ee687b75df"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/8f85fa5618afd608d60121ee687b75df?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18808">Optical Memory and Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2020-12-05/2021-07-21; ID: 90625984<br>" href="edition.php?id=91217341"><i> 2020-jul vol. 29 iss. 3</i></a> pp.179—186</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2020-12-05/2021-07-21; ID: 90625984<br>" href="edition.php?id=91217341">Exponential Discretization of Weights of Neural Network Connections in Pre-Trained Neural Network. Part II: Correlation Maximization <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2020-12-05/2021-07-21; ID: 90625984<br>" href="edition.php?id=91217341"><i><font color="green">DOI: 10.3103/S1060992X20030042</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 84977478</span></nobr>
+
+</td>
+<td>Pushkareva, M. M.; Karandashev, I. M. </td>
+<td></td>
+<td><nobr>2020 July</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=90625984">692 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ca68cd4362c7a01c685bd21903c91496&downloadname=10.3103/S1060992X20030042"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.3103/S1060992X20030042"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/ca68cd4362c7a01c685bd21903c91496"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/ca68cd4362c7a01c685bd21903c91496"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/ca68cd4362c7a01c685bd21903c91496?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-10-06/2021-10-06; ID: 94439095<br>" href="edition.php?id=139114944"><i> 2021-aug vol. 33 iss. 15</i></a> pp.9221—9240</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-10-06/2021-10-06; ID: 94439095<br>" href="edition.php?id=139114944">Full-state neural network observer-based hybrid quantum diagonal recurrent neural network adaptive tracking control <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-10-06/2021-10-06; ID: 94439095<br>" href="edition.php?id=139114944"><i><font color="green">DOI: 10.1007/s00521-020-05685-x</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 85605051</span></nobr>
+
+</td>
+<td>Elkenawy, Ahmed (author);El-Nagar, Ahmad M. (author);El-Bardini, Mohammad (author);El-Rabaie, Nabila M. (author)</td>
+<td>Springer Science and Business Media LLC</td>
+<td><nobr>2021 August</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=94439095">2 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=100af79c68e625acb6cfcafebb7943aa&downloadname=10.1007/s00521-020-05685-x"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-020-05685-x"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/100af79c68e625acb6cfcafebb7943aa"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/100af79c68e625acb6cfcafebb7943aa"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/100af79c68e625acb6cfcafebb7943aa?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111273685<br>s00521-024-09822-8" href="edition.php?id=155904046"><i> 2024-aug vol. 36 iss. 24</i></a> pp.15063—15074</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111273685<br>s00521-024-09822-8" href="edition.php?id=155904046">An improved multi-scale convolutional neural network with gated recurrent neural network model for protein secondary structure prediction <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111273685<br>s00521-024-09822-8" href="edition.php?id=155904046"><i><font color="green">DOI: 10.1007/s00521-024-09822-8</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 90347126</span></nobr>
+
+</td>
+<td>Bongirwar, Vrushali   (author);Mokhade, A. S.   (author)</td>
+<td>Springer Science and Business Media LLC</td>
+<td><nobr>2024 August</nobr></td>
+<td>English</td>
+<td>12</td>
+<td><nobr><a href="/file.php?id=111273685">1 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=e862f085163f520e76c10c07a5ed8a91&downloadname=10.1007/s00521-024-09822-8"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-024-09822-8"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/e862f085163f520e76c10c07a5ed8a91"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/e862f085163f520e76c10c07a5ed8a91"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e862f085163f520e76c10c07a5ed8a91?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18037">Neural Processing Letters   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111289128<br>s11063-023-11170-y" href="edition.php?id=156050788"><i> 2023-dec vol. 55 iss. 7</i></a> pp.8589—8604</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111289128<br>s11063-023-11170-y" href="edition.php?id=156050788">Mutual Information-Based Neural Network Distillation for Improving Photonic Neural Network Training <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-11-09/2025-11-09; ID: 111289128<br>s11063-023-11170-y" href="edition.php?id=156050788"><i><font color="green">DOI: 10.1007/s11063-023-11170-y</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 90362566</span></nobr>
+
+</td>
+<td>Chariton, Alexandros (author);Passalis, Nikolaos (author);Pleros, Nikos (author);Tefas, Anastasios (author)</td>
+<td>Springer Science and Business Media LLC</td>
+<td><nobr>2023 December</nobr></td>
+<td>English</td>
+<td>16</td>
+<td><nobr><a href="/file.php?id=111289128">456 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=a5f522065a77e657c75934c90b073464&downloadname=10.1007/s11063-023-11170-y"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s11063-023-11170-y"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/a5f522065a77e657c75934c90b073464"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/a5f522065a77e657c75934c90b073464"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/a5f522065a77e657c75934c90b073464?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 9798401<br>" href="edition.php?id=9550032"><i> 2011-jun vol. 24 iss. 5</i></a> pp.484—492</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 9798401<br>" href="edition.php?id=9550032">Neural network tomography: Network replication from output surface geometry <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 9798401<br>" href="edition.php?id=9550032"><i><font color="green">DOI: 10.1016/j.neunet.2011.01.006</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 3130038</span></nobr>
+
+</td>
+<td>Rupert C.J. Minnett; Andrew T. Smith; William C. Lennon Jr.; Robert Hecht-Nielsen</td>
+<td></td>
+<td><nobr>2011 June</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=9798401">768 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=1a5561562a088334e5ff18716c58d4f1&downloadname=10.1016/j.neunet.2011.01.006"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/j.neunet.2011.01.006"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/1a5561562a088334e5ff18716c58d4f1"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/1a5561562a088334e5ff18716c58d4f1"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/1a5561562a088334e5ff18716c58d4f1?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886694<br>" href="edition.php?id=9638326"><i> 1988-jan vol. 1 iss. supp-S1</i></a> pp.144—0</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886694<br>" href="edition.php?id=9638326">A neural network for the optimization of communications network design <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886694<br>" href="edition.php?id=9638326"><i><font color="green">DOI: 10.1016/0893-6080(88)90183-9</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 3218332</span></nobr>
+
+</td>
+<td>G. Vichniac; M.(Gard.ner) Lepp; M. Steenstrup</td>
+<td></td>
+<td><nobr>1988 January</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=9886694">95 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=603d694320e61335b2429be85eb22820&downloadname=10.1016/0893-6080(88)90183-9"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/0893-6080(88)90183-9"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/603d694320e61335b2429be85eb22820"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/603d694320e61335b2429be85eb22820"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/603d694320e61335b2429be85eb22820?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886913<br>" href="edition.php?id=9638545"><i> 1988-jan vol. 1 iss. supp-S1</i></a> pp.471—0</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886913<br>" href="edition.php?id=9638545">An application of a multiple neural network system with modifiable network topology (GENSEP) to online character recognition : David J. Ward, Christopher Scofield, Douglas L. Reilly. Nestor Inc., One Richmond Square Providence, Rhode Island 02906 USA <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 9886913<br>" href="edition.php?id=9638545"><i><font color="green">DOI: 10.1016/0893-6080(88)90495-9</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 3218551</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr>1988 January</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=9886913">65 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=334323f88bea72cd916e8fbff4cb467c&downloadname=10.1016/0893-6080(88)90495-9"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/0893-6080(88)90495-9"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/334323f88bea72cd916e8fbff4cb467c"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/334323f88bea72cd916e8fbff4cb467c"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/334323f88bea72cd916e8fbff4cb467c?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 11397849<br>" href="edition.php?id=11149517"><i> 1998-mar vol. 11 iss. 2</i></a> pp.348—357</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 11397849<br>" href="edition.php?id=11149517">The Neural Network Approach To A Parallel Decentralized Network Routing <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-08-09/2021-07-20; ID: 11397849<br>" href="edition.php?id=11149517"><i><font color="green">DOI: 10.1016/s0893-6080(97)00121-4</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 4729523</span></nobr>
+
+</td>
+<td>Hiroaki Kurokawa; Chun Ying Ho; Shinsaku Mori</td>
+<td></td>
+<td><nobr>1998 March</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=11397849">314 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9ae77995d9af6518f56c562fe34a0e36&downloadname=10.1016/s0893-6080(97)00121-4"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/s0893-6080(97)00121-4"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/9ae77995d9af6518f56c562fe34a0e36"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/9ae77995d9af6518f56c562fe34a0e36"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9ae77995d9af6518f56c562fe34a0e36?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 13125870<br>" href="edition.php?id=12886473"><i> 1998-mar vol. 7 iss. 1</i></a> pp.26—36</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 13125870<br>" href="edition.php?id=12886473">A neural network model of a communication network with information servers <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 13125870<br>" href="edition.php?id=12886473"><i><font color="green">DOI: 10.1007/bf01413707</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 6466872</span></nobr>
+
+</td>
+<td>P. De Wilde</td>
+<td></td>
+<td><nobr>1998 March</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=13125870">883 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9b495df9b3945e25481a27ae7873d9dc&downloadname=10.1007/bf01413707"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/bf01413707"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/9b495df9b3945e25481a27ae7873d9dc"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/9b495df9b3945e25481a27ae7873d9dc"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9b495df9b3945e25481a27ae7873d9dc?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-09-10/2021-07-20; ID: 14246289<br>" href="edition.php?id=14007459"><i> 2003-jun 01 vol. 11 iss. 3-4</i></a> pp.238—243</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-09-10/2021-07-20; ID: 14246289<br>" href="edition.php?id=14007459">On Postprocessing of Neural Network Prediction of Polyproline Type II Secondary Structures: Network Spectrum, Response Analysis, and Scattering <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2017-09-10/2021-07-20; ID: 14246289<br>" href="edition.php?id=14007459"><i><font color="green">DOI: 10.1007/s00521-003-0360-5</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 7587858</span></nobr>
+
+</td>
+<td>M. Siermala; M. Juhola; M. Vihinen</td>
+<td></td>
+<td><nobr>2003 June 01</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=14246289">104 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=dbda6467dcad5454c26e3e762a2c0214&downloadname=10.1007/s00521-003-0360-5"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-003-0360-5"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/dbda6467dcad5454c26e3e762a2c0214"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/dbda6467dcad5454c26e3e762a2c0214"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/dbda6467dcad5454c26e3e762a2c0214?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18035">Neural Networks   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 20135991<br>" href="edition.php?id=19975054"><i> 2012-sep vol. 33 iss. none</i></a> pp.42—57</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 20135991<br>" href="edition.php?id=19975054">Advancing interconnect density for spiking neural network hardware implementations using traffic-aware adaptive network-on-chip routers <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-09-24/2021-07-20; ID: 20135991<br>" href="edition.php?id=19975054"><i><font color="green">DOI: 10.1016/j.neunet.2012.04.004</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 13555486</span></nobr>
+
+</td>
+<td>Snaider Carrillo; Jim Harkin; Liam McDaid; Sandeep Pande; Seamus Cawley; Brian McGinley; Fearghal Morgan</td>
+<td></td>
+<td><nobr>2012 September</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=20135991">2 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=22c48e64afe4ebf019cfbf1d78310ada&downloadname=10.1016/j.neunet.2012.04.004"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1016/j.neunet.2012.04.004"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/22c48e64afe4ebf019cfbf1d78310ada"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/22c48e64afe4ebf019cfbf1d78310ada"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/22c48e64afe4ebf019cfbf1d78310ada?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 25909621<br>" href="edition.php?id=25753008"><i> 2011-jun 14 vol. 21 iss. 8</i></a> pp.1931—1936</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 25909621<br>" href="edition.php?id=25753008">Path management method using partially connected neural network in large-scale heterogeneous sensor network <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 25909621<br>" href="edition.php?id=25753008"><i><font color="green">DOI: 10.1007/s00521-011-0664-9</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 19333670</span></nobr>
+
+</td>
+<td>Yujin Lim, Sanggil Kang</td>
+<td></td>
+<td><nobr>2011 June 14</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=25909621">468 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=29fbb0064a60ff536f4f5b1e2e5d1136&downloadname=10.1007/s00521-011-0664-9"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-011-0664-9"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/29fbb0064a60ff536f4f5b1e2e5d1136"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/29fbb0064a60ff536f4f5b1e2e5d1136"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/29fbb0064a60ff536f4f5b1e2e5d1136?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=18033">Neural Computing and Applications   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28284800<br>" href="edition.php?id=28131016"><i> 2013-jan 20 vol. 24 iss. 5</i></a> pp.1147—1152</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28284800<br>" href="edition.php?id=28131016">Bifurcation analysis of a cellular nonlinear network model via neural network approach <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-10-12/2021-07-20; ID: 28284800<br>" href="edition.php?id=28131016"><i><font color="green">DOI: 10.1007/s00521-013-1338-6</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Journal article">a</a></span> 
+<span class="badge badge-secondary"">a 21737220</span></nobr>
+
+</td>
+<td>Javidmanesh, Elham; Afsharnezhad, Zahra; Effati, Sohrab </td>
+<td></td>
+<td><nobr>2013 January 20</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=28284800">772 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=b18359986e1fcb6a206d07e3978ac99f&downloadname=10.1007/s00521-013-1338-6"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="sci-hub" href="http://sci-hub.ru/10.1007/s00521-013-1338-6"><span class="badge badge-primary">Sci-Hub</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/b18359986e1fcb6a206d07e3978ac99f"><span class="badge badge-primary">Randombook</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/b18359986e1fcb6a206d07e3978ac99f"><span class="badge badge-primary">libgen.pw</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/b18359986e1fcb6a206d07e3978ac99f?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=neural+network&topics%5B%5D=a&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 5769</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>
