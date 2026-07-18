@@ -84,6 +84,15 @@ type DownloadResult struct {
 // Download descarga el fichero md5 a dir. Si filename está vacío usa el nombre
 // que anuncia el CDN (content-disposition), saneado.
 func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*DownloadResult, error) {
+	// Acquire a concurrency slot before doing any work, releasing it on return.
+	// While waiting, honor context cancellation so a queued download can be
+	// aborted before it ever touches the network.
+	select {
+	case c.dlSem <- struct{}{}:
+		defer func() { <-c.dlSem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	fileURL, base, err := c.ResolveGetURL(ctx, md5)
 	if err != nil {
 		return nil, err

@@ -22,10 +22,11 @@ func (s staticMirrors) Mirrors(context.Context) []string { return s }
 // tests que ejercitan el retry sobrescriben c.retry.
 func newTestClient(m MirrorLister) *Client {
 	cfg := &config.Config{
-		Timeout:       5 * time.Second,
-		RateRPS:       1000,
-		RateBurst:     100,
-		RetryAttempts: 1,
+		Timeout:                5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
 	}
 	c := New(m, cfg)
 	c.backoffBase = time.Millisecond

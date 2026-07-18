@@ -51,6 +51,10 @@ type Client struct {
 	backoffBase time.Duration // base del backoff; inyectable para tests
 	// maxDownloadBytes es el tope de tamaño de descarga en bytes (0 = sin límite).
 	maxDownloadBytes int64
+	// dlSem is a counting semaphore bounding concurrent downloads: its capacity
+	// is MaxConcurrentDownloads. Download acquires a slot before starting and
+	// releases it on completion.
+	dlSem chan struct{}
 
 	mu       sync.Mutex           // protege cooldown
 	cooldown map[string]time.Time // mirror base → instante en que expira el cooldown
@@ -59,6 +63,10 @@ type Client struct {
 // New construye un Client a partir de la configuración: rate limiter
 // (RateRPS/RateBurst), número de reintentos (RetryAttempts) y timeout HTTP.
 func New(m MirrorLister, cfg *config.Config) *Client {
+	// Size the download semaphore from config; guard against an unvalidated
+	// non-positive value so the channel never becomes an unbuffered (deadlocking)
+	// zero-capacity semaphore.
+	maxConcurrent := max(cfg.MaxConcurrentDownloads, 1)
 	return &Client{
 		mirrors:          m,
 		http:             &http.Client{Timeout: cfg.Timeout},
@@ -67,6 +75,7 @@ func New(m MirrorLister, cfg *config.Config) *Client {
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,
+		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
 	}
 }

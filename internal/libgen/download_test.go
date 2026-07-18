@@ -2,13 +2,18 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 func TestExtractGetLinkFixture(t *testing.T) {
@@ -70,6 +75,160 @@ func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
 	})
 	srv = httptest.NewServer(mux)
 	return srv
+}
+
+const testMD5 = "87a4ebdaf21fa6cc70009a3dd63194ee"
+
+// newTestClientConcurrency builds a test client whose download concurrency
+// semaphore is sized to n slots, keeping the same fast, network-free defaults
+// as newTestClient.
+func newTestClientConcurrency(m MirrorLister, n int) *Client {
+	cfg := &config.Config{
+		Timeout:                5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: n,
+	}
+	c := New(m, cfg)
+	c.backoffBase = time.Millisecond
+	return c
+}
+
+// blockingCDN is an httptest mirror whose CDN handler blocks each in-flight
+// download until the test releases it, letting tests observe how many downloads
+// run concurrently.
+type blockingCDN struct {
+	srv         *httptest.Server
+	entered     chan struct{} // one signal per CDN handler entry
+	release     chan struct{} // send one value to unblock one CDN handler
+	ads         atomic.Int32  // number of /ads.php hits (download attempts started)
+	started     atomic.Int32  // number of CDN handler entries
+	inFlight    atomic.Int32  // CDN handlers currently blocked
+	maxInFlight atomic.Int32  // high-water mark of concurrent CDN handlers
+}
+
+func newBlockingCDN(t *testing.T, payload []byte) *blockingCDN {
+	t.Helper()
+	b := &blockingCDN{
+		entered: make(chan struct{}, 8),
+		release: make(chan struct{}),
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		b.ads.Add(1)
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, testMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("key") != "TESTKEY123" {
+			http.Error(w, "bad key", http.StatusForbidden)
+			return
+		}
+		http.Redirect(w, r, b.srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, _ *http.Request) {
+		cur := b.inFlight.Add(1)
+		for {
+			m := b.maxInFlight.Load()
+			if cur <= m || b.maxInFlight.CompareAndSwap(m, cur) {
+				break
+			}
+		}
+		b.started.Add(1)
+		b.entered <- struct{}{}
+		<-b.release
+		b.inFlight.Add(-1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="file.pdf"`)
+		w.Write(payload)
+	})
+	b.srv = httptest.NewServer(mux)
+	return b
+}
+
+// TestConcurrencyLimit verifies that with MaxConcurrentDownloads=1 a second
+// download does not reach the mirror until the first releases its slot.
+func TestConcurrencyLimit(t *testing.T) {
+	b := newBlockingCDN(t, []byte("%PDF-1.4 payload"))
+	defer b.srv.Close()
+	c := newTestClientConcurrency(staticMirrors{b.srv.URL}, 1)
+	dir := t.TempDir()
+
+	errs := make(chan error, 2)
+	go func() {
+		_, err := c.Download(context.Background(), testMD5, dir, "one.pdf")
+		errs <- err
+	}()
+	// The first download reaches the CDN and holds the only slot.
+	<-b.entered
+
+	go func() {
+		_, err := c.Download(context.Background(), testMD5, dir, "two.pdf")
+		errs <- err
+	}()
+	// While the first download holds the slot, the second must not reach the CDN.
+	select {
+	case <-b.entered:
+		t.Fatal("second download started while the first held the only slot")
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	// Release the first download; the second may now acquire the slot and run.
+	b.release <- struct{}{}
+	<-b.entered
+	b.release <- struct{}{}
+
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatalf("download error: %v", err)
+		}
+	}
+	if got := b.maxInFlight.Load(); got != 1 {
+		t.Errorf("max concurrent CDN downloads = %d, want 1", got)
+	}
+}
+
+// TestConcurrencyContextCancel verifies that a download whose context is
+// canceled while it waits for a slot returns the context error and never
+// reaches the mirror.
+func TestConcurrencyContextCancel(t *testing.T) {
+	b := newBlockingCDN(t, []byte("%PDF-1.4 payload"))
+	defer b.srv.Close()
+	c := newTestClientConcurrency(staticMirrors{b.srv.URL}, 1)
+	dir := t.TempDir()
+
+	// Fill the single slot with a download that blocks in the CDN handler.
+	held := make(chan error, 1)
+	go func() {
+		_, err := c.Download(context.Background(), testMD5, dir, "hold.pdf")
+		held <- err
+	}()
+	<-b.entered
+
+	// A second download waits for the slot; canceling its context must abort it.
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.Download(ctx, testMD5, dir, "wait.pdf")
+		errc <- err
+	}()
+	// Give the second download time to block on the semaphore before canceling.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	if err := <-errc; !errors.Is(err, context.Canceled) {
+		t.Fatalf("waiting download error = %v, want context.Canceled", err)
+	}
+	if got := b.started.Load(); got != 1 {
+		t.Errorf("CDN saw %d downloads, want 1 (the canceled one never started)", got)
+	}
+	if got := b.ads.Load(); got != 1 {
+		t.Errorf("ads.php saw %d hits, want 1 (the canceled one never resolved)", got)
+	}
+
+	// Cleanup: release the held download.
+	b.release <- struct{}{}
+	<-held
 }
 
 func TestDownload(t *testing.T) {
