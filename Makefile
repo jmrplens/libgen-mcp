@@ -6,6 +6,7 @@
 .PHONY: all build build-probe build-all run version \
         test test-short test-race coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
+        format-md-tables check-md-tables \
         install-tools release-check check-server-json sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
@@ -130,6 +131,13 @@ vet: ## Run go vet
 
 tidy: ## Tidy go.mod / go.sum
 	go mod tidy
+
+# ─── Documentation ──────────────────────────────────────────────────────────
+format-md-tables: ## Normalize Markdown pipe tables in README.md and docs/
+	go run ./cmd/format_md_tables/
+
+check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
+	go run ./cmd/format_md_tables/ --check
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
 install-tools: ## Install golangci-lint and govulncheck

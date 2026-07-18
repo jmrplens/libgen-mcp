@@ -14,15 +14,15 @@ Ejecución con subagent-driven-development, subagentes **Opus**, lotes paralelos
 `[T1∥T2] → [T3∥T5] → [T4∥T6] → T7 → T8 → T9 → [T10∥T11] → T12`.
 Ledger autoritativo: `.superpowers/sdd/progress.md` (briefs/reports/diffs en el mismo dir).
 
-| Tarea | Estado |
-|---|---|
-| T1 bootstrap | ✅ commit d55fc0c, revisión aprobada |
-| T2 fixtures | ✅ commit bf69878, revisión aprobada |
-| T3 config | ✅ commit a5ff8a2, revisión aprobada |
-| T5 cliente HTTP | ✅ commit e60d142, revisión aprobada |
-| T4 mirrors | 🔶 commit 9f4e71e (5/5 tests) — **falta revisión de tarea** |
-| T6 búsqueda | 🔶 commit 235709a (10/10 tests) — **falta revisión de tarea** |
-| T7–T12 | ⬜ pendientes |
+| Tarea           | Estado                                                       |
+| --------------- | ------------------------------------------------------------ |
+| T1 bootstrap    | ✅ commit d55fc0c, revisión aprobada                          |
+| T2 fixtures     | ✅ commit bf69878, revisión aprobada                          |
+| T3 config       | ✅ commit a5ff8a2, revisión aprobada                          |
+| T5 cliente HTTP | ✅ commit e60d142, revisión aprobada                          |
+| T4 mirrors      | 🔶 commit 9f4e71e (5/5 tests) — **falta revisión de tarea**   |
+| T6 búsqueda     | 🔶 commit 235709a (10/10 tests) — **falta revisión de tarea** |
+| T7–T12          | ⬜ pendientes                                                 |
 
 Al reanudar: confirmar estado con `git log --oneline` + ledger, despachar las revisiones de T4 y T6 (en paralelo; paquetes con `scripts/review-package <sha>~1 <sha>`), y continuar T7 → T8 → T9 → [T10∥T11] → T12 + revisión final. Minors acumulados para la revisión final están en el ledger.
 

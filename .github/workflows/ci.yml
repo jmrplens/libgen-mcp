@@ -122,6 +122,8 @@ jobs:
           go build -o /dev/null ./cmd/probe
       - name: Verify e2e tests compile
         run: go test -tags e2e -c -o /dev/null ./internal/libgen/
+      - name: Check Markdown tables are formatted
+        run: go run ./cmd/format_md_tables/ --check
 
   golangci-lint:
     name: golangci-lint

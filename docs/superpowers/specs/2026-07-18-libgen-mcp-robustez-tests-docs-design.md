@@ -57,14 +57,14 @@ sampling**. Por tanto:
 accionable por variable, y topes máximos (clamp) sanos. Variables nuevas
 (todas opcionales con default seguro):
 
-| Env | Default | Validación |
-|---|---|---|
-| `LIBGEN_MCP_LOG_LEVEL` | `info` | uno de debug/info/warn/error |
-| `LIBGEN_MCP_RATE_RPS` | `1` | > 0, ≤ 20 |
-| `LIBGEN_MCP_RATE_BURST` | `1` | ≥ 1, ≤ 100 |
-| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | `0` (sin tope) | ≥ 0, ≤ 50 GiB |
-| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `2` | ≥ 1, ≤ 16 |
-| `LIBGEN_MCP_RETRY_ATTEMPTS` | `3` | ≥ 1, ≤ 10 |
+| Env                                   | Default        | Validación                   |
+| ------------------------------------- | -------------- | ---------------------------- |
+| `LIBGEN_MCP_LOG_LEVEL`                | `info`         | uno de debug/info/warn/error |
+| `LIBGEN_MCP_RATE_RPS`                 | `1`            | > 0, ≤ 20                    |
+| `LIBGEN_MCP_RATE_BURST`               | `1`            | ≥ 1, ≤ 100                   |
+| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`       | `0` (sin tope) | ≥ 0, ≤ 50 GiB                |
+| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `2`            | ≥ 1, ≤ 16                    |
+| `LIBGEN_MCP_RETRY_ATTEMPTS`           | `3`            | ≥ 1, ≤ 10                    |
 
 Existentes: `LIBGEN_MIRROR` (validar esquema http/https + host), `LIBGEN_MCP_DOWNLOAD_DIR`
 (validar escribible: crear dir + fichero de prueba), `LIBGEN_MCP_TIMEOUT` (> 0,

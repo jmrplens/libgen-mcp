@@ -27,15 +27,15 @@ GitHub más adelante.
 
 Busca en el catálogo. Parámetros (el schema JSON documenta valores permitidos):
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `query` | string, requerido | Texto de búsqueda |
-| `topics` | array de enum, opcional | Colecciones: `nonfiction` (l), `fiction` (f), `articles` (a), `magazines` (m), `comics` (c), `standards` (s), `fiction_rus` (r). Sin especificar: todas |
-| `search_in` | array de enum, opcional | Columnas: `title` (t), `author` (a), `series` (s), `year` (y), `publisher` (p), `isbn` (i). Sin especificar: todas |
-| `results_per_page` | enum 25/50/100, opcional (def. 25) | |
-| `page` | int, opcional (def. 1) | |
-| `order` | enum opcional: `title`, `author`, `year`, `size`, `id`, `time_added` | |
-| `order_mode` | enum `asc`/`desc`, opcional | |
+| Campo              | Tipo                                                                 | Descripción                                                                                                                                             |
+| ------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`            | string, requerido                                                    | Texto de búsqueda                                                                                                                                       |
+| `topics`           | array de enum, opcional                                              | Colecciones: `nonfiction` (l), `fiction` (f), `articles` (a), `magazines` (m), `comics` (c), `standards` (s), `fiction_rus` (r). Sin especificar: todas |
+| `search_in`        | array de enum, opcional                                              | Columnas: `title` (t), `author` (a), `series` (s), `year` (y), `publisher` (p), `isbn` (i). Sin especificar: todas                                      |
+| `results_per_page` | enum 25/50/100, opcional (def. 25)                                   |                                                                                                                                                         |
+| `page`             | int, opcional (def. 1)                                               |                                                                                                                                                         |
+| `order`            | enum opcional: `title`, `author`, `year`, `size`, `id`, `time_added` |                                                                                                                                                         |
+| `order_mode`       | enum `asc`/`desc`, opcional                                          |                                                                                                                                                         |
 
 Devuelve JSON: lista de resultados con `edition_id`, `file_id`, `md5`, `title`,
 `isbns`, `authors`, `publisher`, `year`, `language`, `pages`, `size` (bytes y
@@ -50,10 +50,10 @@ cambio de maquetado) ≠ "mirror inaccesible".
 
 Metadatos completos de un registro vía API JSON (`json.php`).
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `md5` | string, opcional* | MD5 del fichero |
-| `id` | string, opcional* | ID de edición o fichero |
+| Campo    | Tipo                                    | Descripción              |
+| -------- | --------------------------------------- | ------------------------ |
+| `md5`    | string, opcional*                       | MD5 del fichero          |
+| `id`     | string, opcional*                       | ID de edición o fichero  |
 | `object` | enum opcional: `edition` (def.), `file` | Tipo de objeto para `id` |
 
 (*) Exactamente uno de `md5` o `id` es requerido.
@@ -66,11 +66,11 @@ descripción, URL de portada, tamaño, extensión, fechas de alta/modificación.
 
 Descarga un fichero resolviendo la cadena no-directa de libgen.li.
 
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `md5` | string, requerido | |
-| `path` | string, opcional | Directorio destino. Def.: `LIBGEN_MCP_DOWNLOAD_DIR` o `~/Downloads` |
-| `filename` | string, opcional | Nombre destino. Def.: el de `content-disposition` del CDN, saneado |
+| Campo      | Tipo              | Descripción                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------------- |
+| `md5`      | string, requerido |                                                                     |
+| `path`     | string, opcional  | Directorio destino. Def.: `LIBGEN_MCP_DOWNLOAD_DIR` o `~/Downloads` |
+| `filename` | string, opcional  | Nombre destino. Def.: el de `content-disposition` del CDN, saneado  |
 
 Cadena (verificada 2026-07-17):
 1. `GET /ads.php?md5=X` → extraer `get.php?md5=X&key=CLAVE` del HTML
@@ -129,11 +129,11 @@ parseo de la tabla, json.php, extracción de key en ads.php, redirect del CDN
 
 ## Configuración
 
-| Env | Default | Descripción |
-|---|---|---|
-| `LIBGEN_MIRROR` | (auto) | Fuerza un mirror concreto, p. ej. `https://libgen.li` |
-| `LIBGEN_MCP_DOWNLOAD_DIR` | `~/Downloads` | Directorio de descargas |
-| `LIBGEN_MCP_TIMEOUT` | `30s` | Timeout por petición HTTP |
+| Env                       | Default       | Descripción                                           |
+| ------------------------- | ------------- | ----------------------------------------------------- |
+| `LIBGEN_MIRROR`           | (auto)        | Fuerza un mirror concreto, p. ej. `https://libgen.li` |
+| `LIBGEN_MCP_DOWNLOAD_DIR` | `~/Downloads` | Directorio de descargas                               |
+| `LIBGEN_MCP_TIMEOUT`      | `30s`         | Timeout por petición HTTP                             |
 
 Flags de `cmd/server`: `--http <addr>` (transporte streamable HTTP), sin flag =
 stdio.

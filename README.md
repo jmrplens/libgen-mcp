@@ -47,45 +47,45 @@ binary as the `command` instead.
 
 Search the Library Genesis catalog. Returns a page of file results.
 
-| Parameter          | Type       | Required | Description |
-| ------------------ | ---------- | -------- | ----------- |
-| `query`            | string     | yes      | Search text. |
-| `topics`           | string[]   | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all. |
-| `search_in`        | string[]   | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit for all. |
-| `results_per_page` | int        | no       | Results per page: `25`, `50`, or `100`. |
-| `page`             | int        | no       | Result page, starting at `1`. |
-| `order`            | string     | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`. |
-| `order_mode`       | string     | no       | `asc` or `desc`. |
+| Parameter          | Type     | Required | Description                                                                                                                  |
+| ------------------ | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `query`            | string   | yes      | Search text.                                                                                                                 |
+| `topics`           | string[] | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all. |
+| `search_in`        | string[] | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit for all.                                     |
+| `results_per_page` | int      | no       | Results per page: `25`, `50`, or `100`.                                                                                      |
+| `page`             | int      | no       | Result page, starting at `1`.                                                                                                |
+| `order`            | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                              |
+| `order_mode`       | string   | no       | `asc` or `desc`.                                                                                                             |
 
 ### `get_details`
 
 Full metadata for a record (description, identifiers, DOI, cover, related edition) via the
 libgen JSON API. Look up by `md5` **or** by `id`, not both.
 
-| Parameter | Type   | Required | Description |
-| --------- | ------ | -------- | ----------- |
+| Parameter | Type   | Required | Description                                                          |
+| --------- | ------ | -------- | -------------------------------------------------------------------- |
 | `md5`     | string | one of   | File md5 hash from a search result (returns file + related edition). |
-| `id`      | string | one of   | Edition or file id. |
-| `object`  | string | no       | With `id`: `edition` (default) or `file`. |
+| `id`      | string | one of   | Edition or file id.                                                  |
+| `object`  | string | no       | With `id`: `edition` (default) or `file`.                            |
 
 ### `download`
 
 Download a file by `md5` to a local directory, resolving the mirror download chain
 (`ads.php` key + CDN redirect). Returns the saved path and size.
 
-| Parameter  | Type   | Required | Description |
-| ---------- | ------ | -------- | ----------- |
-| `md5`      | string | yes      | File md5 hash from a search result. |
+| Parameter  | Type   | Required | Description                                                                  |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------- |
+| `md5`      | string | yes      | File md5 hash from a search result.                                          |
 | `path`     | string | no       | Destination directory (default: `LIBGEN_MCP_DOWNLOAD_DIR` or `~/Downloads`). |
-| `filename` | string | no       | Destination filename (default: the name announced by the mirror). |
+| `filename` | string | no       | Destination filename (default: the name announced by the mirror).            |
 
 ## Environment variables
 
-| Variable                  | Default       | Description |
-| ------------------------- | ------------- | ----------- |
+| Variable                  | Default       | Description                                                              |
+| ------------------------- | ------------- | ------------------------------------------------------------------------ |
 | `LIBGEN_MIRROR`           | *(auto)*      | Force a specific mirror, e.g. `https://libgen.li`. Skips auto-discovery. |
-| `LIBGEN_MCP_DOWNLOAD_DIR` | `~/Downloads` | Default destination directory for `download`. |
-| `LIBGEN_MCP_TIMEOUT`      | `30s`         | Per-request HTTP timeout (Go duration, e.g. `45s`, `1m`). |
+| `LIBGEN_MCP_DOWNLOAD_DIR` | `~/Downloads` | Default destination directory for `download`.                            |
+| `LIBGEN_MCP_TIMEOUT`      | `30s`         | Per-request HTTP timeout (Go duration, e.g. `45s`, `1m`).                |
 
 ## Mirrors
 
