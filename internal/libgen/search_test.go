@@ -131,6 +131,31 @@ func TestParseSearchBooks(t *testing.T) {
 	}
 }
 
+// TestParsePaginatorReach verifies that paginatorReach derives the reachable
+// result cap from the Paginator init script and that Truncated flags a search
+// whose advertised total exceeds that cap.
+func TestParsePaginatorReach(t *testing.T) {
+	// The "golang" fixture paginates 6 pages of 25 => 150 reachable, and the
+	// Files tab advertises 135, so the search is not truncated.
+	page := parseFixture(t, "search_books.html")
+	if page.Reachable != 150 {
+		t.Errorf("Reachable = %d, want 150", page.Reachable)
+	}
+	if page.Truncated {
+		t.Errorf("Truncated = true, want false (135 <= 150)")
+	}
+
+	// The "physics" fixture paginates 20 pages of 100 => 2000 reachable, while
+	// the Files tab advertises 38514, so the search is truncated.
+	trunc := parseFixture(t, "search_truncated.html")
+	if trunc.Reachable != 2000 {
+		t.Errorf("Reachable = %d, want 2000", trunc.Reachable)
+	}
+	if !trunc.Truncated {
+		t.Errorf("Truncated = false, want true (38514 > 2000)")
+	}
+}
+
 // TestParseSearchArticles verifies ParseSearchArticles.
 func TestParseSearchArticles(t *testing.T) {
 	page := parseFixture(t, "search_articles.html")

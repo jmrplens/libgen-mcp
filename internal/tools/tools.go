@@ -45,6 +45,9 @@ type SearchOutput struct {
 	Page           int             `json:"page"`
 	ResultsPerPage int             `json:"results_per_page"`
 	TotalFiles     string          `json:"total_files,omitempty"`
+	Reachable      int             `json:"reachable"`
+	Truncated      bool            `json:"truncated"`
+	Hint           string          `json:"hint,omitempty"`
 	HasMore        bool            `json:"has_more"`
 	Mirror         string          `json:"mirror"`
 }
@@ -150,8 +153,15 @@ func searchHandler(c *libgen.Client) mcp.ToolHandlerFor[SearchInput, SearchOutpu
 			Page:           curPage,
 			ResultsPerPage: per,
 			TotalFiles:     page.TotalFiles,
+			Reachable:      page.Reachable,
+			Truncated:      page.Truncated,
 			HasMore:        len(page.Results) >= per,
 			Mirror:         mirror,
+		}
+		if page.Truncated {
+			out.Hint = fmt.Sprintf("Only the first %d of %s results are reachable; "+
+				"refine your query (add author/year, use title-only columns, or narrow topics).",
+				page.Reachable, page.TotalFiles)
 		}
 		if out.Results == nil {
 			out.Results = []libgen.Result{}

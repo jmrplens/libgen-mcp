@@ -154,6 +154,106 @@ func TestSearchTool(t *testing.T) {
 	}
 }
 
+// TestSearchToolTruncated verifies that the search tool surfaces the pagination
+// cap: reachable, truncated and a refine hint when the advertised total exceeds
+// the reachable results.
+func TestSearchToolTruncated(t *testing.T) {
+	truncHTML, err := os.ReadFile("../libgen/testdata/search_truncated.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { w.Write(truncHTML) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, cerr := server.Connect(ctx, st, nil); cerr != nil {
+		t.Fatal(cerr)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "physics", "results_per_page": 100},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		TotalFiles string `json:"total_files"`
+		Reachable  int    `json:"reachable"`
+		Truncated  bool   `json:"truncated"`
+		Hint       string `json:"hint"`
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if out.Reachable != 2000 {
+		t.Errorf("reachable = %d, want 2000", out.Reachable)
+	}
+	if !out.Truncated {
+		t.Errorf("truncated = false, want true")
+	}
+	if !strings.Contains(out.Hint, "2000") || !strings.Contains(out.Hint, out.TotalFiles) || !strings.Contains(out.Hint, "refine") {
+		t.Errorf("hint = %q, want it to mention 2000, %s and refine", out.Hint, out.TotalFiles)
+	}
+}
+
+// TestSearchToolNotTruncated verifies that a non-truncated search omits the
+// hint and reports truncated=false.
+func TestSearchToolNotTruncated(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "golang", "topics": []string{"nonfiction"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("tool error: %v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Reachable int    `json:"reachable"`
+		Truncated bool   `json:"truncated"`
+		Hint      string `json:"hint"`
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if out.Reachable != 150 {
+		t.Errorf("reachable = %d, want 150", out.Reachable)
+	}
+	if out.Truncated {
+		t.Errorf("truncated = true, want false")
+	}
+	if out.Hint != "" {
+		t.Errorf("hint = %q, want empty", out.Hint)
+	}
+}
+
 // TestSearchToolBadTopic verifies SearchToolBadTopic.
 func TestSearchToolBadTopic(t *testing.T) {
 	session := newSession(t)

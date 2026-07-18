@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
 )
+
+// paginatorRe extracts the total page count and per-page size from the top
+// Paginator init script, e.g. `new Paginator("paginator_example_top", 6, 25, ...`.
+var paginatorRe = regexp.MustCompile(`new Paginator\("paginator_example_top",\s*(\d+),\s*(\d+),`)
 
 // ErrLayoutChanged indicates that the page does not have the expected structure:
 // not to be confused with "zero results".
@@ -124,9 +129,15 @@ type Result struct {
 }
 
 // SearchPage is a parsed page of search results plus the total file count.
+//
+// libgen.li advertises TotalFiles as the full match count but only serves the
+// first Reachable results across pages. When the advertised total exceeds that
+// cap the search is Truncated and the caller should refine the query.
 type SearchPage struct {
 	Results    []Result `json:"results"`
 	TotalFiles string   `json:"total_files,omitempty"`
+	Reachable  int      `json:"reachable"`
+	Truncated  bool     `json:"truncated"`
 }
 
 // Search runs the search and returns the parsed page and the mirror used.
@@ -152,6 +163,10 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 		return nil, fmt.Errorf("parsing search page: %w", err)
 	}
 	page := &SearchPage{TotalFiles: filesTabCount(doc)}
+	page.Reachable = paginatorReach(doc)
+	if total, atoiErr := strconv.Atoi(page.TotalFiles); atoiErr == nil && total > 0 && page.Reachable > 0 {
+		page.Truncated = total > page.Reachable
+	}
 	table := findByID(doc, "tablelibgen")
 	if table == nil {
 		if page.TotalFiles == "0" {
@@ -254,6 +269,25 @@ func filesTabCount(doc *html.Node) string {
 		}
 	}
 	return ""
+}
+
+// paginatorReach returns the number of results actually reachable across pages
+// (totalPages * perPage) as declared by the top Paginator init script, or 0 if
+// the script is absent or unparsable.
+func paginatorReach(doc *html.Node) int {
+	for _, s := range elements(doc, "script") {
+		m := paginatorRe.FindStringSubmatch(nodeText(s))
+		if m == nil {
+			continue
+		}
+		pages, err1 := strconv.Atoi(m[1])
+		per, err2 := strconv.Atoi(m[2])
+		if err1 != nil || err2 != nil {
+			return 0
+		}
+		return pages * per
+	}
+	return 0
 }
 
 // --- DOM helpers ---
