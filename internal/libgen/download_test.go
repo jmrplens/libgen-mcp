@@ -397,6 +397,39 @@ func TestLooksLikeHTML(t *testing.T) {
 	}
 }
 
+func TestDownloadProgressCallback(t *testing.T) {
+	payload := []byte("%PDF-1.4 some fake but non-trivial book payload for progress")
+	srv := downloadTestServer(t, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	type call struct{ done, total int64 }
+	var calls []call
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "", func(done, total int64) {
+		calls = append(calls, call{done, total})
+	})
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if len(calls) == 0 {
+		t.Fatal("progress callback was never invoked, want at least one call")
+	}
+	last := calls[len(calls)-1]
+	if last.done != int64(len(payload)) {
+		t.Errorf("last progress done = %d, want %d", last.done, len(payload))
+	}
+	if last.total != int64(len(payload)) {
+		t.Errorf("last progress total = %d, want %d", last.total, len(payload))
+	}
+	if last.done != last.total {
+		t.Errorf("last progress done = %d, total = %d, want done == total", last.done, last.total)
+	}
+	if res.SizeBytes != int64(len(payload)) {
+		t.Errorf("SizeBytes = %d, want %d", res.SizeBytes, len(payload))
+	}
+}
+
 // md5Hex returns the hex-encoded MD5 digest of b.
 func md5Hex(b []byte) string {
 	sum := md5.Sum(b) //nolint:gosec // integrity digest, not a security primitive.

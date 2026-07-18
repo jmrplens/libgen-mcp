@@ -2,11 +2,15 @@ package tools
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -195,5 +199,124 @@ func TestGetDetailsToolValidation(t *testing.T) {
 		if !res.IsError {
 			t.Errorf("args %v deberían devolver tool error", args)
 		}
+	}
+}
+
+// downloadMirror serves the ads.php -> get.php -> CDN chain for a payload whose
+// md5 it advertises, so the download tool can run end to end against httptest.
+func downloadMirror(t *testing.T, payload []byte) *httptest.Server {
+	t.Helper()
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestDownloadToolWithProgressToken exercises the download tool wiring: when the
+// client supplies a progress token, the handler must forward download progress
+// as MCP notifications/progress and the final notification must report the full
+// payload size.
+func TestDownloadToolWithProgressToken(t *testing.T) {
+	payload := []byte("%PDF-1.4 progress notification payload for the download tool")
+	srv := downloadMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	var mu sync.Mutex
+	var progresses []float64
+	var totals []float64
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
+			mu.Lock()
+			progresses = append(progresses, r.Params.Progress)
+			totals = append(totals, r.Params.Total)
+			mu.Unlock()
+		},
+	})
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	params := &mcp.CallToolParams{Name: "download", Arguments: map[string]any{"md5": wantMD5}}
+	params.SetProgressToken("tok-1")
+	res, err := session.CallTool(ctx, params)
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(progresses) == 0 {
+		t.Fatal("no progress notifications received, want at least one")
+	}
+	if last := progresses[len(progresses)-1]; last != float64(len(payload)) {
+		t.Errorf("last progress = %v, want %d", last, len(payload))
+	}
+	if last := totals[len(totals)-1]; last != float64(len(payload)) {
+		t.Errorf("last total = %v, want %d", last, len(payload))
+	}
+}
+
+// TestDownloadToolWithoutProgressToken confirms the download tool still works
+// when the client sends no progress token (the handler passes a nil callback).
+func TestDownloadToolWithoutProgressToken(t *testing.T) {
+	payload := []byte("%PDF-1.4 no progress token payload")
+	srv := downloadMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "download", Arguments: map[string]any{"md5": wantMD5}})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 }

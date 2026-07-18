@@ -192,7 +192,7 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 }
 
 func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, libgen.DownloadResult] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
 		var zero libgen.DownloadResult
 		if !md5Re.MatchString(in.MD5) {
 			return nil, zero, errors.New("md5 must be a 32-char hex string")
@@ -201,10 +201,30 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 		if dir == "" {
 			dir = cfg.DownloadDir
 		}
-		res, err := c.Download(ctx, strings.ToLower(in.MD5), dir, in.Filename)
+		res, err := c.Download(ctx, strings.ToLower(in.MD5), dir, in.Filename, progressNotifier(ctx, req))
 		if err != nil {
 			return nil, zero, err
 		}
 		return nil, *res, nil
+	}
+}
+
+// progressNotifier builds a libgen.ProgressFunc that forwards download progress
+// to the client as MCP notifications/progress, keyed by the progress token the
+// client supplied in the request's _meta. When the client sent no token it
+// returns nil (a no-op) so no notifications are emitted. Emission errors are
+// ignored: progress is best-effort and must never fail the download.
+func progressNotifier(ctx context.Context, req *mcp.CallToolRequest) libgen.ProgressFunc {
+	token := req.Params.GetProgressToken()
+	if token == nil {
+		return nil
+	}
+	session := req.Session
+	return func(done, total int64) {
+		_ = session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+			ProgressToken: token,
+			Progress:      float64(done),
+			Total:         float64(total),
+		})
 	}
 }

@@ -18,9 +18,66 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	xhtml "golang.org/x/net/html"
 )
+
+// ProgressFunc reports live download progress: done is the number of bytes
+// written so far and total is the full expected file size (0 or negative when
+// the size is unknown). It is invoked throttled while streaming plus a final
+// time when the transfer completes (done == total on a size-known download). A
+// nil ProgressFunc disables progress reporting.
+type ProgressFunc func(done, total int64)
+
+// progressInterval and progressFraction bound how often a ProgressFunc fires:
+// at most one call per interval, or whenever progress advances by the fraction
+// of the total. The final completion call always fires regardless.
+const (
+	progressInterval = 500 * time.Millisecond
+	progressFraction = 20 // 1/20 == every ~5% of the total
+)
+
+// progressWriter wraps an io.Writer and reports throttled progress to a
+// ProgressFunc as bytes flow through. done is seeded with any bytes already on
+// disk (a resumed download) so reports cover the whole file, not just this run.
+type progressWriter struct {
+	w        io.Writer
+	progress ProgressFunc
+	total    int64
+	done     int64
+	lastAt   time.Time
+	lastDone int64
+}
+
+// Write forwards p to the wrapped writer and reports throttled progress.
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.w.Write(p)
+	pw.done += int64(n)
+	if pw.progress != nil && pw.shouldEmit() {
+		pw.progress(pw.done, pw.total)
+		pw.lastAt = time.Now()
+		pw.lastDone = pw.done
+	}
+	return n, err
+}
+
+// shouldEmit reports whether enough time has elapsed (progressInterval) or
+// enough bytes have advanced (progressFraction of the total) to emit again.
+func (pw *progressWriter) shouldEmit() bool {
+	if time.Since(pw.lastAt) >= progressInterval {
+		return true
+	}
+	return pw.total > 0 && pw.done-pw.lastDone >= pw.total/progressFraction
+}
+
+// emitFinal reports a final progress call at the fully written size, bypassing
+// the throttle so completion is always observed.
+func (pw *progressWriter) emitFinal() {
+	if pw.progress != nil {
+		pw.progress(pw.done, pw.total)
+	}
+}
 
 var getLinkRe = regexp.MustCompile(`get\.php\?md5=[0-9a-fA-F]{32}&(?:amp;)?key=[A-Za-z0-9]+`)
 
@@ -96,8 +153,11 @@ type DownloadResult struct {
 var errIntegrityCheckFailed = errors.New("integrity check failed: MD5 mismatch")
 
 // Download descarga el fichero md5 a dir. Si filename está vacío usa el nombre
-// que anuncia el CDN (content-disposition), saneado.
-func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*DownloadResult, error) {
+// que anuncia el CDN (content-disposition), saneado. An optional progress
+// callback (only the first is used) is invoked throttled with the running and
+// total byte counts; pass none to disable progress reporting.
+func (c *Client) Download(ctx context.Context, md5, dir, filename string, progress ...ProgressFunc) (*DownloadResult, error) {
+	onProgress := firstProgress(progress)
 	// Acquire a concurrency slot before doing any work, releasing it on return.
 	// While waiting, honor context cancellation so a queued download can be
 	// aborted before it ever touches the network.
@@ -185,7 +245,7 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 		return nil, derr
 	}
 	dest := filepath.Join(dir, name)
-	n, err := c.streamToPartAndVerify(partPath, dest, md5, body, resume, resumeFrom, resp.ContentLength)
+	n, err := c.streamToPartAndVerify(partPath, dest, md5, body, resume, resumeFrom, resp.ContentLength, totalLen, onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +257,15 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 		Verified:         true,
 		Resumed:          resume,
 	}, nil
+}
+
+// firstProgress returns the first progress callback from the variadic optional
+// argument, or nil when none was supplied.
+func firstProgress(progress []ProgressFunc) ProgressFunc {
+	if len(progress) > 0 {
+		return progress[0]
+	}
+	return nil
 }
 
 // partialSize returns the size of a usable partial download at partPath, or 0 if
@@ -309,7 +378,7 @@ func ensureDiskSpace(dir string, contentLength int64) error {
 // Partial lifecycle: on an MD5 mismatch (corrupt/tampered) or an oversized
 // transfer the partial is deleted; on a transient failure (network drop, short
 // read) it is kept so a later call can resume from where it stopped.
-func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, resume bool, existingSize, contentLength int64) (int64, error) {
+func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, resume bool, existingSize, contentLength, total int64, progress ProgressFunc) (int64, error) {
 	flag := os.O_RDWR | os.O_CREATE
 	var startSize int64
 	if resume {
@@ -336,7 +405,10 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 	// against downloads with no (or a lying) Content-Length header. The MD5 is
 	// updated in lockstep with the bytes written to the file.
 	cw := &countingWriter{w: io.MultiWriter(f, digest), limit: c.maxDownloadBytes, written: startSize}
-	streamed, copyErr := io.Copy(cw, body)
+	// progressWriter reports throttled progress over the whole file: seed done
+	// with the bytes already on disk so a resumed download reports absolute totals.
+	pw := &progressWriter{w: cw, progress: progress, total: total, done: startSize, lastAt: time.Now(), lastDone: startSize}
+	streamed, copyErr := io.Copy(pw, body)
 	closeErr := f.Close()
 	if copyErr != nil || closeErr != nil {
 		// An oversized transfer can never succeed, so drop the partial; any other
@@ -350,6 +422,7 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 		// Short read: keep the partial so a later call can resume from here.
 		return 0, fmt.Errorf("truncated download: got %d of %d bytes", streamed, contentLength)
 	}
+	pw.emitFinal() // report completion (done == total) regardless of throttle
 	if got := hex.EncodeToString(digest.Sum(nil)); !strings.EqualFold(got, wantMD5) {
 		os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
 		return 0, fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, got, wantMD5)
