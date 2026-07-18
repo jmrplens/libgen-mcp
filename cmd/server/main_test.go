@@ -38,6 +38,20 @@ func TestHealthEndpoint(t *testing.T) {
 	})
 }
 
+func TestRunValidatesConfig(t *testing.T) {
+	// A syntactically valid but out-of-range value passes config.Load but must
+	// be rejected by cfg.Validate, so run returns before attempting to serve.
+	t.Setenv("LIBGEN_MCP_RATE_RPS", "999")
+
+	err := run(context.Background(), "")
+	if err == nil {
+		t.Fatal("run() = nil, want validation error")
+	}
+	if isCleanShutdown(err) {
+		t.Fatalf("run() error = %v, want a non-clean-shutdown validation error", err)
+	}
+}
+
 func TestIsCleanShutdown(t *testing.T) {
 	cases := []struct {
 		name string
