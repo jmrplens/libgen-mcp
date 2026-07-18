@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	xhtml "golang.org/x/net/html"
@@ -182,11 +181,10 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, progre
 	// open/rehash/truncate/append the same file through separate fds and corrupt
 	// each other (the semaphore only serializes when MaxConcurrentDownloads==1). A
 	// per-path mutex makes them run one after another; a duplicate concurrent
-	// request simply re-downloads and overwrites, which is acceptable.
-	lk, _ := c.partialLocks.LoadOrStore(partPath, &sync.Mutex{})
-	mu, _ := lk.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
+	// request simply re-downloads and overwrites, which is acceptable. The lock is
+	// refcounted so its map entry is removed once the last holder releases.
+	release := c.acquirePartialLock(partPath)
+	defer release()
 
 	resumeFrom := partialSize(partPath)
 

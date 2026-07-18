@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -66,6 +67,39 @@ func TestGetAllMirrorsFailed(t *testing.T) {
 	_, _, err := c.get(context.Background(), "/index.php", nil)
 	if !errors.Is(err, ErrAllMirrorsFailed) {
 		t.Fatalf("err = %v, want ErrAllMirrorsFailed", err)
+	}
+}
+
+// TestGetAllMirrorsPermanent: when every mirror returns a permanent error (404),
+// the sweep exhausts without any transient failure. The result must NOT be
+// classified as ErrAllMirrorsFailed (no "unreachable"/"VPN" alarm), but as
+// ErrRequestRejected, and must not carry the connectivity message text.
+func TestGetAllMirrorsPermanent(t *testing.T) {
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer second.Close()
+
+	c := newTestClient(staticMirrors{first.URL, second.URL})
+	c.retry = 5
+	_, _, err := c.get(context.Background(), "/json.php", url.Values{"md5": {"deadbeef"}})
+	if err == nil {
+		t.Fatal("get() error = nil, want error")
+	}
+	if errors.Is(err, ErrAllMirrorsFailed) {
+		t.Errorf("err = %v, must NOT be ErrAllMirrorsFailed (all permanent, no transient)", err)
+	}
+	if !errors.Is(err, ErrRequestRejected) {
+		t.Errorf("err = %v, want ErrRequestRejected", err)
+	}
+	for _, bad := range []string{"unreachable", "VPN", "DNS"} {
+		if strings.Contains(err.Error(), bad) {
+			t.Errorf("err = %q, must not contain connectivity text %q", err, bad)
+		}
 	}
 }
 

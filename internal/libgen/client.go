@@ -31,8 +31,15 @@ const (
 	maxBackoff = 30 * time.Second
 )
 
-// ErrAllMirrorsFailed indica que ningún mirror respondió correctamente.
+// ErrAllMirrorsFailed indica que ningún mirror respondió correctamente por un
+// fallo transitorio (red/timeout/5xx/429): un problema de conectividad real.
 var ErrAllMirrorsFailed = errors.New("all libgen mirrors unreachable (network block? try a VPN or different DNS)")
+
+// ErrRequestRejected indica que todos los mirrors rechazaron la petición con un
+// error permanente (p. ej. 404/403): no es un problema de conectividad, sino que
+// el recurso no existe o fue rechazado. Se distingue de ErrAllMirrorsFailed para
+// no presentar un "not found" normal como una alarma de red.
+var ErrRequestRejected = errors.New("request rejected by all mirrors")
 
 // MirrorLister provides candidate base URLs, preferred first.
 type MirrorLister interface {
@@ -56,13 +63,62 @@ type Client struct {
 	// releases it on completion.
 	dlSem chan struct{}
 	// partialLocks serializes downloads that share the same partial file (the
-	// same md5 into the same dir), keyed by the absolute .part path → *sync.Mutex.
-	// The .part path is deterministic, so without this two concurrent same-md5
-	// downloads would open/rehash/truncate/append the same file and corrupt it.
-	partialLocks sync.Map
+	// same md5 into the same dir), keyed by the absolute .part path. The .part
+	// path is deterministic, so without this two concurrent same-md5 downloads
+	// would open/rehash/truncate/append the same file and corrupt it. Entries are
+	// refcounted and removed once the last holder releases, so the map does not
+	// grow unbounded over the lifetime of a long-running process.
+	partialMu    sync.Mutex
+	partialLocks map[string]*refLock
 
 	mu       sync.Mutex           // protege cooldown
 	cooldown map[string]time.Time // mirror base → instante en que expira el cooldown
+}
+
+// refLock is a per-key serialization lock with a reference count. refs tracks how
+// many callers currently hold or are waiting on the lock; the entry is deleted
+// from the map when refs drops back to zero, so keys never accumulate.
+type refLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// acquirePartialLock serializes callers on key and returns a release closure. It
+// increments the key's refcount under partialMu, acquires the per-key mutex, and
+// returns a closure that releases the mutex and drops the refcount, deleting the
+// entry when the last holder releases. Two callers with the same key run one
+// after another; distinct keys never block each other and leave nothing behind.
+func (c *Client) acquirePartialLock(key string) func() {
+	c.partialMu.Lock()
+	if c.partialLocks == nil {
+		c.partialLocks = make(map[string]*refLock)
+	}
+	entry, ok := c.partialLocks[key]
+	if !ok {
+		entry = &refLock{}
+		c.partialLocks[key] = entry
+	}
+	entry.refs++
+	c.partialMu.Unlock()
+
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+		c.partialMu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(c.partialLocks, key)
+		}
+		c.partialMu.Unlock()
+	}
+}
+
+// partialLockCount reports the number of live partial-lock entries. It exists for
+// tests to assert that entries are released rather than leaked.
+func (c *Client) partialLockCount() int {
+	c.partialMu.Lock()
+	defer c.partialMu.Unlock()
+	return len(c.partialLocks)
 }
 
 // New construye un Client a partir de la configuración: rate limiter
@@ -97,6 +153,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (content []
 	var errs []error
 	permFailed := make(map[string]bool) // mirrors con error permanente: no reintentar
 	attempts := max(c.retry, 1)
+	sawTransient := false // ¿hubo algún fallo transitorio (conectividad) en todo el get?
 	for attempt := range attempts {
 		if attempt > 0 {
 			if err := c.sleepBackoff(ctx, attempt); err != nil {
@@ -107,12 +164,21 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (content []
 		if done {
 			return body, base, err
 		}
+		sawTransient = sawTransient || retriable
 		if !retriable {
 			break // ningún fallo transitorio pendiente: reintentar no ayudaría
 		}
 	}
-	slog.Error("all mirror attempts exhausted", "path", path, "attempts", attempts)
-	return nil, "", fmt.Errorf("%w: %w", ErrAllMirrorsFailed, errors.Join(errs...))
+	joined := errors.Join(errs...)
+	if sawTransient {
+		// At least one transient failure: genuine connectivity trouble.
+		slog.Error("all mirror attempts exhausted", "path", path, "attempts", attempts)
+		return nil, "", fmt.Errorf("%w: %w", ErrAllMirrorsFailed, joined)
+	}
+	// Every candidate error was permanent (e.g. 404/403): a normal rejection, not
+	// a connectivity problem. Surface it as such and log at a lower severity.
+	slog.Warn("all mirrors rejected the request", "path", path, "attempts", attempts)
+	return nil, "", fmt.Errorf("%w: %w", ErrRequestRejected, joined)
 }
 
 // sweep realiza una pasada sobre los mirrors candidatos, haciendo failover al

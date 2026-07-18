@@ -679,6 +679,36 @@ func TestDownloadSameMD5Concurrent(t *testing.T) {
 	}
 }
 
+// TestPartialLockReleased verifies the refcounted partial-lock map does not leak:
+// after several sequential downloads of distinct md5s complete, no lock entries
+// remain. This guards against the previous sync.Map that grew unbounded.
+func TestPartialLockReleased(t *testing.T) {
+	dir := t.TempDir()
+	c := newTestClient(staticMirrors{}) // mirror set is swapped per download below
+	const n = 5
+	for i := range n {
+		payload := fmt.Appendf(nil, "%%PDF-1.4 distinct payload %d %s", i, strings.Repeat("x", 32))
+		want := md5Hex(payload)
+		srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+			w.Write(payload)
+		})
+		c.mirrors = staticMirrors{srv.URL}
+		res, err := c.Download(context.Background(), want, dir, fmt.Sprintf("book-%d.pdf", i))
+		srv.Close()
+		if err != nil {
+			t.Fatalf("Download(%d) error = %v", i, err)
+		}
+		if !res.Verified {
+			t.Errorf("Download(%d) Verified = false, want true", i)
+		}
+	}
+	if got := c.partialLockCount(); got != 0 {
+		t.Errorf("partialLockCount() = %d after %d downloads, want 0 (lock map leaked)", got, n)
+	}
+}
+
 // TestDownloadResumeWrongContentRange guards the Content-Range validation: the
 // CDN replies 206 but with a Content-Range whose start (0) disagrees with the
 // requested resume offset, and sends the FULL body. The downloader must restart
