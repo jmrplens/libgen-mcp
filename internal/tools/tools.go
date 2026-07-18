@@ -95,6 +95,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Title: "Download file",
 		Description: "Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). " +
 			"Books are tried against libgen (ads.php key + CDN) then randombook (fresh-mirror discovery); articles are tried against unpaywall (open-access PDF) then sci-hub. " +
+			"If both md5 and doi are given, article sources (unpaywall, sci-hub) are tried first, then book sources (libgen, randombook). " +
 			"Returns the saved path, size and the source that served it.",
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("download", downloadHandler(client, cfg)))

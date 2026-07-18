@@ -43,6 +43,30 @@ func fileCDN(t *testing.T, payload []byte, disposition string) *httptest.Server 
 	return httptest.NewServer(mux)
 }
 
+// TestEscapeDOIPath verifies that escapeDOIPath keeps a DOI's slashes literal
+// (the DOI-keyed APIs require them unescaped) while percent-encoding other
+// URL-unsafe characters that would otherwise corrupt the request path.
+func TestEscapeDOIPath(t *testing.T) {
+	tests := []struct {
+		name string
+		doi  string
+		want string
+	}{
+		{name: "plain DOI keeps slash", doi: "10.1234/abc.def", want: "10.1234/abc.def"},
+		{name: "multiple slashes preserved", doi: "10.1000/journal/issue/5", want: "10.1000/journal/issue/5"},
+		{name: "space is encoded", doi: "10.1234/abc def", want: "10.1234/abc%20def"},
+		{name: "hash is encoded but slash survives", doi: "10.1234/ab#cd", want: "10.1234/ab%23cd"},
+		{name: "question mark is encoded", doi: "10.1234/ab?cd", want: "10.1234/ab%3Fcd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := escapeDOIPath(tt.doi); got != tt.want {
+				t.Errorf("escapeDOIPath(%q) = %q, want %q", tt.doi, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDownloadSourceChainFallback verifies the source chain advances past a source
 // whose Resolve fails and completes via the next source, tagging the result with
 // the serving source's Name().

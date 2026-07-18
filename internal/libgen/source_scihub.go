@@ -97,9 +97,11 @@ func (s scihubSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 // tryHost requests a single mirror and returns the extracted PDF URL (empty when
 // the page carries none) or a transport/HTTP error.
 func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, scheme, host, doi string) (string, error) {
-	// The DOI stays raw in the path: Sci-Hub keys articles by the unescaped DOI,
-	// so its slashes must not be percent-encoded.
-	endpoint := scheme + "://" + host + "/" + doi
+	// The DOI's slashes stay literal in the path: Sci-Hub keys articles by the
+	// unescaped DOI, so its slashes must not be percent-encoded. escapeDOIPath keeps
+	// the slashes but percent-encodes any other URL-unsafe characters a DOI may
+	// carry (e.g. '#', '?', space) so they cannot corrupt the request.
+	endpoint := scheme + "://" + host + "/" + escapeDOIPath(doi)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {

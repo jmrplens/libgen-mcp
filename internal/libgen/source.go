@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Item is a download request expressed independently of any particular source: a
@@ -102,6 +103,22 @@ func partialKey(it Item, r Resolved) string {
 func shortHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:16])
+}
+
+// escapeDOIPath percent-encodes a DOI for safe placement in a URL path while
+// keeping its slashes literal. The DOI-keyed APIs (Unpaywall, Sci-Hub) key their
+// records by the unescaped DOI, so the "/" separators must reach them raw; but a
+// DOI may legitimately contain other URL-reserved characters (e.g. '#', '?', a
+// space) that would otherwise be parsed as a fragment or query and corrupt the
+// request. Each "/"-separated segment is escaped with url.PathEscape and the parts
+// are re-joined with "/", so slashes survive literally while every other unsafe
+// character is percent-encoded.
+func escapeDOIPath(doi string) string {
+	parts := strings.Split(doi, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }
 
 // mirrorOf reduces a file URL to its "scheme://host" origin, used as the result's
