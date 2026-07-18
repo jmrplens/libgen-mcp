@@ -139,6 +139,77 @@ func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
 	}
 }
 
+func TestDownloadSizeCapContentLength(t *testing.T) {
+	// Payload small enough to carry an explicit Content-Length header, but larger
+	// than the configured cap: the download must fail before touching the disk.
+	payload := []byte("%PDF-1.4 " + strings.Repeat("x", 500))
+	srv := downloadTestServer(t, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	c.maxDownloadBytes = 100
+	dir := t.TempDir()
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+		t.Fatal("Content-Length above cap should fail")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+	}
+}
+
+func TestDownloadSizeCapStream(t *testing.T) {
+	// Payload larger than the server's buffer (>2048 B) so the response is sent
+	// chunked with no Content-Length: the cap must be enforced while streaming.
+	payload := []byte("%PDF-1.4 " + strings.Repeat("x", 4000))
+	srv := downloadTestServer(t, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	c.maxDownloadBytes = 100
+	dir := t.TempDir()
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+		t.Fatal("streamed body above cap should fail")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+	}
+}
+
+func TestDownloadDiskCheck(t *testing.T) {
+	payload := []byte("%PDF-1.4 fake book content")
+	srv := downloadTestServer(t, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	orig := freeSpaceFn
+	freeSpaceFn = func(string) (uint64, error) { return 1, nil } // simulate a nearly full disk
+	t.Cleanup(func() { freeSpaceFn = orig })
+	dir := t.TempDir()
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+		t.Fatal("insufficient free disk space should fail")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+	}
+}
+
+func TestDownloadUnderCap(t *testing.T) {
+	// Regression: a normal download comfortably under the cap still succeeds.
+	payload := []byte("%PDF-1.4 fake book content")
+	srv := downloadTestServer(t, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	c.maxDownloadBytes = 1 << 20 // 1 MiB, far above the payload
+	dir := t.TempDir()
+	res, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.SizeBytes != int64(len(payload)) {
+		t.Errorf("SizeBytes = %d, want %d", res.SizeBytes, len(payload))
+	}
+}
+
 func TestLooksLikeHTML(t *testing.T) {
 	cases := []struct {
 		name string

@@ -20,6 +20,38 @@ import (
 
 var getLinkRe = regexp.MustCompile(`get\.php\?md5=[0-9a-fA-F]{32}&(?:amp;)?key=[A-Za-z0-9]+`)
 
+// diskSpaceMargin is the extra free space required beyond the expected download
+// size, covering filesystem overhead and rounding.
+const diskSpaceMargin = 8 << 20 // 8 MiB
+
+// errDownloadTooLarge is returned when a download exceeds the configured size cap.
+var errDownloadTooLarge = errors.New("download exceeds the configured size limit")
+
+// freeSpaceFn probes the free space of a directory. It is a package var so tests
+// can inject a stub that simulates an insufficient amount of disk space.
+var freeSpaceFn = freeSpace
+
+// countingWriter forwards writes to w while tracking the running total, and
+// aborts with an error once that total would exceed limit. A limit of 0 disables
+// the cap. It guards against downloads whose size is unknown up front (no
+// Content-Length) or larger than the server advertised.
+type countingWriter struct {
+	w       io.Writer
+	limit   int64
+	written int64
+}
+
+// Write forwards p to the wrapped writer, or returns an error without writing if
+// doing so would push the running total past the limit.
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	if cw.limit > 0 && cw.written+int64(len(p)) > cw.limit {
+		return 0, fmt.Errorf("%w of %d bytes", errDownloadTooLarge, cw.limit)
+	}
+	n, err := cw.w.Write(p)
+	cw.written += int64(n)
+	return n, err
+}
+
 // ExtractGetLink localiza el enlace get.php?md5=…&key=… dentro de la página ads.php.
 func ExtractGetLink(body []byte) (string, error) {
 	m := getLinkRe.Find(body)
@@ -75,6 +107,11 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		return nil, errors.New("mirror returned an HTML page instead of the file (key expired or download blocked)")
 	}
+	// Enforce the size cap up front when the CDN advertises a Content-Length: fail
+	// before creating any file so an oversized download never touches the disk.
+	if c.maxDownloadBytes > 0 && resp.ContentLength > c.maxDownloadBytes {
+		return nil, fmt.Errorf("%w: file is %d bytes, limit is %d bytes", errDownloadTooLarge, resp.ContentLength, c.maxDownloadBytes)
+	}
 	// Algunos CDN sirven páginas de error como application/octet-stream (o sin
 	// Content-Type). Olfateamos los primeros bytes sin consumirlos: Peek deja
 	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
@@ -99,26 +136,60 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 		return nil, fmt.Errorf("creating download dir: %w", mkErr)
 	}
-	tmp, err := os.CreateTemp(dir, ".libgen-mcp-*")
+	if derr := ensureDiskSpace(dir, resp.ContentLength); derr != nil {
+		return nil, derr
+	}
+	dest, n, err := c.streamToFile(dir, name, body, resp.ContentLength)
 	if err != nil {
 		return nil, err
 	}
-	n, copyErr := io.Copy(tmp, body)
+	return &DownloadResult{Path: dest, SizeBytes: n, OriginalFilename: original, Mirror: base}, nil
+}
+
+// ensureDiskSpace verifies, when the size is known, that the download fits on
+// disk (plus a small margin for filesystem overhead) before streaming begins.
+// Best-effort: a probe error (e.g. an unsupported platform) lets it proceed.
+func ensureDiskSpace(dir string, contentLength int64) error {
+	if contentLength <= 0 {
+		return nil
+	}
+	// Best-effort: a probe error (e.g. an unsupported platform) lets it proceed.
+	free, ferr := freeSpaceFn(dir)
+	if ferr == nil {
+		if need := uint64(contentLength) + diskSpaceMargin; need > free {
+			return fmt.Errorf("not enough free disk space in %s: need ~%d bytes, have %d", dir, need, free)
+		}
+	}
+	return nil
+}
+
+// streamToFile streams body into a temp file in dir, enforcing the size cap via a
+// countingWriter, then atomically renames it to name. On any error it removes the
+// temp file and returns. contentLength, when known, is checked against the bytes
+// actually written to detect truncated downloads.
+func (c *Client) streamToFile(dir, name string, body io.Reader, contentLength int64) (dest string, n int64, err error) {
+	tmp, err := os.CreateTemp(dir, ".libgen-mcp-*")
+	if err != nil {
+		return "", 0, err
+	}
+	// countingWriter aborts if the streamed size exceeds the cap; this defends
+	// against downloads with no (or a lying) Content-Length header.
+	n, copyErr := io.Copy(&countingWriter{w: tmp, limit: c.maxDownloadBytes}, body)
 	closeErr := tmp.Close()
 	if copyErr != nil || closeErr != nil {
 		os.Remove(tmp.Name())
-		return nil, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
+		return "", 0, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
 	}
-	if resp.ContentLength > 0 && n != resp.ContentLength {
+	if contentLength > 0 && n != contentLength {
 		os.Remove(tmp.Name())
-		return nil, fmt.Errorf("truncated download: got %d of %d bytes", n, resp.ContentLength)
+		return "", 0, fmt.Errorf("truncated download: got %d of %d bytes", n, contentLength)
 	}
-	dest := filepath.Join(dir, name)
+	dest = filepath.Join(dir, name)
 	if rerr := os.Rename(tmp.Name(), dest); rerr != nil {
 		os.Remove(tmp.Name())
-		return nil, rerr
+		return "", 0, rerr
 	}
-	return &DownloadResult{Path: dest, SizeBytes: n, OriginalFilename: original, Mirror: base}, nil
+	return dest, n, nil
 }
 
 // looksLikeHTML detecta si b (cabecera olfateada del cuerpo) empieza, tras

@@ -49,6 +49,8 @@ type Client struct {
 	limiter     *rate.Limiter
 	retry       int           // número máximo de pasadas sobre los mirrors
 	backoffBase time.Duration // base del backoff; inyectable para tests
+	// maxDownloadBytes es el tope de tamaño de descarga en bytes (0 = sin límite).
+	maxDownloadBytes int64
 
 	mu       sync.Mutex           // protege cooldown
 	cooldown map[string]time.Time // mirror base → instante en que expira el cooldown
@@ -58,13 +60,14 @@ type Client struct {
 // (RateRPS/RateBurst), número de reintentos (RetryAttempts) y timeout HTTP.
 func New(m MirrorLister, cfg *config.Config) *Client {
 	return &Client{
-		mirrors:     m,
-		http:        &http.Client{Timeout: cfg.Timeout},
-		dl:          &http.Client{},
-		limiter:     rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
-		retry:       cfg.RetryAttempts,
-		backoffBase: defaultBackoffBase,
-		cooldown:    make(map[string]time.Time),
+		mirrors:          m,
+		http:             &http.Client{Timeout: cfg.Timeout},
+		dl:               &http.Client{},
+		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
+		retry:            cfg.RetryAttempts,
+		backoffBase:      defaultBackoffBase,
+		maxDownloadBytes: cfg.MaxDownloadBytes,
+		cooldown:         make(map[string]time.Time),
 	}
 }
 
