@@ -4,14 +4,14 @@
 
 **Goal:** Documentación completa (README con badges y tabla de botones de instalación, `docs/` markdown, sitio Astro Starlight en `site/` con deploy a Pages), y una extensión `.mcpb` para instalar en Claude Desktop, integrada en el release.
 
-**Architecture:** Todo manuscrito (3 tools). Sitio Starlight monolingüe (inglés). Pages ya activado en el repo (build_type=workflow, https://jmrplens.github.io/libgen-mcp/). El `.mcpb` se empaqueta con la CLI oficial `mcpb pack` desde los binarios de GoReleaser (darwin universal + windows) y se sube al release.
+**Architecture:** `docs/` markdown y README en INGLÉS (regla global: todo el código y la doc markdown en inglés). El sitio Starlight es **BILINGÜE: EN por defecto + ES** (`defaultLocale: "root"` en inglés + locale `es`). Pages ya activado en el repo (build_type=workflow, https://jmrplens.github.io/libgen-mcp/). El `.mcpb` se empaqueta con la CLI oficial `mcpb pack` desde los binarios de GoReleaser (darwin universal + windows) y se sube al release.
 
 **Tech Stack:** Markdown, Astro `^7` + Starlight `^0.41.3` + astro-mermaid + starlight-links-validator + sharp (pnpm, Node ≥22), `mcpb` CLI, GoReleaser.
 
 ## Global Constraints
 
 - **Fases 1 y 2 completas** (documentar el estado final: env de robustez, gestión de descargas, e2e).
-- Idioma **inglés** (coherente con README/server.json). Sitio **monolingüe**, sin i18n/SEO pesado/generadores.
+- `docs/` y README en **inglés**. Sitio **bilingüe EN(defecto)+ES** (`defaultLocale: "root"` EN + locale `es` como en `../gitlab-mcp-server/site/`), sin SEO pesado/generadores. Cada página MDX tiene su espejo en `es/`.
 - Config base de los deep-links de instalación (docker, sin token): `{"command":"docker","args":["run","-i","--rm","ghcr.io/jmrplens/libgen-mcp:latest"]}`.
 - `.mcpb`: `manifest_version` `0.4`, `server.type` `binary`, `user_config` todos opcionales (sin secretos). Validar que su `version` == `VERSION`.
 - Markdown pasa `markdownlint-cli2`; sitio compila con `pnpm build` (links-validator sin errores). Commits path-scoped con trailer `Claude-Session`.
