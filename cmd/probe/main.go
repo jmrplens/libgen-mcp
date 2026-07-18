@@ -53,7 +53,7 @@ func run() int {
 		fmt.Println("[FAIL] mirrors manager:", err)
 		return 1
 	}
-	client := libgen.New(mgr, cfg.Timeout)
+	client := libgen.New(mgr, cfg)
 
 	c := &checker{}
 	list := mgr.Mirrors(ctx)

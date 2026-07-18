@@ -67,7 +67,7 @@ func run(httpAddr string) error {
 	if err != nil {
 		return err
 	}
-	client := libgen.New(mgr, cfg.Timeout)
+	client := libgen.New(mgr, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: version}, nil)
 	tools.Register(server, client, cfg)
 

@@ -42,8 +42,8 @@ func newSession(t *testing.T) *mcp.ClientSession {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := libgen.New(staticMirrors{srv.URL}, 5*time.Second)
-	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second}
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 	Register(server, client, cfg)
 

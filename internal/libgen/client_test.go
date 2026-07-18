@@ -6,22 +6,34 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 type staticMirrors []string
 
 func (s staticMirrors) Mirrors(context.Context) []string { return s }
 
+// newTestClient construye un Client con defaults sanos para tests: rate limiter
+// muy alto (sin espera), un solo intento por defecto y backoff casi nulo. Los
+// tests que ejercitan el retry sobrescriben c.retry.
 func newTestClient(m MirrorLister) *Client {
-	c := New(m, 5*time.Second)
-	c.limiter.SetLimit(1000) // sin espera en tests
+	cfg := &config.Config{
+		Timeout:       5 * time.Second,
+		RateRPS:       1000,
+		RateBurst:     100,
+		RetryAttempts: 1,
+	}
+	c := New(m, cfg)
+	c.backoffBase = time.Millisecond
 	return c
 }
 
 func TestGetFailsOver(t *testing.T) {
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "down", http.StatusBadGateway)
 	}))
 	defer bad.Close()
@@ -45,7 +57,7 @@ func TestGetFailsOver(t *testing.T) {
 }
 
 func TestGetAllMirrorsFailed(t *testing.T) {
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "down", http.StatusInternalServerError)
 	}))
 	defer bad.Close()
@@ -53,5 +65,87 @@ func TestGetAllMirrorsFailed(t *testing.T) {
 	_, _, err := c.get(context.Background(), "/index.php", nil)
 	if !errors.Is(err, ErrAllMirrorsFailed) {
 		t.Fatalf("err = %v, want ErrAllMirrorsFailed", err)
+	}
+}
+
+// TestGetRetriesTransient: un mirror devuelve 503 dos veces y luego 200; con
+// RetryAttempts=3 el cliente debe reintentar hasta lograr el 200 (3 hits).
+func TestGetRetriesTransient(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) < 3 {
+			http.Error(w, "temporarily down", http.StatusServiceUnavailable)
+			return
+		}
+		w.Write([]byte("ok-body"))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.retry = 3
+	body, _, err := c.get(context.Background(), "/index.php", nil)
+	if err != nil {
+		t.Fatalf("get() error = %v", err)
+	}
+	if string(body) != "ok-body" {
+		t.Errorf("body = %q, want ok-body", body)
+	}
+	if got := hits.Load(); got != 3 {
+		t.Errorf("hits = %d, want 3 (dos reintentos tras 503)", got)
+	}
+}
+
+// TestGetPermanentNoRetry: un 404 es un error permanente; no debe reintentarse
+// aunque haya intentos disponibles (un solo hit) y el error se propaga.
+func TestGetPermanentNoRetry(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.retry = 5
+	_, _, err := c.get(context.Background(), "/index.php", nil)
+	if err == nil {
+		t.Fatal("get() error = nil, want error")
+	}
+	if got := hits.Load(); got != 1 {
+		t.Errorf("hits = %d, want 1 (sin reintento en error permanente)", got)
+	}
+}
+
+// TestCooldownSkip: tras fallar una vez, el mirror malo entra en cooldown; la
+// segunda llamada debe saltarlo y no volver a consultarlo (hits del malo == 1).
+func TestCooldownSkip(t *testing.T) {
+	var badHits, goodHits atomic.Int32
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		badHits.Add(1)
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	defer bad.Close()
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		goodHits.Add(1)
+		w.Write([]byte("ok"))
+	}))
+	defer good.Close()
+
+	c := newTestClient(staticMirrors{bad.URL, good.URL})
+	if _, _, err := c.get(context.Background(), "/x", nil); err != nil {
+		t.Fatalf("first get error = %v", err)
+	}
+	if got := badHits.Load(); got != 1 {
+		t.Fatalf("badHits after first call = %d, want 1", got)
+	}
+
+	if _, _, err := c.get(context.Background(), "/x", nil); err != nil {
+		t.Fatalf("second get error = %v", err)
+	}
+	if got := badHits.Load(); got != 1 {
+		t.Errorf("badHits after second call = %d, want 1 (cooldown skip)", got)
+	}
+	if got := goodHits.Load(); got != 2 {
+		t.Errorf("goodHits = %d, want 2", got)
 	}
 }
