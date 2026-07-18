@@ -109,6 +109,9 @@ func (s randombookSource) lookupID(ctx context.Context, md5 string) (string, err
 	if err := s.getJSON(ctx, endpoint, &rec); err != nil {
 		return "", err
 	}
+	if rec.IsError {
+		return "", fmt.Errorf("randombook: by-id API reported an error for md5 %q", md5)
+	}
 	if rec.Result == nil {
 		return "", fmt.Errorf("randombook: md5 %q not indexed", md5)
 	}
@@ -126,6 +129,9 @@ func (s randombookSource) lookupMirrors(ctx context.Context, id string) ([]strin
 	var rec randombookLinksResponse
 	if err := s.getJSON(ctx, endpoint, &rec); err != nil {
 		return nil, err
+	}
+	if rec.IsError {
+		return nil, fmt.Errorf("randombook: links-by-id API reported an error for id %q", id)
 	}
 	if rec.Result == nil {
 		return nil, fmt.Errorf("%w: randombook links-by-id result missing", ErrLayoutChanged)

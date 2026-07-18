@@ -31,6 +31,10 @@ func newTestClient(m MirrorLister) *Client {
 	}
 	c := New(m, cfg)
 	c.backoffBase = time.Millisecond
+	// Pin the chain to the LibGen source so md5 unit tests never fall through to
+	// the live randombook provider; source-chain wiring is covered separately by
+	// TestNewWiresSourceChainFromConfig and per-source tests inject their own.
+	c.sources = []DownloadSource{libgenSource{c: c}}
 	return c
 }
 

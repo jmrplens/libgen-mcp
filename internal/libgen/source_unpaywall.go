@@ -58,9 +58,13 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	if base == "" {
 		base = unpaywallAPIBase
 	}
+	// The DOI stays raw in the path: the Unpaywall v2 API keys records by the
+	// unescaped DOI (its documented shape is /v2/<doi>), so its slashes must not be
+	// percent-encoded. Encoding "/" as %2F was verified against the live API to
+	// still return 200 today, but the raw form is the documented, canonical one.
 	endpoint := fmt.Sprintf("%s/%s?email=%s",
 		strings.TrimRight(base, "/"),
-		url.PathEscape(it.DOI),
+		it.DOI,
 		url.QueryEscape(s.email),
 	)
 

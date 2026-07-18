@@ -113,6 +113,13 @@ func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, sche
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// Gate extraction on a 200: a challenge/error page (403/404/5xx) can still
+	// embed a stale id="pdf" element, so scraping a PDF link from a non-OK
+	// response would hand back a dead URL. Skip the host instead.
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("scihub: host %q returned HTTP %d", host, resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, scihubMaxBody))
 	if err != nil {
 		return "", fmt.Errorf("scihub: reading %q: %w", host, err)

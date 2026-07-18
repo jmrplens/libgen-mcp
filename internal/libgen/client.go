@@ -63,8 +63,10 @@ type Client struct {
 	// releases it on completion.
 	dlSem chan struct{}
 	// sources is the ordered download-source chain Download tries for each Item,
-	// advancing to the next when one fails to resolve or stream. It always starts
-	// with the LibGen source; later phases prepend/append others (DOI-based).
+	// advancing to the next when one fails to resolve or stream. It is built from
+	// config by buildSourceChain as [unpaywall, scihub, libgen, randombook], then
+	// filtered per item by Supports so books try [libgen, randombook] and articles
+	// try [unpaywall, scihub].
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
 	// same md5 into the same dir), keyed by the absolute .part path. The .part
@@ -125,9 +127,23 @@ func (c *Client) partialLockCount() int {
 	return len(c.partialLocks)
 }
 
+// Option customizes a Client built by New. It exists so callers (chiefly tests
+// that inject a DownloadSource pointing at an httptest server) can override
+// pieces of the Client that are otherwise derived from config.
+type Option func(*Client)
+
+// WithSources overrides the download-source chain New would build from config.
+// The supplied sources are used verbatim and in order; Download still filters
+// them per item via Supports. It is primarily a test seam for injecting a source
+// backed by a local server without reaching the live providers.
+func WithSources(sources ...DownloadSource) Option {
+	return func(c *Client) { c.sources = sources }
+}
+
 // New builds a Client from the configuration: rate limiter (RateRPS/RateBurst),
-// number of retries (RetryAttempts) and HTTP timeout.
-func New(m MirrorLister, cfg *config.Config) *Client {
+// number of retries (RetryAttempts), HTTP timeout and the download-source chain.
+// Options are applied last, so WithSources can replace the config-built chain.
+func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	// Size the download semaphore from config; guard against an unvalidated
 	// non-positive value so the channel never becomes an unbuffered (deadlocking)
 	// zero-capacity semaphore.
@@ -143,10 +159,35 @@ func New(m MirrorLister, cfg *config.Config) *Client {
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
 	}
-	// The default chain resolves md5-keyed items through LibGen. libgenSource
-	// holds c so it can reuse the mirror failover in ResolveGetURL.
-	c.sources = []DownloadSource{libgenSource{c: c}}
+	c.sources = c.buildSourceChain(cfg)
+	for _, opt := range opts {
+		opt(c)
+	}
 	return c
+}
+
+// buildSourceChain assembles the ordered download-source chain from config. The
+// slice order is [unpaywall, scihub, libgen, randombook]; because Download filters
+// each source by Supports(item), this single ordered slice yields the right
+// per-item order: an article (DOI-keyed) item is offered to [unpaywall, scihub]
+// and a book (md5-keyed) item to [libgen, randombook]. Sources omitted from
+// LIBGEN_MCP_SOURCES are left out. Each non-LibGen source uses the client's
+// page HTTP client (with timeout) for its resolution lookups; libgenSource holds
+// c so it can reuse the mirror failover in ResolveGetURL.
+func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
+	factories := map[string]func() DownloadSource{
+		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
+		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },
+		"libgen":     func() DownloadSource { return libgenSource{c: c} },
+		"randombook": func() DownloadSource { return randombookSource{http: c.http} },
+	}
+	chain := make([]DownloadSource, 0, len(config.KnownSources))
+	for _, name := range config.KnownSources {
+		if cfg.SourceEnabled(name) {
+			chain = append(chain, factories[name]())
+		}
+	}
+	return chain
 }
 
 // get tries path?q across the mirrors until it gets a 200. On a transient

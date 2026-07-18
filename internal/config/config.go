@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,7 +35,13 @@ type Config struct {
 	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
+	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 }
+
+// KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
+// in their natural chain order (DOI-based first, then md5-based). It is the
+// authority both for validating the configured list and for building the chain.
+var KnownSources = []string{"unpaywall", "scihub", "libgen", "randombook"}
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
@@ -64,6 +71,9 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
 		cfg.ScihubHosts = splitHosts(v)
+	}
+	if v := os.Getenv("LIBGEN_MCP_SOURCES"); v != "" {
+		cfg.Sources = splitHosts(v)
 	}
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
@@ -196,6 +206,9 @@ func (c *Config) Validate() error {
 	if err := validateScihubHosts(c.ScihubHosts); err != nil {
 		return err
 	}
+	if err := validateSources(c.Sources); err != nil {
+		return err
+	}
 	if err := validateMirror(c.Mirror); err != nil {
 		return err
 	}
@@ -233,6 +246,33 @@ func validateScihubHosts(hosts []string) error {
 		}
 	}
 	return nil
+}
+
+// validateSources checks that every entry in the enabled-sources list names a
+// known download source (case-insensitive). An empty list is valid and means
+// "all sources enabled".
+func validateSources(sources []string) error {
+	for _, s := range sources {
+		if !slices.Contains(KnownSources, strings.ToLower(strings.TrimSpace(s))) {
+			return fmt.Errorf("LIBGEN_MCP_SOURCES has unknown source %q (allowed: %s)", s, strings.Join(KnownSources, ", "))
+		}
+	}
+	return nil
+}
+
+// SourceEnabled reports whether the named download source should be part of the
+// chain. When Sources is empty every source is enabled; otherwise only the listed
+// names (compared case-insensitively) are.
+func (c *Config) SourceEnabled(name string) bool {
+	if len(c.Sources) == 0 {
+		return true
+	}
+	for _, s := range c.Sources {
+		if strings.EqualFold(strings.TrimSpace(s), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateMirror checks that a non-empty mirror is an http/https URL with a host.

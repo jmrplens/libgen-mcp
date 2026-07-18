@@ -238,13 +238,24 @@ func chooseFileName(filename, disposition string, meta *FileMeta, md5, fallbackE
 	return name
 }
 
-// Download downloads the md5 file into dir. The output name is chosen in order:
-// an explicit filename, else the name the CDN announces (content-disposition),
-// else a clean name built from meta (when non-nil and it yields a name), else the
-// md5; the chosen name is sanitized. An optional progress callback (only the first
-// is used) is invoked throttled with the running and total byte counts; pass none
-// to disable progress reporting.
+// Download downloads the md5 file into dir. It is a convenience wrapper over
+// DownloadItem for md5-keyed (book) downloads; DOI-keyed (article) downloads go
+// through DownloadItem directly. The output name is chosen in order: an explicit
+// filename, else the name the CDN announces (content-disposition), else a clean
+// name built from meta (when non-nil and it yields a name), else the md5; the
+// chosen name is sanitized. An optional progress callback (only the first is used)
+// is invoked throttled with the running and total byte counts; pass none to
+// disable progress reporting.
 func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *FileMeta, progress ...ProgressFunc) (*DownloadResult, error) {
+	return c.DownloadItem(ctx, Item{MD5: md5, Meta: meta}, dir, filename, progress...)
+}
+
+// DownloadItem downloads the file identified by item (an md5, a DOI, or both)
+// into dir, trying each supporting source in the configured chain until one
+// succeeds. The output name is chosen as documented on Download. An optional
+// progress callback (only the first is used) reports throttled byte counts; pass
+// none to disable progress reporting.
+func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename string, progress ...ProgressFunc) (*DownloadResult, error) {
 	onProgress := firstProgress(progress)
 	// Acquire a concurrency slot before doing any work, releasing it on return.
 	// While waiting, honor context cancellation so a queued download can be
@@ -254,7 +265,6 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *
 	}
 	defer c.releaseSlot()
 
-	item := Item{MD5: md5, Meta: meta}
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
 	// Try each supporting source in order: a source that fails to resolve or whose
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to

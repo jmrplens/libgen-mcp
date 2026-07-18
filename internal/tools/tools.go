@@ -65,11 +65,13 @@ type DetailsOutput struct {
 	Edition map[string]any `json:"edition,omitempty"`
 }
 
-// DownloadInput holds the parameters for the download tool.
+// DownloadInput holds the parameters for the download tool. Provide md5 (books)
+// or doi (articles); at least one is required.
 type DownloadInput struct {
-	MD5      string `json:"md5" jsonschema:"file md5 hash from a search result,required"`
+	MD5      string `json:"md5,omitempty" jsonschema:"file md5 hash from a book search result; provide md5 or doi"`
+	DOI      string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5 or doi"`
 	Path     string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)"`
-	Filename string `json:"filename,omitempty" jsonschema:"destination filename (default: name announced by the mirror)"`
+	Filename string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
 }
 
 // Register wires the search, get_details and download tools onto the MCP server,
@@ -89,9 +91,11 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client)))
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "download",
-		Title:       "Download file",
-		Description: "Download a file by md5 to a local directory, resolving the libgen mirror download chain (ads.php key + CDN redirect). Returns the saved path and size.",
+		Name:  "download",
+		Title: "Download file",
+		Description: "Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). " +
+			"Books are tried against libgen (ads.php key + CDN) then randombook (fresh-mirror discovery); articles are tried against unpaywall (open-access PDF) then sci-hub. " +
+			"Returns the saved path, size and the source that served it.",
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("download", downloadHandler(client, cfg)))
 }
@@ -211,19 +215,65 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, libgen.DownloadResult] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
 		var zero libgen.DownloadResult
-		if !md5Re.MatchString(in.MD5) {
+		md5 := strings.ToLower(strings.TrimSpace(in.MD5))
+		doi := strings.TrimSpace(in.DOI)
+		if md5 == "" && doi == "" {
+			return nil, zero, errors.New("provide md5 (book) or doi (article)")
+		}
+		if md5 != "" && !md5Re.MatchString(md5) {
 			return nil, zero, errors.New("md5 must be a 32-char hex string")
 		}
 		dir := in.Path
 		if dir == "" {
 			dir = cfg.DownloadDir
 		}
-		res, err := c.Download(ctx, strings.ToLower(in.MD5), dir, in.Filename, nil, progressNotifier(ctx, req))
+		item := libgen.Item{MD5: md5, DOI: doi}
+		// For a book download with no explicit name, fill bibliographic metadata so
+		// the file lands under a clean "Author - Title (Year).ext" name. Best-effort:
+		// a details lookup failure must not fail the download.
+		if md5 != "" && in.Filename == "" {
+			item.Meta = bookMeta(ctx, c, md5)
+		}
+		res, err := c.DownloadItem(ctx, item, dir, in.Filename, progressNotifier(ctx, req))
 		if err != nil {
 			return nil, zero, err
 		}
 		return nil, *res, nil
 	}
+}
+
+// bookMeta fetches bibliographic fields for a book md5 to build a clean download
+// filename. It is best-effort: any lookup error returns nil so the download still
+// proceeds and falls back to the mirror-announced name or the md5. Title, author
+// and year come from the related edition record; the extension from the file
+// record.
+func bookMeta(ctx context.Context, c *libgen.Client, md5 string) *libgen.FileMeta {
+	file, edition, err := c.DetailsByMD5(ctx, md5)
+	if err != nil {
+		return nil
+	}
+	meta := &libgen.FileMeta{
+		Title:  stringField(edition, "title"),
+		Author: stringField(edition, "author"),
+		Year:   stringField(edition, "year"),
+		Ext:    stringField(file, "extension"),
+	}
+	if meta.Title == "" && meta.Author == "" && meta.Year == "" && meta.Ext == "" {
+		return nil
+	}
+	return meta
+}
+
+// stringField reads a trimmed string value from a details record map, returning
+// "" when the map is nil, the key is absent, or the value is not a string.
+func stringField(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	if v, ok := m[key].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 // progressNotifier builds a libgen.ProgressFunc that forwards download progress

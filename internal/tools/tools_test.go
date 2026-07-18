@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -424,5 +425,192 @@ func TestDownloadToolWithoutProgressToken(t *testing.T) {
 	}
 	if res.IsError {
 		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+}
+
+// doiStubSource is a test DownloadSource that resolves any DOI-keyed item straight
+// to a fixed URL (a local file CDN), standing in for unpaywall/sci-hub so the
+// download-by-DOI path can run end to end without touching the live providers.
+type doiStubSource struct {
+	name    string
+	fileURL string
+}
+
+func (s doiStubSource) Name() string                 { return s.name }
+func (s doiStubSource) Supports(it libgen.Item) bool { return it.DOI != "" }
+func (s doiStubSource) Resolve(context.Context, libgen.Item) (libgen.Resolved, error) {
+	return libgen.Resolved{FileURL: s.fileURL, VerifyMD5: false, Ext: "pdf"}, nil
+}
+
+// fileCDNServer serves payload as an octet-stream at /file, with an optional
+// Content-Disposition (empty to omit it so a metadata-built name can win).
+func fileCDNServer(t *testing.T, payload []byte, disposition string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/file", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		if disposition != "" {
+			w.Header().Set("Content-Disposition", disposition)
+		}
+		_, _ = w.Write(payload)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newDownloadSession registers the tools on a client built with the given options
+// and returns an in-memory MCP session, so download tests can inject a custom
+// source chain (e.g. a DOI stub) without reaching the network.
+func newDownloadSession(t *testing.T, cfg *config.Config, mirrors libgen.MirrorLister, opts ...libgen.Option) *mcp.ClientSession {
+	t.Helper()
+	client := libgen.New(mirrors, cfg, opts...)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+// decodeDownloadResult unmarshals a download tool result's structured content.
+func decodeDownloadResult(t *testing.T, res *mcp.CallToolResult) libgen.DownloadResult {
+	t.Helper()
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out libgen.DownloadResult
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return out
+}
+
+// TestDownloadToolByDOI verifies the download tool resolves an article by DOI
+// through the (injected) DOI source and surfaces the serving source in the result.
+func TestDownloadToolByDOI(t *testing.T) {
+	payload := []byte("%PDF-1.4 article fetched by DOI")
+	cdn := fileCDNServer(t, payload, "") // no disposition: DOI items get a name from Ext
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{},
+		libgen.WithSources(doiStubSource{name: "scihub", fileURL: cdn.URL + "/file"}))
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pone.0000217"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	out := decodeDownloadResult(t, res)
+	if out.Source != "scihub" {
+		t.Errorf("Source = %q, want %q", out.Source, "scihub")
+	}
+	if out.SizeBytes != int64(len(payload)) {
+		t.Errorf("SizeBytes = %d, want %d", out.SizeBytes, len(payload))
+	}
+	if !strings.HasSuffix(out.Path, ".pdf") {
+		t.Errorf("Path = %q, want a .pdf name", out.Path)
+	}
+}
+
+// TestDownloadToolRequiresMD5OrDOI verifies the tool rejects a call carrying
+// neither md5 nor doi with a tool error (no download attempted).
+func TestDownloadToolRequiresMD5OrDOI(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("download with neither md5 nor doi should be a tool error")
+	}
+}
+
+// bookMirror serves the full book download chain (ads.php → get.php → CDN) plus
+// json.php for get_details, echoing the requested md5 into the get.php link and
+// omitting a Content-Disposition so a metadata-built filename wins.
+func bookMirror(t *testing.T, payload []byte) *httptest.Server {
+	t.Helper()
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	fileJSON, _ := os.ReadFile("../libgen/testdata/file_by_md5.json")
+	editionJSON, _ := os.ReadFile("../libgen/testdata/edition.json")
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream") // no Content-Disposition
+		_, _ = w.Write(payload)
+	})
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("object") == "f" {
+			_, _ = w.Write(fileJSON)
+		} else {
+			_, _ = w.Write(editionJSON)
+		}
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestDownloadToolMD5Book verifies the md5 (book) path still works and that, with
+// no explicit filename and no mirror-announced name, the file lands under a clean
+// metadata-built name ("Author - Title (Year).ext") from get_details, tagged with
+// the libgen source.
+func TestDownloadToolMD5Book(t *testing.T) {
+	payload := []byte("%PDF-1.4 book fetched by md5 for the metadata name test")
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	srv := bookMirror(t, payload)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	out := decodeDownloadResult(t, res)
+	if out.Source != "libgen" {
+		t.Errorf("Source = %q, want %q", out.Source, "libgen")
+	}
+	if !out.Verified {
+		t.Error("Verified = false, want true (md5-keyed book)")
+	}
+	base := filepath.Base(out.Path)
+	if !strings.HasPrefix(base, "Jyotiswarup Raiturkar - Hands-On Software Architecture with Golang") {
+		t.Errorf("filename = %q, want a clean metadata-built name", base)
+	}
+	if !strings.HasSuffix(base, ".pdf") {
+		t.Errorf("filename = %q, want a .pdf suffix", base)
 	}
 }

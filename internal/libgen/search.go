@@ -19,6 +19,11 @@ import (
 // Paginator init script, e.g. `new Paginator("paginator_example_top", 6, 25, ...`.
 var paginatorRe = regexp.MustCompile(`new Paginator\("paginator_example_top",\s*(\d+),\s*(\d+),`)
 
+// doiRe captures the DOI printed in an article's first cell, e.g. the text
+// "DOI: 10.14311/nnw.2016.26.006". Article rows expose the DOI so the model can
+// hand it to the download tool, which resolves articles by DOI.
+var doiRe = regexp.MustCompile(`(?i)DOI:\s*(\S+)`)
+
 // ErrLayoutChanged indicates that the page does not have the expected structure:
 // not to be confused with "zero results".
 var ErrLayoutChanged = errors.New("libgen page layout not recognized (site may have changed)")
@@ -115,6 +120,7 @@ type Result struct {
 	EditionID string           `json:"edition_id,omitempty"`
 	FileID    string           `json:"file_id,omitempty"`
 	MD5       string           `json:"md5"`
+	DOI       string           `json:"doi,omitempty"`
 	Title     string           `json:"title"`
 	ISBNs     []string         `json:"isbns,omitempty"`
 	Authors   string           `json:"authors,omitempty"`
@@ -189,6 +195,9 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 func parseRow(cells []*html.Node, base string) *Result {
 	r := Result{}
 	parseIdentifiers(cells[0], &r)
+	if m := doiRe.FindStringSubmatch(nodeText(cells[0])); m != nil {
+		r.DOI = strings.TrimSpace(m[1])
+	}
 	r.Authors = strings.TrimSpace(nodeText(cells[1]))
 	r.Publisher = strings.TrimSpace(nodeText(cells[2]))
 	r.Year = strings.TrimSpace(nodeText(cells[3]))

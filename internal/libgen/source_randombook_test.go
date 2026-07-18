@@ -128,6 +128,19 @@ func TestRandombookNoWorkingMirror(t *testing.T) {
 	}
 }
 
+// TestRandombookByIDError verifies the by-id short-circuit: an API response with
+// isError:true yields an error even when it carries a result object, so a flagged
+// error is never treated as a hit.
+func TestRandombookByIDError(t *testing.T) {
+	apiBase := randombookAPIServer(t,
+		`{"result":{"id":"123"},"isError":true}`,
+		`{"result":{"list":[]},"isError":false}`)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() must fail when the by-id API reports isError:true")
+	}
+}
+
 // TestRandombookParsesLinksFixture guards the links response parsing against the
 // captured fixture shape: the mirror hostname list is decoded from result.list.
 func TestRandombookParsesLinksFixture(t *testing.T) {

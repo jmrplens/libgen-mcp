@@ -158,6 +158,36 @@ func TestValidateBadUnpaywallEmail(t *testing.T) {
 	}
 }
 
+// TestLoadSources verifies LIBGEN_MCP_SOURCES parses into the enabled list and
+// that SourceEnabled reflects it (empty = all enabled; a set = only those named).
+func TestLoadSources(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_SOURCES", " libgen , unpaywall ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.SourceEnabled("libgen") || !cfg.SourceEnabled("unpaywall") {
+		t.Errorf("SourceEnabled(libgen/unpaywall) = false, want true")
+	}
+	if cfg.SourceEnabled("scihub") || cfg.SourceEnabled("randombook") {
+		t.Errorf("SourceEnabled(scihub/randombook) = true, want false")
+	}
+
+	empty := &Config{}
+	if !empty.SourceEnabled("scihub") {
+		t.Error("SourceEnabled on an empty list should enable every source")
+	}
+}
+
+// TestValidateBadSources verifies an unknown source name is rejected.
+func TestValidateBadSources(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.Sources = []string{"libgen", "bogus"}
+	if cfg.Validate() == nil {
+		t.Fatal("Validate() with an unknown source should fail")
+	}
+}
+
 // TestLoadBadNumericEnv verifies LoadBadNumericEnv.
 func TestLoadBadNumericEnv(t *testing.T) {
 	cases := map[string]string{

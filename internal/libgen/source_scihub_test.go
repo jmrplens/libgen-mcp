@@ -120,6 +120,23 @@ func TestScihubNoArticle(t *testing.T) {
 	}
 }
 
+// TestScihubRejectsNon200WithPDF verifies the 200 gate: a host that serves a
+// valid id="pdf" element but replies with a non-200 status is skipped, so a stale
+// PDF link on a challenge/error page is never handed back.
+func TestScihubRejectsNon200WithPDF(t *testing.T) {
+	blocked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write(scihubFixture(t)) // real id="pdf", but behind a 403
+	}))
+	t.Cleanup(blocked.Close)
+	host := strings.TrimPrefix(blocked.URL, "http://")
+
+	s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1016/j.cell.2016.01.043"}); err == nil {
+		t.Fatal("Resolve() must reject a PDF scraped from a non-200 response")
+	}
+}
+
 // TestScihubSupports verifies the source claims DOI-keyed items only.
 func TestScihubSupports(t *testing.T) {
 	s := scihubSource{}

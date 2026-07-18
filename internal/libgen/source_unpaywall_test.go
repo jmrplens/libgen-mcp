@@ -67,6 +67,23 @@ func TestUnpaywallResolveNotOA(t *testing.T) {
 	}
 }
 
+// TestUnpaywallRawSlashInPath verifies the DOI keeps its raw slash in the request
+// path (the documented /v2/<doi> shape) rather than being percent-encoded to %2F.
+func TestUnpaywallRawSlashInPath(t *testing.T) {
+	srv, lastURI := unpaywallTestServer(t, "unpaywall_oa.json")
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1371/journal.pone.0000217"}); err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if !strings.Contains(*lastURI, "/10.1371/journal.pone.0000217") {
+		t.Errorf("request URI %q does not carry the DOI with a raw slash", *lastURI)
+	}
+	if strings.Contains(*lastURI, "%2F") {
+		t.Errorf("request URI %q percent-encoded the DOI slash, want it raw", *lastURI)
+	}
+}
+
 // TestUnpaywallSupports verifies that the source claims DOI-keyed items only.
 func TestUnpaywallSupports(t *testing.T) {
 	s := unpaywallSource{email: "mail@jmrp.io"}

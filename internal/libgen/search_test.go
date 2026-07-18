@@ -164,6 +164,29 @@ func TestParseSearchArticles(t *testing.T) {
 	}
 }
 
+// TestParseSearchArticlesDOI verifies the DOI printed in an article row is parsed
+// into Result.DOI, so the model can pass it to the download tool (articles are
+// fetched by DOI). The first fixture row advertises DOI 10.14311/nnw.2016.26.006.
+func TestParseSearchArticlesDOI(t *testing.T) {
+	page := parseFixture(t, "search_articles.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the articles fixture")
+	}
+	const wantDOI = "10.14311/nnw.2016.26.006"
+	if got := page.Results[0].DOI; got != wantDOI {
+		t.Errorf("Results[0].DOI = %q, want %q", got, wantDOI)
+	}
+	var withDOI int
+	for _, r := range page.Results {
+		if r.DOI != "" {
+			withDOI++
+		}
+	}
+	if withDOI == 0 {
+		t.Error("no article result carried a DOI, want several")
+	}
+}
+
 // TestParseSearchEmpty verifies ParseSearchEmpty.
 func TestParseSearchEmpty(t *testing.T) {
 	page := parseFixture(t, "search_empty.html")
