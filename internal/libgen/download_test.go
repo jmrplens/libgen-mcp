@@ -2,12 +2,15 @@ package libgen
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -149,21 +152,23 @@ func newBlockingCDN(t *testing.T, payload []byte) *blockingCDN {
 // TestConcurrencyLimit verifies that with MaxConcurrentDownloads=1 a second
 // download does not reach the mirror until the first releases its slot.
 func TestConcurrencyLimit(t *testing.T) {
-	b := newBlockingCDN(t, []byte("%PDF-1.4 payload"))
+	payload := []byte("%PDF-1.4 payload")
+	wantMD5 := md5Hex(payload)
+	b := newBlockingCDN(t, payload)
 	defer b.srv.Close()
 	c := newTestClientConcurrency(staticMirrors{b.srv.URL}, 1)
 	dir := t.TempDir()
 
 	errs := make(chan error, 2)
 	go func() {
-		_, err := c.Download(context.Background(), testMD5, dir, "one.pdf")
+		_, err := c.Download(context.Background(), wantMD5, dir, "one.pdf")
 		errs <- err
 	}()
 	// The first download reaches the CDN and holds the only slot.
 	<-b.entered
 
 	go func() {
-		_, err := c.Download(context.Background(), testMD5, dir, "two.pdf")
+		_, err := c.Download(context.Background(), wantMD5, dir, "two.pdf")
 		errs <- err
 	}()
 	// While the first download holds the slot, the second must not reach the CDN.
@@ -237,7 +242,7 @@ func TestDownload(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "")
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -262,11 +267,12 @@ func TestDownload(t *testing.T) {
 }
 
 func TestDownloadCustomFilename(t *testing.T) {
-	srv := downloadTestServer(t, []byte("data"))
+	payload := []byte("data")
+	srv := downloadTestServer(t, payload)
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "mi libro.pdf")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "mi libro.pdf")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +366,7 @@ func TestDownloadUnderCap(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 1 << 20 // 1 MiB, far above the payload
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "")
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -388,6 +394,205 @@ func TestLooksLikeHTML(t *testing.T) {
 				t.Errorf("looksLikeHTML(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// md5Hex returns the hex-encoded MD5 digest of b.
+func md5Hex(b []byte) string {
+	sum := md5.Sum(b) //nolint:gosec // integrity digest, not a security primitive.
+	return hex.EncodeToString(sum[:])
+}
+
+// md5CDNServer builds a mirror whose /ads.php advertises the given md5 and whose
+// /cdn/file is served by the provided handler, letting each test control the CDN
+// response (status, Range handling, body) independently.
+func md5CDNServer(t *testing.T, wantMD5 string, cdn http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("key") != "TESTKEY123" {
+			http.Error(w, "bad key", http.StatusForbidden)
+			return
+		}
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", cdn)
+	srv = httptest.NewServer(mux)
+	return srv
+}
+
+// partPathFor mirrors the stable partial path the downloader uses for an md5.
+func partPathFor(dir, md5 string) string {
+	return filepath.Join(dir, ".libgen-mcp-"+md5+".part")
+}
+
+// rangeStart parses the numeric start offset from a "bytes=<start>-" Range header.
+func rangeStart(t *testing.T, header string) int64 {
+	t.Helper()
+	const prefix = "bytes="
+	if !strings.HasPrefix(header, prefix) {
+		t.Fatalf("unexpected Range header %q", header)
+	}
+	spec := strings.TrimPrefix(header, prefix)
+	start, _, _ := strings.Cut(spec, "-")
+	n, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		t.Fatalf("parsing Range start from %q: %v", header, err)
+	}
+	return n
+}
+
+func TestDownloadVerifiesMD5Match(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("real book bytes ", 64))
+	want := md5Hex(payload)
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Write(payload)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	res, err := c.Download(context.Background(), want, dir, "")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if !res.Verified {
+		t.Error("Verified = false, want true")
+	}
+	if res.Resumed {
+		t.Error("Resumed = true, want false (fresh download)")
+	}
+	data, err := os.ReadFile(res.Path)
+	if err != nil || string(data) != string(payload) {
+		t.Errorf("content = %q, err = %v", data, err)
+	}
+	// The stable partial must be gone after a successful rename.
+	if _, statErr := os.Stat(partPathFor(dir, want)); !os.IsNotExist(statErr) {
+		t.Errorf(".part still present after success: %v", statErr)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("dir has %d entries, want 1", len(entries))
+	}
+}
+
+func TestDownloadMD5Mismatch(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("tampered bytes ", 64))
+	// Request a different (but syntactically valid) md5 than the body's real one.
+	want := md5Hex([]byte("some other content entirely"))
+	if want == md5Hex(payload) {
+		t.Fatal("test setup: md5s unexpectedly collide")
+	}
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Write(payload)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	if _, err := c.Download(context.Background(), want, dir, ""); err == nil {
+		t.Fatal("md5 mismatch should fail")
+	}
+	// On integrity failure the partial is deleted and no final file is left.
+	if _, statErr := os.Stat(partPathFor(dir, want)); !os.IsNotExist(statErr) {
+		t.Errorf(".part still present after mismatch: %v", statErr)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("dir has %d entries, want 0 (no final file, no .part)", len(entries))
+	}
+}
+
+func TestDownloadResume(t *testing.T) {
+	full := []byte("%PDF-1.4 " + strings.Repeat("resumable content chunk ", 40))
+	want := md5Hex(full)
+	half := len(full) / 2
+
+	var sawRange atomic.Bool
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, r *http.Request) {
+		rng := r.Header.Get("Range")
+		if rng == "" {
+			t.Errorf("resume: expected a Range header, got none")
+			w.Write(full)
+			return
+		}
+		sawRange.Store(true)
+		start := rangeStart(t, rng)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(full)-1, len(full)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(full[start:])
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	// Pre-create the partial with the first half already downloaded.
+	if err := os.WriteFile(partPathFor(dir, want), full[:half], 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Download(context.Background(), want, dir, "")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if !sawRange.Load() {
+		t.Error("CDN never saw a Range request")
+	}
+	if !res.Resumed {
+		t.Error("Resumed = false, want true")
+	}
+	if !res.Verified {
+		t.Error("Verified = false, want true")
+	}
+	data, err := os.ReadFile(res.Path)
+	if err != nil || string(data) != string(full) {
+		t.Errorf("content mismatch after resume (len=%d, want %d), err=%v", len(data), len(full), err)
+	}
+}
+
+func TestDownloadResumeServerIgnoresRange(t *testing.T) {
+	full := []byte("%PDF-1.4 " + strings.Repeat("restart content chunk ", 40))
+	want := md5Hex(full)
+	half := len(full) / 2
+
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		// The CDN ignores Range entirely: 200 with the full body.
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Write(full)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	if err := os.WriteFile(partPathFor(dir, want), full[:half], 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Download(context.Background(), want, dir, "")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	// A 200 despite the Range means the partial was discarded and restarted.
+	if res.Resumed {
+		t.Error("Resumed = true, want false (server ignored Range → restart)")
+	}
+	if !res.Verified {
+		t.Error("Verified = false, want true")
+	}
+	data, err := os.ReadFile(res.Path)
+	if err != nil || string(data) != string(full) {
+		t.Errorf("content mismatch after restart (len=%d, want %d), err=%v", len(data), len(full), err)
 	}
 }
 

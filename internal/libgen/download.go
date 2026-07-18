@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	cryptomd5 "crypto/md5" //nolint:gosec // MD5 is the digest LibGen keys files by; used only for integrity matching.
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	xhtml "golang.org/x/net/html"
@@ -79,7 +82,17 @@ type DownloadResult struct {
 	SizeBytes        int64  `json:"size_bytes"`
 	OriginalFilename string `json:"original_filename,omitempty"`
 	Mirror           string `json:"mirror"`
+	// Verified reports whether the downloaded file's MD5 digest matched the
+	// requested md5 (integrity confirmed end to end).
+	Verified bool `json:"verified"`
+	// Resumed reports whether the download continued from a pre-existing partial
+	// (the CDN honored a Range request) rather than starting from zero.
+	Resumed bool `json:"resumed"`
 }
+
+// errIntegrityCheckFailed is returned when the downloaded content's MD5 digest
+// does not match the requested md5 (corrupt or tampered download).
+var errIntegrityCheckFailed = errors.New("integrity check failed: MD5 mismatch")
 
 // Download descarga el fichero md5 a dir. Si filename está vacío usa el nombre
 // que anuncia el CDN (content-disposition), saneado.
@@ -97,42 +110,40 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if err != nil {
 		return nil, err
 	}
-	if werr := c.limiter.Wait(ctx); werr != nil {
-		return nil, werr
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
+	// A stable partial path lets an interrupted download resume: if bytes are
+	// already on disk, ask the CDN to continue from that offset with a Range.
+	partPath := filepath.Join(dir, ".libgen-mcp-"+md5+".part")
+	resumeFrom := partialSize(partPath)
+
+	resp, err := c.fetchFile(ctx, fileURL, resumeFrom)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := c.dl.Do(req) // c.dl sin timeout global: descargas largas, gobierna ctx
-	if err != nil {
-		return nil, fmt.Errorf("downloading file: %w", err)
-	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+
+	// Decide whether the CDN honored the Range: a 206 continues the partial; a 200
+	// (server ignored Range) forces a restart from zero, truncating the partial.
+	var resume bool
+	switch {
+	case resumeFrom > 0 && resp.StatusCode == http.StatusPartialContent:
+		resume = true
+	case resp.StatusCode == http.StatusOK:
+		resume = false
+	default:
 		return nil, fmt.Errorf("download failed: status %d from %s", resp.StatusCode, base)
 	}
-	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
-		return nil, errors.New("mirror returned an HTML page instead of the file (key expired or download blocked)")
+
+	// Full expected size: on a resumed 206, Content-Length covers only the range,
+	// so add the bytes already on disk to enforce the cap against the whole file.
+	totalLen := resp.ContentLength
+	if resume && resp.ContentLength >= 0 {
+		totalLen = resumeFrom + resp.ContentLength
 	}
-	// Enforce the size cap up front when the CDN advertises a Content-Length: fail
-	// before creating any file so an oversized download never touches the disk.
-	if c.maxDownloadBytes > 0 && resp.ContentLength > c.maxDownloadBytes {
-		return nil, fmt.Errorf("%w: file is %d bytes, limit is %d bytes", errDownloadTooLarge, resp.ContentLength, c.maxDownloadBytes)
+	body, original, err := c.validateFileResponse(resp, totalLen)
+	if err != nil {
+		return nil, err
 	}
-	// Algunos CDN sirven páginas de error como application/octet-stream (o sin
-	// Content-Type). Olfateamos los primeros bytes sin consumirlos: Peek deja
-	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
-	body := bufio.NewReader(resp.Body)
-	head, err := body.Peek(512)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("reading file header: %w", err)
-	}
-	if looksLikeHTML(head) {
-		return nil, errors.New("mirror returned what looks like an HTML page instead of the file (key expired or download blocked)")
-	}
-	original := filenameFromDisposition(resp.Header.Get("Content-Disposition"))
+
 	name := filename
 	if name == "" {
 		name = original
@@ -148,11 +159,78 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if derr := ensureDiskSpace(dir, resp.ContentLength); derr != nil {
 		return nil, derr
 	}
-	dest, n, err := c.streamToFile(dir, name, body, resp.ContentLength)
+	dest := filepath.Join(dir, name)
+	n, err := c.streamToPartAndVerify(partPath, dest, md5, body, resume, resumeFrom, resp.ContentLength)
 	if err != nil {
 		return nil, err
 	}
-	return &DownloadResult{Path: dest, SizeBytes: n, OriginalFilename: original, Mirror: base}, nil
+	return &DownloadResult{
+		Path:             dest,
+		SizeBytes:        n,
+		OriginalFilename: original,
+		Mirror:           base,
+		Verified:         true,
+		Resumed:          resume,
+	}, nil
+}
+
+// partialSize returns the size of a usable partial download at partPath, or 0 if
+// there is none (missing, empty, or a directory).
+func partialSize(partPath string) int64 {
+	info, err := os.Stat(partPath)
+	if err != nil || info.IsDir() {
+		return 0
+	}
+	return info.Size()
+}
+
+// fetchFile issues the download GET, waiting on the rate limiter first. When
+// resumeFrom > 0 it adds a Range header so the CDN can continue an interrupted
+// download from that offset. The caller owns closing the returned body.
+func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64) (*http.Response, error) {
+	if werr := c.limiter.Wait(ctx); werr != nil {
+		return nil, werr
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	if resumeFrom > 0 {
+		req.Header.Set("Range", "bytes="+strconv.FormatInt(resumeFrom, 10)+"-")
+	}
+	resp, err := c.dl.Do(req) // c.dl sin timeout global: descargas largas, gobierna ctx
+	if err != nil {
+		return nil, fmt.Errorf("downloading file: %w", err)
+	}
+	return resp, nil
+}
+
+// validateFileResponse rejects HTML error pages (by Content-Type and by sniffing
+// the first bytes) and enforces the size cap against totalLen (the full expected
+// file size). It returns a buffered reader positioned at the start of the
+// streamed bytes and the CDN-advertised original filename.
+func (c *Client) validateFileResponse(resp *http.Response, totalLen int64) (*bufio.Reader, string, error) {
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		return nil, "", errors.New("mirror returned an HTML page instead of the file (key expired or download blocked)")
+	}
+	// Enforce the size cap up front when the size is known: fail before creating
+	// any file so an oversized download never touches the disk.
+	if c.maxDownloadBytes > 0 && totalLen > c.maxDownloadBytes {
+		return nil, "", fmt.Errorf("%w: file is %d bytes, limit is %d bytes", errDownloadTooLarge, totalLen, c.maxDownloadBytes)
+	}
+	// Algunos CDN sirven páginas de error como application/octet-stream (o sin
+	// Content-Type). Olfateamos los primeros bytes sin consumirlos: Peek deja
+	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
+	body := bufio.NewReader(resp.Body)
+	head, err := body.Peek(512)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, "", fmt.Errorf("reading file header: %w", err)
+	}
+	if looksLikeHTML(head) {
+		return nil, "", errors.New("mirror returned what looks like an HTML page instead of the file (key expired or download blocked)")
+	}
+	return body, filenameFromDisposition(resp.Header.Get("Content-Disposition")), nil
 }
 
 // ensureDiskSpace verifies, when the size is known, that the download fits on
@@ -172,33 +250,69 @@ func ensureDiskSpace(dir string, contentLength int64) error {
 	return nil
 }
 
-// streamToFile streams body into a temp file in dir, enforcing the size cap via a
-// countingWriter, then atomically renames it to name. On any error it removes the
-// temp file and returns. contentLength, when known, is checked against the bytes
-// actually written to detect truncated downloads.
-func (c *Client) streamToFile(dir, name string, body io.Reader, contentLength int64) (dest string, n int64, err error) {
-	tmp, err := os.CreateTemp(dir, ".libgen-mcp-*")
+// streamToPartAndVerify streams body into the stable partial at partPath while
+// computing the MD5 of the whole file, then verifies the digest against wantMD5
+// and atomically renames the partial to dest on success. It returns the final
+// file size.
+//
+// When resume is true it appends to the existing partial and primes the hash by
+// re-reading the existingSize bytes already on disk, so the final digest covers
+// the entire file; otherwise it truncates and starts fresh. contentLength, when
+// known, is the number of bytes expected from the body (the range length on a
+// resume) and is checked to detect a truncated transfer.
+//
+// Partial lifecycle: on an MD5 mismatch (corrupt/tampered) or an oversized
+// transfer the partial is deleted; on a transient failure (network drop, short
+// read) it is kept so a later call can resume from where it stopped.
+func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, resume bool, existingSize, contentLength int64) (int64, error) {
+	flag := os.O_RDWR | os.O_CREATE
+	var startSize int64
+	if resume {
+		startSize = existingSize
+	} else {
+		flag |= os.O_TRUNC // restart: discard any stale partial
+	}
+	f, err := os.OpenFile(partPath, flag, 0o600)
 	if err != nil {
-		return "", 0, err
+		return 0, err
 	}
-	// countingWriter aborts if the streamed size exceeds the cap; this defends
-	// against downloads with no (or a lying) Content-Length header.
-	n, copyErr := io.Copy(&countingWriter{w: tmp, limit: c.maxDownloadBytes}, body)
-	closeErr := tmp.Close()
+
+	digest := cryptomd5.New() //nolint:gosec // integrity match against the LibGen-provided md5.
+	if resume {
+		// Re-hash the bytes already on disk so the digest covers the whole file;
+		// io.Copy also leaves the file offset at the end, ready to append.
+		if _, rerr := io.Copy(digest, f); rerr != nil {
+			f.Close()
+			return 0, fmt.Errorf("rehashing partial: %w", rerr) // keep .part for a later resume
+		}
+	}
+
+	// countingWriter aborts if the total size exceeds the cap; this defends
+	// against downloads with no (or a lying) Content-Length header. The MD5 is
+	// updated in lockstep with the bytes written to the file.
+	cw := &countingWriter{w: io.MultiWriter(f, digest), limit: c.maxDownloadBytes, written: startSize}
+	streamed, copyErr := io.Copy(cw, body)
+	closeErr := f.Close()
 	if copyErr != nil || closeErr != nil {
-		os.Remove(tmp.Name())
-		return "", 0, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
+		// An oversized transfer can never succeed, so drop the partial; any other
+		// (transient) failure keeps it so a later call can resume.
+		if errors.Is(copyErr, errDownloadTooLarge) {
+			os.Remove(partPath)
+		}
+		return 0, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
 	}
-	if contentLength > 0 && n != contentLength {
-		os.Remove(tmp.Name())
-		return "", 0, fmt.Errorf("truncated download: got %d of %d bytes", n, contentLength)
+	if contentLength > 0 && streamed != contentLength {
+		// Short read: keep the partial so a later call can resume from here.
+		return 0, fmt.Errorf("truncated download: got %d of %d bytes", streamed, contentLength)
 	}
-	dest = filepath.Join(dir, name)
-	if rerr := os.Rename(tmp.Name(), dest); rerr != nil {
-		os.Remove(tmp.Name())
-		return "", 0, rerr
+	if got := hex.EncodeToString(digest.Sum(nil)); !strings.EqualFold(got, wantMD5) {
+		os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
+		return 0, fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, got, wantMD5)
 	}
-	return dest, n, nil
+	if rerr := os.Rename(partPath, dest); rerr != nil {
+		return 0, rerr // content is valid; keep the partial so a retry can rename it
+	}
+	return startSize + streamed, nil
 }
 
 // looksLikeHTML detecta si b (cabecera olfateada del cuerpo) empieza, tras
