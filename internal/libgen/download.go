@@ -1,6 +1,8 @@
 package libgen
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -73,6 +75,17 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		return nil, errors.New("mirror returned an HTML page instead of the file (key expired or download blocked)")
 	}
+	// Algunos CDN sirven páginas de error como application/octet-stream (o sin
+	// Content-Type). Olfateamos los primeros bytes sin consumirlos: Peek deja
+	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
+	body := bufio.NewReader(resp.Body)
+	head, err := body.Peek(512)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("reading file header: %w", err)
+	}
+	if looksLikeHTML(head) {
+		return nil, errors.New("mirror returned what looks like an HTML page instead of the file (key expired or download blocked)")
+	}
 	original := filenameFromDisposition(resp.Header.Get("Content-Disposition"))
 	name := filename
 	if name == "" {
@@ -90,7 +103,7 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if err != nil {
 		return nil, err
 	}
-	n, copyErr := io.Copy(tmp, resp.Body)
+	n, copyErr := io.Copy(tmp, body)
 	closeErr := tmp.Close()
 	if copyErr != nil || closeErr != nil {
 		os.Remove(tmp.Name())
@@ -106,6 +119,16 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 		return nil, err
 	}
 	return &DownloadResult{Path: dest, SizeBytes: n, OriginalFilename: original, Mirror: base}, nil
+}
+
+// looksLikeHTML detecta si b (cabecera olfateada del cuerpo) empieza, tras
+// recortar espacio ASCII inicial, por un marcador de documento HTML.
+func looksLikeHTML(b []byte) bool {
+	trimmed := bytes.TrimLeft(b, " \t\r\n\f\v")
+	lower := bytes.ToLower(trimmed)
+	return bytes.HasPrefix(lower, []byte("<!doctype html")) ||
+		bytes.HasPrefix(lower, []byte("<html")) ||
+		bytes.HasPrefix(lower, []byte("<!--"))
 }
 
 func filenameFromDisposition(header string) string {

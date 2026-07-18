@@ -116,6 +116,51 @@ func TestDownloadCustomFilename(t *testing.T) {
 	}
 }
 
+func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<a href="get.php?md5=87a4ebdaf21fa6cc70009a3dd63194ee&key=K1">x</a>`)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		// CDN error page sin text/html: se hace pasar por el fichero.
+		w.Header().Set("Content-Type", "application/octet-stream")
+		fmt.Fprint(w, "<!DOCTYPE html><html><body>blocked</body></html>")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+		t.Fatal("página HTML servida como octet-stream debería fallar")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+	}
+}
+
+func TestLooksLikeHTML(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []byte
+		want bool
+	}{
+		{"doctype", []byte("<!DOCTYPE html>"), true},
+		{"leading ws html", []byte("  \n<html>"), true},
+		{"comment", []byte("<!-- comment"), true},
+		{"pdf", []byte("%PDF-1.4"), false},
+		{"zip epub", []byte("PK\x03\x04"), false},
+		{"binary", []byte{0x00, 0x01, 0x02, 0xff}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksLikeHTML(tc.in); got != tc.want {
+				t.Errorf("looksLikeHTML(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
