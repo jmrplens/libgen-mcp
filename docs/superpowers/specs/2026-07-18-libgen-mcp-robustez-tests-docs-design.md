@@ -198,11 +198,53 @@ Todo manuscrito (3 tools no justifican maquinaria de generación). Idioma
 
 ### 3.1 README (ampliado)
 
-Secciones: qué es · instalación (go install / binarios del release / Docker) ·
-configuración del cliente MCP · las 3 tools con parámetros · tabla de variables
-de entorno (incluidas las nuevas de robustez) · robustez (failover, retry,
-rate limit, gestión de descargas, verificación MD5) · enlace a `docs/` y al
-sitio · mantenimiento (probe, e2e) · uso responsable. Enlaza a la doc.
+Secciones: **badges** (release, licencia, plataforma, SonarCloud quality gate +
+coverage, Go Report Card, Go Reference) · qué es · **tabla de botones de
+instalación en un clic** (como gitlab-mcp-server) · configuración del cliente
+MCP · las 3 tools con parámetros · tabla de variables de entorno (incluidas las
+nuevas de robustez) · robustez (failover, retry, rate limit, gestión de
+descargas, verificación MD5) · enlace a `docs/` y al sitio · mantenimiento
+(probe, e2e) · uso responsable.
+
+**Tabla de botones de instalación** (HTML, estilo hermano). Cada botón registra
+el servidor **basado en Docker** (`ghcr.io/jmrplens/libgen-mcp:latest`, sin
+token — libgen no requiere auth, así que los configs son más simples que los de
+gitlab). Filas:
+- **VS Code** / **VS Code Insiders**: `https://insiders.vscode.dev/redirect/mcp/install?name=libgen&config=<json-url-encoded>`.
+- **Cursor**: `https://cursor.com/install-mcp?name=libgen&config=<base64>` con la insignia oficial.
+- **LM Studio**: `https://lmstudio.ai/install-mcp?name=libgen&config=<base64>`.
+- **Kiro**: `https://kiro.dev/launch/mcp/add?name=libgen&config=<json-url-encoded>`.
+- **Claude Desktop**: botón de descarga del **`.mcpb`** desde el release
+  (`.../releases/latest/download/libgen-mcp.mcpb`).
+
+Config base para los deep-links (docker):
+`{"command":"docker","args":["run","-i","--rm","ghcr.io/jmrplens/libgen-mcp:latest"]}`.
+Además, bloque **Claude Code** con `claude mcp add libgen ...` (binario o docker).
+
+### 3.6 Extensión `.mcpb` para Claude Desktop
+
+Bundle instalable en un clic para Claude Desktop (nativo, sin Docker):
+- **`mcpb/manifest.json`** (manifest_version `0.4`, confirmado con Context7):
+  `server.type: "binary"`, `entry_point: server/libgen-mcp`,
+  `mcp_config.command: "${__dirname}/server/libgen-mcp"`, `platform_overrides.win32`
+  con `.exe`. `user_config` (todos opcionales, sin secretos) mapeando las env:
+  `mirror` (string), `download_dir` (type `directory`, default `${HOME}/Downloads`),
+  `timeout`, `max_download_bytes` (number), `log_level` (string). Lista las 3
+  tools. `compatibility.platforms: [darwin, win32]`, `license: MIT`, icono.
+- **`mcpb/icon.png`** (512×512).
+- **`scripts/build-mcpb.sh`** (adaptado del hermano): ensambla `bundle/`
+  (manifest con versión sellada + icono + `server/` con el binario **darwin
+  universal** y el `.exe` de windows de GoReleaser) y empaqueta con la CLI
+  oficial **`mcpb pack`** (pin de versión). Salida `dist/libgen-mcp.mcpb`.
+- **`.goreleaser.yml`**: añadir `universal_binaries` (darwin arm64+amd64) para
+  que el `.mcpb` tenga un binario darwin universal (`replace: false` para
+  conservar los assets por-arch).
+- **`.github/workflows/release.yml`**: tras GoReleaser, `bash scripts/build-mcpb.sh
+  <version>` y `gh release upload v<version> dist/libgen-mcp.mcpb --clobber`.
+- Opcional: añadir el `.mcpb` como paquete `mcpb` en `server.json` (ya tiene esa
+  forma para los binarios).
+- **CI** (`ci.yml`): validar `mcpb/manifest.json` contra su esquema (`mcpb validate`
+  o jsonschema) y que su versión coincide con `VERSION`.
 
 ### 3.2 `docs/` (markdown plano, un nivel)
 
