@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,7 +19,10 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
-const version = "0.1.0"
+// version y commit se inyectan en release con
+// -ldflags "-X main.version=<v> -X main.commit=<sha>".
+var version = "0.1.0"
+var commit = "none"
 
 func main() {
 	httpAddr := flag.String("http", "", "serve streamable HTTP on this address (e.g. :8080) instead of stdio")
@@ -25,12 +30,29 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println(version)
+		fmt.Printf("libgen-mcp %s (commit %s)\n", version, commit)
 		return
 	}
-	if err := run(*httpAddr); err != nil {
+	if err := run(*httpAddr); err != nil && !isCleanShutdown(err) {
 		log.Fatal(err)
 	}
+}
+
+// isCleanShutdown reporta si err representa un cierre normal del cliente MCP:
+// nil, io.EOF (stdin cerrado) o context.Canceled.
+func isCleanShutdown(err error) bool {
+	return err == nil || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled)
+}
+
+// newHTTPHandler monta el handler MCP en / y expone GET /health.
+func newHTTPHandler(mcpHandler http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(w, "ok")
+	})
+	mux.Handle("/", mcpHandler)
+	return mux
 }
 
 func run(httpAddr string) error {
@@ -47,10 +69,10 @@ func run(httpAddr string) error {
 	tools.Register(server, client, cfg)
 
 	if httpAddr != "" {
-		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
-		log.Printf("libgen-mcp %s listening on %s (streamable HTTP)", version, httpAddr)
-		return http.ListenAndServe(httpAddr, handler)
+		mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+		log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", version, commit, httpAddr)
+		return http.ListenAndServe(httpAddr, newHTTPHandler(mcpHandler))
 	}
-	fmt.Fprintf(os.Stderr, "libgen-mcp %s serving on stdio\n", version)
+	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", version, commit)
 	return server.Run(context.Background(), &mcp.StdioTransport{})
 }
