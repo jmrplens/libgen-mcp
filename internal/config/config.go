@@ -32,6 +32,7 @@ type Config struct {
 	MaxDownloadBytes       int64         // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
 	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
 	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
+	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 }
 
 // Load builds the configuration from environment variables.
@@ -49,6 +50,10 @@ func Load() (*Config, error) {
 		MaxDownloadBytes:       0,
 		MaxConcurrentDownloads: 2,
 		RetryAttempts:          3,
+		UnpaywallEmail:         "mail@jmrp.io",
+	}
+	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
+		cfg.UnpaywallEmail = v
 	}
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
@@ -162,10 +167,28 @@ func (c *Config) Validate() error {
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
 	}
+	if err := validateUnpaywallEmail(c.UnpaywallEmail); err != nil {
+		return err
+	}
 	if err := validateMirror(c.Mirror); err != nil {
 		return err
 	}
 	return validateDownloadDir(c.DownloadDir)
+}
+
+// validateUnpaywallEmail applies a basic sanity check to the Unpaywall contact
+// address: it must be non-empty, contain an "@", and have a "." somewhere after
+// that "@" (the Unpaywall API rejects requests without a plausible email).
+func validateUnpaywallEmail(email string) error {
+	at := strings.Index(email, "@")
+	if at <= 0 {
+		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must contain %q, got %q", "@", email)
+	}
+	dot := strings.Index(email[at+1:], ".")
+	if dot <= 0 || at+1+dot == len(email)-1 {
+		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must have a domain with a dot, got %q", email)
+	}
+	return nil
 }
 
 // validateMirror checks that a non-empty mirror is an http/https URL with a host.

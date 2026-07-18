@@ -120,6 +120,44 @@ func TestLoadNewOverrides(t *testing.T) {
 	}
 }
 
+// TestLoadUnpaywallEmailDefault verifies the default Unpaywall contact email.
+func TestLoadUnpaywallEmailDefault(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.UnpaywallEmail != "mail@jmrp.io" {
+		t.Errorf("UnpaywallEmail = %q, want %q", cfg.UnpaywallEmail, "mail@jmrp.io")
+	}
+}
+
+// TestLoadUnpaywallEmailOverride verifies overriding the Unpaywall contact email.
+func TestLoadUnpaywallEmailOverride(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "someone@example.org")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.UnpaywallEmail != "someone@example.org" {
+		t.Errorf("UnpaywallEmail = %q, want %q", cfg.UnpaywallEmail, "someone@example.org")
+	}
+}
+
+// TestValidateBadUnpaywallEmail covers rejected Unpaywall contact emails.
+func TestValidateBadUnpaywallEmail(t *testing.T) {
+	cases := []string{"", "no-at-sign", "no-dot@localhost", "trailing@dot."}
+	for _, bad := range cases {
+		t.Run(bad, func(t *testing.T) {
+			cfg := validConfig(t)
+			cfg.UnpaywallEmail = bad
+			if cfg.Validate() == nil {
+				t.Fatalf("Validate() with UnpaywallEmail=%q should fail", bad)
+			}
+		})
+	}
+}
+
 // TestLoadBadNumericEnv verifies LoadBadNumericEnv.
 func TestLoadBadNumericEnv(t *testing.T) {
 	cases := map[string]string{
@@ -154,6 +192,7 @@ func validConfig(t *testing.T) *Config {
 		MaxDownloadBytes:       0,
 		MaxConcurrentDownloads: 2,
 		RetryAttempts:          3,
+		UnpaywallEmail:         "mail@jmrp.io",
 	}
 }
 
