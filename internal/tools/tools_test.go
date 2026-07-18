@@ -61,6 +61,41 @@ func newSession(t *testing.T) *mcp.ClientSession {
 	return session
 }
 
+func TestHandlerRecoversPanic(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	type panicIn struct{}
+	type panicOut struct{}
+	handler := mcp.ToolHandlerFor[panicIn, panicOut](
+		func(context.Context, *mcp.CallToolRequest, panicIn) (*mcp.CallToolResult, panicOut, error) {
+			panic("boom")
+		})
+	mcp.AddTool(server, &mcp.Tool{Name: "boom", Description: "panics on purpose for testing"},
+		withRecovery("boom", handler))
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "boom", Arguments: map[string]any{}})
+	if err != nil {
+		t.Fatalf("panic escaped as a protocol error instead of being recovered: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("recovered panic should produce an IsError tool result")
+	}
+	if len(res.Content) == 0 {
+		t.Fatal("recovered panic should include a helpful error message")
+	}
+}
+
 func TestToolsRegistered(t *testing.T) {
 	session := newSession(t)
 	res, err := session.ListTools(context.Background(), nil)

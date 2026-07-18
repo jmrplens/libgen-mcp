@@ -5,13 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/logging"
 )
 
 var md5Re = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
@@ -67,19 +71,47 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, searchHandler(client))
+	}, withRecovery("search", searchHandler(client)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
 		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id.",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, detailsHandler(client))
+	}, withRecovery("get_details", detailsHandler(client)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download",
 		Title:       "Download file",
 		Description: "Download a file by md5 to a local directory, resolving the libgen mirror download chain (ads.php key + CDN redirect). Returns the saved path and size.",
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
-	}, downloadHandler(client, cfg))
+	}, withRecovery("download", downloadHandler(client, cfg)))
+}
+
+// withRecovery wraps a typed MCP tool handler to make it panic-safe and
+// observable. A panic is recovered and converted into an IsError tool result
+// (with a nil Go error and a zero-value output) so it never escapes to kill the
+// stdio JSON-RPC session. Every invocation, on any path, emits a ToolCall
+// metric line with the elapsed time; a recovered panic is reported to that
+// metric as a non-nil error so failures stay visible.
+func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (result *mcp.CallToolResult, output Out, err error) {
+		start := time.Now()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("tool handler panicked", "tool", name, "panic", r, "stack", debug.Stack())
+				var zero Out
+				output = zero
+				result = &mcp.CallToolResult{
+					IsError: true,
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("tool %q failed unexpectedly: %v", name, r)}},
+				}
+				err = nil
+				logging.ToolCall(name, start, fmt.Errorf("tool %q panicked: %v", name, r))
+				return
+			}
+			logging.ToolCall(name, start, err)
+		}()
+		return h(ctx, req, in)
+	}
 }
 
 func searchHandler(c *libgen.Client) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
