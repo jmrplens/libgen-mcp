@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	xhtml "golang.org/x/net/html"
 )
@@ -113,6 +114,20 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	// A stable partial path lets an interrupted download resume: if bytes are
 	// already on disk, ask the CDN to continue from that offset with a Range.
 	partPath := filepath.Join(dir, ".libgen-mcp-"+md5+".part")
+	if abs, aerr := filepath.Abs(partPath); aerr == nil {
+		partPath = abs
+	}
+	// Serialize downloads that target the same partial file. The .part path is
+	// deterministic, so two concurrent same-md5 downloads into the same dir would
+	// open/rehash/truncate/append the same file through separate fds and corrupt
+	// each other (the semaphore only serializes when MaxConcurrentDownloads==1). A
+	// per-path mutex makes them run one after another; a duplicate concurrent
+	// request simply re-downloads and overwrites, which is acceptable.
+	lk, _ := c.partialLocks.LoadOrStore(partPath, &sync.Mutex{})
+	mu, _ := lk.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
 	resumeFrom := partialSize(partPath)
 
 	resp, err := c.fetchFile(ctx, fileURL, resumeFrom)
@@ -131,6 +146,16 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 		resume = false
 	default:
 		return nil, fmt.Errorf("download failed: status %d from %s", resp.StatusCode, base)
+	}
+
+	// On a 206 the body must begin exactly at resumeFrom for the append to line up
+	// with the existing bytes. If the Content-Range start disagrees (or the header
+	// is absent/unparseable), restart from zero instead of appending, to avoid
+	// corrupting the file.
+	if resume {
+		if start, ok := parseContentRangeStart(resp.Header.Get("Content-Range")); !ok || start != resumeFrom {
+			resume = false
+		}
 	}
 
 	// Full expected size: on a resumed 206, Content-Length covers only the range,
@@ -184,6 +209,26 @@ func partialSize(partPath string) int64 {
 	return info.Size()
 }
 
+// parseContentRangeStart parses the start offset from a Content-Range response
+// header of the form "bytes <start>-<end>/<total>". It reports ok=false when the
+// header is empty or does not match that shape, so callers can be conservative.
+func parseContentRangeStart(header string) (start int64, ok bool) {
+	const prefix = "bytes "
+	if !strings.HasPrefix(header, prefix) {
+		return 0, false
+	}
+	spec := strings.TrimPrefix(header, prefix)
+	startStr, _, found := strings.Cut(spec, "-")
+	if !found {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(startStr), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 // fetchFile issues the download GET, waiting on the rate limiter first. When
 // resumeFrom > 0 it adds a Range header so the CDN can continue an interrupted
 // download from that offset. The caller owns closing the returned body.
@@ -199,7 +244,7 @@ func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64
 	if resumeFrom > 0 {
 		req.Header.Set("Range", "bytes="+strconv.FormatInt(resumeFrom, 10)+"-")
 	}
-	resp, err := c.dl.Do(req) // c.dl sin timeout global: descargas largas, gobierna ctx
+	resp, err := c.dl.Do(req) // c.dl has no global timeout: long downloads are governed by ctx
 	if err != nil {
 		return nil, fmt.Errorf("downloading file: %w", err)
 	}
@@ -219,9 +264,9 @@ func (c *Client) validateFileResponse(resp *http.Response, totalLen int64) (*buf
 	if c.maxDownloadBytes > 0 && totalLen > c.maxDownloadBytes {
 		return nil, "", fmt.Errorf("%w: file is %d bytes, limit is %d bytes", errDownloadTooLarge, totalLen, c.maxDownloadBytes)
 	}
-	// Algunos CDN sirven páginas de error como application/octet-stream (o sin
-	// Content-Type). Olfateamos los primeros bytes sin consumirlos: Peek deja
-	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
+	// Some CDNs serve error pages as application/octet-stream (or with no
+	// Content-Type). Sniff the first bytes without consuming them: Peek leaves
+	// the bytes in the bufio.Reader so io.Copy can read them again.
 	body := bufio.NewReader(resp.Body)
 	head, err := body.Peek(512)
 	if err != nil && !errors.Is(err, io.EOF) {

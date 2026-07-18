@@ -55,6 +55,11 @@ type Client struct {
 	// is MaxConcurrentDownloads. Download acquires a slot before starting and
 	// releases it on completion.
 	dlSem chan struct{}
+	// partialLocks serializes downloads that share the same partial file (the
+	// same md5 into the same dir), keyed by the absolute .part path → *sync.Mutex.
+	// The .part path is deterministic, so without this two concurrent same-md5
+	// downloads would open/rehash/truncate/append the same file and corrupt it.
+	partialLocks sync.Map
 
 	mu       sync.Mutex           // protege cooldown
 	cooldown map[string]time.Time // mirror base → instante en que expira el cooldown

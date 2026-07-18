@@ -596,6 +596,101 @@ func TestDownloadResumeServerIgnoresRange(t *testing.T) {
 	}
 }
 
+// TestDownloadSameMD5Concurrent runs two downloads for the SAME md5 into the SAME
+// dir at once (MaxConcurrentDownloads=2, so the semaphore does not serialize
+// them). The per-partial-path lock must serialize them so neither corrupts the
+// shared .part file; both must succeed with a verified digest and the final file
+// must carry the correct content.
+func TestDownloadSameMD5Concurrent(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("concurrent same-md5 bytes ", 64))
+	want := md5Hex(payload)
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		w.Write(payload)
+	})
+	defer srv.Close()
+	c := newTestClientConcurrency(staticMirrors{srv.URL}, 2)
+	dir := t.TempDir()
+
+	type outcome struct {
+		res *DownloadResult
+		err error
+	}
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() {
+			res, err := c.Download(context.Background(), want, dir, "")
+			results <- outcome{res, err}
+		}()
+	}
+	for range 2 {
+		o := <-results
+		if o.err != nil {
+			t.Fatalf("Download() error = %v", o.err)
+		}
+		if !o.res.Verified {
+			t.Error("Verified = false, want true")
+		}
+	}
+	dest := filepath.Join(dir, "book.pdf")
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("reading final file: %v", err)
+	}
+	if got := md5Hex(data); got != want {
+		t.Errorf("final file md5 = %s, want %s (corruption from concurrent same-md5 downloads?)", got, want)
+	}
+	if string(data) != string(payload) {
+		t.Errorf("final file content mismatch (len=%d, want %d)", len(data), len(payload))
+	}
+}
+
+// TestDownloadResumeWrongContentRange guards the Content-Range validation: the
+// CDN replies 206 but with a Content-Range whose start (0) disagrees with the
+// requested resume offset, and sends the FULL body. The downloader must restart
+// from zero rather than append the full body onto the existing half (which would
+// corrupt the file), and still finish with the correct md5.
+func TestDownloadResumeWrongContentRange(t *testing.T) {
+	full := []byte("%PDF-1.4 " + strings.Repeat("wrong content-range chunk ", 40))
+	want := md5Hex(full)
+	half := len(full) / 2
+
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		// Start offset 0 disagrees with resumeFrom (half); full body follows.
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(full)-1, len(full)))
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write(full)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	if err := os.WriteFile(partPathFor(dir, want), full[:half], 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Download(context.Background(), want, dir, "")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.Resumed {
+		t.Error("Resumed = true, want false (mismatched Content-Range → restart from zero)")
+	}
+	if !res.Verified {
+		t.Error("Verified = false, want true")
+	}
+	data, err := os.ReadFile(res.Path)
+	if err != nil || string(data) != string(full) {
+		t.Errorf("content mismatch after restart (len=%d, want %d), err=%v", len(data), len(full), err)
+	}
+	if got := md5Hex(data); got != want {
+		t.Errorf("final file md5 = %s, want %s", got, want)
+	}
+}
+
 func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
