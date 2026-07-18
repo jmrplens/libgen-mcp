@@ -170,9 +170,7 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 	}
 	page := &SearchPage{TotalFiles: filesTabCount(doc)}
 	page.Reachable = paginatorReach(doc)
-	if total, atoiErr := strconv.Atoi(page.TotalFiles); atoiErr == nil && total > 0 && page.Reachable > 0 {
-		page.Truncated = total > page.Reachable
-	}
+	page.Truncated = isTruncated(page.TotalFiles, page.Reachable)
 	table := findByID(doc, "tablelibgen")
 	if table == nil {
 		if page.TotalFiles == "0" {
@@ -190,6 +188,34 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 		}
 	}
 	return page, nil
+}
+
+// isTruncated reports whether a search returned more matches than are reachable
+// across pages. totalFiles is the Files-tab counter, which libgen renders either
+// as a plain number ("38514") or as a capped indicator ("1000+") when the true
+// count is large. A trailing non-digit suffix (e.g. the '+') is stripped before
+// parsing: if the parsed number exceeds reachable the search is truncated; and a
+// counter that stays non-numeric yet non-empty while some results are reachable is
+// itself a capped-display signal, so it is treated as truncated conservatively (a
+// capped display implies there is more than what is shown).
+func isTruncated(totalFiles string, reachable int) bool {
+	if reachable <= 0 {
+		return false
+	}
+	trimmed := strings.TrimRight(strings.TrimSpace(totalFiles), "+")
+	if i := strings.IndexFunc(trimmed, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
+		trimmed = trimmed[:i]
+	}
+	if trimmed == "" {
+		// Non-numeric but non-empty original (e.g. "many"): a capped display that
+		// implies more results exist than are reachable.
+		return strings.TrimSpace(totalFiles) != ""
+	}
+	total, err := strconv.Atoi(trimmed)
+	if err != nil || total <= 0 {
+		return false
+	}
+	return total > reachable
 }
 
 func parseRow(cells []*html.Node, base string) *Result {

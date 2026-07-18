@@ -325,8 +325,15 @@ func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downl
 	// A stable partial path lets an interrupted download resume: if bytes are
 	// already on disk, ask the CDN to continue from that offset with a Range. It is
 	// keyed by md5 for md5 items (historical LibGen path) and by a DOI/URL hash
-	// otherwise, so resume and locking work for every source.
-	partPath := filepath.Join(req.dir, ".libgen-mcp-"+partialKey(req.item, resolved)+".part")
+	// otherwise, so resume and locking work for every source. The serving source's
+	// Name() is included so each source owns a distinct .part: different sources can
+	// deliver different byte streams for the same logical item (e.g. Unpaywall's OA
+	// PDF vs Sci-Hub's PDF for one DOI), and without this a partial left by one
+	// source could be appended onto by the next via a resumed Range, silently
+	// corrupting the file. This costs the libgen/randombook shared-resume
+	// optimization (they now use distinct .part files), which is an acceptable
+	// trade for cross-source correctness.
+	partPath := filepath.Join(req.dir, ".libgen-mcp-"+sanitizeForPart(src.Name())+"-"+partialKey(req.item, resolved)+".part")
 	if abs, aerr := filepath.Abs(partPath); aerr == nil {
 		partPath = abs
 	}

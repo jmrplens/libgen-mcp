@@ -98,6 +98,21 @@ func partialKey(it Item, r Resolved) string {
 	}
 }
 
+// sanitizeForPart reduces a source name to a filesystem-safe token for embedding
+// in a partial (.part) filename. Source names are known-safe lowercase constants
+// ("libgen", "scihub", "unpaywall", "randombook"), so this is a light defensive
+// pass: it keeps ASCII letters, digits and '-', mapping anything else to '_'.
+func sanitizeForPart(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			return r
+		default:
+			return '_'
+		}
+	}, name)
+}
+
 // shortHash returns a short, filesystem-safe hex token derived from s, used to
 // build deterministic partial paths for non-md5 items.
 func shortHash(s string) string {

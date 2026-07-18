@@ -156,6 +156,37 @@ func TestParsePaginatorReach(t *testing.T) {
 	}
 }
 
+// TestIsTruncated covers the truncation decision, including libgen's capped
+// "1000+" display: a non-numeric-but-large total must still flag the search as
+// truncated (the previous strconv.Atoi silently failed on "1000+" and left it
+// false exactly when the result set was largest).
+func TestIsTruncated(t *testing.T) {
+	cases := []struct {
+		name       string
+		totalFiles string
+		reachable  int
+		want       bool
+	}{
+		{"capped 1000+ over reach", "1000+", 100, true},
+		{"capped 1000+ equal-ish reach", "1000+", 100, true},
+		{"plain number over reach", "38514", 2000, true},
+		{"plain number under reach", "135", 150, false},
+		{"plain number equals reach", "150", 150, false},
+		{"non-numeric indicator", "many", 100, true},
+		{"empty total", "", 100, false},
+		{"zero total", "0", 100, false},
+		{"reach zero", "1000+", 0, false},
+		{"trailing plus with spaces", " 1200+ ", 500, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTruncated(tc.totalFiles, tc.reachable); got != tc.want {
+				t.Errorf("isTruncated(%q, %d) = %v, want %v", tc.totalFiles, tc.reachable, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestParseSearchArticles verifies ParseSearchArticles.
 func TestParseSearchArticles(t *testing.T) {
 	page := parseFixture(t, "search_articles.html")

@@ -576,9 +576,12 @@ func md5CDNServer(t *testing.T, wantMD5 string, cdn http.HandlerFunc) *httptest.
 	return srv
 }
 
-// partPathFor mirrors the stable partial path the downloader uses for an md5.
+// partPathFor mirrors the stable partial path the downloader uses for an md5
+// served by the libgen source (the source that wins the md5 chain in these tests).
+// The partial path embeds the serving source's name so each source owns a distinct
+// .part.
 func partPathFor(dir, md5 string) string {
-	return filepath.Join(dir, ".libgen-mcp-"+md5+".part")
+	return filepath.Join(dir, ".libgen-mcp-libgen-"+md5+".part")
 }
 
 // rangeStart parses the numeric start offset from a "bytes=<start>-" Range header.
@@ -891,5 +894,109 @@ func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", t.TempDir(), "", nil); err == nil {
 		t.Fatal("an HTML response should fail")
+	}
+}
+
+// partialFailCDN serves content over a hijacked connection: it declares a
+// Content-Length of len(content) but only writes the first half before closing,
+// so the client sees an unexpected EOF and keeps the partial for a later resume.
+// The first half is >512 bytes so the HTML-sniff Peek succeeds and the failure
+// occurs while streaming (leaving a .part) rather than at validation.
+func partialFailCDN(t *testing.T, content []byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Errorf("ResponseWriter is not a Hijacker")
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		defer conn.Close()
+		header := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n", len(content))
+		if _, werr := conn.Write([]byte(header)); werr != nil {
+			return
+		}
+		_, _ = conn.Write(content[:len(content)/2]) // partial body, then close mid-stream
+	}))
+}
+
+// rangeAwareCDN serves content in full on a plain GET, or honors a Range request
+// with a 206 (appending onto whatever the client already has). It records whether
+// it ever saw a Range header.
+func rangeAwareCDN(t *testing.T, content []byte, sawRange *atomic.Bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		if rng := r.Header.Get("Range"); rng != "" {
+			sawRange.Store(true)
+			start := rangeStart(t, rng)
+			if start < 0 || start > int64(len(content)) {
+				http.Error(w, "bad range", http.StatusRequestedRangeNotSatisfiable)
+				return
+			}
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, len(content)-1, len(content)))
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(content[start:])
+			return
+		}
+		w.Write(content)
+	}))
+}
+
+// TestDownloadNoCrossSourceResumeContamination is the regression test for the
+// cross-source partial contamination bug. Two sources serve DIFFERENT byte streams
+// for the SAME logical item (a DOI, so VerifyMD5 is false for both — the vulnerable
+// case). Source A streams a partial then fails mid-stream, leaving a .part; the
+// chain advances to source B, which serves different, complete content and honors
+// Range requests with a 206. Because each source now owns a distinct .part path
+// (keyed by source name), B must start fresh — it must NOT resume from A's bytes
+// and append its own onto them. The final file must equal B's FULL content.
+func TestDownloadNoCrossSourceResumeContamination(t *testing.T) {
+	contentA := []byte("%PDF-1.4 SOURCE-A " + strings.Repeat("aaaa", 512)) // >1KB; half is >512
+	contentB := []byte("%PDF-1.7 SOURCE-B " + strings.Repeat("bbbb", 300)) // different length and bytes
+
+	srvA := partialFailCDN(t, contentA)
+	defer srvA.Close()
+	var bSawRange atomic.Bool
+	srvB := rangeAwareCDN(t, contentB, &bSawRange)
+	defer srvB.Close()
+
+	// VerifyMD5 is false for both: this is the vulnerable case (DOI-keyed sources),
+	// where no digest catches a cross-source append.
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srvA.URL + "/file", VerifyMD5: false}},
+		stubSource{name: "srcb", supports: true, resolved: Resolved{FileURL: srvB.URL + "/file", VerifyMD5: false}},
+	}
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/cross.source"}, dir, "out.pdf")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if res.Source != "srcb" {
+		t.Errorf("Source = %q, want %q (A fails, B serves)", res.Source, "srcb")
+	}
+	// The core assertion: B started from zero and served its full content, rather
+	// than appending onto A's leftover bytes (which would corrupt the file).
+	data, rerr := os.ReadFile(res.Path)
+	if rerr != nil {
+		t.Fatalf("reading final file: %v", rerr)
+	}
+	if string(data) != string(contentB) {
+		t.Fatalf("final content is not B's full content: got len=%d, want len=%d (cross-source append?)", len(data), len(contentB))
+	}
+	if bSawRange.Load() {
+		t.Error("source B received a Range request: it resumed from A's partial (.part not distinct)")
+	}
+	// A's partial must still exist under A's own distinct, source-keyed path.
+	item := Item{DOI: "10.1234/cross.source"}
+	aPart := filepath.Join(dir, ".libgen-mcp-srca-"+partialKey(item, Resolved{})+".part")
+	if _, statErr := os.Stat(aPart); statErr != nil {
+		t.Errorf("A's distinct .part missing at %s: %v", aPart, statErr)
 	}
 }

@@ -147,6 +147,14 @@ func (s randombookSource) lookupMirrors(ctx context.Context, id string) ([]strin
 // link. It returns the absolute get.php URL (which the download pipeline follows
 // through the CDN redirect), or an error when the host is unreachable, replies
 // non-200, or serves a page without a get.php key.
+//
+// Trust boundary (SSRF): the mirror hostname comes from the randombook API
+// response (lookupMirrors) and is fetched transitively here — the tool issues
+// requests to whatever hosts that API returns. This is a deliberate trust
+// dependency on the randombook API; it is acceptable for this download tool (the
+// API is the whole point of the randombook fallback), but a compromised or
+// hostile API could redirect these requests to arbitrary hosts. Documented rather
+// than mitigated because the tool's purpose is to fetch files from these mirrors.
 func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 string) (string, error) {
 	base := normalizeMirrorBase(mirror)
 	endpoint := base + "/ads.php?md5=" + url.QueryEscape(md5)
@@ -223,6 +231,10 @@ func (s randombookSource) client() *http.Client {
 // it trims surrounding whitespace and any trailing slash, and prepends https://
 // when the entry is a bare hostname (randombook returns entries like
 // "https://libgen.net", but a scheme-less host is tolerated defensively).
+//
+// Note: the mirror string originates from the untrusted randombook API (see the
+// SSRF trust-boundary note on resolveViaMirror); this only normalizes its shape
+// and does not validate that the host is a legitimate libgen mirror.
 func normalizeMirrorBase(mirror string) string {
 	m := strings.TrimRight(strings.TrimSpace(mirror), "/")
 	if !strings.Contains(m, "://") {
