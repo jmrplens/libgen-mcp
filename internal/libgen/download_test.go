@@ -355,6 +355,10 @@ func TestDownload(t *testing.T) {
 	if res.OriginalFilename != "Author - Title (2020).pdf" {
 		t.Errorf("OriginalFilename = %q", res.OriginalFilename)
 	}
+	// The default chain serves md5 items through the LibGen source.
+	if res.Source != "libgen" {
+		t.Errorf("Source = %q, want %q", res.Source, "libgen")
+	}
 	if res.Path != filepath.Join(dir, "Author - Title (2020).pdf") {
 		t.Errorf("Path = %q", res.Path)
 	}

@@ -141,8 +141,12 @@ type DownloadResult struct {
 	SizeBytes        int64  `json:"size_bytes"`
 	OriginalFilename string `json:"original_filename,omitempty"`
 	Mirror           string `json:"mirror"`
+	// Source is the Name() of the DownloadSource that served the file (e.g.
+	// "libgen"), identifying which provider in the chain succeeded.
+	Source string `json:"source,omitempty"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
-	// requested md5 (integrity confirmed end to end).
+	// requested md5 (integrity confirmed end to end). It is false when the serving
+	// source did not request MD5 verification.
 	Verified bool `json:"verified"`
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
@@ -211,8 +215,12 @@ func cleanNamePiece(s string) string {
 
 // chooseFileName selects the sanitized output filename by priority: an explicit
 // filename, else the CDN-announced disposition name, else a clean name built from
-// meta (when non-nil and it yields a name), else the md5.
-func chooseFileName(filename, disposition string, meta *FileMeta, md5 string) string {
+// meta (when non-nil and it yields a name), else the md5 (which may be empty for
+// non-md5 sources, in which case sanitizeFilename yields a safe default). When the
+// resulting name has no extension and fallbackExt is set, that extension is
+// appended (source-provided type hint for names that would otherwise be
+// extensionless).
+func chooseFileName(filename, disposition string, meta *FileMeta, md5, fallbackExt string) string {
 	name := filename
 	if name == "" {
 		name = disposition
@@ -223,7 +231,11 @@ func chooseFileName(filename, disposition string, meta *FileMeta, md5 string) st
 	if name == "" {
 		name = md5
 	}
-	return sanitizeFilename(name)
+	name = sanitizeFilename(name)
+	if ext := strings.TrimLeft(fallbackExt, "."); ext != "" && filepath.Ext(name) == "" {
+		name = sanitizeFilename(name + "." + ext)
+	}
+	return name
 }
 
 // Download downloads the md5 file into dir. The output name is chosen in order:
@@ -237,60 +249,108 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *
 	// Acquire a concurrency slot before doing any work, releasing it on return.
 	// While waiting, honor context cancellation so a queued download can be
 	// aborted before it ever touches the network.
+	if err := c.acquireSlot(ctx); err != nil {
+		return nil, err
+	}
+	defer c.releaseSlot()
+
+	item := Item{MD5: md5, Meta: meta}
+	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
+	// Try each supporting source in order: a source that fails to resolve or whose
+	// stream is rejected (HTML page / integrity mismatch / short read) advances to
+	// the next. The first success returns; if all fail, the joined errors surface.
+	var errs []error
+	for _, src := range c.sources {
+		if !src.Supports(item) {
+			continue
+		}
+		res, err := c.downloadFrom(ctx, src, req)
+		if err == nil {
+			return res, nil
+		}
+		errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), err))
+		// A canceled/expired context will not recover on the next source, so stop.
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if len(errs) == 0 {
+		return nil, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
+	}
+	return nil, errors.Join(errs...)
+}
+
+// acquireSlot takes a download concurrency slot, honoring context cancellation so
+// a queued download can be aborted before it ever touches the network.
+func (c *Client) acquireSlot(ctx context.Context) error {
 	select {
 	case c.dlSem <- struct{}{}:
-		defer func() { <-c.dlSem }()
+		return nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
-	fileURL, base, err := c.ResolveGetURL(ctx, md5)
+}
+
+// releaseSlot returns a previously acquired download concurrency slot.
+func (c *Client) releaseSlot() { <-c.dlSem }
+
+// downloadReq bundles the per-call download inputs (identity, destination,
+// output name and progress sink) so they can be threaded through the source
+// pipeline without a long parameter list.
+type downloadReq struct {
+	item       Item
+	dir        string
+	filename   string
+	onProgress ProgressFunc
+}
+
+// downloadFrom resolves req.item through a single source, then streams the file
+// through the shared pipeline under the per-partial lock. A resolution error or a
+// rejected stream is returned so Download can advance to the next source.
+func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
+	resolved, err := src.Resolve(ctx, req.item)
 	if err != nil {
 		return nil, err
 	}
 	// A stable partial path lets an interrupted download resume: if bytes are
-	// already on disk, ask the CDN to continue from that offset with a Range.
-	partPath := filepath.Join(dir, ".libgen-mcp-"+md5+".part")
+	// already on disk, ask the CDN to continue from that offset with a Range. It is
+	// keyed by md5 for md5 items (historical LibGen path) and by a DOI/URL hash
+	// otherwise, so resume and locking work for every source.
+	partPath := filepath.Join(req.dir, ".libgen-mcp-"+partialKey(req.item, resolved)+".part")
 	if abs, aerr := filepath.Abs(partPath); aerr == nil {
 		partPath = abs
 	}
 	// Serialize downloads that target the same partial file. The .part path is
-	// deterministic, so two concurrent same-md5 downloads into the same dir would
-	// open/rehash/truncate/append the same file through separate fds and corrupt
-	// each other (the semaphore only serializes when MaxConcurrentDownloads==1). A
-	// per-path mutex makes them run one after another; a duplicate concurrent
-	// request simply re-downloads and overwrites, which is acceptable. The lock is
-	// refcounted so its map entry is removed once the last holder releases.
+	// deterministic, so two concurrent downloads of the same key into the same dir
+	// would open/rehash/truncate/append the same file through separate fds and
+	// corrupt each other (the semaphore only serializes when
+	// MaxConcurrentDownloads==1). A per-path mutex makes them run one after
+	// another; a duplicate concurrent request simply re-downloads and overwrites,
+	// which is acceptable. The lock is refcounted so its map entry is removed once
+	// the last holder releases.
 	release := c.acquirePartialLock(partPath)
 	defer release()
 
+	return c.streamResolved(ctx, src, req, resolved, partPath)
+}
+
+// streamResolved runs the shared download pipeline for one resolved source:
+// fetch (with resume), validate (HTML sniff + size cap), stream to the partial
+// with optional MD5 verification, then atomically rename into place. It returns a
+// completed DownloadResult tagged with the serving source's name.
+func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req downloadReq, resolved Resolved, partPath string) (*DownloadResult, error) {
+	base := mirrorOf(resolved.FileURL)
 	resumeFrom := partialSize(partPath)
 
-	resp, err := c.fetchFile(ctx, fileURL, resumeFrom)
+	resp, err := c.fetchFile(ctx, resolved.FileURL, resumeFrom, resolved.Header)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// Decide whether the CDN honored the Range: a 206 continues the partial; a 200
-	// (server ignored Range) forces a restart from zero, truncating the partial.
-	var resume bool
-	switch {
-	case resumeFrom > 0 && resp.StatusCode == http.StatusPartialContent:
-		resume = true
-	case resp.StatusCode == http.StatusOK:
-		resume = false
-	default:
-		return nil, fmt.Errorf("download failed: status %d from %s", resp.StatusCode, base)
-	}
-
-	// On a 206 the body must begin exactly at resumeFrom for the append to line up
-	// with the existing bytes. If the Content-Range start disagrees (or the header
-	// is absent/unparseable), restart from zero instead of appending, to avoid
-	// corrupting the file.
-	if resume {
-		if start, ok := parseContentRangeStart(resp.Header.Get("Content-Range")); !ok || start != resumeFrom {
-			resume = false
-		}
+	resume, err := resumeDecision(resp, resumeFrom, base)
+	if err != nil {
+		return nil, err
 	}
 
 	// Full expected size: on a resumed 206, Content-Length covers only the range,
@@ -304,16 +364,19 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *
 		return nil, err
 	}
 
-	name := chooseFileName(filename, original, meta, md5)
+	name := chooseFileName(req.filename, original, req.item.Meta, req.item.MD5, resolved.Ext)
 
-	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
+	if mkErr := os.MkdirAll(req.dir, 0o750); mkErr != nil {
 		return nil, fmt.Errorf("creating download dir: %w", mkErr)
 	}
-	if derr := ensureDiskSpace(dir, resp.ContentLength); derr != nil {
+	if derr := ensureDiskSpace(req.dir, resp.ContentLength); derr != nil {
 		return nil, derr
 	}
-	dest := filepath.Join(dir, name)
-	n, err := c.streamToPartAndVerify(partPath, dest, md5, body, resume, resumeFrom, resp.ContentLength, totalLen, onProgress)
+	dest := filepath.Join(req.dir, name)
+	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, body, streamOpts{
+		resume: resume, existingSize: resumeFrom, contentLength: resp.ContentLength,
+		total: totalLen, verify: resolved.VerifyMD5, progress: req.onProgress,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -322,9 +385,30 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *
 		SizeBytes:        n,
 		OriginalFilename: original,
 		Mirror:           base,
-		Verified:         true,
+		Source:           src.Name(),
+		Verified:         resolved.VerifyMD5,
 		Resumed:          resume,
 	}, nil
+}
+
+// resumeDecision inspects the download response against the bytes already on disk
+// and reports whether to append (resume) or restart from zero. A 206 whose
+// Content-Range start matches resumeFrom resumes; a 200 restarts (server ignored
+// the Range); any other status is a download failure. A 206 with a mismatched (or
+// missing/unparseable) Content-Range restarts from zero rather than risk
+// appending misaligned bytes onto the existing partial.
+func resumeDecision(resp *http.Response, resumeFrom int64, base string) (bool, error) {
+	switch {
+	case resumeFrom > 0 && resp.StatusCode == http.StatusPartialContent:
+		if start, ok := parseContentRangeStart(resp.Header.Get("Content-Range")); ok && start == resumeFrom {
+			return true, nil
+		}
+		return false, nil
+	case resp.StatusCode == http.StatusOK:
+		return false, nil
+	default:
+		return false, fmt.Errorf("download failed: status %d from %s", resp.StatusCode, base)
+	}
 }
 
 // firstProgress returns the first progress callback from the variadic optional
@@ -366,10 +450,11 @@ func parseContentRangeStart(header string) (start int64, ok bool) {
 	return n, true
 }
 
-// fetchFile issues the download GET, waiting on the rate limiter first. When
+// fetchFile issues the download GET, waiting on the rate limiter first. Any
+// source-supplied headers are applied on top of the default User-Agent. When
 // resumeFrom > 0 it adds a Range header so the CDN can continue an interrupted
 // download from that offset. The caller owns closing the returned body.
-func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64) (*http.Response, error) {
+func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64, header http.Header) (*http.Response, error) {
 	if werr := c.limiter.Wait(ctx); werr != nil {
 		return nil, werr
 	}
@@ -378,6 +463,12 @@ func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
+	// Apply any source-specific headers (e.g. a Referer) on top of the defaults.
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
 	if resumeFrom > 0 {
 		req.Header.Set("Range", "bytes="+strconv.FormatInt(resumeFrom, 10)+"-")
 	}
@@ -432,25 +523,48 @@ func ensureDiskSpace(dir string, contentLength int64) error {
 	return nil
 }
 
+// streamOpts carries the streaming parameters for streamToPartAndVerify: how to
+// treat any existing partial (resume vs. restart), the expected sizes, whether to
+// enforce MD5 verification, and the progress sink.
+type streamOpts struct {
+	// resume appends to the existing partial (priming the hash from existingSize
+	// bytes on disk) instead of truncating and starting fresh.
+	resume bool
+	// existingSize is the number of bytes already on disk when resuming.
+	existingSize int64
+	// contentLength, when > 0, is the number of bytes expected from the body (the
+	// range length on a resume) and is checked to detect a truncated transfer.
+	contentLength int64
+	// total is the full expected file size, used to report absolute progress.
+	total int64
+	// verify enables the final MD5 digest check against wantMD5. It is disabled for
+	// sources whose files are not keyed by md5.
+	verify bool
+	// progress is the throttled progress sink; nil disables progress reporting.
+	progress ProgressFunc
+}
+
 // streamToPartAndVerify streams body into the stable partial at partPath while
-// computing the MD5 of the whole file, then verifies the digest against wantMD5
-// and atomically renames the partial to dest on success. It returns the final
-// file size.
+// computing the MD5 of the whole file, then (when opts.verify) checks the digest
+// against wantMD5 and atomically renames the partial to dest on success. It
+// returns the final file size.
 //
-// When resume is true it appends to the existing partial and primes the hash by
-// re-reading the existingSize bytes already on disk, so the final digest covers
-// the entire file; otherwise it truncates and starts fresh. contentLength, when
-// known, is the number of bytes expected from the body (the range length on a
-// resume) and is checked to detect a truncated transfer.
+// When opts.resume is true it appends to the existing partial and primes the hash
+// by re-reading the existingSize bytes already on disk, so the final digest covers
+// the entire file; otherwise it truncates and starts fresh. The re-hash also
+// advances the file offset to the end for appending, so it runs whether or not
+// verification is requested. contentLength, when known, is the number of bytes
+// expected from the body (the range length on a resume) and is checked to detect
+// a truncated transfer.
 //
 // Partial lifecycle: on an MD5 mismatch (corrupt/tampered) or an oversized
 // transfer the partial is deleted; on a transient failure (network drop, short
 // read) it is kept so a later call can resume from where it stopped.
-func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, resume bool, existingSize, contentLength, total int64, progress ProgressFunc) (int64, error) {
+func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, opts streamOpts) (int64, error) {
 	flag := os.O_RDWR | os.O_CREATE
 	var startSize int64
-	if resume {
-		startSize = existingSize
+	if opts.resume {
+		startSize = opts.existingSize
 	} else {
 		flag |= os.O_TRUNC // restart: discard any stale partial
 	}
@@ -460,7 +574,7 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 	}
 
 	digest := cryptomd5.New() //nolint:gosec // integrity match against the LibGen-provided md5.
-	if resume {
+	if opts.resume {
 		// Re-hash the bytes already on disk so the digest covers the whole file;
 		// io.Copy also leaves the file offset at the end, ready to append.
 		if _, rerr := io.Copy(digest, f); rerr != nil {
@@ -475,7 +589,7 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 	cw := &countingWriter{w: io.MultiWriter(f, digest), limit: c.maxDownloadBytes, written: startSize}
 	// progressWriter reports throttled progress over the whole file: seed done
 	// with the bytes already on disk so a resumed download reports absolute totals.
-	pw := &progressWriter{w: cw, progress: progress, total: total, done: startSize, lastAt: time.Now(), lastDone: startSize}
+	pw := &progressWriter{w: cw, progress: opts.progress, total: opts.total, done: startSize, lastAt: time.Now(), lastDone: startSize}
 	streamed, copyErr := io.Copy(pw, body)
 	closeErr := f.Close()
 	if copyErr != nil || closeErr != nil {
@@ -486,14 +600,18 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 		}
 		return 0, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
 	}
-	if contentLength > 0 && streamed != contentLength {
+	if opts.contentLength > 0 && streamed != opts.contentLength {
 		// Short read: keep the partial so a later call can resume from here.
-		return 0, fmt.Errorf("truncated download: got %d of %d bytes", streamed, contentLength)
+		return 0, fmt.Errorf("truncated download: got %d of %d bytes", streamed, opts.contentLength)
 	}
 	pw.emitFinal() // report completion (done == total) regardless of throttle
-	if got := hex.EncodeToString(digest.Sum(nil)); !strings.EqualFold(got, wantMD5) {
-		os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
-		return 0, fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, got, wantMD5)
+	// MD5 verification is conditional: only sources keyed by md5 request it. The
+	// size cap, HTML sniff, resume and atomic rename apply to every source.
+	if opts.verify {
+		if got := hex.EncodeToString(digest.Sum(nil)); !strings.EqualFold(got, wantMD5) {
+			os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
+			return 0, fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, got, wantMD5)
+		}
 	}
 	if rerr := os.Rename(partPath, dest); rerr != nil {
 		return 0, rerr // content is valid; keep the partial so a retry can rename it

@@ -62,6 +62,10 @@ type Client struct {
 	// is MaxConcurrentDownloads. Download acquires a slot before starting and
 	// releases it on completion.
 	dlSem chan struct{}
+	// sources is the ordered download-source chain Download tries for each Item,
+	// advancing to the next when one fails to resolve or stream. It always starts
+	// with the LibGen source; later phases prepend/append others (DOI-based).
+	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
 	// same md5 into the same dir), keyed by the absolute .part path. The .part
 	// path is deterministic, so without this two concurrent same-md5 downloads
@@ -128,7 +132,7 @@ func New(m MirrorLister, cfg *config.Config) *Client {
 	// non-positive value so the channel never becomes an unbuffered (deadlocking)
 	// zero-capacity semaphore.
 	maxConcurrent := max(cfg.MaxConcurrentDownloads, 1)
-	return &Client{
+	c := &Client{
 		mirrors:          m,
 		http:             &http.Client{Timeout: cfg.Timeout},
 		dl:               &http.Client{},
@@ -139,6 +143,10 @@ func New(m MirrorLister, cfg *config.Config) *Client {
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
 	}
+	// The default chain resolves md5-keyed items through LibGen. libgenSource
+	// holds c so it can reuse the mirror failover in ResolveGetURL.
+	c.sources = []DownloadSource{libgenSource{c: c}}
+	return c
 }
 
 // get tries path?q across the mirrors until it gets a 200. On a transient
