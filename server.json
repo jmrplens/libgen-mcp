@@ -1,0 +1,188 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jmrplens/libgen-mcp",
+  "title": "Library Genesis MCP Server",
+  "description": "Search Library Genesis, fetch metadata and download options, and download books and papers.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/jmrplens/libgen-mcp",
+    "source": "github",
+    "id": "1304827801"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-linux-amd64",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-linux-arm64",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-darwin-amd64",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-darwin-arm64",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-windows-amd64.exe",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v0.1.0/libgen-mcp-windows-arm64.exe",
+      "version": "0.1.0",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 30s)",
+          "isRequired": false,
+          "default": "30s"
+        }
+      ]
+    }
+  ]
+}
