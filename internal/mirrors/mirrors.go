@@ -81,8 +81,10 @@ type Manager struct {
 	Preferred string
 	HTTP      *http.Client
 
-	mu     sync.Mutex
-	cached []string
+	mu                 sync.Mutex
+	cached             []string
+	cachedAt           time.Time
+	cachedFromFallback bool
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -103,27 +105,39 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 }
 
 // Mirrors devuelve las URLs base con el mirror preferido primero. Nunca vacío.
+//
+// La memoización en memoria solo persiste resultados de una discovery viva o de
+// una caché de disco válida: un fallback (sin red ni caché usable) NO se memoiza,
+// para que la siguiente llamada reintente discovery en lugar de quedar anclada en
+// la lista de respaldo. Además, tras una memoización correcta, se vuelve a intentar
+// discovery una vez que el resultado en memoria supera cacheTTL, de modo que un
+// servidor de larga duración recoge cambios de mirrors sin reiniciar.
 func (m *Manager) Mirrors(ctx context.Context) []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cached == nil {
-		m.cached = orderPreferred(m.load(ctx), m.Preferred)
+	if m.cached == nil || m.cachedFromFallback || time.Since(m.cachedAt) >= cacheTTL {
+		list, fromFallback := m.load(ctx)
+		m.cached = orderPreferred(list, m.Preferred)
+		m.cachedAt = time.Now()
+		m.cachedFromFallback = fromFallback
 	}
 	return m.cached
 }
 
-func (m *Manager) load(ctx context.Context) []string {
+// load devuelve la lista de mirrors y si tuvo que recurrir al fallback hardcodeado
+// (sin fetch vivo ni caché de disco utilizable).
+func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 	if c, err := m.readCache(); err == nil && time.Since(c.FetchedAt) < cacheTTL {
-		return c.Mirrors
+		return c.Mirrors, false
 	}
 	if list, err := m.fetch(ctx); err == nil {
 		m.writeCache(list)
-		return list
+		return list, false
 	}
 	if c, err := m.readCache(); err == nil { // caché caducada mejor que nada
-		return c.Mirrors
+		return c.Mirrors, false
 	}
-	return slices.Clone(DefaultFallback)
+	return slices.Clone(DefaultFallback), true
 }
 
 func (m *Manager) fetch(ctx context.Context) ([]string, error) {

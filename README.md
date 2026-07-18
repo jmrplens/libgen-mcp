@@ -91,7 +91,8 @@ Download a file by `md5` to a local directory, resolving the mirror download cha
 
 Mirrors are discovered automatically from
 [shadowlibraries](https://shadowlibraries.github.io/DirectDownloads/libgen/) and cached for
-24 hours in `~/.cache/libgen-mcp/mirrors.json`. `libgen.li` is preferred, and the server
+24 hours in your OS cache directory (`~/.cache/libgen-mcp/mirrors.json` on Linux,
+`~/Library/Caches/libgen-mcp/mirrors.json` on macOS). `libgen.li` is preferred, and the server
 fails over to the next live mirror automatically when a request fails. Set `LIBGEN_MIRROR`
 to pin a single mirror and bypass discovery.
 

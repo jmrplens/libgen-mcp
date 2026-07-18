@@ -1,5 +1,6 @@
 /libgen-mcp
 /probe
+/server
 /dist/
 coverage.out
 *.test
