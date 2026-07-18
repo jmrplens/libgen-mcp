@@ -193,6 +193,65 @@ func validConfig(t *testing.T) *Config {
 		MaxConcurrentDownloads: 2,
 		RetryAttempts:          3,
 		UnpaywallEmail:         "mail@jmrp.io",
+		ScihubHosts:            []string{"sci-hub.ee", "sci-hub.se"},
+	}
+}
+
+// TestLoadScihubHostsDefault verifies the default ordered Sci-Hub host list.
+func TestLoadScihubHostsDefault(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_SCIHUB_HOSTS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci-hub.ru", "sci-hub.wf"}
+	if len(cfg.ScihubHosts) != len(want) {
+		t.Fatalf("ScihubHosts = %v, want %v", cfg.ScihubHosts, want)
+	}
+	for i, h := range want {
+		if cfg.ScihubHosts[i] != h {
+			t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
+		}
+	}
+}
+
+// TestLoadScihubHostsOverride verifies overriding and trimming the host list.
+func TestLoadScihubHostsOverride(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_SCIHUB_HOSTS", " sci-hub.example , mirror.test ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := []string{"sci-hub.example", "mirror.test"}
+	if len(cfg.ScihubHosts) != len(want) {
+		t.Fatalf("ScihubHosts = %v, want %v", cfg.ScihubHosts, want)
+	}
+	for i, h := range want {
+		if cfg.ScihubHosts[i] != h {
+			t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
+		}
+	}
+}
+
+// TestValidateBadScihubHosts covers rejected Sci-Hub host lists.
+func TestValidateBadScihubHosts(t *testing.T) {
+	cases := []struct {
+		name  string
+		hosts []string
+	}{
+		{"empty", nil},
+		{"scheme", []string{"https://sci-hub.ee"}},
+		{"slash", []string{"sci-hub.ee/path"}},
+		{"blank-entry", []string{"sci-hub.ee", ""}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validConfig(t)
+			cfg.ScihubHosts = tc.hosts
+			if cfg.Validate() == nil {
+				t.Fatalf("Validate() with ScihubHosts=%v should fail", tc.hosts)
+			}
+		})
 	}
 }
 

@@ -33,7 +33,13 @@ type Config struct {
 	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
 	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
+	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
 }
+
+// defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
+// LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
+// the list until one serves an article page.
+var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci-hub.ru", "sci-hub.wf"}
 
 // Load builds the configuration from environment variables.
 //
@@ -51,9 +57,13 @@ func Load() (*Config, error) {
 		MaxConcurrentDownloads: 2,
 		RetryAttempts:          3,
 		UnpaywallEmail:         "mail@jmrp.io",
+		ScihubHosts:            append([]string(nil), defaultScihubHosts...),
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
+	}
+	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
+		cfg.ScihubHosts = splitHosts(v)
 	}
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
@@ -102,6 +112,19 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+// splitHosts parses a comma-separated host list, trimming surrounding whitespace
+// from each entry and dropping empties, so "a , b ," yields ["a", "b"].
+func splitHosts(v string) []string {
+	parts := strings.Split(v, ",")
+	hosts := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if h := strings.TrimSpace(p); h != "" {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
 }
 
 // envInt overwrites *dst with the integer read from the variable key if present.
@@ -170,6 +193,9 @@ func (c *Config) Validate() error {
 	if err := validateUnpaywallEmail(c.UnpaywallEmail); err != nil {
 		return err
 	}
+	if err := validateScihubHosts(c.ScihubHosts); err != nil {
+		return err
+	}
 	if err := validateMirror(c.Mirror); err != nil {
 		return err
 	}
@@ -187,6 +213,24 @@ func validateUnpaywallEmail(email string) error {
 	dot := strings.Index(email[at+1:], ".")
 	if dot <= 0 || at+1+dot == len(email)-1 {
 		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must have a domain with a dot, got %q", email)
+	}
+	return nil
+}
+
+// validateScihubHosts checks that the Sci-Hub host list is non-empty and that
+// each entry is a bare host: no scheme and no slash (the source builds
+// https://<host>/<doi> itself, so a scheme or path here would corrupt the URL).
+func validateScihubHosts(hosts []string) error {
+	if len(hosts) == 0 {
+		return errors.New("LIBGEN_MCP_SCIHUB_HOSTS must list at least one host")
+	}
+	for _, h := range hosts {
+		if h == "" {
+			return errors.New("LIBGEN_MCP_SCIHUB_HOSTS must not contain empty hosts")
+		}
+		if strings.Contains(h, "/") || strings.Contains(h, "://") {
+			return fmt.Errorf("LIBGEN_MCP_SCIHUB_HOSTS entries must be bare hosts, got %q", h)
+		}
 	}
 	return nil
 }
