@@ -1,6 +1,6 @@
-// probe verifica contra los mirrors reales que todas las rutas que usa
-// libgen-mcp siguen funcionando (búsqueda por topic, API JSON, cadena de
-// descarga). Uso: go run ./cmd/probe [-mirror https://libgen.li]
+// Command probe verifies against the real mirrors that every route libgen-mcp
+// uses still works (search by topic, JSON API, download chain).
+// Usage: go run ./cmd/probe [-mirror https://libgen.li]
 package main
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 )
 
-// checker acumula el estado de las comprobaciones e imprime su resultado.
+// checker accumulates the state of the checks and prints their results.
 type checker struct{ failed bool }
 
 func (c *checker) report(name string, err error, okMsg string) {
@@ -89,7 +89,7 @@ func run() int {
 	return 0
 }
 
-// runSearches ejecuta una búsqueda por cada topic y devuelve el primer md5 útil.
+// runSearches runs one search per topic and returns the first useful md5.
 func (c *checker) runSearches(ctx context.Context, client *libgen.Client) string {
 	searches := []struct{ topic, query string }{
 		{"nonfiction", "golang"},
@@ -118,7 +118,7 @@ func (c *checker) runSearches(ctx context.Context, client *libgen.Client) string
 	return sampleMD5
 }
 
-// checkDownload pide el primer byte del CDN para confirmar que la key resuelve.
+// checkDownload requests the first byte from the CDN to confirm the key resolves.
 func checkDownload(ctx context.Context, getURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, http.NoBody)
 	if err != nil {

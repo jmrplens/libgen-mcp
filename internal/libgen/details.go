@@ -7,8 +7,8 @@ import (
 	"net/url"
 )
 
-// decodeObjects interpreta la respuesta de json.php (mapa id → objeto).
-// Una respuesta `[]` (array vacío) significa "sin resultados".
+// decodeObjects interprets the json.php response (map of id → object).
+// A `[]` response (empty array) means "no results".
 func decodeObjects(body []byte) (map[string]map[string]any, error) {
 	var objs map[string]map[string]any
 	if err := json.Unmarshal(body, &objs); err != nil {
@@ -21,7 +21,7 @@ func decodeObjects(body []byte) (map[string]map[string]any, error) {
 	return objs, nil
 }
 
-// DetailsByMD5 devuelve el registro de fichero y su primera edición relacionada.
+// DetailsByMD5 returns the file record and its first related edition.
 func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition map[string]any, err error) {
 	body, _, err := c.get(ctx, "/json.php", url.Values{"object": {"f"}, "md5": {md5}, "addkeys": {"*"}})
 	if err != nil {
@@ -54,7 +54,7 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition ma
 	return file, edition, nil
 }
 
-// DetailsByID devuelve un registro por id. object: "e" (edición) o "f" (fichero).
+// DetailsByID returns a record by id. object: "e" (edition) or "f" (file).
 func (c *Client) DetailsByID(ctx context.Context, object, id string) (map[string]any, error) {
 	if object != "e" && object != "f" {
 		return nil, fmt.Errorf("object must be \"e\" or \"f\", got %q", object)

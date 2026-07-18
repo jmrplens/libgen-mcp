@@ -1,7 +1,7 @@
 # CI pipeline for libgen-mcp
 #
 # Runs on: pull requests to main, pushes to main
-# Jobs: test (+coverage gate), build, golangci-lint, govulncheck, markdown,
+# Jobs: test (+coverage gate), build, golangci-lint, godoc, govulncheck, markdown,
 #       hadolint, docker build (PR + Docker changes only)
 
 name: CI
@@ -136,6 +136,18 @@ jobs:
       - run: go mod download
       - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
       - run: make golangci-lint
+
+  godoc:
+    name: godoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go mod download
+      - name: Audit godoc coverage (exported symbols, packages and tests)
+        run: go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 
   govulncheck:
     name: govulncheck

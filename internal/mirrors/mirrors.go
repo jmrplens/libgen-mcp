@@ -1,4 +1,4 @@
-// Package mirrors descubre y cachea los mirrors vivos de la familia libgen.li.
+// Package mirrors discovers and caches the live mirrors of the libgen.li family.
 package mirrors
 
 import (
@@ -27,7 +27,7 @@ const (
 	cacheTTL         = 24 * time.Hour
 )
 
-// DefaultFallback es la lista de respaldo si no hay red ni caché (verificada 2026-07-17).
+// DefaultFallback is the fallback list used when there is no network or cache (verified 2026-07-17).
 var DefaultFallback = []string{
 	"https://libgen.li", "https://libgen.vg", "https://libgen.la",
 	"https://libgen.bz", "https://libgen.gl",
@@ -35,7 +35,7 @@ var DefaultFallback = []string{
 
 var mirrorHostRe = regexp.MustCompile(`^https?://(libgen\.[a-z]{2,6})/?$`)
 
-// Parse extrae las URLs base de mirrors libgen de la página de shadowlibraries.
+// Parse extracts the libgen mirror base URLs from the shadowlibraries page.
 func Parse(r io.Reader) ([]string, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
@@ -75,6 +75,8 @@ type cacheFile struct {
 	Mirrors   []string  `json:"mirrors"`
 }
 
+// Manager discovers, caches and orders the libgen mirrors, keeping the preferred
+// mirror first.
 type Manager struct {
 	SourceURL string
 	CachePath string
@@ -87,6 +89,8 @@ type Manager struct {
 	cachedFromFallback bool
 }
 
+// NewManager builds a Manager from the configuration, using the configured mirror
+// as preferred (or DefaultPreferred when unset) and the OS cache dir for the cache.
 func NewManager(cfg *config.Config) (*Manager, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
@@ -104,14 +108,14 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	}, nil
 }
 
-// Mirrors devuelve las URLs base con el mirror preferido primero. Nunca vacío.
+// Mirrors returns the base URLs with the preferred mirror first. Never empty.
 //
-// La memoización en memoria solo persiste resultados de una discovery viva o de
-// una caché de disco válida: un fallback (sin red ni caché usable) NO se memoiza,
-// para que la siguiente llamada reintente discovery en lugar de quedar anclada en
-// la lista de respaldo. Además, tras una memoización correcta, se vuelve a intentar
-// discovery una vez que el resultado en memoria supera cacheTTL, de modo que un
-// servidor de larga duración recoge cambios de mirrors sin reiniciar.
+// In-memory memoization only persists results from a live discovery or a valid
+// disk cache: a fallback (no network and no usable cache) is NOT memoized, so the
+// next call retries discovery instead of staying pinned to the fallback list.
+// Also, after a successful memoization, discovery is retried once the in-memory
+// result exceeds cacheTTL, so a long-running server picks up mirror changes
+// without a restart.
 func (m *Manager) Mirrors(ctx context.Context) []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -124,8 +128,8 @@ func (m *Manager) Mirrors(ctx context.Context) []string {
 	return m.cached
 }
 
-// load devuelve la lista de mirrors y si tuvo que recurrir al fallback hardcodeado
-// (sin fetch vivo ni caché de disco utilizable).
+// load returns the mirror list and whether it had to fall back to the hardcoded
+// list (no live fetch and no usable disk cache).
 func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 	if c, err := m.readCache(); err == nil && time.Since(c.FetchedAt) < cacheTTL {
 		return c.Mirrors, false
@@ -134,7 +138,7 @@ func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 		m.writeCache(fetched)
 		return fetched, false
 	}
-	if c, err := m.readCache(); err == nil { // caché caducada mejor que nada
+	if c, err := m.readCache(); err == nil { // a stale cache is better than nothing
 		return c.Mirrors, false
 	}
 	return slices.Clone(DefaultFallback), true
@@ -179,7 +183,7 @@ func (m *Manager) writeCache(list []string) {
 	if mkErr := os.MkdirAll(filepath.Dir(m.CachePath), 0o750); mkErr != nil {
 		return
 	}
-	_ = os.WriteFile(m.CachePath, data, 0o600) // caché best-effort
+	_ = os.WriteFile(m.CachePath, data, 0o600) // best-effort cache
 }
 
 func orderPreferred(list []string, preferred string) []string {

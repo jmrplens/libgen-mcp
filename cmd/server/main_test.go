@@ -10,6 +10,7 @@ import (
 	"testing"
 )
 
+// TestHealthEndpoint verifies HealthEndpoint.
 func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
@@ -38,6 +39,7 @@ func TestHealthEndpoint(t *testing.T) {
 	})
 }
 
+// TestRunValidatesConfig verifies RunValidatesConfig.
 func TestRunValidatesConfig(t *testing.T) {
 	// A syntactically valid but out-of-range value passes config.Load but must
 	// be rejected by cfg.Validate, so run returns before attempting to serve.
@@ -52,6 +54,7 @@ func TestRunValidatesConfig(t *testing.T) {
 	}
 }
 
+// TestIsCleanShutdown covers IsCleanShutdown with table-driven subtests.
 func TestIsCleanShutdown(t *testing.T) {
 	cases := []struct {
 		name string

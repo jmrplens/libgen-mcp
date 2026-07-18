@@ -112,7 +112,7 @@ func (cw *countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// ExtractGetLink localiza el enlace get.php?md5=…&key=… dentro de la página ads.php.
+// ExtractGetLink locates the get.php?md5=…&key=… link inside the ads.php page.
 func ExtractGetLink(body []byte) (string, error) {
 	m := getLinkRe.Find(body)
 	if m == nil {
@@ -121,7 +121,7 @@ func ExtractGetLink(body []byte) (string, error) {
 	return xhtml.UnescapeString(string(m)), nil
 }
 
-// ResolveGetURL obtiene la URL directa de descarga (con key fresca) para un md5.
+// ResolveGetURL obtains the direct download URL (with a fresh key) for an md5.
 func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (getURL, base string, err error) {
 	body, base, err := c.get(ctx, "/ads.php", url.Values{"md5": {md5}})
 	if err != nil {
@@ -134,6 +134,8 @@ func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (getURL, base st
 	return base + "/" + link, base, nil
 }
 
+// DownloadResult describes a completed download: where the file landed, its size
+// and mirror, and whether it was integrity-verified and/or resumed.
 type DownloadResult struct {
 	Path             string `json:"path"`
 	SizeBytes        int64  `json:"size_bytes"`
@@ -151,8 +153,8 @@ type DownloadResult struct {
 // does not match the requested md5 (corrupt or tampered download).
 var errIntegrityCheckFailed = errors.New("integrity check failed: MD5 mismatch")
 
-// Download descarga el fichero md5 a dir. Si filename está vacío usa el nombre
-// que anuncia el CDN (content-disposition), saneado. An optional progress
+// Download downloads the md5 file into dir. If filename is empty it uses the name
+// the CDN announces (content-disposition), sanitized. An optional progress
 // callback (only the first is used) is invoked throttled with the running and
 // total byte counts; pass none to disable progress reporting.
 func (c *Client) Download(ctx context.Context, md5, dir, filename string, progress ...ProgressFunc) (*DownloadResult, error) {
@@ -431,8 +433,8 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 	return startSize + streamed, nil
 }
 
-// looksLikeHTML detecta si b (cabecera olfateada del cuerpo) empieza, tras
-// recortar espacio ASCII inicial, por un marcador de documento HTML.
+// looksLikeHTML reports whether b (a sniffed body header) begins, after trimming
+// leading ASCII whitespace, with an HTML document marker.
 func looksLikeHTML(b []byte) bool {
 	trimmed := bytes.TrimLeft(b, " \t\r\n\f\v")
 	lower := bytes.ToLower(trimmed)

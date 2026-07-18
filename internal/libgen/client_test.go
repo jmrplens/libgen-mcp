@@ -18,9 +18,9 @@ type staticMirrors []string
 
 func (s staticMirrors) Mirrors(context.Context) []string { return s }
 
-// newTestClient construye un Client con defaults sanos para tests: rate limiter
-// muy alto (sin espera), un solo intento por defecto y backoff casi nulo. Los
-// tests que ejercitan el retry sobrescriben c.retry.
+// newTestClient builds a Client with sane test defaults: a very high rate limiter
+// (no waiting), a single attempt by default and a near-zero backoff. Tests that
+// exercise retries override c.retry.
 func newTestClient(m MirrorLister) *Client {
 	cfg := &config.Config{
 		Timeout:                5 * time.Second,
@@ -34,6 +34,7 @@ func newTestClient(m MirrorLister) *Client {
 	return c
 }
 
+// TestGetFailsOver verifies GetFailsOver.
 func TestGetFailsOver(t *testing.T) {
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "down", http.StatusBadGateway)
@@ -54,10 +55,11 @@ func TestGetFailsOver(t *testing.T) {
 		t.Fatalf("get() error = %v", err)
 	}
 	if string(body) != "ok-body" || base != good.URL {
-		t.Errorf("get() = %q desde %q, esperaba ok-body desde %q", body, base, good.URL)
+		t.Errorf("get() = %q from %q, want ok-body from %q", body, base, good.URL)
 	}
 }
 
+// TestGetAllMirrorsFailed verifies GetAllMirrorsFailed.
 func TestGetAllMirrorsFailed(t *testing.T) {
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "down", http.StatusInternalServerError)
@@ -103,8 +105,8 @@ func TestGetAllMirrorsPermanent(t *testing.T) {
 	}
 }
 
-// TestGetRetriesTransient: un mirror devuelve 503 dos veces y luego 200; con
-// RetryAttempts=3 el cliente debe reintentar hasta lograr el 200 (3 hits).
+// TestGetRetriesTransient: a mirror returns 503 twice and then 200; with
+// RetryAttempts=3 the client must retry until it gets the 200 (3 hits).
 func TestGetRetriesTransient(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -126,12 +128,12 @@ func TestGetRetriesTransient(t *testing.T) {
 		t.Errorf("body = %q, want ok-body", body)
 	}
 	if got := hits.Load(); got != 3 {
-		t.Errorf("hits = %d, want 3 (dos reintentos tras 503)", got)
+		t.Errorf("hits = %d, want 3 (two retries after 503)", got)
 	}
 }
 
-// TestGetPermanentNoRetry: un 404 es un error permanente; no debe reintentarse
-// aunque haya intentos disponibles (un solo hit) y el error se propaga.
+// TestGetPermanentNoRetry: a 404 is a permanent error; it must not be retried
+// even when attempts are available (a single hit) and the error propagates.
 func TestGetPermanentNoRetry(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -147,13 +149,13 @@ func TestGetPermanentNoRetry(t *testing.T) {
 		t.Fatal("get() error = nil, want error")
 	}
 	if got := hits.Load(); got != 1 {
-		t.Errorf("hits = %d, want 1 (sin reintento en error permanente)", got)
+		t.Errorf("hits = %d, want 1 (no retry on a permanent error)", got)
 	}
 }
 
-// TestGetFailsOverOnPermanent: un error permanente (404) en el primer mirror no
-// debe abortar el sweep; el cliente hace failover al segundo mirror, que responde
-// 200. El primer mirror se consulta exactamente una vez (sin reintento).
+// TestGetFailsOverOnPermanent: a permanent error (404) on the first mirror must
+// not abort the sweep; the client fails over to the second mirror, which responds
+// 200. The first mirror is queried exactly once (no retry).
 func TestGetFailsOverOnPermanent(t *testing.T) {
 	var firstHits atomic.Int32
 	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -173,15 +175,15 @@ func TestGetFailsOverOnPermanent(t *testing.T) {
 		t.Fatalf("get() error = %v, want failover success", err)
 	}
 	if string(body) != "ok-body" || base != second.URL {
-		t.Errorf("get() = %q desde %q, esperaba ok-body desde %q", body, base, second.URL)
+		t.Errorf("get() = %q from %q, want ok-body from %q", body, base, second.URL)
 	}
 	if got := firstHits.Load(); got != 1 {
-		t.Errorf("firstHits = %d, want 1 (permanente: failover sin reintento)", got)
+		t.Errorf("firstHits = %d, want 1 (permanent: failover without retry)", got)
 	}
 }
 
-// TestCooldownSkip: tras fallar una vez, el mirror malo entra en cooldown; la
-// segunda llamada debe saltarlo y no volver a consultarlo (hits del malo == 1).
+// TestCooldownSkip: after failing once, the bad mirror enters cooldown; the
+// second call must skip it and not query it again (bad mirror hits == 1).
 func TestCooldownSkip(t *testing.T) {
 	var badHits, goodHits atomic.Int32
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

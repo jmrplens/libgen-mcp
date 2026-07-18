@@ -11,6 +11,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 )
 
+// TestParseLevel covers ParseLevel with table-driven subtests.
 func TestParseLevel(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -47,6 +48,7 @@ func TestParseLevel(t *testing.T) {
 	}
 }
 
+// TestToolCallError verifies ToolCallError.
 func TestToolCallError(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
@@ -70,6 +72,7 @@ func TestToolCallError(t *testing.T) {
 	}
 }
 
+// TestToolCallSuccess verifies ToolCallSuccess.
 func TestToolCallSuccess(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
@@ -90,6 +93,7 @@ func TestToolCallSuccess(t *testing.T) {
 	}
 }
 
+// TestSetupWritesStderr verifies SetupWritesStderr.
 func TestSetupWritesStderr(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })

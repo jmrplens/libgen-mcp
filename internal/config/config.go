@@ -1,4 +1,4 @@
-// Package config carga la configuración del servidor desde variables de entorno.
+// Package config loads the server configuration from environment variables.
 package config
 
 import (
@@ -15,30 +15,30 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 )
 
-// maxDownloadBytesLimit es el techo permitido para MaxDownloadBytes (50 GiB).
+// maxDownloadBytesLimit is the allowed ceiling for MaxDownloadBytes (50 GiB).
 const maxDownloadBytesLimit int64 = 50 * 1024 * 1024 * 1024
 
-// maxTimeout es el techo permitido para Timeout.
+// maxTimeout is the allowed ceiling for Timeout.
 const maxTimeout = 10 * time.Minute
 
-// Config agrupa la configuración del servidor leída del entorno.
+// Config groups the server configuration read from the environment.
 type Config struct {
-	Mirror                 string        // LIBGEN_MIRROR: mirror forzado, p. ej. https://libgen.li
-	DownloadDir            string        // LIBGEN_MCP_DOWNLOAD_DIR: destino de descargas
-	Timeout                time.Duration // LIBGEN_MCP_TIMEOUT: timeout por petición HTTP
-	LogLevel               slog.Level    // LIBGEN_MCP_LOG_LEVEL: nivel de log (debug/info/warn/error)
-	RateRPS                float64       // LIBGEN_MCP_RATE_RPS: peticiones por segundo permitidas
-	RateBurst              int           // LIBGEN_MCP_RATE_BURST: ráfaga máxima del limitador
-	MaxDownloadBytes       int64         // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: tamaño máximo de descarga (0 = sin límite)
-	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: descargas simultáneas
-	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: reintentos por petición
+	Mirror                 string        // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
+	DownloadDir            string        // LIBGEN_MCP_DOWNLOAD_DIR: download destination
+	Timeout                time.Duration // LIBGEN_MCP_TIMEOUT: timeout per HTTP request
+	LogLevel               slog.Level    // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
+	RateRPS                float64       // LIBGEN_MCP_RATE_RPS: allowed requests per second
+	RateBurst              int           // LIBGEN_MCP_RATE_BURST: maximum limiter burst
+	MaxDownloadBytes       int64         // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
+	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
+	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
 }
 
-// Load construye la configuración a partir de las variables de entorno.
+// Load builds the configuration from environment variables.
 //
-// Todas las variables nuevas son opcionales; una cadena vacía usa el valor por
-// defecto. Un valor numérico presente pero inválido produce un error en lugar de
-// caer silenciosamente al valor por defecto.
+// Every new variable is optional; an empty string uses the default value. A
+// numeric value that is present but invalid produces an error instead of
+// silently falling back to the default.
 func Load() (*Config, error) {
 	cfg := &Config{
 		Mirror:                 strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/"),
@@ -79,7 +79,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// loadNumeric rellena los campos numéricos del cfg a partir del entorno.
+// loadNumeric fills the numeric fields of cfg from the environment.
 func loadNumeric(cfg *Config) error {
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
 		return err
@@ -99,7 +99,7 @@ func loadNumeric(cfg *Config) error {
 	return nil
 }
 
-// envInt sobrescribe *dst con el entero leído de la variable key si está presente.
+// envInt overwrites *dst with the integer read from the variable key if present.
 func envInt(key string, dst *int) error {
 	v := os.Getenv(key)
 	if v == "" {
@@ -113,7 +113,7 @@ func envInt(key string, dst *int) error {
 	return nil
 }
 
-// envInt64 sobrescribe *dst con el int64 leído de la variable key si está presente.
+// envInt64 overwrites *dst with the int64 read from the variable key if present.
 func envInt64(key string, dst *int64) error {
 	v := os.Getenv(key)
 	if v == "" {
@@ -127,7 +127,7 @@ func envInt64(key string, dst *int64) error {
 	return nil
 }
 
-// envFloat sobrescribe *dst con el float64 leído de la variable key si está presente.
+// envFloat overwrites *dst with the float64 read from the variable key if present.
 func envFloat(key string, dst *float64) error {
 	v := os.Getenv(key)
 	if v == "" {
@@ -141,8 +141,8 @@ func envFloat(key string, dst *float64) error {
 	return nil
 }
 
-// Validate comprueba que los valores de la configuración están dentro de rango
-// y que el mirror y el directorio de descargas son utilizables.
+// Validate checks that the configuration values are within range and that the
+// mirror and download directory are usable.
 func (c *Config) Validate() error {
 	if c.RateRPS <= 0 || c.RateRPS > 20 {
 		return fmt.Errorf("LIBGEN_MCP_RATE_RPS must be in (0, 20], got %v", c.RateRPS)
@@ -168,7 +168,7 @@ func (c *Config) Validate() error {
 	return validateDownloadDir(c.DownloadDir)
 }
 
-// validateMirror comprueba que un mirror no vacío es una URL http/https con host.
+// validateMirror checks that a non-empty mirror is an http/https URL with a host.
 func validateMirror(mirror string) error {
 	if mirror == "" {
 		return nil
@@ -186,8 +186,8 @@ func validateMirror(mirror string) error {
 	return nil
 }
 
-// validateDownloadDir crea el directorio de descargas si falta y comprueba que
-// es escribible mediante un fichero temporal.
+// validateDownloadDir creates the download directory if missing and checks that
+// it is writable using a temporary file.
 func validateDownloadDir(dir string) error {
 	if dir == "" {
 		return errors.New("LIBGEN_MCP_DOWNLOAD_DIR must not be empty")

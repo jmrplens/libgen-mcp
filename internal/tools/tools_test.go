@@ -24,8 +24,8 @@ type staticMirrors []string
 
 func (s staticMirrors) Mirrors(context.Context) []string { return s }
 
-// newSession levanta servidor MCP + cliente in-memory con un mirror httptest
-// que sirve las fixtures del paquete libgen.
+// newSession spins up an MCP server plus an in-memory client with an httptest
+// mirror that serves the libgen package fixtures.
 func newSession(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 	searchHTML, err := os.ReadFile("../libgen/testdata/search_books.html")
@@ -65,6 +65,7 @@ func newSession(t *testing.T) *mcp.ClientSession {
 	return session
 }
 
+// TestHandlerRecoversPanic verifies HandlerRecoversPanic.
 func TestHandlerRecoversPanic(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 	type panicIn struct{}
@@ -100,6 +101,7 @@ func TestHandlerRecoversPanic(t *testing.T) {
 	}
 }
 
+// TestToolsRegistered verifies ToolsRegistered.
 func TestToolsRegistered(t *testing.T) {
 	session := newSession(t)
 	res, err := session.ListTools(context.Background(), nil)
@@ -112,14 +114,15 @@ func TestToolsRegistered(t *testing.T) {
 	}
 	for _, want := range []string{"search", "get_details", "download"} {
 		if !names[want] {
-			t.Errorf("falta la tool %q; registradas: %v", want, names)
+			t.Errorf("missing tool %q; registered: %v", want, names)
 		}
 	}
 	if len(res.Tools) != 3 {
-		t.Errorf("hay %d tools, esperaba 3", len(res.Tools))
+		t.Errorf("got %d tools, want 3", len(res.Tools))
 	}
 }
 
+// TestSearchTool verifies SearchTool.
 func TestSearchTool(t *testing.T) {
 	session := newSession(t)
 	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -151,6 +154,7 @@ func TestSearchTool(t *testing.T) {
 	}
 }
 
+// TestSearchToolBadTopic verifies SearchToolBadTopic.
 func TestSearchToolBadTopic(t *testing.T) {
 	session := newSession(t)
 	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -161,10 +165,11 @@ func TestSearchToolBadTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.IsError {
-		t.Fatal("topic inválido debería devolver tool error")
+		t.Fatal("invalid topic should return a tool error")
 	}
 }
 
+// TestGetDetailsTool verifies GetDetailsTool.
 func TestGetDetailsTool(t *testing.T) {
 	session := newSession(t)
 	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -182,10 +187,11 @@ func TestGetDetailsTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(data), "87a4ebdaf21fa6cc70009a3dd63194ee") {
-		t.Errorf("salida sin md5: %s", data)
+		t.Errorf("output without md5: %s", data)
 	}
 }
 
+// TestGetDetailsToolValidation verifies GetDetailsToolValidation.
 func TestGetDetailsToolValidation(t *testing.T) {
 	session := newSession(t)
 	for _, args := range []map[string]any{
@@ -197,7 +203,7 @@ func TestGetDetailsToolValidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !res.IsError {
-			t.Errorf("args %v deberían devolver tool error", args)
+			t.Errorf("args %v should return a tool error", args)
 		}
 	}
 }

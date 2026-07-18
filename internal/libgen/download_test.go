@@ -19,6 +19,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
+// TestExtractGetLinkFixture verifies ExtractGetLinkFixture.
 func TestExtractGetLinkFixture(t *testing.T) {
 	body, err := os.ReadFile("testdata/ads.html")
 	if err != nil {
@@ -32,16 +33,18 @@ func TestExtractGetLinkFixture(t *testing.T) {
 		t.Errorf("link = %q", link)
 	}
 	if strings.Contains(link, "&amp;") {
-		t.Errorf("link sin desescapar: %q", link)
+		t.Errorf("link not unescaped: %q", link)
 	}
 }
 
+// TestExtractGetLinkMissing verifies ExtractGetLinkMissing.
 func TestExtractGetLinkMissing(t *testing.T) {
-	if _, err := ExtractGetLink([]byte("<html>no hay enlace</html>")); err == nil {
-		t.Fatal("debería fallar sin enlace get.php")
+	if _, err := ExtractGetLink([]byte("<html>no link</html>")); err == nil {
+		t.Fatal("should fail without a get.php link")
 	}
 }
 
+// TestSanitizeFilename verifies SanitizeFilename.
 func TestSanitizeFilename(t *testing.T) {
 	cases := map[string]string{
 		"a/b\\c:d*e?f\"g<h>i|j.pdf": "a_b_c_d_e_f_g_h_i_j.pdf",
@@ -61,7 +64,7 @@ func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
 	mux := http.NewServeMux()
 	var srv *httptest.Server
 	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
-		// md5 fijo: los tests que usan este servidor descargan siempre el mismo.
+		// Fixed md5: tests using this server always download the same one.
 		fmt.Fprint(w, `<html><a href="get.php?md5=87a4ebdaf21fa6cc70009a3dd63194ee&key=TESTKEY123">GET</a></html>`)
 	})
 	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +239,7 @@ func TestConcurrencyContextCancel(t *testing.T) {
 	<-held
 }
 
+// TestDownload verifies Download.
 func TestDownload(t *testing.T) {
 	payload := []byte("%PDF-1.4 fake book content")
 	srv := downloadTestServer(t, payload)
@@ -259,13 +263,14 @@ func TestDownload(t *testing.T) {
 	if res.SizeBytes != int64(len(payload)) {
 		t.Errorf("SizeBytes = %d, want %d", res.SizeBytes, len(payload))
 	}
-	// sin ficheros temporales huérfanos
+	// no orphaned temporary files
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 1 {
-		t.Errorf("quedan %d entradas en dir, esperaba 1", len(entries))
+		t.Errorf("%d entries left in dir, want 1", len(entries))
 	}
 }
 
+// TestDownloadCustomFilename verifies DownloadCustomFilename.
 func TestDownloadCustomFilename(t *testing.T) {
 	payload := []byte("data")
 	srv := downloadTestServer(t, payload)
@@ -281,13 +286,14 @@ func TestDownloadCustomFilename(t *testing.T) {
 	}
 }
 
+// TestDownloadRejectsHTMLViaMagicBytes verifies DownloadRejectsHTMLViaMagicBytes.
 func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<a href="get.php?md5=87a4ebdaf21fa6cc70009a3dd63194ee&key=K1">x</a>`)
 	})
 	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
-		// CDN error page sin text/html: se hace pasar por el fichero.
+		// CDN error page without text/html: masquerades as the file.
 		w.Header().Set("Content-Type", "application/octet-stream")
 		fmt.Fprint(w, "<!DOCTYPE html><html><body>blocked</body></html>")
 	})
@@ -296,14 +302,15 @@ func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
 	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
-		t.Fatal("página HTML servida como octet-stream debería fallar")
+		t.Fatal("an HTML page served as octet-stream should fail")
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
-		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+		t.Errorf("%d entries left in dir, want 0 (neither file nor temp)", len(entries))
 	}
 }
 
+// TestDownloadSizeCapContentLength verifies DownloadSizeCapContentLength.
 func TestDownloadSizeCapContentLength(t *testing.T) {
 	// Payload small enough to carry an explicit Content-Length header, but larger
 	// than the configured cap: the download must fail before touching the disk.
@@ -318,10 +325,11 @@ func TestDownloadSizeCapContentLength(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
-		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+		t.Errorf("%d entries left in dir, want 0 (neither file nor temp)", len(entries))
 	}
 }
 
+// TestDownloadSizeCapStream verifies DownloadSizeCapStream.
 func TestDownloadSizeCapStream(t *testing.T) {
 	// Payload larger than the server's buffer (>2048 B) so the response is sent
 	// chunked with no Content-Length: the cap must be enforced while streaming.
@@ -336,10 +344,11 @@ func TestDownloadSizeCapStream(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
-		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+		t.Errorf("%d entries left in dir, want 0 (neither file nor temp)", len(entries))
 	}
 }
 
+// TestDownloadDiskCheck verifies DownloadDiskCheck.
 func TestDownloadDiskCheck(t *testing.T) {
 	payload := []byte("%PDF-1.4 fake book content")
 	srv := downloadTestServer(t, payload)
@@ -354,10 +363,11 @@ func TestDownloadDiskCheck(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
-		t.Errorf("quedan %d entradas en dir, esperaba 0 (ni fichero ni temporal)", len(entries))
+		t.Errorf("%d entries left in dir, want 0 (neither file nor temp)", len(entries))
 	}
 }
 
+// TestDownloadUnderCap verifies DownloadUnderCap.
 func TestDownloadUnderCap(t *testing.T) {
 	// Regression: a normal download comfortably under the cap still succeeds.
 	payload := []byte("%PDF-1.4 fake book content")
@@ -375,6 +385,7 @@ func TestDownloadUnderCap(t *testing.T) {
 	}
 }
 
+// TestLooksLikeHTML covers LooksLikeHTML with table-driven subtests.
 func TestLooksLikeHTML(t *testing.T) {
 	cases := []struct {
 		name string
@@ -397,6 +408,7 @@ func TestLooksLikeHTML(t *testing.T) {
 	}
 }
 
+// TestDownloadProgressCallback verifies DownloadProgressCallback.
 func TestDownloadProgressCallback(t *testing.T) {
 	payload := []byte("%PDF-1.4 some fake but non-trivial book payload for progress")
 	srv := downloadTestServer(t, payload)
@@ -479,6 +491,7 @@ func rangeStart(t *testing.T, header string) int64 {
 	return n
 }
 
+// TestDownloadVerifiesMD5Match verifies DownloadVerifiesMD5Match.
 func TestDownloadVerifiesMD5Match(t *testing.T) {
 	payload := []byte("%PDF-1.4 " + strings.Repeat("real book bytes ", 64))
 	want := md5Hex(payload)
@@ -515,6 +528,7 @@ func TestDownloadVerifiesMD5Match(t *testing.T) {
 	}
 }
 
+// TestDownloadMD5Mismatch verifies DownloadMD5Mismatch.
 func TestDownloadMD5Mismatch(t *testing.T) {
 	payload := []byte("%PDF-1.4 " + strings.Repeat("tampered bytes ", 64))
 	// Request a different (but syntactically valid) md5 than the body's real one.
@@ -544,6 +558,7 @@ func TestDownloadMD5Mismatch(t *testing.T) {
 	}
 }
 
+// TestDownloadResume verifies DownloadResume.
 func TestDownloadResume(t *testing.T) {
 	full := []byte("%PDF-1.4 " + strings.Repeat("resumable content chunk ", 40))
 	want := md5Hex(full)
@@ -593,6 +608,7 @@ func TestDownloadResume(t *testing.T) {
 	}
 }
 
+// TestDownloadResumeServerIgnoresRange verifies DownloadResumeServerIgnoresRange.
 func TestDownloadResumeServerIgnoresRange(t *testing.T) {
 	full := []byte("%PDF-1.4 " + strings.Repeat("restart content chunk ", 40))
 	want := md5Hex(full)
@@ -754,6 +770,7 @@ func TestDownloadResumeWrongContentRange(t *testing.T) {
 	}
 }
 
+// TestDownloadRejectsHTMLResponse verifies DownloadRejectsHTMLResponse.
 func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
@@ -767,6 +784,6 @@ func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", t.TempDir(), ""); err == nil {
-		t.Fatal("respuesta HTML debería fallar")
+		t.Fatal("an HTML response should fail")
 	}
 }

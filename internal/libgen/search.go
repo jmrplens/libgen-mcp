@@ -14,8 +14,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-// ErrLayoutChanged indica que la página no tiene la estructura esperada:
-// no confundir con "cero resultados".
+// ErrLayoutChanged indicates that the page does not have the expected structure:
+// not to be confused with "zero results".
 var ErrLayoutChanged = errors.New("libgen page layout not recognized (site may have changed)")
 
 var (
@@ -33,6 +33,7 @@ func allowed[V any](m map[string]V) string {
 	return strings.Join(keys, ", ")
 }
 
+// SearchParams holds the parameters of a catalog search.
 type SearchParams struct {
 	Query          string
 	Topics         []string
@@ -43,6 +44,8 @@ type SearchParams struct {
 	OrderMode      string
 }
 
+// Validate reports whether the search parameters are well-formed, rejecting
+// unknown topics, columns, ordering and out-of-range page sizes.
 func (p SearchParams) Validate() error {
 	if strings.TrimSpace(p.Query) == "" {
 		return errors.New("query is required")
@@ -95,11 +98,14 @@ func (p SearchParams) values() url.Values {
 	return v
 }
 
+// DownloadOption is a single labeled download link for a result.
 type DownloadOption struct {
 	Label string `json:"label"`
 	URL   string `json:"url"`
 }
 
+// Result is one catalog entry from a search page, with its metadata and download
+// options.
 type Result struct {
 	EditionID string           `json:"edition_id,omitempty"`
 	FileID    string           `json:"file_id,omitempty"`
@@ -117,12 +123,13 @@ type Result struct {
 	Downloads []DownloadOption `json:"downloads"`
 }
 
+// SearchPage is a parsed page of search results plus the total file count.
 type SearchPage struct {
 	Results    []Result `json:"results"`
 	TotalFiles string   `json:"total_files,omitempty"`
 }
 
-// Search ejecuta la búsqueda y devuelve la página parseada y el mirror usado.
+// Search runs the search and returns the parsed page and the mirror used.
 func (c *Client) Search(ctx context.Context, p SearchParams) (*SearchPage, string, error) {
 	if err := p.Validate(); err != nil {
 		return nil, "", err
@@ -138,7 +145,7 @@ func (c *Client) Search(ctx context.Context, p SearchParams) (*SearchPage, strin
 	return page, base, nil
 }
 
-// ParseSearch parsea la página de resultados. base absolutiza los enlaces relativos.
+// ParseSearch parses the results page. base absolutizes the relative links.
 func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
@@ -148,14 +155,14 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 	table := findByID(doc, "tablelibgen")
 	if table == nil {
 		if page.TotalFiles == "0" {
-			return page, nil // búsqueda válida sin resultados
+			return page, nil // valid search with no results
 		}
 		return nil, ErrLayoutChanged
 	}
 	for _, tr := range elements(table, "tr") {
 		cells := childElements(tr, "td")
 		if len(cells) < 9 {
-			continue // cabecera u otra fila auxiliar
+			continue // header or another auxiliary row
 		}
 		if res := parseRow(cells, base); res != nil {
 			page.Results = append(page.Results, *res)
@@ -187,7 +194,7 @@ func parseRow(cells []*html.Node, base string) *Result {
 	return &r
 }
 
-// parseIdentifiers extrae título, edición, ISBNs y tipo de la primera celda.
+// parseIdentifiers extracts title, edition, ISBNs and type from the first cell.
 func parseIdentifiers(cell *html.Node, r *Result) {
 	for _, a := range elements(cell, "a") {
 		href := attr(a, "href")
@@ -199,7 +206,7 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 			r.Title = strings.TrimSpace(nodeText(a))
 			continue
 		}
-		if r.ISBNs == nil { // segundo enlace edition.php: identificadores
+		if r.ISBNs == nil { // second edition.php link: identifiers
 			for s := range strings.SplitSeq(nodeText(a), ";") {
 				if s = strings.TrimSpace(s); s != "" {
 					r.ISBNs = append(r.ISBNs, s)
@@ -215,7 +222,7 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 	}
 }
 
-// parseDownloads extrae el md5 y las opciones de descarga de la última celda.
+// parseDownloads extracts the md5 and download options from the last cell.
 func parseDownloads(cell *html.Node, base string, r *Result) {
 	for _, a := range elements(cell, "a") {
 		href := attr(a, "href")
@@ -233,8 +240,8 @@ func parseDownloads(cell *html.Node, base string, r *Result) {
 	}
 }
 
-// filesTabCount devuelve el contador de la pestaña "Files" ("138", "1000+", "0")
-// o "" si no se encuentra.
+// filesTabCount returns the counter of the "Files" tab ("138", "1000+", "0")
+// or "" if not found.
 func filesTabCount(doc *html.Node) string {
 	for _, a := range elements(doc, "a") {
 		if !strings.Contains(attr(a, "class"), "nav-link") || !strings.Contains(attr(a, "href"), "curtab=f") {
@@ -249,7 +256,7 @@ func filesTabCount(doc *html.Node) string {
 	return ""
 }
 
-// --- helpers de DOM ---
+// --- DOM helpers ---
 
 func findByID(n *html.Node, id string) *html.Node {
 	if n.Type == html.ElementNode && attr(n, "id") == id {
@@ -263,7 +270,7 @@ func findByID(n *html.Node, id string) *html.Node {
 	return nil
 }
 
-// elements devuelve todos los descendientes con ese tag.
+// elements returns all descendants with the given tag.
 func elements(n *html.Node, tag string) []*html.Node {
 	var out []*html.Node
 	var walk func(*html.Node)

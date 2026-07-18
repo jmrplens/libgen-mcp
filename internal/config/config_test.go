@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// TestLoadDefaults verifies LoadDefaults.
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("LIBGEN_MIRROR", "")
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", "")
@@ -27,6 +28,7 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadOverrides verifies LoadOverrides.
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("LIBGEN_MIRROR", "https://libgen.la/")
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", "/tmp/books")
@@ -36,7 +38,7 @@ func TestLoadOverrides(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if cfg.Mirror != "https://libgen.la" {
-		t.Errorf("Mirror = %q, want https://libgen.la (sin barra final)", cfg.Mirror)
+		t.Errorf("Mirror = %q, want https://libgen.la (no trailing slash)", cfg.Mirror)
 	}
 	if cfg.DownloadDir != "/tmp/books" {
 		t.Errorf("DownloadDir = %q", cfg.DownloadDir)
@@ -46,13 +48,15 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
+// TestLoadBadTimeout verifies LoadBadTimeout.
 func TestLoadBadTimeout(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_TIMEOUT", "banana")
 	if _, err := Load(); err == nil {
-		t.Fatal("Load() con timeout inválido debería fallar")
+		t.Fatal("Load() with an invalid timeout should fail")
 	}
 }
 
+// TestLoadNewDefaults verifies LoadNewDefaults.
 func TestLoadNewDefaults(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_LOG_LEVEL", "")
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "")
@@ -84,6 +88,7 @@ func TestLoadNewDefaults(t *testing.T) {
 	}
 }
 
+// TestLoadNewOverrides verifies LoadNewOverrides.
 func TestLoadNewOverrides(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_LOG_LEVEL", "debug")
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "2.5")
@@ -115,6 +120,7 @@ func TestLoadNewOverrides(t *testing.T) {
 	}
 }
 
+// TestLoadBadNumericEnv verifies LoadBadNumericEnv.
 func TestLoadBadNumericEnv(t *testing.T) {
 	cases := map[string]string{
 		"LIBGEN_MCP_RATE_RPS":                 "fast",
@@ -128,13 +134,13 @@ func TestLoadBadNumericEnv(t *testing.T) {
 		t.Run(envKey, func(t *testing.T) {
 			t.Setenv(envKey, badVal)
 			if _, err := Load(); err == nil {
-				t.Fatalf("Load() con %s=%q debería fallar", envKey, badVal)
+				t.Fatalf("Load() with %s=%q should fail", envKey, badVal)
 			}
 		})
 	}
 }
 
-// validConfig devuelve una configuración que pasa Validate(), con DownloadDir
+// validConfig returns a configuration that passes Validate(), with DownloadDir
 // escribible bajo t.TempDir().
 func validConfig(t *testing.T) *Config {
 	t.Helper()
@@ -151,20 +157,23 @@ func validConfig(t *testing.T) *Config {
 	}
 }
 
+// TestValidateValid verifies ValidateValid.
 func TestValidateValid(t *testing.T) {
 	if err := validConfig(t).Validate(); err != nil {
-		t.Fatalf("Validate() sobre config válida error = %v", err)
+		t.Fatalf("Validate() on a valid config, error = %v", err)
 	}
 }
 
+// TestValidateEmptyMirrorOK verifies ValidateEmptyMirrorOK.
 func TestValidateEmptyMirrorOK(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.Mirror = ""
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() con mirror vacío error = %v", err)
+		t.Fatalf("Validate() with an empty mirror, error = %v", err)
 	}
 }
 
+// TestValidateInvalid covers ValidateInvalid with table-driven subtests.
 func TestValidateInvalid(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -191,12 +200,13 @@ func TestValidateInvalid(t *testing.T) {
 			cfg := validConfig(t)
 			tc.mutate(cfg)
 			if err := cfg.Validate(); err == nil {
-				t.Fatalf("Validate() para %s debería fallar", tc.name)
+				t.Fatalf("Validate() for %s should fail", tc.name)
 			}
 		})
 	}
 }
 
+// TestValidateUnwritableDownloadDir verifies ValidateUnwritableDownloadDir.
 func TestValidateUnwritableDownloadDir(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "notadir")
 	if err != nil {
@@ -206,9 +216,9 @@ func TestValidateUnwritableDownloadDir(t *testing.T) {
 		t.Fatalf("Close() error = %v", closeErr)
 	}
 	cfg := validConfig(t)
-	// Un subdirectorio bajo un fichero regular no es creable (ENOTDIR).
+	// A subdirectory under a regular file cannot be created (ENOTDIR).
 	cfg.DownloadDir = filepath.Join(f.Name(), "sub")
 	if cfg.Validate() == nil {
-		t.Fatal("Validate() con DownloadDir no escribible debería fallar")
+		t.Fatal("Validate() with an unwritable DownloadDir should fail")
 	}
 }

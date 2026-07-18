@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// TestParseFixture verifies ParseFixture.
 func TestParseFixture(t *testing.T) {
 	f, err := os.Open("testdata/shadowlibraries.html")
 	if err != nil {
@@ -29,25 +30,28 @@ func TestParseFixture(t *testing.T) {
 	}
 }
 
+// TestParseNoMirrors verifies ParseNoMirrors.
 func TestParseNoMirrors(t *testing.T) {
 	if _, err := Parse(strings.NewReader("<html><body>nada</body></html>")); err == nil {
-		t.Fatal("Parse() sin mirrors debería fallar")
+		t.Fatal("Parse() without mirrors should fail")
 	}
 }
 
+// TestOrderPreferred verifies OrderPreferred.
 func TestOrderPreferred(t *testing.T) {
 	list := []string{"https://libgen.li", "https://libgen.vg"}
 	got := orderPreferred(list, "https://libgen.vg")
 	if got[0] != "https://libgen.vg" || len(got) != 2 {
 		t.Errorf("orderPreferred() = %v", got)
 	}
-	// preferido ausente de la lista: se añade delante
+	// preferred absent from the list: it is prepended
 	got = orderPreferred(list, "https://libgen.example")
 	if got[0] != "https://libgen.example" || len(got) != 3 {
-		t.Errorf("orderPreferred() con preferido nuevo = %v", got)
+		t.Errorf("orderPreferred() with a new preferred = %v", got)
 	}
 }
 
+// TestManagerFetchesAndCaches verifies ManagerFetchesAndCaches.
 func TestManagerFetchesAndCaches(t *testing.T) {
 	page, _ := os.ReadFile("testdata/shadowlibraries.html")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,10 +65,11 @@ func TestManagerFetchesAndCaches(t *testing.T) {
 		t.Fatalf("Mirrors() = %v", got)
 	}
 	if _, err := os.Stat(cachePath); err != nil {
-		t.Fatalf("caché no escrita: %v", err)
+		t.Fatalf("cache not written: %v", err)
 	}
 }
 
+// TestManagerUsesStaleCacheWhenSourceDown verifies ManagerUsesStaleCacheWhenSourceDown.
 func TestManagerUsesStaleCacheWhenSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
@@ -80,16 +85,16 @@ func TestManagerUsesStaleCacheWhenSourceDown(t *testing.T) {
 	m := &Manager{SourceURL: srv.URL, CachePath: cachePath, Preferred: "https://libgen.la", HTTP: srv.Client()}
 	got := m.Mirrors(context.Background())
 	if got[0] != "https://libgen.la" {
-		t.Errorf("Mirrors() con caché caducada = %v, esperaba usarla", got)
+		t.Errorf("Mirrors() with an expired cache = %v, want it to be used", got)
 	}
 }
 
-// TestManagerRediscoversAfterFallback prueba que un fallback transitorio no queda
-// anclado en memoria: si la primera llamada cae al fallback (fuente caída), una
-// segunda llamada con la fuente ya recuperada devuelve la lista descubierta en vivo.
+// TestManagerRediscoversAfterFallback checks that a transient fallback does not
+// stay pinned in memory: if the first call falls back (source down), a second
+// call with the source recovered returns the live-discovered list.
 func TestManagerRediscoversAfterFallback(t *testing.T) {
 	page, _ := os.ReadFile("testdata/shadowlibraries.html")
-	var up bool // arranca caído
+	var up bool // starts down
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !up {
 			http.Error(w, "boom", http.StatusInternalServerError)
@@ -101,28 +106,28 @@ func TestManagerRediscoversAfterFallback(t *testing.T) {
 	cachePath := filepath.Join(t.TempDir(), "mirrors.json")
 	m := &Manager{SourceURL: srv.URL, CachePath: cachePath, Preferred: "https://libgen.li", HTTP: srv.Client()}
 
-	// Primera llamada: fuente caída, sin caché -> fallback hardcodeado.
+	// First call: source down, no cache -> hardcoded fallback.
 	got := m.Mirrors(context.Background())
 	if !reflect.DeepEqual(got, DefaultFallback) {
-		t.Fatalf("primera llamada = %v, esperaba fallback %v", got, DefaultFallback)
+		t.Fatalf("first call = %v, want fallback %v", got, DefaultFallback)
 	}
 	if !m.cachedFromFallback {
-		t.Fatalf("el fallback debería marcarse como cachedFromFallback")
+		t.Fatalf("the fallback should be marked as cachedFromFallback")
 	}
 
-	// La fuente se recupera; la segunda llamada NO debe reutilizar el fallback anclado.
+	// The source recovers; the second call must NOT reuse the pinned fallback.
 	up = true
 	got = m.Mirrors(context.Background())
 	if len(got) != 5 || got[0] != "https://libgen.li" {
-		t.Fatalf("segunda llamada tras recuperación = %v, esperaba lista descubierta", got)
+		t.Fatalf("second call after recovery = %v, want discovered list", got)
 	}
 	if m.cachedFromFallback {
-		t.Fatalf("una discovery viva no debería marcarse como fallback")
+		t.Fatalf("a live discovery should not be marked as fallback")
 	}
 }
 
-// TestManagerRediscoversAfterTTL prueba que, aun tras memoizar una discovery viva,
-// el resultado en memoria se refresca cuando supera cacheTTL (servidor de larga vida).
+// TestManagerRediscoversAfterTTL checks that, even after memoizing a live discovery,
+// the in-memory result is refreshed once it exceeds cacheTTL (long-lived server).
 func TestManagerRediscoversAfterTTL(t *testing.T) {
 	page, _ := os.ReadFile("testdata/shadowlibraries.html")
 	var hits int
@@ -136,14 +141,14 @@ func TestManagerRediscoversAfterTTL(t *testing.T) {
 
 	_ = m.Mirrors(context.Background())
 	if hits != 1 {
-		t.Fatalf("primera llamada: hits = %d, esperaba 1", hits)
+		t.Fatalf("first call: hits = %d, want 1", hits)
 	}
-	// Dentro de TTL: usa memoria, sin nuevo fetch.
+	// Within TTL: uses memory, no new fetch.
 	_ = m.Mirrors(context.Background())
 	if hits != 1 {
-		t.Fatalf("dentro de TTL: hits = %d, no debería refetchear", hits)
+		t.Fatalf("within TTL: hits = %d, should not refetch", hits)
 	}
-	// Envejecemos la memoria y la caché de disco mas allá de TTL (white-box).
+	// Age the in-memory result and the disk cache beyond TTL (white-box).
 	m.cachedAt = time.Now().Add(-2 * cacheTTL)
 	stale := cacheFile{FetchedAt: time.Now().Add(-2 * cacheTTL), Mirrors: []string{"https://libgen.la"}}
 	data, err := json.Marshal(stale)
@@ -153,10 +158,11 @@ func TestManagerRediscoversAfterTTL(t *testing.T) {
 	os.WriteFile(cachePath, data, 0o600)
 	_ = m.Mirrors(context.Background())
 	if hits != 2 {
-		t.Fatalf("tras expirar TTL: hits = %d, esperaba re-discovery (2)", hits)
+		t.Fatalf("after TTL expiry: hits = %d, want re-discovery (2)", hits)
 	}
 }
 
+// TestManagerFallsBackToHardcoded verifies ManagerFallsBackToHardcoded.
 func TestManagerFallsBackToHardcoded(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)

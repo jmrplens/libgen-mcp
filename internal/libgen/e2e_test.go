@@ -11,8 +11,8 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 )
 
-// TestE2ESearchRealSite valida contra la red real que el HTML del sitio sigue
-// siendo parseable. Ejecutar con: go test -tags e2e ./internal/libgen/ -run E2E -v
+// TestE2ESearchRealSite validates against the real network that the site's HTML is
+// still parseable. Run with: go test -tags e2e ./internal/libgen/ -run E2E -v
 func TestE2ESearchRealSite(t *testing.T) {
 	cfg := &config.Config{Timeout: 30 * time.Second, RateRPS: 1, RateBurst: 1, RetryAttempts: 3}
 	mgr, err := mirrors.NewManager(cfg)
@@ -26,6 +26,6 @@ func TestE2ESearchRealSite(t *testing.T) {
 	}
 	t.Logf("mirror=%s results=%d total=%s", mirror, len(page.Results), page.TotalFiles)
 	if len(page.Results) == 0 {
-		t.Fatal("0 resultados en el sitio real: HTML cambiado o bloqueo")
+		t.Fatal("0 results on the real site: HTML changed or blocked")
 	}
 }

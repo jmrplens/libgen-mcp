@@ -1,4 +1,4 @@
-// Package tools registra las tools MCP del servidor: search, get_details y download.
+// Package tools registers the server's MCP tools: search, get_details and download.
 package tools
 
 import (
@@ -28,6 +28,7 @@ metadata, md5 hash and download options. Allowed values:
 - order: id, time_added, title, author, year, size; order_mode: asc, desc
 Use get_details with a result md5 for full metadata, and download to fetch the file.`
 
+// SearchInput holds the parameters for the search tool.
 type SearchInput struct {
 	Query          string   `json:"query" jsonschema:"search text,required"`
 	Topics         []string `json:"topics,omitempty" jsonschema:"collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all)"`
@@ -38,6 +39,7 @@ type SearchInput struct {
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"asc or desc"`
 }
 
+// SearchOutput holds a page of search results plus pagination metadata.
 type SearchOutput struct {
 	Results        []libgen.Result `json:"results"`
 	Page           int             `json:"page"`
@@ -47,23 +49,28 @@ type SearchOutput struct {
 	Mirror         string          `json:"mirror"`
 }
 
+// DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
 	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both)"`
 	ID     string `json:"id,omitempty" jsonschema:"edition or file id (use md5 OR id, not both)"`
 	Object string `json:"object,omitempty" jsonschema:"with id: edition (default) or file"`
 }
 
+// DetailsOutput holds the file and/or edition record returned by get_details.
 type DetailsOutput struct {
 	File    map[string]any `json:"file,omitempty"`
 	Edition map[string]any `json:"edition,omitempty"`
 }
 
+// DownloadInput holds the parameters for the download tool.
 type DownloadInput struct {
 	MD5      string `json:"md5" jsonschema:"file md5 hash from a search result,required"`
 	Path     string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)"`
 	Filename string `json:"filename,omitempty" jsonschema:"destination filename (default: name announced by the mirror)"`
 }
 
+// Register wires the search, get_details and download tools onto the MCP server,
+// each wrapped with panic recovery and call metrics.
 func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 	truthy, falsy := true, false
 	mcp.AddTool(server, &mcp.Tool{

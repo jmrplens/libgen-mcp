@@ -34,6 +34,7 @@ func jsonFixtureServer(t *testing.T) *httptest.Server {
 	}))
 }
 
+// TestDetailsByMD5 verifies DetailsByMD5.
 func TestDetailsByMD5(t *testing.T) {
 	srv := jsonFixtureServer(t)
 	defer srv.Close()
@@ -46,13 +47,14 @@ func TestDetailsByMD5(t *testing.T) {
 		t.Errorf("file.md5 = %v", file["md5"])
 	}
 	if edition == nil {
-		t.Fatal("edition = nil, esperaba la edición relacionada")
+		t.Fatal("edition = nil, want the related edition")
 	}
 	if edition["title"] == "" || edition["title"] == nil {
-		t.Errorf("edition.title vacío: %v", edition["title"])
+		t.Errorf("edition.title is empty: %v", edition["title"])
 	}
 }
 
+// TestDetailsByID verifies DetailsByID.
 func TestDetailsByID(t *testing.T) {
 	srv := jsonFixtureServer(t)
 	defer srv.Close()
@@ -62,13 +64,14 @@ func TestDetailsByID(t *testing.T) {
 		t.Fatalf("DetailsByID() error = %v", err)
 	}
 	if ed["title"] == nil {
-		t.Error("edition sin title")
+		t.Error("edition without title")
 	}
 	if _, derr := c.DetailsByID(context.Background(), "x", "1"); derr == nil {
-		t.Error("object inválido debería fallar")
+		t.Error("invalid object should fail")
 	}
 }
 
+// TestDetailsNotFound verifies DetailsNotFound.
 func TestDetailsNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`[]`))
@@ -76,6 +79,6 @@ func TestDetailsNotFound(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	if _, _, err := c.DetailsByMD5(context.Background(), "00000000000000000000000000000000"); err == nil {
-		t.Error("md5 inexistente debería fallar")
+		t.Error("nonexistent md5 should fail")
 	}
 }
