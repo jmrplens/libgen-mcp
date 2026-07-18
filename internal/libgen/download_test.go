@@ -59,6 +59,108 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
+// TestCleanFileName covers cleanFileName with table-driven subtests spanning all
+// fields present, each optional piece omitted, illegal characters sanitized, and
+// internal whitespace collapsed.
+func TestCleanFileName(t *testing.T) {
+	cases := []struct {
+		name string
+		meta FileMeta
+		want string
+	}{
+		{"all fields", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
+		{"no year", FileMeta{Author: "Jane Doe", Title: "Great Book", Ext: "pdf"}, "Jane Doe - Great Book.pdf"},
+		{"no author", FileMeta{Title: "Great Book", Year: "2020", Ext: "pdf"}, "Great Book (2020).pdf"},
+		{"no title", FileMeta{Author: "Jane Doe", Year: "2020", Ext: "pdf"}, ""},
+		{"no ext", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020"}, "Jane Doe - Great Book (2020)"},
+		{"illegal chars sanitized", FileMeta{Author: `A/B`, Title: `C:D*E?`, Year: "2020", Ext: "pdf"}, "A_B - C_D_E_ (2020).pdf"},
+		{"whitespace collapsed", FileMeta{Author: "  Jane   Doe ", Title: "Great\t\nBook ", Year: " 2020 ", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := cleanFileName(tc.meta); got != tc.want {
+				t.Errorf("cleanFileName(%+v) = %q, want %q", tc.meta, got, tc.want)
+			}
+		})
+	}
+}
+
+// noDispositionCDN builds a mirror whose CDN serves payload with NO
+// Content-Disposition header, so the output name must come from metadata (or the
+// explicit filename), never from the mirror.
+func noDispositionCDN(t *testing.T, wantMD5 string, payload []byte) *httptest.Server {
+	t.Helper()
+	return md5CDNServer(t, wantMD5, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(payload)
+	})
+}
+
+// TestDownloadUsesCleanNameWhenNoDisposition verifies that when the CDN announces
+// no Content-Disposition, the file is named from the supplied metadata.
+func TestDownloadUsesCleanNameWhenNoDisposition(t *testing.T) {
+	payload := []byte("%PDF-1.4 clean-name payload")
+	want := md5Hex(payload)
+	srv := noDispositionCDN(t, want, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	meta := &FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}
+	res, err := c.Download(context.Background(), want, dir, "", meta)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	const wantName = "Jane Doe - Great Book (2020).pdf"
+	if got := filepath.Base(res.Path); got != wantName {
+		t.Errorf("Path base = %q, want %q", got, wantName)
+	}
+}
+
+// TestDownloadExplicitFilenameBeatsMeta verifies the explicit filename still wins
+// over metadata even when no Content-Disposition is present.
+func TestDownloadExplicitFilenameBeatsMeta(t *testing.T) {
+	payload := []byte("%PDF-1.4 explicit-wins payload")
+	want := md5Hex(payload)
+	srv := noDispositionCDN(t, want, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	meta := &FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}
+	res, err := c.Download(context.Background(), want, dir, "explicit.pdf", meta)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "explicit.pdf" {
+		t.Errorf("Path base = %q, want %q (explicit filename must win over meta)", got, "explicit.pdf")
+	}
+}
+
+// TestDownloadDispositionBeatsMeta verifies the CDN Content-Disposition name wins
+// over metadata when both are available.
+func TestDownloadDispositionBeatsMeta(t *testing.T) {
+	payload := []byte("%PDF-1.4 disposition-wins payload")
+	want := md5Hex(payload)
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="from-cdn.pdf"`)
+		w.Write(payload)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	meta := &FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}
+	res, err := c.Download(context.Background(), want, dir, "", meta)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "from-cdn.pdf" {
+		t.Errorf("Path base = %q, want %q (Content-Disposition must win over meta)", got, "from-cdn.pdf")
+	}
+}
+
 func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -164,14 +266,14 @@ func TestConcurrencyLimit(t *testing.T) {
 
 	errs := make(chan error, 2)
 	go func() {
-		_, err := c.Download(context.Background(), wantMD5, dir, "one.pdf")
+		_, err := c.Download(context.Background(), wantMD5, dir, "one.pdf", nil)
 		errs <- err
 	}()
 	// The first download reaches the CDN and holds the only slot.
 	<-b.entered
 
 	go func() {
-		_, err := c.Download(context.Background(), wantMD5, dir, "two.pdf")
+		_, err := c.Download(context.Background(), wantMD5, dir, "two.pdf", nil)
 		errs <- err
 	}()
 	// While the first download holds the slot, the second must not reach the CDN.
@@ -208,7 +310,7 @@ func TestConcurrencyContextCancel(t *testing.T) {
 	// Fill the single slot with a download that blocks in the CDN handler.
 	held := make(chan error, 1)
 	go func() {
-		_, err := c.Download(context.Background(), testMD5, dir, "hold.pdf")
+		_, err := c.Download(context.Background(), testMD5, dir, "hold.pdf", nil)
 		held <- err
 	}()
 	<-b.entered
@@ -217,7 +319,7 @@ func TestConcurrencyContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() {
-		_, err := c.Download(ctx, testMD5, dir, "wait.pdf")
+		_, err := c.Download(ctx, testMD5, dir, "wait.pdf", nil)
 		errc <- err
 	}()
 	// Give the second download time to block on the semaphore before canceling.
@@ -246,7 +348,7 @@ func TestDownload(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), md5Hex(payload), dir, "")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -277,7 +379,7 @@ func TestDownloadCustomFilename(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), md5Hex(payload), dir, "mi libro.pdf")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "mi libro.pdf", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +403,7 @@ func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
 		t.Fatal("an HTML page served as octet-stream should fail")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -320,7 +422,7 @@ func TestDownloadSizeCapContentLength(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 100
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
 		t.Fatal("Content-Length above cap should fail")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -339,7 +441,7 @@ func TestDownloadSizeCapStream(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 100
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
 		t.Fatal("streamed body above cap should fail")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -358,7 +460,7 @@ func TestDownloadDiskCheck(t *testing.T) {
 	freeSpaceFn = func(string) (uint64, error) { return 1, nil } // simulate a nearly full disk
 	t.Cleanup(func() { freeSpaceFn = orig })
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, ""); err == nil {
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
 		t.Fatal("insufficient free disk space should fail")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -376,7 +478,7 @@ func TestDownloadUnderCap(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 1 << 20 // 1 MiB, far above the payload
 	dir := t.TempDir()
-	res, err := c.Download(context.Background(), md5Hex(payload), dir, "")
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -418,7 +520,7 @@ func TestDownloadProgressCallback(t *testing.T) {
 
 	type call struct{ done, total int64 }
 	var calls []call
-	res, err := c.Download(context.Background(), md5Hex(payload), dir, "", func(done, total int64) {
+	res, err := c.Download(context.Background(), md5Hex(payload), dir, "", nil, func(done, total int64) {
 		calls = append(calls, call{done, total})
 	})
 	if err != nil {
@@ -504,7 +606,7 @@ func TestDownloadVerifiesMD5Match(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
 
-	res, err := c.Download(context.Background(), want, dir, "")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -545,7 +647,7 @@ func TestDownloadMD5Mismatch(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
 
-	if _, err := c.Download(context.Background(), want, dir, ""); err == nil {
+	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
 		t.Fatal("md5 mismatch should fail")
 	}
 	// On integrity failure the partial is deleted and no final file is left.
@@ -589,7 +691,7 @@ func TestDownloadResume(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := c.Download(context.Background(), want, dir, "")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -628,7 +730,7 @@ func TestDownloadResumeServerIgnoresRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := c.Download(context.Background(), want, dir, "")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -669,7 +771,7 @@ func TestDownloadSameMD5Concurrent(t *testing.T) {
 	results := make(chan outcome, 2)
 	for range 2 {
 		go func() {
-			res, err := c.Download(context.Background(), want, dir, "")
+			res, err := c.Download(context.Background(), want, dir, "", nil)
 			results <- outcome{res, err}
 		}()
 	}
@@ -711,7 +813,7 @@ func TestPartialLockReleased(t *testing.T) {
 			w.Write(payload)
 		})
 		c.mirrors = staticMirrors{srv.URL}
-		res, err := c.Download(context.Background(), want, dir, fmt.Sprintf("book-%d.pdf", i))
+		res, err := c.Download(context.Background(), want, dir, fmt.Sprintf("book-%d.pdf", i), nil)
 		srv.Close()
 		if err != nil {
 			t.Fatalf("Download(%d) error = %v", i, err)
@@ -751,7 +853,7 @@ func TestDownloadResumeWrongContentRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := c.Download(context.Background(), want, dir, "")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -783,7 +885,7 @@ func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", t.TempDir(), ""); err == nil {
+	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", t.TempDir(), "", nil); err == nil {
 		t.Fatal("an HTML response should fail")
 	}
 }

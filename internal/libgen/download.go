@@ -153,11 +153,86 @@ type DownloadResult struct {
 // does not match the requested md5 (corrupt or tampered download).
 var errIntegrityCheckFailed = errors.New("integrity check failed: MD5 mismatch")
 
-// Download downloads the md5 file into dir. If filename is empty it uses the name
-// the CDN announces (content-disposition), sanitized. An optional progress
-// callback (only the first is used) is invoked throttled with the running and
-// total byte counts; pass none to disable progress reporting.
-func (c *Client) Download(ctx context.Context, md5, dir, filename string, progress ...ProgressFunc) (*DownloadResult, error) {
+// FileMeta carries the bibliographic fields used to build a clean, human-readable
+// download filename when the mirror announces no name. Any field may be empty;
+// cleanFileName omits the empty pieces.
+type FileMeta struct {
+	// Author is the work's author (or authors), used as the leading name segment.
+	Author string
+	// Title is the work's title, the mandatory core of the filename.
+	Title string
+	// Year is the publication year, rendered in parentheses after the title.
+	Year string
+	// Ext is the file extension (without a leading dot), e.g. "pdf" or "epub".
+	Ext string
+}
+
+// cleanFileName builds a human-readable filename from bibliographic metadata in
+// the form "<Author> - <Title> (<Year>).<Ext>", omitting any empty piece:
+// no year drops the "(<Year>)" segment, no author drops the "<Author> - " prefix,
+// and no extension drops the ".<Ext>" suffix. Textual pieces have their internal
+// whitespace collapsed and illegal path characters stripped via sanitizeFilename.
+// It returns "" when the title is empty, so the caller can fall back to the md5.
+func cleanFileName(m FileMeta) string {
+	author := cleanNamePiece(m.Author)
+	title := cleanNamePiece(m.Title)
+	year := cleanNamePiece(m.Year)
+	if title == "" {
+		return ""
+	}
+	var b strings.Builder
+	if author != "" {
+		b.WriteString(author)
+		b.WriteString(" - ")
+	}
+	b.WriteString(title)
+	if year != "" {
+		b.WriteString(" (")
+		b.WriteString(year)
+		b.WriteString(")")
+	}
+	if ext := cleanNamePiece(strings.TrimLeft(m.Ext, ".")); ext != "" {
+		b.WriteString(".")
+		b.WriteString(ext)
+	}
+	return b.String()
+}
+
+// cleanNamePiece collapses internal whitespace runs to single spaces (trimming
+// the ends) and strips illegal path characters. It returns "" for a piece that is
+// empty or all whitespace, so callers can omit it from the assembled filename.
+func cleanNamePiece(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	return sanitizeFilename(s)
+}
+
+// chooseFileName selects the sanitized output filename by priority: an explicit
+// filename, else the CDN-announced disposition name, else a clean name built from
+// meta (when non-nil and it yields a name), else the md5.
+func chooseFileName(filename, disposition string, meta *FileMeta, md5 string) string {
+	name := filename
+	if name == "" {
+		name = disposition
+	}
+	if name == "" && meta != nil {
+		name = cleanFileName(*meta)
+	}
+	if name == "" {
+		name = md5
+	}
+	return sanitizeFilename(name)
+}
+
+// Download downloads the md5 file into dir. The output name is chosen in order:
+// an explicit filename, else the name the CDN announces (content-disposition),
+// else a clean name built from meta (when non-nil and it yields a name), else the
+// md5; the chosen name is sanitized. An optional progress callback (only the first
+// is used) is invoked throttled with the running and total byte counts; pass none
+// to disable progress reporting.
+func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *FileMeta, progress ...ProgressFunc) (*DownloadResult, error) {
 	onProgress := firstProgress(progress)
 	// Acquire a concurrency slot before doing any work, releasing it on return.
 	// While waiting, honor context cancellation so a queued download can be
@@ -229,14 +304,7 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, progre
 		return nil, err
 	}
 
-	name := filename
-	if name == "" {
-		name = original
-	}
-	if name == "" {
-		name = md5
-	}
-	name = sanitizeFilename(name)
+	name := chooseFileName(filename, original, meta, md5)
 
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 		return nil, fmt.Errorf("creating download dir: %w", mkErr)

@@ -218,7 +218,7 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 		if dir == "" {
 			dir = cfg.DownloadDir
 		}
-		res, err := c.Download(ctx, strings.ToLower(in.MD5), dir, in.Filename, progressNotifier(ctx, req))
+		res, err := c.Download(ctx, strings.ToLower(in.MD5), dir, in.Filename, nil, progressNotifier(ctx, req))
 		if err != nil {
 			return nil, zero, err
 		}
