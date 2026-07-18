@@ -1,0 +1,15 @@
+# markdownlint-cli2 configuration for libgen-mcp
+# Docs: https://github.com/DavidAnson/markdownlint-cli2
+config:
+  default: true
+  MD013: false # line length — prose and tables run long
+  MD033: false # inline HTML — allowed in README
+  MD041: false # first line need not be a top-level heading
+  MD060: false # table pipe alignment — cosmetic, not enforced
+globs:
+  - "**/*.md"
+ignores:
+  - node_modules
+  - dist
+  - docs/superpowers
+  - .superpowers

@@ -3,5 +3,7 @@
 /server
 /dist/
 coverage.out
+coverage.internal.out
+coverage.html
 *.test
 .superpowers/

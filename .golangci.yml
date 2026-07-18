@@ -1,0 +1,245 @@
+# golangci-lint v2 configuration for libgen-mcp
+# Run: golangci-lint run ./...
+# Docs: https://golangci-lint.run/usage/configuration/
+# Adapted from the sibling project gitlab-mcp-server.
+
+version: "2"
+
+issues:
+  max-same-issues: 50
+
+run:
+  go: "1.26"
+  timeout: 15m
+  tests: true
+  build-tags:
+    - e2e
+
+linters:
+  default: none
+  enable:
+    # --- Bug Detection ---
+    - govet # Official Go vet checks
+    - staticcheck # Comprehensive static analysis (SA*, S*, ST*, QF*)
+    - errcheck # Unchecked error return values
+    - ineffassign # Detects ineffectual assignments
+    - bodyclose # HTTP response body not closed (critical for the HTTP client)
+    - noctx # HTTP requests without context.Context
+    - durationcheck # Multiplying two time.Duration values
+    - nilerr # Returns nil when err is not nil
+    - nilnesserr # Checks err != nil but returns a different nil error
+    - nilnil # Returns nil,nil without reason
+    - errname # Sentinel error naming conventions (ErrFoo)
+    - errorlint # Finds code that breaks error wrapping (errors.Is/As)
+    - fatcontext # Detects nested contexts in loops
+    - reassign # Detects package variable reassignment
+
+    # --- Security ---
+    - gosec # OWASP-oriented security scanner (G1xx-G7xx)
+
+    # --- Code Quality ---
+    - gocyclo # Function cyclomatic complexity guard
+    - gocognit # Cognitive complexity guard
+    - nestif # Nested if complexity guard
+    - maintidx # Maintainability index guard
+    - dupl # Duplicate code guard
+    - revive # Configurable Go linter (golint replacement)
+    - gocritic # ~100 diagnostics: bugs, performance, style
+    - unconvert # Unnecessary type conversions
+    - unparam # Unused function parameters
+    - unused # Unused code (variables, functions, types)
+    - wastedassign # Finds wasted assignment statements
+    - predeclared # Detects shadowing of Go predeclared identifiers
+    - recvcheck # Checks receiver type consistency (pointer vs value)
+    - asciicheck # Checks for non-ASCII identifiers
+    - nolintlint # Reports ill-formed or insufficient nolint directives
+    - whitespace # Detects leading/trailing whitespace in functions
+
+    # --- Style & Formatting ---
+    - misspell # Spelling mistakes in comments and strings
+    - usestdlibvars # Use stdlib constants instead of magic values
+    - intrange # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
+    - modernize # Suggests simplifications using modern Go features
+    - usetesting # Reports functions that should use testing.T helpers
+
+    # --- Performance ---
+    - perfsprint # fmt.Sprintf → strconv when possible
+
+    # --- Bug Detection (drop-in safe) ---
+    - bidichk # Dangerous bidi unicode (CVE-2021-42574 trojan source protection)
+    - copyloopvar # Loop variable copies (Go 1.22+, copies not needed)
+    - exptostd # Replace golang.org/x/exp with std equivalents
+    - iotamixing # Mixed iota in const blocks
+    - loggercheck # slog/log key-value pair validation
+    - makezero # Slice append after non-zero-length make
+    - mirror # bytes/strings mirror patterns (avoid unnecessary conversions)
+    - nakedret # Naked returns in long functions
+    - nosprintfhostport # Sprintf misuse for host:port URLs (RFC 3986 compliance)
+    - testableexamples # Examples have expected output (Output: comments)
+
+    # --- Style ---
+    - goprintffuncname # Printf-like funcs end in 'f'
+    - tparallel # t.Parallel() correctness
+    - thelper # Test helpers must call t.Helper()
+
+    # --- Bug Detection (require care) ---
+    - contextcheck # Context propagation
+    - errchkjson # json.Marshal/Encode error handling
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # Too noisy for this project
+      settings:
+        shadow:
+          strict: true
+
+    staticcheck:
+      checks:
+        - "all"
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+
+    gosec:
+      excludes:
+        - G104 # Unhandled errors (covered by errcheck)
+      config:
+        global:
+          audit: "true"
+
+    revive:
+      severity: error
+      enable-all-rules: false
+      enable-default-rules: true
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          arguments:
+            - "checkPublicInterface"
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: struct-tag
+        - name: unused-parameter
+        - name: unnecessary-stmt
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+        - opinionated
+        - experimental
+      disabled-checks:
+        - hugeParam # Too strict for tool input/output structs
+        - rangeValCopy # Often false positives with simple structs
+
+    misspell:
+      locale: US
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+    usetesting:
+      context-background: false # Too noisy across existing tests
+      context-todo: true
+      os-chdir: true
+      os-mkdir-temp: true
+      os-setenv: true
+      os-temp-dir: true
+
+    gocyclo:
+      min-complexity: 20
+
+    gocognit:
+      min-complexity: 25
+
+    nestif:
+      min-complexity: 5
+
+    maintidx:
+      under: 20
+
+    dupl:
+      threshold: 150
+
+    perfsprint:
+      integer-format: true
+      int-conversion: true
+      err-error: true
+      errorf: true
+      sprintf1: true
+      strconcat: true
+
+  exclusions:
+    warn-unused: false
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+
+    rules:
+      # Test files: relax some rules
+      - path: "_test\\.go"
+        linters:
+          - errcheck
+          - gocritic
+          - revive
+          - unparam
+          - dupl
+
+      # Test fixtures intentionally use fake md5 hashes and download keys.
+      - path: "_test\\.go"
+        linters:
+          - gosec
+        text: "G101: Potential hardcoded credentials"
+
+output:
+  formats:
+    text:
+      path: stdout
+  sort-order:
+    - linter
+    - severity
+    - file
+  show-stats: false
+
+formatters:
+  enable:
+    - goimports # Import grouping and ordering
+    - gofumpt # Stricter gofmt-compatible formatting
+    - gci # Enforce deterministic import section grouping
+  settings:
+    gofumpt:
+      module-path: github.com/jmrplens/libgen-mcp
+      extra-rules: true
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/jmrplens/libgen-mcp)
+      custom-order: true
+    goimports:
+      local-prefixes:
+        - github.com/jmrplens/libgen-mcp
