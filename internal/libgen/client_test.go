@@ -116,6 +116,35 @@ func TestGetPermanentNoRetry(t *testing.T) {
 	}
 }
 
+// TestGetFailsOverOnPermanent: un error permanente (404) en el primer mirror no
+// debe abortar el sweep; el cliente hace failover al segundo mirror, que responde
+// 200. El primer mirror se consulta exactamente una vez (sin reintento).
+func TestGetFailsOverOnPermanent(t *testing.T) {
+	var firstHits atomic.Int32
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		firstHits.Add(1)
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer first.Close()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok-body"))
+	}))
+	defer second.Close()
+
+	c := newTestClient(staticMirrors{first.URL, second.URL})
+	c.retry = 5
+	body, base, err := c.get(context.Background(), "/index.php", nil)
+	if err != nil {
+		t.Fatalf("get() error = %v, want failover success", err)
+	}
+	if string(body) != "ok-body" || base != second.URL {
+		t.Errorf("get() = %q desde %q, esperaba ok-body desde %q", body, base, second.URL)
+	}
+	if got := firstHits.Load(); got != 1 {
+		t.Errorf("firstHits = %d, want 1 (permanente: failover sin reintento)", got)
+	}
+}
+
 // TestCooldownSkip: tras fallar una vez, el mirror malo entra en cooldown; la
 // segunda llamada debe saltarlo y no volver a consultarlo (hits del malo == 1).
 func TestCooldownSkip(t *testing.T) {

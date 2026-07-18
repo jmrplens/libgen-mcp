@@ -27,6 +27,8 @@ const (
 	cooldownDuration = 45 * time.Second
 	// defaultBackoffBase es la base del backoff (crece por intento) entre reintentos.
 	defaultBackoffBase = 200 * time.Millisecond
+	// maxBackoff limita la duración de una sola espera de backoff.
+	maxBackoff = 30 * time.Second
 )
 
 // ErrAllMirrorsFailed indica que ningún mirror respondió correctamente.
@@ -66,13 +68,17 @@ func New(m MirrorLister, cfg *config.Config) *Client {
 	}
 }
 
-// get prueba path?q en los mirrors hasta obtener un 200. Reintenta ante fallos
-// transitorios (timeout, error de red, status 5xx/429) con backoff creciente,
-// apartando en cooldown los mirrors que fallan; los errores permanentes (p. ej.
-// 404) se propagan sin reintentar. Devuelve el cuerpo y la URL base que respondió.
+// get prueba path?q en los mirrors hasta obtener un 200. Ante un fallo
+// transitorio (timeout, error de red, status 5xx/429) aparta el mirror en
+// cooldown y reintenta con backoff creciente. Ante un error permanente (p. ej.
+// 404/403) no reintenta ese mirror ni aplica backoff, pero hace failover al
+// siguiente mirror candidato dentro de la misma pasada. Sólo si ningún mirror
+// da un 200 devuelve ErrAllMirrorsFailed encadenando los errores por mirror.
+// Devuelve el cuerpo y la URL base que respondió.
 func (c *Client) get(ctx context.Context, path string, q url.Values) (content []byte, baseURL string, resErr error) {
 	mirrorList := c.mirrors.Mirrors(ctx)
 	var errs []error
+	permFailed := make(map[string]bool) // mirrors con error permanente: no reintentar
 	attempts := max(c.retry, 1)
 	for attempt := range attempts {
 		if attempt > 0 {
@@ -80,36 +86,46 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (content []
 				return nil, "", err
 			}
 		}
-		body, base, done, err := c.sweep(ctx, mirrorList, path, q, &errs)
+		body, base, done, retriable, err := c.sweep(ctx, mirrorList, path, q, &errs, permFailed)
 		if done {
 			return body, base, err
+		}
+		if !retriable {
+			break // ningún fallo transitorio pendiente: reintentar no ayudaría
 		}
 	}
 	slog.Error("all mirror attempts exhausted", "path", path, "attempts", attempts)
 	return nil, "", fmt.Errorf("%w: %w", ErrAllMirrorsFailed, errors.Join(errs...))
 }
 
-// sweep realiza una pasada sobre los mirrors candidatos. Devuelve done=true si
-// hay que parar: éxito (err=nil) o error permanente (err!=nil). done=false indica
-// que todos los mirrors fallaron de forma transitoria y se puede reintentar.
-func (c *Client) sweep(ctx context.Context, mirrorList []string, path string, q url.Values, errs *[]error) (body []byte, base string, done bool, err error) {
-	for _, m := range c.candidates(mirrorList) {
+// sweep realiza una pasada sobre los mirrors candidatos, haciendo failover al
+// siguiente ante cualquier fallo. Devuelve done=true sólo para parar del todo:
+// éxito (err=nil) o error duro de ctx/limiter (err!=nil). Los errores por
+// petición no paran la pasada: un fallo transitorio aparta el mirror en cooldown
+// y marca retriable=true; un error permanente aparta el mirror de futuras pasadas
+// vía permFailed (sin cooldown ni backoff). retriable indica si merece la pena
+// otra pasada (hubo al menos un fallo transitorio recuperable).
+func (c *Client) sweep(ctx context.Context, mirrorList []string, path string, q url.Values, errs *[]error, permFailed map[string]bool) (body []byte, base string, done, retriable bool, err error) {
+	for _, m := range c.candidates(mirrorList, permFailed) {
 		if werr := c.limiter.Wait(ctx); werr != nil {
-			return nil, "", true, werr
+			return nil, "", true, false, werr
 		}
 		slog.Debug("mirror attempt", "mirror", m, "path", path)
 		b, transient, reqErr := c.doRequest(ctx, m, path, q)
 		if reqErr == nil {
-			return b, m, true, nil
+			return b, m, true, false, nil
 		}
 		*errs = append(*errs, reqErr)
-		if !transient {
-			return nil, "", true, reqErr
+		if transient {
+			retriable = true
+			c.markCooldown(m)
+			slog.Warn("mirror failed transiently, trying next", "mirror", m, "error", reqErr)
+			continue
 		}
-		c.markCooldown(m)
-		slog.Warn("mirror failed, trying next", "mirror", m, "error", reqErr)
+		permFailed[m] = true
+		slog.Warn("mirror permanent error, failing over", "mirror", m, "error", reqErr)
 	}
-	return nil, "", false, nil
+	return nil, "", false, retriable, nil
 }
 
 // doRequest ejecuta una petición contra un mirror y clasifica el resultado.
@@ -141,20 +157,27 @@ func (c *Client) doRequest(ctx context.Context, base, path string, q url.Values)
 	return nil, transient, fmt.Errorf("%s: status %d", base, resp.StatusCode)
 }
 
-// candidates devuelve los mirrors fuera de cooldown en orden de preferencia. Si
-// todos están en cooldown, devuelve la lista completa (mejor intentar que nada).
-func (c *Client) candidates(mirrorList []string) []string {
+// candidates devuelve los mirrors elegibles fuera de cooldown en orden de
+// preferencia, excluyendo los que ya fallaron de forma permanente (permFailed).
+// Si todos los elegibles están en cooldown, devuelve la lista elegible completa
+// (mejor intentar que nada), pero nunca reintroduce los permanentes.
+func (c *Client) candidates(mirrorList []string, permFailed map[string]bool) []string {
 	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	allowed := make([]string, 0, len(mirrorList))
 	avail := make([]string, 0, len(mirrorList))
 	for _, m := range mirrorList {
+		if permFailed[m] {
+			continue
+		}
+		allowed = append(allowed, m)
 		if until, ok := c.cooldown[m]; !ok || now.After(until) {
 			avail = append(avail, m)
 		}
 	}
 	if len(avail) == 0 {
-		return mirrorList
+		return allowed
 	}
 	return avail
 }
@@ -169,7 +192,7 @@ func (c *Client) markCooldown(base string) {
 // sleepBackoff espera un backoff creciente con jitter antes del siguiente
 // intento, respetando la cancelación del contexto.
 func (c *Client) sleepBackoff(ctx context.Context, attempt int) error {
-	base := c.backoffBase << (attempt - 1)
+	base := min(c.backoffBase<<(attempt-1), maxBackoff) // cap una sola espera de backoff
 	//nolint:gosec // G404: jitter de backoff, no es sensible a seguridad.
 	jitter := time.Duration(mrand.Int64N(int64(c.backoffBase) + 1))
 	timer := time.NewTimer(base + jitter)
