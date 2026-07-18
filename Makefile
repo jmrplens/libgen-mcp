@@ -7,6 +7,7 @@
         test test-short test-race coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables \
+        godoc-audit godoc-check \
         install-tools release-check check-server-json sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
@@ -138,6 +139,12 @@ format-md-tables: ## Normalize Markdown pipe tables in README.md and docs/
 
 check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
 	go run ./cmd/format_md_tables/ --check
+
+godoc-audit: ## Report missing/malformed Go doc comments (Markdown)
+	go run ./cmd/godoc_tool/ audit --format=markdown
+
+godoc-check: ## Fail if any Go doc comments are missing/malformed (CI mode)
+	go run ./cmd/godoc_tool/ audit --fail-on-findings
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
 install-tools: ## Install golangci-lint and govulncheck
