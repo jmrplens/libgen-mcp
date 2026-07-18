@@ -49,8 +49,8 @@ func newSession(t *testing.T) *mcp.ClientSession {
 
 	st, ct := mcp.NewInMemoryTransports()
 	ctx := context.Background()
-	if _, err := server.Connect(ctx, st, nil); err != nil {
-		t.Fatal(err)
+	if _, cerr := server.Connect(ctx, st, nil); cerr != nil {
+		t.Fatal(cerr)
 	}
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
 	session, err := mcpClient.Connect(ctx, ct, nil)
@@ -93,7 +93,10 @@ func TestSearchTool(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("tool error: %v", res.Content)
 	}
-	data, _ := json.Marshal(res.StructuredContent)
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var out struct {
 		Results []struct {
 			MD5   string `json:"md5"`
@@ -101,8 +104,8 @@ func TestSearchTool(t *testing.T) {
 		} `json:"results"`
 		HasMore bool `json:"has_more"`
 	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		t.Fatal(err)
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
 	}
 	if len(out.Results) == 0 || out.Results[0].MD5 == "" {
 		t.Errorf("resultados inesperados: %+v", out)
@@ -135,7 +138,10 @@ func TestGetDetailsTool(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("tool error: %v", res.Content)
 	}
-	data, _ := json.Marshal(res.StructuredContent)
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(data), "87a4ebdaf21fa6cc70009a3dd63194ee") {
 		t.Errorf("salida sin md5: %s", data)
 	}

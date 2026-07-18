@@ -52,9 +52,9 @@ func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	var srv *httptest.Server
-	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, r *http.Request) {
-		md5 := r.URL.Query().Get("md5")
-		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, md5)
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		// md5 fijo: los tests que usan este servidor descargan siempre el mismo.
+		fmt.Fprint(w, `<html><a href="get.php?md5=87a4ebdaf21fa6cc70009a3dd63194ee&key=TESTKEY123">GET</a></html>`)
 	})
 	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("key") != "TESTKEY123" {

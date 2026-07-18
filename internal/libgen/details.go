@@ -14,7 +14,7 @@ func decodeObjects(body []byte) (map[string]map[string]any, error) {
 	if err := json.Unmarshal(body, &objs); err != nil {
 		var empty []any
 		if json.Unmarshal(body, &empty) == nil && len(empty) == 0 {
-			return nil, nil
+			return map[string]map[string]any{}, nil
 		}
 		return nil, fmt.Errorf("unexpected json.php response: %w", err)
 	}
@@ -22,7 +22,7 @@ func decodeObjects(body []byte) (map[string]map[string]any, error) {
 }
 
 // DetailsByMD5 devuelve el registro de fichero y su primera edición relacionada.
-func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (map[string]any, map[string]any, error) {
+func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition map[string]any, err error) {
 	body, _, err := c.get(ctx, "/json.php", url.Values{"object": {"f"}, "md5": {md5}, "addkeys": {"*"}})
 	if err != nil {
 		return nil, nil, err
@@ -34,17 +34,15 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (map[string]any, 
 	if len(files) == 0 {
 		return nil, nil, fmt.Errorf("no file found for md5 %s", md5)
 	}
-	var file map[string]any
 	for id, f := range files {
 		f["file_id"] = id
 		file = f
 		break
 	}
-	var edition map[string]any
 	if eds, ok := file["editions"].(map[string]any); ok {
 		for _, e := range eds {
-			em, ok := e.(map[string]any)
-			if !ok {
+			em, isMap := e.(map[string]any)
+			if !isMap {
 				continue
 			}
 			if eid, _ := em["e_id"].(string); eid != "" {
@@ -80,5 +78,5 @@ func (c *Client) DetailsByID(ctx context.Context, object, id string) (map[string
 		o["id"] = oid
 		return o, nil
 	}
-	return nil, nil // inalcanzable
+	return nil, fmt.Errorf("no %s record found with id %s", object, id)
 }

@@ -130,9 +130,9 @@ func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 	if c, err := m.readCache(); err == nil && time.Since(c.FetchedAt) < cacheTTL {
 		return c.Mirrors, false
 	}
-	if list, err := m.fetch(ctx); err == nil {
-		m.writeCache(list)
-		return list, false
+	if fetched, err := m.fetch(ctx); err == nil {
+		m.writeCache(fetched)
+		return fetched, false
 	}
 	if c, err := m.readCache(); err == nil { // caché caducada mejor que nada
 		return c.Mirrors, false
@@ -141,7 +141,7 @@ func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 }
 
 func (m *Manager) fetch(ctx context.Context) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.SourceURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.SourceURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +162,8 @@ func (m *Manager) readCache() (*cacheFile, error) {
 		return nil, err
 	}
 	var c cacheFile
-	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, err
+	if uerr := json.Unmarshal(data, &c); uerr != nil {
+		return nil, uerr
 	}
 	if len(c.Mirrors) == 0 {
 		return nil, errors.New("empty cache")
@@ -176,10 +176,10 @@ func (m *Manager) writeCache(list []string) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(m.CachePath), 0o755); err != nil {
+	if mkErr := os.MkdirAll(filepath.Dir(m.CachePath), 0o750); mkErr != nil {
 		return
 	}
-	_ = os.WriteFile(m.CachePath, data, 0o644) // caché best-effort
+	_ = os.WriteFile(m.CachePath, data, 0o600) // caché best-effort
 }
 
 func orderPreferred(list []string, preferred string) []string {

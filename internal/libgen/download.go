@@ -30,7 +30,7 @@ func ExtractGetLink(body []byte) (string, error) {
 }
 
 // ResolveGetURL obtiene la URL directa de descarga (con key fresca) para un md5.
-func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (string, string, error) {
+func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (getURL, base string, err error) {
 	body, base, err := c.get(ctx, "/ads.php", url.Values{"md5": {md5}})
 	if err != nil {
 		return "", "", err
@@ -56,10 +56,10 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	if err != nil {
 		return nil, err
 	}
-	if err := c.limiter.Wait(ctx); err != nil {
-		return nil, err
+	if werr := c.limiter.Wait(ctx); werr != nil {
+		return nil, werr
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	// los bytes en el bufio.Reader para que io.Copy los vuelva a leer.
 	body := bufio.NewReader(resp.Body)
 	head, err := body.Peek(512)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("reading file header: %w", err)
 	}
 	if looksLikeHTML(head) {
@@ -96,8 +96,8 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 	}
 	name = sanitizeFilename(name)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating download dir: %w", err)
+	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
+		return nil, fmt.Errorf("creating download dir: %w", mkErr)
 	}
 	tmp, err := os.CreateTemp(dir, ".libgen-mcp-*")
 	if err != nil {
@@ -114,9 +114,9 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string) (*Down
 		return nil, fmt.Errorf("truncated download: got %d of %d bytes", n, resp.ContentLength)
 	}
 	dest := filepath.Join(dir, name)
-	if err := os.Rename(tmp.Name(), dest); err != nil {
+	if rerr := os.Rename(tmp.Name(), dest); rerr != nil {
 		os.Remove(tmp.Name())
-		return nil, err
+		return nil, rerr
 	}
 	return &DownloadResult{Path: dest, SizeBytes: n, OriginalFilename: original, Mirror: base}, nil
 }

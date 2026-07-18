@@ -72,8 +72,11 @@ func TestManagerUsesStaleCacheWhenSourceDown(t *testing.T) {
 	defer srv.Close()
 	cachePath := filepath.Join(t.TempDir(), "mirrors.json")
 	stale := cacheFile{FetchedAt: time.Now().Add(-48 * time.Hour), Mirrors: []string{"https://libgen.la"}}
-	data, _ := json.Marshal(stale)
-	os.WriteFile(cachePath, data, 0o644)
+	data, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(cachePath, data, 0o600)
 	m := &Manager{SourceURL: srv.URL, CachePath: cachePath, Preferred: "https://libgen.la", HTTP: srv.Client()}
 	got := m.Mirrors(context.Background())
 	if got[0] != "https://libgen.la" {
@@ -143,8 +146,11 @@ func TestManagerRediscoversAfterTTL(t *testing.T) {
 	// Envejecemos la memoria y la caché de disco mas allá de TTL (white-box).
 	m.cachedAt = time.Now().Add(-2 * cacheTTL)
 	stale := cacheFile{FetchedAt: time.Now().Add(-2 * cacheTTL), Mirrors: []string{"https://libgen.la"}}
-	data, _ := json.Marshal(stale)
-	os.WriteFile(cachePath, data, 0o644)
+	data, err := json.Marshal(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(cachePath, data, 0o600)
 	_ = m.Mirrors(context.Background())
 	if hits != 2 {
 		t.Fatalf("tras expirar TTL: hits = %d, esperaba re-discovery (2)", hits)

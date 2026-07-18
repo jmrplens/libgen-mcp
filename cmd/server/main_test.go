@@ -17,7 +17,7 @@ func TestHealthEndpoint(t *testing.T) {
 	handler := newHTTPHandler(stub)
 
 	t.Run("health", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -29,7 +29,7 @@ func TestHealthEndpoint(t *testing.T) {
 	})
 
 	t.Run("delegates to mcp handler", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if got := rec.Body.String(); got != "mcp" {

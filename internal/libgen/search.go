@@ -166,30 +166,7 @@ func ParseSearch(r io.Reader, base string) (*SearchPage, error) {
 
 func parseRow(cells []*html.Node, base string) *Result {
 	r := Result{}
-	for _, a := range elements(cells[0], "a") {
-		href := attr(a, "href")
-		if !strings.Contains(href, "edition.php?id=") {
-			continue
-		}
-		if r.EditionID == "" {
-			r.EditionID = queryParam(href, "id")
-			r.Title = strings.TrimSpace(nodeText(a))
-			continue
-		}
-		if r.ISBNs == nil { // segundo enlace edition.php: identificadores
-			for _, s := range strings.Split(nodeText(a), ";") {
-				if s = strings.TrimSpace(s); s != "" {
-					r.ISBNs = append(r.ISBNs, s)
-				}
-			}
-		}
-	}
-	for _, s := range elements(cells[0], "span") {
-		if strings.Contains(attr(s, "class"), "badge-primary") {
-			r.Type = strings.TrimSpace(nodeText(s))
-			break
-		}
-	}
+	parseIdentifiers(cells[0], &r)
 	r.Authors = strings.TrimSpace(nodeText(cells[1]))
 	r.Publisher = strings.TrimSpace(nodeText(cells[2]))
 	r.Year = strings.TrimSpace(nodeText(cells[3]))
@@ -203,7 +180,44 @@ func parseRow(cells []*html.Node, base string) *Result {
 		}
 	}
 	r.Extension = strings.TrimSpace(nodeText(cells[7]))
-	for _, a := range elements(cells[8], "a") {
+	parseDownloads(cells[8], base, &r)
+	if r.MD5 == "" && r.Title == "" {
+		return nil
+	}
+	return &r
+}
+
+// parseIdentifiers extrae título, edición, ISBNs y tipo de la primera celda.
+func parseIdentifiers(cell *html.Node, r *Result) {
+	for _, a := range elements(cell, "a") {
+		href := attr(a, "href")
+		if !strings.Contains(href, "edition.php?id=") {
+			continue
+		}
+		if r.EditionID == "" {
+			r.EditionID = queryParam(href, "id")
+			r.Title = strings.TrimSpace(nodeText(a))
+			continue
+		}
+		if r.ISBNs == nil { // segundo enlace edition.php: identificadores
+			for s := range strings.SplitSeq(nodeText(a), ";") {
+				if s = strings.TrimSpace(s); s != "" {
+					r.ISBNs = append(r.ISBNs, s)
+				}
+			}
+		}
+	}
+	for _, s := range elements(cell, "span") {
+		if strings.Contains(attr(s, "class"), "badge-primary") {
+			r.Type = strings.TrimSpace(nodeText(s))
+			break
+		}
+	}
+}
+
+// parseDownloads extrae el md5 y las opciones de descarga de la última celda.
+func parseDownloads(cell *html.Node, base string, r *Result) {
+	for _, a := range elements(cell, "a") {
 		href := attr(a, "href")
 		label := attr(a, "title")
 		if strings.Contains(href, "ads.php?md5=") {
@@ -217,10 +231,6 @@ func parseRow(cells []*html.Node, base string) *Result {
 			r.Downloads = append(r.Downloads, DownloadOption{Label: label, URL: href})
 		}
 	}
-	if r.MD5 == "" && r.Title == "" {
-		return nil
-	}
-	return &r
 }
 
 // filesTabCount devuelve el contador de la pestaña "Files" ("138", "1000+", "0")
@@ -269,7 +279,7 @@ func elements(n *html.Node, tag string) []*html.Node {
 	return out
 }
 
-// childElements devuelve solo hijos directos con ese tag.
+// childElements returns only the direct child elements with the given tag.
 func childElements(n *html.Node, tag string) []*html.Node {
 	var out []*html.Node
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

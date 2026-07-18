@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -21,8 +22,10 @@ import (
 
 // version y commit se inyectan en release con
 // -ldflags "-X main.version=<v> -X main.commit=<sha>".
-var version = "0.1.0"
-var commit = "none"
+var (
+	version = "0.1.0"
+	commit  = "none"
+)
 
 func main() {
 	httpAddr := flag.String("http", "", "serve streamable HTTP on this address (e.g. :8080) instead of stdio")
@@ -47,7 +50,7 @@ func isCleanShutdown(err error) bool {
 // newHTTPHandler monta el handler MCP en / y expone GET /health.
 func newHTTPHandler(mcpHandler http.Handler) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = io.WriteString(w, "ok")
 	})
@@ -71,7 +74,14 @@ func run(httpAddr string) error {
 	if httpAddr != "" {
 		mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
 		log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", version, commit, httpAddr)
-		return http.ListenAndServe(httpAddr, newHTTPHandler(mcpHandler))
+		// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
+		// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
+		srv := &http.Server{
+			Addr:              httpAddr,
+			Handler:           newHTTPHandler(mcpHandler),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		return srv.ListenAndServe()
 	}
 	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", version, commit)
 	return server.Run(context.Background(), &mcp.StdioTransport{})

@@ -22,8 +22,9 @@ const (
 // ErrAllMirrorsFailed indica que ningún mirror respondió correctamente.
 var ErrAllMirrorsFailed = errors.New("all libgen mirrors unreachable (network block? try a VPN or different DNS)")
 
-// MirrorLister aporta las URLs base candidatas, preferida primero.
+// MirrorLister provides candidate base URLs, preferred first.
 type MirrorLister interface {
+	// Mirrors returns candidate base URLs, preferred first.
 	Mirrors(ctx context.Context) []string
 }
 
@@ -45,7 +46,7 @@ func New(m MirrorLister, timeout time.Duration) *Client {
 
 // get prueba path?q en cada mirror hasta obtener un 200. Devuelve el cuerpo y
 // la URL base del mirror que respondió.
-func (c *Client) get(ctx context.Context, path string, q url.Values) ([]byte, string, error) {
+func (c *Client) get(ctx context.Context, path string, q url.Values) (content []byte, baseURL string, resErr error) {
 	var errs []error
 	for _, base := range c.mirrors.Mirrors(ctx) {
 		if err := c.limiter.Wait(ctx); err != nil {
@@ -55,7 +56,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) ([]byte, st
 		if len(q) > 0 {
 			u += "?" + q.Encode()
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 		if err != nil {
 			errs = append(errs, err)
 			continue

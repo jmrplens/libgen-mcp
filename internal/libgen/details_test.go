@@ -64,7 +64,7 @@ func TestDetailsByID(t *testing.T) {
 	if ed["title"] == nil {
 		t.Error("edition sin title")
 	}
-	if _, err := c.DetailsByID(context.Background(), "x", "1"); err == nil {
+	if _, derr := c.DetailsByID(context.Background(), "x", "1"); derr == nil {
 		t.Error("object inválido debería fallar")
 	}
 }

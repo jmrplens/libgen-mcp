@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -125,10 +126,10 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 		var zero DetailsOutput
 		switch {
 		case in.MD5 != "" && in.ID != "":
-			return nil, zero, fmt.Errorf("provide md5 or id, not both")
+			return nil, zero, errors.New("provide md5 or id, not both")
 		case in.MD5 != "":
 			if !md5Re.MatchString(in.MD5) {
-				return nil, zero, fmt.Errorf("md5 must be a 32-char hex string")
+				return nil, zero, errors.New("md5 must be a 32-char hex string")
 			}
 			file, edition, err := c.DetailsByMD5(ctx, strings.ToLower(in.MD5))
 			if err != nil {
@@ -153,7 +154,7 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 			}
 			return nil, DetailsOutput{Edition: rec}, nil
 		default:
-			return nil, zero, fmt.Errorf("provide md5 or id")
+			return nil, zero, errors.New("provide md5 or id")
 		}
 	}
 }
@@ -162,7 +163,7 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
 		var zero libgen.DownloadResult
 		if !md5Re.MatchString(in.MD5) {
-			return nil, zero, fmt.Errorf("md5 must be a 32-char hex string")
+			return nil, zero, errors.New("md5 must be a 32-char hex string")
 		}
 		dir := in.Path
 		if dir == "" {
