@@ -49,6 +49,10 @@ func main() {
 	}
 
 	list := mgr.Mirrors(ctx)
+	if len(list) == 0 {
+		report("mirrors", fmt.Errorf("no mirrors discovered"), "")
+		os.Exit(1)
+	}
 	report("mirrors", nil, fmt.Sprintf("%d discovered, preferred %s", len(list), list[0]))
 
 	searches := []struct{ topic, query string }{
