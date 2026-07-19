@@ -161,20 +161,9 @@ func pdfElementSrc(body []byte) (string, bool) {
 		if found {
 			return
 		}
-		if n.Type == html.ElementNode {
-			var id, elemSrc string
-			for _, a := range n.Attr {
-				switch a.Key {
-				case "id":
-					id = a.Val
-				case "src":
-					elemSrc = a.Val
-				}
-			}
-			if id == "pdf" && elemSrc != "" {
-				src, found = elemSrc, true
-				return
-			}
+		if s, ok := pdfSrcAttr(n); ok {
+			src, found = s, true
+			return
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
@@ -182,6 +171,27 @@ func pdfElementSrc(body []byte) (string, bool) {
 	}
 	walk(doc)
 	return src, found
+}
+
+// pdfSrcAttr reports whether n is an element node carrying id="pdf" with a
+// non-empty src attribute, returning that src value.
+func pdfSrcAttr(n *html.Node) (string, bool) {
+	if n.Type != html.ElementNode {
+		return "", false
+	}
+	var id, src string
+	for _, a := range n.Attr {
+		switch a.Key {
+		case "id":
+			id = a.Val
+		case "src":
+			src = a.Val
+		}
+	}
+	if id == "pdf" && src != "" {
+		return src, true
+	}
+	return "", false
 }
 
 // normalizeScihubURL turns a raw PDF reference scraped from a mirror into a

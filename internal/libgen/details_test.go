@@ -107,3 +107,80 @@ func TestDetailsNotFound(t *testing.T) {
 		t.Error("nonexistent md5 should fail")
 	}
 }
+
+// TestDetailsByMD5GetError covers the transport-error branch: when the json.php
+// request cannot be made, DetailsByMD5 surfaces the error.
+func TestDetailsByMD5GetError(t *testing.T) {
+	c := newTestClient(staticMirrors{"http://127.0.0.1:0"})
+	if _, _, err := c.DetailsByMD5(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee"); err == nil {
+		t.Error("DetailsByMD5 should fail when the request cannot be made")
+	}
+}
+
+// TestDetailsByMD5DecodeError covers the decode-error branch: a json.php body that
+// is neither an object map nor an empty array surfaces as an error.
+func TestDetailsByMD5DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not json at all"))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.DetailsByMD5(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee"); err == nil {
+		t.Error("DetailsByMD5 should fail on a malformed json.php body")
+	}
+}
+
+// TestDetailsByMD5NonMapEdition covers the editions loop's skip branch: an entry
+// in the editions map that is not an object is ignored, leaving no related edition.
+func TestDetailsByMD5NonMapEdition(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"file123":{"md5":"abc","editions":{"0":"not-an-object"}}}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	file, edition, err := c.DetailsByMD5(context.Background(), "abc")
+	if err != nil {
+		t.Fatalf("DetailsByMD5() error = %v", err)
+	}
+	if edition != nil {
+		t.Errorf("edition = %v, want nil (non-object edition skipped)", edition)
+	}
+	if file["md5"] != "abc" {
+		t.Errorf("file.md5 = %v, want abc", file["md5"])
+	}
+}
+
+// TestDetailsByIDFileObject covers the object == "f" branch, which sets addkeys on
+// the query, using the file fixture.
+func TestDetailsByIDFileObject(t *testing.T) {
+	srv := jsonFixtureServer(t)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	rec, err := c.DetailsByID(context.Background(), "f", "138281637")
+	if err != nil {
+		t.Fatalf("DetailsByID(f) error = %v", err)
+	}
+	if len(rec) == 0 {
+		t.Error("DetailsByID(f) returned an empty record")
+	}
+}
+
+// TestDetailsByIDGetError covers the transport-error branch of DetailsByID.
+func TestDetailsByIDGetError(t *testing.T) {
+	c := newTestClient(staticMirrors{"http://127.0.0.1:0"})
+	if _, err := c.DetailsByID(context.Background(), "e", "1"); err == nil {
+		t.Error("DetailsByID should fail when the request cannot be made")
+	}
+}
+
+// TestDetailsByIDDecodeError covers the decode-error branch of DetailsByID.
+func TestDetailsByIDDecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("garbage"))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, err := c.DetailsByID(context.Background(), "e", "1"); err == nil {
+		t.Error("DetailsByID should fail on a malformed json.php body")
+	}
+}

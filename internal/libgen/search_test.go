@@ -470,6 +470,90 @@ func TestPaginatorReachUnparsable(t *testing.T) {
 	}
 }
 
+// TestParseSearchReaderError covers ParseSearch's html.Parse failure: a reader
+// that errors makes the parse fail.
+func TestParseSearchReaderError(t *testing.T) {
+	if _, err := ParseSearch(errReader{}, "https://libgen.li"); err == nil {
+		t.Error("ParseSearch should fail when the reader errors")
+	}
+}
+
+// TestClientSearchLayoutError covers Search's parse-error branch: a page with no
+// results table (and a non-zero counter) is a layout change surfaced by Search.
+func TestClientSearchLayoutError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html><body><p>no results table</p></body></html>"))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.Search(context.Background(), SearchParams{Query: "golang"}); err == nil {
+		t.Error("Search should surface a layout-changed parse error")
+	}
+}
+
+// TestParseSearchRowWithoutMD5OrTitle covers parseRow's drop branch (a row with
+// the required cells but neither md5 nor title yields no Result) and badgeType's
+// empty branch (an identifier cell with no primary badge).
+func TestParseSearchRowWithoutMD5OrTitle(t *testing.T) {
+	const doc = `<html><body><table id="tablelibgen"><tr>` +
+		`<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>` +
+		`</tr></table></body></html>`
+	page, err := ParseSearch(strings.NewReader(doc), "https://libgen.li")
+	if err != nil {
+		t.Fatalf("ParseSearch() error = %v", err)
+	}
+	if len(page.Results) != 0 {
+		t.Errorf("Results = %d, want 0 (row without md5/title dropped)", len(page.Results))
+	}
+}
+
+// TestParseSearchRowISBNsAndType covers splitISBNs (trimming, and skipping empty
+// segments) and badgeType's non-empty branch, driven through a full results row.
+func TestParseSearchRowISBNsAndType(t *testing.T) {
+	const doc = `<html><body><table id="tablelibgen"><tr>` +
+		`<td><a href="edition.php?id=42">The Title</a>` +
+		`<a href="edition.php?id=42"> 978-1; 978-2 ; ; 978-3 </a>` +
+		`<span class="badge badge-primary">book</span></td>` +
+		`<td>Author</td><td>Pub</td><td>2020</td><td>en</td><td>300</td>` +
+		`<td></td><td>pdf</td>` +
+		`<td><a href="/ads.php?md5=87a4ebdaf21fa6cc70009a3dd63194ee" title="dl">libgen</a></td>` +
+		`</tr></table></body></html>`
+	page, err := ParseSearch(strings.NewReader(doc), "https://libgen.li")
+	if err != nil {
+		t.Fatalf("ParseSearch() error = %v", err)
+	}
+	if len(page.Results) != 1 {
+		t.Fatalf("Results = %d, want 1", len(page.Results))
+	}
+	r := page.Results[0]
+	if r.Title != "The Title" {
+		t.Errorf("Title = %q, want %q", r.Title, "The Title")
+	}
+	if r.EditionID != "42" {
+		t.Errorf("EditionID = %q, want %q", r.EditionID, "42")
+	}
+	if r.Type != "book" {
+		t.Errorf("Type = %q, want %q", r.Type, "book")
+	}
+	want := []string{"978-1", "978-2", "978-3"}
+	if len(r.ISBNs) != len(want) {
+		t.Fatalf("ISBNs = %v, want %v", r.ISBNs, want)
+	}
+	for i := range want {
+		if r.ISBNs[i] != want[i] {
+			t.Errorf("ISBNs[%d] = %q, want %q", i, r.ISBNs[i], want[i])
+		}
+	}
+}
+
+// TestQueryParamInvalid covers queryParam's parse-error branch: an unparseable URL
+// yields an empty value rather than a panic.
+func TestQueryParamInvalid(t *testing.T) {
+	if got := queryParam("http://%zz", "id"); got != "" {
+		t.Errorf("queryParam on an invalid URL = %q, want empty", got)
+	}
+}
+
 // TestClientSearch verifies ClientSearch.
 func TestClientSearch(t *testing.T) {
 	fixture, _ := os.ReadFile("testdata/search_books.html")

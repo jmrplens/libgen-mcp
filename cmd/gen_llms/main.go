@@ -194,15 +194,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 
 	b.WriteString("Installing for an AI assistant (headless):\n\n")
 	b.WriteString("If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies): download the release asset for the user's OS and architecture from the Releases page and point `command` at its absolute path. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `\"type\": \"stdio\"`). The `mcpServers` form with the native binary:\n\n")
-	b.WriteString("```json\n")
-	b.WriteString("{\n")
-	b.WriteString("  \"mcpServers\": {\n")
-	b.WriteString("    \"libgen\": {\n")
-	b.WriteString("      \"command\": \"/usr/local/bin/libgen-mcp\"\n")
-	b.WriteString("    }\n")
-	b.WriteString("  }\n")
-	b.WriteString("}\n")
-	b.WriteString("```\n\n")
+	writeMcpServersJSON(&b, "/usr/local/bin/libgen-mcp", nil)
 	b.WriteString("For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `\"type\": \"stdio\"` to the `libgen` entry.\n\n")
 	b.WriteString("Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture: set `command` to `docker` and `args` to `[\"run\", \"-i\", \"--rm\", \"ghcr.io/jmrplens/libgen-mcp:latest\"]`.\n\n")
 	b.WriteString("Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).\n\n")
@@ -456,27 +448,38 @@ func writeLLMSFullInstall(b *strings.Builder) {
 	b.WriteString("## Install (headless)\n\n")
 	b.WriteString("No credentials are required. The recommended install is the prebuilt static binary (no dependencies): download the release asset for the user's OS and architecture from the Releases page and point `command` at its absolute path. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `\"type\": \"stdio\"`).\n\n")
 	b.WriteString("Native binary (`mcpServers` form):\n\n")
-	b.WriteString("```json\n")
-	b.WriteString("{\n")
-	b.WriteString("  \"mcpServers\": {\n")
-	b.WriteString("    \"libgen\": {\n")
-	b.WriteString("      \"command\": \"/usr/local/bin/libgen-mcp\"\n")
-	b.WriteString("    }\n")
-	b.WriteString("  }\n")
-	b.WriteString("}\n")
-	b.WriteString("```\n\n")
+	writeMcpServersJSON(b, "/usr/local/bin/libgen-mcp", nil)
 	b.WriteString("Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture:\n\n")
+	writeMcpServersJSON(b, "docker", []string{"run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"})
+	b.WriteString("For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `\"type\": \"stdio\"` to the `libgen` entry.\n\n")
+}
+
+// writeMcpServersJSON writes a fenced ```json block holding an `mcpServers`
+// entry for the libgen server, followed by a blank line. When args is empty
+// only a `command` field is emitted; otherwise an `args` array is appended.
+// Centralizing the block keeps the generated files free of duplicated literals.
+func writeMcpServersJSON(b *strings.Builder, command string, args []string) {
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString("  \"mcpServers\": {\n")
 	b.WriteString("    \"libgen\": {\n")
-	b.WriteString("      \"command\": \"docker\",\n")
-	b.WriteString("      \"args\": [\"run\", \"-i\", \"--rm\", \"ghcr.io/jmrplens/libgen-mcp:latest\"]\n")
+	if len(args) == 0 {
+		fmt.Fprintf(b, "      \"command\": %q\n", command)
+	} else {
+		fmt.Fprintf(b, "      \"command\": %q,\n", command)
+		b.WriteString("      \"args\": [")
+		for i, arg := range args {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(b, "%q", arg)
+		}
+		b.WriteString("]\n")
+	}
 	b.WriteString("    }\n")
 	b.WriteString("  }\n")
 	b.WriteString("}\n")
 	b.WriteString("```\n\n")
-	b.WriteString("For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `\"type\": \"stdio\"` to the `libgen` entry.\n\n")
 }
 
 func writeLLMSFullTool(b *strings.Builder, tool *mcp.Tool) {
@@ -530,14 +533,7 @@ func writeInputSchema(b *strings.Builder, schema any) {
 		return
 	}
 
-	required := map[string]bool{}
-	if reqList, isSlice := schemaMap["required"].([]any); isSlice {
-		for _, r := range reqList {
-			if s, isStr := r.(string); isStr {
-				required[s] = true
-			}
-		}
-	}
+	required := schemaRequiredSet(schemaMap)
 
 	b.WriteString("**Parameters:**\n\n")
 	names := make([]string, 0, len(props))
@@ -551,20 +547,43 @@ func writeInputSchema(b *strings.Builder, schema any) {
 		if !isMap {
 			continue
 		}
-		typ := schemaTypeLabel(prop)
-		desc, _ := prop["description"].(string)
-		desc = strings.TrimSuffix(desc, ",required")
-		req := ""
-		if required[name] {
-			req = " (required)"
-		}
-		if desc != "" {
-			fmt.Fprintf(b, "- `%s` (%s)%s: %s\n", name, typ, req, desc)
-		} else {
-			fmt.Fprintf(b, "- `%s` (%s)%s\n", name, typ, req)
-		}
+		writeSchemaProperty(b, name, prop, required[name])
 	}
 	b.WriteString("\n")
+}
+
+// schemaRequiredSet returns the set of property names listed in the schema's
+// "required" array. It returns an empty set when the field is absent or malformed.
+func schemaRequiredSet(schemaMap map[string]any) map[string]bool {
+	required := map[string]bool{}
+	reqList, ok := schemaMap["required"].([]any)
+	if !ok {
+		return required
+	}
+	for _, r := range reqList {
+		if s, isStr := r.(string); isStr {
+			required[s] = true
+		}
+	}
+	return required
+}
+
+// writeSchemaProperty writes one parameter bullet describing a single schema
+// property, marking it "(required)" when required and appending its description
+// when present.
+func writeSchemaProperty(b *strings.Builder, name string, prop map[string]any, required bool) {
+	typ := schemaTypeLabel(prop)
+	desc, _ := prop["description"].(string)
+	desc = strings.TrimSuffix(desc, ",required")
+	req := ""
+	if required {
+		req = " (required)"
+	}
+	if desc != "" {
+		fmt.Fprintf(b, "- `%s` (%s)%s: %s\n", name, typ, req, desc)
+	} else {
+		fmt.Fprintf(b, "- `%s` (%s)%s\n", name, typ, req)
+	}
 }
 
 func schemaTypeLabel(schema map[string]any) string {

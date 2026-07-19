@@ -68,19 +68,34 @@ func run(args []string, stdout io.Writer) error {
 		return err
 	}
 
+	changed, err := formatFiles(rootFS, files, opts.check)
+	if err != nil {
+		return err
+	}
+
+	return reportResults(stdout, changed, opts.check)
+}
+
+// formatFiles formats each file in turn and returns the display paths of those
+// that changed (in check mode, those that would change).
+func formatFiles(rootFS *os.Root, files []string, check bool) ([]string, error) {
 	changed := make([]string, 0)
 	for _, file := range files {
-		var fileChanged bool
-		fileChanged, err = formatMarkdownTableFile(rootFS, file, opts.check)
+		fileChanged, err := formatMarkdownTableFile(rootFS, file, check)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if fileChanged {
 			changed = append(changed, displayPath(file))
 		}
 	}
+	return changed, nil
+}
 
-	if opts.check {
+// reportResults writes the run summary to stdout. In check mode it returns an
+// error when any table is out of date; otherwise it lists the formatted files.
+func reportResults(stdout io.Writer, changed []string, check bool) error {
+	if check {
 		if len(changed) > 0 {
 			return fmt.Errorf("markdown tables are out of date in %d file(s): %s", len(changed), strings.Join(changed, ", "))
 		}

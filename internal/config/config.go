@@ -182,6 +182,27 @@ func envFloat(key string, dst *float64) error {
 // Validate checks that the configuration values are within range and that the
 // mirror and download directory are usable.
 func (c *Config) Validate() error {
+	if err := c.validateRanges(); err != nil {
+		return err
+	}
+	if err := validateUnpaywallEmail(c.UnpaywallEmail); err != nil {
+		return err
+	}
+	if err := validateScihubHosts(c.ScihubHosts); err != nil {
+		return err
+	}
+	if err := validateSources(c.Sources); err != nil {
+		return err
+	}
+	if err := validateMirror(c.Mirror); err != nil {
+		return err
+	}
+	return validateDownloadDir(c.DownloadDir)
+}
+
+// validateRanges checks that the numeric configuration fields fall within their
+// allowed bounds, reporting the first out-of-range field in declaration order.
+func (c *Config) validateRanges() error {
 	if c.RateRPS <= 0 || c.RateRPS > 20 {
 		return fmt.Errorf("LIBGEN_MCP_RATE_RPS must be in (0, 20], got %v", c.RateRPS)
 	}
@@ -200,19 +221,7 @@ func (c *Config) Validate() error {
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
 	}
-	if err := validateUnpaywallEmail(c.UnpaywallEmail); err != nil {
-		return err
-	}
-	if err := validateScihubHosts(c.ScihubHosts); err != nil {
-		return err
-	}
-	if err := validateSources(c.Sources); err != nil {
-		return err
-	}
-	if err := validateMirror(c.Mirror); err != nil {
-		return err
-	}
-	return validateDownloadDir(c.DownloadDir)
+	return nil
 }
 
 // validateUnpaywallEmail applies a basic sanity check to the Unpaywall contact

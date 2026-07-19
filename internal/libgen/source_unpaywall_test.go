@@ -111,6 +111,25 @@ func TestUnpaywallBadJSON(t *testing.T) {
 	}
 }
 
+// TestUnpaywallRequestBuildError covers the request-construction failure: a base
+// URL carrying a control character cannot be turned into a request.
+func TestUnpaywallRequestBuildError(t *testing.T) {
+	s := unpaywallSource{email: "mail@jmrp.io", baseURL: "http://\x7f", http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve should fail when the endpoint cannot be built into a request")
+	}
+}
+
+// TestUnpaywallDefaultClientTransportError covers the default-client fallback (http
+// is nil) together with the transport-error branch: a dead address makes the
+// request fail.
+func TestUnpaywallDefaultClientTransportError(t *testing.T) {
+	s := unpaywallSource{email: "mail@jmrp.io", baseURL: "http://127.0.0.1:0"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve should fail when the Unpaywall request cannot be sent")
+	}
+}
+
 // TestUnpaywallSupports verifies that the source claims DOI-keyed items only.
 func TestUnpaywallSupports(t *testing.T) {
 	s := unpaywallSource{email: "mail@jmrp.io"}

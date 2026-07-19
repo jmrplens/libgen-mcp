@@ -315,3 +315,35 @@ func TestCooldownSkip(t *testing.T) {
 		t.Errorf("goodHits = %d, want 2", got)
 	}
 }
+
+// TestDoRequestBuildError covers doRequest's request-construction failure: a mirror
+// base carrying a control character cannot be built into a request.
+func TestDoRequestBuildError(t *testing.T) {
+	c := newTestClient(staticMirrors{"http://\x7f"})
+	if _, _, err := c.get(context.Background(), "/index.php", nil); err == nil {
+		t.Error("get should fail when the request URL is invalid")
+	}
+}
+
+// TestDoRequestBodyReadError covers doRequest's 200-with-read-error branch: a
+// mirror that declares more bytes than it sends, then closes, makes reading the
+// body fail even though the status is 200.
+func TestDoRequestBodyReadError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\nshort"))
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.get(context.Background(), "/index.php", nil); err == nil {
+		t.Error("get should fail when a 200 body cannot be fully read")
+	}
+}

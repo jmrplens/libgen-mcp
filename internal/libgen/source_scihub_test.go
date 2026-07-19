@@ -137,6 +137,74 @@ func TestScihubRejectsNon200WithPDF(t *testing.T) {
 	}
 }
 
+// TestScihubNoHosts covers the "no hosts configured" branch: with an empty host
+// list and no per-host error, Resolve reports that nothing could be tried.
+func TestScihubNoHosts(t *testing.T) {
+	s := scihubSource{hosts: nil, http: http.DefaultClient, scheme: "http"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve with no hosts configured should fail")
+	}
+}
+
+// TestScihubDefaultScheme covers the default-scheme branch: an empty scheme
+// defaults to https, which cannot complete against a plain-http test host, so the
+// host is skipped and Resolve fails.
+func TestScihubDefaultScheme(t *testing.T) {
+	host := scihubHostServer(t, "<html></html>")
+	s := scihubSource{hosts: []string{host}, http: http.DefaultClient} // scheme "" -> https
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve should fail when https is attempted against an http host")
+	}
+}
+
+// TestScihubDefaultClient covers the default-client branch: with a nil http client
+// Resolve uses http.DefaultClient, which resolves the article fixture over http.
+func TestScihubDefaultClient(t *testing.T) {
+	host := scihubHostServer(t, string(scihubFixture(t)))
+	s := scihubSource{hosts: []string{host}, scheme: "http"} // http nil -> default client
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1016/j.cell.2016.01.043"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL == "" {
+		t.Error("Resolve() returned an empty FileURL")
+	}
+}
+
+// TestScihubRequestBuildError covers tryHost's request-construction failure: a host
+// containing a control character cannot be turned into a request.
+func TestScihubRequestBuildError(t *testing.T) {
+	s := scihubSource{hosts: []string{"\x7fbad"}, http: http.DefaultClient, scheme: "http"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve should fail when a host yields an unbuildable request")
+	}
+}
+
+// TestScihubBodyReadError covers tryHost's body-read failure: a mirror that
+// declares more bytes than it sends, then closes, makes reading the body fail.
+func TestScihubBodyReadError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		// Declare 1000 bytes but send only 5, then close: the client's read of the
+		// body fails with an unexpected EOF.
+		_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\nshort"))
+		_ = conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+	host := strings.TrimPrefix(srv.URL, "http://")
+	s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Error("Resolve should fail when the mirror body cannot be fully read")
+	}
+}
+
 // TestScihubSupports verifies the source claims DOI-keyed items only.
 func TestScihubSupports(t *testing.T) {
 	s := scihubSource{}
