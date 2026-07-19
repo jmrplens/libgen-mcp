@@ -2,7 +2,7 @@
 #
 # Runs on: pull requests to main, pushes to main
 # Jobs: test (+coverage gate), build, golangci-lint, godoc, govulncheck, markdown,
-#       hadolint, docker build (PR + Docker changes only)
+#       hadolint, docker build (PR + Docker changes only), docs-site (Astro lint + a11y-less checks)
 
 name: CI
 
@@ -219,3 +219,31 @@ jobs:
           build-args: |
             VERSION=ci
             COMMIT=${{ github.sha }}
+
+  docs-site:
+    name: Docs Site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: site/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: site
+        env:
+          # The lint job does not run pa11y, so skip puppeteer's Chromium download.
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+      - name: Build the site
+        run: pnpm run build
+        working-directory: site
+      - name: Lint (astro check, i18n parity, eslint, prettier, html-validate, htmlhint)
+        run: pnpm run lint
+        working-directory: site

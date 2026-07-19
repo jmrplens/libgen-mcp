@@ -17,7 +17,7 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 **LibGen MCP** es un servidor [MCP](https://modelcontextprotocol.io), escrito en Go, para buscar y descargar desde **Library Genesis** (la familia de mirrors `libgen.li`). Expone tres herramientas — `search`, `get_details` y `download` — a cualquier cliente compatible con MCP como Claude Code, Claude Desktop o tu propio agente.
 
@@ -25,16 +25,19 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 
 <CardGrid>
 	<Card title="Tres herramientas" icon="puzzle">
-		`search`, `get_details` y `download` — búsqueda y metadatos de solo lectura, más una descarga no destructiva y reanudable.
+		`search`, `get_details` y `download` — búsqueda y metadatos de solo lectura,
+		más una descarga no destructiva y reanudable.
 	</Card>
 	<Card title="Mirrors resilientes" icon="random">
-		Descubrimiento automático de mirrors, failover, reintentos con enfriamiento y un limitador de tasa compartido.
+		Descubrimiento automático de mirrors, failover, reintentos con enfriamiento
+		y un limitador de tasa compartido.
 	</Card>
 	<Card title="Libros y artículos" icon="open-book">
 		Libros por MD5 desde LibGen; artículos por DOI desde Unpaywall y Sci-Hub.
 	</Card>
 	<Card title="Configurado por entorno" icon="setting">
-		Cada opción es una variable de entorno con un valor por defecto documentado y validación fail-fast.
+		Cada opción es una variable de entorno con un valor por defecto documentado
+		y validación fail-fast.
 	</Card>
 </CardGrid>
 
@@ -58,4 +61,9 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 
 ## Uso responsable
 
-Esta herramienta accede a mirrors de terceros de Library Genesis. Eres responsable de respetar las leyes de derechos de autor y de propiedad intelectual que apliquen en tu lugar de residencia. Úsala solo para contenido al que tengas derecho legal de acceder.
+<Aside type="caution">
+	Esta herramienta accede a mirrors de terceros de Library Genesis. Eres
+	responsable de respetar las leyes de derechos de autor y de propiedad
+	intelectual que apliquen en tu lugar de residencia. Úsala solo para contenido
+	al que tengas derecho legal de acceder.
+</Aside>

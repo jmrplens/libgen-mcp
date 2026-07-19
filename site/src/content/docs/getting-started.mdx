@@ -3,7 +3,7 @@ title: Getting Started
 description: Install libgen-mcp, wire it into an MCP client, and run your first search.
 ---
 
-import { Tabs, TabItem, LinkCard } from '@astrojs/starlight/components';
+import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 This page walks you through installing `libgen-mcp`, wiring it into an MCP client, and running your first search.
 
@@ -15,51 +15,59 @@ The recommended install is the **prebuilt binary**: a single static executable w
 	<TabItem label="Binary (recommended)">
 		Download a prebuilt binary for your platform from the [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named `libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`), covering Linux, macOS, and Windows on both amd64 and arm64.
 
-		```bash
-		# Example: Linux amd64
-		curl -L -o libgen-mcp \
-		  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
-		chmod +x libgen-mcp
-		sudo mv libgen-mcp /usr/local/bin/
-		```
+    	```bash
+    	# Example: Linux amd64
+    	curl -L -o libgen-mcp \
+    	  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
+    	chmod +x libgen-mcp
+    	sudo mv libgen-mcp /usr/local/bin/
+    	```
 
-		The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothing on the host and runs straight away. Each release also ships a `checksums.txt`; verify your download against it before running.
-	</TabItem>
-	<TabItem label="Docker">
-		Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:
+    	The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothing on the host and runs straight away. Each release also ships a `checksums.txt`; verify your download against it before running.
+    </TabItem>
+    <TabItem label="Docker">
+    	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:
 
-		```bash
-		docker pull ghcr.io/jmrplens/libgen-mcp:latest
-		```
+    	```bash
+    	docker pull ghcr.io/jmrplens/libgen-mcp:latest
+    	```
 
-		The image defaults to the streamable HTTP transport on port `8080` and exposes a `GET /health` endpoint:
+    	The image runs the server on **stdio by default** — the correct mode for MCP clients, so `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (as the one-click buttons and `claude mcp add` use it) works out of the box. Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a non-root user, so the host directory must be writable by UID `10001`:
 
-		```bash
-		docker run --rm -p 8080:8080 \
-		  -v "$HOME/Downloads:/downloads" \
-		  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
-		  ghcr.io/jmrplens/libgen-mcp:latest
-		```
+    	```bash
+    	docker run -i --rm \
+    	  -v "$HOME/Downloads:/downloads" \
+    	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+    	  ghcr.io/jmrplens/libgen-mcp:latest
+    	```
 
-		Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a non-root user, so the host directory must be writable by UID `10001`.
-	</TabItem>
-	<TabItem label="go install">
-		If you already have Go 1.26 or newer and prefer building from source:
+    	For the streamable HTTP transport instead, pass `--http 0.0.0.0:8080` and publish the port; HTTP mode also exposes a `GET /health` readiness endpoint:
 
-		```bash
-		go install github.com/jmrplens/libgen-mcp/cmd/server@latest
-		```
+    	```bash
+    	docker run --rm -p 8080:8080 \
+    	  -v "$HOME/Downloads:/downloads" \
+    	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+    	  ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
+    	```
+    </TabItem>
+    <TabItem label="go install">
+    	If you already have Go 1.26 or newer and prefer building from source:
 
-		This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke it as `libgen-mcp`, build it with an explicit name instead:
+    	```bash
+    	go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+    	```
 
-		```bash
-		git clone https://github.com/jmrplens/libgen-mcp
-		cd libgen-mcp
-		go build -o libgen-mcp ./cmd/server
-		```
+    	This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke it as `libgen-mcp`, build it with an explicit name instead:
 
-		Make sure the resulting binary is on your `PATH`.
-	</TabItem>
+    	```bash
+    	git clone https://github.com/jmrplens/libgen-mcp
+    	cd libgen-mcp
+    	go build -o libgen-mcp ./cmd/server
+    	```
+
+    	Make sure the resulting binary is on your `PATH`.
+    </TabItem>
+
 </Tabs>
 
 ## Configure an MCP client
@@ -72,32 +80,37 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 
 ```json
 {
-  "mcpServers": {
-    "libgen": {
-      "command": "libgen-mcp"
-    }
-  }
+	"mcpServers": {
+		"libgen": {
+			"command": "libgen-mcp"
+		}
+	}
 }
 ```
 
 ### Claude Desktop
 
-Edit `claude_desktop_config.json` (`~/Library/Application Support/Claude/` on macOS, `%APPDATA%\Claude\` on Windows) and add the same `mcpServers` block, then restart Claude Desktop:
+The easiest path is the one-click **`.mcpb`** desktop extension from the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS universal + Windows, no Docker): download it and open it with Claude Desktop, then confirm the settings.
+
+To wire it up by hand instead, edit `claude_desktop_config.json` (`~/Library/Application Support/Claude/` on macOS, `%APPDATA%\Claude\` on Windows) and add the same `mcpServers` block, then restart Claude Desktop:
 
 ```json
 {
-  "mcpServers": {
-    "libgen": {
-      "command": "/absolute/path/to/libgen-mcp",
-      "env": {
-        "LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
-      }
-    }
-  }
+	"mcpServers": {
+		"libgen": {
+			"command": "/absolute/path/to/libgen-mcp",
+			"env": {
+				"LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
+			}
+		}
+	}
 }
 ```
 
-Desktop clients do not inherit your shell `PATH`, so use an absolute `command` path.
+<Aside type="caution">
+	Desktop clients do not inherit your shell `PATH`, so use an absolute `command`
+	path.
+</Aside>
 
 ### VS Code
 
@@ -105,12 +118,12 @@ VS Code's MCP support (or the Continue / Cline extensions) reads an `mcp.json` w
 
 ```json
 {
-  "servers": {
-    "libgen": {
-      "command": "libgen-mcp",
-      "type": "stdio"
-    }
-  }
+	"servers": {
+		"libgen": {
+			"command": "libgen-mcp",
+			"type": "stdio"
+		}
+	}
 }
 ```
 
@@ -121,6 +134,8 @@ To run the server centrally and connect over HTTP instead of stdio, start it wit
 ```bash
 libgen-mcp --http :8080
 ```
+
+In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200` while serving, handy for container and load-balancer health checks.
 
 See [Configuration](/libgen-mcp/configuration/) for the environment variables you can set on any of these, and [Architecture](/libgen-mcp/architecture/) for how the transports work.
 
@@ -134,9 +149,9 @@ drives the `search` tool with roughly these arguments:
 
 ```json
 {
-  "query": "the go programming language",
-  "topics": ["nonfiction"],
-  "results_per_page": 25
+	"query": "the go programming language",
+	"topics": ["nonfiction"],
+	"results_per_page": 25
 }
 ```
 

@@ -13,14 +13,13 @@ Quick start:
 
 Installing for an AI assistant (headless):
 
-If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies — see below); if you cannot determine the user's OS and architecture, the Docker form is the most portable. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `"type": "stdio"`). The `mcpServers` form with Docker:
+If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies): download the release asset for the user's OS and architecture from the Releases page and point `command` at its absolute path. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `"type": "stdio"`). The `mcpServers` form with the native binary:
 
 ```json
 {
   "mcpServers": {
     "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
+      "command": "/usr/local/bin/libgen-mcp"
     }
   }
 }
@@ -28,9 +27,9 @@ If you are an AI assistant setting this up for a user from just this repository 
 
 For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `"type": "stdio"` to the `libgen` entry.
 
-Native binary instead of Docker: download the release asset for the user's OS and architecture from the Releases page, then use its path as `command` with no `args` (no `env` block is needed — no token is required).
+Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture: set `command` to `docker` and `args` to `["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]`.
 
-Claude Code (CLI): `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker), or `claude mcp add libgen -- libgen-mcp` (native binary).
+Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).
 
 Configuration (environment variables, all optional):
 

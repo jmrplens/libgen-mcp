@@ -38,10 +38,9 @@ COPY --from=builder /out/libgen-mcp /usr/local/bin/libgen-mcp
 
 USER appuser
 
+# Port used only when the server is started in streamable HTTP mode
+# (`--http 0.0.0.0:8080`). The default transport is stdio, which needs no port.
 EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-	CMD ["wget", "-q", "--spider", "-O", "/dev/null", "http://localhost:8080/health"]
 
 ARG VERSION=""
 ARG COMMIT=""
@@ -57,5 +56,7 @@ LABEL org.opencontainers.image.title="libgen-mcp" \
 	org.opencontainers.image.authors="jmrplens" \
 	org.opencontainers.image.vendor="jmrplens"
 
+# Default transport is stdio (no args) — the mode MCP clients use, so
+# `docker run -i --rm ...` works out of the box. For the streamable HTTP
+# transport, override at run time: `docker run ... --http 0.0.0.0:8080`.
 ENTRYPOINT ["libgen-mcp"]
-CMD ["--http", "0.0.0.0:8080"]

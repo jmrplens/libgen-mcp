@@ -38,18 +38,28 @@ multi-arch image is published to the GitHub Container Registry:
 docker pull ghcr.io/jmrplens/libgen-mcp:latest
 ```
 
-The image defaults to the streamable HTTP transport on port `8080` and exposes a
-`GET /health` endpoint:
+The image runs the server on **stdio by default** — the correct mode for MCP clients, so
+`docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (as the one-click buttons and
+`claude mcp add` use it) works out of the box. Mount a writable volume for downloads and
+point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a non-root user, so the host
+directory must be writable by UID `10001`:
 
 ```bash
-docker run --rm -p 8080:8080 \
+docker run -i --rm \
   -v "$HOME/Downloads:/downloads" \
   -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
   ghcr.io/jmrplens/libgen-mcp:latest
 ```
 
-Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the
-container runs as a non-root user, so the host directory must be writable by UID `10001`.
+For the streamable HTTP transport instead, pass `--http 0.0.0.0:8080` and publish the port;
+HTTP mode also exposes a `GET /health` readiness endpoint:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v "$HOME/Downloads:/downloads" \
+  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+  ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
+```
 
 ### 3. `go install` (from source)
 
@@ -92,7 +102,11 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 
 ### Claude Desktop
 
-Edit `claude_desktop_config.json`
+The easiest path is the one-click **`.mcpb`** desktop extension from the
+[latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS universal +
+Windows, no Docker): download it and open it with Claude Desktop, then confirm the settings.
+
+To wire it up by hand instead, edit `claude_desktop_config.json`
 (`~/Library/Application Support/Claude/` on macOS,
 `%APPDATA%\Claude\` on Windows) and add the same `mcpServers` block, then restart Claude
 Desktop:
@@ -136,6 +150,9 @@ address and point HTTP-capable clients at it:
 ```bash
 libgen-mcp --http :8080
 ```
+
+In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200`
+while serving, handy for container and load-balancer health checks.
 
 See [Configuration](configuration.md) for the environment variables you can set on any of
 these, and [Architecture](architecture.md) for how the transports work.

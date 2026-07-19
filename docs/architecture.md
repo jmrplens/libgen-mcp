@@ -134,3 +134,21 @@ Because the chain is a single ordered slice filtered by `Supports`, a book item 
 offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from
 this chain without reordering it. `Download` tries each supporting source in turn and returns
 the first success; if all fail, it returns the joined per-source errors.
+
+## Transports
+
+The server speaks MCP over one of two transports, selected at startup:
+
+- **stdio (default).** With no `--http` flag the server runs over stdio, reading requests on
+  stdin and writing responses on stdout (logs go to stderr). This is the mode MCP clients
+  such as Claude Code, Claude Desktop, Cursor, and VS Code use: the client launches the
+  binary as a child process and speaks to it locally, one client per process.
+- **streamable HTTP (opt-in).** Started with `--http host:port` (for example
+  `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport,
+  suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
+  also mounts a `GET /health` readiness endpoint that returns `200` (body `ok`) while the
+  server is serving — handy for container and load-balancer health checks.
+
+Both transports share the same tools, HTTP client, and download pipeline; only the
+request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
+and shut the active transport down gracefully.

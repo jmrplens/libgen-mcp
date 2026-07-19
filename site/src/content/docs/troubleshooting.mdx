@@ -18,7 +18,7 @@ This page collects the failures you are most likely to hit and how to resolve th
 - Increase `LIBGEN_MCP_TIMEOUT` (e.g. `45s` or `1m`) and/or `LIBGEN_MCP_RETRY_ATTEMPTS` on slow links.
 - Mirrors that fail are put in a 45-second cooldown; wait a moment and retry — the server fails over automatically once a mirror recovers.
 
-A related but distinct error, `request rejected by all mirrors`, means every mirror returned a *permanent* error (e.g. 404/403). That is a normal "not found / rejected", not a network problem — re-check the query or identifier rather than your connection.
+A related but distinct error, `request rejected by all mirrors`, means every mirror returned a _permanent_ error (e.g. 404/403). That is a normal "not found / rejected", not a network problem — re-check the query or identifier rather than your connection.
 
 ## Download failed / MD5 mismatch
 
@@ -75,12 +75,12 @@ Or in your MCP client's `env` block:
 
 ```json
 {
-  "mcpServers": {
-    "libgen": {
-      "command": "libgen-mcp",
-      "env": { "LIBGEN_MCP_LOG_LEVEL": "debug" }
-    }
-  }
+	"mcpServers": {
+		"libgen": {
+			"command": "libgen-mcp",
+			"env": { "LIBGEN_MCP_LOG_LEVEL": "debug" }
+		}
+	}
 }
 ```
 

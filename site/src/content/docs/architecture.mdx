@@ -82,10 +82,19 @@ flowchart TD
 Download sources implement a common interface — `Name`, `Supports(item)`, and `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built from configuration in the fixed order `unpaywall → scihub → libgen → randombook`, and each source is offered only the items it supports:
 
 | Source       | Keyed by | Role                  | How it resolves                                                                                                                                     |
-| ------------ | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------ | -------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unpaywall`  | DOI      | Open-access articles  | Queries the Unpaywall API for a best open-access PDF link. Returns an error (advancing the chain) when the DOI is not OA or exposes no PDF.         |
 | `scihub`     | DOI      | Article fallback      | Requests `https://<host>/<doi>` on each configured Sci-Hub host in turn, scraping the embedded PDF link from the first that serves an article page. |
 | `libgen`     | MD5      | Primary book provider | Resolves the LibGen link chain (`ads.php` key → `get.php` → CDN) through the mirror failover client, and requires MD5 verification.                 |
 | `randombook` | MD5      | Book fallback         | Queries the randombook.org API to discover fresh libgen-family mirror hostnames for the MD5, then runs the LibGen link chain against those hosts.   |
 
 Because the chain is a single ordered slice filtered by `Supports`, a book item is offered `[libgen, randombook]`, an article item `[unpaywall, scihub]`, and an item carrying both is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from this chain without reordering it. `Download` tries each supporting source in turn and returns the first success; if all fail, it returns the joined per-source errors.
+
+## Transports
+
+The server speaks MCP over one of two transports, selected at startup:
+
+- **stdio (default).** With no `--http` flag the server runs over stdio, reading requests on stdin and writing responses on stdout (logs go to stderr). This is the mode MCP clients such as Claude Code, Claude Desktop, Cursor, and VS Code use: the client launches the binary as a child process and speaks to it locally, one client per process.
+- **streamable HTTP (opt-in).** Started with `--http host:port` (for example `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport, suitable for running centrally and connecting remote HTTP-capable clients. In this mode it also mounts a `GET /health` readiness endpoint that returns `200` (body `ok`) while the server is serving — handy for container and load-balancer health checks.
+
+Both transports share the same tools, HTTP client, and download pipeline; only the request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work and shut the active transport down gracefully.

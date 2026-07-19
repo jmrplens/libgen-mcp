@@ -105,8 +105,8 @@ The download runs through a fixed source chain, filtered by what each item suppo
 
 - **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror
   discovery).
-- **Article** (`doi` only) → `unpaywall` (open-access PDF), then `sci-hub`.
-- **Both `md5` and `doi`** → article sources first (`unpaywall`, `sci-hub`), then book
+- **Article** (`doi` only) → `unpaywall` (open-access PDF), then `scihub`.
+- **Both `md5` and `doi`** → article sources first (`unpaywall`, `scihub`), then book
   sources (`libgen`, `randombook`).
 
 The first source that resolves and streams a valid file wins; the `source` field in the

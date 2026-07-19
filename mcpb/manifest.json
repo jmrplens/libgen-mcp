@@ -38,7 +38,8 @@
         "LIBGEN_MCP_DOWNLOAD_DIR": "${user_config.download_dir}",
         "LIBGEN_MCP_TIMEOUT": "${user_config.timeout}",
         "LIBGEN_MCP_MAX_DOWNLOAD_BYTES": "${user_config.max_download_bytes}",
-        "LIBGEN_MCP_LOG_LEVEL": "${user_config.log_level}"
+        "LIBGEN_MCP_LOG_LEVEL": "${user_config.log_level}",
+        "LIBGEN_MCP_UNPAYWALL_EMAIL": "${user_config.unpaywall_email}"
       },
       "platform_overrides": {
         "win32": {
@@ -101,6 +102,13 @@
       "title": "Log level",
       "description": "Log verbosity: debug, info, warn or error.",
       "default": "info",
+      "required": false
+    },
+    "unpaywall_email": {
+      "type": "string",
+      "title": "Unpaywall email",
+      "description": "Contact email for the Unpaywall API, used to resolve open-access articles by DOI. Recommended if you download research papers; leave empty to disable Unpaywall.",
+      "default": "",
       "required": false
     }
   }

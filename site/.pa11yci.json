@@ -1,0 +1,24 @@
+{
+  "defaults": {
+    "standard": "WCAG2AA",
+    "timeout": 15000,
+    "wait": 2000,
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+    }
+  },
+  "urls": [
+    "http://localhost:4321/libgen-mcp/",
+    "http://localhost:4321/libgen-mcp/getting-started/",
+    "http://localhost:4321/libgen-mcp/configuration/",
+    "http://localhost:4321/libgen-mcp/tools/",
+    "http://localhost:4321/libgen-mcp/architecture/",
+    "http://localhost:4321/libgen-mcp/troubleshooting/",
+    "http://localhost:4321/libgen-mcp/es/",
+    "http://localhost:4321/libgen-mcp/es/getting-started/",
+    "http://localhost:4321/libgen-mcp/es/configuration/",
+    "http://localhost:4321/libgen-mcp/es/tools/",
+    "http://localhost:4321/libgen-mcp/es/architecture/",
+    "http://localhost:4321/libgen-mcp/es/troubleshooting/"
+  ]
+}

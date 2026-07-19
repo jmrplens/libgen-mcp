@@ -14,9 +14,9 @@
 
 </p>
 
-**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards.** One static binary (or a container), three focused tools (`search`, `get_details`, `download`), working with Claude, Cursor, VS Code, and any MCP client.
+**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards.** It ships as one static binary (or a container) with three focused tools: `search`, `get_details`, and `download`. It works with Claude, Cursor, VS Code, and any MCP client.
 
-You talk to your AI assistant; it does the searching and fetching. No mirrors, MD5 hashes, or download URLs to remember. Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down.
+You talk to your AI assistant; it does the searching and fetching. You don't need to track mirrors, MD5 hashes, or download URLs. Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down.
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR."
 
@@ -74,7 +74,7 @@ The **Claude Desktop** row instead downloads a native [`.mcpb` desktop extension
 
 ## Claude Code (`claude mcp add`)
 
-Native binary (install it first — see [Building](#building), or grab a release binary — then register it):
+Native binary (install it first — grab the prebuilt binary from [Install](#install) / the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest), or build from [source](#building) — then register it):
 
 ```bash
 claude mcp add libgen -- /usr/local/bin/libgen-mcp
@@ -130,7 +130,7 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 
 ### `download`
 
-Download a file to a local directory. Provide `md5` for a book **or** `doi` for an article (at least one is required); the server resolves the appropriate source chain and verifies the result. Returns the saved path, size, and the source that served it.
+Download a file to a local directory. Provide `md5` for a book **or** `doi` for an article (at least one is required); the server resolves the appropriate source chain and, for book (`md5`) downloads, verifies the result against the expected hash (DOI/article downloads are not MD5-verified). Returns the saved path, size, and the source that served it.
 
 | Parameter  | Type   | Required | Description                                                                          |
 | ---------- | ------ | -------- | ------------------------------------------------------------------------------------ |
@@ -145,20 +145,20 @@ If both `md5` and `doi` are given, article sources are tried first, then book so
 
 Every variable is optional; an empty or unset value uses the default. A present-but-invalid numeric value is an error rather than a silent fallback.
 
-| Variable                              | Default                                                  | Description                                                                                            |
-| ------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `LIBGEN_MIRROR`                       | _(auto-discovery)_                                       | Force a specific mirror, e.g. `https://libgen.li`. Skips auto-discovery. Must be an `http(s)` URL.     |
-| `LIBGEN_MCP_DOWNLOAD_DIR`             | `~/Downloads`                                            | Default destination directory for `download` (created if missing, checked for writability).            |
-| `LIBGEN_MCP_TIMEOUT`                  | `30s`                                                    | Per-request HTTP timeout (Go duration, e.g. `45s`, `1m`). Range `(0, 10m]`.                            |
-| `LIBGEN_MCP_LOG_LEVEL`                | `info`                                                   | Log level: `debug`, `info`, `warn`, or `error`.                                                        |
-| `LIBGEN_MCP_RATE_RPS`                 | `1`                                                      | Allowed outbound requests per second. Range `(0, 20]`.                                                 |
-| `LIBGEN_MCP_RATE_BURST`               | `1`                                                      | Maximum rate-limiter burst. Range `[1, 100]`.                                                          |
-| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`       | `0` _(no limit)_                                         | Maximum download size in bytes. Range `[0, 50 GiB]`; `0` disables the ceiling.                         |
-| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `2`                                                      | Simultaneous downloads allowed. Range `[1, 16]`.                                                       |
-| `LIBGEN_MCP_RETRY_ATTEMPTS`           | `3`                                                      | Retries per request (with backoff). Range `[1, 10]`.                                                   |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL`          | _(built-in contact address)_                             | Contact email required by the Unpaywall API for DOI lookups. Set your own to be a good API citizen.    |
-| `LIBGEN_MCP_SCIHUB_HOSTS`             | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Ordered, comma-separated Sci-Hub mirror hosts (bare host, no scheme). Tried in order until one serves. |
-| `LIBGEN_MCP_SOURCES`                  | _(all enabled)_                                          | Comma-separated allow-list of download sources: `unpaywall`, `scihub`, `libgen`, `randombook`.         |
+| Variable                              | Default                                                  | Description                                                                                                                                        |
+| ------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MIRROR`                       | _(auto-discovery)_                                       | Force a specific mirror, e.g. `https://libgen.li`. Skips auto-discovery. Must be an `http(s)` URL.                                                 |
+| `LIBGEN_MCP_DOWNLOAD_DIR`             | `~/Downloads`                                            | Default destination directory for `download` (created if missing, checked for writability).                                                        |
+| `LIBGEN_MCP_TIMEOUT`                  | `30s`                                                    | Per-request HTTP timeout (Go duration, e.g. `45s`, `1m`). Range `(0, 10m]`.                                                                        |
+| `LIBGEN_MCP_LOG_LEVEL`                | `info`                                                   | Log level: `debug`, `info`, `warn`, or `error`.                                                                                                    |
+| `LIBGEN_MCP_RATE_RPS`                 | `1`                                                      | Allowed outbound requests per second. Range `(0, 20]`.                                                                                             |
+| `LIBGEN_MCP_RATE_BURST`               | `1`                                                      | Maximum rate-limiter burst. Range `[1, 100]`.                                                                                                      |
+| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`       | `0` _(no limit)_                                         | Maximum download size in bytes. Range `[0, 50 GiB]`; `0` disables the ceiling.                                                                     |
+| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `2`                                                      | Simultaneous downloads allowed. Range `[1, 16]`.                                                                                                   |
+| `LIBGEN_MCP_RETRY_ATTEMPTS`           | `3`                                                      | Passes over the mirror list for page requests (search / details / link resolution), with backoff; does not govern file downloads. Range `[1, 10]`. |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL`          | _(built-in contact address)_                             | Contact email required by the Unpaywall API for DOI lookups. Set your own to be a good API citizen.                                                |
+| `LIBGEN_MCP_SCIHUB_HOSTS`             | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Ordered, comma-separated Sci-Hub mirror hosts (bare host, no scheme). Tried in order until one serves.                                             |
+| `LIBGEN_MCP_SOURCES`                  | _(all enabled)_                                          | Comma-separated allow-list of download sources: `unpaywall`, `scihub`, `libgen`, `randombook`.                                                     |
 
 ## Multi-source downloads
 
@@ -209,7 +209,7 @@ make lint          # golangci-lint + govulncheck
 make format-md-tables  # normalize Markdown pipe tables
 ```
 
-By default the server speaks MCP over **stdio**. To serve **streamable HTTP** instead, pass `--http` with an address (`libgen-mcp --http :8080`). Print the version with `--version`.
+By default the server speaks MCP over **stdio**. To serve **streamable HTTP** instead, pass `--http` with an address (`libgen-mcp --http :8080`); HTTP mode also exposes a `GET /health` readiness endpoint that returns `200` while serving. Print the version with `--version`.
 
 ## Maintenance
 
