@@ -182,35 +182,48 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 		case in.MD5 != "" && in.ID != "":
 			return nil, zero, errors.New("provide md5 or id, not both")
 		case in.MD5 != "":
-			if !md5Re.MatchString(in.MD5) {
-				return nil, zero, errors.New("md5 must be a 32-char hex string")
-			}
-			file, edition, err := c.DetailsByMD5(ctx, strings.ToLower(in.MD5))
-			if err != nil {
-				return nil, zero, err
-			}
-			return nil, DetailsOutput{File: file, Edition: edition}, nil
+			out, err := detailsByMD5(ctx, c, in.MD5)
+			return nil, out, err
 		case in.ID != "":
-			object := "e"
-			switch in.Object {
-			case "", "edition":
-			case "file":
-				object = "f"
-			default:
-				return nil, zero, fmt.Errorf("object must be edition or file, got %q", in.Object)
-			}
-			rec, err := c.DetailsByID(ctx, object, in.ID)
-			if err != nil {
-				return nil, zero, err
-			}
-			if object == "f" {
-				return nil, DetailsOutput{File: rec}, nil
-			}
-			return nil, DetailsOutput{Edition: rec}, nil
+			out, err := detailsByID(ctx, c, in.Object, in.ID)
+			return nil, out, err
 		default:
 			return nil, zero, errors.New("provide md5 or id")
 		}
 	}
+}
+
+// detailsByMD5 validates the md5 and returns the file plus its related edition.
+func detailsByMD5(ctx context.Context, c *libgen.Client, md5 string) (DetailsOutput, error) {
+	if !md5Re.MatchString(md5) {
+		return DetailsOutput{}, errors.New("md5 must be a 32-char hex string")
+	}
+	file, edition, err := c.DetailsByMD5(ctx, strings.ToLower(md5))
+	if err != nil {
+		return DetailsOutput{}, err
+	}
+	return DetailsOutput{File: file, Edition: edition}, nil
+}
+
+// detailsByID resolves a record by edition ("e", default) or file ("f") id,
+// mapping the caller-facing object name to the API code.
+func detailsByID(ctx context.Context, c *libgen.Client, objectName, id string) (DetailsOutput, error) {
+	object := "e"
+	switch objectName {
+	case "", "edition":
+	case "file":
+		object = "f"
+	default:
+		return DetailsOutput{}, fmt.Errorf("object must be edition or file, got %q", objectName)
+	}
+	rec, err := c.DetailsByID(ctx, object, id)
+	if err != nil {
+		return DetailsOutput{}, err
+	}
+	if object == "f" {
+		return DetailsOutput{File: rec}, nil
+	}
+	return DetailsOutput{Edition: rec}, nil
 }
 
 func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, libgen.DownloadResult] {
