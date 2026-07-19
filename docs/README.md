@@ -13,7 +13,7 @@ open-access and Sci-Hub sources by DOI.
 
 | Page                                  | What it covers                                                                                                    |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| [Getting started](getting-started.md) | Install (`go install`, release binary, or Docker), wire the server into an MCP client, and run your first search. |
+| [Getting started](getting-started.md) | Install (release binary, Docker, or `go install`), wire the server into an MCP client, and run your first search. |
 | [Configuration](configuration.md)     | Every environment variable, with its default, valid range, and meaning.                                           |
 | [Tools](tools.md)                     | The `search`, `get_details`, and `download` tools — inputs, outputs, and error behavior.                          |
 | [Architecture](architecture.md)       | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, and the multi-source chain.  |
