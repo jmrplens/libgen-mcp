@@ -9,7 +9,8 @@ config:
 globs:
   - "**/*.md"
 ignores:
-  - node_modules
-  - dist
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/.astro/**"
   - docs/superpowers
   - .superpowers
