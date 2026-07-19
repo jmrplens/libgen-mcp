@@ -217,6 +217,93 @@ func TestRandombookMirrorNon200(t *testing.T) {
 	}
 }
 
+// TestRandombookDefaultClientTransportError covers the default-client fallback
+// (http is nil) together with getJSON's transport-error branch: a dead API address
+// makes the by-id request fail.
+func TestRandombookDefaultClientTransportError(t *testing.T) {
+	s := randombookSource{apiBase: "http://127.0.0.1:0"} // http nil -> default client
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when the API request cannot be sent")
+	}
+}
+
+// TestRandombookRequestBuildError covers getJSON's request-construction failure: a
+// base URL carrying a control character cannot be turned into a request.
+func TestRandombookRequestBuildError(t *testing.T) {
+	s := randombookSource{apiBase: "http://\x7f", http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when the request cannot be built")
+	}
+}
+
+// TestRandombookEmptyMirrorList covers lookupMirrors' empty-list branch: a valid id
+// whose links-by-id response carries no mirrors yields an error.
+func TestRandombookEmptyMirrorList(t *testing.T) {
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), `{"result":{"list":[]},"isError":false}`)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when the discovered mirror list is empty")
+	}
+}
+
+// TestRandombookLinksNon200 covers lookupMirrors' getJSON error branch: a non-200
+// links-by-id response (by-id having succeeded) surfaces as an error.
+func TestRandombookLinksNon200(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/search/by-id", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(randombookByIDFixture(t)))
+	})
+	mux.HandleFunc("/api/download/links-by-id", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "down", http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	s := randombookSource{apiBase: srv.URL, http: srv.Client()}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when links-by-id returns a non-200")
+	}
+}
+
+// TestRandombookMirrorRequestBuildError covers resolveViaMirror's
+// request-construction failure and normalizeMirrorBase's bare-host branch: a
+// scheme-less mirror host with a control character is prefixed with https:// and
+// then fails to build a request.
+func TestRandombookMirrorRequestBuildError(t *testing.T) {
+	// A scheme-less host carrying a DEL (0x7f) control byte: it is prefixed with
+	// https:// (the bare-host branch) and then rejected by request construction.
+	links := "{\"result\":{\"list\":[\"\x7fbadhost\"]},\"isError\":false}"
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when a discovered mirror yields an unbuildable request")
+	}
+}
+
+// TestRandombookMirrorBodyReadError covers resolveViaMirror's body-read failure: a
+// mirror that declares more bytes than it sends, then closes, makes reading the
+// ads.php body fail.
+func TestRandombookMirrorBodyReadError(t *testing.T) {
+	badMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\nshort"))
+		_ = conn.Close()
+	}))
+	t.Cleanup(badMirror.Close)
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, badMirror.URL)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Error("Resolve should fail when a mirror body cannot be fully read")
+	}
+}
+
 // TestRandombookParsesLinksFixture guards the links response parsing against the
 // captured fixture shape: the mirror hostname list is decoded from result.list.
 func TestRandombookParsesLinksFixture(t *testing.T) {

@@ -131,11 +131,11 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string) error {
 		}
 		return err
 	case <-ctx.Done():
-		// ctx is already canceled here, so the shutdown deadline must derive from
-		// a fresh context rather than the (dead) parent.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), httpShutdownTimeout)
+		// ctx is already canceled here, so derive the shutdown deadline from a
+		// cancellation-stripped copy of ctx (preserving its values) rather than
+		// the dead parent, keeping graceful shutdown bounded by httpShutdownTimeout.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpShutdownTimeout)
 		defer cancel()
-		//nolint:contextcheck // graceful shutdown intentionally uses a fresh, deadline-bounded context.
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			return err
 		}

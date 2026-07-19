@@ -41,33 +41,49 @@ func Parse(r io.Reader) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing mirrors page: %w", err)
 	}
+	out := collectMirrors(doc)
+	if len(out) == 0 {
+		return nil, errors.New("no libgen mirrors found in page (layout change?)")
+	}
+	return out, nil
+}
+
+// collectMirrors walks the parsed document and returns the deduplicated mirror
+// base URLs in document order.
+func collectMirrors(doc *html.Node) []string {
 	var out []string
 	seen := map[string]bool{}
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, a := range n.Attr {
-				if a.Key != "href" {
-					continue
-				}
-				if m := mirrorHostRe.FindStringSubmatch(strings.TrimSpace(a.Val)); m != nil {
-					u := "https://" + m[1]
-					if !seen[u] {
-						seen[u] = true
-						out = append(out, u)
-					}
-				}
-			}
-		}
+		appendMirrorsFromNode(n, seen, &out)
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
 	}
 	walk(doc)
-	if len(out) == 0 {
-		return nil, errors.New("no libgen mirrors found in page (layout change?)")
+	return out
+}
+
+// appendMirrorsFromNode appends any new mirror base URLs found in n's anchor
+// href attributes to out, tracking already-seen URLs in seen.
+func appendMirrorsFromNode(n *html.Node, seen map[string]bool, out *[]string) {
+	if n.Type != html.ElementNode || n.Data != "a" {
+		return
 	}
-	return out, nil
+	for _, a := range n.Attr {
+		if a.Key != "href" {
+			continue
+		}
+		m := mirrorHostRe.FindStringSubmatch(strings.TrimSpace(a.Val))
+		if m == nil {
+			continue
+		}
+		u := "https://" + m[1]
+		if !seen[u] {
+			seen[u] = true
+			*out = append(*out, u)
+		}
+	}
 }
 
 type cacheFile struct {
@@ -180,7 +196,7 @@ func (m *Manager) writeCache(list []string) {
 	if err != nil {
 		return
 	}
-	if mkErr := os.MkdirAll(filepath.Dir(m.CachePath), 0o750); mkErr != nil {
+	if os.MkdirAll(filepath.Dir(m.CachePath), 0o750) != nil {
 		return
 	}
 	_ = os.WriteFile(m.CachePath, data, 0o600) // best-effort cache

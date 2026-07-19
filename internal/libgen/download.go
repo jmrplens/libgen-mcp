@@ -561,6 +561,33 @@ type streamOpts struct {
 	progress ProgressFunc
 }
 
+// openPartForStream opens (or creates) the partial file at partPath for
+// streaming and reports how many bytes are already present. On a resume it
+// re-hashes the bytes already on disk into digest so the final digest covers the
+// whole file and leaves the file offset at the end, ready to append; on a fresh
+// download it truncates any stale partial and reports a zero starting size. On a
+// rehash failure it keeps the partial so a later call can resume.
+func openPartForStream(partPath string, opts streamOpts, digest io.Writer) (*os.File, int64, error) {
+	flag := os.O_RDWR | os.O_CREATE
+	if !opts.resume {
+		flag |= os.O_TRUNC // restart: discard any stale partial
+	}
+	f, err := os.OpenFile(partPath, flag, 0o600)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !opts.resume {
+		return f, 0, nil
+	}
+	// Re-hash the bytes already on disk so the digest covers the whole file;
+	// io.Copy also leaves the file offset at the end, ready to append.
+	if _, rerr := io.Copy(digest, f); rerr != nil {
+		f.Close()
+		return nil, 0, fmt.Errorf("rehashing partial: %w", rerr) // keep .part for a later resume
+	}
+	return f, opts.existingSize, nil
+}
+
 // streamToPartAndVerify streams body into the stable partial at partPath while
 // computing the MD5 of the whole file, then (when opts.verify) checks the digest
 // against wantMD5 and atomically renames the partial to dest on success. It
@@ -578,26 +605,10 @@ type streamOpts struct {
 // transfer the partial is deleted; on a transient failure (network drop, short
 // read) it is kept so a later call can resume from where it stopped.
 func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, opts streamOpts) (int64, error) {
-	flag := os.O_RDWR | os.O_CREATE
-	var startSize int64
-	if opts.resume {
-		startSize = opts.existingSize
-	} else {
-		flag |= os.O_TRUNC // restart: discard any stale partial
-	}
-	f, err := os.OpenFile(partPath, flag, 0o600)
+	digest := cryptomd5.New() //nolint:gosec // integrity match against the LibGen-provided md5.
+	f, startSize, err := openPartForStream(partPath, opts, digest)
 	if err != nil {
 		return 0, err
-	}
-
-	digest := cryptomd5.New() //nolint:gosec // integrity match against the LibGen-provided md5.
-	if opts.resume {
-		// Re-hash the bytes already on disk so the digest covers the whole file;
-		// io.Copy also leaves the file offset at the end, ready to append.
-		if _, rerr := io.Copy(digest, f); rerr != nil {
-			f.Close()
-			return 0, fmt.Errorf("rehashing partial: %w", rerr) // keep .part for a later resume
-		}
 	}
 
 	// countingWriter aborts if the total size exceeds the cap; this defends

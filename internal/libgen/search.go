@@ -257,19 +257,35 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 			continue
 		}
 		if r.ISBNs == nil { // second edition.php link: identifiers
-			for s := range strings.SplitSeq(nodeText(a), ";") {
-				if s = strings.TrimSpace(s); s != "" {
-					r.ISBNs = append(r.ISBNs, s)
-				}
-			}
+			r.ISBNs = splitISBNs(nodeText(a))
 		}
 	}
+	if t := badgeType(cell); t != "" {
+		r.Type = t
+	}
+}
+
+// splitISBNs splits a semicolon-separated identifier string into its non-empty,
+// trimmed parts. It returns nil when no identifier is present.
+func splitISBNs(text string) []string {
+	var out []string
+	for s := range strings.SplitSeq(text, ";") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// badgeType returns the trimmed text of the first span in cell whose class marks
+// it as the primary badge (the result type), or "" when none is present.
+func badgeType(cell *html.Node) string {
 	for _, s := range elements(cell, "span") {
 		if strings.Contains(attr(s, "class"), "badge-primary") {
-			r.Type = strings.TrimSpace(nodeText(s))
-			break
+			return strings.TrimSpace(nodeText(s))
 		}
 	}
+	return ""
 }
 
 // parseDownloads extracts the md5 and download options from the last cell.
