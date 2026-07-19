@@ -17,7 +17,7 @@ permissions:
 
 env:
   GO_VERSION: "1.26.5"
-  COVERAGE_MIN: "80"
+  COVERAGE_MIN: "85"
 
 jobs:
   test:
@@ -121,7 +121,7 @@ jobs:
           go build -o /dev/null ./cmd/server
           go build -o /dev/null ./cmd/probe
       - name: Verify e2e tests compile
-        run: go test -tags e2e -c -o /dev/null ./internal/libgen/
+        run: go test -tags e2e -c -o /dev/null ./test/e2e/
       - name: Check Markdown tables are formatted
         run: go run ./cmd/format_md_tables/ --check
 

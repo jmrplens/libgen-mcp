@@ -1,0 +1,47 @@
+# Live end-to-end tests against the real Library Genesis site.
+#
+# The suite in test/e2e/ is gated behind LIBGEN_E2E=1 + a reachability probe;
+# it politely skips when the site is unreachable, so a green run means
+# "passed or skipped". Runs nightly and on demand — never on push/PR, to avoid
+# hammering libgen from every build.
+
+name: E2E
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.5"
+
+jobs:
+  e2e:
+    name: Live E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go mod download
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+      - name: Run live E2E suite
+        env:
+          LIBGEN_E2E: "1"
+        run: |
+          mkdir -p test-results
+          gotestsum --junitfile test-results/e2e-junit.xml --format standard-verbose \
+            -- -v -tags e2e -timeout 600s -count=1 ./test/e2e/
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 14
