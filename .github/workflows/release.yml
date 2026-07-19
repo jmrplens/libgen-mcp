@@ -41,6 +41,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and upload the .mcpb Claude Desktop bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          bash scripts/build-mcpb.sh "${VERSION}"
+          gh release upload "v${VERSION}" dist/libgen-mcp.mcpb --clobber
+
       - name: Pin server.json version and SHA256 hashes
         run: bash scripts/update-server-json-sha.sh dist/checksums.txt "${GITHUB_REF#refs/tags/v}"
 

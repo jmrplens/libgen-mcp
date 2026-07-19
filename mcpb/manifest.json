@@ -1,0 +1,107 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.4",
+  "name": "libgen-mcp",
+  "display_name": "Library Genesis MCP Server",
+  "version": "0.1.0",
+  "description": "Search the Library Genesis catalog and download books and articles from Claude.",
+  "long_description": "libgen-mcp exposes three focused tools — search, get_details and download — for browsing the Library Genesis catalog and fetching files.\n\nSearch across collections (nonfiction, fiction, articles, magazines, comics, standards) with field and sort controls, pull full metadata for any record by md5 or id, and download books (by md5) or articles (by DOI) to a local directory. Book downloads try Library Genesis then a fresh-mirror fallback; article downloads try Unpaywall (open access) then Sci-Hub.\n\nEvery setting is optional — no token or account is required. Configure the mirror, download directory, request timeout, a maximum download size and the log level from the extension settings.",
+  "author": {
+    "name": "José M. Requena Plens",
+    "url": "https://github.com/jmrplens"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jmrplens/libgen-mcp"
+  },
+  "homepage": "https://github.com/jmrplens/libgen-mcp",
+  "support": "https://github.com/jmrplens/libgen-mcp/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": [
+    "library-genesis",
+    "libgen",
+    "books",
+    "articles",
+    "download",
+    "search",
+    "ebooks"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/libgen-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/libgen-mcp",
+      "args": [],
+      "env": {
+        "LIBGEN_MIRROR": "${user_config.mirror}",
+        "LIBGEN_MCP_DOWNLOAD_DIR": "${user_config.download_dir}",
+        "LIBGEN_MCP_TIMEOUT": "${user_config.timeout}",
+        "LIBGEN_MCP_MAX_DOWNLOAD_BYTES": "${user_config.max_download_bytes}",
+        "LIBGEN_MCP_LOG_LEVEL": "${user_config.log_level}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/libgen-mcp.exe"
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search the Library Genesis catalog across collections with field, paging and sort controls; returns file results with metadata and md5."
+    },
+    {
+      "name": "get_details",
+      "description": "Fetch full metadata for a record (description, identifiers, DOI, cover, related edition) by md5 or by edition/file id."
+    },
+    {
+      "name": "download",
+      "description": "Download a book (by md5) or article (by DOI) to a local directory; returns the saved path, size and the source that served it."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32"
+    ]
+  },
+  "user_config": {
+    "mirror": {
+      "type": "string",
+      "title": "Mirror",
+      "description": "Force a specific Library Genesis mirror, e.g. https://libgen.li. Leave empty to auto-select a reachable mirror.",
+      "default": "",
+      "required": false
+    },
+    "download_dir": {
+      "type": "directory",
+      "title": "Download directory",
+      "description": "Destination directory for downloaded files.",
+      "default": "${HOME}/Downloads",
+      "required": false
+    },
+    "timeout": {
+      "type": "string",
+      "title": "Request timeout",
+      "description": "Timeout per HTTP request as a Go duration, e.g. 30s or 2m (max 10m).",
+      "default": "30s",
+      "required": false
+    },
+    "max_download_bytes": {
+      "type": "number",
+      "title": "Maximum download size (bytes)",
+      "description": "Reject downloads larger than this many bytes. 0 means no limit.",
+      "default": 0,
+      "required": false
+    },
+    "log_level": {
+      "type": "string",
+      "title": "Log level",
+      "description": "Log verbosity: debug, info, warn or error.",
+      "default": "info",
+      "required": false
+    }
+  }
+}

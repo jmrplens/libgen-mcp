@@ -8,7 +8,7 @@
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables \
         godoc-audit godoc-check \
-        install-tools release-check check-server-json sonar clean help \
+        install-tools release-check check-server-json check-mcpb-manifest mcpb sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
 
@@ -163,6 +163,17 @@ check-server-json: ## Verify server.json parses and matches the VERSION file
 		echo "FAIL: server.json version ($$SJ) != VERSION ($$VF)"; exit 1; \
 	fi; \
 	echo "server.json version matches VERSION ($$VF)"
+
+check-mcpb-manifest: ## Verify mcpb/manifest.json parses and matches the VERSION file
+	@jq empty mcpb/manifest.json && echo "mcpb/manifest.json: valid JSON"
+	@MV=$$(jq -r '.version' mcpb/manifest.json); VF=$$(cat VERSION | tr -d '[:space:]'); \
+	if [ "$$MV" != "$$VF" ]; then \
+		echo "FAIL: mcpb/manifest.json version ($$MV) != VERSION ($$VF)"; exit 1; \
+	fi; \
+	echo "mcpb/manifest.json version matches VERSION ($$VF)"
+
+mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
+	bash scripts/build-mcpb.sh $(VERSION)
 
 sonar: ## Run the SonarCloud scanner locally (needs sonar-scanner + SONAR_TOKEN)
 	@command -v sonar-scanner >/dev/null || { echo "sonar-scanner not installed"; exit 1; }

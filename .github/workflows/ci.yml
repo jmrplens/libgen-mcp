@@ -105,6 +105,14 @@ jobs:
             inst=json.load(open('server.json')); \
             jsonschema.validate(inst, schema); \
             print('server.json: VALID')"
+      - name: Validate mcpb/manifest.json parses and matches VERSION
+        run: |
+          set -euo pipefail
+          jq empty mcpb/manifest.json && echo "mcpb/manifest.json: valid JSON"
+          MV=$(jq -r '.version' mcpb/manifest.json)
+          VF=$(tr -d '[:space:]' < VERSION)
+          echo "mcpb/manifest.json=$MV VERSION=$VF"
+          [ "$MV" = "$VF" ] || { echo "::error::mcpb/manifest.json version ($MV) != VERSION ($VF)"; exit 1; }
 
   build:
     name: Build

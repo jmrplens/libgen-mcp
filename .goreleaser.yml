@@ -28,6 +28,17 @@ builds:
     # Reproducible builds: stamp binary mtime from the commit timestamp.
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# Fuse the darwin amd64 + arm64 builds into a single universal ("fat") binary.
+# The .mcpb Claude Desktop bundle ships this one file so it runs on both Intel
+# and Apple Silicon Macs. `replace: false` keeps the per-arch binaries too.
+universal_binaries:
+  - id: libgen-mcp-universal
+    ids:
+      - libgen-mcp
+    name_template: libgen-mcp
+    replace: false
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
 archives:
   - id: binaries
     formats: [binary]
