@@ -1,23 +1,26 @@
 ---
 // Custom Starlight <Header> override.
-// Renders Starlight's default header, then a compact group holding BOTH the
-// theme toggle and the LanguageSelect, shown only below the `md` (50rem)
-// breakpoint. Starlight hides the whole header right-group (social icons +
-// theme select + language select) on narrow viewports, leaving those controls
-// reachable only at the bottom of the hamburger drawer — below the fold on most
-// phones. This keeps light/dark and EN/ES switching one tap away in the header
-// at every viewport width, in both locales and both themes, without touching
-// the desktop layout (where the default right-group already includes both).
+// Replaces the header's theme + language controls with compact ones that stay
+// visible at every viewport width (Starlight otherwise hides the whole header
+// right-group — social icons, theme select, language select — below the `md`
+// (50rem) breakpoint, leaving those controls reachable only at the bottom of the
+// hamburger drawer):
+//   - a two-state light/dark toggle button (no "auto"), and
+//   - an icon-only language dropdown.
+// The default header (site title, search, social icons) is preserved; only its
+// built-in ThemeSelect + LanguageSelect are hidden, and the compact pair is
+// rendered in their place. Their small footprint leaves room in the bar for
+// Starlight's fixed mobile menu button on pages that have a sidebar.
 import Default from "@astrojs/starlight/components/Header.astro";
-import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
 import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro";
+import ThemeToggle from "./ThemeToggle.astro";
 ---
 
 <div class="lgm-header">
   <div class="lgm-default-header"><Default><slot /></Default></div>
-  <div class="lgm-mobile-controls">
-    <ThemeSelect />
-    <LanguageSelect />
+  <div class="lgm-controls">
+    <ThemeToggle />
+    <div class="lgm-lang"><LanguageSelect /></div>
   </div>
 </div>
 
@@ -33,21 +36,65 @@ import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro";
     min-width: 0;
     height: 100%;
   }
-  .lgm-mobile-controls {
+  /* Hide the default header's own theme + language controls (they only render
+     in the desktop right-group). Scoped to the header, so the mobile menu
+     drawer keeps its full preferences footer untouched. */
+  .lgm-default-header :global(starlight-theme-select),
+  .lgm-default-header :global(starlight-lang-select) {
+    display: none !important;
+  }
+  .lgm-controls {
     display: flex;
     align-items: center;
-    gap: var(--sl-nav-gap);
-  }
-  /* Desktop (≥ md): the default header right-group already renders both the
-     theme select and the language select, so hide the mobile duplicate. */
-  @media (min-width: 50rem) {
-    .lgm-mobile-controls {
-      display: none;
-    }
+    gap: 0.5rem;
   }
   @media print {
-    .lgm-mobile-controls {
+    .lgm-controls {
       display: none;
     }
+  }
+  /* Pages with a sidebar show a fixed mobile menu button pinned to the top-right
+     corner below `md`; offset the controls so they sit to the left of it instead
+     of underneath. The splash home page has no sidebar (and no menu button), so
+     no offset is applied there. */
+  @media (max-width: 50rem) {
+    :global(:root[data-has-sidebar]) .lgm-controls {
+      margin-inline-end: calc(var(--sl-menu-button-size, 2.5rem) + 0.5rem);
+    }
+  }
+
+  /* Compact, icon-only language dropdown: keep the globe icon and overlay a
+     transparent native <select> so the browser's own dropdown still opens on
+     tap. The visually-hidden label text keeps it accessible. */
+  .lgm-lang :global(label) {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    margin: 0;
+    color: var(--sl-color-gray-2);
+  }
+  .lgm-lang :global(label):hover {
+    color: var(--sl-color-white);
+  }
+  .lgm-lang :global(.label-icon) {
+    position: static;
+    transform: none;
+    font-size: 1.15rem;
+  }
+  .lgm-lang :global(.caret) {
+    display: none;
+  }
+  .lgm-lang :global(select) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
   }
 </style>

@@ -1,0 +1,77 @@
+---
+// Compact two-state light/dark theme toggle (no "auto") for the header.
+// Integrates with Starlight's own theme system: it writes the same
+// `starlight-theme` localStorage key and `documentElement.dataset.theme` that
+// Starlight's built-in ThemeSelect uses, and calls
+// `StarlightThemeProvider.updatePickers()` so any other theme picker on the page
+// (e.g. the mobile menu drawer) stays in sync. The icon shown is the *target*
+// mode: a sun while dark (tap → light), a moon while light (tap → dark).
+import { Icon } from "@astrojs/starlight/components";
+---
+
+<lgm-theme-toggle>
+  <button
+    type="button"
+    class="lgm-theme-toggle"
+    aria-label="Toggle between light and dark theme"
+  >
+    <Icon name="sun" class="lgm-icon lgm-icon-sun" />
+    <Icon name="moon" class="lgm-icon lgm-icon-moon" />
+  </button>
+</lgm-theme-toggle>
+
+<script>
+  class LgmThemeToggle extends HTMLElement {
+    constructor() {
+      super();
+      const btn = this.querySelector("button");
+      btn?.addEventListener("click", () => {
+        const current =
+          document.documentElement.dataset.theme === "light" ? "light" : "dark";
+        const next = current === "light" ? "dark" : "light";
+        document.documentElement.dataset.theme = next;
+        try {
+          localStorage.setItem("starlight-theme", next);
+        } catch {
+          /* localStorage unavailable (private mode): theme still applies for this page */
+        }
+        const provider = (
+          window as unknown as {
+            StarlightThemeProvider?: { updatePickers(theme: string): void };
+          }
+        ).StarlightThemeProvider;
+        provider?.updatePickers(next);
+      });
+    }
+  }
+  customElements.define("lgm-theme-toggle", LgmThemeToggle);
+</script>
+
+<style>
+  .lgm-theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+  }
+  .lgm-theme-toggle:hover {
+    color: var(--sl-color-white);
+  }
+  .lgm-icon {
+    font-size: 1.25rem;
+  }
+  /* Show only the target-mode icon: sun while dark, moon while light. */
+  :global([data-theme="light"]) .lgm-icon-sun {
+    display: none;
+  }
+  :global([data-theme="dark"]) .lgm-icon-moon {
+    display: none;
+  }
+</style>
