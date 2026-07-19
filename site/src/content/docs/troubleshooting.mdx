@@ -1,6 +1,99 @@
 ---
 title: Troubleshooting
-description: Common issues and fixes for the LibGen MCP server.
+description: Fixes for unreachable mirrors, failed downloads, missing articles, truncated searches, and disk-space errors.
 ---
 
-Placeholder page. Content will be added in a later task.
+This page collects the failures you are most likely to hit and how to resolve them. When in doubt, raise the log level (see [below](#raising-the-log-level)) and re-run — most errors carry an explanatory message.
+
+## All mirrors unreachable
+
+**Symptom.** Searches and downloads fail with `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
+
+**Meaning.** At least one mirror failed transiently (network error, timeout, HTTP 5xx, or 429) on every retry pass — a genuine connectivity problem, not a missing resource.
+
+**Fixes.**
+
+- Check basic connectivity and DNS resolution to the `libgen.li` family. Some ISPs and networks block these domains; a VPN or an alternative resolver (e.g. `1.1.1.1`) often helps.
+- If discovery itself is blocked, pin a mirror you can reach with `LIBGEN_MIRROR=https://libgen.li` (or another live host) to bypass auto-discovery.
+- Increase `LIBGEN_MCP_TIMEOUT` (e.g. `45s` or `1m`) and/or `LIBGEN_MCP_RETRY_ATTEMPTS` on slow links.
+- Mirrors that fail are put in a 45-second cooldown; wait a moment and retry — the server fails over automatically once a mirror recovers.
+
+A related but distinct error, `request rejected by all mirrors`, means every mirror returned a *permanent* error (e.g. 404/403). That is a normal "not found / rejected", not a network problem — re-check the query or identifier rather than your connection.
+
+## Download failed / MD5 mismatch
+
+**Symptom.** `download` returns an error, or `integrity check failed: MD5 mismatch`.
+
+**Meaning and fixes.**
+
+- **MD5 mismatch** — the downloaded bytes did not match the requested `md5` (corrupt or tampered transfer, or a stale mirror). The partial file is deleted automatically; simply retry. If it persists on one mirror, the `randombook` fallback will try freshly discovered mirrors.
+- **"mirror returned an HTML page instead of the file"** — the download key expired or the mirror served an error/challenge page. Retry; the pipeline resolves a fresh key each time and falls over to the next source.
+- **"download exceeds the configured size limit"** — the file is larger than `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Raise the cap (up to 50 GiB) or set it to `0` to disable it.
+- **"truncated download"** — the connection dropped mid-stream. The `.part` file is kept, so re-running `download` resumes from where it stopped (the result's `resumed` field reports `true` when it does).
+- **All sources failed** — the tool returns the joined per-source errors, one line per source it tried. Read them to see whether the item was simply not found or every provider was unreachable.
+
+## Article not found (open access vs Sci-Hub)
+
+**Symptom.** A `download` with a `doi` fails, or returns nothing useful.
+
+**Meaning.** Articles are fetched by DOI through two sources in order:
+
+1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain advances.
+2. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an article page with an extractable PDF.
+
+**Fixes.**
+
+- Confirm the DOI is correct (copy it exactly from the article search result).
+- If only Unpaywall failed, the article likely is not open access; Sci-Hub is the fallback.
+- Sci-Hub mirrors rotate and go down often. Update `LIBGEN_MCP_SCIHUB_HOSTS` with a currently working host list if all defaults fail.
+- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL`; the API expects a real contact address.
+- Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no LibGen digest for them.
+
+## Truncated search results
+
+**Symptom.** A search response has `truncated: true` and a `hint`, and paging past a certain point returns nothing.
+
+**Meaning.** The mirror reports more matches (`total_files`) than it will actually serve across pages (`reachable`). Pages beyond `reachable` are empty.
+
+**Fix.** Refine rather than page deeper, as the `hint` suggests:
+
+- Add distinguishing terms (author, year).
+- Constrain the fields with `search_in` (e.g. `["title"]`).
+- Narrow `topics` to the relevant collection(s).
+
+See [Tools](/libgen-mcp/tools/#pagination-and-truncation) for the exact fields.
+
+## Raising the log level
+
+Most problems are easier to diagnose at `debug`, which traces each mirror attempt, cooldown, and failover:
+
+```bash
+LIBGEN_MCP_LOG_LEVEL=debug libgen-mcp
+```
+
+Or in your MCP client's `env` block:
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "libgen-mcp",
+      "env": { "LIBGEN_MCP_LOG_LEVEL": "debug" }
+    }
+  }
+}
+```
+
+Logs go to **stderr** (stdout is reserved for the stdio MCP transport), so check your client's server-log view or the terminal where the process runs. Valid levels are `debug`, `info` (default), `warn`, and `error`.
+
+## Disk space
+
+**Symptom.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.
+
+**Meaning.** Before streaming a download whose size is known, the server checks that the destination has room for the file plus an ~8 MiB margin, and refuses rather than filling the disk.
+
+**Fixes.**
+
+- Free space on the target volume, or point `LIBGEN_MCP_DOWNLOAD_DIR` (or the per-call `path`) at a volume with more room.
+- Remove stale `.part` files left by interrupted downloads if you do not intend to resume them (they live in the download directory, named `.libgen-mcp-*.part`).
+- Under Docker, make sure the mounted download volume is large enough and writable by UID `10001`.

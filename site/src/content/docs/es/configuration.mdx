@@ -1,6 +1,48 @@
 ---
 title: Configuración
-description: Configura el servidor LibGen MCP.
+description: Todas las variables de entorno de libgen-mcp, con su valor por defecto, rango válido y significado.
 ---
 
-Placeholder page. Content will be added in a later task.
+`libgen-mcp` se configura por completo mediante variables de entorno. Todas las variables son opcionales: un valor vacío o sin definir usa el valor por defecto documentado. Una variable presente pero mal formada (un número incorrecto, un valor fuera de rango, un directorio no escribible, un nombre de fuente desconocido) hace que el servidor **falle de inmediato al arrancar** con un error explicativo, en lugar de recurrir silenciosamente al valor por defecto.
+
+Fija estas variables en el bloque `env` de tu cliente MCP (consulta [Primeros pasos](/libgen-mcp/es/getting-started/)), en tu shell, o con flags `-e` en `docker run`.
+
+## Referencia
+
+| Variable                              | Por defecto                                              | Rango / valores permitidos                                              | Significado                                                                                                                                                                                                      |
+| ------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MIRROR`                       | *(autodescubrimiento)*                                   | URL `http`/`https` con host                                            | Fija un único mirror, p. ej. `https://libgen.li`, y omite el autodescubrimiento. Las barras finales se recortan. Cuando está vacía, los mirrors se descubren y se cachean (ver [Arquitectura](/libgen-mcp/es/architecture/)). |
+| `LIBGEN_MCP_DOWNLOAD_DIR`             | `~/Downloads`                                            | Cualquier ruta de directorio escribible                                | Directorio de destino por defecto para `download`. Se crea si falta y se comprueba su escritura al arrancar. El argumento `path` de la herramienta `download` lo sobreescribe en cada llamada.                   |
+| `LIBGEN_MCP_TIMEOUT`                  | `30s`                                                    | `(0, 10m]`, duración de Go                                              | Tiempo de espera HTTP por petición para búsqueda, detalles y resolución de enlaces (p. ej. `45s`, `1m`). **No** limita las descargas en streaming, que se rigen por el contexto de la petición.                  |
+| `LIBGEN_MCP_LOG_LEVEL`                | `info`                                                   | `debug`, `info`, `warn`, `error`                                        | Nivel mínimo de log. Los logs van a stderr (stdout se reserva para el transporte stdio). Sube a `debug` para trazar los intentos por mirror.                                                                     |
+| `LIBGEN_MCP_RATE_RPS`                 | `1`                                                      | `(0, 20]`, float                                                        | Peticiones salientes por segundo permitidas (tasa de recarga del token-bucket) en todas las peticiones a mirrors y descargas.                                                                                    |
+| `LIBGEN_MCP_RATE_BURST`               | `1`                                                      | `[1, 100]`, int                                                         | Tamaño máximo de ráfaga del limitador de tasa — cuántas peticiones pueden dispararse seguidas antes de estrangular a `LIBGEN_MCP_RATE_RPS`.                                                                      |
+| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`       | `0` (sin límite)                                         | `[0, 53687091200]` (0–50 GiB), int                                      | Tamaño máximo de una sola descarga en bytes. `0` desactiva el límite. Se aplica primero desde `Content-Length` y de nuevo durante el streaming, de modo que una longitud falsa o ausente también se detecta.    |
+| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `2`                                                      | `[1, 16]`, int                                                         | Número de descargas que pueden ejecutarse a la vez. Las descargas extra hacen cola en un semáforo hasta que se libera un hueco.                                                                                  |
+| `LIBGEN_MCP_RETRY_ATTEMPTS`           | `3`                                                      | `[1, 10]`, int                                                          | Número máximo de pasadas sobre la lista de mirrors para una petición de página antes de rendirse. Solo los fallos transitorios (red/timeout/5xx/429) provocan una pasada de reintento; un 4xx permanente hace failover sin reintentar. |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL`          | `mail@jmrp.io`                                           | Debe contener `@` y un dominio con un `.`                              | Email de contacto enviado a la API de [Unpaywall](https://unpaywall.org) en cada consulta de artículo (la API lo exige). Fija tu propia dirección para que las peticiones se te atribuyan a ti y no al mantenedor por defecto. |
+| `LIBGEN_MCP_SCIHUB_HOSTS`             | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Hosts simples separados por comas (sin esquema, sin ruta); al menos uno | Hosts de mirror de Sci-Hub ordenados que se prueban al resolver un artículo por DOI. La fuente construye `https://<host>/<doi>` por sí misma, así que cada entrada debe ser un host simple. Recorre la lista hasta que uno sirva una página de artículo. |
+| `LIBGEN_MCP_SOURCES`                  | *(todas activas)*                                        | Subconjunto separado por comas de `unpaywall`, `scihub`, `libgen`, `randombook` | Restringe qué fuentes de descarga están activas. Vacío significa todas activas. Los nombres desconocidos se rechazan al arrancar. El orden en la variable no importa — el orden de la cadena es fijo (ver más abajo). |
+
+## Notas sobre variables concretas
+
+### `LIBGEN_MIRROR`
+
+Cuando se define, este mirror se usa como el único mirror preferido y se coloca primero. Debe parsearse como una URL `http`/`https` con host, de lo contrario el arranque falla. Déjala sin definir para que el servidor descubra los mirrors vivos actuales y haga failover entre ellos automáticamente.
+
+### `LIBGEN_MCP_DOWNLOAD_DIR`
+
+Al arrancar, el directorio se crea (con modo `0750`) si no existe y se escribe y elimina un archivo temporal para confirmar que es escribible. Bajo Docker, el contenedor se ejecuta como UID `10001`, así que un directorio de host montado debe ser escribible por ese usuario.
+
+### `LIBGEN_MCP_UNPAYWALL_EMAIL`
+
+Solo la usa la fuente `unpaywall` (DOIs de artículos). El valor por defecto es la dirección del mantenedor; se recomienda fijar la tuya y, en uso de alto volumen, la etiqueta de la API de Unpaywall lo espera. El valor se comprueba superficialmente (debe contener `@` y un dominio con punto) pero no se verifica su entregabilidad.
+
+### `LIBGEN_MCP_SOURCES` y la cadena de fuentes
+
+La cadena de descarga siempre se ejecuta en el orden fijo `unpaywall → scihub → libgen → randombook`. Cada fuente declara qué elementos admite, de modo que en la práctica:
+
+- **Los libros** (identificados por `md5`) se prueban contra `libgen`, luego `randombook`.
+- **Los artículos** (identificados por `doi`) se prueban contra `unpaywall`, luego `scihub`.
+
+`LIBGEN_MCP_SOURCES` solo elimina fuentes de esa cadena; nunca la reordena. Por ejemplo, `LIBGEN_MCP_SOURCES=libgen` desactiva las fuentes de artículos y el fallback `randombook`, dejando solo la fuente principal de libros de LibGen. Consulta [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo se construye y recorre la cadena.
