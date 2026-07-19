@@ -95,6 +95,9 @@ test-short: ## Run tests without the coverage profile
 test-race: ## Run all tests under the race detector
 	go test -count=1 -race $(PKGS)
 
+test-e2e: ## Run the gated live e2e suite against the real site (needs network)
+	LIBGEN_E2E=1 go test -tags e2e -timeout 600s -count=1 ./test/e2e/
+
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
 
