@@ -1,4 +1,6 @@
-# libgen-mcp
+<p align="center">
+  <img src="assets/banner.png" alt="libgen-mcp" width="100%">
+</p>
 
 <p align="center">
 

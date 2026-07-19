@@ -26,6 +26,43 @@ export default defineConfig({
         alt: "LibGen MCP",
       },
       favicon: "/favicon.svg",
+      head: [
+        {
+          tag: "link",
+          attrs: {
+            rel: "icon",
+            type: "image/png",
+            href: "/libgen-mcp/favicon.png",
+            sizes: "any",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image",
+            content: "https://jmrplens.github.io/libgen-mcp/og.png",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:width", content: "1200" },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:height", content: "630" },
+        },
+        {
+          tag: "meta",
+          attrs: { name: "twitter:card", content: "summary_large_image" },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image",
+            content: "https://jmrplens.github.io/libgen-mcp/og.png",
+          },
+        },
+      ],
       social: [
         {
           icon: "github",
