@@ -12,5 +12,11 @@ func freeSpace(dir string) (uint64, error) {
 	if err := unix.Statfs(dir, &st); err != nil {
 		return 0, err
 	}
+	// Bsize is signed (int64) on some platforms and unsigned on others; a
+	// non-positive block size is nonsensical, so guard before the uint64
+	// conversion (this also proves non-negativity to the overflow checker).
+	if st.Bsize <= 0 {
+		return 0, nil
+	}
 	return st.Bavail * uint64(st.Bsize), nil
 }
