@@ -1,0 +1,25 @@
+# Smithery configuration — https://smithery.ai/docs/config
+# libgen-mcp is a stdio MCP server distributed as a static binary or a Docker
+# image. No account, API key, or credentials are required; every option below
+# is optional.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      unpaywallEmail:
+        type: string
+        description: Optional contact email for the Unpaywall API, used to resolve open-access articles by DOI.
+      downloadDir:
+        type: string
+        description: Optional directory where downloaded files are saved (defaults to ~/Downloads).
+  commandFunction: |-
+    (config) => ({
+      command: 'docker',
+      args: ['run', '-i', '--rm', 'ghcr.io/jmrplens/libgen-mcp:latest'],
+      env: Object.assign(
+        {},
+        config.unpaywallEmail ? { LIBGEN_MCP_UNPAYWALL_EMAIL: config.unpaywallEmail } : {},
+        config.downloadDir ? { LIBGEN_MCP_DOWNLOAD_DIR: config.downloadDir } : {}
+      )
+    })
