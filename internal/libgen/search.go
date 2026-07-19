@@ -277,7 +277,11 @@ func parseDownloads(cell *html.Node, base string, r *Result) {
 	for _, a := range elements(cell, "a") {
 		href := attr(a, "href")
 		label := attr(a, "title")
-		if strings.Contains(href, "ads.php?md5=") {
+		// The primary libgen download link is rendered as ads.php?md5= for most
+		// topics, but the comics topic (and the occasional row elsewhere) renders it
+		// as a direct get.php?md5= link instead. Recognize either form so every
+		// topic yields the md5 and a "libgen" download option.
+		if strings.Contains(href, "ads.php?md5=") || strings.Contains(href, "get.php?md5=") {
 			r.MD5 = strings.ToLower(queryParam(href, "md5"))
 			if strings.HasPrefix(href, "/") {
 				href = base + href

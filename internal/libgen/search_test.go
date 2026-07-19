@@ -237,6 +237,197 @@ func TestParseSearchLayoutChanged(t *testing.T) {
 	}
 }
 
+// TestParseAllTopics parses every topic fixture and asserts that each non-empty
+// page yields at least one well-formed result (valid 32-hex md5, non-empty title,
+// at least one download option) and exposes a TotalFiles counter. The empty
+// fixture must parse to zero results. The comics fixture is the regression guard:
+// libgen renders its primary download link as get.php?md5= (not ads.php?md5=), so
+// before the parser fix comics rows carried an empty md5 and this test failed.
+func TestParseAllTopics(t *testing.T) {
+	cases := []struct {
+		name    string
+		fixture string
+		empty   bool
+	}{
+		{"nonfiction", "search_books.html", false},
+		{"articles", "search_articles.html", false},
+		{"fiction", "search_fiction.html", false},
+		{"magazines", "search_magazines.html", false},
+		{"comics", "search_comics.html", false},
+		{"standards", "search_standards.html", false},
+		{"fiction_rus", "search_fiction_rus.html", false},
+		{"empty", "search_empty.html", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page := parseFixture(t, tc.fixture)
+			if tc.empty {
+				if len(page.Results) != 0 {
+					t.Fatalf("%s: results = %d, want 0", tc.fixture, len(page.Results))
+				}
+				return
+			}
+			assertTopicPage(t, tc.fixture, page)
+		})
+	}
+}
+
+// assertTopicPage checks a non-empty topic page: it must advertise a TotalFiles
+// counter, hold at least one fully-formed result (valid 32-hex md5, non-empty
+// title, at least one download option), and expose an md5 for the vast majority of
+// its rows. A handful of libgen rows genuinely lack a recorded title, so full
+// validity is counted rather than demanded of every row; for comics the get.php
+// regression makes every md5 empty, so both the zero-valid and the majority checks
+// fail exactly when the parser fix is missing.
+func assertTopicPage(t *testing.T, fixture string, page *SearchPage) {
+	t.Helper()
+	if len(page.Results) == 0 {
+		t.Fatalf("%s: 0 results, want >= 1", fixture)
+	}
+	if page.TotalFiles == "" {
+		t.Errorf("%s: TotalFiles is empty", fixture)
+	}
+	var valid, withMD5 int
+	for _, r := range page.Results {
+		ok := md5Re.MatchString(r.MD5)
+		if ok {
+			withMD5++
+		}
+		if ok && r.Title != "" && len(r.Downloads) > 0 {
+			valid++
+		}
+	}
+	if valid == 0 {
+		t.Errorf("%s: no fully-formed result (valid md5 + title + download)", fixture)
+	}
+	if withMD5*4 < len(page.Results)*3 {
+		t.Errorf("%s: only %d/%d results have a valid md5", fixture, withMD5, len(page.Results))
+	}
+}
+
+// TestSearchParamsAllColumns verifies that values() maps every search_in column to
+// its single-letter libgen code, both individually and combined in one query.
+func TestSearchParamsAllColumns(t *testing.T) {
+	want := map[string]string{
+		"title":     "t",
+		"author":    "a",
+		"series":    "s",
+		"year":      "y",
+		"publisher": "p",
+		"isbn":      "i",
+	}
+	for col, letter := range want {
+		t.Run(col, func(t *testing.T) {
+			v := SearchParams{Query: "x", SearchIn: []string{col}}.values()
+			if got := v["columns[]"]; len(got) != 1 || got[0] != letter {
+				t.Errorf("search_in %q => columns[] = %v, want [%q]", col, got, letter)
+			}
+		})
+	}
+	all := []string{"title", "author", "series", "year", "publisher", "isbn"}
+	v := SearchParams{Query: "x", SearchIn: all}.values()
+	got := v["columns[]"]
+	if len(got) != len(all) {
+		t.Fatalf("combined columns[] = %v, want %d entries", got, len(all))
+	}
+	for i, col := range all {
+		if got[i] != want[col] {
+			t.Errorf("combined columns[][%d] = %q, want %q (%s)", i, got[i], want[col], col)
+		}
+	}
+}
+
+// TestSearchParamsOrderPagination verifies that every valid order maps to its
+// libgen order code and that order_mode, res and page are emitted when set and
+// omitted when left at their zero values.
+func TestSearchParamsOrderPagination(t *testing.T) {
+	orders := map[string]string{
+		"id":         "f_id",
+		"time_added": "time_added",
+		"title":      "title",
+		"author":     "author",
+		"year":       "year",
+		"size":       "filesize",
+	}
+	for order, code := range orders {
+		t.Run("order_"+order, func(t *testing.T) {
+			p := SearchParams{Query: "x", Order: order, OrderMode: "desc"}
+			if err := p.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v", err)
+			}
+			v := p.values()
+			if v.Get("order") != code {
+				t.Errorf("order %q => %q, want %q", order, v.Get("order"), code)
+			}
+			if v.Get("ordermode") != "desc" {
+				t.Errorf("ordermode = %q, want desc", v.Get("ordermode"))
+			}
+		})
+	}
+
+	// Full pagination: res and page emitted verbatim, ascending order mode.
+	full := SearchParams{Query: "x", Order: "size", OrderMode: "asc", ResultsPerPage: 100, Page: 3}.values()
+	if full.Get("res") != "100" || full.Get("page") != "3" || full.Get("ordermode") != "asc" || full.Get("order") != "filesize" {
+		t.Errorf("full pagination values = %v", full)
+	}
+
+	// Page 1 is the default and must be omitted, unlike res.
+	first := SearchParams{Query: "x", ResultsPerPage: 25, Page: 1}.values()
+	if _, ok := first["page"]; ok {
+		t.Errorf("page 1 should be omitted, values = %v", first)
+	}
+	if first.Get("res") != "25" {
+		t.Errorf("res = %q, want 25", first.Get("res"))
+	}
+
+	// Nothing requested: order/ordermode/res/page all omitted.
+	none := SearchParams{Query: "x"}.values()
+	for _, k := range []string{"order", "ordermode", "res", "page"} {
+		if _, ok := none[k]; ok {
+			t.Errorf("values() includes %q that was not requested", k)
+		}
+	}
+}
+
+// TestParseDownloadOptions verifies the shape of the download options list. On the
+// nonfiction fixture the first option is the "libgen" ads.php link (absolute) and
+// the external mirrors (Anna's Archive, libgen.pw, Randombook) are captured with
+// their labels. On the comics fixture the "libgen" option is the get.php link,
+// which the parser must recognize and absolutize like ads.php.
+func TestParseDownloadOptions(t *testing.T) {
+	books := parseFixture(t, "search_books.html")
+	if len(books.Results) == 0 {
+		t.Fatal("0 results in the books fixture")
+	}
+	first := books.Results[0]
+	if first.Downloads[0].Label != "libgen" ||
+		!strings.HasPrefix(first.Downloads[0].URL, "https://libgen.li/ads.php?md5=") {
+		t.Errorf("books first download = %+v, want libgen ads.php", first.Downloads[0])
+	}
+	labels := map[string]bool{}
+	for _, d := range first.Downloads {
+		labels[d.Label] = true
+	}
+	for _, want := range []string{"anna's archive", "libgen.pw", "Randombook"} {
+		if !labels[want] {
+			t.Errorf("books first result missing external mirror %q; labels = %v", want, labels)
+		}
+	}
+
+	comics := parseFixture(t, "search_comics.html")
+	if len(comics.Results) == 0 {
+		t.Fatal("0 results in the comics fixture")
+	}
+	c := comics.Results[0]
+	if c.Downloads[0].Label != "libgen" ||
+		!strings.HasPrefix(c.Downloads[0].URL, "https://libgen.li/get.php?md5=") {
+		t.Errorf("comics first download = %+v, want libgen get.php", c.Downloads[0])
+	}
+	if !md5Re.MatchString(c.MD5) {
+		t.Errorf("comics first result md5 = %q, want valid 32-hex", c.MD5)
+	}
+}
+
 // TestClientSearch verifies ClientSearch.
 func TestClientSearch(t *testing.T) {
 	fixture, _ := os.ReadFile("testdata/search_books.html")
