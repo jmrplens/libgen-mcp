@@ -9,8 +9,8 @@
 ![Platform](https://img.shields.io/badge/Windows%20%7C%20Linux%20%7C%20macOS-amd64%20%26%20arm64-lightgrey?style=flat&logo=windows-terminal&logoColor=white)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_libgen-mcp&metric=alert_status)](https://sonarcloud.io/summary/overall?id=jmrplens_libgen-mcp)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_libgen-mcp&metric=coverage)](https://sonarcloud.io/summary/overall?id=jmrplens_libgen-mcp)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jmrplens/libgen-mcp)](https://goreportcard.com/report/github.com/jmrplens/libgen-mcp)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jmrplens/libgen-mcp.svg)](https://pkg.go.dev/github.com/jmrplens/libgen-mcp)
+[![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/libgen-mcp)
 
 </p>
 

@@ -107,7 +107,10 @@ jobs:
             exit 0
           fi
           git commit -m "chore: pin server.json for v${VERSION}"
-          git push origin main
+          # main is protected by a ruleset; the github-actions bot is expected to
+          # bypass it. If a push is ever rejected, warn but don't fail the release
+          # (the pinned SHAs can then be applied via a PR).
+          git push origin main || echo "::warning::Could not push pinned server.json to protected main; apply it via a PR."
 
   docker:
     name: Docker

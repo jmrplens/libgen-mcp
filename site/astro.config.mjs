@@ -157,7 +157,12 @@ const jsonLd = JSON.stringify({
 				priceCurrency: "USD",
 			},
 			author: { "@id": authorId },
-			sameAs: [`${fullUrl}/`, repositoryUrl],
+			sameAs: [
+				`${fullUrl}/`,
+				repositoryUrl,
+				"https://cursor.directory/plugins/libgen-mcp",
+				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
+			],
 		},
 		{
 			"@type": "SoftwareSourceCode",
