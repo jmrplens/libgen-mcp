@@ -186,6 +186,102 @@ func TestGetFailsOverOnPermanent(t *testing.T) {
 	}
 }
 
+// TestGetContextCanceled: a request whose context is already canceled must fail
+// at the limiter wait without reaching any mirror.
+func TestGetContextCanceled(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := c.get(ctx, "/index.php", nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Errorf("mirror was hit %d times, want 0 (canceled before the request)", got)
+	}
+}
+
+// TestGetContextCanceledDuringBackoff: after a transient failure the client waits
+// a backoff before retrying; a context that expires during that wait aborts with
+// the context error rather than looping.
+func TestGetContextCanceledDuringBackoff(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	c.retry = 3
+	c.backoffBase = 500 * time.Millisecond // long enough to outlast the ctx below
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	if _, _, err := c.get(ctx, "/index.php", nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded from the backoff wait", err)
+	}
+}
+
+// TestGetTransientTransportError: a connection error (the server is closed, so
+// the port refuses connections) is a transient failure and surfaces as
+// ErrAllMirrorsFailed, not ErrRequestRejected.
+func TestGetTransientTransportError(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close() // now deadURL refuses connections: a transport error, not an HTTP status
+	c := newTestClient(staticMirrors{deadURL})
+	_, _, err := c.get(context.Background(), "/index.php", nil)
+	if !errors.Is(err, ErrAllMirrorsFailed) {
+		t.Fatalf("err = %v, want ErrAllMirrorsFailed (transport error is transient)", err)
+	}
+}
+
+// TestGetPermFailedSkippedOnRetry: a permanently-failed mirror (404) must stay
+// out of later retry passes triggered by a second mirror's transient failure.
+// The permanent mirror is queried exactly once even though a retry pass runs.
+func TestGetPermFailedSkippedOnRetry(t *testing.T) {
+	var permHits, transHits atomic.Int32
+	perm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		permHits.Add(1)
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer perm.Close()
+	trans := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		transHits.Add(1)
+		http.Error(w, "temporarily down", http.StatusServiceUnavailable)
+	}))
+	defer trans.Close()
+
+	c := newTestClient(staticMirrors{perm.URL, trans.URL})
+	c.retry = 3
+	if _, _, err := c.get(context.Background(), "/index.php", nil); err == nil {
+		t.Fatal("get() should fail when one mirror is permanent and the other is transient")
+	}
+	if got := permHits.Load(); got != 1 {
+		t.Errorf("permanent mirror hits = %d, want 1 (skipped on retry passes)", got)
+	}
+	if got := transHits.Load(); got < 2 {
+		t.Errorf("transient mirror hits = %d, want >= 2 (retried across passes)", got)
+	}
+}
+
+// TestWithSourcesOverridesChain verifies the WithSources option replaces the
+// config-built download-source chain verbatim and in order.
+func TestWithSourcesOverridesChain(t *testing.T) {
+	cfg := &config.Config{
+		Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
+		MaxConcurrentDownloads: 1, UnpaywallEmail: "mail@jmrp.io", ScihubHosts: []string{"sci-hub.se"},
+	}
+	a := stubSource{name: "alpha", supports: true}
+	b := stubSource{name: "beta", supports: true}
+	c := New(staticMirrors{}, cfg, WithSources(a, b))
+	if got := sourceNames(c); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Errorf("chain = %v, want [alpha beta]", got)
+	}
+}
+
 // TestCooldownSkip: after failing once, the bad mirror enters cooldown; the
 // second call must skip it and not query it again (bad mirror hits == 1).
 func TestCooldownSkip(t *testing.T) {

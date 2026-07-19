@@ -5,6 +5,7 @@ import (
 	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -306,6 +307,188 @@ func TestGetDetailsToolValidation(t *testing.T) {
 		if !res.IsError {
 			t.Errorf("args %v should return a tool error", args)
 		}
+	}
+}
+
+// TestGetDetailsToolByID exercises the id lookup branch of the details handler:
+// an edition id (default object), a file id (object=file), and a rejected object.
+func TestGetDetailsToolByID(t *testing.T) {
+	session := newSession(t)
+	ctx := context.Background()
+
+	edRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_details",
+		Arguments: map[string]any{"id": "138281637"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edRes.IsError {
+		t.Fatalf("get_details by edition id error: %v", edRes.Content)
+	}
+	edData, err := json.Marshal(edRes.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(edData), "edition") {
+		t.Errorf("edition lookup output missing edition: %s", edData)
+	}
+
+	fileRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_details",
+		Arguments: map[string]any{"id": "93485370", "object": "file"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileRes.IsError {
+		t.Fatalf("get_details by file id error: %v", fileRes.Content)
+	}
+
+	badRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "get_details",
+		Arguments: map[string]any{"id": "1", "object": "chapter"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !badRes.IsError {
+		t.Error("get_details with an invalid object should be a tool error")
+	}
+}
+
+// TestGetDetailsToolBadMD5 verifies the tool rejects a syntactically invalid md5
+// (not 32 hex chars) before any lookup.
+func TestGetDetailsToolBadMD5(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "get_details",
+		Arguments: map[string]any{"md5": "not-a-valid-md5"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Error("get_details with a malformed md5 should be a tool error")
+	}
+}
+
+// TestDownloadToolBadMD5 verifies the tool rejects a syntactically invalid md5.
+func TestDownloadToolBadMD5(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "xyz"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Error("download with a malformed md5 should be a tool error")
+	}
+}
+
+// md5ErrSource is a DownloadSource that supports md5 items but always fails to
+// resolve, so the download handler's error path can be exercised without a network.
+type md5ErrSource struct{}
+
+func (md5ErrSource) Name() string                 { return "boom" }
+func (md5ErrSource) Supports(it libgen.Item) bool { return it.MD5 != "" }
+func (md5ErrSource) Resolve(context.Context, libgen.Item) (libgen.Resolved, error) {
+	return libgen.Resolved{}, errors.New("resolve failed")
+}
+
+// TestDownloadToolResolveError verifies that a source-resolution failure surfaces
+// as a tool error from the download handler.
+func TestDownloadToolResolveError(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a download whose only source fails to resolve should be a tool error")
+	}
+}
+
+// TestSearchToolEmptyResults verifies the handler normalizes a zero-result page to
+// an empty (non-nil) results slice.
+func TestSearchToolEmptyResults(t *testing.T) {
+	emptyHTML, err := os.ReadFile("../libgen/testdata/search_empty.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { w.Write(emptyHTML) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "nothingmatches"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("empty search returned a tool error: %v", res.Content)
+	}
+	var out struct {
+		Results []any `json:"results"`
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if out.Results == nil {
+		t.Error("results should be a non-nil empty array, got null")
+	}
+	if len(out.Results) != 0 {
+		t.Errorf("results = %d, want 0", len(out.Results))
+	}
+}
+
+// TestStringField verifies the record-field reader handles a nil map, a missing
+// key, a non-string value, and a trimmed string value.
+func TestStringField(t *testing.T) {
+	if got := stringField(nil, "title"); got != "" {
+		t.Errorf("stringField(nil) = %q, want empty", got)
+	}
+	m := map[string]any{"title": "  Go  ", "pages": 300}
+	if got := stringField(m, "title"); got != "Go" {
+		t.Errorf("stringField(title) = %q, want %q", got, "Go")
+	}
+	if got := stringField(m, "pages"); got != "" {
+		t.Errorf("stringField(non-string) = %q, want empty", got)
+	}
+	if got := stringField(m, "absent"); got != "" {
+		t.Errorf("stringField(absent) = %q, want empty", got)
+	}
+}
+
+// TestBookMetaEmptyReturnsNil verifies bookMeta returns nil when the record lookup
+// yields no usable bibliographic fields, so naming falls back to the md5.
+func TestBookMetaEmptyReturnsNil(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		// A file record with no title/author/year/extension and no related edition.
+		_, _ = w.Write([]byte(`{"93485370":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	if meta := bookMeta(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee"); meta != nil {
+		t.Errorf("bookMeta() = %+v, want nil (no usable fields)", meta)
 	}
 }
 

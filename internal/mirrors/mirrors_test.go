@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // TestParseFixture verifies ParseFixture.
@@ -159,6 +161,33 @@ func TestManagerRediscoversAfterTTL(t *testing.T) {
 	_ = m.Mirrors(context.Background())
 	if hits != 2 {
 		t.Fatalf("after TTL expiry: hits = %d, want re-discovery (2)", hits)
+	}
+}
+
+// TestNewManager verifies the Manager constructor: the preferred mirror comes
+// from the config when set, and defaults to DefaultPreferred when the config
+// leaves it empty.
+func TestNewManager(t *testing.T) {
+	m, err := NewManager(&config.Config{Mirror: "https://libgen.la", Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	if m.Preferred != "https://libgen.la" {
+		t.Errorf("Preferred = %q, want the configured mirror", m.Preferred)
+	}
+	if m.SourceURL != DefaultSourceURL {
+		t.Errorf("SourceURL = %q, want %q", m.SourceURL, DefaultSourceURL)
+	}
+	if m.CachePath == "" {
+		t.Error("CachePath is empty, want a path under the OS cache dir")
+	}
+
+	def, err := NewManager(&config.Config{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+	if def.Preferred != DefaultPreferred {
+		t.Errorf("Preferred = %q, want DefaultPreferred %q", def.Preferred, DefaultPreferred)
 	}
 }
 

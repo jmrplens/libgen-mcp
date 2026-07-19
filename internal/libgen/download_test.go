@@ -416,6 +416,77 @@ func TestDownloadRejectsHTMLViaMagicBytes(t *testing.T) {
 	}
 }
 
+// TestDownloadRejectsErrorPageFixture verifies the magic-byte HTML sniff against
+// the captured error_page.html fixture served as application/octet-stream (no
+// text/html Content-Type): the sniffer must still reject it and leave no file.
+func TestDownloadRejectsErrorPageFixture(t *testing.T) {
+	errPage, err := os.ReadFile("testdata/error_page.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := md5CDNServer(t, testMD5, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream") // masquerades as the file
+		_, _ = w.Write(errPage)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+	if _, derr := c.Download(context.Background(), testMD5, dir, "", nil); derr == nil {
+		t.Fatal("an HTML error page served as octet-stream should be rejected")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("%d entries left in dir, want 0 (neither file nor temp)", len(entries))
+	}
+}
+
+// TestDownloadResumeServerError verifies resumeDecision's failure branch: with a
+// partial already on disk, a mirror that answers neither 206 nor 200 (here 500)
+// is a download failure, and the partial is kept for a later retry.
+func TestDownloadResumeServerError(t *testing.T) {
+	full := []byte("%PDF-1.4 " + strings.Repeat("resume error chunk ", 40))
+	want := md5Hex(full)
+	half := len(full) / 2
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+	if err := os.WriteFile(partPathFor(dir, want), full[:half], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
+		t.Fatal("a resume that gets a 500 (neither 206 nor 200) should fail")
+	}
+	if _, statErr := os.Stat(partPathFor(dir, want)); os.IsNotExist(statErr) {
+		t.Error("the partial should be kept after a transient resume failure")
+	}
+}
+
+// TestDownloadRenameError verifies that a rename failure (the destination name is
+// occupied by a non-empty directory) surfaces as an error after a valid transfer.
+func TestDownloadRenameError(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("rename clash ", 64))
+	want := md5Hex(payload)
+	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	})
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+	// Occupy the destination name ("<md5>") with a non-empty directory so the final
+	// os.Rename(part, dest) cannot succeed.
+	dest := filepath.Join(dir, want)
+	if err := os.MkdirAll(filepath.Join(dest, "occupied"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
+		t.Fatal("rename onto a non-empty directory should fail")
+	}
+}
+
 // TestDownloadSizeCapContentLength verifies DownloadSizeCapContentLength.
 func TestDownloadSizeCapContentLength(t *testing.T) {
 	// Payload small enough to carry an explicit Content-Length header, but larger

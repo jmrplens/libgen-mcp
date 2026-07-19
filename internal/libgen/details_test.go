@@ -71,6 +71,31 @@ func TestDetailsByID(t *testing.T) {
 	}
 }
 
+// TestDetailsByIDNotFound verifies that a by-id lookup whose json.php response is
+// an empty array (`[]`, no record) returns an error rather than a nil record.
+func TestDetailsByIDNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, err := c.DetailsByID(context.Background(), "e", "999999"); err == nil {
+		t.Error("DetailsByID() for a missing id should fail")
+	}
+}
+
+// TestDecodeObjectsGarbage verifies that a json.php body that is neither an
+// object map nor an empty array is surfaced as an "unexpected response" error.
+func TestDecodeObjectsGarbage(t *testing.T) {
+	if _, err := decodeObjects([]byte(`not json at all`)); err == nil {
+		t.Error("decodeObjects() on a non-JSON body should fail")
+	}
+	// A non-empty array is also unexpected (the API returns an object map or []).
+	if _, err := decodeObjects([]byte(`[1,2,3]`)); err == nil {
+		t.Error("decodeObjects() on a non-empty array should fail")
+	}
+}
+
 // TestDetailsNotFound verifies DetailsNotFound.
 func TestDetailsNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

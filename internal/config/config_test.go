@@ -334,6 +334,49 @@ func TestValidateInvalid(t *testing.T) {
 	}
 }
 
+// TestValidateEmptyDownloadDir verifies that an empty download directory is
+// rejected by Validate (the empty-string guard in validateDownloadDir).
+func TestValidateEmptyDownloadDir(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.DownloadDir = ""
+	if cfg.Validate() == nil {
+		t.Fatal("Validate() with an empty DownloadDir should fail")
+	}
+}
+
+// TestValidateReadOnlyDownloadDir verifies that a directory that exists but is
+// not writable is rejected: MkdirAll succeeds on the existing dir, then the
+// write-test CreateTemp fails.
+func TestValidateReadOnlyDownloadDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory write permissions")
+	}
+	dir := filepath.Join(t.TempDir(), "ro")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // restore write bits so TempDir cleanup can remove the dir
+	cfg := validConfig(t)
+	cfg.DownloadDir = dir
+	if cfg.Validate() == nil {
+		t.Fatal("Validate() with a read-only DownloadDir should fail")
+	}
+}
+
+// TestLoadHomeDirError verifies that when LIBGEN_MCP_DOWNLOAD_DIR is unset and no
+// home directory can be resolved, Load fails instead of building an unusable
+// default download path.
+func TestLoadHomeDirError(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", "")
+	t.Setenv("HOME", "")
+	if _, err := os.UserHomeDir(); err == nil {
+		t.Skip("os.UserHomeDir still resolves a home directory on this platform")
+	}
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() with no home dir and no LIBGEN_MCP_DOWNLOAD_DIR should fail")
+	}
+}
+
 // TestValidateUnwritableDownloadDir verifies ValidateUnwritableDownloadDir.
 func TestValidateUnwritableDownloadDir(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "notadir")

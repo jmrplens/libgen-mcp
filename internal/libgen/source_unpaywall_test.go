@@ -84,6 +84,33 @@ func TestUnpaywallRawSlashInPath(t *testing.T) {
 	}
 }
 
+// TestUnpaywallNon200 verifies that a non-200 API response yields an error so the
+// download chain advances to the next source.
+func TestUnpaywallNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("Resolve() on a non-200 Unpaywall response should return an error")
+	}
+}
+
+// TestUnpaywallBadJSON verifies that a malformed OA response body is surfaced as a
+// decode error rather than silently treated as not-OA.
+func TestUnpaywallBadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"is_oa": not-json`))
+	}))
+	t.Cleanup(srv.Close)
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("Resolve() on a malformed Unpaywall body should return a decode error")
+	}
+}
+
 // TestUnpaywallSupports verifies that the source claims DOI-keyed items only.
 func TestUnpaywallSupports(t *testing.T) {
 	s := unpaywallSource{email: "mail@jmrp.io"}

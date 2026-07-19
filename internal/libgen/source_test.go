@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -64,6 +65,59 @@ func TestEscapeDOIPath(t *testing.T) {
 				t.Errorf("escapeDOIPath(%q) = %q, want %q", tt.doi, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestPartialKey verifies the partial-file key derivation for all three item
+// shapes: md5-keyed (historical LibGen path), DOI-keyed, and URL-only (neither
+// md5 nor DOI), each yielding a stable, filesystem-safe token.
+func TestPartialKey(t *testing.T) {
+	if got := partialKey(Item{MD5: "abc"}, Resolved{}); got != "abc" {
+		t.Errorf("partialKey(md5) = %q, want %q", got, "abc")
+	}
+	if got := partialKey(Item{DOI: "10.1/x"}, Resolved{}); !strings.HasPrefix(got, "doi-") {
+		t.Errorf("partialKey(doi) = %q, want a doi- prefix", got)
+	}
+	got := partialKey(Item{}, Resolved{FileURL: "https://cdn.example/file"})
+	if !strings.HasPrefix(got, "url-") {
+		t.Errorf("partialKey(url-only) = %q, want a url- prefix", got)
+	}
+}
+
+// TestSanitizeForPart verifies that unsafe characters in a source name are mapped
+// to '_' while ASCII letters, digits and '-' survive for embedding in a .part name.
+func TestSanitizeForPart(t *testing.T) {
+	if got := sanitizeForPart("libgen"); got != "libgen" {
+		t.Errorf("sanitizeForPart(libgen) = %q, want libgen", got)
+	}
+	if got := sanitizeForPart("a/b c.d"); got != "a_b_c_d" {
+		t.Errorf("sanitizeForPart(%q) = %q, want a_b_c_d", "a/b c.d", got)
+	}
+}
+
+// TestMirrorOf verifies the origin extraction, including the fallback that returns
+// the raw string when the URL has no parseable host.
+func TestMirrorOf(t *testing.T) {
+	if got := mirrorOf("https://cdn.example.org/path/file.pdf"); got != "https://cdn.example.org" {
+		t.Errorf("mirrorOf() = %q, want https://cdn.example.org", got)
+	}
+	if got := mirrorOf("not-a-url"); got != "not-a-url" {
+		t.Errorf("mirrorOf(no host) = %q, want the raw string", got)
+	}
+}
+
+// TestLibgenSourceResolveError verifies that when the ads.php lookup fails (the
+// mirror returns 404), libgenSource.Resolve surfaces the error so the download
+// chain can advance.
+func TestLibgenSourceResolveError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	s := libgenSource{c: c}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() should fail when ads.php cannot be fetched")
 	}
 }
 

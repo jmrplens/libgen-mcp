@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -151,6 +152,68 @@ func TestRandombookLinksError(t *testing.T) {
 	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
 	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
 		t.Fatal("Resolve() must fail when the links-by-id API reports isError:true")
+	}
+}
+
+// TestRandombookByIDNoID verifies that a by-id result object carrying an empty id
+// is treated as a layout change (ErrLayoutChanged), not a normal miss.
+func TestRandombookByIDNoID(t *testing.T) {
+	apiBase := randombookAPIServer(t, `{"result":{"id":""},"isError":false}`, `{"result":{"list":[]},"isError":false}`)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if !errors.Is(err, ErrLayoutChanged) {
+		t.Fatalf("err = %v, want ErrLayoutChanged (by-id result with no id)", err)
+	}
+}
+
+// TestRandombookLinksMissingResult verifies that a links-by-id response with no
+// result object is treated as a layout change (ErrLayoutChanged).
+func TestRandombookLinksMissingResult(t *testing.T) {
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), `{"isError":false}`)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if !errors.Is(err, ErrLayoutChanged) {
+		t.Fatalf("err = %v, want ErrLayoutChanged (links-by-id result missing)", err)
+	}
+}
+
+// TestRandombookByIDNon200 verifies that a non-200 by-id response is surfaced as
+// an error (getJSON's status gate) so the download chain falls through.
+func TestRandombookByIDNon200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	s := randombookSource{apiBase: srv.URL, http: srv.Client()}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() on a non-200 by-id response should return an error")
+	}
+}
+
+// TestRandombookByIDBadJSON verifies that a malformed by-id body is wrapped in
+// ErrLayoutChanged (the private API may have changed shape).
+func TestRandombookByIDBadJSON(t *testing.T) {
+	apiBase := randombookAPIServer(t, `{"result": not-json`, `{"result":{"list":[]},"isError":false}`)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if !errors.Is(err, ErrLayoutChanged) {
+		t.Fatalf("err = %v, want ErrLayoutChanged (malformed by-id JSON)", err)
+	}
+}
+
+// TestRandombookMirrorNon200 verifies that a discovered mirror returning a non-200
+// status is skipped (resolveViaMirror's status gate), and with no other mirror the
+// resolve fails rather than handing back a bogus URL.
+func TestRandombookMirrorNon200(t *testing.T) {
+	badMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	t.Cleanup(badMirror.Close)
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, badMirror.URL)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() should fail when the only discovered mirror returns non-200")
 	}
 }
 

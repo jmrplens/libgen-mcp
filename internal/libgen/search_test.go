@@ -428,6 +428,48 @@ func TestParseDownloadOptions(t *testing.T) {
 	}
 }
 
+// TestClientSearchValidationError verifies that Search rejects invalid parameters
+// before issuing any HTTP request (the Validate() gate in Search).
+func TestClientSearchValidationError(t *testing.T) {
+	c := newTestClient(staticMirrors{"http://127.0.0.1:0"})
+	if _, _, err := c.Search(context.Background(), SearchParams{Query: ""}); err == nil {
+		t.Fatal("Search() with an empty query should fail without touching the network")
+	}
+}
+
+// TestClientSearchAllMirrorsFailed verifies that when every mirror errors, Search
+// propagates the transport failure instead of a parsed page.
+func TestClientSearchAllMirrorsFailed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.Search(context.Background(), SearchParams{Query: "golang"}); err == nil {
+		t.Fatal("Search() should fail when every mirror is down")
+	}
+}
+
+// TestPaginatorReachUnparsable verifies that a Paginator init script whose page
+// count overflows an int yields a reach of 0 (unparsable → not truncated) rather
+// than a panic or a bogus cap. The table is present with no rows, so the page
+// parses to zero results.
+func TestPaginatorReachUnparsable(t *testing.T) {
+	const doc = `<html><body>` +
+		`<script>new Paginator("paginator_example_top", 99999999999999999999, 25, 1)</script>` +
+		`<table id="tablelibgen"></table></body></html>`
+	page, err := ParseSearch(strings.NewReader(doc), "https://libgen.li")
+	if err != nil {
+		t.Fatalf("ParseSearch() error = %v", err)
+	}
+	if page.Reachable != 0 {
+		t.Errorf("Reachable = %d, want 0 (unparsable paginator count)", page.Reachable)
+	}
+	if page.Truncated {
+		t.Errorf("Truncated = true, want false (reach 0)")
+	}
+}
+
 // TestClientSearch verifies ClientSearch.
 func TestClientSearch(t *testing.T) {
 	fixture, _ := os.ReadFile("testdata/search_books.html")
