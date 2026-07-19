@@ -1,0 +1,9 @@
+{
+    // "servers": {
+    //     "libgen-mcp": {
+    //         "type": "stdio",
+    //         "command": "${workspaceFolder}/dist/libgen-mcp",
+    //         "envFile": "${workspaceFolder}/.env"
+    //     }
+    // }
+}

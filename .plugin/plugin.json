@@ -1,0 +1,32 @@
+{
+  "$schema": "./plugin.schema.json",
+  "name": "libgen-mcp",
+  "version": "0.1.0",
+  "description": "MCP server in Go to search and download books, papers, comics and more from Library Genesis — three focused tools (search, get_details, download), one static binary, no account required.",
+  "author": {
+    "name": "José Manuel Requena Plens",
+    "url": "https://github.com/jmrplens"
+  },
+  "homepage": "https://jmrplens.github.io/libgen-mcp/",
+  "repository": "https://github.com/jmrplens/libgen-mcp",
+  "license": "MIT",
+  "logo": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/site/src/assets/logo-light.svg",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "libgen",
+    "library-genesis",
+    "go",
+    "golang",
+    "claude",
+    "cursor",
+    "llm",
+    "ai",
+    "books",
+    "ebooks",
+    "research-papers",
+    "doi"
+  ],
+  "mcpServers": "./mcp.json"
+}

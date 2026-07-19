@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "node scripts/copy-llms.mjs",
     "build": "astro build",
     "preview": "astro preview"
   },

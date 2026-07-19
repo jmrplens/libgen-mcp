@@ -1,0 +1,53 @@
+---
+// Custom Starlight <Header> override.
+// Renders Starlight's default header, then a compact group holding BOTH the
+// theme toggle and the LanguageSelect, shown only below the `md` (50rem)
+// breakpoint. Starlight hides the whole header right-group (social icons +
+// theme select + language select) on narrow viewports, leaving those controls
+// reachable only at the bottom of the hamburger drawer — below the fold on most
+// phones. This keeps light/dark and EN/ES switching one tap away in the header
+// at every viewport width, in both locales and both themes, without touching
+// the desktop layout (where the default right-group already includes both).
+import Default from "@astrojs/starlight/components/Header.astro";
+import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
+import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro";
+---
+
+<div class="lgm-header">
+  <div class="lgm-default-header"><Default><slot /></Default></div>
+  <div class="lgm-mobile-controls">
+    <ThemeSelect />
+    <LanguageSelect />
+  </div>
+</div>
+
+<style>
+  .lgm-header {
+    display: flex;
+    gap: var(--sl-nav-gap);
+    align-items: center;
+    height: 100%;
+  }
+  .lgm-default-header {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+  }
+  .lgm-mobile-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--sl-nav-gap);
+  }
+  /* Desktop (≥ md): the default header right-group already renders both the
+     theme select and the language select, so hide the mobile duplicate. */
+  @media (min-width: 50rem) {
+    .lgm-mobile-controls {
+      display: none;
+    }
+  }
+  @media print {
+    .lgm-mobile-controls {
+      display: none;
+    }
+  }
+</style>

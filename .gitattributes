@@ -1,0 +1,96 @@
+# Git Attributes — libgen-mcp
+# Enforce LF line endings for all text files (cross-platform consistency).
+
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Go source files
+*.go text eol=lf diff=golang
+*.mod text eol=lf
+*.sum text eol=lf
+
+# JavaScript / TypeScript
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+
+# Web / Astro
+*.astro text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.mdx text eol=lf
+*.svg text eol=lf
+
+# Scripts
+*.sh text eol=lf
+*.ps1 text eol=lf
+
+# Config / Data
+*.json text eol=lf
+*.jsonc text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.properties text eol=lf
+*.editorconfig text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Dotfiles and extensionless text files
+.dockerignore text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+CODEOWNERS text eol=lf
+Dockerfile text eol=lf
+LICENSE text eol=lf
+Makefile text eol=lf
+VERSION text eol=lf
+
+# Cryptographic keys
+*.asc text eol=lf
+*.pub text eol=lf
+
+# Binary files — no conversion
+*.exe binary
+*.dll binary
+*.gif binary
+*.gz binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.png binary
+*.tar binary
+*.tar.gz binary
+*.tgz binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.zip binary
+
+# Auto-generated files (GitHub language statistics, diff suppression)
+llms.txt linguist-generated=true
+llms-full.txt linguist-generated=true
+internal/**/testdata/*.json linguist-generated=true
+go.sum linguist-generated=true
+site/pnpm-lock.yaml linguist-generated=true
+
+# Files excluded from `git archive` (release tarballs)
+.github/ export-ignore
+.gitattributes export-ignore
+.gitignore export-ignore
+.editorconfig export-ignore
+.golangci.yml export-ignore
+.markdownlint-cli2.yaml export-ignore
+.goreleaser.yml export-ignore
+plan/ export-ignore
+test/ export-ignore
+docs/ export-ignore
+site/ export-ignore
+sonar-project.properties export-ignore
+CODEOWNERS export-ignore
