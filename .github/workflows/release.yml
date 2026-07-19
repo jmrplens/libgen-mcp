@@ -92,12 +92,28 @@ jobs:
       - name: Commit pinned server.json back to main
         if: ${{ github.event.repository.private == false }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_DEPLOY_KEY_B64: ${{ secrets.RELEASE_DEPLOY_KEY_B64 }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF#refs/tags/v}"
+
+          # main is protected by a ruleset. Push over SSH with a write-enabled
+          # deploy key, which the ruleset's DeployKey bypass allows.
+          if [ -z "${RELEASE_DEPLOY_KEY_B64:-}" ]; then
+            echo "::warning::RELEASE_DEPLOY_KEY_B64 not set — skipping the server.json pin-back to main."
+            exit 0
+          fi
+          KEY_FILE="${RUNNER_TEMP}/release_deploy_key"
+          KNOWN_HOSTS_FILE="${RUNNER_TEMP}/known_hosts"
+          echo "${RELEASE_DEPLOY_KEY_B64}" | base64 --decode > "${KEY_FILE}"
+          chmod 600 "${KEY_FILE}"
+          ssh-keyscan -H github.com > "${KNOWN_HOSTS_FILE}" 2>/dev/null
+
+          git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
+          git config core.sshCommand "ssh -i ${KEY_FILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${KNOWN_HOSTS_FILE}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git fetch origin main
           git checkout main
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
@@ -107,10 +123,7 @@ jobs:
             exit 0
           fi
           git commit -m "chore: pin server.json for v${VERSION}"
-          # main is protected by a ruleset; the github-actions bot is expected to
-          # bypass it. If a push is ever rejected, warn but don't fail the release
-          # (the pinned SHAs can then be applied via a PR).
-          git push origin main || echo "::warning::Could not push pinned server.json to protected main; apply it via a PR."
+          git push origin main
 
   docker:
     name: Docker
