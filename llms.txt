@@ -7,13 +7,13 @@ It provides exactly 3 MCP tools (search, get_details, download) over the libgen.
 
 Quick start:
 
-1. Pull the Docker image or download the binary for your platform from the Releases page
+1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)
 2. Add the server to your AI client configuration (see below)
 3. Start searching — no sign-up, API key or token is needed
 
 Installing for an AI assistant (headless):
 
-If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `"type": "stdio"`). The `mcpServers` form with Docker:
+If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies — see below); if you cannot determine the user's OS and architecture, the Docker form is the most portable. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `"type": "stdio"`). The `mcpServers` form with Docker:
 
 ```json
 {

@@ -17,7 +17,46 @@ there is nothing to authenticate — skip straight to installation.
 
 ## Step 1 — Choose an install method
 
-### Method A: Docker (recommended — no download, always up to date)
+### Method A: Native binary (recommended — no dependencies)
+
+A single static executable: no Docker, no Go, nothing else to install. If you
+cannot determine the user's OS and architecture, use Docker (Method B) instead.
+
+1. Download the binary for the user's platform from the latest release at
+   `https://github.com/jmrplens/libgen-mcp/releases/latest`. Asset names:
+   - `libgen-mcp-linux-amd64`
+   - `libgen-mcp-linux-arm64`
+   - `libgen-mcp-darwin-amd64`
+   - `libgen-mcp-darwin-arm64`
+   - `libgen-mcp-windows-amd64.exe`
+   - `libgen-mcp-windows-arm64.exe`
+2. Make it executable (`chmod +x`) on Linux/macOS and place it somewhere stable,
+   e.g. `/usr/local/bin/libgen-mcp`. Verify against the release `checksums.txt`.
+3. Configure (desktop clients do not inherit your shell `PATH`, so use an
+   absolute `command` path) for clients that use the `mcpServers` key (Cursor
+   `mcp.json`, Claude Desktop `claude_desktop_config.json`, Cline
+   `cline_mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "/usr/local/bin/libgen-mcp"
+    }
+  }
+}
+```
+
+For VS Code / GitHub Copilot, use the `servers` key with an explicit
+`"type": "stdio"` and the same absolute `command`.
+
+**Claude Code CLI one-liner** with the native binary:
+
+```bash
+claude mcp add libgen -- /usr/local/bin/libgen-mcp
+```
+
+### Method B: Docker (no download; pulls on first run)
 
 Requires Docker installed and running. Verify with `docker --version`. The image
 is pulled automatically on first run.
@@ -63,37 +102,6 @@ claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
 > `args` (the container runs as UID `10001`, so the host dir must be writable by
 > it).
 
-### Method B: Native binary (no Docker)
-
-1. Download the binary for the user's platform from the latest release at
-   `https://github.com/jmrplens/libgen-mcp/releases/latest`. Asset names:
-   - `libgen-mcp-linux-amd64`
-   - `libgen-mcp-linux-arm64`
-   - `libgen-mcp-darwin-amd64`
-   - `libgen-mcp-darwin-arm64`
-   - `libgen-mcp-windows-amd64.exe`
-   - `libgen-mcp-windows-arm64.exe`
-2. Make it executable (`chmod +x`) on Linux/macOS and place it somewhere stable,
-   e.g. `/usr/local/bin/libgen-mcp`. Verify against the release `checksums.txt`.
-3. Configure (desktop clients do not inherit your shell `PATH`, so use an
-   absolute `command` path):
-
-```json
-{
-  "mcpServers": {
-    "libgen": {
-      "command": "/usr/local/bin/libgen-mcp"
-    }
-  }
-}
-```
-
-Claude Code CLI with the native binary:
-
-```bash
-claude mcp add libgen -- /usr/local/bin/libgen-mcp
-```
-
 ## Step 2 — Optional environment variables
 
 All configuration is optional; the defaults work out of the box. Add entries to
@@ -122,8 +130,8 @@ Full reference: <https://jmrplens.github.io/libgen-mcp/configuration/>
 
 ## Troubleshooting
 
-- **Docker: `docker: command not found`** — fall back to Method B (native
-  binary).
+- **Docker: `docker: command not found`** — use Method A (native binary), the
+  recommended default anyway.
 - **No search results / parse errors** — a mirror may be down or have changed
   layout. Mirrors fail over automatically; retry, or pin a known-good one with
   `LIBGEN_MIRROR`. Set `LIBGEN_MCP_LOG_LEVEL=debug` to trace per-mirror attempts.

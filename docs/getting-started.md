@@ -5,32 +5,17 @@ running your first search.
 
 ## Install
 
-Pick whichever of the three methods fits your setup.
+The recommended way to install `libgen-mcp` is the **prebuilt binary**: a single
+static executable with nothing else to install — no Go toolchain, no Docker, no
+runtime. Docker and `go install` are offered as alternatives if they fit your
+setup better.
 
-### 1. `go install` (from source)
-
-Requires Go 1.26 or newer.
-
-```bash
-go install github.com/jmrplens/libgen-mcp/cmd/server@latest
-```
-
-This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke
-it as `libgen-mcp`, build it with an explicit name instead:
-
-```bash
-git clone https://github.com/jmrplens/libgen-mcp
-cd libgen-mcp
-go build -o libgen-mcp ./cmd/server
-```
-
-Make sure the resulting binary is on your `PATH`.
-
-### 2. Release binary
+### 1. Release binary (recommended)
 
 Download a prebuilt binary for your platform from the
 [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named
-`libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`).
+`libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`),
+covering Linux, macOS, and Windows on both amd64 and arm64.
 
 ```bash
 # Example: Linux amd64
@@ -40,11 +25,14 @@ chmod +x libgen-mcp
 sudo mv libgen-mcp /usr/local/bin/
 ```
 
-Each release also ships a `checksums.txt`; verify your download against it before running.
+The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothing on
+the host and runs straight away. Each release also ships a `checksums.txt`; verify your
+download against it before running.
 
-### 3. Docker
+### 2. Docker
 
-A multi-arch image is published to the GitHub Container Registry:
+Prefer containers, or want a zero-install command your client pulls on first run? A
+multi-arch image is published to the GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/jmrplens/libgen-mcp:latest
@@ -62,6 +50,25 @@ docker run --rm -p 8080:8080 \
 
 Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the
 container runs as a non-root user, so the host directory must be writable by UID `10001`.
+
+### 3. `go install` (from source)
+
+If you already have Go 1.26 or newer and prefer building from source:
+
+```bash
+go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+```
+
+This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke
+it as `libgen-mcp`, build it with an explicit name instead:
+
+```bash
+git clone https://github.com/jmrplens/libgen-mcp
+cd libgen-mcp
+go build -o libgen-mcp ./cmd/server
+```
+
+Make sure the resulting binary is on your `PATH`.
 
 ## Configure an MCP client
 

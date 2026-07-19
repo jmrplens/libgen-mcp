@@ -9,28 +9,11 @@ Esta página te guía para instalar `libgen-mcp`, conectarlo a un cliente MCP y 
 
 ## Instalación
 
-Elige el método de los tres que mejor encaje con tu configuración.
+La instalación recomendada es el **binario precompilado**: un único ejecutable estático sin nada más que instalar — sin toolchain de Go, sin Docker, sin runtime. Docker y `go install` se ofrecen como alternativas.
 
 <Tabs>
-	<TabItem label="go install">
-		Requiere Go 1.26 o posterior.
-
-		```bash
-		go install github.com/jmrplens/libgen-mcp/cmd/server@latest
-		```
-
-		Esto produce un binario llamado `server` en `$(go env GOPATH)/bin`. Si prefieres invocarlo como `libgen-mcp`, compílalo con un nombre explícito:
-
-		```bash
-		git clone https://github.com/jmrplens/libgen-mcp
-		cd libgen-mcp
-		go build -o libgen-mcp ./cmd/server
-		```
-
-		Asegúrate de que el binario resultante esté en tu `PATH`.
-	</TabItem>
-	<TabItem label="Binario de release">
-		Descarga un binario precompilado para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases). Los archivos se llaman `libgen-mcp-<os>-<arch>` (por ejemplo `libgen-mcp-linux-amd64` o `libgen-mcp-darwin-arm64`).
+	<TabItem label="Binario (recomendado)">
+		Descarga un binario precompilado para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases). Los archivos se llaman `libgen-mcp-<os>-<arch>` (por ejemplo `libgen-mcp-linux-amd64` o `libgen-mcp-darwin-arm64`), cubriendo Linux, macOS y Windows en amd64 y arm64.
 
 		```bash
 		# Ejemplo: Linux amd64
@@ -40,10 +23,10 @@ Elige el método de los tres que mejor encaje con tu configuración.
 		sudo mv libgen-mcp /usr/local/bin/
 		```
 
-		Cada release incluye también un `checksums.txt`; verifica tu descarga contra él antes de ejecutarla.
+		El binario es totalmente estático (compilado con `CGO_ENABLED=0`), así que no depende de nada en el host y se ejecuta directamente. Cada release incluye también un `checksums.txt`; verifica tu descarga contra él antes de ejecutarla.
 	</TabItem>
 	<TabItem label="Docker">
-		Se publica una imagen multi-arch en el GitHub Container Registry:
+		¿Prefieres contenedores, o un comando sin instalación que tu cliente descarga en el primer arranque? Se publica una imagen multi-arch en el GitHub Container Registry:
 
 		```bash
 		docker pull ghcr.io/jmrplens/libgen-mcp:latest
@@ -59,6 +42,23 @@ Elige el método de los tres que mejor encaje con tu configuración.
 		```
 
 		Monta un volumen con permisos de escritura para las descargas y apunta `LIBGEN_MCP_DOWNLOAD_DIR` a él; el contenedor se ejecuta como usuario sin privilegios, por lo que el directorio del host debe ser escribible por el UID `10001`.
+	</TabItem>
+	<TabItem label="go install">
+		Si ya tienes Go 1.26 o posterior y prefieres compilar desde el código fuente:
+
+		```bash
+		go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+		```
+
+		Esto produce un binario llamado `server` en `$(go env GOPATH)/bin`. Si prefieres invocarlo como `libgen-mcp`, compílalo con un nombre explícito:
+
+		```bash
+		git clone https://github.com/jmrplens/libgen-mcp
+		cd libgen-mcp
+		go build -o libgen-mcp ./cmd/server
+		```
+
+		Asegúrate de que el binario resultante esté en tu `PATH`.
 	</TabItem>
 </Tabs>
 

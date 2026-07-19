@@ -22,9 +22,22 @@ You talk to your AI assistant; it does the searching and fetching. No mirrors, M
 
 ---
 
-## Install in one click
+## Install
 
-Pick your client. Each button registers the **Docker**-based server (auto-pulls `ghcr.io/jmrplens/libgen-mcp:latest` on first run; you need [Docker](https://www.docker.com/) installed). **No token or account is required** — Library Genesis needs no credentials.
+The recommended install is a **prebuilt static binary** — no Docker, no Go, no dependencies to manage. Download the asset for your platform from the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest):
+
+```bash
+# Example: Linux amd64 (macOS, Windows and arm64 builds are on the releases page)
+curl -L -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
+chmod +x libgen-mcp && sudo mv libgen-mcp /usr/local/bin/
+```
+
+The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/arch with nothing else installed. Each release ships a `checksums.txt` to verify the download. Then register the binary with your MCP client — see [Claude Code](#claude-code-claude-mcp-add) below, or the [getting-started guide](docs/getting-started.md) for every client. **No token or account is required** — Library Genesis needs no credentials.
+
+### Prefer a one-click button? (Docker)
+
+Each button below registers the **Docker**-based server instead (auto-pulls `ghcr.io/jmrplens/libgen-mcp:latest` on first run; you need [Docker](https://www.docker.com/) installed).
 
 <table>
   <tr>

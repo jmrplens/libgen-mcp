@@ -188,12 +188,12 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	fmt.Fprintf(&b, "It provides exactly %d MCP tools (search, get_details, download) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList))
 
 	b.WriteString("Quick start:\n\n")
-	b.WriteString("1. Pull the Docker image or download the binary for your platform from the Releases page\n")
+	b.WriteString("1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)\n")
 	b.WriteString("2. Add the server to your AI client configuration (see below)\n")
 	b.WriteString("3. Start searching — no sign-up, API key or token is needed\n\n")
 
 	b.WriteString("Installing for an AI assistant (headless):\n\n")
-	b.WriteString("If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `\"type\": \"stdio\"`). The `mcpServers` form with Docker:\n\n")
+	b.WriteString("If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies — see below); if you cannot determine the user's OS and architecture, the Docker form is the most portable. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `\"type\": \"stdio\"`). The `mcpServers` form with Docker:\n\n")
 	b.WriteString("```json\n")
 	b.WriteString("{\n")
 	b.WriteString("  \"mcpServers\": {\n")
