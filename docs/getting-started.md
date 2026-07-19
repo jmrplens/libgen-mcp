@@ -1,0 +1,155 @@
+# Getting started
+
+This page walks you through installing `libgen-mcp`, wiring it into an MCP client, and
+running your first search.
+
+## Install
+
+Pick whichever of the three methods fits your setup.
+
+### 1. `go install` (from source)
+
+Requires Go 1.26 or newer.
+
+```bash
+go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+```
+
+This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke
+it as `libgen-mcp`, build it with an explicit name instead:
+
+```bash
+git clone https://github.com/jmrplens/libgen-mcp
+cd libgen-mcp
+go build -o libgen-mcp ./cmd/server
+```
+
+Make sure the resulting binary is on your `PATH`.
+
+### 2. Release binary
+
+Download a prebuilt binary for your platform from the
+[GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named
+`libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`).
+
+```bash
+# Example: Linux amd64
+curl -L -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
+chmod +x libgen-mcp
+sudo mv libgen-mcp /usr/local/bin/
+```
+
+Each release also ships a `checksums.txt`; verify your download against it before running.
+
+### 3. Docker
+
+A multi-arch image is published to the GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+The image defaults to the streamable HTTP transport on port `8080` and exposes a
+`GET /health` endpoint:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v "$HOME/Downloads:/downloads" \
+  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+  ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the
+container runs as a non-root user, so the host directory must be writable by UID `10001`.
+
+## Configure an MCP client
+
+Point your client at the binary. The command is `libgen-mcp` (or the absolute path to the
+`server` binary if you kept the default `go install` name). Over stdio no extra arguments
+are needed.
+
+### Claude Code
+
+Add the server to your project's `.mcp.json` (or run `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "libgen-mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Edit `claude_desktop_config.json`
+(`~/Library/Application Support/Claude/` on macOS,
+`%APPDATA%\Claude\` on Windows) and add the same `mcpServers` block, then restart Claude
+Desktop:
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "/absolute/path/to/libgen-mcp",
+      "env": {
+        "LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
+      }
+    }
+  }
+}
+```
+
+Desktop clients do not inherit your shell `PATH`, so use an absolute `command` path.
+
+### VS Code
+
+VS Code's MCP support (or the Continue / Cline extensions) reads an `mcp.json` with the
+same shape. In VS Code's own format:
+
+```json
+{
+  "servers": {
+    "libgen": {
+      "command": "libgen-mcp",
+      "type": "stdio"
+    }
+  }
+}
+```
+
+### Remote (streamable HTTP)
+
+To run the server centrally and connect over HTTP instead of stdio, start it with an
+address and point HTTP-capable clients at it:
+
+```bash
+libgen-mcp --http :8080
+```
+
+See [Configuration](configuration.md) for the environment variables you can set on any of
+these, and [Architecture](architecture.md) for how the transports work.
+
+## Your first search
+
+Once the client shows `libgen` as connected, ask it to search. A prompt such as:
+
+> Search Library Genesis for "the go programming language" in nonfiction, 25 results.
+
+drives the `search` tool with roughly these arguments:
+
+```json
+{
+  "query": "the go programming language",
+  "topics": ["nonfiction"],
+  "results_per_page": 25
+}
+```
+
+Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to
+`get_details` for full metadata, then to `download` to fetch the file — or feed a `doi`
+straight to `download` for an article. See [Tools](tools.md) for the full input and output
+shapes.
