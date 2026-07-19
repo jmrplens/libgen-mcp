@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" role="img" aria-label="LibGen MCP">
+  <path d="M8 9h9c1.9 0 3.5 1.6 3.5 3.5V28c0-1.4-1.1-2.5-2.5-2.5H8V9z" fill="#2dd4bf"/>
+  <path d="M32 9h-9c-1.9 0-3.5 1.6-3.5 3.5V28c0-1.4 1.1-2.5 2.5-2.5H32V9z" fill="#5eead4"/>
+  <path d="M20 28.5v4m0 0-3-3M20 32.5l3-3" fill="none" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
