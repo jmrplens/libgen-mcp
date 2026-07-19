@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=safety&topics%5B%5D=s&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="safety" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox"  class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox"  class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox"  class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox"  class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox"  class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox" checked class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=safety&topics%5B%5D=s&curtab=f">Files <span class="badge badge-primary">4391</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=safety&topics%5B%5D=s&curtab=e">Editions <span class="badge badge-primary">31042</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=safety&topics%5B%5D=s&curtab=s">Series <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=safety&topics%5B%5D=s&curtab=a">Authors <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=safety&topics%5B%5D=s&curtab=p">Publishers <span class="badge badge-primary">4</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=safety&topics%5B%5D=s&curtab=w">Works <span class="badge badge-primary">118</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=104596922,104587393,104713242,104585843,104585844,104585845,104587397,104601102,104601103,104713246,104585209,104585702,104586385,104587149,104587192,108241140,104577302,104580641,104580642,104585205,104585716,104585919,104587068,104587441,104588145,104593821,104598709,104598710,104598711,104600632,104601104,104606320,104606321,104713294,104714120,104719911,104720334,108239032,108242147,108243643,108243644,108243645,108244398,108245303,108253873,108253874,3894982,104572591,104572683,104572686,104572728,104573093,104577303,104577304,104577338,104580335,104581954,104583010,104585210,104585212,104585555,104585879,104585908,104586582,104587411,104587412,104588400,104588401,104588624,104588636,104588639,104588642,104588643,104588648,104588715,104589593,104589594,104591007,104591012,104593822,104593823,104593824,104593829,104594007,104594014,104595432,104595992,104595993,104595994,104595995,104595996,104595997,104595998,104595999,104596099,104600186,104603925,104605393,104605394,104606319,104606558,104607367,104607969,104608267,104608270,104609630,104712936,104713179,104713180,104713260,104713261,104714401,104714402,104714655,104714667,104714670,104714673,104714674,104714678,104714679,104714749,104716954,104719212,104719912,104719913,104719914,104719922,104720183,104720335,104722310,108238860,108239033,108240574,108242002,108242148,108242598,108243168,108243398,108243399,108244545,108244918,108246205,108246255,108251648,108253872,108254792,108254927,3879546,3880027,3880381,3883925,3884222,3884223,3884224,3884225,3884226,3884227,3884228,3884338,3884491,3885684,3886398,3886399,3887277,3887278,3887284,3887830,3887869,3887870,3890425,3890601,3890602,3891027,3891590,3891591,3893888,3894763,3894981,3894990,101055031,104562580,104562862,104563025,104563642,104564104,104564839,104564950,104564951,104564952,104564953,104564983,104564984,104564985,104564986,104564987,104564988,104564989,104564990,104564991,104564992,104564993,104564994,104564995,104564996,104564997,104565106,104565225,104565226,104565633,104565790,104565817,104567234,104567746,104567749,104568427,104568546,104568604,104568847,104569110,104569128,104569129,104569594,104570196,104570213,104571208,104571596,104572022,104572192,104572199,104572682,104572684,104572685,104572687,104572688,104572701,104572702,104573569,104574058,104574060,104575070,104575217,104575424,104575425,104577337,104577660,104577952,104580506,104581961,104581975,104582436,104582713,104582793,104582957,104583135,104583138,104583514,104583784,104584619,104585204,104585206,104585211,104585717,104585721,104585870,104585912,104585916,104585941,104586364,104586764,104586765,104586770,104587085,104587273,104587322,104587344,104587396,104587400,104587402,104587404,104587406,104587407,104587408,104587440,104587454,104587583,104587590,104587592,104587593,104587594,104588257,104588576,104588635,104588637,104588638,104588640,104588641,104588645,104588646,104588647,104588684,104588685,104588706,104589127,104590176,104590333,104590351,104590401,104590669,104590872,104590901,104590948,104592427,104594002,104594003,104594004,104594006,104594008,104594009,104594010,104594011,104594722,104594887,104595333,104595578,104596851,104596981,104597063,104597325,104598740,104598859,104599600,104599601,104600246,104601098,104601099,104601110,104601599,104601601,104602069,104602083,104603194,104603268,104604966,104605395,104605467,104605469,104605470,104605471,104605472,104605473,104605475,104605938,104605979,104606135,104606538,104607309,104607611,104607612,104607613,104607642,104607643,104607962,104608249,104608602,104609782,104609783,104609944,104637340,104711567,104711568,104711574,104711600,104711621,104712324,104712483,104712499,104712502,104713111,104713166,104713187,104713193,104713245,104713249,104713251,104713253,104713255,104713256,104713257,104713293,104713305,104713473,104713476,104713477,104714610,104714666,104714668,104714669,104714671,104714672,104714676,104714677,104714718,104714719,104714739,104715223,104715251,104716247,104717473,104717578,104717731,104719246,104719561,104720173,104720174,104720175,104720176,104720177,104720178,104720179,104720180,104720333,104722147,104722303,104723272,104724532,104724536,104724537,104724591,107802556,108238583,108238909,108239178,108239355,108239879,108240123,108240125,108240126,108240648,108241434,108241681,108241949,108241964,108243169,108243215,108243228,108243246,108243261,108243295,108243665,108244397,108244470,108244965,108245718,108245719,108245727,108246128,108247687,108248766,108248787,108248789,108248790,108248791,108248792,108250332,108250333,108250334,108252424,108252558,108252561,108252562,108252567,108253347,108253569,108254679,108254890,108255415,108255592,108255810,108255829,115987704,3873335,3878073,3879457,3879498,3879517,3879532,3879536,3879537,3879538,3879554,3879571,3879572,3879593,3879609,3879625,3879633,3879644,3879664,3879671,3879699,3879700,3879701,3879707,3879731,3879732,3879748,3879765,3879865,3879897,3879934,3879946,3879947,3879948,3879950,3879956,3879976,3879988,3880004,3880012,3880015,3880016,3880019,3880030,3880084,3880102,3880155,3880174,3880221,3880275,3880285,3880319,3880326,3880335,3880336,3880345,3880346,3880356,3880359,3880362,3880369,3880378,3880379,3880380,3880460,3880461,3880497,3880521,3880527,3880533,3880534,3880573,3880582,3880615,3880618,3880622,3880629,3880630,3880750,3881429,3881502,3881654,3881655,3881656,3881657,3881658,3881659,3881660,3881661,3881662,3882236,3882442,3882577,3882705,3882706,3882707,3882708,3882709,3882710,3882711,3882712,3882713,3882714,3882715,3882716,3882717,3882718,3882802,3882906,3882968,3882969,3883003,3883066,3883076,3883081,3883150,3883151,3883159,3883169,3883170,3883171,3883172,3883173,3883283,3883284,3883285,3883286,3883287,3883288,3883497,3883498,3883499,3883525,3883526,3883527,3883528,3883529,3883530,3883896,3883897,3883898,3883899,3883954,3883955,3883975,3883976,3883977,3883978,3883979,3883980,3883981,3884456,3884473,3884474,3884475,3884476,3884477,3884478,3884479,3884480,3884481,3884482,3884483,3884484,3884485,3884486,3884487,3884488,3884489,3884490,3884492,3884493,3884494,3884495,3884496,3884497,3884614,3884653,3884654,3884655,3884656,3884657,3884658,3884659,3884724,3884725,3884731,3884840,3884927,3884936,3885092,3885096,3885097,3885098,3885143,3885240,3885241,3885282,3885474,3885475,3885518,3885617,3885618,3885619,3885620,3885621,3885622,3885623,3885624,3885625,3885626,3885627,3885682,3885683,3885738,3885739,3885770,3885783,3885837,3885838,3885839,3885840,3885867,3885868,3885869,3885902,3885920,3885930,3885970,3885988,3885996,3886022,3886023,3886079,3886096,3886099,3886113,3886151,3886152,3886165,3886166,3886171,3886231,3886232,3886233,3886234,3886235,3886236,3886237,3886238,3886239,3886240,3886241,3886242,3886262,3886263,3886280,3886380,3886381,3886392,3886393,3886546,3886547,3886548,3886549,3886592,3886594,3886604,3886606,3886612,3886613,3886614,3886644,3886711,3886712,3886760,3886795,3886796,3886977,3887080,3887081,3887092,3887202,3887224,3887263,3887264,3887265,3887266,3887267,3887268,3887269,3887270,3887274,3887275,3887276,3887279,3887280,3887281,3887282,3887283,3887285,3887299,3887319,3887404,3887405,3887418,3887446,3887552,3887572,3887624,3887652,3887659,3887660,3887792,3887793,3887859,3888000,3888064,3888096,3888118,3888119,3888132,3888137,3888138,3888190,3888194,3888245,3888289,3888290,3888291,3888292,3888297,3888298,3888299,3888330,3888369,3888532,3888533,3888546,3888572,3888615,3888616,3888617,3888618,3888624,3888640,3888675,3888680,3888735,3888740,3888804,3888818,3888819,3888820,3888821,3888822,3888823,3888824,3888830,3888854,3888880,3888906,3888920,3888928,3888936,3888967,3888995,3888996,3888997,3888999,3889000,3889001,3889013,3889055,3889056,3889057,3889105,3889106,3889376,3889377,3889378,3889379,3889380,3889412,3889413,3889414,3889416,3889417,3889468,3889469,3889470,3889471,3889472,3889473,3889474,3889475,3889476,3889477,3889478,3889479,3889480,3889481,3889482,3889483,3889484,3889485,3889486,3889487,3889488,3889489,3889490,3889547,3889548,3889549,3889550,3889551,3889552,3889553,3889554,3889555,3889556,3889557,3889568,3889569,3889570,3889571,3889574,3889575,3889578,3889605,3889606,3889608,3889609,3889625,3889626,3889627,3889649,3889655,3889658,3889675,3889679,3889756,3889764,3889780,3889781,3889801,3889802,3889819,3889899,3889900,3889912,3889913,3889942,3889949,3889952,3889953,3890037,3890038,3890090,3890091,3890092,3890093,3890094,3890095,3890096,3890097,3890098,3890099,3890100,3890101,3890102,3890103,3890104,3890105,3890106,3890107,3890108,3890109,3890110,3890111,3890112,3890113,3890114,3890115,3890116,3890117,3890118,3890119,3890120,3890121,3890122,3890123,3890124,3890125,3890126,3890127,3890128,3890129,3890130,3890131,3890132,3890133,3890218,3890219,3890220,3890221,3890222,3890292,3890293,3890309,3890386,3890387,3890403,3890404,3890405,3890426,3890427,3890428,3890429,3890430,3890431,3890432,3890433,3890434,3890435,3890436,3890437,3890438,3890439,3890440,3890441,3890442,3890443,3890444,3890445,3890446,3890447,3890448,3890449,3890506,3890507,3890518,3890533,3890579,3890580,3890581,3890594,3890595,3890596,3890597,3890598,3890599,3890600,3890603,3890604,3890605,3890606,3890607,3890608,3890609,3890610,3890611,3890612,3890613,3890614,3890615,3890616,3890617,3890618,3890619,3890620,3890670,3890672,3890716,3890717,3890913,3890914,3890915,3890916,3890917,3890918,3890919,3890920,3890921,3890922,3890984,3890985,3890986,3890987,3890988,3890989,3890990,3890991,3890998,3891007,3891008,3891009,3891010,3891011,3891012,3891013,3891014,3891015,3891016,3891017,3891018,3891019,3891020,3891021,3891022,3891023,3891024,3891025,3891026,3891028,3891033,3891073,3891074,3891075,3891228,3891297,3891298,3891314,3891315,3891397,3891398,3891399,3891588,3891589,3891592,3891593,3891594,3891595,3891596,3891597,3891598,3891599,3891746,3891881,3891882,3891883,3891884,3891885,3891886,3891887,3891888,3891889,3891890,3892143,3892144,3892145,3892425,3892930,3892931,3892932,3892933,3892934,3892935,3892936,3892937,3892938,3892939,3893017,3893109,3893252,3893539,3893540,3893551,3893589,3893876,3893877,3894280,3894346,3894455,3894522,3894530,3894547,3894610,3894761,3894762,3894764,3894765,3894766,3894775,3894809,3894900,3894902,3894921,3894983,3894984,3895108,3895182,3895183,3895184,3895189,3895215,3895235,3895366,3895367,3895368,3895369,3895373,3895433,3895439,3895450,3895481,3895482,3895483,3895484,3895505,3895529,3895539,3895553,3895554,3895561,3895565,3895578,3895579,3895585,3895601,18087294,18087295,24960961,24999454,25097490,29388596,29745721,29814125,29883368,29918299,34733413,36512150,36792413,37571173,37704027,37748698,37899242,37899252,37899271,37899324,37910632,39785804,39785812,39785933,39785946,39788142,40477807,41159138,42950048,43077616,43270633,43631968,43645279,43789178,43814245,43815246,43816530,43820147,43827289,43867208,44266857,45174205,45379073,46157388,46304004,46327985,47768848,47768850,47768854,47768869,48511045,49629531,51246300,51252537,52048479,52048483,53184266,56925436,57708647,57883438,58830293,59121477,60239361,61458709,65170384,65199686,65646114,66030700,66068371,66253044,66253045,66741893,67150227,67293370,67293371,67589299,67808678,68220850,68240511,70137463,76524806,79904672,79993564,80052235,83269460,84687344,84779596,85015803,85086823,90260022,90859504,91766145,91982450,92111403,92209242,93424929,94395476,94980917,96119975,104544973,104544974,104544975,104544976,104544977,104544978,104561445,104561579,104562162,104562351,104562497,104562585,104562603,104562623,104562625,104562652,104562790,104562843,104562875,104563065,104563068,104563168,104563309,104563507,104563555,104563617,104563648,104563686,104563687,104563715,104564026,104564027,104564028,104564029,104564079,104564080,104564081,104564086,104564087,104564089,104564091,104564092,104564093,104564094,104564095,104564096,104564097,104564098,104564099,104564100,104564103,104564105,104564107,104564108,104564112,104564163,104564190,104564208,104564295,104564315,104564327,104564328,104564329,104564331,104564332,104564333,104564338,104564365,104564366,104564385,104564386,104564387,104564388,104564389,104564419,104564420,104564442,104564461,104564462,104564463,104564464,104564483,104564484,104564485,104564504,104564509,104564511,104564582,104564593,104564596,104564654,104564656,104564657,104564658,104564659,104564693,104564707,104564708,104564709,104564737,104564748,104564749,104564750,104564751,104564752,104564753,104564754,104564777,104564779,104564796,104564798,104564853,104564864,104564875,104564907,104564911,104564918,104564932,104564939,104564940,104564962,104564963,104564964,104564976,104564980,104564981,104565052,104565091,104565092,104565107,104565145,104565146,104565207,104565232,104565233,104565234,104565351,104565370,104565406,104565408,104565410,104565415,104565426,104565427,104565428,104565429,104565430,104565441,104565485,104565514,104565515,104565559,104565581,104565584,104565586,104565587,104565588,104565589,104565590,104565591,104565592,104565593,104565614,104565620,104565638,104565641,104565658,104565664,104565676,104565683,104565684,104565685,104565702,104565703,104565710,104565711,104565730,104565731,104565732,104565733,104565734,104565735,104565736,104565737,104565741,104565743,104565745,104565746,104565747,104565753,104565763,104565764,104565768,104565798,104567193,104567211,104567213,104567214,104567279,104567280,104567299,104567302,104567320,104567321,104567339,104567344,104567355,104567370,104567371,104567372,104567375,104567376,104567378,104567391,104567419,104567429,104567431,104567442,104567456,104567457,104567458,104567460,104567462,104567463,104567464,104567465,104567484,104567488,104567498,104567537,104567538,104567551,104567552,104567553,104567560,104567570,104567571,104567620,104567621,104567622,104567626,104567645,104567675,104567719,104567730,104567752,104567791,104567792,104567793,104567794,104567795,104567818,104567839,104567840,104567841,104567897,104567900,104567914,104567918,104567962,104567972,104568015,104568016,104568017,104568037,104568081,104568089,104568090,104568091,104568098,104568125,104568177,104568178,104568205,104568220,104568221,104568232,104568233,104568241,104568245,104568247,104568248,104568251,104568268,104568270,104568271,104568272,104568273,104568274,104568363,104568378,104568381,104568389,104568410,104568411,104568412,104568413,104568415,104568431,104568437,104568459,104568464,104568500,104568508,104568509,104568528,104568541,104568542,104568547,104568548,104568552,104568553,104568555,104568581,104568583,104568593,104568598,104568609,104568617,104568626,104568641,104568642,104568646,104568704,104568787,104568833,104568834,104568835,104568837,104568841,104568941,104568951,104568971,104568998,104569030,104569035,104569053,104569054,104569057,104569089,104569109,104569112,104569138,104569139,104569143,104569144,104569146,104569147,104569152,104569185,104569226,104569247,104569258,104569316,104569331,104569361,104569376,104569381,104569397,104569425,104569426,104569427,104569428,104569441,104569484,104569524,104569532,104569535,104569597,104569599,104569626,104569627,104569633,104569651,104569659,104569660,104569680,104569712,104569715,104569725,104569748,104569756,104569771,104569772,104569786,104569793,104569829,104569830,104569832,104569861,104569862,104569886,104569892,104569927,104569950,104569973,104569995,104569996,104570005,104570019,104570124,104570136,104570141,104570143,104570156,104570158,104570159,104570160,104570161,104570176,104570185,104570194,104570195,104570197,104570207,104570240,104570241,104570266,104570277,104570394,104570410,104570411,104570413,104570419,104570420,104570422,104570423,104570424,104570436,104570441,104570495,104570496,104570554,104570566,104570583,104570616,104570711,104570732,104570761,104570818,104570821,104570836,104570838,104570876,104570882,104570885,104570983,104570985,104571009,104571011,104571012,104571013,104571134,104571145,104571150,104571160,104571209,104571210,104571227,104571235,104571339,104571340,104571341,104571342,104571343,104571344,104571345,104571346,104571347,104571348,104571350,104571351,104571352,104571353,104571354,104571356,104571357,104571358,104571359,104571360,104571361,104571362,104571363,104571364,104571365,104571366,104571367,104571369,104571370,104571371,104571372,104571373,104571374,104571375,104571376,104571377,104571378,104571379,104571380,104571381,104571382,104571383,104571384,104571385,104571386,104571387,104571388,104571389,104571390,104571391,104571392,104571393,104571394,104571395,104571398,104571399,104571400,104571402,104571403,104571404,104571405,104571406,104571407,104571408,104571409,104571413,104571414,104571415,104571416,104571417,104571418,104571419,104571444,104571504,104571505,104571506,104571591,104571595,104571640,104571641,104571644,104571646,104571648,104571650,104571652,104571653,104571659,104571660,104571661,104571663,104571665,104571669,104571670,104571671,104571675,104571678,104571680,104571682,104571685,104571686,104571687,104571689,104571691,104571694,104571695,104571848,104571851,104571853,104571855,104571859,104571860,104571861,104572023,104572060,104572093,104572094,104572107,104572110,104572131,104572146,104572149,104572200,104572201,104572202,104572203,104572204,104572205,104572206,104572207,104572208,104572210,104572211,104572212,104572217,104572218,104572219,104572221,104572226,104572243,104572284,104572437,104572444,104572452,104572494,104572578,104572579,104572580,104572612,104572677,104572678,104572689,104572696,104572697,104572698,104572699,104572700,104572703,104572704,104572705,104572706,104572707,104572708,104572709,104572710,104572711,104572714,104572715,104572716,104572717,104572718,104572719,104572723,104572724,104572726,104572729,104572730,104572731,104572734,104572852,104572855,104572856,104572860,104572894,104572999,104573000,104573047,104573076,104573110,104573111,104573113,104573123,104573177,104573210,104573212,104573263,104573339,104573340,104573348,104573402,104573404,104573418,104573451,104573496,104573528,104573550,104573551,104573552,104573553,104573554,104573555,104573556,104573557,104573568,104573576,104573589,104573979,104573980,104573982,104574064,104574065,104574066,104574067,104574068,104574069,104574070,104574071,104574072,104574075,104574078,104574440,104574508,104574732,104574733,104574782,104574784,104574785,104574786,104574787,104574860,104574926,104574929,104574932"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=safety&topics%5B%5D=s&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=safety&topics%5B%5D=s&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104596922<br>ISO 08359-1996 scan" href="edition.php?id=147506520">ISO 8359:1996 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104596922<br>ISO 08359-1996 scan" href="edition.php?id=147506520">Oxygen concentrators for medical use - Safety requirements <i>2</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 280777</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>31 / 30</td>
+<td><nobr><a href="/file.php?id=104596922">3 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=f7ca37c5d51e17af04d13f14a9fc621d"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587393<br>IEC 61029-1-1990 scan" href="edition.php?id=147622844">IEC 61029-1:1990 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587393<br>IEC 61029-1-1990 scan" href="edition.php?id=147622844">Safety of transportable motor-operated electric tools; part 1: general requirements <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 271248</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>186 / 186</td>
+<td><nobr><a href="/file.php?id=104587393">8 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=091a3fc32dbc4ef449bcec9d0c4b3eff"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-25/2024-04-25; ID: 104713242<br>IEC 61029-1-1990 scan" href="edition.php?id=147622844">IEC 61029-1:1990 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-25/2024-04-25; ID: 104713242<br>IEC 61029-1-1990 scan" href="edition.php?id=147622844">Safety of transportable motor-operated electric tools; part 1: general requirements <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 396604</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>186 / 186</td>
+<td><nobr><a href="/file.php?id=104713242">7 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8713017f8f7b1348ec2360fd56c8211d"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585843<br>IEC 60598-2-19-1981 amd1-1987 scan" href="edition.php?id=147495441">IEC 60598-2-19:1981/Amd 1:1987 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585843<br>IEC 60598-2-19-1981 amd1-1987 scan" href="edition.php?id=147495441">Luminaires. Part 2 : Particular requirements. Air-handling luminaires. Safety requirements <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269698</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>4 / 4</td>
+<td><nobr><a href="/file.php?id=104585843">222 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3d2bca39cf935a058c2fe749ada68bf3"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585844<br>IEC 60598-2-19-1981 amd2-1997" href="edition.php?id=147495442">IEC 60598-2-19:1981/Amd 2:1997 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585844<br>IEC 60598-2-19-1981 amd2-1997" href="edition.php?id=147495442">Luminaires - Part 2: Particular requirements - Section 19: Air-handling luminaires (safety requirements); Amendment 2 <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269699</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>10 / 4</td>
+<td><nobr><a href="/file.php?id=104585844">48 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=7f683d049b439f4b1c23b968036feb5b"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585845<br>IEC 60598-2-19-1981 scan" href="edition.php?id=147495443">IEC 60598-2-19:1981 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585845<br>IEC 60598-2-19-1981 scan" href="edition.php?id=147495443">Luminaires. Part 2 : Particular requirements. Air-handling luminaires. Safety requirements <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269700</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>24 / 22</td>
+<td><nobr><a href="/file.php?id=104585845">989 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=98c0f9a9aeb4e3be74edf6cd7853e5e7"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587397<br>IEC 61029-2-10-1998" href="edition.php?id=147622848">IEC 61029-2-10:1998 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587397<br>IEC 61029-2-10-1998" href="edition.php?id=147622848">Safety of transportable motor-operated electric tools - Part 2-10: Particular requirements for cutting-off grinders <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 271252</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>24 / 20</td>
+<td><nobr><a href="/file.php?id=104587397">220 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8394073dedd4b00ec1385d596ccdd372"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104601102<br>ISO 13852-1996 scan" href="edition.php?id=147510700">ISO 13852:1996 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104601102<br>ISO 13852-1996 scan" href="edition.php?id=147510700">Safety of machinery - Safety distances to prevent danger zones being reached by the upper limbs <i>1</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 284957</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>16 / 16</td>
+<td><nobr><a href="/file.php?id=104601102">410 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=259f03359215d016d872425a5516dc13"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104601103<br>ISO 13853-1998" href="edition.php?id=147510701">ISO 13853:1998 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104601103<br>ISO 13853-1998" href="edition.php?id=147510701">Safety of machinery - Safety distances to prevent danger zones being reached by the lower limbs <i>1</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 284958</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>12 / 12</td>
+<td><nobr><a href="/file.php?id=104601103">64 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=26af7ec5d3f11fc6df051335d9fe6f75"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-25/2024-04-25; ID: 104713246<br>IEC 61029-2-10-1998" href="edition.php?id=147622848">IEC 61029-2-10:1998 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-25/2024-04-25; ID: 104713246<br>IEC 61029-2-10-1998" href="edition.php?id=147622848">Safety of transportable motor-operated electric tools - Part 2-10: Particular requirements for cutting-off grinders <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 396608</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>24 / 20</td>
+<td><nobr><a href="/file.php?id=104713246">147 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d5723c1e95d693d4fdafd03cada406c6"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585209<br>IEC 60364-4-47-1981 scan" href="edition.php?id=147494807">IEC 60364-4-47:1981 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585209<br>IEC 60364-4-47-1981 scan" href="edition.php?id=147494807">Electrical installations of buildings. Part 4 : Protection for safety. Chapter 47 : Application of protective measures for safety. Section 470 - General. Section 471 - Measures of protection against electric shock <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269064</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>7 / 12</td>
+<td><nobr><a href="/file.php?id=104585209">273 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=58edeaced82f3e79eaba8a30879a3f18"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585702<br>IEC TR 60513-1994 scan" href="edition.php?id=147495300">IEC TR 60513:1994 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585702<br>IEC TR 60513-1994 scan" href="edition.php?id=147495300">Fundamental aspects of safety standards for medical electrical equipment <i>2.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269557</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>130 / 128</td>
+<td><nobr><a href="/file.php?id=104585702">6 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=814585d3f2e7e3320a34156b14afc8b3"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104586385<br>IEC 60745-2-7-1989 scan" href="edition.php?id=147495983">IEC 60745-2-7:1989 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104586385<br>IEC 60745-2-7-1989 scan" href="edition.php?id=147495983">Safety of hand-held motor-operated electric tools; part 2: particular requirements for spray guns for non-flammable liquids <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 270240</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>20 / 18</td>
+<td><nobr><a href="/file.php?id=104586385">624 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ee9edb84ece2bdce315990b2fb0664c4"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587149<br>IEC 60960-1988 scan" href="edition.php?id=147496747">IEC 60960:1988 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587149<br>IEC 60960-1988 scan" href="edition.php?id=147496747">Functional design criteria for a safety parameter display system for nuclear power stations <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 271004</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>26 / 24</td>
+<td><nobr><a href="/file.php?id=104587149">1 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=82be6bd78a6d276c7e07efe3bf6eb859"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587192<br>IEC 60980-1989 scan" href="edition.php?id=147496790">IEC 60980:1989 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587192<br>IEC 60980-1989 scan" href="edition.php?id=147496790">Recommended practices for seismic qualification of electrical equipment of the safety system for nuclear generating stations <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 271047</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>84 / 82</td>
+<td><nobr><a href="/file.php?id=104587192">4 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=eee0cbcdc9e6f541cfe6ebd48e6460a1"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-07-07/2025-07-07; ID: 108241140<br>ISO 07767-1997 scan" href="edition.php?id=147777227">ISO 7767:1997 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2025-07-07/2025-07-07; ID: 108241140<br>ISO 07767-1997 scan" href="edition.php?id=147777227">Oxygen monitors for monitoring patient breathing mixtures - Safety requirements <i>2</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 1009047</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English</td>
+<td>36 / 33</td>
+<td><nobr><a href="/file.php?id=108241140">4 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=811bd29494d86d1a30bf18b374f5c999"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104577302<br>BS ISO 03864-1-2011" href="edition.php?id=148107039">BS ISO 3864-1:2011 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104577302<br>BS ISO 03864-1-2011" href="edition.php?id=148107039">Graphical symbols. Safety colours and safety signs. Design principles for safety signs and safety markings <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 261157</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td></td>
+<td>28 / 28</td>
+<td><nobr><a href="/file.php?id=104577302">2 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=18865d04efad347aa1e7deda0f29b52d"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104580641<br>BS ISO 24409-2-2014" href="edition.php?id=148092301">BS ISO 24409-2:2014 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104580641<br>BS ISO 24409-2-2014" href="edition.php?id=148092301">Ships and marine technology. Design, location and use of shipboard safety signs, safety-related signs, safety notices and safety markings. Catalogue <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 264496</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td></td>
+<td>210 / 210</td>
+<td><nobr><a href="/file.php?id=104580641">10 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=5f6afffdc334a1f07549607a223a5a18"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104580642<br>BS ISO 24409-3-2014" href="edition.php?id=148113600">BS ISO 24409-3:2014 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104580642<br>BS ISO 24409-3-2014" href="edition.php?id=148113600">Ships and marine technology. Design, location and use of shipboard safety signs, safety-related signs, safety notices and safety markings. Code of practice <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 264497</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td></td>
+<td>30 / 30</td>
+<td><nobr><a href="/file.php?id=104580642">6 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d5678480a7288bd2ed9d809d6e6a6ee6"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585205<br>IEC 60364-4-443-1995 scan" href="edition.php?id=147494803">IEC 60364-4-443:1995 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585205<br>IEC 60364-4-443-1995 scan" href="edition.php?id=147494803">Electrical installations of buildings - Part 4: Protection for safety - Chapter 44: Protection against overvoltages - Section 443: Protection against overvoltages of atmospheric origin or due to switching <i>2.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269060</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>8 / 23</td>
+<td><nobr><a href="/file.php?id=104585205">577 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=fcd4728357dbe3c2ea65b08ab26bb2ee"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585716<br>IEC 60519-5-1980 scan" href="edition.php?id=147495314">IEC 60519-5:1980 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585716<br>IEC 60519-5-1980 scan" href="edition.php?id=147495314">Safety in electroheat installations. Part 5 : Specifications for safety in plasma installations <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269571</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>22 / 20</td>
+<td><nobr><a href="/file.php?id=104585716">800 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9731c18c256bdc5ddd01681c42369bd3"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585919<br>IEC 60601-2-40-1998" href="edition.php?id=147495517">IEC 60601-2-40:1998 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104585919<br>IEC 60601-2-40-1998" href="edition.php?id=147495517">Medical electrical equipment - Part 2-40: Particular requirements for the safety of electromyographs and evoked response equipment <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 269774</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>48 / 38</td>
+<td><nobr><a href="/file.php?id=104585919">234 kB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=4edc064dd15f6dbc1d27517ecaa16f8e"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587068<br>IEC 60931-1-1996" href="edition.php?id=147496666">IEC 60931-1:1996 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587068<br>IEC 60931-1-1996" href="edition.php?id=147496666">Shunt power capacitors of the non-self-healing type for a.c. systems having a rated voltage up to and including 1000 V - Part 1: General - Performance, testing and rating - Safety requirements - Guide for installation and operation <i>2.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 270923</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>72 / 72</td>
+<td><nobr><a href="/file.php?id=104587068">3 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=6140a989cfaede2c428da8aa22e155e6"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587441<br>IEC 61050-1991 scan" href="edition.php?id=147622896">IEC 61050:1991 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104587441<br>IEC 61050-1991 scan" href="edition.php?id=147622896">Transformers for tubular discharge lamps having a no-load output voltage exceeding 1000 kV (generally called neon-transformers); general and safety requirements <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 271296</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>78 / 76</td>
+<td><nobr><a href="/file.php?id=104587441">3 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ac105288ae863f282b7872ff6f767dbc"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr><tr>
+
+<td><b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104588145<br>IEC 61250-1994 scan" href="edition.php?id=147623722">IEC 61250:1994 </a></b><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2024-04-20/2024-04-21; ID: 104588145<br>IEC 61250-1994 scan" href="edition.php?id=147623722">Nuclear reactors; instrumentation and control systems important for safety; detection of leakage in coolant systems <i>1.0</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Standard">s</a></span> 
+<span class="badge badge-secondary"">s 272000</span></nobr>
+
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>English;French</td>
+<td>34 / 32</td>
+<td><nobr><a href="/file.php?id=104588145">2 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=93a7e0ea05ec42fcac88ff58ff27c290"><span class="badge badge-primary">Libgen</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=safety&topics%5B%5D=s&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 3887</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>

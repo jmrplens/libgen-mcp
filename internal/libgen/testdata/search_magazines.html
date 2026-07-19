@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=science&topics%5B%5D=m&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="science" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox"  class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox"  class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox"  class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox" checked class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox"  class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox"  class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=science&topics%5B%5D=m&curtab=f">Files <span class="badge badge-primary">21342</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=science&topics%5B%5D=m&curtab=e">Editions <span class="badge badge-primary">11386</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=science&topics%5B%5D=m&curtab=s">Series <span class="badge badge-primary">335</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=science&topics%5B%5D=m&curtab=a">Authors <span class="badge badge-primary">39</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=science&topics%5B%5D=m&curtab=p">Publishers <span class="badge badge-primary">161</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=science&topics%5B%5D=m&curtab=w">Works <span class="badge badge-primary">39333</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=2235832,2365132,544159,2235797,2235824,2235858,2235859,102981654,103227791,103227803,103542011,149946,191631,583777,655762,655843,2227827,2227845,2235974,2235983,2421189,2434088,2453336,2453770,2466525,2468699,2469231,2491780,2491991,2494756,2501665,2516005,2520683,97860843,97860844,97860845,97860846,102979879,102981089,102984801,103066922,103205100,103205197,103205241,103206510,103227634,103227640,103227652,103227656,103227659,103227769,103228425,103228459,103399307,103399308,103470451,103470491,103481832,103481851,103481867,103481876,103481877,103481893,103481936,103481947,103481974,103481975,103481979,103482099,103482115,103482116,103482130,103482144,103482153,103543359,103543361,103545924,103551625,103552190,104026580,104181061,107402792,107402794,107402818,107402820,107402821,107402871,107402874,107404190,107404191,107404192,107404193,107404194,107404195,107404196,107404197,107404198,107404199,107404200,107404201,107404202,107404203,107404204,107404206,107404207,107404208,107404209,107404210,107404211,107404223,107404224,107404225,107404226,107404227,107404228,107404229,107404230,107404231,107404232,107404234,107404235,107404236,107404237,107404238,107404249,107404250,107404251,107404252,107404263,107404264,107404265,107404266,107404276,107404278,107404279,107404288,107404289,107404413,107404414,107404415,107404416,107404417,107404418,107404419,107404420,107404421,107404422,107404423,107404424,107404425,107404426,107404427,107404428,107404429,107404430,107404431,107404795,107542142,107547176,107559973,107581681,107582915,107630681,107638274,107639678,107640546,107640961,107644454,107655033,107656934,107657266,107657831,107658479,107659256,107704471,103552193,193773,512688,512689,536445,536446,537825,537826,537828,537830,537832,537835,572870,575081,575082,583694,583698,583701,583703,583704,583707,934742,2165386,2165387,2165388,2165389,2165390,2165391,2165392,2165393,2165394,2165401,2165402,2165407,2165408,2165412,2165413,2165414,2165415,2165423,2165424,2208666,2227817,2227821,2227831,2227882,2235772,2235774,2235775,2235777,2235794,2235796,2235798,2235800,2235803,2235804,2235807,2235809,2235811,2235813,2235815,2235817,2235818,2235819,2235820,2235821,2235822,2235823,2235825,2235826,2235831,2235833,2235834,2236033,2236035,2236036,2236037,2236081,2236090,2236093,2236117,2365058,2365065,2365069,2365085,2365088,2365094,2365123,2365128,2365144,2365148,2365155,2365157,2365159,2401069,2401070,2447806,2447807,2447808,2490914,2490918,2491785,2493385,2493826,2494797,2495237,2497152,2497875,2501731,2502201,2503125,2506290,2507417,2508527,2511353,2512238,2512429,2512749,2512834,2514099,2515297,2515946,2517093,2517791,2517976,2518450,2519438,103205120,103227745,103227747,103227750,103227786,103227787,103227788,103227795,103227800,103252864,103252865,103252866,103252867,103252868,103252869,103252870,103252871,103541497,103541498,103541500,103541501,103541502,103541503,103541542,103541544,103878443,104139240,105098564,105098590,105098726,105099140,105099378,105099379,107431999,107481365,107582063,107663078,107663463,107663516,107664409,108362,127603,127604,128731,128732,128733,143904,143905,149057,149058,149076,149077,149078,149079,149084,149085,149113,149114,149115,149116,149117,149118,149119,149120,149121,149122,149123,149124,149125,149126,149127,149128,149129,149130,149131,149132,149133,149134,149135,149136,149137,149138,149139,149140,149141,149142,149143,149144,149145,149146,149147,149148,149149,149150,149151,149152,149153,149154,149185,149186,149208,149212,149213,149214,149215,149241,149242,149243,149245,149246,149272,149273,149308,149932,149940,149941,150013,150014,150015,150016,150072,150073,150194,150195,151065,151066,151067,151068,151069,151070,151150,151513,151514,158491,158493,158494,158495,158496,158497,158498,158537,159468,159485,160011,160016,161046,161047,180072,182544,182546,182547,182667,191326,191327,191450,192302,192303,192304,192396,192397,192398,192453,192454,192455,192456,192457,192458,193094,193352,193353,193363,193369,193601,193603,193605,193606,193607,193754,193833,193906,193943,193944,340339,367635,367636,367638,510994,510995,510996,510997,510998,510999,511000,511001,511004,511011,511012,511355,511385,511387,511389,511390,511391,511392,512022,512103,512104,512106,512481,512482,512483,512484,512485,512486,512488,512489,512490,512491,512492,512493,512494,512495,512496,512497,512498,512499,512500,512501,512502,512503,512504,512505,512506,512507,512509,512510,512511,512512,512513,512514,512515,512516,512517,512518,512519,512520,512521,512522,512523,512524,512525,512526,512527,512528,512529,512530,512531,512532,512533,512534,512535,512536,512537,512538,512539,512540,512541,512542,512543,512544,512545,512546,512547,512560,512561,512562,512563,512564,512565,512566,512567,512568,512569,512570,512571,512572,512573,512574,512575,512576,512577,512578,512579,512580,512581,512582,512583,512584,512585,512586,512587,512588,512589,512590,512591,512592,512593,512594,512595,512596,512597,512598,512599,512600,512601,512602,512603,512604,512605,512606,512607,512608,512609,512610,512611,512612,512613,512615,512616,512617,512619,512620,512621,512622,512623,512624,512625,512626,512627,512628,512629,512630,512631,512632,512633,512634,512635,512636,512637,512638,512639,512640,512641,512642,512643,512644,512645,512646,512647,512648,512649,512650,512651,512652,512653,512654,512655,512656,512657,512658,512659,512660,512661,512662,512663,512664,512665,512667,512668,512669,512670,512671,512672,512673,512674,512675,512676,512677,512678,512679,512680,512681,512682,512683,512684,512685,512686,512687,512690,512691,512692,512693,512694,512695,512696,512697,512698,512701,512955,512956,512958,512959,512960,512961,512962,512963,513042,513043,513044,513045,513046,513047,513048,513049,513050,513051,513052,513509,513510,513643,513644,513645,513646,513647,513648,513649,513650,513653,513654,513655,521092,521093,532829,532842,532843,532844,532845,532846,532847,532848,532849,532850,532851,532884,532887,532895,532900,532901,532902,532924,532925,532928,532937,532938,532939,532941,532942,532943,533320,533321,533322,533324,533325,533326,533328,533330,533332,533333,533335,533336,533337,533338,533340,533519,534458,534462,534463,534464,534465,534466,534467,534468,534469,534470,534471,534472,534473,534474,534475,534476,534477,534479,534481,534482,534870,534871,534872,534873,534874,536422,536423,536424,536430,536431,536432,536434,536435,536436,536437,536443,536444,536447,536448,536477,536480,536481,536621,536623,536624,536625,536626,536627,536628,536629,536630,536634,536638,536639,536640,536641,536642,536643,536644,536645,536646,536647,536648,536649,536650,536651,536652,536653,536654,536655,536658,536659,536660,536661,536662,536663,536664,536665,536666,536667,536668,536669,536670,536671,536672,536673,536674,536675,536676,536681,536683,536684,536685,537052,537053,537054,537055,537056,537057,537058,537059,537060,537061,537062,537063,537064,537065,537066,537067,537068,537069,537070,537071,537072,537073,537074,537075,537076,537077,537078,537079,537080,537081,537082,537083,537084,537085,537086,537827,539051,539052,539053,539054,539146,539153,539295,539298,539454,539455,539456,539457,539458,539459,539460,539461,539462,539463,539464,539465,539466,539467,539468,539759,544143,544145,544146,544147,544148,544150,544151,544154,544155,544156,544157,544158,544160,544161,544162,544163,544164,544165,544166,544167,544168,544169,544170,544171,544172,544173,544174,544175,544176,544177,544178,544179,544180,544181,544186,544187,544188,544189,544190,544191,544192,544193,544194,544195,544196,544197,544198,544209,544210,544211,544212,544213,544214,544215,544216,544217,544218,544219,544220,544221,544222,544223,544224,544225,544226,544227,544228,544229,544230,544231,544232,544233,544234,544235,544236,544237,544241,544242,544243,544244,544245,544246,544247,544254,544255,544256,544257,544365,544366,544367,544368,544369,544370,544377,544378,544379,544380,544381,544382,544383,544384,544386,544387,544393,544394,544395,544397,544398,544399,544400,544401,544402,544410,544411,544412,544413,544414,544415,544417,544463,544542,544543,544544,544545,544546,544547,544548,544553,544557,549614,573303,573304,573306,573312,573314,573319,573320,573322,573324,573325,573329,573330,573331,573332,573333,573334,573335,573336,573337,583685,583686,583687,583688,583689,583690,583691,583692,583693,583695,583696,583697,583699,583700,583702,583705,583706,583708,583709,583710,583711,583712,583713,583714,583715,583716,583717,583718,583719,583720,583721,583722,583723,583724,583725,583726,583727,583728,583729,583730,583731,583732,583733,583734,583735,583736,583737,583738,583739,583740,583741,583742,583743,583744,583745,583746,583747,583748,583749,583750,583751,583752,583753,583754,583755,583756,583757,583758,583759,583760,583761,583762,583763,583779,583782,609804,609805,609806,609847,609848,609849,609850,612547,654503,655751,655754,655760,655761,655764,655766,655767,655769,655774,655775,655780,655782,655784,655788,655791,655793,655798,655801,655802,655810,655811,655815,655817,655821,655824,655825,655826,655828,655832,655835,655836,655839,655841,655842,655844,655845,655849,655850,655852,655853,655854,655855,655856,655858,655859,655860,655861,655863,655864,655865,655866,655867,655868,655869,655870,655871,655872,655873,655874,655875,655876,655877,655878,655879,655881,655882,655883,655884,655885,655886,655887,655888,655889,655890,655893,655894,655895,655896,655897,655912,934471,934473,934478,934479,934481,934483,934484,934485,934486,934739,934740,934741,934743,934744,934745,934755,934765,934782,937652,937653,937654,952805,957568,957590,2155000,2155001,2155002,2155003,2155004,2155005,2155006,2155007,2155008,2155009,2155010,2155011,2155012,2155013,2155014,2155015,2155016,2155017,2155018,2155019,2155020,2155021,2155022,2155023,2155024,2155025,2155026,2155027,2155028,2155029,2155030,2155031,2155032,2155033,2155034,2165362,2165363,2165364,2165365,2165366,2165367,2165368,2165369,2165370,2165371,2165372,2165373,2165374,2165375,2165376,2165377,2165378,2165379,2165380,2165381,2165382,2165383,2165384,2165385,2165395,2165396,2165397,2165398,2165399,2165400,2165403,2165404,2165405,2165406,2165409,2165411,2165416,2165417,2165419,2165420,2165421,2165422,2165425,2165426,2165427,2165428,2165429,2165430,2165431,2165432,2165433,2165434,2165435,2165436,2165437,2165438,2165439,2165440,2165441,2165442,2165443,2165444,2165445,2165446,2165447,2165448,2165449,2165450,2165451,2165452,2165453,2165454,2165455,2165456,2165457,2165458,2165459,2165460,2165461,2165462,2165463,2165464,2165465,2165466,2165467,2165468,2165469,2165470,2165471,2165472,2165473,2165474,2165475,2165476,2165477,2165478,2165479,2165480,2165481,2165482,2165483,2165484,2165485,2165486,2165487,2165488,2165489,2165490,2165491,2165492,2165493,2165494,2165495,2165496,2165497,2165498,2165499,2165500,2165501,2165502,2165503,2165504,2165505,2165506,2165507,2165508,2165509,2165510,2165511,2165512,2165513,2165514,2165515,2165516,2165517,2165518,2165519,2165520,2165521,2165522,2165523,2165524,2165525,2165526,2165527,2165528,2165529,2165530,2165531,2165532,2165533,2165534,2165535,2165536,2165537,2165538,2165539,2165540,2165541,2165542,2165543,2165544,2165545,2165546,2165547,2165548,2165549,2165550,2165551,2165552,2165553,2165554,2165555,2165556,2165557,2165558,2165559,2165560,2165561,2165562,2165563,2165564,2165565,2165566,2165567,2165568,2165569,2165570,2165571,2165572,2165573,2165574,2165575,2165576,2165577,2165578,2165579,2165580,2165581,2165582,2165583,2165584,2165585,2165586,2165587,2165588,2165589,2165590,2165591,2165592,2165593,2165594,2165595,2165596,2165597,2165598,2165599,2165600,2165601,2165602,2165603,2165604,2165605,2165606,2165607,2165608,2165609,2165610,2165611,2165612,2165613,2165614,2165615,2165616,2165617,2165618,2165619,2165620,2165621,2165622,2165623,2165624,2165625,2165626,2165627,2165628,2165629,2165630,2165631,2165632,2165633,2165634,2165635,2165636,2165637,2165638,2165639,2165640,2165641,2165642,2165643,2165644,2165645,2165646,2165647,2165648,2165649,2165650,2165651,2165652,2165653,2165654,2165655,2165656,2165657,2165658,2165659,2165660,2165661,2165662,2165663,2165664,2165665,2165666,2165667,2165668,2165669,2165670,2165671,2165672,2165673,2165674,2165675,2165676,2165677,2165678,2165679,2165680,2165681,2165682,2165683,2165684,2165685,2165686,2165687,2165688,2165689,2165690,2165691,2165692,2165693,2165694,2165695,2165696,2165697,2165698,2165699,2165700,2165701,2165703,2165704,2193422,2193423,2193424,2193425,2193426,2193470,2193471,2193472,2193982,2208454,2208455,2208456,2208457,2208459,2208460,2208461,2208462,2208463,2208464,2208465,2208466,2208467,2208468,2208469,2208470,2208471,2208472,2208473,2208474,2208475,2208476,2208477,2208478,2208479,2208480,2208481,2208482,2208483,2208484,2208485,2208486,2208487,2208488,2208489,2208490,2208491,2208492,2208493,2208494,2208495,2208496,2208497,2208498,2208499,2208500,2208501,2208502,2208503,2208504,2208505,2208506,2208507,2208508,2208509,2208510,2208511,2208512,2208513,2208514,2208515,2208516,2208517,2208518,2208519,2208520,2208521,2208522,2208523,2208524,2208525,2208526,2208527,2208528,2208529,2208530,2208531,2208532,2208533,2208534,2208535,2208536,2208537,2208538,2208539,2208540,2208541,2208542,2208543,2208544,2208545,2208546,2208547,2208548,2208549,2208550,2208551,2208552,2208553,2208554,2208555,2208556,2208557,2208558,2208559,2208560,2208561,2208562,2208563,2208564,2208565,2208566,2208567,2208568,2208569,2208570,2208571,2208572,2208573,2208574,2208575,2208576,2208577,2208578,2208579,2208580,2208581,2208582,2208583,2208584,2208585,2208586,2208587,2208588,2208590,2208591,2208592,2208593,2208594,2208595,2208596,2208597,2208598,2208599,2208600,2208601,2208602,2208603,2208604,2208605,2208606,2208607,2208608,2208609,2208610,2208611,2208612,2208613,2208614,2208615,2208616,2208617,2208618,2208619,2208620,2208621,2208622,2208623,2208624,2208625,2208626,2208627,2208628,2208629,2208630,2208631,2208632,2208633,2208634,2208635,2208636,2208637,2208638,2208639,2208640,2208641,2208642,2208643,2208644,2208645,2208646,2208647,2208648,2208649,2208650,2208651,2208652,2208653,2208654,2208655,2208656,2208657,2208658,2208659,2208660,2208661,2208662,2208663,2208664,2208665,2208667,2208668,2208669,2208670,2208671,2208672,2208673,2208674,2208675,2208676,2208677,2208678,2208679,2208680,2208681,2208682,2208683,2208684,2212686,2212687,2212688,2212689,2212690,2227530,2227531,2227532,2227533,2227534,2227535,2227536,2227537,2227538,2227539,2227540,2227541,2227542,2227543,2227544,2227545,2227546,2227547,2227548,2227549,2227550,2227551,2227552,2227553,2227554,2227555,2227556,2227557,2227558,2227559,2227560,2227561,2227562,2227563,2227564,2227565,2227566,2227567,2227568,2227569,2227570,2227571,2227572,2227573,2227574,2227575,2227576,2227577,2227578,2227579,2227580,2227581,2227582,2227583,2227584,2227585,2227586,2227587,2227588,2227589,2227590,2227591,2227592,2227593,2227594,2227595,2227596,2227597,2227598,2227599,2227600,2227601,2227602,2227603,2227604,2227605,2227606,2227607,2227608,2227609,2227610,2227611,2227612,2227613,2227614,2227615,2227616,2227617,2227618,2227619,2227620,2227621,2227622,2227623,2227624,2227625,2227626,2227627,2227628,2227629,2227630,2227631,2227632,2227633,2227634,2227635,2227636,2227637,2227638,2227639,2227640,2227641,2227642,2227643,2227644,2227645,2227646,2227647,2227648,2227649,2227650,2227651,2227652,2227653,2227654,2227655"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=science&topics%5B%5D=m&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=science&topics%5B%5D=m&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235832<br>Science 5755 2005-12-16" href="edition.php?id=812852"><i> #5755 2005-50 2005-dec 16 vol. 310</i></a></b> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35840</span> <span class="badge badge-secondary"">m 91201</span></nobr>
+<font size=1 color="gray"><br>Science 5755 2005-12-16 <br><b> </b></font>
+</td>
+<td>The Staff of American Association For Advancement of Science</td>
+<td>American Association For Advancement of Science</td>
+<td><nobr>2005 December 16</nobr></td>
+<td>English</td>
+<td>132 / 132</td>
+<td><nobr><a href="/file.php?id=2235832">12 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=5b1e061c7669ed77b56a48cac458914a"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/5b1e061c7669ed77b56a48cac458914a"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/5b1e061c7669ed77b56a48cac458914a?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/5b1e061c7669ed77b56a48cac458914a"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/5b1e061c7669ed77b56a48cac458914a"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2011-09-13/2021-09-05; ID: 2365132<br>Science 570 2004-52 v30 [12-24]" href="edition.php?id=812802"><i> #5705 2004-52 2004-dec 24 vol. 306 iss. 5705</i></a> pp.2163—2163</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2011-09-13/2021-09-05; ID: 2365132<br>Science 570 2004-52 v30 [12-24]" href="edition.php?id=812802">A Dangerous Signal to Science <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2011-09-13/2021-09-05; ID: 2365132<br>Science 570 2004-52 v30 [12-24]" href="edition.php?id=812802"><i><font color="green">DOI: 10.1126/science.1108749</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35791</span> <span class="badge badge-secondary"">m 224703</span></nobr>
+<font size=1 color="gray"><br>Science 570 2004-52 v30 [12-24] <br><b> </b></font>
+</td>
+<td>Leshner, A. I. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2004 December 24</nobr></td>
+<td>English</td>
+<td>116 / 116</td>
+<td><nobr><a href="/file.php?id=2365132">11 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=41ff0c3fa87effdc48cff7268631652d"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/41ff0c3fa87effdc48cff7268631652d"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/41ff0c3fa87effdc48cff7268631652d?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/41ff0c3fa87effdc48cff7268631652d"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/41ff0c3fa87effdc48cff7268631652d"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=175512">Science Fiction Adventures (1952-1954)   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-06-28/2021-06-18; ID: 544159<br>Science Fiction Adventures v01n01 (1952-11.Science Fiction)" href="edition.php?id=1924072"><i> 1952-nov vol. 1 iss. 1</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-06-28/2021-06-18; ID: 544159<br>Science Fiction Adventures v01n01 (1952-11.Science Fiction)" href="edition.php?id=1924072"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 211012</span></nobr>
+<font size=1 color="gray"><br>Science Fiction Adventures v01n01 (1952-11.Science Fiction) <br><b>1416x2016px </b></font>
+</td>
+<td><a href="author.php?id=101471">Erik Van Lhin,</a></td>
+<td><a href="publisher.php?id=24235">Science Fiction Publications, Inc.</a></td>
+<td><nobr>1952 November</nobr></td>
+<td>English</td>
+<td>166 / 164</td>
+<td><nobr><a href="/file.php?id=544159">80 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=243ee79896381f7eb431dedc20fe2800"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/243ee79896381f7eb431dedc20fe2800?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235797<br>Science 5712 2005-02-18" href="edition.php?id=812809"><i> #5712 2005-7 2005-feb 18 vol. 307 iss. 5712</i></a> pp.1013—1013</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235797<br>Science 5712 2005-02-18" href="edition.php?id=812809">Nurturing the Next Einsteins <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235797<br>Science 5712 2005-02-18" href="edition.php?id=812809"><i><font color="green">DOI: 10.1126/science.1110137</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35798</span> <span class="badge badge-secondary"">m 91166</span></nobr>
+<font size=1 color="gray"><br>Science 5712 2005-02-18 <br><b> </b></font>
+</td>
+<td>Alexander, L. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2005 February 18</nobr></td>
+<td>English</td>
+<td>118 / 118</td>
+<td><nobr><a href="/file.php?id=2235797">11 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3f5438013e245fed448618882a434215"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/3f5438013e245fed448618882a434215"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/3f5438013e245fed448618882a434215?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/3f5438013e245fed448618882a434215"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/3f5438013e245fed448618882a434215"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235824<br>Science 5742 2005-09-16" href="edition.php?id=812839"><i> #5742 2005-37 2005-sep 16 vol. 309 iss. 5742</i></a> pp.1789—1789</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235824<br>Science 5742 2005-09-16" href="edition.php?id=812839">Climate Equity for All <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235824<br>Science 5742 2005-09-16" href="edition.php?id=812839"><i><font color="green">DOI: 10.1126/science.1115898</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35827</span> <span class="badge badge-secondary"">m 91193</span></nobr>
+<font size=1 color="gray"><br>Science 5742 2005-09-16 <br><b> </b></font>
+</td>
+<td>Huntingford, C. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2005 September 16</nobr></td>
+<td>English</td>
+<td>95 / 95</td>
+<td><nobr><a href="/file.php?id=2235824">11 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=6f923c155ac2d3517d255e48028a08cd"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/6f923c155ac2d3517d255e48028a08cd"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/6f923c155ac2d3517d255e48028a08cd?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/6f923c155ac2d3517d255e48028a08cd"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/6f923c155ac2d3517d255e48028a08cd"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235858<br>Science 5785 2006-07-21" href="edition.php?id=812882"><i> #5785 2006-29 2006-jul 21 vol. 313</i></a> pp.273—273</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235858<br>Science 5785 2006-07-21" href="edition.php?id=812882">News on Women's Health <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235858<br>Science 5785 2006-07-21" href="edition.php?id=812882"><i><font color="green">DOI: 10.1126/science.1132381</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35851</span> <span class="badge badge-secondary"">m 91227</span></nobr>
+<font size=1 color="gray"><br>Science 5785 2006-07-21 <br><b> </b></font>
+</td>
+<td>Kennedy, D. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2006 July 21</nobr></td>
+<td>English</td>
+<td>93 / 93</td>
+<td><nobr><a href="/file.php?id=2235858">11 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=4caeabc16760e35724f68d55d68a6198"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/4caeabc16760e35724f68d55d68a6198"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/4caeabc16760e35724f68d55d68a6198?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/4caeabc16760e35724f68d55d68a6198"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/4caeabc16760e35724f68d55d68a6198"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235859<br>Science 5786 2006-07-28" href="edition.php?id=812883"><i> #5786 2006-30 2006-jul 28 vol. 313</i></a> pp.409—409</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235859<br>Science 5786 2006-07-28" href="edition.php?id=812883">Twenty-Five Years of HIV/AIDS <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2235859<br>Science 5786 2006-07-28" href="edition.php?id=812883"><i><font color="green">DOI: 10.1126/science.1131993</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35852</span> <span class="badge badge-secondary"">m 91228</span></nobr>
+<font size=1 color="gray"><br>Science 5786 2006-07-28 <br><b> </b></font>
+</td>
+<td>Fauci, A. S. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2006 July 28</nobr></td>
+<td>English</td>
+<td>116 / 116</td>
+<td><nobr><a href="/file.php?id=2235859">13 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3920119724258d1a2f5d728436925f62"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/3920119724258d1a2f5d728436925f62"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/3920119724258d1a2f5d728436925f62?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/3920119724258d1a2f5d728436925f62"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/3920119724258d1a2f5d728436925f62"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=544924">BBC Science Focus Magazine Collection   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 102981654<br>BBC.Science.Focus.Magazine.Specials.Mind.Bending.Science-VOL.06.2017" href="edition.php?id=150363915"><i> #6</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 102981654<br>BBC.Science.Focus.Magazine.Specials.Mind.Bending.Science-VOL.06.2017" href="edition.php?id=150363915">Mind Bending Science <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 487052</span></nobr>
+<font size=1 color="gray"><br>BBC.Science.Focus.Magazine.Specials.Mind.Bending.Science-VOL.06.2017 <br><b> </b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr>2017</nobr></td>
+<td>English</td>
+<td>96</td>
+<td><nobr><a href="/file.php?id=102981654">71 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=31f2916accad5ec242a779da191b5c01"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/31f2916accad5ec242a779da191b5c01?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227791<br>Science 21 July 2006" href="edition.php?id=812882"><i> #5785 2006-29 2006-jul 21 vol. 313</i></a> pp.273—273</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227791<br>Science 21 July 2006" href="edition.php?id=812882">News on Women's Health <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227791<br>Science 21 July 2006" href="edition.php?id=812882"><i><font color="green">DOI: 10.1126/science.1132381</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 733189</span></nobr>
+<font size=1 color="gray"><br>Science 21 July 2006 <br><b> </b></font>
+</td>
+<td>Kennedy, D. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2006 July 21</nobr></td>
+<td>English</td>
+<td>93 / 93</td>
+<td><nobr><a href="/file.php?id=103227791">11 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8297f6f41f861abcac25f3133f27865c"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/8297f6f41f861abcac25f3133f27865c?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227803<br>Science 28 July 2006" href="edition.php?id=812883"><i> #5786 2006-30 2006-jul 28 vol. 313</i></a> pp.409—409</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227803<br>Science 28 July 2006" href="edition.php?id=812883">Twenty-Five Years of HIV/AIDS <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-06/2023-08-06; ID: 103227803<br>Science 28 July 2006" href="edition.php?id=812883"><i><font color="green">DOI: 10.1126/science.1131993</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 733201</span></nobr>
+<font size=1 color="gray"><br>Science 28 July 2006 <br><b> </b></font>
+</td>
+<td>Fauci, A. S. </td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td><nobr>2006 July 28</nobr></td>
+<td>English</td>
+<td>116 / 116</td>
+<td><nobr><a href="/file.php?id=103227803">13 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=c31855cc02a0607a985a837d32ef3d5f"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/c31855cc02a0607a985a837d32ef3d5f?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=544924">BBC Science Focus Magazine Collection   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-19/2023-08-19; ID: 103542011<br>BBC Science Focus Magazine: Extreme Science - 2020" href="edition.php?id=150363919"><i> 2020-oct 3</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-08-19/2023-08-19; ID: 103542011<br>BBC Science Focus Magazine: Extreme Science - 2020" href="edition.php?id=150363919">Extreme Science <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 1021864</span></nobr>
+<font size=1 color="gray"><br>BBC Science Focus Magazine: Extreme Science - 2020 <br><b> </b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr>2020 October 3</nobr></td>
+<td>English</td>
+<td>100</td>
+<td><nobr><a href="/file.php?id=103542011">95 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9641c447af176cdfaf34769cf507047b"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9641c447af176cdfaf34769cf507047b?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=170383">Selected Science-Fiction Magazine   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-24/2021-06-18; ID: 149946<br>Selected Science-Fiction Magazine 02 (1955.Malian)(Aus)(madmaxau)" href="edition.php?id=1858983"><i> #2 1955-jun</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-24/2021-06-18; ID: 149946<br>Selected Science-Fiction Magazine 02 (1955.Malian)(Aus)(madmaxau)" href="edition.php?id=1858983"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 210646</span></nobr>
+<font size=1 color="gray"><br>Selected Science-Fiction Magazine 02 (1955.Malian)(Aus)(madmaxau) <br><b>3104x2259px 300dpi</b></font>
+</td>
+<td><a href="author.php?id=655">Editors of Selected Science Fiction Magazine</a></td>
+<td><a href="publisher.php?id=17590">Malian Press</a></td>
+<td><nobr>1955 June</nobr></td>
+<td>English</td>
+<td>19 / 34</td>
+<td><nobr><a href="/file.php?id=149946">11 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=2404875ae6d7740ee98b40a4e16c6cc6"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/2404875ae6d7740ee98b40a4e16c6cc6?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=166894">Vanguard Science Fiction   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-27/2022-08-21; ID: 191631<br>Vanguard Science Fiction 1958-01 jun v01n01 (Vanguard)(Gorgon)" href="edition.php?id=1920080"><i> 1958-1 1958-jun vol. 1 iss. 1</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-27/2022-08-21; ID: 191631<br>Vanguard Science Fiction 1958-01 jun v01n01 (Vanguard)(Gorgon)" href="edition.php?id=1920080"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">c 1169555</span> <span class="badge badge-secondary"">m 106103</span></nobr>
+<font size=1 color="gray"><br>Vanguard Science Fiction 1958-01 jun v01n01 (Vanguard)(Gorgon) <br><b>1500x2200px 300dpi</b></font>
+</td>
+<td><a href="author.php?id=18958">William Atheling, Jr.,</a></td>
+<td><a href="publisher.php?id=28800">Vanguard Science Fiction, Inc.</a></td>
+<td><nobr>1958 June</nobr></td>
+<td>English</td>
+<td>132 / 132</td>
+<td><nobr><a href="/file.php?id=191631">56 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=4e5c39500d19d0e5ed4292fc8f2435e5"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/4e5c39500d19d0e5ed4292fc8f2435e5?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=170186">The Best of Omni Science Fiction   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-09-24/2021-06-18; ID: 583777<br>Best of Omni Science Fiction 02 1981" href="edition.php?id=1598612"><i> #2</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-09-24/2021-06-18; ID: 583777<br>Best of Omni Science Fiction 02 1981" href="edition.php?id=1598612">The Best of OMNI Science Fiction 2 (1981) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">f 626695</span> <span class="badge badge-secondary"">m 16608</span></nobr>
+<font size=1 color="gray"><br>Best of Omni Science Fiction 02 1981 <br><b>1227x1628px 150dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr>1981</nobr></td>
+<td>English</td>
+<td>112</td>
+<td><nobr><a href="/file.php?id=583777">153 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d1f94bbe9bd38ce353e8d6e59c9e20fa"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/d1f94bbe9bd38ce353e8d6e59c9e20fa"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/d1f94bbe9bd38ce353e8d6e59c9e20fa?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/d1f94bbe9bd38ce353e8d6e59c9e20fa"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=175420">The Magazine Of Fantasy And Science Fiction   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-12-08/2020-01-09; ID: 655762<br>Magazine of Fantasy and Science Fiction 1995-01 Vol 088 Issue 01 " href="edition.php?id=1887469"><i> #524 1995-1 1995-jan vol. 88 iss. 1</i></a><br>F&sf January 1995 Vol 88 Issue 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-12-08/2020-01-09; ID: 655762<br>Magazine of Fantasy and Science Fiction 1995-01 Vol 088 Issue 01 " href="edition.php?id=1887469"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 61631</span></nobr>
+<font size=1 color="gray"><br>Magazine of Fantasy and Science Fiction 1995-01 Vol 088 Issue 01  <br><b>337x500px 72dpi</b></font>
+</td>
+<td><a href="author.php?id=618696">The Magazine Of Fantasy And Science Fiction,  (Author)</a>; <a href="author.php?id=161210">Kris Rusch,</a></td>
+<td><a href="publisher.php?id=18208">Mercury Press, Inc.</a></td>
+<td><nobr>1995 January</nobr></td>
+<td>English</td>
+<td>2 / 164</td>
+<td><nobr><a href="/file.php?id=655762">177 kB</a></nobr></td>
+<td>rar</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=99c7526d62df373b7d0d4f784ac11243"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/99c7526d62df373b7d0d4f784ac11243?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=175420">The Magazine Of Fantasy And Science Fiction   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-12-08/2020-01-09; ID: 655843<br>Magazine of Fantasy and Science Fiction 2003-09 Vol 105 Issue 03 " href="edition.php?id=1914290"><i> #621 2003-9 2003-sep</i></a><br>F&SF September 2003 vol 105 issue 3 <br>Fantasy & Sci-Fi-Sep-2003 <br>Fantasy & Science Fiction F&SF Vol 105 Issue 3 September 2003</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-12-08/2020-01-09; ID: 655843<br>Magazine of Fantasy and Science Fiction 2003-09 Vol 105 Issue 03 " href="edition.php?id=1914290"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 61729</span></nobr>
+<font size=1 color="gray"><br>Magazine of Fantasy and Science Fiction 2003-09 Vol 105 Issue 03  <br><b>367x500px 72dpi</b></font>
+</td>
+<td><a href="author.php?id=618696">The Magazine Of Fantasy And Science Fiction,  (Author)</a>; <a href="author.php?id=190671">Gordon Van Gelder</a></td>
+<td><a href="publisher.php?id=25420">Spilogale, Inc.</a></td>
+<td><nobr>2003 September</nobr></td>
+<td>English</td>
+<td>3 / 164</td>
+<td><nobr><a href="/file.php?id=655843">168 kB</a></nobr></td>
+<td>rar</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ff754d9a17fd5c67403ee076ae0360dd"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/ff754d9a17fd5c67403ee076ae0360dd?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167437">Popular Science USA   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-09-05; ID: 2227827<br>Popular Science 2005-04" href="edition.php?id=791307"><i> 2005-4 2005-apr</i></a></b> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35734</span> <span class="badge badge-secondary"">m 82272</span></nobr>
+<font size=1 color="gray"><br>Popular Science 2005-04 <br><b> </b></font>
+</td>
+<td>Editors of Popular Science</td>
+<td>Robert Defendi</td>
+<td><nobr>2005 April</nobr></td>
+<td>English</td>
+<td>132 / 132</td>
+<td><nobr><a href="/file.php?id=2227827">12 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=540dd79200970f6bea9721ba091bb12a"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/540dd79200970f6bea9721ba091bb12a"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/540dd79200970f6bea9721ba091bb12a?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/540dd79200970f6bea9721ba091bb12a"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/540dd79200970f6bea9721ba091bb12a"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167437">Popular Science USA   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-08-30; ID: 2227845<br>Popular Science 2006-12" href="edition.php?id=791327"><i> 2006-12 2006-dec</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-08-30; ID: 2227845<br>Popular Science 2006-12" href="edition.php?id=791327"><i><font color="green"> 1580608531; 9781580608534</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 35737</span> <span class="badge badge-secondary"">m 82291</span></nobr>
+<font size=1 color="gray"><br>Popular Science 2006-12 <br><b> </b></font>
+</td>
+<td>Editors of Popular Science</td>
+<td>Time4Media</td>
+<td><nobr>2006 December</nobr></td>
+<td>English</td>
+<td>166 / 166</td>
+<td><nobr><a href="/file.php?id=2227845">41 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=54b7e89e395dc6961b327cfe60d9552e"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/54b7e89e395dc6961b327cfe60d9552e"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/54b7e89e395dc6961b327cfe60d9552e?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/54b7e89e395dc6961b327cfe60d9552e"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/54b7e89e395dc6961b327cfe60d9552e"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-08-30; ID: 2235974<br>Science 5903 2008-11-07" href="edition.php?id=813000"><i> #5903 2008-45 2008-nov 7 vol. 322</i></a></b> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 771834</span> <span class="badge badge-secondary"">m 91343</span></nobr>
+<font size=1 color="gray"><br>Science 5903 2008-11-07 <br><b> </b></font>
+</td>
+<td>American Association for the Advancement of Science</td>
+<td></td>
+<td><nobr>2008 November 7</nobr></td>
+<td>English</td>
+<td>144 / 144</td>
+<td><nobr><a href="/file.php?id=2235974">44 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=c619a44908cc00ee2f5c4bae9db2f937"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/c619a44908cc00ee2f5c4bae9db2f937"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/c619a44908cc00ee2f5c4bae9db2f937?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/c619a44908cc00ee2f5c4bae9db2f937"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/c619a44908cc00ee2f5c4bae9db2f937"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167540">Science   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2014-03-23/2021-08-30; ID: 2235983<br>Science 5912 2009-01-16 (323)" href="edition.php?id=813009"><i> #5912 2009-3 2009-jan 16 vol. 323</i></a></b> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">l 684004</span> <span class="badge badge-secondary"">m 91352</span></nobr>
+<font size=1 color="gray"><br>Science 5912 2009-01-16 (323) <br><b> </b></font>
+</td>
+<td>American Association for the Advancement of Science (AAAS)</td>
+<td></td>
+<td><nobr>2009 January 16</nobr></td>
+<td>English</td>
+<td>126 / 126</td>
+<td><nobr><a href="/file.php?id=2235983">19 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=e8fcb2df50d64747c412c6147875fe03"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/e8fcb2df50d64747c412c6147875fe03"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e8fcb2df50d64747c412c6147875fe03?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/e8fcb2df50d64747c412c6147875fe03"><span class="badge badge-primary">4</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="bookfi.net" href="http://bookfi.net/md5/e8fcb2df50d64747c412c6147875fe03"><span class="badge badge-primary">5</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167437">Popular Science USA   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-03-21/2021-06-18; ID: 2421189<br>Popular Science 2015 04 us" href="edition.php?id=1666350"><i> 2015-4 2015-apr</i></a></b> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 280899</span></nobr>
+<font size=1 color="gray"><br>Popular Science 2015 04 us <br><b> </b></font>
+</td>
+<td>Popular Science USA</td>
+<td></td>
+<td><nobr>2015 April</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=2421189">13 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3a5d8ea578fe4791a775d09d7999e03e"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/3a5d8ea578fe4791a775d09d7999e03e?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=167437">Popular Science USA   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-12/2021-06-18; ID: 2434088<br>Popular Science 2015 08 us" href="edition.php?id=1666354"><i> 2015-8 2015-aug</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-12/2021-06-18; ID: 2434088<br>Popular Science 2015 08 us" href="edition.php?id=1666354"> <i>quarto</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 293800</span></nobr>
+<font size=1 color="gray"><br>Popular Science 2015 08 us <br><b> </b></font>
+</td>
+<td><a href="author.php?id=613">Editors of Popular Science</a></td>
+<td><a href="publisher.php?id=4332">Bonnier Corp.</a></td>
+<td><nobr>2015 August</nobr></td>
+<td>English</td>
+<td>0 / 80</td>
+<td><nobr><a href="/file.php?id=2434088">49 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d15b255f7a30e3827c12bcb71b9f9d2b"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/d15b255f7a30e3827c12bcb71b9f9d2b?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=406694">Starlog Photo Guidebook - Science Fiction Aliens   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-21/2021-06-18; ID: 2453336<br>Starlog photo guidebook - Science Fiction Aliens - 1977" href="edition.php?id=2034040"><i></i></a><br><a href="series.php?id=211002">Starlog Photo Guidebook  1 </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-21/2021-06-18; ID: 2453336<br>Starlog photo guidebook - Science Fiction Aliens - 1977" href="edition.php?id=2034040">Science Fiction Aliens <i>tp</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-21/2021-06-18; ID: 2453336<br>Starlog photo guidebook - Science Fiction Aliens - 1977" href="edition.php?id=2034040"><i><font color="green"> 0931064015</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 313094</span></nobr>
+<font size=1 color="gray"><br>Starlog photo guidebook - Science Fiction Aliens - 1977 <br><b> </b></font>
+</td>
+<td><a href="author.php?id=134239">Ed Naha</a></td>
+<td><a href="publisher.php?id=25638">Starlog Press</a></td>
+<td><nobr>1977</nobr></td>
+<td>English</td>
+<td>0 / 97</td>
+<td><nobr><a href="/file.php?id=2453336">75 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=8f5a3ede32015db27faeb6f59de3f32c"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/8f5a3ede32015db27faeb6f59de3f32c?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=175512">Science Fiction Adventures (1952-1954)   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-03-03/2021-06-18; ID: 2453770<br>Science Fiction Adventures v01n01 1952-11" href="edition.php?id=1924072"><i> 1952-nov vol. 1 iss. 1</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-03-03/2021-06-18; ID: 2453770<br>Science Fiction Adventures v01n01 1952-11" href="edition.php?id=1924072"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 313528</span></nobr>
+<font size=1 color="gray"><br>Science Fiction Adventures v01n01 1952-11 <br><b> </b></font>
+</td>
+<td><a href="author.php?id=101471">Erik Van Lhin,</a></td>
+<td><a href="publisher.php?id=24235">Science Fiction Publications, Inc.</a></td>
+<td><nobr>1952 November</nobr></td>
+<td>English</td>
+<td>0 / 164</td>
+<td><nobr><a href="/file.php?id=2453770">78 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=16c47e25777d2c9761716ee2f540ccd7"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/16c47e25777d2c9761716ee2f540ccd7?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=175420">The Magazine Of Fantasy And Science Fiction   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-08-25/2021-06-18; ID: 2466525<br>Fantasy & Science Fiction v105n03 (2003 09)" href="edition.php?id=1914290"><i> #621 2003-9 2003-sep</i></a><br>F&SF September 2003 vol 105 issue 3 <br>Fantasy & Sci-Fi-Sep-2003 <br>Fantasy & Science Fiction F&SF Vol 105 Issue 3 September 2003</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-08-25/2021-06-18; ID: 2466525<br>Fantasy & Science Fiction v105n03 (2003 09)" href="edition.php?id=1914290"> <i>digest</i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Magazine issue">m</a></span> 
+<span class="badge badge-secondary"">m 326539</span></nobr>
+<font size=1 color="gray"><br>Fantasy & Science Fiction v105n03 (2003 09) <br><b> </b></font>
+</td>
+<td><a href="author.php?id=618696">The Magazine Of Fantasy And Science Fiction,  (Author)</a>; <a href="author.php?id=190671">Gordon Van Gelder</a></td>
+<td><a href="publisher.php?id=25420">Spilogale, Inc.</a></td>
+<td><nobr>2003 September</nobr></td>
+<td>English</td>
+<td>0 / 164</td>
+<td><nobr><a href="/file.php?id=2466525">35 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=48ca70f4b1c0e331f54bee53bbafa091"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/48ca70f4b1c0e331f54bee53bbafa091?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=science&topics%5B%5D=m&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 3738</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>

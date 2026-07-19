@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=dune&topics%5B%5D=f&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="dune" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox"  class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox" checked class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox"  class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox"  class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox"  class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox"  class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=dune&topics%5B%5D=f&curtab=f">Files <span class="badge badge-primary">4658</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=dune&topics%5B%5D=f&curtab=e">Editions <span class="badge badge-primary">4777</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=dune&topics%5B%5D=f&curtab=s">Series <span class="badge badge-primary">17</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=dune&topics%5B%5D=f&curtab=a">Authors <span class="badge badge-primary">2</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=dune&topics%5B%5D=f&curtab=p">Publishers <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=dune&topics%5B%5D=f&curtab=w">Works <span class="badge badge-primary">751</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=99923650,115953625,115953629,115953635,115953628,96894727,112802345,113307635,113773974,115953632,115953641,115953648,115974482,6087222,6089104,6339424,96789038,96803115,96833864,96846402,96846403,97267499,97345086,97345097,97345098,97345099,99565365,101725470,104883793,104883794,104893795,104893797,115953617,115953621,4195306,4195307,4195308,4195309,4195310,4195311,4433541,4439599,4447400,4447401,4447405,4568637,4568638,4568639,4597666,4597667,4732008,4732009,4749762,4749763,4749764,4749765,4749766,4749767,4841602,5020290,5299679,5447807,5565936,5565951,5745035,5745038,5745040,6339414,6339415,6339419,6339420,6339421,6339423,6339459,6339462,6339463,6339464,6339465,6339466,6339469,6339502,6339503,6339509,6339540,6339564,6339567,6339581,6339596,6339608,6512448,6593337,6593338,6611857,6623056,6649286,96509166,96509172,96509180,96509183,96561598,96789033,96789037,96833858,96846389,96846390,96846391,96953094,96953095,97267500,97267502,97267503,97267504,97267505,97285773,97285792,97285798,97285800,97329042,97329043,97345018,97345019,97345020,97345022,97345023,97813314,97813315,97813316,97813317,97813318,97813320,97813322,98656780,98656796,98680673,98680728,98681059,98690833,98697701,98795029,98819606,98819607,98824452,98833260,99102418,99116637,99121944,99144595,99794150,100507296,101081621,101174173,101442844,102095428,102095429,102140112,102140450,102142563,102223558,102261548,102261549,102261553,102739167,102739169,102739170,104893789,104893793,104893796,104893815,104960798,104960799,104960800,104960801,104960805,104991884,104991885,104991890,104991891,104991892,104991894,104991904,104991907,104991908,104991910,104991911,104991913,104991914,104991916,104991917,106155028,106155033,107371284,107371285,107896061,108326852,112011885,112246421,112288999,113089986,113089988,113191886,113191888,113191890,113307381,113307691,113516989,113529152,113773972,114603888,114604004,114732767,114921687,114925066,115022345,115022349,115022350,115974500,115974505,774148,774149,774180,936067,936068,936096,936097,936098,936099,936100,936101,950053,950684,958195,958196,958197,3730246,3743835,4063976,4065147,4065148,4065149,4065150,4065151,4065152,4065153,4065154,4065155,4065156,4065157,4065158,4065159,4065160,4065161,4065435,4065436,4065437,4065438,4065439,4065440,4065441,4065442,4065443,4065444,4065445,4065446,4065447,4065448,4065449,4065450,4065451,4065452,4065453,4065454,4073919,4073920,4073921,4073922,4073923,4073924,4073925,4073926,4073927,4073928,4073929,4073930,4073931,4073932,4073933,4073934,4073935,4073936,4073937,4073938,4073939,4073940,4073941,4073942,4073945,4073946,4073947,4073951,4073952,4073953,4073954,4073955,4073956,4073957,4073958,4073959,4073960,4073961,4073962,4073963,4073964,4073965,4073966,4073967,4073968,4073969,4073970,4073971,4073972,4081128,4081129,4081130,4081131,4081132,4081133,4081134,4081135,4081136,4081137,4081138,4081139,4081140,4081141,4081142,4081143,4083754,4083755,4083756,4083757,4083758,4083759,4083760,4083761,4083762,4083763,4083764,4083765,4083766,4083767,4083768,4083769,4083770,4083771,4083772,4083773,4085452,4085453,4085454,4085455,4085456,4135536,4135537,4135538,4135539,4135540,4135541,4135542,4206299,4206300,4206301,4206310,4206311,4206312,4206313,4206314,4206315,4206316,4206317,4206318,4206319,4206320,4206321,4206322,4206323,4206324,4206325,4206326,4206327,4206328,4224101,4224102,4224103,4224104,4237196,4237198,4237201,4266885,4266911,4266912,4266913,4266914,4303049,4303050,4303051,4303052,4303053,4303054,4303055,4303056,4303057,4303058,4303059,4303060,4303061,4303062,4303063,4303064,4303065,4303066,4303067,4303068,4303069,4303072,4303073,4303074,4303075,4314110,4314123,4314125,4314126,4314127,4314128,4314129,4314130,4314131,4314132,4314133,4314134,4314137,4428029,4429280,4430351,4430784,4431053,4434434,4447398,4447399,4447416,4458720,4458721,4458722,4458723,4458724,4458725,4458726,4458727,4458728,4458729,4458730,4458731,4458732,4458733,4458734,4458735,4458736,4458737,4458738,4458739,4458740,4458741,4458742,4458743,4458744,4458745,4458746,4458747,4458748,4458749,4458750,4458758,4458768,4458769,4458770,4458771,4458772,4458773,4458774,4458775,4458776,4458777,4458778,4458779,4458780,4458781,4458782,4458783,4458784,4458785,4458786,4458787,4458788,4458789,4458790,4458791,4458792,4458793,4458794,4458795,4458796,4458797,4458802,4458808,4458809,4461883,4461884,4461885,4461886,4461887,4461888,4461889,4461890,4498957,4506419,4512695,4512696,4512697,4512707,4565124,4583776,4587461,4587464,4591728,4591731,4591732,4594054,4594056,4597658,4597659,4597660,4597663,4597664,4597669,4597673,4605668,4620171,4620172,4636839,4636841,4636842,4636843,4636844,4636845,4636846,4636852,4636853,4636854,4636855,4638307,4638308,4732010,4732011,4749782,4749794,4756652,4845714,4845715,4845716,4845717,4845718,4845719,4845720,4845721,4845722,4845723,4845724,4845725,4845726,4845727,4845728,4845729,4845730,4845731,4845732,4845733,4845734,4845735,4845736,4849119,4849120,4849121,4849122,4849123,4849124,4849125,4849126,4849127,4849128,4849129,4849130,4849131,4849132,4849133,4849134,4849135,4849136,4849137,4849138,4849139,4849140,4849141,4849142,4849143,4849144,4849145,4849146,4849147,4874525,4874526,4874527,4874538,4874539,4886208,4886209,4886210,4886211,4989497,4989498,4989499,4989504,4989505,5020259,5020260,5020261,5020267,5020283,5020284,5020287,5020288,5020289,5020292,5020293,5037238,5037412,5037413,5041472,5041473,5045029,5046373,5046374,5062628,5062629,5070219,5090342,5090343,5107521,5107522,5107525,5115975,5118566,5120546,5139679,5145400,5149022,5169266,5187180,5187181,5213872,5263337,5299105,5299106,5299107,5299254,5337198,5338009,5338010,5378278,5378279,5378280,5378281,5378282,5378283,5378288,5378289,5399636,5411407,5432273,5432274,5433528,5434678,5434682,5435694,5436005,5436006,5436322,5447808,5480266,5489290,5537740,5565937,5565938,5565939,5565940,5565941,5590501,5620850,5620932,5621223,5621224,5621227,5621232,5621234,5621626,5621867,5621870,5622499,5622501,5745030,5745031,5745032,5745033,5745034,5745036,5745047,5745056,5745057,5745058,5745061,5745062,5745063,5745064,5745065,5745066,5745067,5909088,5909089,5909091,5909092,5909318,5909319,5922300,5946139,5946668,5946669,5946670,5946671,5957883,5957884,5957885,5957886,5967278,5967279,5967280,5971121,5971122,5971123,5973805,5993922,6001873,6041884,6049120,6049121,6049390,6049480,6056878,6056900,6056901,6057258,6058050,6058845,6058846,6058905,6063840,6063852,6063903,6064096,6064240,6087219,6087220,6087221,6087228,6089107,6124510,6132226,6132227,6132742,6132759,6171108,6228453,6228454,6339416,6339422,6339454,6339455,6339456,6339457,6339458,6339460,6339467,6339468,6339470,6339471,6339472,6339473,6339474,6339475,6339476,6339477,6339480,6339504,6339505,6339506,6339507,6339508,6339530,6339531,6339532,6339533,6339534,6339535,6339536,6339537,6339538,6339539,6339553,6339555,6339556,6339557,6339558,6339559,6339560,6339561,6339562,6339563,6339565,6339566,6339568,6339569,6339570,6339571,6339572,6339573,6339574,6339575,6339576,6339577,6339578,6339579,6339580,6339582,6339583,6339588,6339589,6339590,6339591,6339592,6339593,6339594,6339595,6339601,6339602,6339603,6339604,6339605,6339606,6339607,6339615,6339618,6339619,6339621,6339661,6339662,6339663,6339664,6339665,6518940,6648276,96510559,96696001,96789031,96789032,96833859,96833860,96833861,96833862,96846384,96846398,96846399,96940662,96940663,96940664,96940665,96940666,96940667,96940668,96953101,96953102,96953108,96953109,96953113,96953114,96953115,96953117,96953118,96978289,96978290,96978291,96978292,96978293,96978294,96978295,96978296,96978297,96978298,96978299,96980001,96980002,96980054,96980055,96980056,96980057,97079536,97079537,97079538,97079539,97079624,97104978,97104979,97104980,97104985,97105053,97105054,97105055,97105056,97105057,97105058,97105059,97105060,97105061,97105062,97105063,97105064,97105065,97105066,97105067,97105068,97105076,97105077,97105092,97105093,97105094,97105095,97105110,97105111,97105112,97105113,97105114,97105126,97105127,97105133,97105134,97105135,97105136,97105137,97267491,97267492,97285766,97285769,97285770,97285771,97285774,97285775,97285776,97285777,97285778,97285779,97329031,97329032,97329033,97329035,97329036,97329037,97329038,97329039,97329040,97329041,97329044,97329052,97329053,97329054,97329057,97329058,97329059,97329060,97329061,97344975,97344976,97344977,97344978,97344979,97344980,97344981,97344982,97344984,97344985,97344986,97344987,97344988,97344989,97344990,97345025,97345026,97345027,97345028,97345029,97345031,97345032,97345033,97345034,97345035,97345036,97345041,97345042,97345043,97345044,97345045,97345046,97345047,97345048,97345049,97345050,97345051,97345052,97345058,97345059,97345060,97345061,97345062,97345063,97345064,97345065,97345067,97345068,97345069,97345070,97345071,97345072,97345073,97345074,97345075,97345094,97345095,97345100,97345104,97345105,97345106,97345107,97811419,97813301,97813302,97813303,97813304,97813305,97813306,97813307,97813308,97813309,97813310,97813311,97813312,97813313,97818523,97818524,97818525,97818526,97818527,97839061,97839165,97839166,97841445,97841446,97843380,97844087,97844088,97844624,97850425,97898219,97946482,97946483,97946484,97998974,97998977,98205692,98205693,98428310,98428397,98448969,98600568,98600584,98617883,98652435,98656786,98656788,98656799,98656803,98657639,98658759,98660266,98660273,98663886,98680666,98680793,98681048,98683742,98683743,98683744,98687201,98687776,98690866,98697643,98702301,98754817,98756125,98757138,98758311,98760034,98763531,98763532,98769960,98769963,98782603,98782612,98782711,98795030,98795032,98799630,98799631,98811559,98815278,98815309,98815318,98822549,98823164,98833259,98857279,98857280,98862504,98862505,98862506,98866187,98866207,98880307,98915632,98925645,98932782,98932783,98932789,98932796,99084251,99084252,99085251,99085261,99110787,99120805,99122404,99130277,99318576,99581468,99581469,99581472,99581473,99581474,99581483,99581485,99604563,99604565,99604566,99604567,99604569,99608944,99608947,99615931,99644261,99691462,99720260,99722197,99736020,99838864,99847081,99863554,99863752,99890272,99890275,99890283,99890288,99900011,99905211,99905632,99925208,99926184,99928347,99955882,99955888,99955945,99955947,99963061,99963093,99963168,99963175,99963222,99963231,99963650,99963653,99963666,99963677,99981599,99982371,99984597,99984862,100009964,100021582,100021886,100137209,100137210,100137211,100144690,100144938,100160551,100160552,100160553,100160555,100169507,100169508,100169509,100169510,100169512,100169513,100169515,100169516,100169517,100170580,100170581,100219604,100259379,100267493,100282223,100314084,100314613,100330943,100331065,100335855,100335858,100579093,100579095,100579096,100667634,100667660,100673988,100673989,100673990,100673991,100673993,100740058,100740523,100776853,100784130,100786202,100947383,100950250,100951620,100953081,100961757,100970434,101048674,101081613,101081614,101081615,101081616,101081617,101081618,101081619,101081620,101121073,101121077,101121078,101121080,101136156,101136157,101136158,101136159,101136160,101173405,101269358,101269911,101271261,101319300,101319303,101319304,101344465,101344466,101346218,101346219,101346220,101346222,101346224,101359331,101359332,101359333,101359334,101359335,101359336,101359337,101412456,101416504,101442842,101444133,101444654,101474059,101474060,101474145,101474193,101488993,101494344,101494440,101549109,101703962,101708444,101715978,101741902,101892428,101985582,101985601,101998480,101998612,101998657,101998658,101999666,102000434,102000491,102000522,102003139,102076567,102076569,102076571,102076575,102076595,102076596,102095289,102095305,102095318,102095345,102095370,102095448,102137303,102223559,102255664,102261544,102261545,102261546,102261547,102261550,102261551,102261552,102350505,102350506,102372013,102374484,102375584,102376973,102377022,102384775,102385965,102385966,102385967,102385968,102385969,102385970,102392376,102437753,102452402,102462356,102462357,102462358,102462359,102462360,102462361,102462362,102462363,102462364,102462365,102462366,102462368,102462369,102462370,102462372,102462373,102462375,102462376,102477167,102477168,102504099,102504105,102504112,102504114,102504119,102504124,102504143,102504145,102569246,102590971,102602818,102602821,102602823,102602824,102704464,102734786,102739168,102739171,102739173,102739175,102739176,102772601,103993490,103993492,103993493,103993494,104468755,104742289,104889028,104889029,104889030,104889032,104889034,104889035,104891060,104891061,104892272,104893801,104893802,104893805,104893831,104899524,104914660,104914661,104914662,104914663,104914664,104914665,104965539,104965858,104966625,104966867,104969025,104969038,104969046,104969818,104991882,104991887,104991888,104991889,104991895,104991896,105013139,105013140,105013148,105013152,105013157,105019481,105019483,105037708,105037713,105037730,105037731,105097376,106155026,106155029,106155030,106155031,106155032,106159624,106419640,106419641,106419642,106419643,106419644,106505842,106548422,106548423,106548424,106602645,106676177,106676183,106740382,106740384,107896060,107896062,107896063,107896064,107896065,107896066,108040926,108291899,111991570,111993979,111993980,111999048,112011886,112014089,112027557,112027558,112080429,112080430,112080431,112080432,112080433,112080434,112250468,112250469,112260390,112271922,112275643,112276791,112278482,112286929,112308795,112654214,112654215,112654234,112662055,112802343,112802344,112802346,112802347,112850437,112850441,112886400,112953942,112953943,112953946,112973072,112973073,112973080,113089985,113089987,113126669,113131182,113131193,113131961,113156191,113159490,113160030,113169860,113191881,113191882,113191883,113191903,113191904,113191905,113191906,113276963,113278148,113278330,113278936,113278990,113279105,113307464,113307562,113307569,113355338,113355339,113355342,113355343,113516986,113516987,113516988,113516990,113543421,113641200,113641201,113641202,113641203,113698573,113973022,114084765,114184417,114245702,114382472,114427737,114427738,114433344,114433347,114603369,114603816,114671865,114671866,114671867,114671877,114746368,114746482,114778830,114866839,114866840,114866844,114866845,114866851,114866864,114936101,114936102,114936643,114936644,114936645,115022346,115250101,115263658,115266478,115501161,115503182,115503183,115503184,115506800,115523553,115953655,115974464,115974467,115974486,115974492,98191591,115949481,103982887,106545754,106727390,107742047,107742048,107742049,107749691,107749692,107749693,115953602,116250821,99910489,108040985,108040989,108040991,113493778,113493779,113493780,115953606,116277345,6339431,6339432,6339433,6339434,6339435,6339449,6339450,6339451,6339452,97267501,97345096,101124327,101124709,101127499,102095444,104883787,104883788,104883792,104893787,104893788,104893794,106637594,108040982,108040987,112022527,112483251,112710311,4130705,4130706,4130707,4130708,4130709,4130710,4130711,4130712,4130713,4130714,4130715,4130716,4130717,4163169,4266886,4266887,4436020,4436299,4437984,4447403,4447404,4447406,4447424,4447425,4458753,4458755,4458756,4571556,4591286,4606246,4732002,4732003,4732004,4732005,4732006,4732007,5378287,5506651,5565942,5565943,5565945,5565946,5565947,5565948,5565949,5621868,5621869,5621871,5921152,5921156,5922934,5922936,6339413,6339430,6339436,6339437,6339438,6339439,6339440,6339441,6339443,6339444,6339446,6339447,6339453,6339481,6339482,6339483,6339484,6339488,6339489,6339490,6339494,6339495,6339496,6339529,6529418,6529420,6546416,6546420,6601148,6601149,6630428,96690240,96803116,96803117,96803118,96846388,96846400,96879748,96953092,96953096,96981386,97285772,97285781,97285782,97285783,97285785,97285788,97285789,97285790,97285791,97285793,97285794,97285795,97285797,97345008,97345021,97463289,97463290,97813319,97813321,97912942,98113539,98600574,98656782,98656798,99074581,99090417,99102409,99102419,99152952,99158428,99159282,99159324,99890292,99900617,99927849,100138906,100139892,100140514,100143114,100146185,100146191,100147805,100148079,100148824,100148940,100153555,100330992,100331132,100477278,100754576,100754577,100754578,100754579,100953074,100953075,100953076,101017162,101113879,101124656,101127500,101353289,101353290,101353291,101358268,101406371,102095412,102140449,102392147,102392148,102408291,102462367,102739859,102739860,103731287,103979622,103979624,103979626,103979627,103979629,104794991,104794992,104808399,104808400,104881026,104883789,104883790,104883791,104893790,104893791,104893792,104922586,104960802,104960803,104960804,104991883,104991893,104991898,104991899,104991900,104991901,104991902,104991903,104991905,104991906,104991909,104991912,106247451,106247841,106411697,106588564,107748966,107762031,108040980,108040983,108286501,112028504,112104565,112503433,112711158,112711159,112711160,112715042,112715597,112717525,112850438,112850440,112973075,112973076,113122855,113191878,113191880,113191889,113294828,113307708,113433312,113493081,113493082,113493083,113493211,113493212,113493213,113493350,113493351,113493352,113493474,113493475,113493476,113493495,113493496,113493497,113493628,113493629,113493630,113493827,113493828,113493829,113493833,113493834,113493835,113493918,113493919,113493920,113496736,113542387,113838088,113884313,113979501,114045610,114382473,114427736,114427739,114427740,114433345,114603524,114604132,114745505,114921274,114921290,114921307,114930076,114981316,115311732,116250789,116250834,116254106,116254113,116254129,774144,774145,774407,775531,775532,855781,855782,855783,856542,950054,958198,2644722,2644723,2644724,2644725,4055444,4055445,4057924,4065146,4065162,4065483,4065484,4065485,4065486,4065487,4065789,4066587,4067529,4073948,4073949,4073950,4073973,4073974,4073975,4073976,4073977,4075490,4085006,4085007,4085008,4085009,4085010,4085011,4085012,4085013"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=dune&topics%5B%5D=f&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=dune&topics%5B%5D=f&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b>Le cycle de Dune 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2023-07-11/2023-07-15; ID: 99923650<br>Frank Herbert - Dune 1(Presses Pocket)" href="edition.php?id=143673667">Dune 1 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 4572086</span></nobr>
+
+</td>
+<td>Frank Herbert - Le cycle de Dune - 1</td>
+<td>Presses Pocket</td>
+<td><nobr></nobr></td>
+<td>French</td>
+<td>97</td>
+<td><nobr><a href="/file.php?id=99923650">781 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=e7c75dc2964ce80c19cb69140aae8614"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/e7c75dc2964ce80c19cb69140aae8614"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e7c75dc2964ce80c19cb69140aae8614?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/e7c75dc2964ce80c19cb69140aae8614"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Great Schools Of Dune 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953625<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 01] - Sisterhood Of Dune (epub)" href="edition.php?id=208527594">Sisterhood of Dune: Dune novels. Schools of Dune bk. 1 <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953625<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 01] - Sisterhood Of Dune (epub)" href="edition.php?id=208527594"><i><font color="green"> 0765322730; 9780765322739</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109280</span></nobr>
+
+</td>
+<td>Brian Herbert; Kevin J Anderson</td>
+<td>Tor;Scribner</td>
+<td><nobr>2012;2013</nobr></td>
+<td>English</td>
+<td>0 / 496 pages; 25 cm.</td>
+<td><nobr><a href="/file.php?id=115953625">1000 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=66b244325fe051ef2fada274a45ebde8"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/66b244325fe051ef2fada274a45ebde8"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/66b244325fe051ef2fada274a45ebde8?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/66b244325fe051ef2fada274a45ebde8"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Great Schools Of Dune 3</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953629<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 03] - Navigators Of Dune (epub)" href="edition.php?id=208527598">Navigators of Dune: Dune novels. Schools of Dune bk. 3 <i>First edition</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953629<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 03] - Navigators Of Dune (epub)" href="edition.php?id=208527598"><i><font color="green"> 1466878800; 9781466878808; 0765381257; 9780765381255</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109284</span></nobr>
+
+</td>
+<td>Herbert, Brian(aut); Anderson, Kevin J.(aut) [1962-]</td>
+<td>Tor;Scribner</td>
+<td><nobr>2016</nobr></td>
+<td>English;Undetermined</td>
+<td>0 / 412 pages; 25 cm.</td>
+<td><nobr><a href="/file.php?id=115953629">1 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=1bd14c576dfcbcdf015a85c27b8e4c9a"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/1bd14c576dfcbcdf015a85c27b8e4c9a"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/1bd14c576dfcbcdf015a85c27b8e4c9a?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/1bd14c576dfcbcdf015a85c27b8e4c9a"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Heroes Of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953635<br>Brian Herbert & Kevin J Anderson - [Heroes of Dune 02] - Winds Of Dune, (epub)" href="edition.php?id=208527604">The winds of dune: Dune novels. Heroes of Dune bk. 2 <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953635<br>Brian Herbert & Kevin J Anderson - [Heroes of Dune 02] - Winds Of Dune, (epub)" href="edition.php?id=208527604"><i><font color="green"> 0765322722; 9780765322722</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109290</span></nobr>
+
+</td>
+<td>Brian Herbert; Kevin J Anderson</td>
+<td>Tor;Scribner</td>
+<td><nobr>2009</nobr></td>
+<td>English</td>
+<td>0 / 448 pages; 25 cm.</td>
+<td><nobr><a href="/file.php?id=115953635">802 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=cf67795e5484f0c20a5ea8b36c60025b"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/cf67795e5484f0c20a5ea8b36c60025b"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/cf67795e5484f0c20a5ea8b36c60025b?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/cf67795e5484f0c20a5ea8b36c60025b"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Great Schools Of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953628<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 02] - Mentats Of Dune (epub)" href="edition.php?id=208527597">Mentats of dune: Great Schools of Dune Series, Book 2 <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953628<br>Brian Herbert & Kevin J Anderson - [Great Schools of Dune 02] - Mentats Of Dune (epub)" href="edition.php?id=208527597"><i><font color="green"> 1429949767; 9781429949767</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109283</span></nobr>
+
+</td>
+<td>Brian Herbert; Kevin J Anderson</td>
+<td>Tor;Scribner</td>
+<td><nobr>2015;2014</nobr></td>
+<td>English</td>
+<td>0 / 1 online resource</td>
+<td><nobr><a href="/file.php?id=115953628">895 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=9be669eeddc5737cb752d7aff3e41b28"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/9be669eeddc5737cb752d7aff3e41b28"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9be669eeddc5737cb752d7aff3e41b28?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/9be669eeddc5737cb752d7aff3e41b28"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune: house trilogy 2;Dune: Prelude to Dune Trilogy</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96894727<br>House harkonnen - Brian Herbert" href="edition.php?id=140863397">Dune. House Harkonnen <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96894727<br>House harkonnen - Brian Herbert" href="edition.php?id=140863397"><i><font color="green"> 0553897837; 9780553897838</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2892223</span></nobr>
+
+</td>
+<td>OverDrive Media.;Anderson, Kevin J.;Herbert, Brian;Herbert, Frank</td>
+<td>Spectra</td>
+<td><nobr>2003</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=96894727">934 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=bcac3ba33c9046d639ba20e3c3d1bfa4"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/bcac3ba33c9046d639ba20e3c3d1bfa4"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/bcac3ba33c9046d639ba20e3c3d1bfa4?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/bcac3ba33c9046d639ba20e3c3d1bfa4"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>DUNE 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-12/2026-01-12; ID: 112802345<br>Herbert, Frank - Il Ciclo Di Dune: Dune-Messia Di Dune-I Figli Di Dune (2006, Sperling & Kupfer)" href="edition.php?id=205450921">Il Ciclo Di Dune: Dune-Messia Di Dune-I Figli Di Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-12/2026-01-12; ID: 112802345<br>Herbert, Frank - Il Ciclo Di Dune: Dune-Messia Di Dune-I Figli Di Dune (2006, Sperling & Kupfer)" href="edition.php?id=205450921"><i><font color="green"> 9788873391289; 8873391281</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 8257424</span></nobr>
+
+</td>
+<td>Herbert, Frank</td>
+<td>Sperling & Kupfer</td>
+<td><nobr>2006</nobr></td>
+<td>Italian</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=112802345">213 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=bd94f7e30afef028094a8184f83df2b1"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/bd94f7e30afef028094a8184f83df2b1"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/bd94f7e30afef028094a8184f83df2b1?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/bd94f7e30afef028094a8184f83df2b1"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune Chronicles [05]</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-13/2026-01-13; ID: 113307635<br>Frank Herbert - Heretics of Dune (1984, Putnam)" href="edition.php?id=205956204">Heretics of Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-13/2026-01-13; ID: 113307635<br>Frank Herbert - Heretics of Dune (1984, Putnam)" href="edition.php?id=205956204"><i><font color="green"> 9780399128981; 0399128980</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 8619921</span></nobr>
+
+</td>
+<td>Frank Herbert</td>
+<td>Putnam</td>
+<td><nobr>1984</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=113307635">937 kB</a></nobr></td>
+<td>azw3</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=33441dfc1aed762e1dc5d24f98829c6b"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/33441dfc1aed762e1dc5d24f98829c6b"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/33441dfc1aed762e1dc5d24f98829c6b?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/33441dfc1aed762e1dc5d24f98829c6b"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune Chronicles 5</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-15/2026-01-15; ID: 113773974<br>Herbert, Frank - Heretics of Dune (1984, Putnam)" href="edition.php?id=206422596">Heretics of Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-01-15/2026-01-15; ID: 113773974<br>Herbert, Frank - Heretics of Dune (1984, Putnam)" href="edition.php?id=206422596"><i><font color="green"> 9780399128981; 0399128980; 0441328008; 9780441328000</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 8979702</span></nobr>
+
+</td>
+<td>Herbert, Frank</td>
+<td>Putnam</td>
+<td><nobr>1984</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=113773974">563 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=0357a3316988cc7507b26a80fd01a9b5"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/0357a3316988cc7507b26a80fd01a9b5"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/0357a3316988cc7507b26a80fd01a9b5?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/0357a3316988cc7507b26a80fd01a9b5"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Heroes Of Dune 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953632<br>Brian Herbert & Kevin J Anderson - [Heroes of Dune - 01] Paul Of Dune (epub)" href="edition.php?id=208527601">Paul Of Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953632<br>Brian Herbert & Kevin J Anderson - [Heroes of Dune - 01] Paul Of Dune (epub)" href="edition.php?id=208527601"><i><font color="green"> 0340837535; 9780340837535; 0340837543; 9780340837542; 0765312948; 9780765312945</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109287</span></nobr>
+
+</td>
+<td>Herbert, Brian; Anderson, Kevin J. [1962-]</td>
+<td>Hodder & Stoughton;Scribner</td>
+<td><nobr>2008</nobr></td>
+<td>English</td>
+<td>0 / 512 pages; 24 cm</td>
+<td><nobr><a href="/file.php?id=115953632">906 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=32fe6f3afd10d3efc5c9f8b009d5164a"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/32fe6f3afd10d3efc5c9f8b009d5164a"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/32fe6f3afd10d3efc5c9f8b009d5164a?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/32fe6f3afd10d3efc5c9f8b009d5164a"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Legends Of Dune 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953641<br>Brian Herbert & Kevin J Anderson - [Legends of Dune 01] - The Butlerian Jihad (epub)" href="edition.php?id=208527609">Dune. The Butlerian jihad <i>1st ed;First edition</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953641<br>Brian Herbert & Kevin J Anderson - [Legends of Dune 01] - The Butlerian Jihad (epub)" href="edition.php?id=208527609"><i><font color="green"> 0765340771; 9780765340771; 0765305852; 9780765305855; 0765301571; 9780765301574</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109295</span></nobr>
+
+</td>
+<td>Herbert, Brian(aut); Anderson, Kevin J.(aut) [1962-]; Herbert, Frank</td>
+<td>Tor;Scribner</td>
+<td><nobr>2002</nobr></td>
+<td>English</td>
+<td>0 / 621 pages; 25 cm.</td>
+<td><nobr><a href="/file.php?id=115953641">1 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=4cd02defbfa1a4901474dea1ae370df3"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/4cd02defbfa1a4901474dea1ae370df3"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/4cd02defbfa1a4901474dea1ae370df3?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/4cd02defbfa1a4901474dea1ae370df3"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Legends Of Dune 3</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953648<br>Brian Herbert & Kevin J Anderson - [Legends of Dune 03] - The Battle Of Corrin (epub)" href="edition.php?id=208527616">Dune. The Battle of Corrin <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-30/2026-05-30; ID: 115953648<br>Brian Herbert & Kevin J Anderson - [Legends of Dune 03] - The Battle Of Corrin (epub)" href="edition.php?id=208527616"><i><font color="green"> 0765340798; 9780765340795; 0340823364; 9780340823361; 0765305879; 9780765305879; 0765301598; 9780765301598</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10109302</span></nobr>
+
+</td>
+<td>Herbert, Brian(aut); Anderson, Kevin J.(aut) [1962-]</td>
+<td>Tor;Scribner</td>
+<td><nobr>2004</nobr></td>
+<td>English</td>
+<td>0 / 620 pages: illustrations; 25 cm.</td>
+<td><nobr><a href="/file.php?id=115953648">1 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=38c1fea2f70df21e696c646e8f60e1de"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/38c1fea2f70df21e696c646e8f60e1de"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/38c1fea2f70df21e696c646e8f60e1de?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/38c1fea2f70df21e696c646e8f60e1de"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune-1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-31/2026-05-31; ID: 115974482<br>Herbert, Frank - Dune 01 - Dune" href="edition.php?id=208548886">Le cycle de Dune. 1, Dune. 1;Le cycle de Dune. Volume 1, Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2026-05-31/2026-05-31; ID: 115974482<br>Herbert, Frank - Dune 01 - Dune" href="edition.php?id=208548886"><i><font color="green"> 9782266155489; 2266155482; 2266026658; 9782266026659</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 10127917</span></nobr>
+
+</td>
+<td>Herbert, Frank(Auteur.) [(1920-1986).]; Demuth, Michel(Traduction.) [(1939-2006).]</td>
+<td>Presses pocket</td>
+<td><nobr>1980;1965</nobr></td>
+<td>French</td>
+<td>0 / 1 vol. (348 p.): couv. ill. en coul.; 18 cm.</td>
+<td><nobr><a href="/file.php?id=115974482">1 MB</a></nobr></td>
+<td>mobi</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d2da420a02e4bbf240a7670f56fee482"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/d2da420a02e4bbf240a7670f56fee482"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/d2da420a02e4bbf240a7670f56fee482?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/d2da420a02e4bbf240a7670f56fee482"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune 6-Great Schools of Dune 3;Legends of Dune 9</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2021-06-18; ID: 6087222<br>Sisterhood of Dune_001" href="edition.php?id=5836505">Sisterhood of Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2021-06-18; ID: 6087222<br>Sisterhood of Dune_001" href="edition.php?id=5836505"><i><font color="green"> 9780765322739; 0765322730; 9781429986571; 1429986573</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2075473</span></nobr>
+
+</td>
+<td>Anderson, Kevin J; Herbert, Brian Patrick</td>
+<td>Tor</td>
+<td><nobr>2012</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=6087222">799 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=b11d1e075f7fcecbdc2874254c79ac72"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/b11d1e075f7fcecbdc2874254c79ac72"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/b11d1e075f7fcecbdc2874254c79ac72?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/b11d1e075f7fcecbdc2874254c79ac72"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune 6-Great Schools of Dune 3;Navigators of Dune</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2026-06-12; ID: 6089104<br>Frank Herbert - Dune 06-Great Schools of Dune 03 - Navigators of Dune # Brian Herbert & Kevin J. Anderson (v5.0)" href="edition.php?id=5838432">Sisterhood of Dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2026-06-12; ID: 6089104<br>Frank Herbert - Dune 06-Great Schools of Dune 03 - Navigators of Dune # Brian Herbert & Kevin J. Anderson (v5.0)" href="edition.php?id=5838432"><i><font color="green"> 9780765322739; 0765322730; 9781429986571; 1429986573</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2077399</span></nobr>
+
+</td>
+<td>Anderson, Kevin J; Herbert, Brian Patrick; Herbert, Frank </td>
+<td>Tom Doherty Associates</td>
+<td><nobr>2012</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=6089104">662 kB</a></nobr></td>
+<td>azw3</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=b8e6c9fe38ad08ec64f7c85697db249b"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/b8e6c9fe38ad08ec64f7c85697db249b"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/b8e6c9fe38ad08ec64f7c85697db249b?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/b8e6c9fe38ad08ec64f7c85697db249b"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune chronicles;Dune Universe 2;Legends of Dune</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2021-06-18; ID: 6339424<br>Dune_ The Machine Crusade (Dune Universe Book 2) - Brian Herbert & Kevin J. Anderson" href="edition.php?id=6090517">Dune: The Machine Crusade <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2021-06-18/2021-06-18; ID: 6339424<br>Dune_ The Machine Crusade (Dune Universe Book 2) - Brian Herbert & Kevin J. Anderson" href="edition.php?id=6090517"><i><font color="green"> 9781429967891; 1429967897; 076530158X; 9780765301581; 0765305860; 9780765305862</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2329487</span></nobr>
+
+</td>
+<td>Anderson, Kevin J; Herbert, Brian </td>
+<td>Tom Doherty Associates;Tor</td>
+<td><nobr>2004;2012</nobr></td>
+<td>English</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=6339424">789 kB</a></nobr></td>
+<td>azw3</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3809c052a068363548d0e198b01bf954"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/3809c052a068363548d0e198b01bf954"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/3809c052a068363548d0e198b01bf954?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/3809c052a068363548d0e198b01bf954"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune: Great Schools of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96789038<br>Mentats of Dune - Brian Herbert & Kevin J. Anderson - 20845 - eng" href="edition.php?id=140757707">Mentats of Dune <i>1st mass market ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96789038<br>Mentats of Dune - Brian Herbert & Kevin J. Anderson - 20845 - eng" href="edition.php?id=140757707"><i><font color="green"> 9781429949767; 1429949767; 9780765322746; 0765322749; 9780765362636; 0765362635; 9781471128028; 1471128024; 9781471131837; 1471131831; 9781847374257; 1847374255; 9781847394309; 1847394302; 9781849830294; 1849830290</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2786534</span></nobr>
+
+</td>
+<td>Anderson, Kevin J.;Herbert, Brian;Herbert, Frank</td>
+<td>Tor</td>
+<td><nobr>2015</nobr></td>
+<td>English</td>
+<td>0 / 665 pages ; 19 cm</td>
+<td><nobr><a href="/file.php?id=96789038">667 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=2de9222dd4a27eacf9f8f5f1296573f0"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/2de9222dd4a27eacf9f8f5f1296573f0"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/2de9222dd4a27eacf9f8f5f1296573f0?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/2de9222dd4a27eacf9f8f5f1296573f0"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune:heroes of dune 1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96803115<br>Paul of dune - Brian Herbert" href="edition.php?id=140771784">Paul of dune <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96803115<br>Paul of dune - Brian Herbert" href="edition.php?id=140771784"><i><font color="green"> 9780765312945; 0765312948; 9780340837535; 0340837535; 9780340837542; 0340837543</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2800611</span></nobr>
+
+</td>
+<td>Brian Herbert;Kevin J. Anderson</td>
+<td>Hodder & Stoughton</td>
+<td><nobr>2008</nobr></td>
+<td>English</td>
+<td>0 / 512 pages ; 24 cm</td>
+<td><nobr><a href="/file.php?id=96803115">602 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=f75f83cec133bbf962cdeaf79e0234c4"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/f75f83cec133bbf962cdeaf79e0234c4"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/f75f83cec133bbf962cdeaf79e0234c4?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/f75f83cec133bbf962cdeaf79e0234c4"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune 18</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2026-06-12; ID: 96833864<br>Frank Herbert - Dune 18 - Hunters of Dune # Brian Herbert & Kevin J. Anderson (v5.0)" href="edition.php?id=140802533">Hunters of Dune: Dune chronicles. Vol. 7 <i>First edition</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2026-06-12; ID: 96833864<br>Frank Herbert - Dune 18 - Hunters of Dune # Brian Herbert & Kevin J. Anderson (v5.0)" href="edition.php?id=140802533"><i><font color="green"> 9780765312921; 0765312921</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2831360</span></nobr>
+
+</td>
+<td>Frank Herbert;Brian Herbert;Kevin J. Anderson</td>
+<td>Tom Doherty Associates; Tor</td>
+<td><nobr>2006</nobr></td>
+<td>English</td>
+<td>0 / 524 pages ; 25 cm</td>
+<td><nobr><a href="/file.php?id=96833864">1 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=614903e49d3d24f2654e4b07e67d1265"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/614903e49d3d24f2654e4b07e67d1265"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/614903e49d3d24f2654e4b07e67d1265?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/614903e49d3d24f2654e4b07e67d1265"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune: Heroes of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96846402<br>The Winds of Dune - Brian Herbert & Kevin J. Anderson - 20848 - eng" href="edition.php?id=140815071">The Winds of Dune <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96846402<br>The Winds of Dune - Brian Herbert & Kevin J. Anderson - 20848 - eng" href="edition.php?id=140815071"><i><font color="green"> 9780765322722; 0765322722</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2843898</span></nobr>
+
+</td>
+<td>Herbert, Frank;Anderson, Kevin J.;Herbert, Brian</td>
+<td>Tom Doherty Associates</td>
+<td><nobr>2009</nobr></td>
+<td>English</td>
+<td>0 / 448 pages</td>
+<td><nobr><a href="/file.php?id=96846402">601 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=f1dad94174ee3793ba68482b98acdea3"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/f1dad94174ee3793ba68482b98acdea3"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/f1dad94174ee3793ba68482b98acdea3?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/f1dad94174ee3793ba68482b98acdea3"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune:heroes of dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96846403<br>The winds of dune - Brian Herbert" href="edition.php?id=140815072">The winds of dune <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-07/2022-03-07; ID: 96846403<br>The winds of dune - Brian Herbert" href="edition.php?id=140815072"><i><font color="green"> 9780765322722; 0765322722</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 2843899</span></nobr>
+
+</td>
+<td>Herbert, Frank;Anderson, Kevin J.;Herbert, Brian</td>
+<td>Tom Doherty Associates</td>
+<td><nobr>2009</nobr></td>
+<td>English</td>
+<td>0 / 448 pages</td>
+<td><nobr><a href="/file.php?id=96846403">472 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=f34aa0de0f41a88c04d9ac65646a7a9b"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/f34aa0de0f41a88c04d9ac65646a7a9b"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/f34aa0de0f41a88c04d9ac65646a7a9b?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/f34aa0de0f41a88c04d9ac65646a7a9b"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune: Great Schools of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2026-06-12; ID: 97267499<br>Mentats Of Dune" href="edition.php?id=141236172">Mentats of Dune <i>1st mass market ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2026-06-12; ID: 97267499<br>Mentats Of Dune" href="edition.php?id=141236172"><i><font color="green"> 9781429949767; 1429949767; 9780765322746; 0765322749; 9780765362636; 0765362635; 9781471128028; 1471128024; 9781471131837; 1471131831; 9781847374257; 1847374255; 9781847394309; 1847394302; 9781849830294; 1849830290</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 3264995</span></nobr>
+
+</td>
+<td>Anderson, Kevin J.;Herbert, Brian;Herbert, Frank</td>
+<td>Tor</td>
+<td><nobr>2015</nobr></td>
+<td>Spanish</td>
+<td>0 / 665 pages ; 19 cm</td>
+<td><nobr><a href="/file.php?id=97267499">655 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=1f11e022af75f7b162c0980f799b45c7"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/1f11e022af75f7b162c0980f799b45c7"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/1f11e022af75f7b162c0980f799b45c7?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/1f11e022af75f7b162c0980f799b45c7"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune: Heroes of Dune 2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2026-06-12; ID: 97345086<br>The Winds Of Dune" href="edition.php?id=141313759">The Winds of Dune <i>1st ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2026-06-12; ID: 97345086<br>The Winds Of Dune" href="edition.php?id=141313759"><i><font color="green"> 9780765322722; 0765322722</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 3342582</span></nobr>
+
+</td>
+<td>Herbert, Frank;Anderson, Kevin J.;Herbert, Brian</td>
+<td>Tom Doherty Associates</td>
+<td><nobr>2009</nobr></td>
+<td>Spanish</td>
+<td>0 / 448 pages</td>
+<td><nobr><a href="/file.php?id=97345086">637 kB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=e8f830d69a8dc1f4abcc38866c2ab652"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/e8f830d69a8dc1f4abcc38866c2ab652"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e8f830d69a8dc1f4abcc38866c2ab652?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/e8f830d69a8dc1f4abcc38866c2ab652"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune 1;Bestseller (Debolsillo (Firma comercial)). Biblioteca Frank Herbert; 261/1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2022-03-08; ID: 97345097<br>Dune - Frank Herbert" href="edition.php?id=141313770">Dune <i>2a ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2022-03-08; ID: 97345097<br>Dune - Frank Herbert" href="edition.php?id=141313770"><i><font color="green"> 9788497596824; 849759682X</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 3342593</span></nobr>
+
+</td>
+<td>Herbert, Frank;Santos, Domingo</td>
+<td>Debolsillo</td>
+<td><nobr>2004</nobr></td>
+<td>Spanish</td>
+<td>0 / 701</td>
+<td><nobr><a href="/file.php?id=97345097">2 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=3967255fbaa933929c272c48befcb32a"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/3967255fbaa933929c272c48befcb32a"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/3967255fbaa933929c272c48befcb32a?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/3967255fbaa933929c272c48befcb32a"><span class="badge badge-primary">4</span></a> </td>
+</tr><tr>
+
+<td><b>Dune 1;Bestseller (Debolsillo (Firma comercial)). Biblioteca Frank Herbert; 261/1</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2022-03-08; ID: 97345098<br>Dune - Frank Herbert" href="edition.php?id=141313771">Dune <i>2a ed</i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-03-08/2022-03-08; ID: 97345098<br>Dune - Frank Herbert" href="edition.php?id=141313771"><i><font color="green"> 9788497596824; 849759682X</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">f 3342594</span></nobr>
+
+</td>
+<td>Herbert, Frank;Santos, Domingo</td>
+<td>DEBOLSILLO</td>
+<td><nobr>2004</nobr></td>
+<td>Spanish</td>
+<td>0 / 701</td>
+<td><nobr><a href="/file.php?id=97345098">2 MB</a></nobr></td>
+<td>epub</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=271a6e4960118aa3bfaf662a364dc173"><span class="badge badge-primary">1</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/271a6e4960118aa3bfaf662a364dc173"><span class="badge badge-primary">2</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/271a6e4960118aa3bfaf662a364dc173?r=Ax2w6jC"><span class="badge badge-primary">3</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen.pw" href="https://libgen.pw/book/271a6e4960118aa3bfaf662a364dc173"><span class="badge badge-primary">4</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=dune&topics%5B%5D=f&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 3706</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>
