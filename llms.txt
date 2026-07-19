@@ -1,0 +1,68 @@
+# libgen-mcp
+
+> A Model Context Protocol (MCP) server that searches and downloads books, papers, comics, magazines and standards from Library Genesis for AI assistants.
+
+libgen-mcp v1.0.0 is a single static Go binary that runs locally via stdio or remotely via HTTP transport.
+It provides exactly 3 MCP tools (search, get_details, download) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).
+
+Quick start:
+
+1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)
+2. Add the server to your AI client configuration (see below)
+3. Start searching — no sign-up, API key or token is needed
+
+Installing for an AI assistant (headless):
+
+If you are an AI assistant setting this up for a user from just this repository URL, write the MCP client configuration directly. No credentials are required. The recommended install is the prebuilt static binary (no dependencies): download the release asset for the user's OS and architecture from the Releases page and point `command` at its absolute path. Cursor, Claude Desktop, and Claude Code use an `mcpServers` key; VS Code and GitHub Copilot use a `servers` key (each entry also sets `"type": "stdio"`). The `mcpServers` form with the native binary:
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "/usr/local/bin/libgen-mcp"
+    }
+  }
+}
+```
+
+For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `"type": "stdio"` to the `libgen` entry.
+
+Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture: set `command` to `docker` and `args` to `["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]`.
+
+Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).
+
+Configuration (environment variables, all optional):
+
+- LIBGEN_MIRROR: force a specific mirror base URL, e.g. `https://libgen.li` (default: auto-discovered)
+- LIBGEN_MCP_DOWNLOAD_DIR: download destination directory (default: `~/Downloads`)
+- LIBGEN_MCP_TIMEOUT: timeout per HTTP request, e.g. `30s` (default: 30s)
+- LIBGEN_MCP_LOG_LEVEL: log level — debug, info, warn or error (default: info)
+- LIBGEN_MCP_RATE_RPS: allowed requests per second (default: 1)
+- LIBGEN_MCP_RATE_BURST: maximum rate-limiter burst (default: 1)
+- LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes, 0 = no limit (default: 0)
+- LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads (default: 2)
+- LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)
+- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API for article downloads
+- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)
+- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)
+
+Tools:
+
+- search: Search the Library Genesis catalog.
+- get_details: Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API.
+- download: Download a file to a local directory.
+
+## Documentation
+
+- [Getting started](docs/getting-started.md): Installation and first-run guide
+- [Configuration](docs/configuration.md): Full environment-variable configuration reference
+- [Tools](docs/tools.md): Per-tool reference for search, get_details and download
+- [Architecture](docs/architecture.md): Internal architecture, mirror discovery and download sources
+- [Troubleshooting](docs/troubleshooting.md): Common setup and runtime issues
+- [Privacy policy](PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources
+- [Headless install](llms-install.md): Machine-readable install guide for AI assistants
+
+## Optional
+
+- [Full LLM reference](llms-full.txt): Generated companion reference with full tool schemas
+- [Documentation site](https://jmrplens.github.io/libgen-mcp/): Rendered documentation site

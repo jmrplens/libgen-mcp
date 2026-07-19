@@ -1,0 +1,51 @@
+{
+    "mcpServers": {
+        "libgen": {
+            "command": "docker",
+            "args": [
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "LIBGEN_MIRROR",
+                "-e",
+                "LIBGEN_MCP_DOWNLOAD_DIR",
+                "-e",
+                "LIBGEN_MCP_TIMEOUT",
+                "-e",
+                "LIBGEN_MCP_LOG_LEVEL",
+                "-e",
+                "LIBGEN_MCP_RATE_RPS",
+                "-e",
+                "LIBGEN_MCP_RATE_BURST",
+                "-e",
+                "LIBGEN_MCP_MAX_DOWNLOAD_BYTES",
+                "-e",
+                "LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS",
+                "-e",
+                "LIBGEN_MCP_RETRY_ATTEMPTS",
+                "-e",
+                "LIBGEN_MCP_UNPAYWALL_EMAIL",
+                "-e",
+                "LIBGEN_MCP_SCIHUB_HOSTS",
+                "-e",
+                "LIBGEN_MCP_SOURCES",
+                "ghcr.io/jmrplens/libgen-mcp:latest"
+            ],
+            "env": {
+                "LIBGEN_MIRROR": "${LIBGEN_MIRROR:-}",
+                "LIBGEN_MCP_DOWNLOAD_DIR": "${LIBGEN_MCP_DOWNLOAD_DIR:-}",
+                "LIBGEN_MCP_TIMEOUT": "${LIBGEN_MCP_TIMEOUT:-30s}",
+                "LIBGEN_MCP_LOG_LEVEL": "${LIBGEN_MCP_LOG_LEVEL:-info}",
+                "LIBGEN_MCP_RATE_RPS": "${LIBGEN_MCP_RATE_RPS:-1}",
+                "LIBGEN_MCP_RATE_BURST": "${LIBGEN_MCP_RATE_BURST:-1}",
+                "LIBGEN_MCP_MAX_DOWNLOAD_BYTES": "${LIBGEN_MCP_MAX_DOWNLOAD_BYTES:-0}",
+                "LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS": "${LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS:-2}",
+                "LIBGEN_MCP_RETRY_ATTEMPTS": "${LIBGEN_MCP_RETRY_ATTEMPTS:-3}",
+                "LIBGEN_MCP_UNPAYWALL_EMAIL": "${LIBGEN_MCP_UNPAYWALL_EMAIL:-}",
+                "LIBGEN_MCP_SCIHUB_HOSTS": "${LIBGEN_MCP_SCIHUB_HOSTS:-}",
+                "LIBGEN_MCP_SOURCES": "${LIBGEN_MCP_SOURCES:-}"
+            }
+        }
+    }
+}

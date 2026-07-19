@@ -1,0 +1,14 @@
+# Keep the build context small and deterministic.
+.git
+.github
+.superpowers
+dist
+docs
+*.md
+!README.md
+coverage.out
+coverage.internal.out
+coverage.html
+.golangci.yml
+.goreleaser.yml
+Makefile

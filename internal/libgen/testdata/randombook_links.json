@@ -1,0 +1,14 @@
+{
+  "result": {
+    "list": [
+      "https://libgen.net",
+      "https://libgen.me",
+      "https://libgen.xyz",
+      "https://annas-archive.gl"
+    ],
+    "links": [
+      "https://libgen.net?l=OPAQUE_PER_REQUEST_TOKEN_NOT_A_DIRECT_FILE"
+    ]
+  },
+  "isError": false
+}

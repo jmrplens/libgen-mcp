@@ -1,0 +1,12 @@
+{
+  "result": {
+    "id": "123",
+    "title": "Hands-On Software Architecture with Golang",
+    "author": ["Jyotiswarup Raiturkar"],
+    "year": 2018,
+    "language": "eng",
+    "fileExtension": "pdf",
+    "fileSize": 18298205
+  },
+  "isError": false
+}

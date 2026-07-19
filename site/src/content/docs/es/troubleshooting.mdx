@@ -1,0 +1,163 @@
+---
+title: Solución de problemas
+description: Soluciones para mirrors inalcanzables, descargas fallidas, artículos no encontrados, búsquedas truncadas y errores de espacio en disco.
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Por qué dice que todos los mirrors están inaccesibles?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "El error all libgen mirrors unreachable significa que al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente. Comprueba la conectividad y la resolución DNS a la familia libgen.li (algunos ISPs las bloquean; prueba una VPN o un resolutor como 1.1.1.1), fija un mirror alcanzable con LIBGEN_MIRROR para saltarte el autodescubrimiento, o aumenta LIBGEN_MCP_TIMEOUT y LIBGEN_MCP_RETRY_ATTEMPTS. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor hace failover automáticamente cuando uno se recupera."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Por qué falló la verificación MD5 de mi descarga?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Una discrepancia de MD5 (integrity check failed: MD5 mismatch) significa que los bytes descargados no coincidieron con el md5 solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, el fallback randombook probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por md5) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo verified es false."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Por qué faltan algunos artículos en los resultados?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Los artículos se obtienen por DOI a través de dos fuentes por orden: unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y scihub es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con truncated: true indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Dónde guarda libgen-mcp los archivos descargados?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Por defecto en ~/Downloads. Puedes cambiar el directorio con la variable LIBGEN_MCP_DOWNLOAD_DIR o con el argumento path de la herramienta download en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID 10001."
+            }
+          }
+        ]
+      }
+---
+
+Esta página reúne los fallos que es más probable que encuentres y cómo resolverlos. Ante la duda, sube el nivel de log (ver [más abajo](#subir-el-nivel-de-log)) y vuelve a ejecutar — la mayoría de los errores llevan un mensaje explicativo.
+
+## Todos los mirrors inalcanzables
+
+**Síntoma.** Las búsquedas y descargas fallan con `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
+
+**Significado.** Al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente.
+
+**Soluciones.**
+
+- Comprueba la conectividad básica y la resolución DNS a la familia `libgen.li`. Algunos ISPs y redes bloquean estos dominios; una VPN o un resolutor alternativo (p. ej. `1.1.1.1`) suele ayudar.
+- Si el propio descubrimiento está bloqueado, fija un mirror que puedas alcanzar con `LIBGEN_MIRROR=https://libgen.li` (u otro host vivo) para saltarte el autodescubrimiento.
+- Aumenta `LIBGEN_MCP_TIMEOUT` (p. ej. `45s` o `1m`) y/o `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos.
+- Los mirrors que fallan entran en un enfriamiento de 45 segundos; espera un momento y reintenta — el servidor hace failover automáticamente una vez que un mirror se recupera.
+
+Un error relacionado pero distinto, `request rejected by all mirrors`, significa que todos los mirrors devolvieron un error _permanente_ (p. ej. 404/403). Eso es un "no encontrado / rechazado" normal, no un problema de red — vuelve a revisar la consulta o el identificador en lugar de tu conexión.
+
+## Descarga fallida / discrepancia de MD5
+
+**Síntoma.** `download` devuelve un error, o `integrity check failed: MD5 mismatch`.
+
+**Significado y soluciones.**
+
+- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, el fallback `randombook` probará mirrors recién descubiertos.
+- **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y hace failover a la siguiente fuente.
+- **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
+- **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
+- **Todas las fuentes fallaron** — la herramienta devuelve los errores por fuente unidos, una línea por cada fuente que probó. Léelos para ver si el elemento simplemente no se encontró o si todos los proveedores estaban inalcanzables.
+
+## Artículo no encontrado (acceso abierto vs Sci-Hub)
+
+**Síntoma.** Un `download` con un `doi` falla, o no devuelve nada útil.
+
+**Significado.** Los artículos se obtienen por DOI a través de dos fuentes por orden:
+
+1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza.
+2. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+
+**Soluciones.**
+
+- Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
+- Si solo falló Unpaywall, es probable que el artículo no sea de acceso abierto; Sci-Hub es el fallback.
+- Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
+- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL`; la API espera una dirección de contacto real.
+- Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
+
+## Resultados de búsqueda truncados
+
+**Síntoma.** Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.
+
+**Significado.** El mirror informa más coincidencias (`total_files`) de las que servirá realmente a través de las páginas (`reachable`). Las páginas más allá de `reachable` están vacías.
+
+**Solución.** Refina en lugar de paginar más profundo, como sugiere el `hint`:
+
+- Añade términos distintivos (autor, año).
+- Restringe los campos con `search_in` (p. ej. `["title"]`).
+- Acota `topics` a la(s) colección(es) relevante(s).
+
+Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los campos exactos.
+
+## Subir el nivel de log
+
+La mayoría de los problemas son más fáciles de diagnosticar en `debug`, que traza cada intento de mirror, enfriamiento y failover:
+
+```bash
+LIBGEN_MCP_LOG_LEVEL=debug libgen-mcp
+```
+
+O en el bloque `env` de tu cliente MCP:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "libgen-mcp",
+			"env": { "LIBGEN_MCP_LOG_LEVEL": "debug" }
+		}
+	}
+}
+```
+
+Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así que revisa la vista de logs del servidor de tu cliente o el terminal donde se ejecuta el proceso. Los niveles válidos son `debug`, `info` (por defecto), `warn` y `error`.
+
+## Espacio en disco
+
+**Síntoma.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.
+
+**Significado.** Antes de transmitir una descarga cuyo tamaño se conoce, el servidor comprueba que el destino tiene espacio para el archivo más un margen de ~8 MiB, y se niega en lugar de llenar el disco.
+
+**Soluciones.**
+
+- Libera espacio en el volumen de destino, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` (o el `path` por llamada) a un volumen con más espacio.
+- Elimina los archivos `.part` obsoletos que dejan las descargas interrumpidas si no piensas reanudarlas (viven en el directorio de descargas, con el nombre `.libgen-mcp-*.part`).
+- Bajo Docker, asegúrate de que el volumen de descargas montado sea lo bastante grande y escribible por el UID `10001`.
+
+## Preguntas frecuentes
+
+### ¿Por qué dice que todos los mirrors están inaccesibles?
+
+El error `all libgen mirrors unreachable` significa que al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente. Comprueba la conectividad y la resolución DNS a la familia `libgen.li` (algunos ISPs las bloquean; prueba una VPN o un resolutor como `1.1.1.1`), fija un mirror alcanzable con `LIBGEN_MIRROR` para saltarte el autodescubrimiento, o aumenta `LIBGEN_MCP_TIMEOUT` y `LIBGEN_MCP_RETRY_ATTEMPTS`. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor hace failover automáticamente cuando uno se recupera.
+
+### ¿Por qué falló la verificación MD5 de mi descarga?
+
+Una discrepancia de MD5 (`integrity check failed: MD5 mismatch`) significa que los bytes descargados no coincidieron con el `md5` solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, el fallback `randombook` probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por `md5`) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo `verified` es `false`.
+
+### ¿Por qué faltan algunos artículos en los resultados?
+
+Los artículos se obtienen por DOI a través de dos fuentes por orden: `unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y `scihub` es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con `truncated: true` indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo.
+
+### ¿Dónde guarda libgen-mcp los archivos descargados?
+
+Por defecto en `~/Downloads`. Puedes cambiar el directorio con la variable `LIBGEN_MCP_DOWNLOAD_DIR` o con el argumento `path` de la herramienta `download` en cada llamada; el campo `path` del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo `.part` (con nombre `.libgen-mcp-*.part`) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID `10001`.

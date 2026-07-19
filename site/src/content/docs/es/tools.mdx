@@ -1,0 +1,137 @@
+---
+title: Herramientas
+description: Las herramientas search, get_details y download — entradas, salidas y comportamiento ante errores.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` expone tres herramientas MCP: [`search`](#search), [`get_details`](#get_details) y [`download`](#download). Las tres están anotadas con una pista de mundo abierto; `search` y `get_details` son de solo lectura, y `download` es no destructiva e idempotente. Cada handler es a prueba de panics: un fallo inesperado se devuelve como error de herramienta, nunca como una caída de la sesión.
+
+## search
+
+Busca en el catálogo de Library Genesis. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
+
+### entrada de search
+
+| Parámetro          | Tipo     | Requerido | Descripción                                                                                                                           |
+| ------------------ | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`            | string   | sí        | Texto de búsqueda.                                                                                                                    |
+| `topics`           | string[] | no        | Colecciones donde buscar: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omítelo para todas. |
+| `search_in`        | string[] | no        | Campos a coincidir: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omítelo para coincidir con todos los campos.            |
+| `results_per_page` | int      | no        | Resultados por página: `25`, `50` o `100`. Por defecto `25`.                                                                          |
+| `page`             | int      | no        | Página de resultados, empezando en `1`. Por defecto `1`.                                                                              |
+| `order`            | string   | no        | Ordenar por: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                   |
+| `order_mode`       | string   | no        | Dirección de orden: `asc` o `desc`.                                                                                                   |
+
+### salida de search
+
+| Campo              | Tipo   | Descripción                                                                                                                                                                                                                                            |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `results`          | array  | Los registros de archivo de esta página. Cada uno incluye `md5` (libros), `doi` (artículos), título, autores, editorial, año, idioma, páginas, tamaño, extensión, tipo, ISBNs, ids y `downloads` etiquetados. Array vacío cuando no hay coincidencias. |
+| `page`             | int    | El número de página devuelto.                                                                                                                                                                                                                          |
+| `results_per_page` | int    | El tamaño de página en vigor.                                                                                                                                                                                                                          |
+| `total_files`      | string | Total de coincidencias que el mirror informa para la consulta. Puede ser un indicador tope como `1000+`.                                                                                                                                               |
+| `reachable`        | int    | Cuántos resultados son realmente alcanzables a través de todas las páginas (los mirrors limitan esto por debajo de `total_files`).                                                                                                                     |
+| `truncated`        | bool   | `true` cuando `total_files` supera a `reachable`, es decir, algunas coincidencias no pueden paginarse.                                                                                                                                                 |
+| `hint`             | string | Presente solo cuando `truncated` — aconseja refinar la consulta (añadir autor/año, usar columnas de solo título o acotar temas).                                                                                                                       |
+| `has_more`         | bool   | `true` cuando esta página está llena (`len(results) >= results_per_page`), lo que sugiere que puede existir una página siguiente.                                                                                                                      |
+| `mirror`           | string | La URL base del mirror que sirvió esta búsqueda.                                                                                                                                                                                                       |
+
+### Paginación y truncado
+
+Los mirrors de Library Genesis anuncian un recuento total de coincidencias (`total_files`) pero solo sirven los primeros `reachable` resultados a través de las páginas. Cuando el total anunciado supera ese tope, la búsqueda está `truncated` y `hint` explica cómo acotarla, por ejemplo:
+
+> Only the first 250 of 38514 results are reachable; refine your query (add author/year, use title-only columns, or narrow topics).
+
+Prefiere refinar una consulta truncada antes que paginar en profundidad: las páginas más allá de `reachable` no devuelven nada.
+
+### Errores
+
+La entrada inválida se rechaza antes de cualquier llamada de red: un `query` vacío, un `topic`, `search_in` u `order` desconocido, un `results_per_page` distinto de 25/50/100, o un `order_mode` distinto de `asc`/`desc`. Los problemas de conectividad y de mirror aparecen como se describe en [Solución de problemas](/libgen-mcp/es/troubleshooting/).
+
+## get_details
+
+Metadatos completos de un registro vía la API JSON de LibGen — descripción, identificadores, DOI, portada y edición relacionada. Consulta por `md5` **o** por `id`, nunca ambos.
+
+### entrada de get_details
+
+| Parámetro | Tipo   | Requerido | Descripción                                                                                                                                                            |
+| --------- | ------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`     | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda. Devuelve el registro de archivo más su primera edición relacionada. Debe ser una cadena hexadecimal de 32 caracteres. |
+| `id`      | string | uno de    | Id de edición o de archivo.                                                                                                                                            |
+| `object`  | string | no        | Se usa con `id`: `edition` (por defecto) o `file`.                                                                                                                     |
+
+<Aside>
+	Proporciona exactamente uno de `md5` o `id`. Aportar ambos, ninguno, un `md5`
+	que no sea de 32 caracteres hex, o un `object` distinto de `edition`/`file`
+	devuelve un error de entrada.
+</Aside>
+
+### salida de get_details
+
+| Campo     | Tipo   | Descripción                                                                                                                           |
+| --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`    | object | El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).                              |
+| `edition` | object | El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`). |
+
+Una consulta por `md5` devuelve `file` y, en la medida de lo posible, su `edition` relacionada. Una consulta por `id` devuelve el objeto que se haya pedido. Una consulta que no coincide con nada devuelve un error "no file found".
+
+## download
+
+<Aside type="caution">
+	`libgen-mcp` accede a mirrors de terceros de Library Genesis. Eres responsable
+	de respetar las leyes de derechos de autor y de propiedad intelectual que
+	apliquen en tu lugar de residencia. Úsalo solo para contenido al que tengas
+	derecho legal de acceder.
+</Aside>
+
+Descarga un archivo a un directorio local. Proporciona `md5` para un libro **o** `doi` para un artículo; se requiere al menos uno. Devuelve la ruta guardada, el tamaño y la fuente que lo sirvió.
+
+### entrada de download
+
+| Parámetro  | Tipo   | Requerido | Descripción                                                                                                                             |
+| ---------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`      | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                             |
+| `doi`      | string | uno de    | DOI de un resultado de búsqueda de artículo. Los artículos se obtienen por DOI.                                                         |
+| `path`     | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                         |
+| `filename` | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5. |
+
+Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caracteres hex) se rechaza antes de cualquier trabajo.
+
+### Fuentes probadas
+
+La descarga recorre una cadena de fuentes fija, filtrada por lo que admite cada elemento:
+
+- **Libro** (`md5` solo) → `libgen` (clave de ads.php + CDN), luego `randombook` (descubrimiento de mirrors frescos).
+- **Artículo** (`doi` solo) → `unpaywall` (PDF de acceso abierto), luego `scihub`.
+- **Ambos `md5` y `doi`** → primero las fuentes de artículo (`unpaywall`, `scihub`), luego las de libro (`libgen`, `randombook`).
+
+Gana la primera fuente que resuelve y transmite un archivo válido; el campo `source` del resultado la nombra. Consulta [Arquitectura](/libgen-mcp/es/architecture/) para la cadena completa.
+
+### salida de download
+
+| Campo               | Tipo   | Descripción                                                                                                                                                          |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`              | string | Ruta absoluta del archivo guardado.                                                                                                                                  |
+| `size_bytes`        | int    | Tamaño final del archivo en bytes.                                                                                                                                   |
+| `original_filename` | string | El nombre que anunció el mirror/CDN (desde `Content-Disposition`), si lo hay.                                                                                        |
+| `mirror`            | string | El origen `scheme://host` que sirvió los bytes.                                                                                                                      |
+| `source`            | string | La fuente que tuvo éxito: `libgen`, `randombook`, `unpaywall` o `scihub`.                                                                                            |
+| `verified`          | bool   | `true` cuando el MD5 de los bytes descargados coincidió con el `md5` solicitado (descargas de libros). `false` para fuentes por DOI, que no llevan digest de LibGen. |
+| `resumed`           | bool   | `true` cuando la descarga continuó desde un parcial preexistente mediante una petición HTTP `Range` en lugar de empezar de cero.                                     |
+
+<Aside type="caution">
+	Las descargas por DOI (artículos) **no** se verifican por MD5 — no existe un
+	digest de LibGen para ellas, por lo que el campo `verified` del resultado es
+	`false`. Solo las descargas de libros (por `md5`) se comprueban por hash.
+</Aside>
+
+### Comportamiento y errores
+
+- **Nombres limpios.** Sin un `filename` explícito, las descargas de libros consultan los metadatos bibliográficos y quedan bajo un nombre como `Author - Title (Year).ext`, recurriendo al nombre anunciado por el CDN y luego al MD5. Los caracteres de ruta ilegales se eliminan.
+- **Reanudación.** Una descarga interrumpida deja un archivo `.part`; una llamada posterior pide al CDN continuar desde el offset existente. Si el servidor ignora el rango, reinicia limpiamente.
+- **Verificación MD5.** Para descargas de libro (`md5`) se calcula el hash del archivo completo y se compara con el digest solicitado; una discrepancia elimina el parcial y falla la descarga. Las fuentes por DOI omiten esta comprobación.
+- **Guardas.** Las páginas HTML de error se rechazan (por tipo de contenido e inspeccionando los primeros bytes), se aplica el límite de tamaño (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`), se comprueba el espacio libre en disco antes de transmitir, y el archivo completado se renombra atómicamente en su lugar.
+- **Progreso.** Cuando el cliente aporta un token de progreso, se emiten notificaciones de progreso limitadas durante el streaming.
+
+Si todas las fuentes aplicables fallan, la herramienta devuelve los errores por fuente unidos. Consulta [Solución de problemas](/libgen-mcp/es/troubleshooting/) para saber cómo leerlos.

@@ -1,0 +1,12 @@
+packages:
+  - .
+
+# Allow native/build scripts for these dependencies (pnpm blocks them by default).
+# puppeteer's build fetches the Chromium that pa11y-ci uses for accessibility checks.
+allowBuilds:
+  esbuild: true
+  puppeteer: true
+  sharp: true
+
+# Disable pnpm 11's supply-chain release-age gate so deps resolve to published versions.
+minimumReleaseAge: 0

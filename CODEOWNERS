@@ -1,0 +1,38 @@
+# CODEOWNERS — libgen-mcp
+#
+# GitHub uses this file to automatically request reviews from code owners.
+# Each line maps a file pattern to one or more owners. The last matching
+# pattern takes precedence.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @jmrplens
+
+# Go source code
+*.go @jmrplens
+go.mod @jmrplens
+go.sum @jmrplens
+
+# Build
+Makefile @jmrplens
+scripts/ @jmrplens
+
+# Documentation
+docs/ @jmrplens
+README.md @jmrplens
+CONTRIBUTING.md @jmrplens
+
+# Commands (server, probe, generators)
+cmd/ @jmrplens
+
+# MCP tool implementations
+internal/tools/ @jmrplens
+
+# Library Genesis client and mirror resolution
+internal/libgen/ @jmrplens
+internal/mirrors/ @jmrplens
+
+# Configuration and logging
+internal/config/ @jmrplens
+internal/logging/ @jmrplens

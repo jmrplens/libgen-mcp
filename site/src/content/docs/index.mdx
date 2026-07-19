@@ -1,0 +1,134 @@
+---
+title: LibGen MCP
+description: Open source Model Context Protocol server for Library Genesis — search books and resolve download links from your AI assistant.
+head:
+  - tag: title
+    content: "LibGen MCP — MCP server for Library Genesis book & paper search"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the libgen.li mirror family). It exposes three tools — search, get_details, and download — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books and resolve download links in plain language."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What can libgen-mcp do?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall) and Sci-Hub sources. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do I need an account, API key, or token to use libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups, and it ships with a working default."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is libgen-mcp free and open source?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. libgen-mcp is free and open source under the MIT license. The full source code is on GitHub at https://github.com/jmrplens/libgen-mcp, and prebuilt binaries, a Docker image, and a Claude Desktop extension are published with each release."
+            }
+          }
+        ]
+      }
+hero:
+  tagline: A Model Context Protocol server that lets your AI assistant search Library Genesis and resolve download links — in plain language.
+  image:
+    dark: ../../assets/logo-dark.svg
+    light: ../../assets/logo-light.svg
+  actions:
+    - text: Getting Started
+      link: /libgen-mcp/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/jmrplens/libgen-mcp
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
+
+**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes three tools — `search`, `get_details`, and `download` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
+
+Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched from open-access and Sci-Hub sources by DOI.
+
+<CardGrid>
+	<Card title="Three tools" icon="puzzle">
+		`search`, `get_details`, and `download` — read-only search and metadata plus
+		a non-destructive, resumable download.
+	</Card>
+	<Card title="Resilient mirrors" icon="random">
+		Automatic mirror discovery, failover, retry with cooldown, and a shared rate
+		limiter.
+	</Card>
+	<Card title="Books and articles" icon="open-book">
+		Books by MD5 from LibGen; articles by DOI from Unpaywall and Sci-Hub.
+	</Card>
+	<Card title="Configured by env" icon="setting">
+		Every option is an environment variable with a documented default and
+		fail-fast validation.
+	</Card>
+</CardGrid>
+
+## Start here
+
+<LinkCard
+	title="Getting Started"
+	description="Install (prebuilt binary, Docker, or go install), wire the server into an MCP client, and run your first search."
+	href="/libgen-mcp/getting-started/"
+/>
+<LinkCard
+	title="Tools"
+	description="The search, get_details, and download tools — inputs, outputs, and error behavior."
+	href="/libgen-mcp/tools/"
+/>
+<LinkCard
+	title="Configuration"
+	description="Every environment variable, with its default, valid range, and meaning."
+	href="/libgen-mcp/configuration/"
+/>
+
+## Responsible use
+
+<Aside type="caution">
+	This tool accesses third-party mirrors of Library Genesis. You are responsible
+	for respecting the copyright and intellectual-property laws that apply where
+	you live. Use it only for content you are legally entitled to access.
+</Aside>
+
+## Frequently asked questions
+
+### What is libgen-mcp?
+
+libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the `libgen.li` mirror family). It exposes three tools — `search`, `get_details`, and `download` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books and resolve download links in plain language.
+
+### What can libgen-mcp do?
+
+It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall) and Sci-Hub sources. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+
+### Do I need an account, API key, or token to use libgen-mcp?
+
+No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups, and it ships with a working default.
+
+### Is libgen-mcp free and open source?
+
+Yes. libgen-mcp is free and open source under the MIT license. The full source code is on GitHub at [github.com/jmrplens/libgen-mcp](https://github.com/jmrplens/libgen-mcp), and prebuilt binaries, a Docker image, and a Claude Desktop extension are published with each release.

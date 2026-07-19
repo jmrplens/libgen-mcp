@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="мастер" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox"  class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox"  class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox"  class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox"  class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox" checked class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox"  class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f">Files <span class="badge badge-primary">2504</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=e">Editions <span class="badge badge-primary">2023</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=s">Series <span class="badge badge-primary">118</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=a">Authors <span class="badge badge-primary">22</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=p">Publishers <span class="badge badge-primary">6</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=w">Works <span class="badge badge-primary">6</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=2555875,2589875,2669989,2769335,2899366,97593006,2530247,2530248,2553446,2555874,2555876,2587194,2612882,2628578,2628579,2642260,2651783,2665088,2668128,2676789,2676848,2678271,2680012,2684294,2687002,2687361,2687419,2687541,2704241,2710338,2711482,2711484,2720849,2720850,2723812,2739290,2755395,2769333,2771728,2785874,2785927,2789914,2848224,2855562,2891099,2891103,2891104,2896822,2907076,2939846,2940502,2988778,3025693,3029725,3029726,3035115,3035193,3043698,3062042,3112960,3131494,3148352,3206612,3278956,3279197,3340975,3364221,3370281,3413878,3454532,3469851,3498964,3505474,3507429,3561369,3562482,3567585,3610218,3696914,3698694,3699160,3738584,3743718,3744776,3749685,3761413,3763395,3764104,3764465,97604955,97606008,97635111,97635164,97638312,97641486,97647036,97649361,97655194,97668570,97677506,97679403,97681081,97689663,97693821,97696695,97704169,97704337,97711354,97729397,97741278,97745596,97759391,97759849,99466978,99466979,99524904,99936615,99943940,100012351,100078069,100122635,100719034,102225666,105167003,105167004,105167321,105170317,105170838,105170933,105171113,105172184,105173679,105175843,105176864,105179211,105181272,105182376,105187508,105188706,105190099,105190676,105194000,105194214,105194792,105196209,105197297,105200783,105203726,105205382,105206540,105207384,105212694,105212984,105214731,105216272,105216839,105217183,105217197,105226171,105266357,105274264,105275915,105279855,105300861,105301949,105303748,105303749,105304004,105304171,105305606,105305805,105305806,105305807,105305808,105305821,107876786,108037903,114593038,115118182,115120265,115121038,115124485,115127132,115127133,115127134,115288364,116004113,116004437,116005686,116007118,116007124,116007129,116007217,116008182,116008643,116008647,116008648,116008731,116010038,116011184,116012755,116013339,116014013,116015268,116015632,116016326,116017240,116017456,116017701,116017936,116019279,116022264,116022621,116026713,116028920,116031059,116034019,116034047,116034850,116036004,116038083,116041385,116041510,116041553,116043097,116044832,116046057,116047149,116047229,116047233,116047239,116047245,116047249,116047255,116047260,116047566,116050481,116051902,116054105,116057398,116061353,116063149,116063154,116063160,116063166,116063562,116064426,116064488,116071304,116072022,116073043,116073048,116073615,116073705,116073758,116073785,116074314,116075941,116075998,116076588,116079111,116080465,116080506,116081094,116081739,116082292,116083513,116083553,116083730,116086093,116086159,116087637,116087687,116088294,116088305,116089162,116089257,116089399,116089502,116089739,116090852,116091457,116091574,116091649,116096106,116096113,116096239,116096241,2931988,3723061,105197390,2771527,2823590,2825557,2856828,2875687,2888755,2906092,2924430,2936572,2958179,2967108,2999678,3029595,3055339,3055422,3544687,3653524,3710659,3812023,97618027,2522806,2523613,2524057,2527148,2527301,2530233,2532530,2534385,2534635,2536030,2537185,2538507,2539114,2540096,2541420,2542880,2542999,2543039,2543678,2548681,2548989,2549227,2549397,2549895,2550500,2550515,2550537,2550548,2550550,2550600,2550669,2550670,2550671,2550674,2550675,2550676,2550704,2550747,2554065,2554101,2555123,2555849,2556311,2556674,2561537,2562773,2563082,2563344,2564878,2565064,2566268,2567449,2567506,2571157,2571294,2572131,2574842,2574843,2574848,2574853,2574855,2574856,2574860,2574862,2574863,2574866,2575188,2576764,2578761,2580098,2580102,2580110,2580762,2580976,2581045,2581693,2582535,2586883,2588499,2588526,2588529,2590521,2591276,2592144,2592539,2592602,2592608,2592610,2592611,2594363,2594365,2594619,2595820,2599076,2599077,2599111,2599897,2599905,2600533,2601631,2601807,2602622,2602646,2602650,2602722,2602746,2603180,2604542,2604544,2605061,2608159,2608384,2608385,2608682,2609652,2610695,2611059,2612881,2613185,2613279,2613342,2613465,2613823,2614120,2614389,2616237,2622056,2622198,2624453,2625560,2625571,2627278,2629462,2629615,2631336,2632580,2633047,2636740,2637188,2637313,2638015,2638896,2639351,2640822,2640824,2640826,2641746,2642179,2642182,2642499,2642723,2643049,2643245,2643469,2643983,2644616,2645301,2648031,2648636,2649586,2649958,2650141,2650387,2650465,2650786,2654630,2654669,2656117,2656119,2656206,2656486,2656776,2657981,2657996,2657997,2658128,2658130,2658131,2658132,2658154,2659948,2661625,2661746,2662027,2663626,2664635,2665082,2665083,2665084,2665085,2665086,2665087,2665089,2665090,2665091,2665092,2665093,2665094,2665222,2667502,2668752,2672225,2673050,2673128,2673610,2675060,2677291,2677521,2678161,2678846,2679738,2681555,2683096,2683870,2684985,2685339,2685514,2685895,2685933,2685939,2685941,2685942,2685943,2685945,2685975,2685985,2685991,2685992,2685993,2685994,2685995,2685996,2686010,2686016,2686146,2686317,2686490,2686667,2686878,2686880,2687418,2689029,2689552,2691382,2691627,2694864,2695873,2696615,2697118,2697225,2698862,2699004,2701473,2701666,2702714,2703995,2704451,2704985,2704992,2705378,2707064,2707076,2707086,2707229,2707441,2707517,2707882,2712949,2712969,2716207,2718454,2719006,2722178,2723724,2726661,2728806,2728829,2729348,2729744,2729745,2729971,2730981,2730983,2730988,2731129,2732228,2732812,2733396,2734128,2736180,2737137,2738453,2739277,2742009,2742442,2742449,2742450,2742948,2743398,2746281,2747304,2748225,2751192,2751552,2754159,2754388,2755202,2755204,2755451,2756068,2756934,2762239,2763269,2763691,2764666,2765245,2765934,2767908,2771060,2771441,2771567,2771568,2772173,2772729,2772924,2773330,2773355,2773358,2773484,2774447,2776584,2776897,2779744,2781274,2782010,2782840,2784650,2785832,2786968,2787066,2787129,2787161,2787163,2787164,2787166,2789428,2791058,2791346,2792301,2794246,2794588,2794890,2797311,2797446,2798486,2798583,2799389,2801493,2801952,2802212,2802887,2804173,2804325,2807153,2810419,2810945,2811767,2812250,2813041,2813483,2815267,2815375,2815940,2816990,2819046,2819047,2820034,2820118,2821721,2823591,2826941,2827143,2827152,2829346,2829744,2830696,2830836,2831039,2831147,2832470,2832597,2832847,2833272,2833724,2834503,2835556,2835584,2835594,2836397,2837555,2837722,2838058,2839233,2842794,2842795,2842816,2845234,2845638,2845743,2845760,2846505,2847054,2847160,2848045,2848048,2848222,2849126,2852085,2853415,2855334,2856064,2856068,2857263,2858311,2859383,2859414,2859496,2860010,2862723,2862748,2862779,2862783,2863412,2863512,2863629,2863630,2864454,2867648,2868947,2869887,2870279,2870280,2870414,2870415,2870416,2870423,2870424,2870425,2870426,2870428,2870429,2870592,2874178,2874179,2875623,2877144,2877729,2877998,2878151,2878435,2880279,2880280,2880357,2880512,2881663,2883035,2883161,2884006,2885682,2886249,2886372,2887178,2888283,2888286,2889785,2891995,2893530,2893801,2894951,2896132,2896241,2896900,2897787,2899899,2899937,2900225,2901454,2902696,2902828,2903146,2904462,2904482,2904740,2907481,2907482,2907509,2907511,2907517,2907588,2908122,2909459,2909476,2910295,2910908,2910909,2910910,2911390,2911836,2913770,2914807,2920823,2921113,2921129,2924798,2924827,2926996,2926997,2930598,2930652,2931982,2931983,2931987,2933187,2934642,2934654,2936718,2938605,2938648,2938649,2939535,2939537,2939538,2939539,2939549,2940649,2940654,2940778,2941383,2941399,2942210,2942855,2947211,2947466,2947876,2948733,2952525,2952638,2955058,2955130,2955194,2956910,2957410,2958178,2958180,2958181,2958201,2958203,2958253,2958456,2959441,2959990,2961100,2967389,2971186,2972030,2974663,2974664,2974889,2975622,2975857,2976313,2977981,2978812,2979054,2979746,2982725,2984178,2984334,2984659,2985189,2985842,2986549,2986731,2988017,2988455,2988996,2993162,2997594,2999059,3000872,3001046,3001364,3007141,3009041,3010042,3013294,3015917,3015918,3017178,3018887,3019496,3020360,3021217,3021310,3021671,3021920,3021986,3022643,3025920,3025947,3026006,3027158,3027471,3027625,3030077,3030252,3030344,3030355,3031232,3031401,3033789,3035330,3036296,3037375,3038037,3038377,3039964,3042204,3043855,3045013,3045031,3047314,3047991,3047993,3048458,3049330,3050742,3050761,3052633,3053371,3054123,3054319,3054494,3055201,3055971,3056218,3057447,3058941,3059704,3059705,3059712,3060013,3062052,3064437,3064885,3064955,3064957,3066172,3067525,3068665,3069392,3070222,3070223,3072927,3072928,3073661,3073696,3074379,3075959,3076478,3077179,3078480,3078634,3078740,3080432,3082879,3083725,3085685,3085742,3086370,3086860,3090118,3090226,3090253,3090389,3090450,3091144,3091146,3091147,3091149,3092397,3093125,3093634,3094746,3095375,3097253,3098371,3098502,3098783,3098871,3099527,3100909,3101598,3102962,3103209,3103251,3103284,3103401,3103720,3105972,3107699,3107988,3108640,3109005,3112196,3112308,3112820,3112822,3112999,3115030,3115278,3117086,3117344,3118522,3120042,3120649,3121046,3121537,3121547,3122216,3122218,3122222,3123010,3123840,3124382,3126882,3127227,3127483,3127612,3128149,3128875,3130190,3133782,3133862,3135473,3136629,3138805,3139067,3139077,3139078,3139088,3140130,3140458,3140465,3140704,3141704,3141908,3141910,3141979,3142075,3142747,3142829,3144298,3144876,3146689,3147304,3147699,3147946,3147996,3150684,3151876,3152953,3153246,3153448,3153479,3153484,3153486,3153487,3153488,3153490,3153515,3153521,3153527,3153528,3153529,3153530,3153531,3153532,3153545,3153551,3153816,3153921,3154051,3154444,3155441,3156568,3157841,3159547,3160472,3161107,3161161,3161401,3161749,3162136,3164397,3164751,3164752,3164753,3164754,3164755,3164756,3164757,3164758,3164759,3164760,3164761,3164762,3164763,3164850,3166516,3168582,3169200,3169712,3169715,3169963,3170089,3173611,3173848,3173967,3174284,3174445,3175043,3175417,3176912,3177255,3177888,3178223,3180818,3181017,3181806,3182464,3185092,3185093,3185851,3185967,3187368,3190169,3193186,3193413,3194137,3195105,3196522,3197099,3200364,3200365,3200394,3201349,3202052,3202594,3202604,3202631,3202905,3203026,3203346,3204394,3204797,3207059,3207525,3207860,3208102,3208163,3208169,3208171,3208172,3209268,3209270,3211686,3212526,3216662,3219110,3219156,3220868,3221433,3222049,3223822,3223823,3223828,3223829,3223830,3226719,3226720,3226721,3226723,3226725,3226726,3226727,3227105,3227592,3227681,3229497,3231177,3232288,3233114,3233232,3234810,3237108,3237962,3241167,3241337,3241852,3246780,3246954,3250458,3252620,3252972,3253251,3253252,3253338,3253903,3254759,3254977,3255072,3256156,3256423,3257346,3258811,3258896,3259384,3260020,3260067,3260076,3261481,3262348,3263021,3263386,3264379,3265740,3265741,3265756,3265757,3265758,3265795,3265981,3266353,3266816,3267853,3269543,3271244,3274219,3274818,3274825,3275614,3275667,3277226,3278038,3278413,3282090,3284166,3285913,3287600,3287835,3293275,3293435,3295808,3298304,3298796,3300933,3306661,3315288,3316545,3323942,3332014,3332259,3333436,3337011,3337329,3337773,3337774,3337775,3340976,3340977,3341084,3344467,3345161,3346960,3347561,3349059,3350854,3352839,3353227,3356086,3356694,3357787,3359183,3360580,3360691,3360782,3361393,3361810,3363032,3363033,3363034,3363035,3363038,3363039,3364220,3364228,3365225,3369083,3369793,3369794,3371657,3372424,3377954,3378232,3378384,3378980,3378981,3379107,3380322,3381686,3382652,3382778,3383873,3384478,3384883,3385491,3385805,3386873,3389355,3390136,3391265,3392026,3393026,3393226,3394057,3394146,3395826,3398594,3398767,3399031,3400784,3400896,3401266,3401414,3401604,3403249,3403981,3404325,3404745,3406067,3406631,3410325,3411870,3411962,3414716,3415070,3415537,3416279,3416419,3419522,3420026,3420528,3421271,3426717,3426806,3427978,3429389,3430525,3430725,3431111,3431215,3431406,3432435,3433278,3433320,3435229,3435253,3436810,3437418,3439354,3442072,3443371,3443549,3444503,3444619,3446639,3446772,3448066,3448192,3448286,3449097,3449725,3451062,3453054,3454855,3455807,3455905,3456127,3456468,3456506,3457482,3457813,3459677,3460875,3462394,3462813,3463448,3463988,3467501,3468322,3471894,3473035,3473739,3474192,3474405,3474840,3475235,3475506,3476711,3477020,3477794,3478211,3478230,3480736,3482396,3482643,3483386,3483541,3485746,3485800,3486432,3487986,3489788,3490654,3491740,3492191,3495488,3497274,3499066,3499233,3500620,3501525,3501770,3503102,3503835,3504120,3504717,3505346,3507068,3507387,3508231,3509061,3509207,3510190,3510252,3510501,3511627,3511756,3512476,3514839,3516266,3516509,3517750,3518067,3519041,3519433,3521424,3521600,3521602,3521769,3523567,3524536,3525328,3525344,3525677,3527276,3527361,3528260,3530310,3531220,3531860,3532575,3534537,3536051,3536623,3537378,3539945,3542884,3543499,3544438,3545189,3546380,3547127,3550142,3551297,3552014,3554591,3554881,3555369,3556880,3557861,3558082,3558300,3559376,3559982,3560619,3561310,3562804,3564241,3565909,3568452,3568582,3570727,3572464,3573508,3574189,3576174,3576736,3578350,3580312,3580629,3580864,3583178,3584208,3584574,3584823,3585129,3586637,3586656,3586681,3587073,3588249,3588298,3589924,3591299,3593229,3593791,3593912,3595135,3595330,3595835,3598508,3599850,3600341,3602535,3603470,3603823,3604919,3605473,3605689,3606514,3607544,3609785,3610067,3610497,3614393,3615211,3616808,3617635,3618454,3619894,3620322,3620412,3623571,3623853,3624444,3626421,3626602,3627260,3627571,3630120,3630286,3630526,3633056,3633812,3634315,3634421,3635050,3636280,3636502,3638464,3639769,3639831,3640548,3641726,3646841,3646913,3647959,3649882,3651114,3653607,3654805,3655094,3655724,3656301,3660237,3662494,3662617,3663237,3663561,3663912,3665278,3666638,3667124,3667741,3670340,3670385,3672849,3674568,3674601,3675985,3676478,3677377,3680282,3684516,3687511,3687593,3689565,3689842,3691215,3691807,3696325,3696926,3697124,3697125,3697429,3697655,3698067,3698894,3698895,3699047,3699410,3700134,3707269,3707354,3707768,3707971,3710292,3710613,3712183,3712234,3713585,3715584,3715958,3716031,3717438,3717577,3719773,3719947,3721083,3723057,3723058,3723060,3723086,3723299,3723384,3723642,3725609,3726019,3726555,3726604,3727948,3728102,3730895,3732228,3732302,3732651,3735869,3736188,3743949,3743951,3745406,3748043,3748679,3750570,3751961,3753165,3753784,3754559,3761048,3763200,3763201,3763595,3764029,3764328,3764703,3766480,3768569,3768732,3770891,3771073,3785905,3788638,3792046,3792865,3792974,3793889,3794173,3794978,3795449,3796468,3798570,3800956,3801037,3802230,3807260,3807778,3808114,3808434,3811135,3812307,3813588,3815526,3815576,3816308,3816337,3817831,3817834,3817837,3818936,3818976,3819260,3819274,3820467,3821695,3823236,91272425,92275264,92304047,92529186,92529187,92560078,97590159,97593336,97601450,97606371,97606702,97607167,97607790,97608382,97611813,97613277,97613773,97615062,97616613,97617373,97618284,97619148,97619468,97619497,97620588,97620737,97622131,97622167,97622608,97622975,97622982,97624460,97624477,97625110,97625214,97627985,97630883,97631957,97632361,97632794,97633106,97634864,97634939,97635889,97636511,97636632,97637704,97638399,97638433,97638722,97638977,97639080,97639258,97640806,97642107,97642735,97643046,97644186,97649205,97654176,97656294,97656637,97659197,97664184,97665993,97666064,97666301,97667654,97669678,97670201,97671197,97673803,97674082,97674468,97683111,97683853,97687871,97688333,97689358,97689947,97689997,97690327,97691757,97692517,97696042,97696706,97696806,97696890,97697094,97699223,97699330,97701062,97701100,97701394,97701800,97701913,97702884,97702898,97708202,97708938,97710160,97710854,97712086,97716879,97717060,97717635,97721297,97722144,97722496,97722618,97722677,97723627,97723926,97725706,97725979,97726055,97726082,97726160,97727829,97728084,97729809,97732838,97733446,97737160,97737167,97738107,97738400,97738598,97740345,97741642,97744635,97746129,97746468,97746739,97746825,97746896,97746937,97747551,97748361,97748429,97748465,97750134,97751735,97751767,97753832,97755297,97755381,97757274,97759192,97759252,97759256,97759261,97759834,97760035,97760168,97760447,97760534,97762108,97762724,99440066,99441551,99444605,99447078,99447079,99447241,99450268,99450771,99454237,99454238,99455008,99455934,99457747,99464999,99466948,99466977,99466980,99467542,99470854,99472008,99472173,99473410,99474281,99474432,99477484,99478208,99478326,99478925,99478996,99481117,99482107,99485551,99485703,99485772,99486367,99488795,99489023,99489061,99489063,99490777,99491922,99491958,99491975,99492365,99493189,99494651,99495790,99495846,99499009,99499662,99499663,99499664,99501275,99501871,99502191,99502404,99502750,99503861,99504988,99507644,99510099,99510293,99511053,99511854,99511855,99511856,99512032,99512668,99515006,99515908,99516438,99516822,99523924,99524719,99524905,99524906,99526959,99528454,99529092,99529142,99530235,99530651,99530734,99530835,99530950,99532244,99532520,99533537,99533538,99533617,99536157,99538587,99538692,99539342,99539463,99539709,99540307,99540938,99542177,99545661,99547848,99548231,99548960"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №1; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2555875<br>" href="edition.php?id=3032824">Мастер Загадок (Мастер загадок - 1) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 35050</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td>Азбука</td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 220</td>
+<td><nobr><a href="/file.php?id=2555875">431 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=52bea8b3b191010187d5368b32177a48"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/52bea8b3b191010187d5368b32177a48"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №1; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2589875<br>" href="edition.php?id=3032824">Мастер Загадок (Мастер загадок - 1) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 69050</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td>Азбука</td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 220</td>
+<td><nobr><a href="/file.php?id=2589875">430 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=7eb0bbc2992b300bfabb9a1281b12416"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/7eb0bbc2992b300bfabb9a1281b12416"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=241994">Редакции и варианты романа «Мастер и Маргарита»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-27/2022-05-05; ID: 2669989<br>" href="edition.php?id=3330646">«Мой бедный, бедный мастер...» <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-27/2022-05-05; ID: 2669989<br>" href="edition.php?id=3330646"><i><font color="green"> 9785969703643; 5969703648</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 151212</span></nobr>
+
+</td>
+<td><a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a>; <a href="author.php?id=307340">Маркевич, Борис Анисимович(Author)</a>;<input type="checkbox" id="2669989" class="taghide"/><label for="2669989" ><b>[...]</b></label><div id="2669989"> <a href="author.php?id=303177">Лосев, Виктор Иванович(Editor)</a></div></td>
+<td>Вагриус</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 1562</td>
+<td><nobr><a href="/file.php?id=2669989">5 MB</a></nobr></td>
+<td>txt</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=6e2d89e7ecdb0b314fd20ec638c80f5b"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/6e2d89e7ecdb0b314fd20ec638c80f5b"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=241994">Редакции и варианты романа «Мастер и Маргарита»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-14; ID: 2769335<br>Булгаков - _Мой бедный, бедный мастер__.fb2" href="edition.php?id=3330646">«Мой бедный, бедный мастер...» <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-14; ID: 2769335<br>Булгаков - _Мой бедный, бедный мастер__.fb2" href="edition.php?id=3330646"><i><font color="green"> 9785969703643; 5969703648</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 254273</span></nobr>
+
+</td>
+<td><a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a>; <a href="author.php?id=307340">Маркевич, Борис Анисимович(Author)</a>;<input type="checkbox" id="2769335" class="taghide"/><label for="2769335" ><b>[...]</b></label><div id="2769335"> <a href="author.php?id=303177">Лосев, Виктор Иванович(Editor)</a></div></td>
+<td>Вагриус</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 1562</td>
+<td><nobr><a href="/file.php?id=2769335">3 MB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=f6a0e0426347b8552320aaa5131f3644"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/f6a0e0426347b8552320aaa5131f3644"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=241994">Редакции и варианты романа «Мастер и Маргарита»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-14; ID: 2899366<br>" href="edition.php?id=3330646">«Мой бедный, бедный мастер...» <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-14; ID: 2899366<br>" href="edition.php?id=3330646"><i><font color="green"> 9785969703643; 5969703648</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 393162</span></nobr>
+
+</td>
+<td><a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a>; <a href="author.php?id=307340">Маркевич, Борис Анисимович(Author)</a>;<input type="checkbox" id="2899366" class="taghide"/><label for="2899366" ><b>[...]</b></label><div id="2899366"> <a href="author.php?id=303177">Лосев, Виктор Иванович(Editor)</a></div></td>
+<td>Вагриус</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 1562</td>
+<td><nobr><a href="/file.php?id=2899366">4 MB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=fe712570f9adbc214df2e688a6638e2a"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/fe712570f9adbc214df2e688a6638e2a"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=241994">Редакции и варианты романа «Мастер и Маргарита»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-05-03/2024-05-13; ID: 97593006<br>Mihail_Bulgakov_Moy_bednyiy_bednyiy_master...Polnoe_sobranie_redaktsiy_i_variantov_romana_Master_i_Margarita__pod_red._V.I.Loseva" href="edition.php?id=3330646">«Мой бедный, бедный мастер...» <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2022-05-03/2024-05-13; ID: 97593006<br>Mihail_Bulgakov_Moy_bednyiy_bednyiy_master...Polnoe_sobranie_redaktsiy_i_variantov_romana_Master_i_Margarita__pod_red._V.I.Loseva" href="edition.php?id=3330646"><i><font color="green"> 9785969703643; 5969703648</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 1325667</span></nobr>
+
+</td>
+<td><a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a>; <a href="author.php?id=307340">Маркевич, Борис Анисимович(Author)</a>;<input type="checkbox" id="97593006" class="taghide"/><label for="97593006" ><b>[...]</b></label><div id="97593006"> <a href="author.php?id=303177">Лосев, Виктор Иванович(Editor)</a></div></td>
+<td>Вагриус</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 1562</td>
+<td><nobr><a href="/file.php?id=97593006">1 MB</a></nobr></td>
+<td>zip</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=84408ba7a07282080e1eaa9a7e40a8db"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/84408ba7a07282080e1eaa9a7e40a8db"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=239862">Прочесть обязательно!   </a>; <a href="series.php?id=241464">Эксмо-Классика   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2530247<br>" href="edition.php?id=3030133">Мастер и Маргарита <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2530247<br>" href="edition.php?id=3030133"><i><font color="green"> 5699155007; 9785699155002</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 9422</span></nobr>
+
+</td>
+<td><a href="author.php?id=276721">Евгений, Штыров (Author)</a>; <a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a></td>
+<td>Эксмо</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 386</td>
+<td><nobr><a href="/file.php?id=2530247">766 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=023dd20b19a29136fb66d33bda55679c"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/023dd20b19a29136fb66d33bda55679c"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241994">Редакции и варианты романа «Мастер и Маргарита»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2530248<br>" href="edition.php?id=2973149">Мастер и Маргарита (переписанные главы) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 9423</span></nobr>
+
+</td>
+<td><a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Russian</td>
+<td>0 / 62</td>
+<td><nobr><a href="/file.php?id=2530248">120 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=2c8b3e1dbb11fbe7b02bde10ac904b40"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/2c8b3e1dbb11fbe7b02bde10ac904b40"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=676092">Мастер (версии)   </a>; <a href="series.php?id=245884">МУРу – 90 лет. Лучшие романы Н. Леонова   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2553446<br>" href="edition.php?id=3085337">Мастер [журнальный вариант] <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2553446<br>" href="edition.php?id=3085337"><i><font color="green"> 9785699309245; 5699309241</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 32621</span></nobr>
+
+</td>
+<td><a href="author.php?id=300952">Леонов, Николай (Author)</a>; <a href="author.php?id=368127">Леонов, Николай Иванович(Author)</a>;<input type="checkbox" id="2553446" class="taghide"/><label for="2553446" ><b>[...]</b></label><div id="2553446"> <a href="author.php?id=333018">Садовников, Георгий Михайлович(Author)</a></div></td>
+<td>Молодая гвардия</td>
+<td><nobr>2008</nobr></td>
+<td>Russian</td>
+<td>0 / 149</td>
+<td><nobr><a href="/file.php?id=2553446">258 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=392c517f520ee9410ece7d2bab6ad669"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/392c517f520ee9410ece7d2bab6ad669"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №3; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2555874<br>" href="edition.php?id=3071630">Арфист на ветру (Мастер загадок - 3) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 35049</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td></td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 244</td>
+<td><nobr><a href="/file.php?id=2555874">483 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=5605207adb52d80c83c7e2777f6065fc"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/5605207adb52d80c83c7e2777f6065fc"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №2; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2555876<br>" href="edition.php?id=3071629">Наследница моря и огня (Мастер загадок - 2) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 35051</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td></td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 181</td>
+<td><nobr><a href="/file.php?id=2555876">358 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=df9eb4d451c0a71d06ea64976805ff45"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/df9eb4d451c0a71d06ea64976805ff45"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=239862">Прочесть обязательно!   </a>; <a href="series.php?id=241464">Эксмо-Классика   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2587194<br>" href="edition.php?id=3030133">Мастер и Маргарита <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2587194<br>" href="edition.php?id=3030133"><i><font color="green"> 5699155007; 9785699155002</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 66369</span></nobr>
+
+</td>
+<td><a href="author.php?id=276721">Евгений, Штыров (Author)</a>; <a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a></td>
+<td>Эксмо</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 386</td>
+<td><nobr><a href="/file.php?id=2587194">2 MB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=194e5dcf2644488b803feda55631bfd7"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/194e5dcf2644488b803feda55631bfd7"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=243081">Рубина, Дина. Сборники   </a>; <a href="series.php?id=243804">Сборник «Мастер-тарабука»   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2612882<br>Рубина - Мастер-тарабука (сборник).fb2" href="edition.php?id=3055928">Мастер-тарабука <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 92521</span></nobr>
+
+</td>
+<td><a href="author.php?id=331287">Рубина, Дина Ильинична(Author)</a></td>
+<td>Эксмо</td>
+<td><nobr>2007</nobr></td>
+<td>Russian</td>
+<td>0 / 122</td>
+<td><nobr><a href="/file.php?id=2612882">264 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=b98457bc023b3d7b34222cff7a12c553"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/b98457bc023b3d7b34222cff7a12c553"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №2; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2628578<br>" href="edition.php?id=3071629">Наследница моря и огня (Мастер загадок - 2) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 108308</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td></td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 181</td>
+<td><nobr><a href="/file.php?id=2628578">662 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=14bfbdd2920a19df4cf3babb7004a983"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/14bfbdd2920a19df4cf3babb7004a983"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241735">Мастер загадок   </a> №3; <a href="series.php?id=476476">Наследники Толкина. Коллекция   </a>; <a href="series.php?id=241306">Черный дракон   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2628579<br>" href="edition.php?id=3071630">Арфист на ветру (Мастер загадок - 3) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 108309</span></nobr>
+
+</td>
+<td><a href="author.php?id=305619">Маккиллип, Патриция(Author)</a></td>
+<td></td>
+<td><nobr>2002</nobr></td>
+<td>Russian</td>
+<td>0 / 244</td>
+<td><nobr><a href="/file.php?id=2628579">882 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=01107a0383b4adbac635fd64d186c11e"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/01107a0383b4adbac635fd64d186c11e"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=676092">Мастер (версии)   </a>; <a href="series.php?id=245884">МУРу – 90 лет. Лучшие романы Н. Леонова   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2642260<br>Леонов, Садовников - Мастер.fb2" href="edition.php?id=3085337">Мастер [журнальный вариант] <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2642260<br>Леонов, Садовников - Мастер.fb2" href="edition.php?id=3085337"><i><font color="green"> 9785699309245; 5699309241</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 122447</span></nobr>
+
+</td>
+<td><a href="author.php?id=300952">Леонов, Николай (Author)</a>; <a href="author.php?id=368127">Леонов, Николай Иванович(Author)</a>;<input type="checkbox" id="2642260" class="taghide"/><label for="2642260" ><b>[...]</b></label><div id="2642260"> <a href="author.php?id=333018">Садовников, Георгий Михайлович(Author)</a></div></td>
+<td>Молодая гвардия</td>
+<td><nobr>2008</nobr></td>
+<td>Russian</td>
+<td>0 / 149</td>
+<td><nobr><a href="/file.php?id=2642260">631 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=7ec702c32e6004860e9a38b79b89d999"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/7ec702c32e6004860e9a38b79b89d999"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №1; <a href="series.php?id=240068">Современный фантастический боевик   </a> №623</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2651783<br>" href="edition.php?id=3147412">Мастер клинков - Начало пути <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2651783<br>" href="edition.php?id=3147412"><i><font color="green"> 5992205055; 9785992205053</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 132633</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a></td>
+<td>Альфа-Книга</td>
+<td><nobr>2009</nobr></td>
+<td>Russian</td>
+<td>0 / 322</td>
+<td><nobr><a href="/file.php?id=2651783">652 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=c6da371c4558143c4ce577a3241ee6d8"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/c6da371c4558143c4ce577a3241ee6d8"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=241608">Мистер Паркер Пайн – мастер счастья   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2665088<br>Кристи - Мистер Паркер Пайн - мастер счастья.fb2" href="edition.php?id=3108206">Мистер Паркер Пайн – мастер счастья <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-19/2026-06-12; ID: 2665088<br>Кристи - Мистер Паркер Пайн - мастер счастья.fb2" href="edition.php?id=3108206"><i><font color="green"> 9785699345687; 569934568X</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 146206</span></nobr>
+
+</td>
+<td><a href="author.php?id=295211">Кристи, Агата(Author)</a></td>
+<td>ЭКСМО</td>
+<td><nobr>2009</nobr></td>
+<td>Russian</td>
+<td>0 / 147</td>
+<td><nobr><a href="/file.php?id=2665088">504 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=17baeb06751f750fcd818d7e34c2d7a5"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/17baeb06751f750fcd818d7e34c2d7a5"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=240023">Мастер и Маргарита (версии)   </a>; <a href="series.php?id=239862">Прочесть обязательно!   </a>; <a href="series.php?id=241464">Эксмо-Классика   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2668128<br>" href="edition.php?id=3030133">Мастер и Маргарита <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2668128<br>" href="edition.php?id=3030133"><i><font color="green"> 5699155007; 9785699155002</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 149325</span></nobr>
+
+</td>
+<td><a href="author.php?id=276721">Евгений, Штыров (Author)</a>; <a href="author.php?id=207417">Булгаков, Михаил Афанасьевич(Author)</a></td>
+<td>Эксмо</td>
+<td><nobr>2006</nobr></td>
+<td>Russian</td>
+<td>0 / 386</td>
+<td><nobr><a href="/file.php?id=2668128">1 MB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=d5d912d55242e17db746fa77be488784"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/d5d912d55242e17db746fa77be488784"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2; <a href="series.php?id=240613">Попаданцы - фэнтези   </a>; <a href="series.php?id=240068">Современный фантастический боевик   </a> №655; <a href="series.php?id=496780">Фантастический боеви   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-27/2022-05-05; ID: 2676789<br>" href="edition.php?id=3121404">Мастер клинков - Клинок выковывается <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-27/2022-05-05; ID: 2676789<br>" href="edition.php?id=3121404"><i><font color="green"> 9785992206531; 5992206531</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 158064</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a>; <a href="author.php?id=214164">wotti(Designer)</a></td>
+<td>Альфа-книга</td>
+<td><nobr>2010</nobr></td>
+<td>Russian</td>
+<td>0 / 338</td>
+<td><nobr><a href="/file.php?id=2676789">376 kB</a></nobr></td>
+<td>doc</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=291d2dc152b6da5562b7ff63c550baf1"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/291d2dc152b6da5562b7ff63c550baf1"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2; <a href="series.php?id=240613">Попаданцы - фэнтези   </a>; <a href="series.php?id=240068">Современный фантастический боевик   </a> №655; <a href="series.php?id=496780">Фантастический боеви   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2676848<br>" href="edition.php?id=3121404">Мастер клинков - Клинок выковывается <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2676848<br>" href="edition.php?id=3121404"><i><font color="green"> 9785992206531; 5992206531</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 158125</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a>; <a href="author.php?id=214164">wotti(Designer)</a></td>
+<td>Альфа-книга</td>
+<td><nobr>2010</nobr></td>
+<td>Russian</td>
+<td>0 / 338</td>
+<td><nobr><a href="/file.php?id=2676848">204 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=2bbef565bcf818d7d9716a2d626509d6"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/2bbef565bcf818d7d9716a2d626509d6"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2; <a href="series.php?id=240613">Попаданцы - фэнтези   </a>; <a href="series.php?id=240068">Современный фантастический боевик   </a> №655; <a href="series.php?id=496780">Фантастический боеви   </a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2678271<br>" href="edition.php?id=3121404">Мастер клинков - Клинок выковывается <i></i></a><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-12; ID: 2678271<br>" href="edition.php?id=3121404"><i><font color="green"> 9785992206531; 5992206531</font></a></i> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 159550</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a>; <a href="author.php?id=214164">wotti(Designer)</a></td>
+<td>Альфа-книга</td>
+<td><nobr>2010</nobr></td>
+<td>Russian</td>
+<td>0 / 338</td>
+<td><nobr><a href="/file.php?id=2678271">336 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=eeec45f3a5be444a484e984c040fbcce"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/eeec45f3a5be444a484e984c040fbcce"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2680012<br>" href="edition.php?id=3123147">Мастер клинков - Клинок выковывается <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 161320</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Russian</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=2680012">430 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ae52fb1e41e3a08c9b0fb643ef258426"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/ae52fb1e41e3a08c9b0fb643ef258426"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2684294<br>" href="edition.php?id=3123147">Мастер клинков - Клинок выковывается <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 165647</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Russian</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=2684294">541 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=ca3ba766de3080cb557d86b54d74ff14"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/ca3ba766de3080cb557d86b54d74ff14"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=248345">Мастер клинков   </a> №2</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-01-23/2026-06-13; ID: 2687002<br>" href="edition.php?id=3130153">Мастер клинков - Клинок выковывается (обновление 17.01.10) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Book">b</a></span> 
+<span class="badge badge-secondary"">r 168403</span></nobr>
+
+</td>
+<td><a href="author.php?id=328095">Распопов, Дмитрий Викторович(Author)</a></td>
+<td></td>
+<td><nobr>2010</nobr></td>
+<td>Russian</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=2687002">625 kB</a></nobr></td>
+<td>fb2</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/ads.php?md5=0a7cbd94b2a92cc05bd19efc3b6ef5af"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Randombook" href="https://randombook.org/book/0a7cbd94b2a92cc05bd19efc3b6ef5af"><span class="badge badge-primary">Randombook</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=%D0%BC%D0%B0%D1%81%D1%82%D0%B5%D1%80&topics%5B%5D=r&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 3897</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>

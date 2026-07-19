@@ -1,0 +1,134 @@
+{
+    "gopls": {
+        "build.buildFlags": ["-tags=e2e"],
+        "ui.semanticTokens": true,
+        // Delegate staticcheck to golangci-lint (on save) to avoid duplicate/inconsistent
+        // diagnostics — .golangci.yml excludes ST1000, ST1016, QF1008 that gopls would flag.
+        "ui.diagnostic.staticcheck": false,
+        "analyses": {
+            // SA4006: "this value of X is never used"
+            // SA4017: "X doesn't have side effects and its return value is ignored"
+            // False positives with Go 1.26's enhanced new(value) builtin.
+            // staticcheck doesn't recognize that new(expr) consumes the variable.
+            "SA4006": false,
+            "SA4017": false
+        }
+    },
+    "go.lintOnSave": "package",
+    "go.lintTool": "golangci-lint",
+    "go.formatTool": "goimports",
+    "go.testFlags": ["-count=1"],
+    "go.testTimeout": "300s",
+    "editor.formatOnSave": true,
+    "[go]": {
+        "editor.defaultFormatter": "golang.go"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "[yaml]": {
+        "editor.defaultFormatter": "redhat.vscode-yaml"
+    },
+    // Astro Starlight site (site/) — Prettier for web file types.
+    "[astro]": {
+        "editor.defaultFormatter": "astro-build.astro-vscode"
+    },
+    "[mdx]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[css]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "[markdown]": {
+        "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.markdownlint": "explicit"
+        }
+    },
+    // Exclude build artifacts and generated files from search results.
+    // site/src/ content is kept searchable; only generated/dependency files excluded.
+    "search.exclude": {
+        "dist/**": true,
+        "site/dist/**": true,
+        "site/.astro/**": true,
+        "site/pnpm-lock.yaml": true,
+        "go.sum": true,
+        "*-results.txt": true,
+        "*-output.txt": true,
+        "plan/**": true
+    },
+    // Reduce file watcher overhead on directories that change during builds.
+    "files.watcherExclude": {
+        "dist/**": true,
+        "site/dist/**": true,
+        "site/.astro/**": true,
+        "**/node_modules/**": true
+    },
+    // YAML schema associations for IntelliSense and validation.
+    "yaml.schemas": {
+        "https://golangci-lint.run/jsonschema/golangci.v2.jsonschema.json": ".golangci.yml"
+    },
+    // Auto-approve URLs for chat tools — project-relevant documentation sources.
+    // Keep each source to its base URL plus glob patterns for endpoints and subdomains.
+    "chat.tools.urls.autoApprove": {
+        "https://code.visualstudio.com/docs/copilot": true,
+        "https://docs.github.com/en/copilot": true,
+        "https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk": true,
+        "https://modelcontextprotocol.io": true,
+        "https://spec.modelcontextprotocol.io/specification": true,
+        "https://golangci-lint.run": true,
+        "https://goreleaser.com": true,
+        "https://docs.astro.build": true,
+        "https://starlight.astro.build": true,
+        "https://docs.sonarsource.com/sonarqube": true,
+        "https://sonarcloud.io": true,
+        "https://owasp.org": true
+    },
+    // ── SonarQube for IDE: rule overrides ──
+    // IMPORTANT: sonarlint.rules has "scope": "application" in the extension,
+    // meaning VS Code ONLY reads it from User Settings, NOT Workspace Settings.
+    // The actual rule overrides that take effect are in:
+    //   %APPDATA%\Code\User\settings.json → sonarlint.rules
+    // This block is kept as documentation for contributors to replicate in their
+    // own User Settings. sonar-project.properties exclusions only apply in
+    // Connected Mode / server-side CI analysis.
+    // See: https://docs.sonarsource.com/sonarqube-for-vs-code/using/rules/#rule-selection
+    "sonarlint.rules": {
+        // S1192: "Define a constant instead of duplicating this literal"
+        // Go table-driven tests repeat string literals for readability. Extracting
+        // every repeated literal into a constant harms test clarity.
+        "go:S1192": {
+            "level": "off"
+        },
+        // S1186: "Add a nested comment explaining why this function is empty"
+        // Empty httptest handler bodies simulate HTTP 200 OK — standard Go practice:
+        //   http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+        "go:S1186": {
+            "level": "off"
+        },
+        // S100: "Rename function to match the regular expression"
+        // Go test names use underscores by convention (TestFoo_Bar_Baz).
+        // See: https://go.dev/doc/code#Testing
+        "go:S100": {
+            "level": "off"
+        },
+        // S3776: "Refactor this method to reduce its Cognitive Complexity"
+        // Go option-builder functions use many trivial if-branches for field mapping.
+        // Also affects test helper functions that verify many API response fields.
+        "go:S3776": {
+            "level": "off"
+        }
+    }
+}

@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Crear Pull Request en GitHub",
+			"type": "shell",
+			"command": "gh pr create --fill --web",
+			"args": [],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

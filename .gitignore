@@ -1,0 +1,22 @@
+/libgen-mcp
+/probe
+/server
+/dist/
+coverage.out
+coverage.internal.out
+coverage.html
+*.test
+.superpowers/
+
+# Generated LLM-discovery files published to the site (regenerated from the
+# canonical root-level llms.txt / llms-full.txt by site prebuild — not committed)
+/site/public/llms.txt
+/site/public/llms-full.txt
+
+# Astro build output
+/site/dist/
+/site/.astro/
+
+# Local planning / spec scratch — not part of the published repo
+/plan/
+/docs/superpowers/

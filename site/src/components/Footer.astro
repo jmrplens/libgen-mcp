@@ -1,0 +1,94 @@
+---
+// Custom Starlight <Footer> override.
+// Renders Starlight's default footer, then a human-visible maintainer block so
+// the on-page authorship corroborates the Person node in the site-wide @graph
+// (astro.config.mjs). AI engines look for agreement between structured data and
+// rendered content when deciding whether to cite a source; this supplies it.
+import Default from "@astrojs/starlight/components/Footer.astro";
+
+const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const pathname = Astro.url.pathname;
+const rel = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
+const isES = rel === "/es" || rel.startsWith("/es/");
+
+const label = isES ? "Mantenido por" : "Maintained by";
+// Curated subset of the Person `sameAs` set in the site-wide @graph — the
+// human-relevant profiles; machine-oriented entries (Matrix, Keyoxide, ORCID)
+// stay JSON-LD-only.
+const links = [
+	{ href: "https://github.com/jmrplens", text: "GitHub" },
+	{ href: "https://www.linkedin.com/in/jmrplens", text: "LinkedIn" },
+	{ href: "https://mstdn.jmrp.io/@jmrplens", text: "Mastodon" },
+	{
+		href: "https://scholar.google.com/citations?user=9b0kPaUAAAAJ",
+		text: "Google Scholar",
+	},
+];
+
+const licenseUrl = "https://github.com/jmrplens/libgen-mcp/blob/main/LICENSE";
+const privacyUrl = "https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md";
+const licenseText = isES ? "Licencia MIT" : "MIT-licensed";
+const trustSuffix = isES
+	? " · sin telemetría · sin cuenta"
+	: " · no telemetry · no account required";
+const privacyText = isES ? "Privacidad" : "Privacy";
+---
+
+<Default />
+<div class="lgm-maintainer">
+	<span>
+		{label}{" "}
+		<a href="https://jmrp.io" rel="author">José Manuel Requena Plens</a>
+	</span>
+	<span class="lgm-maintainer-links">
+		{
+			links.map((l) => (
+				<a href={l.href} rel="me noopener noreferrer" target="_blank">
+					{l.text}
+				</a>
+			))
+		}
+	</span>
+</div>
+<div class="lgm-trust">
+	<a href={licenseUrl} rel="noopener noreferrer" target="_blank">
+		{licenseText}
+	</a>{trustSuffix} ·{" "}
+	<a href={privacyUrl} rel="noopener noreferrer" target="_blank">
+		{privacyText}
+	</a>
+</div>
+
+<style>
+	.lgm-maintainer {
+		margin-top: 1.5rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--sl-color-hairline);
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1rem;
+		align-items: baseline;
+		justify-content: space-between;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.lgm-maintainer-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+	.lgm-trust {
+		margin-top: 0.5rem;
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+	}
+	.lgm-maintainer a,
+	.lgm-trust a {
+		color: var(--sl-color-text-accent);
+		text-decoration: none;
+	}
+	.lgm-maintainer a:hover,
+	.lgm-trust a:hover {
+		text-decoration: underline;
+	}
+</style>

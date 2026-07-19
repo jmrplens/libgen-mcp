@@ -1,0 +1,1096 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="max-age=604800, must-revalidate">
+	<meta name="rating" content="general">
+	<!--<link href="/rss/index.php" rel="alternate" type="application/rss+xml" title="News" />-->
+	<link rel="shortcut icon" href="/img/favicon.ico" type="image/x-icon">
+	<title>Library Genesis</title>
+		
+	<!--[if IE 6]>
+	<style>
+		body {behavior: url("/csshover3.htc");}
+		#menu li .drop {background:url("img/drop.gif") no-repeat right 8px; 
+	</style>
+	<![endif]-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css">	
+	
+<link href="/css/font.min.css" rel="stylesheet">	
+<style>
+nav.navbar .dropdown:hover > .dropdown-menu {
+ display: block; 
+}
+.bd-placeholder-img {
+	font-size: 1.125rem;
+	text-anchor: middle;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+@media (min-width: 768px) {
+			.bd-placeholder-img-lg {
+			font-size: 3.5rem;
+		}
+	}
+
+.panel-heading .accordion-toggle:after {
+    font-family: "Glyphicons Halflings";  
+    content: "\e114";    
+    float: right;       
+    color: grey;         
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    content: "\e080";   
+}
+.tooltip-inner {
+    max-width: 350px;
+    width: 350px; 
+}
+h1 {
+	display: block; 
+	font-size: 1.8rem; 
+	font-weight: bold; 
+	font-family: Georgia, "Times New Roman", Times, serif;  color: #A00000; 
+}
+#tablelibgen td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+#tablelibgen1 td { 
+	font-family: "Pt Sans", Tahoma, Helvetica, sans-serif; 
+	margin: 0; 
+	padding: 0em 3px; 
+	font-size: 1rem;
+}
+
+.taghide {
+    display: none; 
+}
+.taghide + label ~ div {
+    display: none;
+}
+/* оформляем текст label */
+.taghide + label {
+    display: inline-block; 
+}
+/* вид текста label при активном переключателе */
+
+/* когда чекбокс активен показываем блоки с содержанием  */
+.taghide:checked + label + div {
+    display: block; 
+}
+
+
+
+/*.navbar {
+	background-color: #BBBBBB;
+}*/
+	</style>
+
+	<link rel="stylesheet" href="/css/dark-mode.css">
+	<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<link rel="stylesheet" type="text/css" href="../css/paginator3000.css" />
+<script type="text/javascript" src="../js/paginator3000.js"></script><script data-cfasync="false" async type="text/javascript" src="//je.deuxseethe.com/rUJqARoMIAl18z/146156"></script>
+
+
+
+
+</head>
+<body>    
+<nav class="navbar navbar-expand-md navbar-dark bg-secondary  mb-1">
+  
+   <a class="navbar-brand" href="/index.php">
+    <img src="/img/logo.png"  height="30" alt="">
+  </a>
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/app.php/article/news">NEWS <span class="sr-only">(current)</span></a>
+      </li>
+      <li class="nav-item active">
+        <a class="nav-link" href="/community/">FORUM <span class="sr-only">(current)</span></a>
+      </li>
+	
+      <li class="nav-item dropdown">
+<a class="btn btn-secondary dropdown-toggle" href="/community/ucp.php?mode=login" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LOGIN
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">    
+          <a class="dropdown-item" href="/community/ucp.php?mode=register">Register</a>
+        </div>
+      </li>
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          DOWNLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">      
+
+          <a class="dropdown-item" href="/mirrors.php">Mirrors</a>
+          <a class="dropdown-item" href="http://libgenfrialc7tguyjywa36vtrdcplwpxaw43h6o63dmmwhvavo5rqqd.onion/">TOR</a>
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">P2P</h6>
+          <a class="dropdown-item" href="/torrents/">Torrents</a>
+          <a class="dropdown-item" href="https://ipdl.cat/data/torrents.html">Torrents status</a>
+          <a class="dropdown-item" href="/nzb/">Usenet (*.nzb)</a>
+          <a class="dropdown-item" href="/soft/">Soft</a>
+	<!--https://phillm.net/libgen-stats-table.php-->
+
+
+
+
+	<div class="dropdown-divider"></div>
+         <h6 class="dropdown-header">DB Dumps</h6>
+          <a class="dropdown-item" href="/dirlist.php?dir=dbdumps">Libgen</a>
+          <a class="dropdown-item" href="http://libgen.rs/dbdumps/">libgen.rs (gen.lib.rus.ec)</a>
+
+	<!--<div class="dropdown-divider"></div>
+ 	 <a class="dropdown-item" href="/magz0/">Unsorted magz</a>
+ 	 <a class="dropdown-item" href="/fict0/">Unsorted fiction</a>
+
+	 <a class="dropdown-item" href="/comics4/">Unsorted comics</a>
+        </div>-->
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="librarian.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          UPLOAD
+        </a>
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="ftp://ftp.libgen.bz/upload/">FTP</a> 
+        </div>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="/index.php?req=fmode:last&topics1=all" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LAST
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">
+	<a class="dropdown-item" href="/index.php?req=fmode:last&topics1=all"><b>Files</b></a>
+
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=l">Libgen</a>
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=a">Scientific Articles</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=f">Fiction</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=c">Comics</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=m">Magazines</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=s">Standards</a> 
+          <a class="dropdown-item" href="/index.php?req=fmode:last&topics%5B%5D=r">Fiction RUS</a>
+	<div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=e">Editions</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=s">Series</a>
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=p">Publishers</a> 
+        <!--  <a class="dropdown-item" href="/index.php?req=mode:last&curtab=f">Files</a> -->
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=a">Authors</a> 
+          <a class="dropdown-item" href="/index.php?req=mode:last&curtab=w">Works</a>
+
+
+  
+        </div>
+
+
+      </li>
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          OTHERS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+          <a class="dropdown-item" href="json.php">API</a> 
+          <a class="dropdown-item" href="rss.php">RSS</a> 
+          <a class="dropdown-item" href="top.php">Top 100 users</a> 
+          <a class="dropdown-item" href="stat.php">Stats</a>
+
+	<a class="dropdown-item" href="topics.php">Topics</a>
+
+          <a class="dropdown-item" href="batchsearchindex.php">Batch search</a>  
+          <a class="dropdown-item" href="biblioservice.php">Bibliographic services</a>
+          <a class="dropdown-item" href="https://wiki.mhut.org/software:libgen_desktop">Libgen librarian for desktop</a>
+
+
+          <a class="dropdown-item" href="/code/">Source (PHP)</a>
+          <a class="dropdown-item" href="/soft/">LG soft</a>
+          <!--<a class="dropdown-item" href="/import/">Import local files in LG format</a>-->
+          <a class="dropdown-item" href="https://z-library.se/fulltext/">Full text search</a>
+
+
+
+        </div>
+      </li>
+
+
+
+     <!-- <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="topics.php" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          Topics
+        </a>
+      </li>
+-->
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary dropdown-toggle" href="#" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          LINKS
+        </a>
+
+        <div class="dropdown-menu" aria-labelledby="dropdown01">  
+
+
+          
+          <a class="dropdown-item" href="http://sci-hub.ru">Sci-hub</a> 
+          <a class="dropdown-item" href="http://magzdb.org">Magzdb.org</a>
+
+          <a class="dropdown-item" href="http://nlr.ru/rlin/Periodika_rus.php">РНБ</a>
+          <a class="dropdown-item" href="http://rsl.ru/">РГБ</a>
+          <a class="dropdown-item" href="http://loc.gov/">LOC</a>
+          <a class="dropdown-item" href="https://comicvine.gamespot.com/">ComicVine</a>
+          <a class="dropdown-item" href="http://cyberleninka.ru/">Cyberleninka</a>
+          <a class="dropdown-item" href="http://lib.rus.ec/">Lib.rus.ec</a>
+          <a class="dropdown-item" href="http://flibusta.net/">Flibusta.net</a>
+          <a class="dropdown-item" href="http://goodreads.com/">Goodreads.com</a>
+          <a class="dropdown-item" href="http://worldcat.org/">Worldcat.org</a>
+          <a class="dropdown-item" href="https://wiki.archiveteam.org/">Archive team</a>
+          <a class="dropdown-item" href="https://www.reddit.com/r/libgen/">Reddit</a>
+          <a class="dropdown-item" href="http://annas-archive.org/">Anna's Archive</a>
+          <a class="dropdown-item" href="https://welib.org/">Welib</a>
+          <a class="dropdown-item" href="https://open-slum.org/">The Shadow Library Uptime Monitor</a>
+
+        </div>
+
+      </li>
+
+
+      <li class="nav-item dropdown">
+        <a class="btn btn-secondary" href="index.php?req=mode:req&curtab=e" role="button" id="dropdownMenuLink"  aria-haspopup="true" aria-expanded="false">
+          WANTED
+        </a>
+      </li>
+
+    </ul>
+  </div>
+
+  <div class="nav-link">
+
+    <div class="custom-control custom-switch">
+      <input type="checkbox" class="custom-control-input" id="darkSwitch">
+      <label class="custom-control-label" for="darkSwitch">🌓</label>
+    </div>
+    <script src="/js/dark-mode-switch.js"></script>
+  </div>
+   <a class="navbar-brand" href="setlang.php?req=batman&topics%5B%5D=c&lang=ru">RU</a>
+</nav>
+<form class="card p-2 needs-validation" novalidate id="formlibgen" action="index.php" enctype="multipart/form-data" METHOD="GET">
+<div class="input-group mb-3" >
+	<input autofocus type="text" class="form-control" placeholder="Input value" name="req" aria-label="input text" aria-describedby="button-addon2" value="batman" required>
+	<div class="input-group-append">
+	<button class="btn btn-outline-secondary"  id="button-addon2" type="submit">&nbsp;&nbsp;&nbsp;&nbsp;&#128269;&nbsp;&nbsp;&nbsp;&nbsp;</button>
+	</div>
+
+	<div class="invalid-feedback">Input value</div>
+</div>
+
+<div class="container-fluid">
+	<div class="row">
+		<div class="col-8">	
+			<div class="d-block" id="topic">
+				<strong>Search in fields:</strong>
+				<input type="checkbox" checked class="column-input" id="colt" name="columns[]" value="t">
+				<label class="column-label" for="coltitle">Title</label>
+				<input type="checkbox" checked class="column-input" id="cola" name="columns[]" value="a">
+				<label class="column-label" for="colauthor">Author(s)</label>
+				<input type="checkbox" checked class="column-input" id="cols" name="columns[]" value="s">
+				<label class="column-label" for="colseries">Series</label>
+				<input type="checkbox" checked class="column-input" id="coly" name="columns[]" value="y">
+				<label class="column-label" for="colyear">Year</label>
+				<input type="checkbox" checked class="column-input" id="colp" name="columns[]" value="p">
+				<label class="column-label" for="colpublisher">Publisher</label>
+				<input type="checkbox" checked class="column-input" id="coli" name="columns[]" value="i">
+				<label class="column-label" for="colisbn">ISBN</label>
+	  		</div>
+	
+	  		<div class="d-block" id="object">
+				<strong>Search in objects:</strong>
+				<input type="checkbox" checked class="column-input" id="objf" name="objects[]" value="f">
+				<label class="column-label" for="objf">Files</label>
+				<input type="checkbox" checked class="column-input" id="obje" name="objects[]" value="e">
+				<label class="column-label" for="obje">Editions</label>
+				<input type="checkbox" checked class="column-input" id="objs" name="objects[]" value="s">
+				<label class="column-label" for="objs">Series</label>
+				<input type="checkbox" checked class="column-input" id="obja" name="objects[]" value="a">
+				<label class="column-label" for="obja">Authors</label>
+				<input type="checkbox" checked class="column-input" id="objp" name="objects[]" value="p">
+				<label class="column-label" for="objp">Publishers</label>
+				<input type="checkbox" checked class="column-input" id="objw" name="objects[]" value="w">
+				<label class="column-label" for="objw">Works</label>
+			</div>
+			<div class="d-block" id="column">
+				<strong>Search in topics :</strong>
+				<input type="checkbox"  class="column-input" id="topl" name="topics[]" value="l" >
+				<label class="column-label" for="topl">Libgen</label>
+				<input type="checkbox" checked class="column-input" id="topc" name="topics[]" value="c" >
+				<label class="column-label" for="topc">Comics</label>
+				<input type="checkbox"  class="column-input" id="topf" name="topics[]" value="f" >
+				<label class="column-label" for="topf">Fiction</label>
+				<input type="checkbox"  class="column-input" id="topa" name="topics[]" value="a" >
+				<label class="column-label" for="topa">Scientific Articles</label>
+				<input type="checkbox"  class="column-input" id="topm" name="topics[]" value="m" >
+				<label class="column-label" for="topm">Magazines</label>
+				<input type="checkbox"  class="column-input" id="topr" name="topics[]" value="r" >
+				<label class="column-label" for="topr">Fiction RUS</label>
+				<input type="checkbox"  class="column-input" id="tops" name="topics[]" value="s" >
+				<label class="column-label" for="tops">Standards</label>
+			</div>
+ 		</div>
+		<div class="col-4">
+
+			<div >
+				<strong>Results per page:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res25" name="res" class="custom-control-input" value="25" checked>
+				<label class="custom-control-label" for="res25">25</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res50" name="res" class="custom-control-input" value="50" >
+				<label class="custom-control-label" for="res50">50</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="res100" name="res" class="custom-control-input" value="100" >
+				<label class="custom-control-label" for="res100">100</label>
+
+				</div>
+ 			</div>
+			<div class="d-block">
+				<table><tr><td>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="covers" name="covers" >
+						<label class="custom-control-label" for="covers"><strong>Show Covers</strong></label>
+						<script type="text/javascript">
+						$("input[id=covers]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "covers=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+					</td><td> 
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="showch" name="showch" >
+						<label class="custom-control-label" for="showch"><strong>Show chapters</strong></label>
+						<script type="text/javascript">
+						$("input[id=showch]").change(function(){
+							if($(this).is(":checked")==false)
+							{
+								document.cookie = "showch=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+							}
+						});				
+						</script>
+					</div>
+				</td></tr></table>
+
+ 			</div>
+
+			<div class="d-block">
+
+				<div class="custom-control custom-switch">
+					<input type="checkbox" class="custom-control-input" id="gmode" name="gmode" >
+					<label class="custom-control-label" for="gmode" ><strong>Google mode <a href="#" data-toggle="modal" data-target="#googlemodemodal">?</a></strong></label>
+					<script type="text/javascript">
+					$("input[id=gmode]").change(function(){
+						if($(this).is(":checked")==false)
+						{
+							document.cookie = "gmode=; expires=Thu 01-Jan-70 00:00:01 GMT;";
+						}
+					});
+					</script>
+					
+				</div>
+ 			</div>
+
+			<div >
+
+
+				<strong>Seach in files:</strong>
+
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="all" name="filesuns" class="custom-control-input" value="all" checked>
+				<label class="custom-control-label" for="all">All</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="sort" name="filesuns" class="custom-control-input" value="sort" >
+				<label class="custom-control-label" for="sort">Only sorted</label>
+				</div>
+				<div class="custom-control custom-radio custom-control-inline">
+				<input type="radio" id="unsort" name="filesuns" class="custom-control-input" value="unsort" >
+				<label class="custom-control-label" for="unsort">Only uns.</label>
+				</div>
+
+
+
+ 			</div>
+
+ 		</div>
+	</div>
+</div>
+</form><ul class="nav nav-tabs "><li class="nav-item">
+ <a class="nav-link active " href="/index.php?req=batman&topics%5B%5D=c&curtab=f">Files <span class="badge badge-primary">37664</span> <i>Showing the first  2000</i></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=batman&topics%5B%5D=c&curtab=e">Editions <span class="badge badge-primary">11706</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=batman&topics%5B%5D=c&curtab=s">Series <span class="badge badge-primary">2072</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=batman&topics%5B%5D=c&curtab=a">Authors <span class="badge badge-primary">0</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=batman&topics%5B%5D=c&curtab=p">Publishers <span class="badge badge-primary">1</span></a>
+</li><li class="nav-item">
+ <a class="nav-link  " href="/index.php?req=batman&topics%5B%5D=c&curtab=w">Works <span class="badge badge-primary">348</span></a>
+</li><li class="navbar-right" style="float: right !important;"><a class="nav-link" href="/json.php?object=f&ids=5646,205000,1641653,5698,85236,95156,95158,95160,95161,95178,95179,95180,106425,108127,205002,301889,309794,405492,425874,451973,451981,451994,452002,452068,475899,482657,520384,873498,991351,1097556,1292950,1292951,1292963,1292964,1292975,1292976,1292987,1292988,1293054,1293063,1293068,1293073,1293252,1293257,1293262,1294501,1294529,1294564,1294667,1294683,1294684,1294685,1294686,1294687,1294688,1294690,1294691,1294692,1294693,1294694,1294695,1294696,1300331,1300332,1300333,1300334,1300335,1300336,1300337,1300436,1300439,1300518,1300519,1300520,1300524,1300525,1300526,1300530,1300531,1300532,1300533,1300534,1300535,1300551,1300552,1300553,1300555,1300556,1300557,1300559,1300560,1300561,1300563,1300564,1300565,1300568,1300569,1300570,1300575,1300576,1301819,1310380,1641593,1641654,1641984,1641985,1641986,1642315,1642317,1642320,1642322,1768556,1768561,1768562,1768759,1987699,1987702,1987703,1987704,1987992,1987993,1987999,1988357,1988358,1988359,1988360,2056332,2065315,2074096,2076001,2077475,2087405,2088348,2091357,2106863,2116575,2116956,2119404,2133679,2135011,5647,5648,5649,5650,77869,77871,77872,78323,78330,80308,80410,80485,80486,80634,85758,87132,97470,207275,207276,306371,307083,485662,528680,577404,654378,713896,848259,849733,884366,884367,887224,991350,991353,991355,1116162,1290977,1290978,1290989,1290990,1290991,1290992,1290993,1290994,1290995,1290996,1290999,1291500,1291856,1291858,1291892,1291894,1291895,1292952,1292953,1292954,1292955,1292956,1292957,1292958,1292960,1292965,1292966,1292967,1292968,1292969,1292970,1292971,1292973,1292977,1292978,1292979,1292980,1292981,1292982,1292983,1292985,1292989,1292990,1292991,1292992,1292993,1292994,1292995,1292997,1293055,1293057,1293058,1293059,1293060,1293062,1293064,1293065,1293069,1293070,1293074,1293075,1293077,1293253,1293254,1293258,1293259,1293263,1293264,1293527,1293528,1293529,1293530,1293533,1293534,1293535,1293536,1294120,1294121,1294122,1294123,1294124,1294125,1294126,1294127,1294128,1294129,1294130,1294131,1294132,1294133,1294134,1294135,1294136,1294137,1294138,1294139,1294140,1294141,1294142,1294143,1294144,1294145,1294146,1294148,1294149,1294175,1294176,1294177,1294178,1294179,1294180,1294181,1294182,1294183,1294184,1294185,1294186,1294199,1294202,1294203,1294204,1294205,1294206,1294207,1294208,1294209,1294245,1294246,1294248,1294249,1294250,1294251,1294252,1294253,1294254,1294255,1294256,1294257,1294259,1294260,1294261,1294262,1294263,1294265,1294266,1294502,1294503,1294504,1294505,1294506,1294507,1294508,1294510,1294531,1294532,1294533,1294534,1294535,1294536,1294565,1294566,1294567,1294568,1294569,1294571,1294668,1294669,1294670,1294671,1294672,1294673,1294674,1294675,1294676,1294677,1294678,1294679,1294680,1294681,1294682,1294708,1294709,1294710,1294711,1294712,1294713,1294714,1294715,1294716,1294717,1294718,1294732,1294733,1294734,1294735,1294736,1294737,1294738,1294739,1294740,1294741,1294742,1296276,1296277,1296278,1296279,1296280,1296281,1297086,1297087,1297090,1297091,1297092,1297183,1297307,1297759,1297760,1297761,1298586,1298587,1299751,1299752,1299940,1300022,1300023,1300024,1300025,1300026,1300027,1300028,1300029,1300030,1300031,1300032,1300033,1300034,1300035,1300036,1300037,1300271,1300272,1300273,1300274,1300275,1300276,1300277,1300278,1300279,1300280,1300281,1300282,1300283,1300284,1300345,1300346,1300347,1300348,1300349,1300350,1300351,1300352,1300353,1300354,1300355,1300356,1300357,1300358,1300359,1300360,1300361,1300362,1300363,1300364,1300365,1300366,1300367,1300368,1300369,1300370,1300371,1300372,1300373,1300374,1300375,1300376,1300377,1300378,1300379,1300380,1300381,1300382,1300521,1300522,1300523,1300528,1300529,1300554,1300562,1300566,1300567,1300571,1300572,1300573,1300574,1300577,1300775,1301144,1301145,1301146,1301147,1301384,1301385,1301386,1301387,1301388,1301389,1301390,1301391,1301392,1301393,1301394,1301395,1301396,1301397,1301398,1301419,1301896,1301897,1301899,1301901,1313271,1313272,1382628,1382629,1382630,1382631,1382636,1382637,1382638,1382639,1382640,1382641,1382642,1382643,1382644,1382645,1382646,1382647,1382648,1382649,1382650,1382672,1382673,1382674,1382675,1382703,1382704,1382705,1382706,1382707,1382708,1382709,1382710,1382730,1382731,1382732,1382733,1382734,1382735,1382736,1382737,1382738,1382739,1382740,1382741,1382742,1382743,1382744,1382745,1382754,1382755,1382756,1382757,1382761,1382762,1382763,1382764,1382765,1382766,1382767,1382768,1382769,1401275,1640532,1640534,1640911,1641281,1641282,1641283,1641284,1641287,1641291,1641296,1641306,1641307,1641308,1641309,1641310,1641335,1641336,1641337,1641374,1641375,1641469,1641470,1641471,1641479,1641481,1641482,1641494,1641498,1641589,1641590,1641591,1641592,1641602,1641603,1641604,1641606,1641612,1641614,1641647,1641648,1641649,1641650,1641652,1641659,1641660,1641665,1641666,1641667,1641952,1641953,1641954,1641955,1641990,1641991,1641992,1641993,1641994,1641995,1641996,1641997,1641998,1642000,1642001,1642002,1642003,1642004,1642005,1642006,1642007,1642008,1642009,1642038,1642179,1642180,1642314,1642316,1642318,1642321,1642323,1642858,1643484,1643486,1644013,1658917,1722960,1722962,1722963,1722964,1722965,1722966,1722967,1722968,1722982,1722983,1722997,1722998,1723010,1723011,1723012,1723013,1723014,1723015,1723016,1723017,1723019,1723022,1723023,1768543,1768544,1768545,1768546,1768560,1768563,1768564,1768708,1768751,1768760,1768761,1768862,1768863,1768875,1768878,1768879,1835754,1835755,1835756,1987516,1987517,1987574,1987613,1987617,1987700,1987701,1987705,1987734,1987771,1987772,1987773,1987869,1987870,1987872,1987873,1987878,1987879,1987880,1987883,1987884,1987892,1987893,1987894,1987895,1987896,1987964,1987967,1987975,1987976,1987991,1987995,1987998,1988251,1988252,1988253,1988255,1988256,1988257,1988450,1989122,1989123,2004575,2004579,2004582,2004583,2004584,2004603,2004617,2004627,2004629,2004630,2004631,2004636,2004638,2004639,2014965,2021911,2049300,2050681,2052203,2054128,2059451,2059540,2062393,2067600,2067714,2076547,2079030,2079851,2080391,2081230,2081351,2081410,2087362,2088207,2090946,2094761,2095417,2096416,2097394,2098902,2101430,2111409,2112946,2114848,2115529,2116206,2118839,2125754,2129837,2131907,2132451,2134573,2137062,2139475,96567109,97552621,78670,90916,452061,961344,961345,963647,963649,1299400,1306895,1306898,1648305,1768690,1768691,1768692,1768693,1871916,82111,85048,85235,85237,91600,91601,91603,91604,91606,91608,92112,203100,205001,214884,214886,306364,306367,377246,970221,1285431,1285443,1293100,1293108,1293116,1293125,1295289,1295369,1295653,1295788,1295791,1295795,1295796,1298168,1299272,1300440,1300514,1300515,1300516,1301669,1306520,1306524,1306538,1382592,1401210,1401211,1640998,1641393,1641697,1642374,1642570,1648173,1673168,1722934,1768709,1768744,1987503,1987747,1987922,1987924,1987956,1987958,1987982,1987984,1987997,1988025,1988026,1988037,1988039,1988216,1988217,1988804,1989026,1989029,2004533,2007561,84,85,109,318,319,681,944,945,950,1162,1311,1312,1313,1314,1315,1317,1318,1320,1324,1325,1326,1327,1328,1329,1330,1331,1332,1333,1335,1336,1337,1338,1339,1340,1341,1342,1343,1344,1345,1346,1347,1348,1350,1352,1353,1357,1364,1365,1366,1367,1368,1396,1399,1403,1404,1409,1410,1411,1413,1415,1416,1422,1423,1424,1425,1426,1427,1431,1436,1437,1442,1443,1458,1459,1460,1461,1462,1463,1464,1465,1475,1477,1481,1482,3541,3542,3543,3544,3545,3548,3549,3550,3555,3556,3558,3560,3562,3563,3567,5190,5191,5192,5193,5194,5195,5196,5197,5198,5251,5289,5306,5309,5354,5373,5374,5375,5376,5382,5383,5384,5389,5390,5569,5638,5639,5642,5644,5645,5651,5676,5677,5678,5679,5684,5691,5692,5693,5694,5695,5696,5697,5699,5700,5703,5706,5707,5708,5709,5777,8304,8305,8306,8307,8308,8309,11142,11143,11144,11145,11146,11147,13452,13453,13454,13455,13456,13457,13458,13459,13460,13461,13462,13463,13464,13465,13466,14817,16501,22215,22595,24552,24569,25071,26526,30582,30852,39095,58192,60541,61507,61508,61509,61510,61519,61520,61533,61572,61576,61577,61586,61587,61588,61589,61592,62486,62487,62488,62489,62490,62491,62492,62493,62494,62824,62825,63876,63877,63968,64045,65043,65044,65045,65046,65047,65048,65591,65934,65935,65936,67039,67670,68011,68012,68022,68033,68034,68035,68036,68037,68038,68039,68382,68383,68384,68385,68386,68387,68388,68389,68390,68391,68392,68393,68394,68395,68396,68397,68398,68399,68400,68401,68402,68403,68404,68405,68406,68407,68408,68409,68410,68411,68412,68413,68414,68415,68416,68417,68418,68419,68420,68421,68422,68809,68810,69761,69762,69763,70507,70508,70509,70510,70511,70512,70513,70514,70515,70516,70517,70518,70519,70520,70521,70522,70523,70524,70525,70526,70527,70528,70529,70530,70531,70532,70533,70534,70535,70536,70537,70538,70539,70540,70541,70542,70543,70544,70545,70546,70547,70548,70549,70551,70552,70553,70554,70555,70556,70557,70558,70559,70560,70561,70562,70563,70564,70565,70566,70567,70568,70569,70570,70571,70572,70573,70574,70575,70576,70577,70578,70579,70580,70581,70582,70583,70584,70585,70586,70587,70588,70589,70590,70591,70592,70593,70594,70595,70727,70728,71496,71497,71498,71499,71500,71501,71502,71503,71504,73190,73205,73206,73207,73287,73569,73573,74011,74580,74586,75163,75499,75500,75513,75656,75657,75658,75659,75660,75661,76116,76464,76483,77217,77236,77347,77859,77862,77866,77867,77868,77870,77873,77874,77879,77883,77884,78187,78188,78191,78193,78194,78240,78241,78242,78243,78322,78324,78325,78326,78327,78328,78329,78385,78399,78470,78593,78638,78773,78776,79148,79561,79562,79563,79564,79679,79680,79681,79682,79843,80306,80307,80309,80310,80311,80312,80313,80314,80316,80409,80484,80487,80488,80490,80491,80595,80596,80597,80598,80599,80600,80601,80602,80603,80604,80608,80609,80616,80617,80622,80624,80625,80627,80631,80873,80939,80940,81215,81482,81483,81484,81485,81486,81487,81488,81794,81795,81796,81797,81798,81802,81803,81804,81805,81806,81807,81808,81809,81810,81811,81812,81813,81814,81815,81816,81817,81818,81917,81918,81919,82106,82107,82108,82110,82112,82113,82115,82117,82119,82121,82126,82127,82412,82417,82479,82500,82573,82624,82657,82684,82685,82686,82785,82791,82873,82893,82965,83025,83026,83027,83029,83030,83118,83337,83630,83784,84029,84051,84052,84053,84054,84055,84057,84059,84060,84063,84065,84066,84067,84068,84069,84072,84073,84074,84118,84767,85203,85305,85355,85356,85357,85358,85369,85370,85371,85397,85759,85899,86823,86824,86825,86826,86827,86828,86829,86889,86911,86994,87014,87015,87018,87019,87020,87021,87022,87023,87024,87025,87026,87028,87029,87030,87031,88505,88506,88507,88621,88622,89301,89506,89507,89508,89509,89510,90019,90020,90021,90022,90023,90024,90687,90904,91589,91590,91591,91592,91593,91594,91595,91596,91597,91598,91599,91602,91605,91607,91609,91610,91611,91612,91613,92166,92167,92168,92169,92170,92171,92172,92173,92174,92175,92176,92177,92178,92179,92180,92181,92182,92183,92184,92185,92186,92187,92188,92189,92190,92191,92192,92193,92194,92195,92196,92197,92198,92199,92200,92201,92202,92203,92205,92328,92329,92330,92331,92332,92333,92334,92512,92518,92533,92534,92535,92536,92537,92538,92539,92540,92541,92542,92543,92544,92545,92928,92929,93173,93174,93175,94196,94197,94198,94199,94200,94201,94202,94203,94204,94205,94206,94207,94208,94209,94210,94211,94212,94213,94214,94215,94216,94217,94218,94219,94220,94221,94222,94223,94224,94225,94226,94227,94228,94229,94230,94231,94232,94233,94234,94235,94236,94237,94238,94821,95162,95163,95164,95166,95167,95168,95170,95171,95173,95174,95175,95176,95181,95656,95657,95658,96130,96431,96432,96433,97185,97309,97310,97311,97312,97313,97314,97315,97316,97317,97318,97320,97322,97323,97324,97325,97326,97327,97343,97344,97345,97346,97347,97349,97350,97351,97352,97354,97355,97356,97459,97460,97461,97462,97463,97464,97465,97466,97467,97468,97469,99072,99089,99103,100356,100357,100359,100364,100366,100367,100368,100370,100371,100372,100373,102090,102316,102317,102318,102319,102320,102321,102322,103246,103268,103269,103270,103271,103272,103273,103274,103275,103276,103277,103278,103279,103280,103281,103282,103283,103284,103285,103286,103287,103288,103289,103654,104071,104413,104414,104415,104416,104417,104418,104419,104420,104421,104422,104423,104424,104425,104426,104427,104428,104429,104430,104431,104432,104433,104434,104435,104436,104437,104439,104440,104441,104585,104678,105363,105576,105577,105578,105579,105580,105581,105582,105584,105585,105587,105588,105589,105590,105591,105592,105593,105594,105595,105596,105597,105598,105599,105600,105601,105602,105603,105604,105605,105606,105607,105608,105609,105610,105611,105612,105613,105614,105615,105616,105618,105619,105620,105621,105622,105623,105624,105625,105626,105627,105628,105629,105630,105631,105632,105633,105634,105635,105797,105798,105848,106417,106777,106778,106780,106781,106782,106783,106784,106785,106786,106787,106790,106791,106792,106831,108128,108129,108130,108131,108132,108133,108134,108135,108136,108137,108138,108139,108140,108141,108142,108143,108144,108145,108146,108147,108148,108149,108150,109045,111619,114863,123388,126692,126693,126694,126695,126696,126697,126698,126699,126700,126701,126702,126703,126704,126720,126721,126722,127301,128677,129226,129227,129228,129229,129230,129231,147058,153767,155164,155165,155166,155168,155171,155172,155173,155177,155178,155183,155674,155676,155677,156031,156099,156978,158506,158507,158871,158874,159013,159014,159015,159016,159972,160302,160303,160304,163989,163990,163991,182656,182982,189006,189999,191059,191060,191061,191062,191063,191064,191065,191584,191585,191586,191587,191589,191590,192759,195765,195766,195767,195769,195770,195887,195976,195977,195978,195979,195980,195983,195984,195985,195986,195987,195989,195990,195991,195992,195993,195994,195995,198339,199451,199711,199845,199905,199911,199917,200019,200023,200042,201735"><font color="black">JSON</font></a></li> </ul><div style="text-align: center;" class="paginator" id="paginator_example_top"></div><script type="text/javascript">paginator_example_top = new Paginator("paginator_example_top", 80, 25, 1, "/index.php?req=batman&topics%5B%5D=c&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><table class="table  table-striped" id="tablelibgen"><thead><tr>
+
+<th scope="col" class="first_col"><nobr>
+ID <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=f_id&ordermode=asc">&#8597</a> 
+Time add. <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=time_added&ordermode=asc">&#8597</a> 
+Title <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=title&ordermode=asc">&#8597</a> 
+Series <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=series&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Author(s) <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=author&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Publisher <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=publisher&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Year <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=year&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Language</th>
+<th scope="col">Pages</th>
+<th scope="col"><nobr>Size  <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=filesize&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col"><nobr>Ext. <a href="/index.php?req=batman&topics%5B%5D=c&curtab=f&order=extension&ordermode=asc">&#8597</a></nobr></th>
+<th scope="col">Mirrors</th>
+</tr></thead><tbody><tr>
+
+<td><b><a href="series.php?id=343950">Batman: Giveaways Kellogg's Pop-Tarts   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-07/2022-08-21; ID: 5646<br>Batman featuring The Case of Batman II (Kellogg's Pop-Tarts 1966) c2c" href="edition.php?id=142418212"><i> #1966</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-07/2022-08-21; ID: 5646<br>Batman featuring The Case of Batman II (Kellogg's Pop-Tarts 1966) c2c" href="edition.php?id=142418212">Batman featuring The Case of Batman II <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1005268</span></nobr>
+<font size=1 color="gray"><br>Batman featuring The Case of Batman II (Kellogg's Pop-Tarts 1966) c2c <br><b>1050x1050px 150dpi</b></font>
+</td>
+<td></td>
+<td><a href="publisher.php?id=42017">Kellogg's</a></td>
+<td><nobr>1966</nobr></td>
+<td>English</td>
+<td>16</td>
+<td><nobr><a href="/file.php?id=5646">6 MB</a></nobr></td>
+<td>cbz</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=69cdd13eca7ab12b28089735af5d1749"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/69cdd13eca7ab12b28089735af5d1749?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=147597">Batman  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-28/2022-08-21; ID: 205000<br>Batman R.I.P. [Бетмен - Поминки] - 11-Batman 677 - [2008]" href="edition.php?id=247484"><i> #677 2008-jul 1</i></a><br>Batman R.I.P 11</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-28/2022-08-21; ID: 205000<br>Batman R.I.P. [Бетмен - Поминки] - 11-Batman 677 - [2008]" href="edition.php?id=247484">Batman R.I.P.: Batman in the Underworld <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1275546</span></nobr>
+<font size=1 color="gray"><br>Batman R.I.P. [Бетмен - Поминки] - 11-Batman 677 - [2008] <br><b>850x1336px 400dpi</b></font>
+</td>
+<td>Alex Ross (artist, cover), Dan DiDio (editor), Grant Morrison (writer), Guy Major (colorist), Jared K. Fletcher (letterer),<input type="checkbox" id="205000" class="taghide"/><label for="205000" ><b>[...]</b></label><div id="205000"> Jeanine Schaefer (editor), Mike Marts (editor), Sandu Florea (inker), Tony Daniel (cover, penciler)</div></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr>2008 Июль 1</nobr></td>
+<td>Russian</td>
+<td>24</td>
+<td><nobr><a href="/file.php?id=205000">6 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=a9262d450264c4d73234a7795097962e"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/a9262d450264c4d73234a7795097962e?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=106769">Batman  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2018-03-02/2021-06-18; ID: 1641653<br>Batman #677 (Batman RIP)" href="edition.php?id=34647"><i> #677 2008-jul 1</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2018-03-02/2021-06-18; ID: 1641653<br>Batman #677 (Batman RIP)" href="edition.php?id=34647">Batman R.I.P.: Batman in the Underworld <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 428005</span></nobr>
+<font size=1 color="gray"><br>Batman #677 (Batman RIP) <br><b>1280x1990px 150dpi</b></font>
+</td>
+<td>Alex Ross (artist, cover), Dan DiDio (editor), Grant Morrison (writer), Guy Major (colorist), Jared K. Fletcher (letterer),<input type="checkbox" id="1641653" class="taghide"/><label for="1641653" ><b>[...]</b></label><div id="1641653"> Jeanine Schaefer (editor), Mike Marts (editor), Sandu Florea (inker), Tony Daniel (cover, penciler)</div></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr>2008 July 1</nobr></td>
+<td>English</td>
+<td>24</td>
+<td><nobr><a href="/file.php?id=1641653">20 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=34390fba4c86133c37b1ec642760755f"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/34390fba4c86133c37b1ec642760755f?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=343862">Batman Newspaper Comic Strips  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-08/2022-08-21; ID: 5698<br>Batman Newspaper Comic Strips 005 [670319-670430] v1.0 Batman Meets Benny" href="edition.php?id=142418063"><i> #5 1967-mar 19 - 1967-apr 30</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-08/2022-08-21; ID: 5698<br>Batman Newspaper Comic Strips 005 [670319-670430] v1.0 Batman Meets Benny" href="edition.php?id=142418063">Batman Meets Benny <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1005444</span></nobr>
+<font size=1 color="gray"><br>Batman Newspaper Comic Strips 005 [670319-670430] v1.0 Batman Meets Benny <br><b>2548x1712px 100dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr>1967 March 19―1967 April 30</nobr></td>
+<td>English</td>
+<td>44</td>
+<td><nobr><a href="/file.php?id=5698">21 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=ec43653720d8ab95c3b7c2a70c22fffa"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/ec43653720d8ab95c3b7c2a70c22fffa?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=380619">Batman Aftershock   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 85236<br>[Comics Fr] Batman Aftershock volume 3 bis (Batman Chronicle 14)" href="edition.php?id=142550839"><i> #3 bis</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 85236<br>[Comics Fr] Batman Aftershock volume 3 bis (Batman Chronicle 14)" href="edition.php?id=142550839">Batman Chronicle 14 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1191040</span></nobr>
+<font size=1 color="gray"><br>[Comics Fr] Batman Aftershock volume 3 bis (Batman Chronicle 14) <br><b>1280x1907px 233dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>French</td>
+<td>29</td>
+<td><nobr><a href="/file.php?id=85236">11 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=27cee15d4ca582a85dc2b1c1a87309be"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/27cee15d4ca582a85dc2b1c1a87309be?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=147597">Batman  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95156<br>Batman RIP 01 Batman 676 [Traducido por Froiking][CRG]" href="edition.php?id=247483"><i> #676 2008-jun</i></a><br>Batman R.I.P. 10</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95156<br>Batman RIP 01 Batman 676 [Traducido por Froiking][CRG]" href="edition.php?id=247483">Batman R.I.P.: Midnight in the House of Hurt <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1292770</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 01 Batman 676 [Traducido por Froiking][CRG] <br><b>976x1550px 74dpi</b></font>
+</td>
+<td>Alex Ross (artist, cover), Dan DiDio (editor), Grant Morrison (writer), Guy Major (colorist), Jeanine Schaefer (editor),<input type="checkbox" id="95156" class="taghide"/><label for="95156" ><b>[...]</b></label><div id="95156"> Mike Marts (editor), Randy Gentile (letterer), Sandu Florea (inker), Tony Daniel (cover, penciler)</div></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr>2008 Июнь</nobr></td>
+<td>Russian</td>
+<td>23</td>
+<td><nobr><a href="/file.php?id=95156">8 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=34fb792c39745fbd5adf35373f24db99"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/34fb792c39745fbd5adf35373f24db99?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=396165">Batman   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95158<br>Batman RIP 03 Batman 678 [Traducido por Froiking][CRG]" href="edition.php?id=142616263"><i> #678</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95158<br>Batman RIP 03 Batman 678 [Traducido por Froiking][CRG]" href="edition.php?id=142616263">Batman Rip 3 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1292772</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 03 Batman 678 [Traducido por Froiking][CRG] <br><b>974x1550px 74dpi</b></font>
+</td>
+<td></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr></nobr></td>
+<td>Spanish</td>
+<td>24</td>
+<td><nobr><a href="/file.php?id=95158">8 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=27889d049948119c5d33f4e5c1c2ed7d"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/27889d049948119c5d33f4e5c1c2ed7d?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=396165">Batman   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95160<br>Batman RIP 05 Batman 680 [Traducido por Froiking][CRG]" href="edition.php?id=142616264"><i> #680</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95160<br>Batman RIP 05 Batman 680 [Traducido por Froiking][CRG]" href="edition.php?id=142616264">Batman Rip 5 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1292774</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 05 Batman 680 [Traducido por Froiking][CRG] <br><b>975x1550px 74dpi</b></font>
+</td>
+<td></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr></nobr></td>
+<td>Spanish</td>
+<td>24</td>
+<td><nobr><a href="/file.php?id=95160">8 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=011513c52b747a3712cb014268e87bbb"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/011513c52b747a3712cb014268e87bbb?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=147597">Batman  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95161<br>Batman RIP 06 Batman 681 [Traducido por Froiking][CRG]" href="edition.php?id=247488"><i> #681 2008-dec 1</i></a><br>Batman R.I.P. 15</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95161<br>Batman RIP 06 Batman 681 [Traducido por Froiking][CRG]" href="edition.php?id=247488">Batman R.I.P.: The Conclusion - Hearts in Darkness <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1292775</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 06 Batman 681 [Traducido por Froiking][CRG] <br><b>1029x1550px 74dpi</b></font>
+</td>
+<td>Alex Ross (cover), Dan DiDio (editor), Grant Morrison (writer), Guy Major (colorist), Janelle Asselin (Siegel) (editor),<input type="checkbox" id="95161" class="taghide"/><label for="95161" ><b>[...]</b></label><div id="95161"> Jared K. Fletcher (letterer), Mike Marts (editor), Sandu Florea (inker), Tony Daniel (cover, penciler)</div></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr>2008 Декабрь 1</nobr></td>
+<td>Russian</td>
+<td>33</td>
+<td><nobr><a href="/file.php?id=95161">11 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=54eb134ff133555b936a9c402d4fd36c"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/54eb134ff133555b936a9c402d4fd36c?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=396201">Batman Rip   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95178<br>Batman RIP 18 Batman y los Outsiders 11 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616388"><i> #18</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95178<br>Batman RIP 18 Batman y los Outsiders 11 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616388">Batman Y Los Outsiders 11 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1293046</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 18 Batman y los Outsiders 11 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG] <br><b>1280x2002px 400dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Spanish</td>
+<td>26</td>
+<td><nobr><a href="/file.php?id=95178">14 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=e778980b9275e13e8e90000d758e1c64"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e778980b9275e13e8e90000d758e1c64?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=396201">Batman Rip   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95179<br>Batman RIP 19 Batman y los Outsiders 12 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616389"><i> #19</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95179<br>Batman RIP 19 Batman y los Outsiders 12 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616389">Batman Y Los Outsiders 12 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1293047</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 19 Batman y los Outsiders 12 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG] <br><b>1280x1999px 300dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Spanish</td>
+<td>27</td>
+<td><nobr><a href="/file.php?id=95179">15 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=d067cf8141a0d502b89d1f5ba11f7828"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/d067cf8141a0d502b89d1f5ba11f7828?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=396201">Batman Rip   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95180<br>Batman RIP 20 Batman y los Outsiders 13 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616390"><i> #20</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 95180<br>Batman RIP 20 Batman y los Outsiders 13 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG]" href="edition.php?id=142616390">Batman Y Los Outsiders 13 <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1293048</span></nobr>
+<font size=1 color="gray"><br>Batman RIP 20 Batman y los Outsiders 13 [Traducido por Green Arrow y Hawk44][L9D-EK-CRG] <br><b>1280x1990px 400dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Spanish</td>
+<td>26</td>
+<td><nobr><a href="/file.php?id=95180">13 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=744ae3a675a00491361756470fefe548"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/744ae3a675a00491361756470fefe548?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=333648">Dc Comic Batman   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 106425<br>DC Comic Batman 40 - Batman Inferno Teil I" href="edition.php?id=142367719"><i> #40</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 106425<br>DC Comic Batman 40 - Batman Inferno Teil I" href="edition.php?id=142367719">Batman Inferno Teil I <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 933485</span></nobr>
+<font size=1 color="gray"><br>DC Comic Batman 40 - Batman Inferno Teil I <br><b> </b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>German</td>
+<td>0</td>
+<td><nobr><a href="/file.php?id=106425">10 MB</a></nobr></td>
+<td>pdf</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=85c8c1061c3342995938233b9911d2cb"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/85c8c1061c3342995938233b9911d2cb?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=333306">Batman (Gesucht: Santa Claus)   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 108127<br>Batman (Gesucht- Santa Claus) [Panini 2002 Beilage zum Schuber (Batman - Der Dunkle Ritter Kehrt ZurA.25ck) 12p c2c] (Flattermann)" href="edition.php?id=142366070"><i></i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-23/2022-08-21; ID: 108127<br>Batman (Gesucht- Santa Claus) [Panini 2002 Beilage zum Schuber (Batman - Der Dunkle Ritter Kehrt ZurA.25ck) 12p c2c] (Flattermann)" href="edition.php?id=142366070">Beilage Zum Schuber (Batman - Der Dunkle Ritter Kehrt Zura) <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 931504</span></nobr>
+<font size=1 color="gray"><br>Batman (Gesucht- Santa Claus) [Panini 2002 Beilage zum Schuber (Batman - Der Dunkle Ritter Kehrt ZurA.25ck) 12p c2c] (Flattermann) <br><b> </b></font>
+</td>
+<td></td>
+<td><a href="publisher.php?id=34520">Panini Comics</a></td>
+<td><nobr>2002</nobr></td>
+<td>German</td>
+<td>18</td>
+<td><nobr><a href="/file.php?id=108127">8 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=88b6cccad95a49d9d57e7fd45188e97f"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/88b6cccad95a49d9d57e7fd45188e97f?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=147597">Batman  1 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-28/2022-08-21; ID: 205002<br>Batman R.I.P. [Бетмен - Поминки] - 13-Batman 679 - [2008]" href="edition.php?id=247486"><i> #679 2008-sep 1</i></a><br>Batman R.I.P 13</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-28/2022-08-21; ID: 205002<br>Batman R.I.P. [Бетмен - Поминки] - 13-Batman 679 - [2008]" href="edition.php?id=247486">Batman R.I.P.: Miracle on Crime Alley <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1275548</span></nobr>
+<font size=1 color="gray"><br>Batman R.I.P. [Бетмен - Поминки] - 13-Batman 679 - [2008] <br><b>800x1246px 400dpi</b></font>
+</td>
+<td>Alex Ross (artist, colorist, cover), Dan DiDio (editor), Grant Morrison (writer), Guy Major (colorist),<input type="checkbox" id="205002" class="taghide"/><label for="205002" ><b>[...]</b></label><div id="205002"> Mike Marts (editor), Randy Gentile (letterer), Sandu Florea (inker), Tony Daniel (cover, penciler)</div></td>
+<td><a href="publisher.php?id=7556">DC Comics</a></td>
+<td><nobr>2008 Сентябрь 1</nobr></td>
+<td>Russian</td>
+<td>23</td>
+<td><nobr><a href="/file.php?id=205002">5 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=b9368d7c173d2b31698195c8346b40cf"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/b9368d7c173d2b31698195c8346b40cf?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=159702">Batman hs 2 </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-30/2022-08-21; ID: 301889<br>Batman.hs.v2.01.-.batman.contre.hulk.-.(coffeeshop)" href="edition.php?id=142070227"><i> #1 2003-jul</i></a><br>DC Comics</b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-30/2022-08-21; ID: 301889<br>Batman.hs.v2.01.-.batman.contre.hulk.-.(coffeeshop)" href="edition.php?id=142070227">Batman contre Hulk <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1191013</span></nobr>
+<font size=1 color="gray"><br>Batman.hs.v2.01.-.batman.contre.hulk.-.(coffeeshop) <br><b>963x1410px 150dpi</b></font>
+</td>
+<td>Wein, Glynis(Colourist); Garcia-López, José Luis(Designer); Wein, Len(Screenplay)</td>
+<td><a href="publisher.php?id=43176">Semic</a></td>
+<td><nobr>2003 Juillet</nobr></td>
+<td>French</td>
+<td>71 / 64</td>
+<td><nobr><a href="/file.php?id=301889">21 MB</a></nobr></td>
+<td>cbz</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=1659d0e970f840766247dce94761ec72"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/1659d0e970f840766247dce94761ec72?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=157554">Batman Poche   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-31/2022-08-21; ID: 309794<br>[Comics Fr] Batman Poche - 18 - La derniere histoire de Batman (Sagedition)" href="edition.php?id=142079058"><i> #18 1979-jun</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-07-31/2022-08-21; ID: 309794<br>[Comics Fr] Batman Poche - 18 - La derniere histoire de Batman (Sagedition)" href="edition.php?id=142079058">La Dernière Histoire de Batman ? <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 1191364</span></nobr>
+<font size=1 color="gray"><br>[Comics Fr] Batman Poche - 18 - La derniere histoire de Batman (Sagedition) <br><b>1900x2884px 762dpi</b></font>
+</td>
+<td>{Collectif}(Designer); {Collectif}(Screenplay)</td>
+<td><a href="publisher.php?id=43109">Sagedition</a></td>
+<td><nobr>1979 Juin</nobr></td>
+<td>French</td>
+<td>68 / 66</td>
+<td><nobr><a href="/file.php?id=309794">91 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=635106923a3e0f97b49c0ef0b59d073a"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/635106923a3e0f97b49c0ef0b59d073a?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335707">Batman   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-30/2022-08-21; ID: 405492<br>Batman (RW Uitgaven) - 05 - Batman Earth One" href="edition.php?id=142379306"><i> #5</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2015-12-30/2022-08-21; ID: 405492<br>Batman (RW Uitgaven) - 05 - Batman Earth One" href="edition.php?id=142379306">Batman Earth One <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947115</span></nobr>
+<font size=1 color="gray"><br>Batman (RW Uitgaven) - 05 - Batman Earth One <br><b>1647x2600px 300dpi</b></font>
+</td>
+<td></td>
+<td><a href="publisher.php?id=45780">RW Uitgaven</a></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>143</td>
+<td><nobr><a href="/file.php?id=405492">120 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=c0876b81db28a0365d7ead050d7d7ef4"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/c0876b81db28a0365d7ead050d7d7ef4?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335709">Batman: Classics   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-14/2022-08-21; ID: 425874<br>Batman (Classics) - 081 - Batman En Kamandi In Strijd Op Leven En Dood " href="edition.php?id=142379356"><i> #81</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-14/2022-08-21; ID: 425874<br>Batman (Classics) - 081 - Batman En Kamandi In Strijd Op Leven En Dood " href="edition.php?id=142379356">Batman En Kamandi In Strijd Op Leven En Dood <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947151</span></nobr>
+<font size=1 color="gray"><br>Batman (Classics) - 081 - Batman En Kamandi In Strijd Op Leven En Dood  <br><b>1280x1900px 96dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>36</td>
+<td><nobr><a href="/file.php?id=425874">18 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=ec0f83f29f205ba95df9a0855605e42b"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/ec0f83f29f205ba95df9a0855605e42b?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335709">Batman: Classics   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451973<br>Batman (Classics) - 066 - Hierom Lach Je Je Dood, Batman! (Mist blz 17 tm 20)" href="edition.php?id=142379353"><i> #66</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451973<br>Batman (Classics) - 066 - Hierom Lach Je Je Dood, Batman! (Mist blz 17 tm 20)" href="edition.php?id=142379353">Hierom Lach Je Je Dood, Batman! <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947148</span></nobr>
+<font size=1 color="gray"><br>Batman (Classics) - 066 - Hierom Lach Je Je Dood, Batman! (Mist blz 17 tm 20) <br><b>1296x1904px 200dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>32</td>
+<td><nobr><a href="/file.php?id=451973">20 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=c7c1422f7456590ae532e18c6cdd6064"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/c7c1422f7456590ae532e18c6cdd6064?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335709">Batman: Classics   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451981<br>Batman (Classics) - 076 - Batman In Het Juwelenmysterie" href="edition.php?id=142379354"><i> #76</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451981<br>Batman (Classics) - 076 - Batman In Het Juwelenmysterie" href="edition.php?id=142379354">Batman In Het Juwelenmysterie <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947149</span></nobr>
+<font size=1 color="gray"><br>Batman (Classics) - 076 - Batman In Het Juwelenmysterie <br><b>1327x1929px 200dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>36</td>
+<td><nobr><a href="/file.php?id=451981">24 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=cb8a1a5c9458da3132e6606694bd8b45"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/cb8a1a5c9458da3132e6606694bd8b45?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335709">Batman: Classics   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451994<br>Batman (Classics) - 093 - Batman's Grootste Mislukking!" href="edition.php?id=142379361"><i> #93</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 451994<br>Batman (Classics) - 093 - Batman's Grootste Mislukking!" href="edition.php?id=142379361">Batman's Grootste Mislukking! <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947156</span></nobr>
+<font size=1 color="gray"><br>Batman (Classics) - 093 - Batman's Grootste Mislukking! <br><b>1304x2029px 200dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>36</td>
+<td><nobr><a href="/file.php?id=451994">24 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=06ee6260590f153667fcd9843f049c93"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/06ee6260590f153667fcd9843f049c93?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335709">Batman: Classics   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 452002<br>Batman (Classics) - 102 - Batman In De Greep Van De Moord-Kultus" href="edition.php?id=142379363"><i> #102</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 452002<br>Batman (Classics) - 102 - Batman In De Greep Van De Moord-Kultus" href="edition.php?id=142379363">Batman In De Greep Van De Moord-Kultus <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947159</span></nobr>
+<font size=1 color="gray"><br>Batman (Classics) - 102 - Batman In De Greep Van De Moord-Kultus <br><b>1164x1800px 240dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>36</td>
+<td><nobr><a href="/file.php?id=452002">33 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=e5c6c3a3c7620680ba9b5fd914ad1c5b"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/e5c6c3a3c7620680ba9b5fd914ad1c5b?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=335702">Batman SP  </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 452068<br>Batman - SP06 - De Vele Malen Dat Batman Stierf. Periode Van Rouw" href="edition.php?id=142379288"><i> #6</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-02-29/2022-08-21; ID: 452068<br>Batman - SP06 - De Vele Malen Dat Batman Stierf. Periode Van Rouw" href="edition.php?id=142379288">De Vele Malen Dat Batman Stierf Periode Van Rouw <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 947102</span></nobr>
+<font size=1 color="gray"><br>Batman - SP06 - De Vele Malen Dat Batman Stierf. Periode Van Rouw <br><b>1159x1800px 240dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>Dutch</td>
+<td>68</td>
+<td><nobr><a href="/file.php?id=452068">58 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=9a1b8d76a4c50bfa02bc6c3ae3acb829"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/9a1b8d76a4c50bfa02bc6c3ae3acb829?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr><tr>
+
+<td><b><a href="series.php?id=333310">Batman Panini   </a><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-03-16/2022-08-21; ID: 475899<br>Batman  Panini  - 10 - Batman gegen Redhood" href="edition.php?id=142366084"><i> #10</i></a></b><br><a data-toggle="tooltip" data-placement="right" data-html="true" title="Add/Edit : 2016-03-16/2022-08-21; ID: 475899<br>Batman  Panini  - 10 - Batman gegen Redhood" href="edition.php?id=142366084">Batman gegen Redhood <i></i></a> 
+<nobr><span class="badge badge-primary"><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="Comics issue">c</a></span> 
+<span class="badge badge-secondary"">c 931530</span></nobr>
+<font size=1 color="gray"><br>Batman  Panini  - 10 - Batman gegen Redhood <br><b>1304x2061px 72dpi</b></font>
+</td>
+<td></td>
+<td></td>
+<td><nobr></nobr></td>
+<td>German</td>
+<td>92</td>
+<td><nobr><a href="/file.php?id=475899">28 MB</a></nobr></td>
+<td>cbr</td>
+<td><a data-toggle="tooltip" data-placement="bottom" data-html="true" title="libgen" href="/get.php?md5=08a17c9a28b9faf8ab06481de8d64a19"><span class="badge badge-primary">Libgen</span></a> <a data-toggle="tooltip" data-placement="bottom" data-html="true" title="anna's archive" href="https://en.annas-archive.gl/md5/08a17c9a28b9faf8ab06481de8d64a19?r=Ax2w6jC"><span class="badge badge-primary">Anna's arch</span></a> </td>
+</tr></tbody></table><table>
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+  <tr>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+    <td><script type="text/javascript">
+	atOptions = {
+		'key' : '80ff16b446cdd16fda9f69edcec465d4',
+		'format' : 'iframe',
+		'height' : 60,
+		'width' : 468,
+		'params' : {}
+	};
+</script>
+<script src="https://raisinggrannyexplode.com/80ff16b446cdd16fda9f69edcec465d4/invoke.js"></script>
+
+</td>
+  </tr> 
+</table><div style="text-align: center;" class="paginator" id="paginator_example_bottom"></div><script type="text/javascript">paginator_example_bottom = new Paginator("paginator_example_bottom", 80, 25, 1, "/index.php?req=batman&topics%5B%5D=c&curtab=f&order=&ordermode=desc&filesuns=all&page=" );</script><div class="modal fade text-dark" id="googlemodemodal" tabindex="-1" aria-labelledby="googlemodemodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="googlemodemodalLabel">Google mode</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        
+By default, the search searches for a set of marked fields containing all the words specified in the query in no particular order<br>
+Advanced search mode (Google mode), allows you to set more precise search terms:<br>
+- Quotes: "" - search exactly for the phrase as it is written in the database<br>
+- Mask: * (min 3 chars)- search by part of a word<br>
+- Excluding words: - (minus) - does not display records containing this word, also, these conditions can be combined.<br>
+Example:<br>
+"Physics and Chemistry" Basi * -technology<br>
+means the title of the book contains the exact phrase "Physics and Chemistry", contains the word starting with Basi and does not contain the word technology.<br>
+You can also search for a specific field or view mode that is not displayed for selection in the interface, syntax: field_name:value<br>
+List of add. fields:<br>
+For the Files tab:<br>
+<i>md5</i><br>
+<i>tth</i><br>
+<i>sha1</i><br>
+<i>sha256</i><br>
+<i>crc32</i><br>
+<i>edonkey</i><br>
+<i>doi</i><br>
+
+View modes:<br>
+<i>mode:last</i> - last added entries (for a given object - series, authors, editions, etc.)<br>
+<br>
+<i>fmode:last</i> - last added files (for the given repository)<br>
+<br>
+Add. fields for object "editions" and "files":<br>
+<i>issuevolume</i> - periodical volume<br>
+<i>issuesid</i> - serial ID of the periodical<br>
+<i>issuenumber</i> - the number (within the volume) of the periodical<br>
+<i>issuetnumber</i> is the gross number of the periodical<br>
+<i>issueynumber</i> - intra-annual issue of the periodical<br>
+<i>year</i> - year<br>
+<i>publisherid</i> - Publisher ID<br>
+<i>authorid</i> - Author's ID<br>
+<i>lang</i> - three-letter language code (ISO 639)<br>
+<i>fsize</i> - filesize (MBytes), for example: fsize&gt;10, fsize&lt;20, fsize=15<br>
+<i>ext</i> - File extenstion <br>
+<i>booktopicid</i> - ID of the classifier for books<br>
+<i>tags</i> - Теги (издание, работы, серия)<br>
+<br>
+Add. fields for object "series"<br>
+<i>comtopicid</i> - ID of the classifier for comics<br>
+<i>smtopicid</i> - ID of the classifier for scientific journals<br>
+<i>magtopicid</i> - ID of the classifier for magazines<br>
+<i>issn</i> - ISSN
+
+      </div>
+    </div>
+  </div>
+</div><nav class="navbar sticky-bottom navbar-expand-sm navbar-dark bg-secondary">
+  <div class="collapse navbar-collapse" id="navbarCollapse">
+    <ul class="navbar-nav mr-auto">
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#dmcamodal">DMCA</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#aboutmodal">ABOUT</a>
+      </li>
+      <li class="nav-item">
+	    <a class="nav-link" href="#" data-toggle="modal" data-target="#donatemodal" >DONATE</a>
+      </li>
+	
+    </ul>
+	<span class="navbar-text">Users online 3868</span>
+  </div>
+</nav>
+
+<!-- Modal Donate -->
+<div class="modal fade text-dark" id="donatemodal" tabindex="-1" aria-labelledby="donatemodalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="donatemodalLabel">Donate</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <a href="bitcoin://bc1qlv9lwa5vncm2jjrxyhddfcvu0z3u5vn0s9672r">Bitcoin</a>
+	<br>
+        <a href="monero:48WhyKv4D9x53SyDFNYuMsHsDzuHXEcht4mWoFtXtE3k4KZ3A7goi3CQWBQQZ3A8PSK7CpwnAFKLnfGiZTAbEpcaCQCghvN">Monero</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal About -->
+<div class="modal fade text-dark" id="aboutmodal" tabindex="-1" aria-labelledby="aboutmodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aboutmodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+
+<div id="about">
+The Library Genesis aggregator is a community aiming at collecting and cataloging items descriptions for the most part of scientific, 
+scientific and technical directions, as well as file metadata. In addition to the descriptions, 
+the aggregator contains only links to third-party resources hosted by users. 
+All information posted on the website is collected from publicly available public Internet resources and is intended solely for informational purposes.  
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal DMCA -->
+<div class="modal fade text-dark" id="dmcamodal" tabindex="-1" aria-labelledby="dmcamodalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dmcamodalLabel">About</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+
+<div id="dmca">
+Library Genesis - aggregator items is a website that collects and organizes online items from users. 
+Item aggregation is done for fact-finding purposes, and website Library Genesis respects the rights of copyright holders and respect dcma.
+
+     Removing Content From Library Genesis / DMCA Policy
+     Library Genesis respects the intellectual property of others.
+</div>
+
+    <div class="dmca">
+     If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement and is accessible on this site, you may notify our copyright agent, as set forth in the Digital Millennium Copyright Act of 1998 (DMCA). For your complaint to be valid under the DMCA, you must provide the following information when providing notice of the claimed copyright infringement:
+</div>
+    <div class="dmca">
+     * A physical or electronic signature of a person authorized to act on behalf of the copyright owner Identification of the copyrighted work claimed to have been infringed <br />
+     * Identification of the material that is claimed to be infringing or to be the subject of the infringing activity and that is to be removed <br />
+     * Information reasonably sufficient to permit the service provider to contact the complaining party, such as an address, telephone number, and, if available, an electronic mail address <br />
+     * A statement that the complaining party "in good faith believes that use of the material in the manner complained of is not authorized by the copyright owner, its agent, or law" <br />
+     * A statement that the "information in the notification is accurate", and "under penalty of perjury, the complaining party is authorized to act on behalf of the owner of an exclusive right that is allegedly infringed" <br />
+     The above information must be submitted as a written, faxed or emailed notification to the following Designated Agent: ianzlib@protonmail.com. Appeals will be reviewed within 72 hours.</div>
+
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.5/dist/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.min.js" integrity="sha384-w1Q4orYjBQndcko6MimVbzY0tgp4pWB4lZ7lr30WKz0vr/aWKhXdBNmNb5D92v7s" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+	<script src="/js/form-validation.js"></script>
+	<script>
+$('[data-toggle="tooltip"]').tooltip();
+$('.btn-tooltip-bottom').tooltip({
+    placement: 'bottom'
+});
+</script>
+
+</body>
+</html>

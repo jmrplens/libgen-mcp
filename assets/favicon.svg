@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="libgen-mcp">
+  <style>
+    :root { --arrow: #0f766e; --p1: #0d9488; --p2: #14b8a6; }
+    @media (prefers-color-scheme: dark) { :root { --arrow: #99f6e4; --p1: #2dd4bf; --p2: #5eead4; } }
+  </style>
+  <path d="M28 8 h8 v14 h8 L32 36 20 22 h8 z" fill="var(--arrow)"/>
+  <path d="M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z" fill="var(--p1)"/>
+  <path d="M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z" fill="var(--p2)"/>
+</svg>

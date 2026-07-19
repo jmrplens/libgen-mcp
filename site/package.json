@@ -1,0 +1,50 @@
+{
+  "name": "libgen-mcp-site",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "prebuild": "node scripts/copy-llms.mjs",
+    "build": "astro build",
+    "postbuild": "node -e \"const fs=require('fs'),path=require('path');function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.isFile()&&e.name.endsWith('.html')){const c=fs.readFileSync(p,'utf8');const t=c.split('\\n').map(l=>l.replace(/[ \\t\\r]+$/,'')).join('\\n');if(t!==c)fs.writeFileSync(p,t);}}}walk('dist');\" && node scripts/add-sitemap-lastmod.mjs",
+    "preview": "astro preview",
+    "check": "astro check",
+    "i18n:check": "node scripts/check-i18n-parity.mjs",
+    "eslint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "html-validate": "html-validate 'dist/**/*.html'",
+    "htmlhint": "htmlhint 'dist/**/*.html'",
+    "pa11y": "astro preview & sleep 3 && pa11y-ci; EXIT=$?; kill %1 2>/dev/null; exit $EXIT",
+    "test:a11y": "pnpm run pa11y",
+    "lint": "pnpm run check && pnpm run i18n:check && pnpm run eslint && pnpm run format:check && pnpm run html-validate && pnpm run htmlhint",
+    "analyze": "pnpm run build && pnpm run lint"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.1.1",
+    "astro-mermaid": "^2.1.0",
+    "mermaid": "^11.16.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@typescript-eslint/eslint-plugin": "^8.64.0",
+    "@typescript-eslint/parser": "^8.64.0",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-astro": "^3.0.1",
+    "html-validate": "^11.5.6",
+    "htmlhint": "^1.9.2",
+    "pa11y-ci": "^4.1.1",
+    "prettier": "^3.9.5",
+    "serve": "^14.2.6",
+    "starlight-links-validator": "^0.25.2",
+    "typescript": "^6.0.3"
+  }
+}
