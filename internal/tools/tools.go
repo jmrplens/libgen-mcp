@@ -144,6 +144,10 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 	return schema
 }
 
+// sourceChainSep joins ordered source names in the download tool's prose, so the
+// text reads "libgen then randombook".
+const sourceChainSep = " then "
+
 // downloadToolDescription renders the download tool's prose from the enabled book
 // (md5) and article (doi) sources, so disabled providers are never advertised to
 // the model. At least one source is always enabled.
@@ -153,14 +157,14 @@ func downloadToolDescription(book, article []string) string {
 	switch {
 	case len(book) > 0 && len(article) > 0:
 		b.WriteString("Provide md5 for a book or doi for an article (at least one is required). ")
-		fmt.Fprintf(&b, "Books are tried against %s; articles against %s. ", strings.Join(book, " then "), strings.Join(article, " then "))
+		fmt.Fprintf(&b, "Books are tried against %s; articles against %s. ", strings.Join(book, sourceChainSep), strings.Join(article, sourceChainSep))
 		b.WriteString("If both md5 and doi are given, article sources are tried first, then book sources. ")
 	case len(book) > 0:
 		b.WriteString("Provide the md5 of a book (article/doi sources are disabled). ")
-		fmt.Fprintf(&b, "Books are tried against %s. ", strings.Join(book, " then "))
+		fmt.Fprintf(&b, "Books are tried against %s. ", strings.Join(book, sourceChainSep))
 	case len(article) > 0:
 		b.WriteString("Provide the doi of an article (book/md5 sources are disabled). ")
-		fmt.Fprintf(&b, "Articles are tried against %s. ", strings.Join(article, " then "))
+		fmt.Fprintf(&b, "Articles are tried against %s. ", strings.Join(article, sourceChainSep))
 	}
 	fmt.Fprintf(&b, "Set source to restrict the download to a single enabled provider (%s) instead of trying them all. ",
 		strings.Join(orderedEnabledSources(book, article), ", "))
