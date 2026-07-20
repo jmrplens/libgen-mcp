@@ -34,7 +34,7 @@ head:
             "name": "How do I download research papers by DOI with libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Pass a doi to the download tool. Articles are fetched by DOI through two sources in order: unpaywall, which returns a PDF only when the article is genuinely open access, and then sci-hub as a fallback. Set LIBGEN_MCP_UNPAYWALL_EMAIL to your own contact address, because the Unpaywall API expects a real email on every lookup. You can adjust the Sci-Hub mirrors tried with LIBGEN_MCP_SCIHUB_HOSTS, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified."
+              "text": "Pass a doi to the download tool. Articles are fetched by DOI through two sources in order: unpaywall, which returns a PDF only when the article is genuinely open access, and then sci-hub as a fallback. The unpaywall source is disabled unless LIBGEN_MCP_UNPAYWALL_EMAIL is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset only sci-hub is tried. You can adjust the Sci-Hub mirrors tried with LIBGEN_MCP_SCIHUB_HOSTS, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified."
             }
           },
           {
@@ -77,7 +77,7 @@ Set these in your MCP client's `env` block (see [Getting started](/libgen-mcp/ge
 | `LIBGEN_MCP_RETRY_ATTEMPTS`             | `3`                                                      | `[1, 10]`, int                                                          | Maximum number of passes over the mirror list for a page request before giving up. Only transient failures (network/timeout/5xx/429) trigger a retry pass; a permanent 4xx fails over without retrying.                                                                                                                                                          |
 | `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` | `5s,5s,5s,10s,10s,10s,15s`                               | Comma-separated Go durations; each in `(0, 10m]`; at most 20 waits      | Staged wait schedule between attempts to get a download to **begin** (resolve the URL, connect, and pull the first byte). `N` waits means `N+1` attempts; the default spans ~60 s over 8 attempts. Retries cover resolve errors, connection errors, non-2xx statuses, and no-first-byte responses. Once bytes flow, start-retries stop and streaming takes over. |
 | `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`     | `60s`                                                    | `(0, 1h]`, Go duration                                                  | Progress-resetting stall window while streaming: a download is aborted only when **no** bytes arrive for this long. A slow-but-progressing transfer (e.g. 20–50 kB/s) is never cut. `LIBGEN_MCP_TIMEOUT` does not apply to downloads.                                                                                                                            |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL`            | `mail@jmrp.io`                                           | Must contain `@` and a domain with a `.`                                | Contact email sent to the [Unpaywall](https://unpaywall.org) API on every article lookup (the API requires it). Set your own address so requests are attributed to you rather than the maintainer's default.                                                                                                                                                     |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL`            | _(unset — disabled)_                                     | empty, or an email with `@` and a dotted domain                         | Contact email sent to the [Unpaywall](https://unpaywall.org) API on every article lookup (the API rejects requests without one). Empty by default, which **disables the `unpaywall` source** entirely; set your own address to enable it. A non-empty value is sanity-checked.                                                                                   |
 | `LIBGEN_MCP_SCIHUB_HOSTS`               | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Comma-separated bare hosts (no scheme, no path); at least one           | Ordered Sci-Hub mirror hosts tried when resolving an article by DOI. The source builds `https://<host>/<doi>` itself, so each entry must be a bare host. Falls through the list until one serves an article page.                                                                                                                                                |
 | `LIBGEN_MCP_SOURCES`                    | _(all enabled)_                                          | Comma-separated subset of `unpaywall`, `scihub`, `libgen`, `randombook` | Restrict which download sources are active. Empty means all are enabled. Unknown names are rejected at startup. Order in the variable does not matter — the chain order is fixed (see below).                                                                                                                                                                    |
 
@@ -93,7 +93,7 @@ At startup the directory is created (with mode `0750`) if it does not exist and 
 
 ### `LIBGEN_MCP_UNPAYWALL_EMAIL`
 
-This is used only by the `unpaywall` source (article DOIs). The default is the maintainer's address; setting your own is recommended and, on high-volume use, expected by Unpaywall's API etiquette. The value is sanity-checked (must contain `@` and a dotted domain) but not verified for deliverability.
+This is used only by the `unpaywall` source (article DOIs). It is **unset by default, which disables the `unpaywall` source**: the Unpaywall API requires a contact email on every lookup, so without one there is nothing to send and the source is skipped. Set your own contact address to enable it. A non-empty value is sanity-checked (must contain `@` and a dotted domain) but not verified for deliverability; an empty value is allowed and simply leaves the source disabled.
 
 ### `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` and `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`
 
@@ -107,7 +107,7 @@ These two variables make downloads resilient without ever cutting a healthy but 
 The download chain always runs in the fixed order `unpaywall → scihub → libgen → randombook`. Each source declares which items it supports, so in practice:
 
 - **Books** (identified by `md5`) are tried against `libgen`, then `randombook`.
-- **Articles** (identified by `doi`) are tried against `unpaywall`, then `scihub`.
+- **Articles** (identified by `doi`) are tried against `unpaywall` (only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set), then `scihub`.
 
 `LIBGEN_MCP_SOURCES` only removes sources from that chain; it never reorders it. For example, `LIBGEN_MCP_SOURCES=libgen` disables the article sources and the `randombook` fallback, leaving only the primary LibGen book source. See [Architecture](/libgen-mcp/architecture/) for how the chain is built and traversed.
 
@@ -123,7 +123,7 @@ Set `LIBGEN_MCP_DOWNLOAD_DIR` to the destination directory; it defaults to `~/Do
 
 ### How do I download research papers by DOI with libgen-mcp?
 
-Pass a `doi` to the `download` tool. Articles are fetched by DOI through two sources in order: `unpaywall`, which returns a PDF only when the article is genuinely open access, and then `sci-hub` as a fallback. Set `LIBGEN_MCP_UNPAYWALL_EMAIL` to your own contact address, because the Unpaywall API expects a real email on every lookup. You can adjust the Sci-Hub mirrors tried with `LIBGEN_MCP_SCIHUB_HOSTS`, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified.
+Pass a `doi` to the `download` tool. Articles are fetched by DOI through two sources in order: `unpaywall`, which returns a PDF only when the article is genuinely open access, and then `sci-hub` as a fallback. The `unpaywall` source is disabled unless `LIBGEN_MCP_UNPAYWALL_EMAIL` is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset only `sci-hub` is tried. You can adjust the Sci-Hub mirrors tried with `LIBGEN_MCP_SCIHUB_HOSTS`, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified.
 
 ### How do I limit the request rate in libgen-mcp?
 

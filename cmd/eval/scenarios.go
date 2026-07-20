@@ -30,6 +30,17 @@ const notAValidDOI = "download doi is not a valid DOI"
 // scenario (PLoS ONE, freely available via Unpaywall / Sci-Hub).
 const openAccessDOI = "10.1371/journal.pone.0000308"
 
+// scihubDOI is a heavily-cited paywalled article DOI (Hanahan & Weinberg,
+// "Hallmarks of Cancer: The Next Generation", Cell 2011) used to exercise the
+// Sci-Hub source: unlike an arXiv DOI, a paywalled paper is what Sci-Hub actually
+// mirrors, so the download has a real chance to complete instead of always
+// skipping.
+const scihubDOI = "10.1016/j.cell.2011.02.013"
+
+// evalUnpaywallEmail is the contact email the article scenario sets so the
+// unpaywall source (disabled by default without an email) is exercised.
+const evalUnpaywallEmail = "mail@jmrp.io"
+
 // scenario is one live end-to-end check: a natural-language prompt, an optional
 // per-scenario environment, and an assertion over the resulting transcript.
 // Assertions grade the tool name, the argument JSON shape, and whether the real
@@ -195,7 +206,7 @@ func scenarios() []scenario {
 		},
 		{
 			ID:     "S6",
-			Prompt: `Search for the paper "Attention Is All You Need", then download this paper from sci-hub.`,
+			Prompt: fmt.Sprintf("Download the article with DOI %s from sci-hub.", scihubDOI),
 			Assert: assertS6Scihub,
 		},
 		{
@@ -206,7 +217,10 @@ func scenarios() []scenario {
 		{
 			ID:     "S7",
 			Prompt: fmt.Sprintf("Download the open-access article with DOI %s.", openAccessDOI),
-			Assert: assertS7,
+			// Unpaywall is disabled unless a contact email is configured; set one so
+			// this scenario exercises the open-access (unpaywall) path functionally.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": evalUnpaywallEmail},
+			Assert:   assertS7,
 		},
 		{
 			ID:     "S8",

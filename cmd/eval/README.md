@@ -38,16 +38,33 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S3  | Standards search (SKIPs if the mirror returns 0) |
 | S4  | `get_details` on an md5 taken from a prior search result |
 | S5  | Book download by md5: saved path + non-zero size |
-| S6  | Download **choosing a source**: model sets `source:"scihub"` for an article DOI |
+| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI |
 | S6b | Download choosing a book source: model sets `source:"randombook"` for an md5 |
-| S7  | Open-access article by DOI, served by unpaywall or sci-hub |
+| S7  | Open-access article by DOI via unpaywall (needs a contact email) |
 | S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it |
 | S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success |
 
 S6 / S6b are the reason this harness exists alongside the older checks: the
-`download` tool now takes an optional **`source`** argument, and these scenarios
+`download` tool takes an optional **`source`** argument, and these scenarios
 assert the model actually sets it (and that `DownloadResult.Source` matches when
 the live fetch succeeds).
+
+**Source availability and SKIPs.** A download scenario grades the model's tool
+call; if the model picks the right source but the live fetch fails, it SKIPs
+rather than fails, because the external sources are not equally reliable:
+
+- **libgen** (S5) and **unpaywall** (S7) are the dependable download paths.
+- **sci-hub** (S6) mirrors are volatile and only host *paywalled* papers — S6 uses
+  a heavily-cited paywalled DOI (not an arXiv one, which Sci-Hub does not carry),
+  so it can actually complete when a mirror is up, and SKIPs when none are.
+- **randombook** (S6b) rediscovers fresh mirrors each run, so whether a given md5
+  resolves varies; a live miss is a SKIP, the source-selection behavior still
+  graded.
+
+**Unpaywall needs a contact email.** The unpaywall source is disabled unless
+`LIBGEN_MCP_UNPAYWALL_EMAIL` is set (its API rejects requests without one), so it
+is also hidden from the download tool's `source` schema when unset. S7 sets the
+email via its per-scenario environment to exercise the open-access path.
 
 S9 exercises the download **start-retry** path deterministically without needing
 a flaky live failure: it enables only `scihub`, points `LIBGEN_MCP_SCIHUB_HOSTS`

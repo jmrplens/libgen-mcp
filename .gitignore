@@ -1,6 +1,7 @@
 /libgen-mcp
 /probe
 /server
+/eval
 /dist/
 coverage.out
 coverage.internal.out
@@ -20,3 +21,7 @@ coverage.html
 # Local planning / spec scratch — not part of the published repo
 /plan/
 /docs/superpowers/
+
+# Local environment secrets — ANTHROPIC_API_KEY for the gated eval, etc.
+# (also covered by the global gitignore; pinned here so a fresh clone is safe)
+.env

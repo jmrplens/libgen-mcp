@@ -93,7 +93,7 @@ func Load() (*Config, error) {
 		MaxDownloadBytes:        0,
 		MaxConcurrentDownloads:  2,
 		RetryAttempts:           3,
-		UnpaywallEmail:          "mail@jmrp.io",
+		UnpaywallEmail:          "", // empty disables the unpaywall source; each deployment sets its own contact email via LIBGEN_MCP_UNPAYWALL_EMAIL
 		ScihubHosts:             append([]string(nil), defaultScihubHosts...),
 		DownloadStartRetryWaits: defaultStartRetryWaits(),
 		DownloadStallTimeout:    60 * time.Second,
@@ -324,9 +324,14 @@ func (c *Config) validateDownloadTuning() error {
 }
 
 // validateUnpaywallEmail applies a basic sanity check to the Unpaywall contact
-// address: it must be non-empty, contain an "@", and have a "." somewhere after
-// that "@" (the Unpaywall API rejects requests without a plausible email).
+// address. An empty value is valid and disables the unpaywall source (each
+// deployment opts in by setting its own email); a non-empty value must contain
+// an "@" and have a "." somewhere after it (the Unpaywall API rejects requests
+// without a plausible email).
 func validateUnpaywallEmail(email string) error {
+	if email == "" {
+		return nil
+	}
 	at := strings.Index(email, "@")
 	if at <= 0 {
 		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must contain %q, got %q", "@", email)
@@ -370,8 +375,13 @@ func validateSources(sources []string) error {
 
 // SourceEnabled reports whether the named download source should be part of the
 // chain. When Sources is empty every source is enabled; otherwise only the listed
-// names (compared case-insensitively) are.
+// names (compared case-insensitively) are. The unpaywall source is additionally
+// gated on a configured contact email: its API rejects requests without one, so
+// an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables it regardless of the Sources list.
 func (c *Config) SourceEnabled(name string) bool {
+	if strings.EqualFold(strings.TrimSpace(name), "unpaywall") && strings.TrimSpace(c.UnpaywallEmail) == "" {
+		return false
+	}
 	if len(c.Sources) == 0 {
 		return true
 	}

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
@@ -92,16 +93,83 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id.",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client)))
+	book, article := client.EnabledSourceNames()
 	mcp.AddTool(server, &mcp.Tool{
-		Name:  "download",
-		Title: "Download file",
-		Description: "Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). " +
-			"Books are tried against libgen (ads.php key + CDN) then randombook (fresh-mirror discovery); articles are tried against unpaywall (open-access PDF) then sci-hub. " +
-			"If both md5 and doi are given, article sources (unpaywall, sci-hub) are tried first, then book sources (libgen, randombook). " +
-			"Set source to restrict the download to a single provider (libgen/randombook for books, unpaywall/scihub for articles) instead of trying them all. " +
-			"Returns the saved path, size and the source that served it.",
+		Name:        "download",
+		Title:       "Download file",
+		Description: downloadToolDescription(book, article),
+		InputSchema: downloadInputSchema(orderedEnabledSources(book, article)),
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("download", downloadHandler(client, cfg)))
+}
+
+// orderedEnabledSources merges the enabled book (md5) and article (doi) source
+// names into a single list in canonical chain order (config.KnownSources), for
+// the download tool's source enum.
+func orderedEnabledSources(book, article []string) []string {
+	present := make(map[string]bool, len(book)+len(article))
+	for _, n := range book {
+		present[n] = true
+	}
+	for _, n := range article {
+		present[n] = true
+	}
+	out := make([]string, 0, len(present))
+	for _, n := range config.KnownSources {
+		if present[n] {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// downloadInputSchema infers the download tool's input schema from DownloadInput
+// (exactly as AddTool would) and constrains the source property to the enabled
+// sources: an enum so the model cannot select a disabled provider, plus a matching
+// description. A nil result makes AddTool fall back to the default inferred schema
+// (no enum), which only happens if inference of the static struct ever fails.
+func downloadInputSchema(enabled []string) *jsonschema.Schema {
+	schema, err := jsonschema.For[DownloadInput](nil)
+	if err != nil {
+		return nil
+	}
+	if src := schema.Properties["source"]; src != nil && len(enabled) > 0 {
+		src.Enum = make([]any, len(enabled))
+		for i, n := range enabled {
+			src.Enum[i] = n
+		}
+		src.Description = "restrict the download to a single enabled source: " + strings.Join(enabled, ", ") +
+			". Omit to try every compatible source in order with failover"
+	}
+	return schema
+}
+
+// sourceChainSep joins ordered source names in the download tool's prose, so the
+// text reads "libgen then randombook".
+const sourceChainSep = " then "
+
+// downloadToolDescription renders the download tool's prose from the enabled book
+// (md5) and article (doi) sources, so disabled providers are never advertised to
+// the model. At least one source is always enabled.
+func downloadToolDescription(book, article []string) string {
+	var b strings.Builder
+	b.WriteString("Download a file to a local directory. ")
+	switch {
+	case len(book) > 0 && len(article) > 0:
+		b.WriteString("Provide md5 for a book or doi for an article (at least one is required). ")
+		fmt.Fprintf(&b, "Books are tried against %s; articles against %s. ", strings.Join(book, sourceChainSep), strings.Join(article, sourceChainSep))
+		b.WriteString("If both md5 and doi are given, article sources are tried first, then book sources. ")
+	case len(book) > 0:
+		b.WriteString("Provide the md5 of a book (article/doi sources are disabled). ")
+		fmt.Fprintf(&b, "Books are tried against %s. ", strings.Join(book, sourceChainSep))
+	case len(article) > 0:
+		b.WriteString("Provide the doi of an article (book/md5 sources are disabled). ")
+		fmt.Fprintf(&b, "Articles are tried against %s. ", strings.Join(article, sourceChainSep))
+	}
+	fmt.Fprintf(&b, "Set source to restrict the download to a single enabled provider (%s) instead of trying them all. ",
+		strings.Join(orderedEnabledSources(book, article), ", "))
+	b.WriteString("Returns the saved path, size and the source that served it.")
+	return b.String()
 }
 
 // withRecovery wraps a typed MCP tool handler to make it panic-safe and
