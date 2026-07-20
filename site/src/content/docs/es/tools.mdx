@@ -89,12 +89,12 @@ Descarga un archivo a un directorio local. Proporciona `md5` para un libro **o**
 
 ### entrada de download
 
-| Parámetro  | Tipo   | Requerido | Descripción                                                                                                                             |
-| ---------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                             |
-| `doi`      | string | uno de    | DOI de un resultado de búsqueda de artículo. Los artículos se obtienen por DOI.                                                         |
-| `path`     | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                         |
-| `filename` | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5. |
+| Parámetro  | Tipo   | Requerido | Descripción                                                                                                                                                                                         |
+| ---------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`      | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                                                                                         |
+| `doi`      | string | uno de    | DOI de un resultado de búsqueda de artículo. Los artículos se obtienen por DOI.                                                                                                                     |
+| `path`     | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                                                                                     |
+| `filename` | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5.                                                             |
 | `source`   | string | no        | Restringe la descarga a una única fuente: `libgen`/`randombook` (libros, `md5`) o `unpaywall`/`scihub` (artículos, `doi`). Omítelo para probar todas las fuentes compatibles en orden con failover. |
 
 Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caracteres hex) se rechaza antes de cualquier trabajo.
