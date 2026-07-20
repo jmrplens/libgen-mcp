@@ -1,0 +1,107 @@
+---
+title: Resultados del eval con LLM
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 16 escenarios."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+libgen-mcp incluye un **arnés de evaluación controlado y guiado por un LLM**
+(`cmd/eval`) que va más allá de los tests unitarios y e2e: conecta un **modelo de
+lenguaje real** (Claude Haiku) a un **servidor libgen-mcp real** por el protocolo
+MCP y comprueba que el modelo realmente _usa bien las herramientas_ contra el
+sitio **en vivo** de Library Genesis — la herramienta correcta, los argumentos
+correctos, una recuperación sensata ante fallos y un manejo correcto de la salida
+estructurada.
+
+## Cómo funciona
+
+Para cada escenario, el arnés:
+
+1. Aplica el entorno propio del escenario y construye un servidor libgen-mcp
+   fresco en proceso con las tres herramientas registradas.
+2. Envía el prompt en lenguaje natural del escenario más las definiciones de las
+   herramientas al modelo (hasta cuatro turnos).
+3. Ejecuta cada llamada de herramienta del modelo **contra el servidor real**
+   (mirrors reales, descargas reales) y le devuelve los resultados.
+4. Evalúa la transcripción: el nombre de la herramienta, la forma de los
+   argumentos y si la respuesta MCP real está bien formada — nunca el contenido
+   exacto del catálogo, que cambia con el tiempo.
+
+Cada escenario devuelve **PASS**, **FAIL** o **SKIP**. Un SKIP significa que el
+modelo hizo lo correcto pero un mirror en vivo no estaba disponible (p. ej. un
+host rotatorio de Sci-Hub o un fallo de descubrimiento de mirror fresco) — una
+condición de red, nunca un fallo del modelo.
+
+<Aside type="note">
+	El arnés está detrás del build tag `eval` y solo se ejecuta con
+	`LIBGEN_EVAL=1` y una `ANTHROPIC_API_KEY`. Gasta tokens reales de la API y
+	hace descargas reales, así que nunca corre en CI — es una comprobación de
+	calidad bajo demanda.
+</Aside>
+
+## Escenarios
+
+Dieciséis escenarios (S1–S15, más una variante S6b) cubren búsqueda, detalles,
+descargas, selección de fuente, recuperación de errores, progreso y — de forma
+importante — prompts **sin guía** que no dan pistas al modelo, para comprobar si
+la superficie de herramientas es lo bastante auto-descriptiva para que un LLM la
+use sin ayuda.
+
+| ID  | Qué comprueba                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                           |
+| S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                               |
+| S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                    |
+| S4  | `get_details` sobre un md5 tomado de un resultado de búsqueda previo                                                                                                                     |
+| S5  | Descarga de libro por md5: ruta guardada + tamaño no nulo                                                                                                                                |
+| S6  | Descarga **eligiendo fuente**: el modelo pone `source:"scihub"` para un DOI de artículo de pago                                                                                          |
+| S6b | Descarga eligiendo fuente de libro: el modelo pone `source:"randombook"` para un md5                                                                                                     |
+| S7  | Artículo de acceso abierto por DOI vía unpaywall (necesita email de contacto)                                                                                                            |
+| S8  | Ambiguo "encuéntrame un buen libro" — pasa si el modelo pide aclaración o la herramienta lo rechaza                                                                                      |
+| S9  | **Reintentos de arranque**: Sci-Hub apuntado a un host muerto; el schedule escalonado debe agotarse y devolver el error accionable "could not start", y el modelo no debe fabricar éxito |
+| S10 | **Búsqueda de libro sin guía** ("quiero leer _Dune_…") — el modelo forma una búsqueda desde una petición simple, sin pistas de colección/campos                                          |
+| S11 | **Búsqueda de cómics sin guía** ("encuentra la novela gráfica _Watchmen_") — el modelo debe descubrir la colección correcta sin ayuda                                                    |
+| S12 | **Descarga de libro sin guía** ("descarga _Clean Code_…") — el modelo busca y descarga por un md5 que descubrió, eligiendo la fuente él mismo                                            |
+| S13 | **Descarga de artículo sin guía** ("dame un PDF de _Hallmarks of Cancer_") — el modelo debe descubrir que los artículos van por DOI, no por md5                                          |
+| S14 | **Progreso de descarga** — se adjunta un token de progreso; las notificaciones deben llegar al cliente de punta a punta durante una descarga en vivo                                     |
+| S15 | **Tabla ordenada con enlaces** — una petición grande y ordenada; el modelo debe fijar un tamaño de página grande + orden e incluir los enlaces de descarga en su respuesta               |
+
+## Últimos resultados
+
+En las corridas en vivo más recientes (API real + mirrors reales), **todos los
+escenarios pasan**, con `S6b` en SKIP cuando el descubrimiento de mirror fresco de
+randombook no está disponible — una condición de mirror en vivo, no un fallo del
+modelo.
+
+| ID  | Resultado | Evidencia                                                                  |
+| --- | --------- | -------------------------------------------------------------------------- |
+| S1  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                      |
+| S2  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                |
+| S3  | ✅ PASS   | búsqueda standards, 25 resultados                                          |
+| S4  | ✅ PASS   | `get_details` devolvió un registro File/Edition                            |
+| S5  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                            |
+| S6  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                         |
+| S6b | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404 |
+| S7  | ✅ PASS   | descargó un DOI vía `unpaywall`                                            |
+| S8  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                              |
+| S9  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                 |
+| S10 | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                        |
+| S11 | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                         |
+| S12 | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                      |
+| S13 | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                            |
+| S14 | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`               |
+| S15 | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta       |
+
+## Cómo ejecutarlo
+
+```sh
+# Todos los escenarios (API + mirrors + descargas reales)
+LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… make eval
+
+# Un subconjunto, conservando los archivos descargados
+LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… go run -tags eval ./cmd/eval --only S1,S9,S14 --keep-downloads
+```
+
+El proceso sale con código ≠ 0 si algún escenario **falla** o **da error** (los
+SKIP y PASS no). Consulta [`cmd/eval/README.md`](https://github.com/jmrplens/libgen-mcp/blob/main/cmd/eval/README.md)
+para la documentación completa del arnés.

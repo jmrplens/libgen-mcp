@@ -21,7 +21,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR."
 
-**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the three tools add **~1,900 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required.
+**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the three tools add **~1,900 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrplens.github.io/libgen-mcp/eval-results/).
 
 ---
 

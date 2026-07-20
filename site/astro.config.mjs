@@ -334,6 +334,11 @@ export default defineConfig({
 							label: "Architecture",
 							translations: { es: "Arquitectura" },
 						},
+						{
+							slug: "eval-results",
+							label: "LLM eval results",
+							translations: { es: "Resultados del eval con LLM" },
+						},
 					],
 				},
 			],
