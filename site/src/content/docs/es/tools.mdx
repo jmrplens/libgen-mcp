@@ -7,6 +7,8 @@ import { Aside } from "@astrojs/starlight/components";
 
 `libgen-mcp` expone tres herramientas MCP: [`search`](#search), [`get_details`](#get_details) y [`download`](#download). Las tres están anotadas con una pista de mundo abierto; `search` y `get_details` son de solo lectura, y `download` es no destructiva e idempotente. Cada handler es a prueba de panics: un fallo inesperado se devuelve como error de herramienta, nunca como una caída de la sesión.
 
+Cada resultado se devuelve por dos canales: la salida JSON estructurada que se documenta más abajo, y una representación Markdown legible en el contenido de texto. Para `search`, el Markdown es una tabla de resultados que incluye los enlaces de descarga de cada resultado. Ambos canales empiezan por un campo `next_steps`, y la guía de búsqueda le indica al modelo que incluya los enlaces de descarga al presentarte los resultados.
+
 ## search
 
 Busca en el catálogo de Library Genesis. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
@@ -27,6 +29,7 @@ Busca en el catálogo de Library Genesis. Devuelve una página de resultados de 
 
 | Campo              | Tipo   | Descripción                                                                                                                                                                                                                                            |
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `next_steps`       | array  | Llamadas de seguimiento sugeridas — p. ej. un ejemplo de `get_details` o `download` usando el `md5`/`doi` del primer resultado, o, cuando no hay coincidencias, cómo ampliar la consulta. Presente para guiar al modelo; se puede ignorar.             |
 | `results`          | array  | Los registros de archivo de esta página. Cada uno incluye `md5` (libros), `doi` (artículos), título, autores, editorial, año, idioma, páginas, tamaño, extensión, tipo, ISBNs, ids y `downloads` etiquetados. Array vacío cuando no hay coincidencias. |
 | `page`             | int    | El número de página devuelto.                                                                                                                                                                                                                          |
 | `results_per_page` | int    | El tamaño de página en vigor.                                                                                                                                                                                                                          |
@@ -69,10 +72,11 @@ Metadatos completos de un registro vía la API JSON de LibGen — descripción, 
 
 ### salida de get_details
 
-| Campo     | Tipo   | Descripción                                                                                                                           |
-| --------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `file`    | object | El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).                              |
-| `edition` | object | El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`). |
+| Campo        | Tipo   | Descripción                                                                                                                                                                  |
+| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Llamada de seguimiento sugerida — p. ej. una llamada a `download` con el `md5` (libro) o `doi` (artículo) de este registro. Presente para guiar al modelo; se puede ignorar. |
+| `file`       | object | El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).                                                                     |
+| `edition`    | object | El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).                                        |
 
 Una consulta por `md5` devuelve `file` y, en la medida de lo posible, su `edition` relacionada. Una consulta por `id` devuelve el objeto que se haya pedido. Una consulta que no coincide con nada devuelve un error "no file found".
 
@@ -113,6 +117,7 @@ Gana la primera fuente que resuelve y transmite un archivo válido; el campo `so
 
 | Campo               | Tipo   | Descripción                                                                                                                                                          |
 | ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`        | array  | Confirma que el archivo se guardó y está listo para abrir o leer. Presente para guiar al modelo; se puede ignorar.                                                   |
 | `path`              | string | Ruta absoluta del archivo guardado.                                                                                                                                  |
 | `size_bytes`        | int    | Tamaño final del archivo en bytes.                                                                                                                                   |
 | `original_filename` | string | El nombre que anunció el mirror/CDN (desde `Content-Disposition`), si lo hay.                                                                                        |

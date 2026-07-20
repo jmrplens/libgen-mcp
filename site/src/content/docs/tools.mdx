@@ -7,6 +7,8 @@ import { Aside } from "@astrojs/starlight/components";
 
 `libgen-mcp` exposes three MCP tools: [`search`](#search), [`get_details`](#get_details), and [`download`](#download). All three are annotated with an open-world hint; `search` and `get_details` are read-only, and `download` is non-destructive and idempotent. Every handler is panic-safe: an unexpected failure is returned as a tool error, never as a crash of the session.
 
+Every result is returned on two channels: the structured JSON output documented below, and a human-readable Markdown rendering in the text content. For `search`, the Markdown is a results table that includes each result's clickable download links. Both channels lead with a `next_steps` field, and the search guidance tells the model to include the download links when it presents the results to you.
+
 ## search
 
 Search the Library Genesis catalog. Returns a page of file results with metadata, MD5 hashes, and per-result download options, plus pagination metadata.
@@ -25,17 +27,18 @@ Search the Library Genesis catalog. Returns a page of file results with metadata
 
 ### search output
 
-| Field              | Type   | Description                                                                                                                                                                                                                       |
-| ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `results`          | array  | The file records on this page. Each carries `md5` (books), `doi` (articles), title, authors, publisher, year, language, pages, size, extension, type, ISBNs, ids, and labeled `downloads`. Empty array when there are no matches. |
-| `page`             | int    | The page number returned.                                                                                                                                                                                                         |
-| `results_per_page` | int    | The page size in effect.                                                                                                                                                                                                          |
-| `total_files`      | string | Total matches the mirror reports for the query. May be a capped indicator such as `1000+`.                                                                                                                                        |
-| `reachable`        | int    | How many results are actually reachable across all pages (mirrors cap this below `total_files`).                                                                                                                                  |
-| `truncated`        | bool   | `true` when `total_files` exceeds `reachable`, i.e. some matches cannot be paged to.                                                                                                                                              |
-| `hint`             | string | Present only when `truncated` — advises refining the query (add author/year, use title-only columns, or narrow topics).                                                                                                           |
-| `has_more`         | bool   | `true` when this page is full (`len(results) >= results_per_page`), suggesting a next page may exist.                                                                                                                             |
-| `mirror`           | string | The mirror base URL that served this search.                                                                                                                                                                                      |
+| Field              | Type   | Description                                                                                                                                                                                                                                    |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`       | array  | Suggested follow-up tool calls given this result — e.g. an example `get_details` or `download` call using the first result's `md5`/`doi`, or, when there are no matches, how to broaden the query. Present to guide the model; safe to ignore. |
+| `results`          | array  | The file records on this page. Each carries `md5` (books), `doi` (articles), title, authors, publisher, year, language, pages, size, extension, type, ISBNs, ids, and labeled `downloads`. Empty array when there are no matches.              |
+| `page`             | int    | The page number returned.                                                                                                                                                                                                                      |
+| `results_per_page` | int    | The page size in effect.                                                                                                                                                                                                                       |
+| `total_files`      | string | Total matches the mirror reports for the query. May be a capped indicator such as `1000+`.                                                                                                                                                     |
+| `reachable`        | int    | How many results are actually reachable across all pages (mirrors cap this below `total_files`).                                                                                                                                               |
+| `truncated`        | bool   | `true` when `total_files` exceeds `reachable`, i.e. some matches cannot be paged to.                                                                                                                                                           |
+| `hint`             | string | Present only when `truncated` — advises refining the query (add author/year, use title-only columns, or narrow topics).                                                                                                                        |
+| `has_more`         | bool   | `true` when this page is full (`len(results) >= results_per_page`), suggesting a next page may exist.                                                                                                                                          |
+| `mirror`           | string | The mirror base URL that served this search.                                                                                                                                                                                                   |
 
 ### Pagination and truncation
 
@@ -69,10 +72,11 @@ Full metadata for a record via the LibGen JSON API — description, identifiers,
 
 ### get_details output
 
-| Field     | Type   | Description                                                                                                   |
-| --------- | ------ | ------------------------------------------------------------------------------------------------------------- |
-| `file`    | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                         |
-| `edition` | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`). |
+| Field        | Type   | Description                                                                                                                                                                |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Suggested follow-up tool calls given this result — e.g. a `download` call using this record's `md5` (book) or `doi` (article). Present to guide the model; safe to ignore. |
+| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                                                                                      |
+| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).                                                              |
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup returns whichever object was requested. A lookup that matches nothing returns a "no file found" error.
 
@@ -110,15 +114,16 @@ The first source that resolves and streams a valid file wins; the `source` field
 
 ### download output
 
-| Field               | Type   | Description                                                                                                                                      |
-| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `path`              | string | Absolute path of the saved file.                                                                                                                 |
-| `size_bytes`        | int    | Final file size in bytes.                                                                                                                        |
-| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                          |
-| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                |
-| `source`            | string | The source that succeeded: `libgen`, `randombook`, `unpaywall`, or `scihub`.                                                                     |
-| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest. |
-| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                       |
+| Field               | Type   | Description                                                                                                                                              |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`        | array  | Suggested follow-up tool calls given this result — confirms the file was saved and is ready to open or read. Present to guide the model; safe to ignore. |
+| `path`              | string | Absolute path of the saved file.                                                                                                                         |
+| `size_bytes`        | int    | Final file size in bytes.                                                                                                                                |
+| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                                  |
+| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                        |
+| `source`            | string | The source that succeeded: `libgen`, `randombook`, `unpaywall`, or `scihub`.                                                                             |
+| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest.         |
+| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                               |
 
 ### Behavior and errors
 

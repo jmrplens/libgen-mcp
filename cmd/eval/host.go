@@ -20,14 +20,14 @@ import (
 // libgen mirrors and download sources. The cleanup closes the client and drains
 // the server session. Construction is offline: config.Load and
 // mirrors.NewManager do no network I/O.
-func newHostSession(ctx context.Context) (session *mcp.ClientSession, cleanup func(), err error) {
+func newHostSession(ctx context.Context) (session *mcp.ClientSession, progress *progressCapture, cleanup func(), err error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load config: %w", err)
+		return nil, nil, nil, fmt.Errorf("load config: %w", err)
 	}
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create mirror manager: %w", err)
+		return nil, nil, nil, fmt.Errorf("create mirror manager: %w", err)
 	}
 	client := libgen.New(mgr, cfg)
 
@@ -38,18 +38,26 @@ func newHostSession(ctx context.Context) (session *mcp.ClientSession, cleanup fu
 
 	serverSession, err := server.Connect(ctx, st, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("server connect: %w", err)
+		return nil, nil, nil, fmt.Errorf("server connect: %w", err)
 	}
 
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "libgen-eval-client", Version: "0.0.1"}, nil)
+	// Register a progress handler so scenarios can assert that download progress
+	// notifications actually reach the client end to end (see progress token in
+	// executeTool).
+	progress = &progressCapture{}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "libgen-eval-client", Version: "0.0.1"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
+			progress.add(r.Params)
+		},
+	})
 	session, err = mcpClient.Connect(ctx, ct, nil)
 	if err != nil {
 		_ = serverSession.Close()
 		_ = serverSession.Wait()
-		return nil, nil, fmt.Errorf("client connect: %w", err)
+		return nil, nil, nil, fmt.Errorf("client connect: %w", err)
 	}
 
-	return session, func() {
+	return session, progress, func() {
 		_ = session.Close()
 		_ = serverSession.Wait()
 	}, nil

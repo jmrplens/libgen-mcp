@@ -43,6 +43,14 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S7  | Open-access article by DOI via unpaywall (needs a contact email) |
 | S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it |
 | S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success |
+| S10 | **Unguided book search** ("I want to read _Dune_…") — model must form a search from a bare request, no collection/field hints |
+| S11 | **Unguided search, comics** ("find the graphic novel _Watchmen_") — tests whether the model discovers the right collection unaided |
+| S12 | **Unguided book download** ("download _Clean Code_…") — model must search, then download by an md5 it discovered, choosing the source itself |
+| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover that articles are keyed by DOI, not md5 |
+| S14 | **Download progress** — attaches a progress token to the download and asserts progress notifications actually reach the client end to end |
+| S15 | **Ordered table with links** — a large, sorted results request; asserts the model sets a big page size + ordering and includes the results' download links in its answer (the tool's next_steps instructs it to) |
+
+**Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
 S6 / S6b are the reason this harness exists alongside the older checks: the
 `download` tool takes an optional **`source`** argument, and these scenarios

@@ -6,6 +6,12 @@ and [`download`](#download). All three are annotated with an open-world hint; `s
 is panic-safe: an unexpected failure is returned as a tool error, never as a crash of the
 session.
 
+Every result is returned on **two channels**: the structured JSON output (fields documented
+below) and a human-readable Markdown rendering in the text content — for `search`, a results
+table that includes each result's clickable download links. Both channels lead with a
+`next_steps` guidance list; the search guidance tells the model to include the download links
+when it presents the results to the user.
+
 ## search
 
 Search the Library Genesis catalog. Returns a page of file results with metadata, MD5
@@ -27,6 +33,7 @@ hashes, and per-result download options, plus pagination metadata.
 
 | Field              | Type   | Description                                                                                                                                                                                                                       |
 | ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`       | array  | Model-facing follow-up suggestions with a ready-to-run example (e.g. a `get_details`/`download` call using the first result's `md5`/`doi`, or, on no matches, how to broaden the query). Every tool output leads with this.       |
 | `results`          | array  | The file records on this page. Each carries `md5` (books), `doi` (articles), title, authors, publisher, year, language, pages, size, extension, type, ISBNs, ids, and labeled `downloads`. Empty array when there are no matches. |
 | `page`             | int    | The page number returned.                                                                                                                                                                                                         |
 | `results_per_page` | int    | The page size in effect.                                                                                                                                                                                                          |
@@ -73,10 +80,11 @@ Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is 
 
 ### get_details output
 
-| Field     | Type   | Description                                                                                                   |
-| --------- | ------ | ------------------------------------------------------------------------------------------------------------- |
-| `file`    | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                         |
-| `edition` | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`). |
+| Field        | Type   | Description                                                                                                    |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Model-facing follow-up suggestion, e.g. a `download` call using this record's `md5` (book) or `doi` (article). |
+| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                          |
+| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).  |
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
 returns whichever object was requested. A lookup that matches nothing returns a
@@ -117,6 +125,7 @@ result names it. See [Architecture](architecture.md) for the full chain.
 
 | Field               | Type   | Description                                                                                                                                      |
 | ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                    |
 | `path`              | string | Absolute path of the saved file.                                                                                                                 |
 | `size_bytes`        | int    | Final file size in bytes.                                                                                                                        |
 | `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                          |

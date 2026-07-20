@@ -206,6 +206,186 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 	}
 }
 
+// TestSearchNextSteps verifies the search follow-up guidance: with results it
+// embeds executable get_details/download examples carrying the first result's
+// real md5; with no results it returns recovery suggestions naming the topics.
+func TestSearchNextSteps(t *testing.T) {
+	withResults := searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", DOI: "10.1/x"}},
+		Page:    1,
+	})
+	joined := strings.Join(withResults, "\n")
+	if !strings.Contains(joined, "get_details") || !strings.Contains(joined, "download") {
+		t.Errorf("next_steps should mention get_details and download; got %q", joined)
+	}
+	if !strings.Contains(joined, "0123456789abcdef0123456789abcdef") {
+		t.Errorf("next_steps should embed the first result's md5; got %q", joined)
+	}
+	if !strings.Contains(joined, "10.1/x") {
+		t.Errorf("next_steps should embed the first result's doi; got %q", joined)
+	}
+
+	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}})
+	if len(empty) == 0 || !strings.Contains(empty[0], "No matches") {
+		t.Errorf("empty search should suggest recovery; got %q", empty)
+	}
+	if !strings.Contains(empty[0], "comics") {
+		t.Errorf("empty-search suggestion should list topics; got %q", empty[0])
+	}
+}
+
+// TestDetailsNextSteps verifies the details follow-up prefers the record's md5,
+// falls back to its doi, and always suggests download.
+func TestDetailsNextSteps(t *testing.T) {
+	byMD5 := detailsNextSteps(DetailsOutput{File: map[string]any{"md5": "abc"}})
+	if len(byMD5) != 1 || !strings.Contains(byMD5[0], `"md5":"abc"`) {
+		t.Errorf("md5 record should suggest download by md5; got %q", byMD5)
+	}
+	byDOI := detailsNextSteps(DetailsOutput{Edition: map[string]any{"doi": "10.1/y"}})
+	if len(byDOI) != 1 || !strings.Contains(byDOI[0], `"doi":"10.1/y"`) {
+		t.Errorf("doi record should suggest download by doi; got %q", byDOI)
+	}
+	none := detailsNextSteps(DetailsOutput{})
+	if len(none) != 1 || !strings.Contains(none[0], "download") {
+		t.Errorf("empty record should still suggest download; got %q", none)
+	}
+}
+
+// TestDownloadNextSteps verifies the download follow-up names the saved path,
+// size and source.
+func TestDownloadNextSteps(t *testing.T) {
+	steps := downloadNextSteps(libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 123, Source: "libgen"})
+	if len(steps) != 1 {
+		t.Fatalf("want 1 step, got %d", len(steps))
+	}
+	for _, want := range []string{"/tmp/book.pdf", "123", "libgen"} {
+		if !strings.Contains(steps[0], want) {
+			t.Errorf("download step should mention %q; got %q", want, steps[0])
+		}
+	}
+}
+
+// TestSearchToolEmitsNextSteps verifies the registered search tool surfaces
+// next_steps in its structured output over a real tools/call round-trip.
+func TestSearchToolEmitsNextSteps(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "golang", "topics": []string{"nonfiction"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out SearchOutput
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if len(out.NextSteps) == 0 {
+		t.Errorf("search output should carry next_steps; structured=%s", data)
+	}
+}
+
+// textContent returns the concatenated text of a result's TextContent blocks.
+func textContent(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+// TestSearchToolReturnsMarkdownAndStructured verifies a search call carries BOTH
+// channels: a human-readable Markdown text block (with a results table and the
+// next-steps section) and the structured JSON output.
+func TestSearchToolReturnsMarkdownAndStructured(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "golang", "topics": []string{"nonfiction"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := textContent(res)
+	if !strings.Contains(md, "| # | Title") {
+		t.Errorf("markdown should contain a results table header; got:\n%s", md)
+	}
+	if !strings.Contains(md, "Next steps") {
+		t.Errorf("markdown should contain a next-steps section; got:\n%s", md)
+	}
+	if strings.HasPrefix(strings.TrimSpace(md), "{") {
+		t.Errorf("text content should be markdown, not raw JSON; got:\n%s", md)
+	}
+	if res.StructuredContent == nil {
+		t.Error("result should still carry structured JSON output alongside the markdown")
+	}
+}
+
+// TestSearchLinksSurfacedAndHinted verifies the search markdown table renders
+// each result's download links as Markdown links, and that the structured
+// next_steps carries the instruction to include those links in the reply.
+func TestSearchLinksSurfacedAndHinted(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{{
+			Title: "A Book", MD5: "0123456789abcdef0123456789abcdef",
+			Downloads: []libgen.DownloadOption{{Label: "GET", URL: "https://mirror/dl/1"}},
+		}},
+	}
+	out.NextSteps = searchNextSteps(out)
+
+	md := renderSearchMarkdown(out)
+	if !strings.Contains(md, "Download links") {
+		t.Errorf("table should have a Download links column; got:\n%s", md)
+	}
+	if !strings.Contains(md, "[GET](https://mirror/dl/1)") {
+		t.Errorf("table should render the download link; got:\n%s", md)
+	}
+	steps := strings.Join(out.NextSteps, "\n")
+	if !strings.Contains(steps, "download links") {
+		t.Errorf("next_steps should instruct the model to include download links; got %q", steps)
+	}
+
+	// No links → no preserve-links hint.
+	noLinks := SearchOutput{Mirror: "m", Page: 1, Results: []libgen.Result{{Title: "B", MD5: "abc"}}}
+	if resultsHaveLinks(noLinks.Results) {
+		t.Fatal("fixture should have no links")
+	}
+	if strings.Contains(strings.Join(searchNextSteps(noLinks), "\n"), "download links") {
+		t.Error("next_steps should not mention download links when results carry none")
+	}
+}
+
+// TestRenderMarkdownEdgeCases covers the empty-search, doi-only details, and
+// resumed-download rendering branches.
+func TestRenderMarkdownEdgeCases(t *testing.T) {
+	empty := renderSearchMarkdown(SearchOutput{Mirror: "m", NextSteps: []string{"broaden it"}})
+	if !strings.Contains(empty, "No results") || !strings.Contains(empty, "broaden it") {
+		t.Errorf("empty search markdown should note no results and next steps; got:\n%s", empty)
+	}
+
+	details := renderDetailsMarkdown(DetailsOutput{
+		Edition:   map[string]any{"title": "Paper", "doi": "10.1/z"},
+		NextSteps: []string{"download it"},
+	})
+	if !strings.Contains(details, "Paper") || !strings.Contains(details, "10.1/z") {
+		t.Errorf("details markdown should show title and doi; got:\n%s", details)
+	}
+
+	dl := renderDownloadMarkdown(DownloadOutput{
+		DownloadResult: libgen.DownloadResult{Path: "/p", SizeBytes: 9, Source: "libgen", Resumed: true},
+	})
+	if !strings.Contains(dl, "Resumed") {
+		t.Errorf("resumed download markdown should note the resume; got:\n%s", dl)
+	}
+}
+
 // TestToolsRegistered verifies ToolsRegistered.
 func TestToolsRegistered(t *testing.T) {
 	session := newSession(t)
