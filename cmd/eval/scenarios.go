@@ -1,0 +1,423 @@
+//go:build eval
+
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/tools"
+)
+
+// skipPrefix marks an assertion message as a SKIP (an unmet precondition or a
+// flaky live mirror), not a pass or a fail.
+const skipPrefix = "SKIP:"
+
+// noDownloadCall is the failure detail when a download scenario produced no
+// download tool call.
+const noDownloadCall = "no download call"
+
+// openAccessDOI is a stable open-access article DOI used by the DOI download
+// scenario (PLoS ONE, freely available via Unpaywall / Sci-Hub).
+const openAccessDOI = "10.1371/journal.pone.0000308"
+
+// scenario is one live end-to-end check: a natural-language prompt, an optional
+// per-scenario environment, and an assertion over the resulting transcript.
+// Assertions grade the tool name, the argument JSON shape, and whether the real
+// MCP response is non-empty / well-formed — never exact catalog content.
+type scenario struct {
+	ID         string
+	Prompt     string
+	ToolChoice string
+	SetupEnv   map[string]string
+	Assert     func(transcript) (bool, string)
+}
+
+var (
+	md5Pattern = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
+	doiPattern = regexp.MustCompile(`^10\.\d{4,9}/`)
+)
+
+// isMD5 reports whether s is a 32-character hex md5.
+func isMD5(s string) bool { return md5Pattern.MatchString(strings.TrimSpace(s)) }
+
+// isDOI reports whether s looks like a DOI (10.<registrant>/...).
+func isDOI(s string) bool { return doiPattern.MatchString(strings.TrimSpace(s)) }
+
+// hasTopic reports whether the tool input's topics array contains topic.
+func hasTopic(input map[string]any, topic string) bool {
+	return slices.Contains(stringSlice(input, "topics"), topic)
+}
+
+// subsetOf reports whether every value in got is one of the allowed values. An
+// empty got is trivially a subset.
+func subsetOf(got []string, allowed ...string) bool {
+	for _, g := range got {
+		if !slices.Contains(allowed, g) {
+			return false
+		}
+	}
+	return true
+}
+
+// stringSlice extracts a string slice from a JSON-decoded tool input value.
+func stringSlice(input map[string]any, key string) []string {
+	raw, ok := input[key]
+	if !ok {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, isStr := item.(string); isStr {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []string:
+		return v
+	default:
+		return nil
+	}
+}
+
+// stringField extracts a string field from a JSON-decoded tool input value.
+func stringField(input map[string]any, key string) string {
+	if s, ok := input[key].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
+// findCall returns the first tool call with the given name.
+func findCall(tr transcript, name string) (toolCall, bool) {
+	for _, c := range tr.Calls {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return toolCall{}, false
+}
+
+// decodeStructured re-marshals a JSON-decoded structured content value into a
+// typed target.
+func decodeStructured(v, target any) error {
+	if v == nil {
+		return errors.New("no structured content")
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal structured: %w", err)
+	}
+	if err = json.Unmarshal(data, target); err != nil {
+		return fmt.Errorf("decode structured: %w", err)
+	}
+	return nil
+}
+
+// searchOutput finds the first search call and decodes its structured output.
+func searchOutput(tr transcript) (toolCall, tools.SearchOutput, error) {
+	call, ok := findCall(tr, "search")
+	if !ok {
+		return toolCall{}, tools.SearchOutput{}, errors.New("no search call")
+	}
+	var out tools.SearchOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return call, tools.SearchOutput{}, err
+	}
+	return call, out, nil
+}
+
+// downloadFailed reports whether a download tool call did not produce a file
+// (protocol error or an IsError result), which for a live mirror is treated as
+// a SKIP rather than a model failure.
+func downloadFailed(call toolCall) bool {
+	return call.Result == nil || call.Result.IsError
+}
+
+// md5InSearchResults reports whether md5 appears in any prior search result of
+// the transcript.
+func md5InSearchResults(tr transcript, md5 string) bool {
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		var out tools.SearchOutput
+		if decodeStructured(c.Structured, &out) != nil {
+			continue
+		}
+		for _, r := range out.Results {
+			if strings.EqualFold(r.MD5, md5) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// scenarios returns the ordered list of live scenarios.
+func scenarios() []scenario {
+	return []scenario{
+		{
+			ID:     "S1",
+			Prompt: `Find the book "Introduction to Algorithms" by Cormen. It is a non-fiction textbook: search the nonfiction collection and match on the title and author fields.`,
+			Assert: assertS1,
+		},
+		{
+			ID:     "S2",
+			Prompt: `Search for the research article "Attention Is All You Need" in the articles collection.`,
+			Assert: assertS2,
+		},
+		{
+			ID:     "S3",
+			Prompt: `Search Library Genesis for the standard "ISO 9001" in the standards collection.`,
+			Assert: assertS3,
+		},
+		{
+			ID:     "S4",
+			Prompt: `Find the book "Introduction to Algorithms" by Cormen in the nonfiction collection, then fetch the full details of the first result.`,
+			Assert: assertS4,
+		},
+		{
+			ID:     "S5",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie and download it for me.`,
+			Assert: assertS5,
+		},
+		{
+			ID:     "S6",
+			Prompt: `Search for the paper "Attention Is All You Need", then download this paper from sci-hub.`,
+			Assert: assertS6Scihub,
+		},
+		{
+			ID:     "S6b",
+			Prompt: `Find the book "The C Programming Language" by Kernighan and Ritchie, then download it from the randombook source.`,
+			Assert: assertS6Randombook,
+		},
+		{
+			ID:     "S7",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s.", openAccessDOI),
+			Assert: assertS7,
+		},
+		{
+			ID:     "S8",
+			Prompt: `Can you find me a good book?`,
+			Assert: assertS8,
+		},
+	}
+}
+
+// assertS1 checks a nonfiction title+author search with a valid first md5.
+func assertS1(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if stringField(call.Input, "query") == "" {
+		return false, "empty query"
+	}
+	if !hasTopic(call.Input, "nonfiction") {
+		return false, "topics missing nonfiction"
+	}
+	if !subsetOf(stringSlice(call.Input, "search_in"), "title", "author") {
+		return false, "search_in not a subset of {title, author}"
+	}
+	if len(out.Results) == 0 {
+		return false, "search returned no results"
+	}
+	if !isMD5(out.Results[0].MD5) {
+		return false, "first result md5 is not 32-hex"
+	}
+	return true, fmt.Sprintf("nonfiction search; %d results; first md5 ok", len(out.Results))
+}
+
+// assertS2 checks an articles search that yields at least one DOI.
+func assertS2(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if !hasTopic(call.Input, "articles") {
+		return false, "topics missing articles"
+	}
+	for _, r := range out.Results {
+		if isDOI(r.DOI) {
+			return true, "articles search; found a result with a valid DOI"
+		}
+	}
+	return false, "no result carried a valid DOI"
+}
+
+// assertS3 checks a standards search, skipping when the mirror returns nothing.
+func assertS3(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if !hasTopic(call.Input, "standards") {
+		return false, "topics missing standards"
+	}
+	if len(out.Results) == 0 {
+		return true, skipPrefix + " standards search returned 0 results from the mirror"
+	}
+	return true, fmt.Sprintf("standards search; %d results", len(out.Results))
+}
+
+// assertS4 checks a get_details call keyed by an md5 from a prior search result.
+func assertS4(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "get_details")
+	if !ok {
+		return false, "no get_details call"
+	}
+	md5 := stringField(call.Input, "md5")
+	if !isMD5(md5) {
+		return false, "get_details md5 is not 32-hex"
+	}
+	if !md5InSearchResults(tr, md5) {
+		return false, "get_details md5 did not come from a prior search result"
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " details lookup failed against the live mirror"
+	}
+	var out tools.DetailsOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if len(out.File) == 0 && len(out.Edition) == 0 {
+		return false, "details had neither File nor Edition"
+	}
+	return true, "get_details returned a File or Edition record"
+}
+
+// assertS5 checks a book download by md5 produces a saved, non-empty file.
+func assertS5(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isMD5(stringField(call.Input, "md5")) {
+		return false, "download md5 is not 32-hex"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " valid md5 download but the live fetch failed (mirror/network)"
+	}
+	return checkDownloadedFile(call, "")
+}
+
+// assertS6Scihub checks a source-restricted article download from sci-hub.
+func assertS6Scihub(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "scihub", "doi")
+}
+
+// assertS6Randombook checks a source-restricted book download from randombook.
+func assertS6Randombook(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "randombook", "md5")
+}
+
+// assertSourcedDownload checks that the model set the source arg to want and
+// keyed the download by the expected identifier (doi or md5). When the live
+// fetch succeeds it also confirms DownloadResult.Source == want; a live fetch
+// failure is a SKIP since the model behavior under test (source selection) was
+// still correct.
+func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if stringField(call.Input, "source") != want {
+		return false, "download source arg is not " + want
+	}
+	if key == "doi" && !isDOI(stringField(call.Input, "doi")) {
+		return false, "download doi is not a valid DOI"
+	}
+	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
+		return false, "download md5 is not 32-hex"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " model set source=" + want + " correctly but the live download failed (mirror/network)"
+	}
+	return checkDownloadedFile(call, want)
+}
+
+// assertS7 checks an open-access DOI download served by unpaywall or sci-hub.
+func assertS7(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, "download doi is not a valid DOI"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " valid DOI download but the live fetch failed (mirror/network)"
+	}
+	fileOK, msg := checkDownloadedFile(call, "")
+	if !fileOK {
+		return fileOK, msg
+	}
+	var res libgen.DownloadResult
+	if err := decodeStructured(call.Structured, &res); err != nil {
+		return false, err.Error()
+	}
+	if res.Source != "unpaywall" && res.Source != "scihub" {
+		return false, "unexpected article source " + res.Source
+	}
+	return true, "downloaded DOI via " + res.Source
+}
+
+// assertS8 passes when the model asks to clarify (no tool call) or the search
+// tool's own validation rejects the missing query.
+func assertS8(tr transcript) (pass bool, detail string) {
+	if len(tr.Calls) == 0 {
+		return true, "model asked to clarify instead of guessing (no tool call)"
+	}
+	for _, c := range tr.Calls {
+		if c.Name == "search" && c.Result != nil && c.Result.IsError {
+			return true, "search validation rejected the underspecified query"
+		}
+	}
+	return false, "model called a tool without clarifying the ambiguous request"
+}
+
+// checkDownloadedFile decodes a download result and confirms a non-empty saved
+// path and size, plus (when want is non-empty) the serving source.
+func checkDownloadedFile(call toolCall, want string) (pass bool, detail string) {
+	var res libgen.DownloadResult
+	if err := decodeStructured(call.Structured, &res); err != nil {
+		return false, err.Error()
+	}
+	if res.Path == "" || res.SizeBytes <= 0 {
+		return false, "download result had an empty path or zero size"
+	}
+	if want != "" && res.Source != want {
+		return false, "DownloadResult.Source is " + res.Source + ", want " + want
+	}
+	return true, fmt.Sprintf("downloaded %d bytes via %s", res.SizeBytes, res.Source)
+}
+
+// selectScenarios filters scenarios by a comma-separated --only list (empty
+// runs all).
+func selectScenarios(all []scenario, only string) []scenario {
+	only = strings.TrimSpace(only)
+	if only == "" {
+		return all
+	}
+	wanted := map[string]bool{}
+	for id := range strings.SplitSeq(only, ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			wanted[id] = true
+		}
+	}
+	var out []scenario
+	for _, sc := range all {
+		if wanted[sc.ID] {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
