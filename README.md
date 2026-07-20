@@ -11,6 +11,7 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_libgen-mcp2&metric=coverage)](https://sonarcloud.io/summary/overall?id=jmrplens_libgen-mcp2)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jmrplens/libgen-mcp.svg)](https://pkg.go.dev/github.com/jmrplens/libgen-mcp)
 [![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/libgen-mcp)
+[![libgen-mcp MCP server](https://glama.ai/mcp/servers/jmrplens/libgen-mcp/badges/score.svg)](https://glama.ai/mcp/servers/jmrplens/libgen-mcp)
 
 </p>
 
