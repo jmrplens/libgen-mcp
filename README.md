@@ -90,6 +90,8 @@ claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
 
 ## Tools
 
+Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list, and the search guidance tells the model to include the download links when presenting results.
+
 ### `search`
 
 Search the Library Genesis catalog. Returns a page of file results with metadata, MD5 hashes, and download options, plus pagination metadata.
@@ -106,17 +108,18 @@ Search the Library Genesis catalog. Returns a page of file results with metadata
 
 The response includes pagination metadata so the model can decide whether to page or refine:
 
-| Field              | Type   | Description                                                                                     |
-| ------------------ | ------ | ----------------------------------------------------------------------------------------------- |
-| `results`          | array  | The file records on this page.                                                                  |
-| `page`             | int    | The page number returned.                                                                       |
-| `results_per_page` | int    | Page size in effect.                                                                            |
-| `total_files`      | string | Total matches reported by the mirror for the query.                                             |
-| `reachable`        | int    | How many of those matches were actually parsed/reachable.                                       |
-| `truncated`        | bool   | `true` when only the first slice of matches is reachable.                                       |
-| `hint`             | string | When truncated, a suggestion to refine the query (add author/year, title-only columns, topics). |
-| `has_more`         | bool   | `true` when a full page was returned (more results likely on the next page).                    |
-| `mirror`           | string | The mirror that served the query.                                                               |
+| Field              | Type   | Description                                                                                                                                                                                                |
+| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`       | array  | Model-facing follow-up suggestions with a ready-to-run example (e.g. a `get_details`/`download` call using a result's `md5`/`doi`, or how to broaden a no-match query). Every tool output leads with this. |
+| `results`          | array  | The file records on this page.                                                                                                                                                                             |
+| `page`             | int    | The page number returned.                                                                                                                                                                                  |
+| `results_per_page` | int    | Page size in effect.                                                                                                                                                                                       |
+| `total_files`      | string | Total matches reported by the mirror for the query.                                                                                                                                                        |
+| `reachable`        | int    | How many of those matches were actually parsed/reachable.                                                                                                                                                  |
+| `truncated`        | bool   | `true` when only the first slice of matches is reachable.                                                                                                                                                  |
+| `hint`             | string | When truncated, a suggestion to refine the query (add author/year, title-only columns, topics).                                                                                                            |
+| `has_more`         | bool   | `true` when a full page was returned (more results likely on the next page).                                                                                                                               |
+| `mirror`           | string | The mirror that served the query.                                                                                                                                                                          |
 
 ### `get_details`
 

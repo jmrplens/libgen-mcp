@@ -32,39 +32,52 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query          string   `json:"query" jsonschema:"search text,required"`
-	Topics         []string `json:"topics,omitempty" jsonschema:"collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all)"`
-	SearchIn       []string `json:"search_in,omitempty" jsonschema:"fields to match: title author series year publisher isbn (omit for all)"`
-	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"results per page: 25 50 or 100"`
-	Page           int      `json:"page,omitempty" jsonschema:"result page starting at 1"`
-	Order          string   `json:"order,omitempty" jsonschema:"sort by: id time_added title author year size"`
-	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"asc or desc"`
+	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
+	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
+	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
+	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
+	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
+	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
 }
 
-// SearchOutput holds a page of search results plus pagination metadata.
+// SearchOutput holds a page of search results plus pagination metadata. NextSteps
+// leads so the model sees what to do with the results before reading them.
 type SearchOutput struct {
-	Results        []libgen.Result `json:"results"`
-	Page           int             `json:"page"`
-	ResultsPerPage int             `json:"results_per_page"`
-	TotalFiles     string          `json:"total_files,omitempty"`
-	Reachable      int             `json:"reachable"`
-	Truncated      bool            `json:"truncated"`
-	Hint           string          `json:"hint,omitempty"`
-	HasMore        bool            `json:"has_more"`
-	Mirror         string          `json:"mirror"`
+	NextSteps      []string        `json:"next_steps,omitempty" jsonschema:"suggested follow-up tool calls given these results (e.g. get_details or download with a result's md5/doi)"`
+	Results        []libgen.Result `json:"results" jsonschema:"the file records on this page; each carries the md5/doi/id you pass to get_details or download"`
+	Page           int             `json:"page" jsonschema:"the page number returned"`
+	ResultsPerPage int             `json:"results_per_page" jsonschema:"the page size in effect"`
+	TotalFiles     string          `json:"total_files,omitempty" jsonschema:"total matches the mirror reports (may be a capped indicator such as 1000+)"`
+	Reachable      int             `json:"reachable" jsonschema:"how many results are actually reachable across all pages"`
+	Truncated      bool            `json:"truncated" jsonschema:"true when total_files exceeds reachable, i.e. some matches cannot be paged to"`
+	Hint           string          `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
+	HasMore        bool            `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
+	Mirror         string          `json:"mirror" jsonschema:"the mirror base URL that served this search"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both)"`
-	ID     string `json:"id,omitempty" jsonschema:"edition or file id (use md5 OR id, not both)"`
-	Object string `json:"object,omitempty" jsonschema:"with id: edition (default) or file"`
+	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field"`
+	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field"`
+	Object string `json:"object,omitempty" jsonschema:"with id: a single value edition (default) or file"`
 }
 
 // DetailsOutput holds the file and/or edition record returned by get_details.
+// NextSteps leads so the model sees the download follow-up before the payload.
 type DetailsOutput struct {
-	File    map[string]any `json:"file,omitempty"`
-	Edition map[string]any `json:"edition,omitempty"`
+	NextSteps []string       `json:"next_steps,omitempty" jsonschema:"suggested follow-up (e.g. download this record by its md5 or doi)"`
+	File      map[string]any `json:"file,omitempty" jsonschema:"the file record (present for an md5 lookup, or an id lookup with object=file)"`
+	Edition   map[string]any `json:"edition,omitempty" jsonschema:"the edition record (present for an md5 lookup's related edition, or an id lookup with object=edition)"`
+}
+
+// DownloadOutput wraps the domain download result with leading NextSteps guidance.
+// The embedded DownloadResult's fields are promoted, so the wire shape is the
+// result fields plus a leading next_steps; the domain type stays free of any
+// MCP-presentation concern.
+type DownloadOutput struct {
+	NextSteps []string `json:"next_steps,omitempty" jsonschema:"suggested follow-up now that the file is saved"`
+	libgen.DownloadResult
 }
 
 // DownloadInput holds the parameters for the download tool. Provide md5 (books)
@@ -90,7 +103,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
-		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id.",
+		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client)))
 	book, article := client.EnabledSourceNames()
@@ -168,8 +181,82 @@ func downloadToolDescription(book, article []string) string {
 	}
 	fmt.Fprintf(&b, "Set source to restrict the download to a single enabled provider (%s) instead of trying them all. ",
 		strings.Join(orderedEnabledSources(book, article), ", "))
-	b.WriteString("Returns the saved path, size and the source that served it.")
+	b.WriteString("The md5/doi come from a prior search result. Returns the saved path, size and the source that served it. See also: search (to find the md5/doi).")
 	return b.String()
+}
+
+// hintIncludeLinks tells the model to surface the results' download links to the
+// user when it presents them, so the links are not dropped from the reply.
+const hintIncludeLinks = "When you present these results to the user, include each result's download links as clickable [label](url) Markdown links (they are in the results' downloads field and the Markdown table) so the user can navigate directly."
+
+// resultsHaveLinks reports whether any result carries at least one download link.
+func resultsHaveLinks(results []libgen.Result) bool {
+	for _, r := range results {
+		for _, d := range r.Downloads {
+			if d.URL != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// searchNextSteps builds the follow-up guidance for a search result, embedding a
+// concrete, ready-to-run example that uses the first result's real identifier so
+// the model can pivot to get_details/download without guessing the argument shape.
+// On zero results it returns recovery suggestions instead.
+func searchNextSteps(out SearchOutput) []string {
+	if len(out.Results) == 0 {
+		return []string{
+			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
+				strings.Join(libgen.TopicNames(), ", ") + ".",
+		}
+	}
+	first := out.Results[0]
+	steps := []string{}
+	if first.MD5 != "" {
+		steps = append(steps,
+			fmt.Sprintf("For full metadata on a result, call get_details with its md5, e.g. {\"md5\":%q}.", first.MD5),
+			fmt.Sprintf("To fetch a book, call download with its md5, e.g. {\"md5\":%q}.", first.MD5))
+	}
+	if first.DOI != "" {
+		steps = append(steps,
+			fmt.Sprintf("To fetch an article, call download with its doi, e.g. {\"doi\":%q}.", first.DOI))
+	}
+	if resultsHaveLinks(out.Results) {
+		steps = append(steps, hintIncludeLinks)
+	}
+	if out.Truncated {
+		steps = append(steps, "Many matches are unreachable; refine the query (add author/year or narrow topics) rather than deep-paging.")
+	} else if out.HasMore {
+		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
+	}
+	return steps
+}
+
+// detailsNextSteps suggests the download follow-up for a details record, using
+// the md5/doi found on the record so the model can act without re-deriving them.
+func detailsNextSteps(out DetailsOutput) []string {
+	md5 := stringField(out.File, "md5")
+	doi := stringField(out.File, "doi")
+	if doi == "" {
+		doi = stringField(out.Edition, "doi")
+	}
+	switch {
+	case md5 != "":
+		return []string{fmt.Sprintf("To download this book, call download with {\"md5\":%q}.", md5)}
+	case doi != "":
+		return []string{fmt.Sprintf("To download this article, call download with {\"doi\":%q}.", doi)}
+	default:
+		return []string{"To fetch the file, call download with this record's md5 (book) or doi (article)."}
+	}
+}
+
+// downloadNextSteps confirms the saved file and points at the next natural action.
+func downloadNextSteps(res libgen.DownloadResult) []string {
+	return []string{
+		fmt.Sprintf("File saved to %s (%d bytes) via %s; it is ready to open or read.", res.Path, res.SizeBytes, res.Source),
+	}
 }
 
 // withRecovery wraps a typed MCP tool handler to make it panic-safe and
@@ -242,25 +329,40 @@ func searchHandler(c *libgen.Client) mcp.ToolHandlerFor[SearchInput, SearchOutpu
 		if out.Results == nil {
 			out.Results = []libgen.Result{}
 		}
-		return nil, out, nil
+		out.NextSteps = searchNextSteps(out)
+		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
+}
+
+// markdownResult wraps a human-readable Markdown rendering in a CallToolResult.
+// The SDK keeps this Content and additionally sets StructuredContent to the
+// output JSON, so the client receives both channels.
+func markdownResult(md string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: md}}}
 }
 
 func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
+		var (
+			out DetailsOutput
+			err error
+		)
 		switch {
 		case in.MD5 != "" && in.ID != "":
 			return nil, zero, errors.New("provide md5 or id, not both")
 		case in.MD5 != "":
-			out, err := detailsByMD5(ctx, c, in.MD5)
-			return nil, out, err
+			out, err = detailsByMD5(ctx, c, in.MD5)
 		case in.ID != "":
-			out, err := detailsByID(ctx, c, in.Object, in.ID)
-			return nil, out, err
+			out, err = detailsByID(ctx, c, in.Object, in.ID)
 		default:
 			return nil, zero, errors.New("provide md5 or id")
 		}
+		if err != nil {
+			return nil, zero, err
+		}
+		out.NextSteps = detailsNextSteps(out)
+		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
 }
 
@@ -315,9 +417,9 @@ func validateDownloadInput(in DownloadInput) (md5, doi, source string, err error
 	return md5, doi, source, nil
 }
 
-func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, libgen.DownloadResult] {
-	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
-		var zero libgen.DownloadResult
+func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
+		var zero DownloadOutput
 		md5, doi, source, err := validateDownloadInput(in)
 		if err != nil {
 			return nil, zero, err
@@ -337,7 +439,8 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 		if err != nil {
 			return nil, zero, err
 		}
-		return nil, *res, nil
+		out := DownloadOutput{NextSteps: downloadNextSteps(*res), DownloadResult: *res}
+		return markdownResult(renderDownloadMarkdown(out)), out, nil
 	}
 }
 

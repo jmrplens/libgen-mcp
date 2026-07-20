@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -176,6 +178,26 @@ func md5InSearchResults(tr transcript, md5 string) bool {
 	return false
 }
 
+// doiInSearchResults reports whether doi appears in any prior search result of
+// the transcript.
+func doiInSearchResults(tr transcript, doi string) bool {
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		var out tools.SearchOutput
+		if decodeStructured(c.Structured, &out) != nil {
+			continue
+		}
+		for _, r := range out.Results {
+			if strings.EqualFold(r.DOI, doi) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // scenarios returns the ordered list of live scenarios.
 func scenarios() []scenario {
 	return []scenario{
@@ -244,7 +266,208 @@ func scenarios() []scenario {
 			},
 			Assert: assertS9Retry,
 		},
+		// S10–S13 are deliberately under-specified: the prompts read like a real
+		// user request and give NO guidance on which collection, search fields, or
+		// download source to use. They test that the model can discover the right
+		// tool arguments from the tool/field descriptions alone — a proxy for how
+		// well the server self-describes to an unguided LLM.
+		{
+			ID:     "S10",
+			Prompt: `I want to read the novel "Dune" by Frank Herbert — can you find it in the library for me?`,
+			Assert: assertNaturalSearch("dune"),
+		},
+		{
+			ID:     "S11",
+			Prompt: `Find the graphic novel "Watchmen" by Alan Moore.`,
+			Assert: assertNaturalSearch("watchmen"),
+		},
+		{
+			ID:     "S12",
+			Prompt: `Can you download the book "Clean Code" by Robert C. Martin for me?`,
+			Assert: assertNaturalBookDownload,
+		},
+		{
+			ID: "S13",
+			Prompt: `Get me a PDF of the research paper "Hallmarks of Cancer: The Next Generation" ` +
+				`by Hanahan and Weinberg.`,
+			// A paywalled paper Sci-Hub actually mirrors (unlike an arXiv-only paper),
+			// so the article download path can complete. The model must discover on
+			// its own that articles are fetched by DOI, not md5. Unpaywall is left
+			// disabled (this paper is not open access); Sci-Hub serves it.
+			Assert: assertNaturalArticleDownload,
+		},
+		{
+			ID:     "S14",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie and download it.`,
+			// Progress path: the harness attaches a progress token to every download
+			// call, so a successful download must surface progress notifications to
+			// the client. Asserts the notifications actually arrived end to end.
+			Assert: assertDownloadProgress,
+		},
+		{
+			ID: "S15",
+			Prompt: `List 50 science fiction books sorted by year, newest first, ` +
+				`as a table, and include each book's download links.`,
+			// Surface test: the model must set a large page size and an ordering, and
+			// — because the tool tells it to via next_steps — actually include the
+			// download links in its written answer.
+			Assert: assertOrderedTableWithLinks,
+		},
 	}
+}
+
+// assertOrderedTableWithLinks checks a large, ordered results request that asks
+// for download links: the model must set a big page size and an ordering, get a
+// sizable page whose results carry links, and then include those links in its
+// final answer (the tool's next_steps instructs it to). A thin mirror page is a
+// SKIP.
+func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if per, _ := call.Input["results_per_page"].(float64); per < 50 {
+		return false, fmt.Sprintf("results_per_page should be large (>=50) for a big list; got %v", call.Input["results_per_page"])
+	}
+	if stringField(call.Input, "order") == "" {
+		return false, "model did not set an order for a sorted list"
+	}
+	if len(out.Results) < 25 {
+		return true, fmt.Sprintf("%s ordered search returned only %d results from the mirror", skipPrefix, len(out.Results))
+	}
+	if !resultsCarryLinks(out.Results) {
+		return true, skipPrefix + " results carried no download links from the mirror"
+	}
+	if !finalTextHasLink(tr.FinalText) {
+		return false, "model did not include any download link in its answer despite the results carrying links"
+	}
+	return true, fmt.Sprintf("ordered page of %d with links; model surfaced links in its answer", len(out.Results))
+}
+
+// resultsCarryLinks reports whether any search result exposes a download link.
+func resultsCarryLinks(results []libgen.Result) bool {
+	for _, r := range results {
+		for _, d := range r.Downloads {
+			if d.URL != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// finalTextHasLink reports whether the model's final prose contains a URL or a
+// Markdown link (evidence it surfaced the download links to the user).
+func finalTextHasLink(s string) bool {
+	return strings.Contains(s, "http://") || strings.Contains(s, "https://") || strings.Contains(s, "](")
+}
+
+// assertDownloadProgress checks that a successful download emitted progress
+// notifications that reached the client (the harness attaches a progress token to
+// download calls). A live fetch failure is a SKIP, since no progress can flow when
+// the download never starts.
+func assertDownloadProgress(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " download did not complete live, so no progress could be emitted (mirror/network)"
+	}
+	var last *mcp.ProgressNotificationParams
+	n := 0
+	for i := range tr.Progress {
+		if fmt.Sprint(tr.Progress[i].ProgressToken) == downloadProgressToken {
+			last = &tr.Progress[i]
+			n++
+		}
+	}
+	if n == 0 {
+		return false, "download succeeded but no progress notifications reached the client"
+	}
+	if last.Progress <= 0 {
+		return false, fmt.Sprintf("final progress notification reported no bytes (progress=%v)", last.Progress)
+	}
+	detail = fmt.Sprintf("received %d progress notification(s); final progress=%v total=%v", n, last.Progress, last.Total)
+	return true, detail
+}
+
+// assertNaturalSearch builds an assertion for an under-specified search prompt:
+// the model must translate the request into a single search call whose query
+// carries the distinctive title token, with no guidance on topic or search
+// fields. A mirror that returns nothing is a SKIP, not a failure.
+func assertNaturalSearch(titleToken string) func(transcript) (bool, string) {
+	return func(tr transcript) (pass bool, detail string) {
+		call, out, err := searchOutput(tr)
+		if err != nil {
+			return false, err.Error()
+		}
+		query := strings.ToLower(stringField(call.Input, "query"))
+		if query == "" {
+			return false, "empty query"
+		}
+		if !strings.Contains(query, titleToken) {
+			return false, fmt.Sprintf("query %q does not mention %q", query, titleToken)
+		}
+		if len(out.Results) == 0 {
+			return true, skipPrefix + " search well-formed but the mirror returned 0 results"
+		}
+		topics := stringSlice(call.Input, "topics")
+		return true, fmt.Sprintf("unguided search; %d results; topics=%v", len(out.Results), topics)
+	}
+}
+
+// assertNaturalBookDownload checks an under-specified "download this book" prompt:
+// the model must search, then download by an md5 it discovered — without being
+// told to use md5 or which source. A live fetch failure is a SKIP.
+func assertNaturalBookDownload(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	md5 := stringField(call.Input, "md5")
+	if !isMD5(md5) {
+		return false, "model did not download by a valid md5 (books are md5-keyed)"
+	}
+	if !md5InSearchResults(tr, md5) {
+		return false, "download md5 did not come from a prior search result"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " model discovered the md5 download flow but the live fetch failed (mirror/network)"
+	}
+	return checkDownloadedFile(call, "")
+}
+
+// assertNaturalArticleDownload checks an under-specified "get me the PDF of this
+// paper" prompt: the model must discover that articles are keyed by DOI (not
+// md5) and download by a valid DOI — no source named. Downloading by a valid DOI
+// is the discovery signal under test; whether the DOI came from a prior search or
+// the model already knew it is not graded (a wrong DOI would simply fail to
+// resolve → SKIP, never a false pass). A live fetch failure is a SKIP.
+func assertNaturalArticleDownload(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	doi := stringField(call.Input, "doi")
+	if !isDOI(doi) {
+		if isMD5(stringField(call.Input, "md5")) {
+			return false, "model downloaded by md5; articles must be keyed by doi"
+		}
+		return false, "model did not download by a valid doi"
+	}
+	via := "known"
+	if doiInSearchResults(tr, doi) {
+		via = "search"
+	}
+	if downloadFailed(call) {
+		return true, fmt.Sprintf("%s model chose a valid doi (%s) but the live fetch failed (mirror/network)", skipPrefix, via)
+	}
+	ok2, msg := checkDownloadedFile(call, "")
+	if !ok2 {
+		return ok2, msg
+	}
+	return true, msg + " (doi via " + via + ")"
 }
 
 // assertS1 checks a nonfiction title+author search with a valid first md5.

@@ -32,7 +32,7 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition ma
 		return nil, nil, err
 	}
 	if len(files) == 0 {
-		return nil, nil, fmt.Errorf("no file found for md5 %s", md5)
+		return nil, nil, fmt.Errorf("no file found for md5 %s — verify the md5 comes from a search result (run the search tool first to obtain valid md5s)", md5)
 	}
 	for id, f := range files {
 		f["file_id"] = id
@@ -72,11 +72,11 @@ func (c *Client) DetailsByID(ctx context.Context, object, id string) (map[string
 		return nil, err
 	}
 	if len(objs) == 0 {
-		return nil, fmt.Errorf("no %s record found with id %s", object, id)
+		return nil, fmt.Errorf("no %s record found with id %s — verify the id comes from a search result or get_details response", object, id)
 	}
 	for oid, o := range objs {
 		o["id"] = oid
 		return o, nil
 	}
-	return nil, fmt.Errorf("no %s record found with id %s", object, id)
+	return nil, fmt.Errorf("no %s record found with id %s — verify the id comes from a search result or get_details response", object, id)
 }

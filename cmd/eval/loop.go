@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -17,6 +18,36 @@ const maxTurns = 4
 // maxToolResultLen caps the size of a tool result fed back to the model.
 const maxToolResultLen = 20_000
 
+// downloadProgressToken is attached to every download tool call so the server
+// emits progress notifications the eval client can capture and assert on.
+const downloadProgressToken = "eval-progress"
+
+// progressCapture accumulates the progress notifications the client receives,
+// guarded for the SDK's notification goroutine.
+type progressCapture struct {
+	mu     sync.Mutex
+	events []mcp.ProgressNotificationParams
+}
+
+// add records one received progress notification.
+func (p *progressCapture) add(e *mcp.ProgressNotificationParams) {
+	if e == nil {
+		return
+	}
+	p.mu.Lock()
+	p.events = append(p.events, *e)
+	p.mu.Unlock()
+}
+
+// snapshot returns a copy of the notifications received so far.
+func (p *progressCapture) snapshot() []mcp.ProgressNotificationParams {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]mcp.ProgressNotificationParams, len(p.events))
+	copy(out, p.events)
+	return out
+}
+
 // toolCall records one executed model tool call and the real MCP response.
 type toolCall struct {
 	Name       string
@@ -26,11 +57,12 @@ type toolCall struct {
 }
 
 // transcript captures everything a scenario's assertions grade against: every
-// executed tool call and the model's final prose (when it stopped without a
-// tool call).
+// executed tool call, the model's final prose (when it stopped without a tool
+// call), and the progress notifications the client received during the run.
 type transcript struct {
 	Calls     []toolCall
 	FinalText string
+	Progress  []mcp.ProgressNotificationParams
 }
 
 // runScenario drives one scenario to completion: it applies any per-scenario
@@ -38,11 +70,11 @@ type transcript struct {
 // tool-use loop (send prompt + tools; execute each tool_use against the real
 // MCP session; feed tool_result blocks back) until the model answers without a
 // tool call or the turn budget is exhausted.
-func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (transcript, error) {
+func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr transcript, err error) {
 	restore := applyEnv(sc.SetupEnv)
 	defer restore()
 
-	session, cleanup, err := newHostSession(ctx)
+	session, progress, cleanup, err := newHostSession(ctx)
 	if err != nil {
 		return transcript{}, err
 	}
@@ -58,7 +90,9 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (transcr
 		toolChoice = "auto"
 	}
 
-	var tr transcript
+	// Snapshot the progress notifications at every exit (named return tr), including
+	// the early return when the model answers without a tool call.
+	defer func() { tr.Progress = progress.snapshot() }()
 	messages := []message{{Role: "user", Content: []contentBlock{{Type: "text", Text: sc.Prompt}}}}
 	for range maxTurns {
 		resp, callErr := ac.call(ctx, anthropicRequest{
@@ -94,7 +128,13 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (transcr
 // both the recorded toolCall and the tool_result block to feed back to the model.
 func executeTool(ctx context.Context, session *mcp.ClientSession, use contentBlock) (toolCall, contentBlock) {
 	call := toolCall{Name: use.Name, Input: use.Input}
-	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: use.Name, Arguments: use.Input})
+	params := &mcp.CallToolParams{Name: use.Name, Arguments: use.Input}
+	// Attach a progress token to download calls so the server emits progress
+	// notifications the client captures (see progressCapture).
+	if use.Name == "download" {
+		params.SetProgressToken(downloadProgressToken)
+	}
+	res, err := session.CallTool(ctx, params)
 	if err != nil {
 		return call, contentBlock{
 			Type:      "tool_result",

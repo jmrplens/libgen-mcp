@@ -43,6 +43,12 @@ func allowed[V any](m map[string]V) string {
 	return strings.Join(keys, ", ")
 }
 
+// TopicNames returns the recognized search topic names in a stable order, for
+// surfacing the collection choices to callers (e.g. in no-result guidance).
+func TopicNames() []string {
+	return []string{"nonfiction", "fiction", "articles", "magazines", "comics", "standards", "fiction_rus"}
+}
+
 // SearchParams holds the parameters of a catalog search.
 type SearchParams struct {
 	Query          string
@@ -110,28 +116,28 @@ func (p SearchParams) values() url.Values {
 
 // DownloadOption is a single labeled download link for a result.
 type DownloadOption struct {
-	Label string `json:"label"`
-	URL   string `json:"url"`
+	Label string `json:"label" jsonschema:"human label for this download link"`
+	URL   string `json:"url" jsonschema:"direct download URL for this option"`
 }
 
 // Result is one catalog entry from a search page, with its metadata and download
-// options.
+// options. The identifier fields are the pivot keys for the other tools.
 type Result struct {
-	EditionID string           `json:"edition_id,omitempty"`
-	FileID    string           `json:"file_id,omitempty"`
-	MD5       string           `json:"md5"`
-	DOI       string           `json:"doi,omitempty"`
-	Title     string           `json:"title"`
-	ISBNs     []string         `json:"isbns,omitempty"`
-	Authors   string           `json:"authors,omitempty"`
-	Publisher string           `json:"publisher,omitempty"`
-	Year      string           `json:"year,omitempty"`
-	Language  string           `json:"language,omitempty"`
-	Pages     string           `json:"pages,omitempty"`
-	Size      string           `json:"size,omitempty"`
-	Extension string           `json:"extension,omitempty"`
-	Type      string           `json:"type,omitempty"`
-	Downloads []DownloadOption `json:"downloads"`
+	EditionID string           `json:"edition_id,omitempty" jsonschema:"edition id; pass to get_details as id (with object=edition)"`
+	FileID    string           `json:"file_id,omitempty" jsonschema:"file id; pass to get_details as id with object=file"`
+	MD5       string           `json:"md5" jsonschema:"file MD5 hash (32 hex chars); pass to get_details or download to fetch this book"`
+	DOI       string           `json:"doi,omitempty" jsonschema:"article DOI; pass to download to fetch this article"`
+	Title     string           `json:"title" jsonschema:"record title"`
+	ISBNs     []string         `json:"isbns,omitempty" jsonschema:"ISBNs for this record, if any"`
+	Authors   string           `json:"authors,omitempty" jsonschema:"authors"`
+	Publisher string           `json:"publisher,omitempty" jsonschema:"publisher"`
+	Year      string           `json:"year,omitempty" jsonschema:"publication year"`
+	Language  string           `json:"language,omitempty" jsonschema:"language"`
+	Pages     string           `json:"pages,omitempty" jsonschema:"page count"`
+	Size      string           `json:"size,omitempty" jsonschema:"human-readable file size"`
+	Extension string           `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub)"`
+	Type      string           `json:"type,omitempty" jsonschema:"record type"`
+	Downloads []DownloadOption `json:"downloads" jsonschema:"labeled download links; prefer the download tool, which handles mirrors and verification"`
 }
 
 // SearchPage is a parsed page of search results plus the total file count.
