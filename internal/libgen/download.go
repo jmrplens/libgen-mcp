@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	xhtml "golang.org/x/net/html"
@@ -492,7 +493,7 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 	dest := filepath.Join(req.dir, name)
 	// Bytes are flowing: guard the stream against stalls (no wall-clock cap), then
 	// stream to the partial. A stall aborts via streamCtx and keeps the .part.
-	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, c.guardStall(streamCtx, body, cancel), streamOpts{
+	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, c.guardStall(body, cancel), streamOpts{
 		resume: resume, existingSize: resumeFrom, contentLength: resp.ContentLength,
 		total: totalLen, verify: resolved.VerifyMD5, progress: req.onProgress,
 	})
@@ -511,43 +512,44 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 }
 
 // guardStall wraps r in a stall-detecting reader when a stall timeout is
-// configured. The reader cancels streamCtx (via cancel) when no bytes arrive
+// configured. The reader cancels the transfer (via cancel) when no bytes arrive
 // within the window, aborting the in-flight body read; a non-positive timeout
 // leaves r unwrapped so slow-but-progressing transfers are never capped by a
 // wall-clock deadline.
-func (c *Client) guardStall(streamCtx context.Context, r io.Reader, cancel context.CancelCauseFunc) io.Reader {
+func (c *Client) guardStall(r io.Reader, cancel context.CancelCauseFunc) io.Reader {
 	if c.stallTimeout <= 0 {
 		return r
 	}
-	return &stallReader{ctx: streamCtx, r: r, timeout: c.stallTimeout, cancel: cancel}
+	return &stallReader{r: r, timeout: c.stallTimeout, cancel: cancel}
 }
 
 // stallReader enforces a progress-resetting read deadline: the timer is armed for
 // timeout at the start of each Read and re-armed on the next, so a transfer is
 // aborted only when NO bytes arrive within the window — never for being slow.
-// When the timer fires it cancels ctx with errStalled, which unblocks the
-// underlying body read; the resulting error is reported as errStalled so callers
-// see a clear stall rather than a bare context cancellation.
+// When the timer fires it records the stall and cancels the transfer context
+// (via cancel) with errStalled, which unblocks the underlying body read; the
+// resulting error is reported as errStalled so callers see a clear stall rather
+// than a bare context cancellation.
 type stallReader struct {
-	ctx     context.Context
 	r       io.Reader
 	timeout time.Duration
 	cancel  context.CancelCauseFunc
 	timer   *time.Timer
+	stalled atomic.Bool
 }
 
 // Read forwards to the wrapped reader while keeping the stall timer armed, and
 // translates a stall-triggered cancellation into errStalled.
 func (s *stallReader) Read(p []byte) (int, error) {
 	if s.timer == nil {
-		s.timer = time.AfterFunc(s.timeout, func() { s.cancel(errStalled) })
+		s.timer = time.AfterFunc(s.timeout, func() { s.stalled.Store(true); s.cancel(errStalled) })
 	} else {
 		s.timer.Reset(s.timeout)
 	}
 	n, err := s.r.Read(p)
 	if err != nil {
 		s.timer.Stop()
-		if errors.Is(context.Cause(s.ctx), errStalled) {
+		if s.stalled.Load() {
 			return n, errStalled
 		}
 	}
