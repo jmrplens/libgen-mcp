@@ -8,7 +8,7 @@
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables \
         godoc-audit godoc-check \
-        gen-llms check-llms \
+        gen-llms check-llms audit-tokens \
         install-tools release-check check-server-json check-mcpb-manifest mcpb sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
@@ -158,6 +158,9 @@ gen-llms: ## Generate llms.txt and llms-full.txt from the registered tools
 
 check-llms: ## Fail if llms.txt/llms-full.txt are stale or structurally invalid (CI mode)
 	go run ./cmd/gen_llms/ --check
+
+audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool definitions
+	go run ./cmd/audit_tokens/
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
 install-tools: ## Install golangci-lint and govulncheck
