@@ -62,7 +62,7 @@ call; if the model picks the right source but the live fetch fails, it SKIPs
 rather than fails, because the external sources are not equally reliable:
 
 - **libgen** (S5) and **unpaywall** (S7) are the dependable download paths.
-- **sci-hub** (S6) mirrors are volatile and only host *paywalled* papers — S6 uses
+- **sci-hub** (S6) mirrors are volatile and only host _paywalled_ papers — S6 uses
   a heavily-cited paywalled DOI (not an arXiv one, which Sci-Hub does not carry),
   so it can actually complete when a mirror is up, and SKIPs when none are.
 - **randombook** (S6b) rediscovers fresh mirrors each run, so whether a given md5
