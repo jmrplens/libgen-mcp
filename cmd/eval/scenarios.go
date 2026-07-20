@@ -22,6 +22,10 @@ const skipPrefix = "SKIP:"
 // download tool call.
 const noDownloadCall = "no download call"
 
+// notAValidDOI is the failure detail when a download call's doi argument is not
+// a syntactically valid DOI.
+const notAValidDOI = "download doi is not a valid DOI"
+
 // openAccessDOI is a stable open-access article DOI used by the DOI download
 // scenario (PLoS ONE, freely available via Unpaywall / Sci-Hub).
 const openAccessDOI = "10.1371/journal.pone.0000308"
@@ -350,7 +354,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, "download source arg is not " + want
 	}
 	if key == "doi" && !isDOI(stringField(call.Input, "doi")) {
-		return false, "download doi is not a valid DOI"
+		return false, notAValidDOI
 	}
 	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
 		return false, "download md5 is not 32-hex"
@@ -368,7 +372,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if !isDOI(stringField(call.Input, "doi")) {
-		return false, "download doi is not a valid DOI"
+		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " valid DOI download but the live fetch failed (mirror/network)"
@@ -402,7 +406,7 @@ func assertS9Retry(tr transcript) (pass bool, detail string) {
 		return false, "download source arg is not scihub"
 	}
 	if !isDOI(stringField(call.Input, "doi")) {
-		return false, "download doi is not a valid DOI"
+		return false, notAValidDOI
 	}
 	if !downloadFailed(call) {
 		return false, "expected the download to fail to start against the dead host, but it succeeded"
