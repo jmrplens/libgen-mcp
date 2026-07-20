@@ -4,7 +4,7 @@
 # golangci-lint (bundles govet, staticcheck, gosec, ...) + govulncheck.
 
 .PHONY: all build build-probe build-all run version \
-        test test-short test-race coverage cover-check \
+        test test-short test-race test-e2e eval coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables \
         godoc-audit godoc-check \
@@ -98,6 +98,9 @@ test-race: ## Run all tests under the race detector
 
 test-e2e: ## Run the gated live e2e suite against the real site (needs network)
 	LIBGEN_E2E=1 go test -tags e2e -timeout 600s -count=1 ./test/e2e/
+
+eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads)
+	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval
 
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
