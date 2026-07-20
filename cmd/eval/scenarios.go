@@ -22,6 +22,10 @@ const skipPrefix = "SKIP:"
 // download tool call.
 const noDownloadCall = "no download call"
 
+// notAValidDOI is the failure detail when a download call's doi argument is not
+// a syntactically valid DOI.
+const notAValidDOI = "download doi is not a valid DOI"
+
 // openAccessDOI is a stable open-access article DOI used by the DOI download
 // scenario (PLoS ONE, freely available via Unpaywall / Sci-Hub).
 const openAccessDOI = "10.1371/journal.pone.0000308"
@@ -209,6 +213,23 @@ func scenarios() []scenario {
 			Prompt: `Can you find me a good book?`,
 			Assert: assertS8,
 		},
+		{
+			ID:     "S9",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s from sci-hub.", openAccessDOI),
+			// Force a fast, deterministic start-failure: sci-hub is the only
+			// enabled source and its sole host is a dead local address, so every
+			// resolve/connect attempt is refused instantly. The 1ms retry waits
+			// keep the whole staged schedule sub-second while still exercising it
+			// end to end, so the tool must surface the actionable could-not-start
+			// error and the model must react without fabricating success.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":                    "scihub",
+				"LIBGEN_MCP_SCIHUB_HOSTS":               "127.0.0.1",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_TIMEOUT":                    "2s",
+			},
+			Assert: assertS9Retry,
+		},
 	}
 }
 
@@ -333,7 +354,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, "download source arg is not " + want
 	}
 	if key == "doi" && !isDOI(stringField(call.Input, "doi")) {
-		return false, "download doi is not a valid DOI"
+		return false, notAValidDOI
 	}
 	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
 		return false, "download md5 is not 32-hex"
@@ -351,7 +372,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if !isDOI(stringField(call.Input, "doi")) {
-		return false, "download doi is not a valid DOI"
+		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " valid DOI download but the live fetch failed (mirror/network)"
@@ -368,6 +389,62 @@ func assertS7(tr transcript) (pass bool, detail string) {
 		return false, "unexpected article source " + res.Source
 	}
 	return true, "downloaded DOI via " + res.Source
+}
+
+// assertS9Retry checks the staged start-retry schedule end to end: with sci-hub
+// pinned to a dead host, the download must exhaust its retries and surface the
+// actionable "could not start" error (naming retry-now / retry-later / ask-the-
+// user recovery), and the model must react to that error rather than fabricate a
+// successful download. A live success here is impossible (the host is dead), so
+// an unexpected non-error result is a genuine failure, not a SKIP.
+func assertS9Retry(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if stringField(call.Input, "source") != "scihub" {
+		return false, "download source arg is not scihub"
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, notAValidDOI
+	}
+	if !downloadFailed(call) {
+		return false, "expected the download to fail to start against the dead host, but it succeeded"
+	}
+	errText := strings.ToLower(resultText(call.Result))
+	if !strings.Contains(errText, "retry") || !strings.Contains(errText, "ask") {
+		return false, "tool error is not the actionable could-not-start message: " + errText
+	}
+	// Valid recovery is either relaying the failure/options to the user or
+	// actively retrying the download itself; fabricating success is the failure.
+	recovered := containsAny(strings.ToLower(tr.FinalText),
+		"retry", "later", "again", "unable", "couldn't", "could not", "failed", "wasn't able", "ask") ||
+		countCalls(tr, "download") >= 2
+	if !recovered {
+		return false, "model neither retried nor surfaced the start-failure to the user"
+	}
+	return true, "start-retries exhausted; actionable error surfaced and the model did not fabricate success"
+}
+
+// containsAny reports whether s contains any of the given substrings.
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// countCalls counts the tool calls with the given name in the transcript.
+func countCalls(tr transcript, name string) int {
+	n := 0
+	for _, c := range tr.Calls {
+		if c.Name == name {
+			n++
+		}
+	}
+	return n
 }
 
 // assertS8 passes when the model asks to clarify (no tool call) or the search

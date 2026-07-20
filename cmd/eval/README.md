@@ -42,11 +42,20 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S6b | Download choosing a book source: model sets `source:"randombook"` for an md5 |
 | S7  | Open-access article by DOI, served by unpaywall or sci-hub |
 | S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it |
+| S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success |
 
 S6 / S6b are the reason this harness exists alongside the older checks: the
 `download` tool now takes an optional **`source`** argument, and these scenarios
 assert the model actually sets it (and that `DownloadResult.Source` matches when
 the live fetch succeeds).
+
+S9 exercises the download **start-retry** path deterministically without needing
+a flaky live failure: it enables only `scihub`, points `LIBGEN_MCP_SCIHUB_HOSTS`
+at `127.0.0.1` (connection refused instantly), and shrinks
+`LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` to `1ms,1ms` so the whole staged schedule
+runs sub-second. It asserts the tool returns the actionable could-not-start error
+(naming retry-now / retry-later / ask-the-user recovery) and that the model
+reacts — relaying the failure or retrying — instead of claiming a saved file.
 
 ## Running
 
