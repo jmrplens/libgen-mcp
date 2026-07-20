@@ -1,0 +1,101 @@
+---
+title: LLM eval results
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries and progress across 16 scenarios."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+libgen-mcp ships a **gated, LLM-driven evaluation harness** (`cmd/eval`) that goes
+beyond unit and end-to-end tests: it connects a **real language model** (Claude
+Haiku) to a **real libgen-mcp server** over the MCP protocol and checks that the
+model actually _uses the tools correctly_ against the **live** Library Genesis
+site — the right tool, the right arguments, sensible recovery on failure, and
+correct handling of the structured output.
+
+## How it works
+
+For each scenario the harness:
+
+1. Applies any per-scenario environment, then builds a fresh in-process
+   libgen-mcp server with the three tools registered.
+2. Sends the scenario's natural-language prompt plus the tool definitions to the
+   model (up to four turns).
+3. Executes every tool call the model makes **against the real server** (real
+   mirrors, real downloads) and feeds the results back.
+4. Grades the transcript: the tool name, the argument shape, and whether the
+   real MCP response is well-formed — never exact catalog content, which drifts.
+
+Each scenario returns **PASS**, **FAIL**, or **SKIP**. A SKIP means the model did
+the right thing but a live mirror was unavailable (e.g. a rotating Sci-Hub host or
+a fresh-mirror miss) — a network condition, never a model failure.
+
+<Aside type="note">
+	The harness is behind the `eval` build tag and only runs with `LIBGEN_EVAL=1`
+	and an `ANTHROPIC_API_KEY`. It spends real API tokens and performs real
+	downloads, so it never runs in CI — it is an on-demand quality check.
+</Aside>
+
+## Scenarios
+
+Sixteen scenarios (S1–S15, plus a S6b variant) cover search, details, downloads,
+source selection, error recovery, progress, and — importantly — **unguided**
+prompts that give the model no hints, testing whether the tool surface is
+self-describing enough for an LLM to use unaided.
+
+| ID  | What it checks                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                    |
+| S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                  |
+| S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                      |
+| S4  | `get_details` on an md5 taken from a prior search result                                                                                                                              |
+| S5  | Book download by md5: saved path + non-zero size                                                                                                                                      |
+| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI                                                                                              |
+| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5                                                                                                          |
+| S7  | Open-access article by DOI via unpaywall (needs a contact email)                                                                                                                      |
+| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it                                                                                                |
+| S9  | **Start-retries**: Sci-Hub pinned to a dead host; the staged retry schedule must exhaust and surface the actionable "could not start" error, and the model must not fabricate success |
+| S10 | **Unguided book search** ("I want to read _Dune_…") — model forms a search from a bare request, no collection/field hints                                                             |
+| S11 | **Unguided comics search** ("find the graphic novel _Watchmen_") — model must discover the right collection unaided                                                                   |
+| S12 | **Unguided book download** ("download _Clean Code_…") — model searches, then downloads by an md5 it discovered, choosing the source itself                                            |
+| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover articles are keyed by DOI, not md5                                                      |
+| S14 | **Download progress** — a progress token is attached; progress notifications must reach the client end to end during a live download                                                  |
+| S15 | **Ordered table with links** — a large sorted request; the model must set a big page size + ordering and include the results' download links in its answer                            |
+
+## Latest results
+
+Across the most recent live runs (real API + real mirrors), **every scenario
+passes**, with `S6b` skipping when the randombook fresh-mirror lookup is
+unavailable — a live-mirror condition, not a model failure.
+
+| ID  | Result  | Evidence                                                                  |
+| --- | ------- | ------------------------------------------------------------------------- |
+| S1  | ✅ PASS | nonfiction search, 25 results, first md5 valid                            |
+| S2  | ✅ PASS | articles search, result with a valid DOI                                  |
+| S3  | ✅ PASS | standards search, 25 results                                              |
+| S4  | ✅ PASS | `get_details` returned a File/Edition record                              |
+| S5  | ✅ PASS | downloaded a book via `libgen` (MD5-verified)                             |
+| S6  | ✅ PASS | model set `source:"scihub"`; downloaded ~6.4 MB                           |
+| S6b | ⏭️ SKIP | model set `source:"randombook"` correctly; live mirror returned 404       |
+| S7  | ✅ PASS | downloaded a DOI via `unpaywall`                                          |
+| S8  | ✅ PASS | model asked to clarify instead of guessing                                |
+| S9  | ✅ PASS | start-retries exhausted; actionable error surfaced; no fabricated success |
+| S10 | ✅ PASS | picked `topics:[fiction]` unaided                                         |
+| S11 | ✅ PASS | picked `topics:[comics]` unaided                                          |
+| S12 | ✅ PASS | searched, then downloaded by md5 via `libgen`                             |
+| S13 | ✅ PASS | searched → found DOI → downloaded via `scihub`                            |
+| S14 | ✅ PASS | received 18 progress notifications, final `982888/982888`                 |
+| S15 | ✅ PASS | ordered page of 50; model surfaced the download links in its answer       |
+
+## Running it yourself
+
+```sh
+# All scenarios (real API + mirrors + downloads)
+LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… make eval
+
+# A subset, and keep the downloaded files
+LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… go run -tags eval ./cmd/eval --only S1,S9,S14 --keep-downloads
+```
+
+The process exits non-zero if any scenario **fails** or **errors** (SKIPs and
+PASSes do not). See [`cmd/eval/README.md`](https://github.com/jmrplens/libgen-mcp/blob/main/cmd/eval/README.md)
+for the full harness documentation.
