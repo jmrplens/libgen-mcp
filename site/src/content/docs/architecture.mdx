@@ -34,16 +34,23 @@ All outbound requests (page requests and file streams alike) pass through a shar
 
 ## Download pipeline
 
-Downloads use a separate HTTP client with **no global timeout** — long transfers are bounded by the request context, not a fixed deadline. Concurrency is capped by a semaphore of size `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`; extra downloads queue for a slot (and can be canceled while queued, before touching the network).
+Downloads use a separate HTTP client with **no global timeout** — long transfers are bounded by the request context and a progress-aware stall guard, not a fixed deadline. Concurrency is capped by a semaphore of size `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`; extra downloads queue for a slot (and can be canceled while queued, before touching the network).
+
+### Start-retries and the stall guard
+
+Two mechanisms make downloads resilient without ever cutting a healthy transfer:
+
+- **Staged start-retries.** Getting a download to _begin_ — resolving a fresh URL, connecting, and pulling the first byte — is retried on a schedule (`LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS`, default `5s,5s,5s,10s,10s,10s,15s`: 8 attempts over ~60 s). A resolve error, connection error, non-2xx status, or a 2xx response that yields no bytes is retried; each retry resolves afresh so an expired key is renewed. The moment bytes flow, start-retries stop and streaming begins. This wraps a _single_ source attempt — the multi-source chain still advances to the next source when one is exhausted. When every source fails to start, the download returns an actionable error guiding the caller to retry now, retry later, or ask the user.
+- **Progress-resetting stall timeout.** While streaming, a download is aborted only when **no** bytes arrive within `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` (default 60 s). Every received byte resets the window, so a slow-but-progressing transfer (20–50 kB/s is common) is never cut, while a truly dead connection is dropped after the window with its `.part` kept for resume. The per-request `LIBGEN_MCP_TIMEOUT` is never applied to a stream; caller (LLM) cancellation aborts promptly.
 
 For a given item the pipeline:
 
 1. **Resolves** the item against a source to a concrete, streamable URL (plus any headers, a verify-MD5 flag, and a fallback extension).
 2. Computes a deterministic **partial (`.part`) path**, namespaced by source name and a key (the MD5 for books, or a hash of the DOI/URL otherwise), and takes a per-partial lock so two downloads of the same target never corrupt each other.
-3. **Fetches** the file; if bytes are already on disk it sends a `Range` header to **resume** from that offset.
+3. **Fetches** the file under the start-retry schedule (re-resolving on each attempt); if bytes are already on disk it sends a `Range` header to **resume** from that offset.
 4. Inspects the response: a `206` whose `Content-Range` start matches the existing bytes resumes; a `200` restarts from zero; anything else is a failure.
 5. **Validates** the response — rejects HTML error pages (by `Content-Type` and by sniffing the first 512 bytes), enforces the size cap against the full expected size, and checks free disk space.
-6. **Streams** the body into the `.part` file while computing its MD5 and reporting throttled progress. On resume it re-hashes the bytes already on disk so the final digest covers the whole file.
+6. **Streams** the body into the `.part` file while computing its MD5 and reporting throttled progress, under the progress-resetting stall guard. On resume it re-hashes the bytes already on disk so the final digest covers the whole file.
 7. **Verifies** (for MD5-keyed sources) the digest against the requested MD5. A mismatch or an oversized transfer deletes the partial; a transient short read keeps it so a later call can resume.
 8. **Atomically renames** the completed `.part` to the final destination.
 

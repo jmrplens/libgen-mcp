@@ -58,6 +58,16 @@ type Client struct {
 	backoffBase time.Duration // backoff base; injectable for tests
 	// maxDownloadBytes is the download size cap in bytes (0 = no limit).
 	maxDownloadBytes int64
+	// startRetryWaits is the staged wait schedule between attempts to get a
+	// download to BEGIN (resolve + connect + first bytes). len(waits)+1 attempts
+	// are made before a source is deemed unable to start; an empty schedule means a
+	// single attempt with no start-retries. Injectable so tests use tiny waits.
+	startRetryWaits []time.Duration
+	// stallTimeout is the progress-resetting stall window while streaming: a
+	// transfer is aborted only when no bytes arrive within it, never for being
+	// merely slow. A non-positive value disables the stall guard. Injectable so
+	// tests use tiny windows.
+	stallTimeout time.Duration
 	// dlSem is a counting semaphore bounding concurrent downloads: its capacity
 	// is MaxConcurrentDownloads. Download acquires a slot before starting and
 	// releases it on completion.
@@ -156,6 +166,8 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,
+		startRetryWaits:  cfg.DownloadStartRetryWaits,
+		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
 	}

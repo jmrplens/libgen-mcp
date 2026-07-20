@@ -120,6 +120,71 @@ func TestLoadNewOverrides(t *testing.T) {
 	}
 }
 
+// TestLoadDownloadTuningDefaults verifies the start-retry schedule and stall
+// timeout fall back to the spec defaults (3x5s, 3x10s, 1x15s; stall 60s) when
+// their environment variables are unset.
+func TestLoadDownloadTuningDefaults(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "")
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DownloadStallTimeout != 60*time.Second {
+		t.Errorf("DownloadStallTimeout = %v, want 60s", cfg.DownloadStallTimeout)
+	}
+	want := []time.Duration{5 * time.Second, 5 * time.Second, 5 * time.Second, 10 * time.Second, 10 * time.Second, 10 * time.Second, 15 * time.Second}
+	if len(cfg.DownloadStartRetryWaits) != len(want) {
+		t.Fatalf("DownloadStartRetryWaits = %v, want %v", cfg.DownloadStartRetryWaits, want)
+	}
+	for i, w := range want {
+		if cfg.DownloadStartRetryWaits[i] != w {
+			t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
+		}
+	}
+}
+
+// TestLoadDownloadTuningOverrides verifies both download-tuning variables parse
+// from the environment, including a comma-separated schedule with surrounding
+// whitespace and empty entries.
+func TestLoadDownloadTuningOverrides(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "90s")
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", " 1s , 2s ,, 3s ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DownloadStallTimeout != 90*time.Second {
+		t.Errorf("DownloadStallTimeout = %v, want 90s", cfg.DownloadStallTimeout)
+	}
+	want := []time.Duration{time.Second, 2 * time.Second, 3 * time.Second}
+	if len(cfg.DownloadStartRetryWaits) != len(want) {
+		t.Fatalf("DownloadStartRetryWaits = %v, want %v", cfg.DownloadStartRetryWaits, want)
+	}
+	for i, w := range want {
+		if cfg.DownloadStartRetryWaits[i] != w {
+			t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
+		}
+	}
+}
+
+// TestLoadBadDownloadTuning verifies a malformed stall timeout or an unparseable
+// entry in the start-retry schedule fails Load fast.
+func TestLoadBadDownloadTuning(t *testing.T) {
+	t.Run("stall", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() with a bad stall timeout should fail")
+		}
+	})
+	t.Run("waits", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "5s,banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() with a bad retry-wait entry should fail")
+		}
+	})
+}
+
 // TestLoadUnpaywallEmailDefault verifies the default Unpaywall contact email.
 func TestLoadUnpaywallEmailDefault(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "")
@@ -213,17 +278,19 @@ func TestLoadBadNumericEnv(t *testing.T) {
 func validConfig(t *testing.T) *Config {
 	t.Helper()
 	return &Config{
-		Mirror:                 "https://libgen.li",
-		DownloadDir:            t.TempDir(),
-		Timeout:                30 * time.Second,
-		LogLevel:               slog.LevelInfo,
-		RateRPS:                1,
-		RateBurst:              1,
-		MaxDownloadBytes:       0,
-		MaxConcurrentDownloads: 2,
-		RetryAttempts:          3,
-		UnpaywallEmail:         "mail@jmrp.io",
-		ScihubHosts:            []string{"sci-hub.ee", "sci-hub.se"},
+		Mirror:                  "https://libgen.li",
+		DownloadDir:             t.TempDir(),
+		Timeout:                 30 * time.Second,
+		LogLevel:                slog.LevelInfo,
+		RateRPS:                 1,
+		RateBurst:               1,
+		MaxDownloadBytes:        0,
+		MaxConcurrentDownloads:  2,
+		RetryAttempts:           3,
+		UnpaywallEmail:          "mail@jmrp.io",
+		ScihubHosts:             []string{"sci-hub.ee", "sci-hub.se"},
+		DownloadStartRetryWaits: defaultStartRetryWaits(),
+		DownloadStallTimeout:    60 * time.Second,
 	}
 }
 
@@ -319,6 +386,11 @@ func TestValidateInvalid(t *testing.T) {
 		{"MaxBytesTooHigh", func(c *Config) { c.MaxDownloadBytes = 51 * 1024 * 1024 * 1024 }},
 		{"TimeoutZero", func(c *Config) { c.Timeout = 0 }},
 		{"TimeoutTooHigh", func(c *Config) { c.Timeout = 11 * time.Minute }},
+		{"StallTimeoutZero", func(c *Config) { c.DownloadStallTimeout = 0 }},
+		{"StallTimeoutTooHigh", func(c *Config) { c.DownloadStallTimeout = 2 * time.Hour }},
+		{"StartRetryWaitZero", func(c *Config) { c.DownloadStartRetryWaits = []time.Duration{0} }},
+		{"StartRetryWaitTooHigh", func(c *Config) { c.DownloadStartRetryWaits = []time.Duration{11 * time.Minute} }},
+		{"TooManyStartRetryWaits", func(c *Config) { c.DownloadStartRetryWaits = make([]time.Duration, maxStartRetries+1) }},
 		{"BadMirrorScheme", func(c *Config) { c.Mirror = "ftp://x" }},
 		{"BadMirrorNoHost", func(c *Config) { c.Mirror = "https://" }},
 		{"MirrorUnparseable", func(c *Config) { c.Mirror = "://nope" }},

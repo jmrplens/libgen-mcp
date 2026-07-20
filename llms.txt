@@ -42,6 +42,8 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes, 0 = no limit (default: 0)
 - LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads (default: 2)
 - LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)
+- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: staged waits between attempts to start a download — resolve/connect/first byte (default: `5s,5s,5s,10s,10s,10s,15s`, ~8 attempts over ~60s)
+- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)
 - LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API for article downloads
 - LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)
 - LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)
