@@ -69,7 +69,7 @@ problem — re-check the query or identifier rather than your connection.
 - If only Unpaywall failed, the article likely is not open access; Sci-Hub is the fallback.
 - Sci-Hub mirrors rotate and go down often. Update `LIBGEN_MCP_SCIHUB_HOSTS` with a currently
   working host list if all defaults fail.
-- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL`; the API expects a real contact address.
+- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL` — until you do, Unpaywall is disabled and only Sci-Hub is tried for DOIs. The API expects a real contact address.
 - Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
   LibGen digest for them.
 

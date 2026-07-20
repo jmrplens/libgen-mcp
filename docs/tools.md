@@ -97,13 +97,13 @@ at least one is required. Returns the saved path, size, and the source that serv
 
 ### download input
 
-| Parameter  | Type   | Required | Description                                                                                                                                                                           |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                           |
-| `doi`      | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                       |
-| `path`     | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                      |
-| `filename` | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                            |
-| `source`   | string | no       | Restrict the download to a single source: `libgen`/`randombook` (books, `md5`) or `unpaywall`/`scihub` (articles, `doi`). Omit to try every compatible source in order with failover. |
+| Parameter  | Type   | Required | Description                                                                                                                                                                                                                                                    |
+| ---------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`      | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                                                                                                    |
+| `doi`      | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                |
+| `path`     | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                               |
+| `filename` | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                     |
+| `source`   | string | no       | Restrict the download to a single source: `libgen`/`randombook` (books, `md5`) or `unpaywall`/`scihub` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set. Omit to try every compatible source in order with failover. |
 
 At least one of `md5` or `doi` is required. A malformed `md5` (not 32 hex chars) is
 rejected before any work.

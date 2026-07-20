@@ -2,7 +2,7 @@
 
 > A Model Context Protocol (MCP) server that searches and downloads books, papers, comics, magazines and standards from Library Genesis for AI assistants.
 
-libgen-mcp v1.0.0 is a single static Go binary that runs locally via stdio or remotely via HTTP transport.
+libgen-mcp v1.1.0 is a single static Go binary that runs locally via stdio or remotely via HTTP transport.
 It provides exactly 3 MCP tools (search, get_details, download) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).
 
 Quick start:

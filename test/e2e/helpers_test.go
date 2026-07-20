@@ -75,9 +75,16 @@ func requireLive(t *testing.T) *liveEnv {
 	return &liveEnv{cfg: cfg, client: libgen.New(mgr, cfg)}
 }
 
+// e2eUnpaywallEmail is the contact address the suite sets when none is configured,
+// so the DOI/article path actually exercises the unpaywall source (which is
+// disabled by default unless LIBGEN_MCP_UNPAYWALL_EMAIL is set).
+const e2eUnpaywallEmail = "libgen-mcp-e2e@jmrp.io"
+
 // loadLiveConfig loads the real configuration and redirects downloads to a fresh
 // temp dir so the suite never writes into the user's Downloads folder and does not
 // need config.Validate. The default rate limit (1 rps) is preserved to stay polite.
+// It also supplies a contact email when none is set, so unpaywall (email-gated and
+// off by default) is exercised rather than silently skipped.
 func loadLiveConfig(t *testing.T) *config.Config {
 	t.Helper()
 	cfg, err := config.Load()
@@ -85,6 +92,14 @@ func loadLiveConfig(t *testing.T) *config.Config {
 		t.Fatalf("config.Load: %v", err)
 	}
 	cfg.DownloadDir = t.TempDir()
+	if strings.TrimSpace(cfg.UnpaywallEmail) == "" {
+		cfg.UnpaywallEmail = e2eUnpaywallEmail
+	}
+	// Shrink the download start-retry schedule so a source that cannot start fails
+	// fast instead of consuming the whole test timeout: the default ~60 s schedule
+	// would exhaust a 60 s test context before the fallback source is ever tried.
+	// The staged-retry timing itself is covered by unit tests and the eval (S9).
+	cfg.DownloadStartRetryWaits = []time.Duration{time.Second, 2 * time.Second}
 	return cfg
 }
 

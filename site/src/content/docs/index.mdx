@@ -36,7 +36,7 @@ head:
             "name": "Do I need an account, API key, or token to use libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups, and it ships with a working default."
+              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source (Sci-Hub still serves DOIs without it); set your own address to enable Unpaywall."
             }
           },
           {
@@ -127,7 +127,7 @@ It searches the Library Genesis catalog, returns per-result metadata and MD5 has
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 
-No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups, and it ships with a working default.
+No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source (Sci-Hub still serves DOIs without it); set your own address to enable Unpaywall.
 
 ### Is libgen-mcp free and open source?
 

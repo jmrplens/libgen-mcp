@@ -4,7 +4,9 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,5 +194,93 @@ func TestE2EMCPSearchTool(t *testing.T) {
 	if len(res.Content) == 0 {
 		t.Fatal("search tool returned no content")
 	}
-	t.Logf("mcp search tool returned %d content block(s)", len(res.Content))
+
+	// Both channels of the discoverability contract, against real data: a
+	// human-readable Markdown block with a results table and download links, plus
+	// structured output leading with a next_steps guidance list.
+	md := textOf(res)
+	if !strings.Contains(md, "| # | Title") {
+		t.Errorf("search markdown should contain a results table header; got:\n%s", md)
+	}
+	if !strings.Contains(md, "](http") {
+		t.Errorf("search markdown should include clickable download links; got:\n%s", md)
+	}
+	var out tools.SearchOutput
+	decodeStructured(t, res, &out)
+	if len(out.NextSteps) == 0 {
+		t.Error("search structured output should carry next_steps")
+	}
+	if len(out.Results) > 0 && !hasDownloadLink(out.Results) {
+		t.Error("search results should expose at least one download link")
+	}
+	t.Logf("mcp search tool: %d results, %d next_steps, markdown %d bytes", len(out.Results), len(out.NextSteps), len(md))
+}
+
+// TestE2EGetDetailsByID looks a record up by its edition id (taken from a live
+// search result), exercising the id/object path of get_details against the real
+// json.php API and asserting an edition record comes back.
+func TestE2EGetDetailsByID(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	page, _, err := env.client.Search(ctx, libgen.SearchParams{Query: "linux", Topics: []string{"nonfiction"}})
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	var editionID string
+	for i := range page.Results {
+		if id := strings.TrimSpace(page.Results[i].EditionID); id != "" {
+			editionID = id
+			break
+		}
+	}
+	if editionID == "" {
+		t.Skip("no result carried an edition_id; cannot exercise the id path")
+	}
+	pace()
+
+	rec, err := env.client.DetailsByID(ctx, "e", editionID)
+	if err != nil {
+		t.Fatalf("DetailsByID(e, %s) error: %v", editionID, err)
+	}
+	if len(rec) == 0 || !hasNonEmptyField(rec) {
+		t.Errorf("edition record %s is empty: %+v", editionID, rec)
+	}
+	t.Logf("details by id=%s fields=%d", editionID, len(rec))
+}
+
+// textOf concatenates the text of a tool result's TextContent blocks.
+func textOf(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+// decodeStructured re-marshals a tool result's structured content into target.
+func decodeStructured(t *testing.T, res *mcp.CallToolResult, target any) {
+	t.Helper()
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal structured content: %v", err)
+	}
+	if uerr := json.Unmarshal(data, target); uerr != nil {
+		t.Fatalf("decode structured content: %v", uerr)
+	}
+}
+
+// hasDownloadLink reports whether any result exposes a download URL.
+func hasDownloadLink(results []libgen.Result) bool {
+	for i := range results {
+		for _, d := range results[i].Downloads {
+			if strings.TrimSpace(d.URL) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -92,7 +92,7 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 - Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
 - Si solo falló Unpaywall, es probable que el artículo no sea de acceso abierto; Sci-Hub es el fallback.
 - Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
-- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL`; la API espera una dirección de contacto real.
+- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada y para los DOI solo se prueba Sci-Hub. La API espera una dirección de contacto real.
 - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
 
 ## Resultados de búsqueda truncados
