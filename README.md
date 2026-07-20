@@ -21,6 +21,8 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR."
 
+**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the three tools add **~1,900 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required.
+
 ---
 
 ## Install
@@ -146,7 +148,19 @@ Download a file to a local directory. Provide `md5` for a book **or** `doi` for 
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
 
-## Environment variables
+## Configuration
+
+**It works out of the box — zero configuration, no account.** Every variable below is optional. Common setups (add these as `env` entries in your MCP client config, or `-e NAME=value` with Docker):
+
+- **Enable open-access articles (Unpaywall):** `LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com` — disabled by default; the Unpaywall API needs a contact email. Without it, DOIs still resolve via Sci-Hub.
+- **Choose where files land:** `LIBGEN_MCP_DOWNLOAD_DIR=/path/to/downloads` (default `~/Downloads`; the `download` tool's `path` argument overrides per call).
+- **Pin one mirror** (skip auto-discovery): `LIBGEN_MIRROR=https://libgen.li`.
+- **Restrict sources** (e.g. books only, no article sources): `LIBGEN_MCP_SOURCES=libgen,randombook`.
+- **Cap download size / concurrency:** `LIBGEN_MCP_MAX_DOWNLOAD_BYTES=1073741824` (1 GiB), `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS=1`.
+
+Full reference and tuning knobs (rate limits, retry/stall schedules, Sci-Hub hosts) are in the **[configuration guide](https://jmrplens.github.io/libgen-mcp/configuration/)**.
+
+### Environment variables
 
 Every variable is optional; an empty or unset value uses the default. A present-but-invalid numeric value is an error rather than a silent fallback.
 
