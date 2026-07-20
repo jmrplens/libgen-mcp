@@ -142,12 +142,12 @@ Download sources implement a common interface — `Name`, `Supports(item)`, and
 from configuration in the fixed order `unpaywall → scihub → libgen → randombook`, and each
 source is offered only the items it supports:
 
-| Source       | Keyed by | Role                  | How it resolves                                                                                                                                     |
-| ------------ | -------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unpaywall`  | DOI      | Open-access articles  | Queries the Unpaywall API for a best open-access PDF link. Returns an error (advancing the chain) when the DOI is not OA or exposes no PDF.         |
-| `scihub`     | DOI      | Article fallback      | Requests `https://<host>/<doi>` on each configured Sci-Hub host in turn, scraping the embedded PDF link from the first that serves an article page. |
-| `libgen`     | MD5      | Primary book provider | Resolves the LibGen link chain (`ads.php` key → `get.php` → CDN) through the mirror failover client, and requires MD5 verification.                 |
-| `randombook` | MD5      | Book fallback         | Queries the randombook.org API to discover fresh libgen-family mirror hostnames for the MD5, then runs the LibGen link chain against those hosts.   |
+| Source       | Keyed by | Role                  | How it resolves                                                                                                                                                                                                                                                        |
+| ------------ | -------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unpaywall`  | DOI      | Open-access articles  | Queries the Unpaywall API for a best open-access PDF link. Returns an error (advancing the chain) when the DOI is not OA or exposes no PDF. Disabled — and absent from the chain — unless `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, since the API requires a contact email. |
+| `scihub`     | DOI      | Article fallback      | Requests `https://<host>/<doi>` on each configured Sci-Hub host in turn, scraping the embedded PDF link from the first that serves an article page.                                                                                                                    |
+| `libgen`     | MD5      | Primary book provider | Resolves the LibGen link chain (`ads.php` key → `get.php` → CDN) through the mirror failover client, and requires MD5 verification.                                                                                                                                    |
+| `randombook` | MD5      | Book fallback         | Queries the randombook.org API to discover fresh libgen-family mirror hostnames for the MD5, then runs the LibGen link chain against those hosts.                                                                                                                      |
 
 Because the chain is a single ordered slice filtered by `Supports`, a book item is offered
 `[libgen, randombook]`, an article item `[unpaywall, scihub]`, and an item carrying both is

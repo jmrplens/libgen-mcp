@@ -3,11 +3,11 @@
   "manifest_version": "0.4",
   "name": "libgen-mcp",
   "display_name": "Library Genesis MCP Server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Search the Library Genesis catalog and download books and articles from Claude.",
-  "long_description": "libgen-mcp exposes three focused tools — search, get_details and download — for browsing the Library Genesis catalog and fetching files.\n\nSearch across collections (nonfiction, fiction, articles, magazines, comics, standards) with field and sort controls, pull full metadata for any record by md5 or id, and download books (by md5) or articles (by DOI) to a local directory. Book downloads try Library Genesis then a fresh-mirror fallback; article downloads try Unpaywall (open access) then Sci-Hub.\n\nEvery setting is optional — no token or account is required. Configure the mirror, download directory, request timeout, a maximum download size and the log level from the extension settings.",
+  "long_description": "libgen-mcp exposes three focused tools — search, get_details and download — for browsing the Library Genesis catalog and fetching files.\n\nSearch across collections (nonfiction, fiction, articles, magazines, comics, standards) with field and sort controls, pull full metadata for any record by md5 or id, and download books (by md5) or articles (by DOI) to a local directory. Book downloads try Library Genesis then a fresh-mirror fallback; article downloads try Unpaywall (open access, when a contact email is configured in unpaywall_email) then Sci-Hub.\n\nEvery setting is optional — no token or account is required. Configure the mirror, download directory, request timeout, a maximum download size and the log level from the extension settings.",
   "author": {
-    "name": "José M. Requena Plens",
+    "name": "José Manuel Requena Plens",
     "url": "https://github.com/jmrplens"
   },
   "repository": {

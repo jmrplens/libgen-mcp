@@ -9,7 +9,7 @@ startCommand:
     properties:
       unpaywallEmail:
         type: string
-        description: Optional contact email for the Unpaywall API, used to resolve open-access articles by DOI.
+        description: Contact email for the Unpaywall API, used to resolve open-access articles by DOI. The Unpaywall source is disabled unless this is set (Sci-Hub still serves DOIs without it).
       downloadDir:
         type: string
         description: Optional directory where downloaded files are saved (defaults to ~/Downloads).

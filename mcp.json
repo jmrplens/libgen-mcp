@@ -30,6 +30,10 @@
                 "LIBGEN_MCP_SCIHUB_HOSTS",
                 "-e",
                 "LIBGEN_MCP_SOURCES",
+                "-e",
+                "LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS",
+                "-e",
+                "LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT",
                 "ghcr.io/jmrplens/libgen-mcp:latest"
             ],
             "env": {
@@ -44,7 +48,9 @@
                 "LIBGEN_MCP_RETRY_ATTEMPTS": "${LIBGEN_MCP_RETRY_ATTEMPTS:-3}",
                 "LIBGEN_MCP_UNPAYWALL_EMAIL": "${LIBGEN_MCP_UNPAYWALL_EMAIL:-}",
                 "LIBGEN_MCP_SCIHUB_HOSTS": "${LIBGEN_MCP_SCIHUB_HOSTS:-}",
-                "LIBGEN_MCP_SOURCES": "${LIBGEN_MCP_SOURCES:-}"
+                "LIBGEN_MCP_SOURCES": "${LIBGEN_MCP_SOURCES:-}",
+                "LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "${LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS:-5s,5s,5s,10s,10s,10s,15s}",
+                "LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT": "${LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT:-60s}"
             }
         }
     }

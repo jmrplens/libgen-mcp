@@ -36,7 +36,7 @@ head:
             "name": "¿Necesito una cuenta, clave de API o token para usar libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. libgen-mcp no requiere ninguna cuenta de Library Genesis, ninguna clave de API ni ningún token. Cada opción es una variable de entorno con un valor por defecto documentado, así que el servidor funciona sin configuración alguna. El único ajuste con forma de email es la dirección de contacto opcional LIBGEN_MCP_UNPAYWALL_EMAIL que se envía a la API de Unpaywall para las consultas por DOI, y viene con un valor por defecto que funciona."
+              "text": "No. libgen-mcp no requiere ninguna cuenta de Library Genesis, ninguna clave de API ni ningún token. Cada opción es una variable de entorno con un valor por defecto documentado, así que el servidor funciona sin configuración alguna. El único ajuste con forma de email es la dirección de contacto opcional LIBGEN_MCP_UNPAYWALL_EMAIL que se envía a la API de Unpaywall para las consultas por DOI. Está sin definir por defecto, lo que desactiva la fuente Unpaywall (Sci-Hub sigue sirviendo DOIs sin ella); fija tu propia dirección para activar Unpaywall."
             }
           },
           {
@@ -128,7 +128,7 @@ Busca en el catálogo de Library Genesis, devuelve metadatos y hashes MD5 por re
 
 ### ¿Necesito una cuenta, clave de API o token para usar libgen-mcp?
 
-No. libgen-mcp no requiere ninguna cuenta de Library Genesis, ninguna clave de API ni ningún token. Cada opción es una variable de entorno con un valor por defecto documentado, así que el servidor funciona sin configuración alguna. El único ajuste con forma de email es la dirección de contacto opcional `LIBGEN_MCP_UNPAYWALL_EMAIL` que se envía a la API de Unpaywall para las consultas por DOI, y viene con un valor por defecto que funciona.
+No. libgen-mcp no requiere ninguna cuenta de Library Genesis, ninguna clave de API ni ningún token. Cada opción es una variable de entorno con un valor por defecto documentado, así que el servidor funciona sin configuración alguna. El único ajuste con forma de email es la dirección de contacto opcional `LIBGEN_MCP_UNPAYWALL_EMAIL` que se envía a la API de Unpaywall para las consultas por DOI. Está sin definir por defecto, lo que desactiva la fuente Unpaywall (Sci-Hub sigue sirviendo DOIs sin ella); fija tu propia dirección para activar Unpaywall.
 
 ### ¿libgen-mcp es gratis y de código abierto?
 

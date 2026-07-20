@@ -24,7 +24,7 @@ your shell, or with `-e` flags on `docker run`.
 | `LIBGEN_MCP_RETRY_ATTEMPTS`             | `3`                                                      | `[1, 10]`, int                                                          | Maximum number of passes over the mirror list for a page request before giving up. Only transient failures (network/timeout/5xx/429) trigger a retry pass; a permanent 4xx fails over without retrying.                                                                                                                                                          |
 | `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` | `5s,5s,5s,10s,10s,10s,15s`                               | Comma-separated Go durations; each in `(0, 10m]`; at most 20 waits      | Staged wait schedule between attempts to get a download to **begin** (resolve the URL, connect, and pull the first byte). `N` waits means `N+1` attempts; the default spans ~60 s over 8 attempts. Retries cover resolve errors, connection errors, non-2xx statuses, and no-first-byte responses. Once bytes flow, start-retries stop and streaming takes over. |
 | `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`     | `60s`                                                    | `(0, 1h]`, Go duration                                                  | Progress-resetting stall window while streaming: a download is aborted only when **no** bytes arrive for this long. A slow-but-progressing transfer (e.g. 20–50 kB/s) is never cut. `LIBGEN_MCP_TIMEOUT` does not apply to downloads.                                                                                                                            |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL`            | `mail@jmrp.io`                                           | Must contain `@` and a domain with a `.`                                | Contact email sent to the [Unpaywall](https://unpaywall.org) API on every article lookup (the API requires it). Set your own address so requests are attributed to you rather than the maintainer's default.                                                                                                                                                     |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL`            | *(unset — disabled)*                                     | Empty, or an email with `@` and a dotted domain                         | Contact email sent to the [Unpaywall](https://unpaywall.org) API on every article lookup (the API rejects requests without one). Empty by default, which **disables the `unpaywall` source** and hides it from the download tool's `source` schema; set your own address to enable it.                                                                           |
 | `LIBGEN_MCP_SCIHUB_HOSTS`               | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Comma-separated bare hosts (no scheme, no path); at least one           | Ordered Sci-Hub mirror hosts tried when resolving an article by DOI. The source builds `https://<host>/<doi>` itself, so each entry must be a bare host. Falls through the list until one serves an article page.                                                                                                                                                |
 | `LIBGEN_MCP_SOURCES`                    | *(all enabled)*                                          | Comma-separated subset of `unpaywall`, `scihub`, `libgen`, `randombook` | Restrict which download sources are active. Empty means all are enabled. Unknown names are rejected at startup. Order in the variable does not matter — the chain order is fixed (see below).                                                                                                                                                                    |
 
@@ -44,10 +44,12 @@ UID `10001`, so a mounted host directory must be writable by that user.
 
 ### `LIBGEN_MCP_UNPAYWALL_EMAIL`
 
-This is used only by the `unpaywall` source (article DOIs). The default is the maintainer's
-address; setting your own is recommended and, on high-volume use, expected by Unpaywall's
-API etiquette. The value is sanity-checked (must contain `@` and a dotted domain) but not
-verified for deliverability.
+This is used only by the `unpaywall` source (article DOIs). It is **unset by default, which
+disables the `unpaywall` source**: the Unpaywall API requires a contact email on every lookup,
+so without one there is nothing to send and the source is skipped (and hidden from the download
+tool's `source` schema). Set your own contact address to enable it. A non-empty value is
+sanity-checked (must contain `@` and a dotted domain) but not verified for deliverability; an
+empty value is allowed and simply leaves the source disabled.
 
 ### `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` and `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`
 
@@ -76,7 +78,7 @@ The download chain always runs in the fixed order `unpaywall → scihub → libg
 randombook`. Each source declares which items it supports, so in practice:
 
 - **Books** (identified by `md5`) are tried against `libgen`, then `randombook`.
-- **Articles** (identified by `doi`) are tried against `unpaywall`, then `scihub`.
+- **Articles** (identified by `doi`) are tried against `unpaywall` (only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set), then `scihub`.
 
 `LIBGEN_MCP_SOURCES` only removes sources from that chain; it never reorders it. For
 example, `LIBGEN_MCP_SOURCES=libgen` disables the article sources and the `randombook`
