@@ -132,12 +132,13 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 
 Download a file to a local directory. Provide `md5` for a book **or** `doi` for an article (at least one is required); the server resolves the appropriate source chain and, for book (`md5`) downloads, verifies the result against the expected hash (DOI/article downloads are not MD5-verified). Returns the saved path, size, and the source that served it.
 
-| Parameter  | Type   | Required | Description                                                                          |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------------------ |
-| `md5`      | string | one of   | File MD5 hash from a book search result.                                             |
-| `doi`      | string | one of   | DOI from an article search result; articles are fetched by DOI.                      |
-| `path`     | string | no       | Destination directory (default: `LIBGEN_MCP_DOWNLOAD_DIR` or `~/Downloads`).         |
-| `filename` | string | no       | Destination filename (default: a clean name from the record metadata or the mirror). |
+| Parameter  | Type   | Required | Description                                                                                                                           |
+| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`      | string | one of   | File MD5 hash from a book search result.                                                                                              |
+| `doi`      | string | one of   | DOI from an article search result; articles are fetched by DOI.                                                                       |
+| `path`     | string | no       | Destination directory (default: `LIBGEN_MCP_DOWNLOAD_DIR` or `~/Downloads`).                                                          |
+| `filename` | string | no       | Destination filename (default: a clean name from the record metadata or the mirror).                                                  |
+| `source`   | string | no       | Restrict the download to one source: `libgen`/`randombook` (books) or `unpaywall`/`scihub` (articles). Omit to try all with failover. |
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
 

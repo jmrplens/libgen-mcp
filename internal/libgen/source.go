@@ -21,6 +21,10 @@ type Item struct {
 	// DOI is the Digital Object Identifier, when the file is keyed by DOI (e.g.
 	// Unpaywall or Sci-Hub). Empty when unknown.
 	DOI string
+	// Source, when set, restricts the download to that single named source (one
+	// of config.KnownSources). Empty means try the full configured source chain
+	// in order with transparent failover.
+	Source string
 	// Meta carries bibliographic fields for naming; may be nil.
 	Meta *FileMeta
 }

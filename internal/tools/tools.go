@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -72,6 +73,7 @@ type DownloadInput struct {
 	DOI      string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5 or doi"`
 	Path     string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)"`
 	Filename string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
+	Source   string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover"`
 }
 
 // Register wires the search, get_details and download tools onto the MCP server,
@@ -96,6 +98,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Description: "Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). " +
 			"Books are tried against libgen (ads.php key + CDN) then randombook (fresh-mirror discovery); articles are tried against unpaywall (open-access PDF) then sci-hub. " +
 			"If both md5 and doi are given, article sources (unpaywall, sci-hub) are tried first, then book sources (libgen, randombook). " +
+			"Set source to restrict the download to a single provider (libgen/randombook for books, unpaywall/scihub for articles) instead of trying them all. " +
 			"Returns the saved path, size and the source that served it.",
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("download", downloadHandler(client, cfg)))
@@ -226,22 +229,36 @@ func detailsByID(ctx context.Context, c *libgen.Client, objectName, id string) (
 	return DetailsOutput{Edition: rec}, nil
 }
 
+// validateDownloadInput normalizes and validates the download request, returning
+// the cleaned md5, doi and source (source is "" when unset). At least one of md5
+// or doi is required; md5 must be 32-hex; source, when set, must be a known one.
+func validateDownloadInput(in DownloadInput) (md5, doi, source string, err error) {
+	md5 = strings.ToLower(strings.TrimSpace(in.MD5))
+	doi = strings.TrimSpace(in.DOI)
+	source = strings.ToLower(strings.TrimSpace(in.Source))
+	switch {
+	case md5 == "" && doi == "":
+		return "", "", "", errors.New("provide md5 (book) or doi (article)")
+	case md5 != "" && !md5Re.MatchString(md5):
+		return "", "", "", errors.New("md5 must be a 32-char hex string")
+	case source != "" && !slices.Contains(config.KnownSources, source):
+		return "", "", "", fmt.Errorf("source must be one of %s, got %q", strings.Join(config.KnownSources, ", "), in.Source)
+	}
+	return md5, doi, source, nil
+}
+
 func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, libgen.DownloadResult] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, libgen.DownloadResult, error) {
 		var zero libgen.DownloadResult
-		md5 := strings.ToLower(strings.TrimSpace(in.MD5))
-		doi := strings.TrimSpace(in.DOI)
-		if md5 == "" && doi == "" {
-			return nil, zero, errors.New("provide md5 (book) or doi (article)")
-		}
-		if md5 != "" && !md5Re.MatchString(md5) {
-			return nil, zero, errors.New("md5 must be a 32-char hex string")
+		md5, doi, source, err := validateDownloadInput(in)
+		if err != nil {
+			return nil, zero, err
 		}
 		dir := in.Path
 		if dir == "" {
 			dir = cfg.DownloadDir
 		}
-		item := libgen.Item{MD5: md5, DOI: doi}
+		item := libgen.Item{MD5: md5, DOI: doi, Source: source}
 		// For a book download with no explicit name, fill bibliographic metadata so
 		// the file lands under a clean "Author - Title (Year).ext" name. Best-effort:
 		// a details lookup failure must not fail the download.
