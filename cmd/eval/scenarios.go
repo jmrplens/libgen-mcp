@@ -18,6 +18,10 @@ import (
 // flaky live mirror), not a pass or a fail.
 const skipPrefix = "SKIP:"
 
+// noDownloadCall is the failure detail when a download scenario produced no
+// download tool call.
+const noDownloadCall = "no download call"
+
 // openAccessDOI is a stable open-access article DOI used by the DOI download
 // scenario (PLoS ONE, freely available via Unpaywall / Sci-Hub).
 const openAccessDOI = "10.1371/journal.pone.0000308"
@@ -294,7 +298,7 @@ func assertS4(tr transcript) (pass bool, detail string) {
 func assertS5(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
-		return false, "no download call"
+		return false, noDownloadCall
 	}
 	if !isMD5(stringField(call.Input, "md5")) {
 		return false, "download md5 is not 32-hex"
@@ -323,7 +327,7 @@ func assertS6Randombook(tr transcript) (pass bool, detail string) {
 func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
-		return false, "no download call"
+		return false, noDownloadCall
 	}
 	if stringField(call.Input, "source") != want {
 		return false, "download source arg is not " + want
@@ -344,7 +348,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 func assertS7(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
-		return false, "no download call"
+		return false, noDownloadCall
 	}
 	if !isDOI(stringField(call.Input, "doi")) {
 		return false, "download doi is not a valid DOI"

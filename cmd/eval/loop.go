@@ -172,7 +172,7 @@ func truncate(s string, n int) string {
 // that puts the previous values back. A nil or empty map is a no-op.
 func applyEnv(env map[string]string) func() {
 	if len(env) == 0 {
-		return func() {}
+		return func() { /* no variables changed, nothing to restore */ }
 	}
 	saved := make(map[string]*string, len(env))
 	for key, value := range env {
