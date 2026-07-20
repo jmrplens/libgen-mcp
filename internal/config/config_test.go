@@ -185,15 +185,31 @@ func TestLoadBadDownloadTuning(t *testing.T) {
 	})
 }
 
-// TestLoadUnpaywallEmailDefault verifies the default Unpaywall contact email.
+// TestLoadUnpaywallEmailDefault verifies unpaywall defaults to disabled (no
+// contact email) and becomes enabled once an email is configured.
 func TestLoadUnpaywallEmailDefault(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.UnpaywallEmail != "mail@jmrp.io" {
-		t.Errorf("UnpaywallEmail = %q, want %q", cfg.UnpaywallEmail, "mail@jmrp.io")
+	if cfg.UnpaywallEmail != "" {
+		t.Errorf("UnpaywallEmail = %q, want empty (disabled by default)", cfg.UnpaywallEmail)
+	}
+	if cfg.SourceEnabled("unpaywall") {
+		t.Error("unpaywall should be disabled when no contact email is configured")
+	}
+
+	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "me@example.com")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.UnpaywallEmail != "me@example.com" {
+		t.Errorf("UnpaywallEmail = %q, want %q", cfg.UnpaywallEmail, "me@example.com")
+	}
+	if !cfg.SourceEnabled("unpaywall") {
+		t.Error("unpaywall should be enabled once a contact email is configured")
 	}
 }
 
@@ -211,7 +227,7 @@ func TestLoadUnpaywallEmailOverride(t *testing.T) {
 
 // TestValidateBadUnpaywallEmail covers rejected Unpaywall contact emails.
 func TestValidateBadUnpaywallEmail(t *testing.T) {
-	cases := []string{"", "no-at-sign", "no-dot@localhost", "trailing@dot."}
+	cases := []string{"no-at-sign", "no-dot@localhost", "trailing@dot."}
 	for _, bad := range cases {
 		t.Run(bad, func(t *testing.T) {
 			cfg := validConfig(t)
@@ -223,9 +239,38 @@ func TestValidateBadUnpaywallEmail(t *testing.T) {
 	}
 }
 
+// TestValidateEmptyUnpaywallEmailOK verifies an empty contact email validates:
+// it disables the unpaywall source rather than being a configuration error.
+func TestValidateEmptyUnpaywallEmailOK(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.UnpaywallEmail = ""
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("empty UnpaywallEmail should validate (disabled), got %v", err)
+	}
+}
+
+// TestSourceEnabledUnpaywallRequiresEmail verifies the unpaywall source is gated
+// on a contact email even when it is otherwise enabled via LIBGEN_MCP_SOURCES,
+// while the other sources are unaffected by the email.
+func TestSourceEnabledUnpaywallRequiresEmail(t *testing.T) {
+	if (&Config{UnpaywallEmail: "me@example.com"}).SourceEnabled("unpaywall") != true {
+		t.Error("unpaywall should be enabled with an email and an empty Sources list")
+	}
+	if (&Config{}).SourceEnabled("unpaywall") {
+		t.Error("unpaywall should be disabled without a contact email")
+	}
+	if (&Config{Sources: []string{"unpaywall"}}).SourceEnabled("unpaywall") {
+		t.Error("unpaywall listed in Sources but without an email should stay disabled")
+	}
+	if !(&Config{}).SourceEnabled("scihub") {
+		t.Error("scihub should not be gated on the unpaywall email")
+	}
+}
+
 // TestLoadSources verifies LIBGEN_MCP_SOURCES parses into the enabled list and
 // that SourceEnabled reflects it (empty = all enabled; a set = only those named).
 func TestLoadSources(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "me@example.com") // unpaywall is email-gated
 	t.Setenv("LIBGEN_MCP_SOURCES", " libgen , unpaywall ")
 	cfg, err := Load()
 	if err != nil {

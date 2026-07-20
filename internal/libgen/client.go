@@ -202,6 +202,26 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	return chain
 }
 
+// EnabledSourceNames returns the names of the enabled download sources in
+// canonical chain order, split by the identifier each resolves: book sources
+// (keyed by md5) and article sources (keyed by doi). It reflects
+// LIBGEN_MCP_SOURCES and derives the split from each source's own Supports, so
+// callers advertise only usable sources (e.g. in the download tool's schema)
+// without duplicating the book/article categorization.
+func (c *Client) EnabledSourceNames() (book, article []string) {
+	bookProbe := Item{MD5: "0"}
+	articleProbe := Item{DOI: "0"}
+	for _, s := range c.sources {
+		if s.Supports(bookProbe) {
+			book = append(book, s.Name())
+		}
+		if s.Supports(articleProbe) {
+			article = append(article, s.Name())
+		}
+	}
+	return book, article
+}
+
 // get tries path?q across the mirrors until it gets a 200. On a transient
 // failure (timeout, network error, status 5xx/429) it puts the mirror in cooldown
 // and retries with growing backoff. On a permanent error (e.g. 404/403) it does

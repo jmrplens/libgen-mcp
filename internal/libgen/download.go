@@ -273,6 +273,25 @@ func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *
 	return c.DownloadItem(ctx, Item{MD5: md5, Meta: meta}, dir, filename, progress...)
 }
 
+// selectSources returns the chain to try for a download: the full configured
+// chain when name is empty, or just the named source when it is set. A named
+// source that is not in the chain yields an actionable "not enabled" error that
+// points at the relevant configuration (and, for unpaywall, its email gate).
+func (c *Client) selectSources(name string) ([]DownloadSource, error) {
+	if name == "" {
+		return c.sources, nil
+	}
+	sources := sourcesNamed(c.sources, name)
+	if len(sources) == 0 {
+		hint := "check LIBGEN_MCP_SOURCES"
+		if strings.EqualFold(name, "unpaywall") {
+			hint = "check LIBGEN_MCP_SOURCES; unpaywall also requires a contact email in LIBGEN_MCP_UNPAYWALL_EMAIL"
+		}
+		return nil, fmt.Errorf("download source %q is not enabled (%s)", name, hint)
+	}
+	return sources, nil
+}
+
 // DownloadItem downloads the file identified by item (an md5, a DOI, or both)
 // into dir, trying each supporting source in the configured chain until one
 // succeeds. The output name is chosen as documented on Download. An optional
@@ -290,12 +309,9 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 
 	// When the item names a source, restrict the download to that single source;
 	// otherwise try the whole configured chain in order.
-	sources := c.sources
-	if item.Source != "" {
-		sources = sourcesNamed(c.sources, item.Source)
-		if len(sources) == 0 {
-			return nil, fmt.Errorf("download source %q is not enabled (check LIBGEN_MCP_SOURCES)", item.Source)
-		}
+	sources, selErr := c.selectSources(item.Source)
+	if selErr != nil {
+		return nil, selErr
 	}
 
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}

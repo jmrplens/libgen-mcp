@@ -89,13 +89,13 @@ Descarga un archivo a un directorio local. Proporciona `md5` para un libro **o**
 
 ### entrada de download
 
-| Parámetro  | Tipo   | Requerido | Descripción                                                                                                                                                                                         |
-| ---------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                                                                                         |
-| `doi`      | string | uno de    | DOI de un resultado de búsqueda de artículo. Los artículos se obtienen por DOI.                                                                                                                     |
-| `path`     | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                                                                                     |
-| `filename` | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5.                                                             |
-| `source`   | string | no        | Restringe la descarga a una única fuente: `libgen`/`randombook` (libros, `md5`) o `unpaywall`/`scihub` (artículos, `doi`). Omítelo para probar todas las fuentes compatibles en orden con failover. |
+| Parámetro  | Tipo   | Requerido | Descripción                                                                                                                                                                                                                                                                                                              |
+| ---------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `md5`      | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                                                                                                                                                                                                              |
+| `doi`      | string | uno de    | DOI de un resultado de búsqueda de artículo. Los artículos se obtienen por DOI.                                                                                                                                                                                                                                          |
+| `path`     | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                                                                                                                                                                                                          |
+| `filename` | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5.                                                                                                                                                                                  |
+| `source`   | string | no        | Restringe la descarga a una única fuente: `libgen`/`randombook` (libros, `md5`) o `unpaywall`/`scihub` (artículos, `doi`). `unpaywall` solo es seleccionable cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está configurado (si no, se omite del schema). Omítelo para probar todas las fuentes compatibles en orden con failover. |
 
 Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caracteres hex) se rechaza antes de cualquier trabajo.
 
@@ -104,7 +104,7 @@ Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caractere
 La descarga recorre una cadena de fuentes fija, filtrada por lo que admite cada elemento:
 
 - **Libro** (`md5` solo) → `libgen` (clave de ads.php + CDN), luego `randombook` (descubrimiento de mirrors frescos).
-- **Artículo** (`doi` solo) → `unpaywall` (PDF de acceso abierto), luego `scihub`.
+- **Artículo** (`doi` solo) → `unpaywall` (PDF de acceso abierto), luego `scihub`. `unpaywall` requiere que `LIBGEN_MCP_UNPAYWALL_EMAIL` esté fijado; si no, está desactivada y para artículos solo se prueba `scihub`.
 - **Ambos `md5` y `doi`** → primero las fuentes de artículo (`unpaywall`, `scihub`), luego las de libro (`libgen`, `randombook`).
 
 Gana la primera fuente que resuelve y transmite un archivo válido; el campo `source` del resultado la nombra. Consulta [Arquitectura](/libgen-mcp/es/architecture/) para la cadena completa.

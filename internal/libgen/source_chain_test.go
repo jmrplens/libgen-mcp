@@ -58,6 +58,29 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	}
 }
 
+// TestEnabledSourceNames verifies EnabledSourceNames splits the enabled chain
+// into book (md5) and article (doi) sources, and that an empty unpaywall email
+// drops unpaywall from the article list.
+func TestEnabledSourceNames(t *testing.T) {
+	book, article := New(staticMirrors{}, baseChainConfig()).EnabledSourceNames()
+	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
+		t.Errorf("book = %v, want %v", book, want)
+	}
+	if want := []string{"unpaywall", "scihub"}; !slices.Equal(article, want) {
+		t.Errorf("article = %v, want %v", article, want)
+	}
+
+	noEmail := baseChainConfig()
+	noEmail.UnpaywallEmail = ""
+	book, article = New(staticMirrors{}, noEmail).EnabledSourceNames()
+	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
+		t.Errorf("book (no email) = %v, want %v", book, want)
+	}
+	if want := []string{"scihub"}; !slices.Equal(article, want) {
+		t.Errorf("article (no email) = %v, want %v", article, want)
+	}
+}
+
 // TestNewSourcesFilter verifies LIBGEN_MCP_SOURCES disables sources by name while
 // preserving the relative order of the remaining ones.
 func TestNewSourcesFilter(t *testing.T) {

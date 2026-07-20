@@ -137,6 +137,14 @@ func listTools() ([]*mcp.Tool, error) {
 	if err != nil {
 		cfg = &config.Config{}
 	}
+	// The download tool advertises only the sources enabled in the ambient config
+	// (unpaywall is off without a contact email, and LIBGEN_MCP_SOURCES can trim
+	// the chain), but the generated docs must describe the full capability set —
+	// so enable every source for documentation regardless of the environment.
+	cfg.Sources = nil
+	if cfg.UnpaywallEmail == "" {
+		cfg.UnpaywallEmail = "docs@example.com"
+	}
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create mirror manager: %w", err)
@@ -211,7 +219,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("- LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)\n")
 	b.WriteString("- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: staged waits between attempts to start a download — resolve/connect/first byte (default: `5s,5s,5s,10s,10s,10s,15s`, ~8 attempts over ~60s)\n")
 	b.WriteString("- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)\n")
-	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API for article downloads\n")
+	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source\n")
 	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
 	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)\n\n")
 
@@ -411,7 +419,7 @@ var configEnvVars = []envVarDoc{
 	{"LIBGEN_MCP_RETRY_ATTEMPTS", "3", "[1, 10]", "Retries per request."},
 	{"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "5s,5s,5s,10s,10s,10s,15s", "comma-separated Go durations; each in (0, 10m]; at most 20", "Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default)."},
 	{"LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "60s", "(0, 1h]", "Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed."},
-	{"LIBGEN_MCP_UNPAYWALL_EMAIL", "mail@jmrp.io", "email with @ and a dotted domain", "Contact email required by the Unpaywall API for article (DOI) downloads."},
+	{"LIBGEN_MCP_UNPAYWALL_EMAIL", "empty (unpaywall disabled)", "empty, or an email with @ and a dotted domain", "Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it."},
 	{"LIBGEN_MCP_SCIHUB_HOSTS", "sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf", "comma-separated bare hosts (no scheme, no path)", "Ordered Sci-Hub mirror hosts, tried in order until one serves an article."},
 	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, libgen, randombook", "Enabled/ordered download sources. Empty enables all."},
 }

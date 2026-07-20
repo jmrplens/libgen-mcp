@@ -48,7 +48,7 @@ Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
 
 **Download file**
 
-Download a file to a local directory.
+Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). Books are tried against libgen then randombook; articles against unpaywall then scihub. If both md5 and doi are given, article sources are tried first, then book sources. Set source to restrict the download to a single enabled provider (unpaywall, scihub, libgen, randombook) instead of trying them all. Returns the saved path, size and the source that served it.
 
 **Parameters:**
 
@@ -56,7 +56,7 @@ Download a file to a local directory.
 - `filename` (string): destination filename (default: a clean name from the record metadata or the name the mirror announces)
 - `md5` (string): file md5 hash from a book search result; provide md5 or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)
-- `source` (string): restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover
+- `source` (string): restrict the download to a single enabled source: unpaywall, scihub, libgen, randombook. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
 
@@ -77,7 +77,7 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_RETRY_ATTEMPTS` | 3 | [1, 10] | Retries per request. |
 | `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` | 5s,5s,5s,10s,10s,10s,15s | comma-separated Go durations; each in (0, 10m]; at most 20 | Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default). |
 | `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` | 60s | (0, 1h] | Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed. |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | mail@jmrp.io | email with @ and a dotted domain | Contact email required by the Unpaywall API for article (DOI) downloads. |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | empty (unpaywall disabled) | empty, or an email with @ and a dotted domain | Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it. |
 | `LIBGEN_MCP_SCIHUB_HOSTS` | sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf | comma-separated bare hosts (no scheme, no path) | Ordered Sci-Hub mirror hosts, tried in order until one serves an article. |
 | `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, scihub, libgen, randombook | Enabled/ordered download sources. Empty enables all. |
 

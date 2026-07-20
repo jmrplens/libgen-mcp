@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -100,6 +101,108 @@ func TestHandlerRecoversPanic(t *testing.T) {
 	}
 	if len(res.Content) == 0 {
 		t.Fatal("recovered panic should include a helpful error message")
+	}
+}
+
+// downloadToolSchema registers the tools for cfg and returns the download tool
+// as the client sees it over a real tools/list round-trip.
+func downloadToolSchema(t *testing.T, cfg *config.Config) *mcp.Tool {
+	t.Helper()
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	res, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range res.Tools {
+		if tl.Name == "download" {
+			return tl
+		}
+	}
+	t.Fatal("download tool not registered")
+	return nil
+}
+
+// sourceEnum extracts properties.source.enum from a tool input schema, robustly
+// across whatever concrete type the client decodes the schema into.
+func sourceEnum(t *testing.T, schema any) []string {
+	t.Helper()
+	data, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Properties struct {
+			Source struct {
+				Enum []string `json:"enum"`
+			} `json:"source"`
+		} `json:"properties"`
+	}
+	if uerr := json.Unmarshal(data, &s); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return s.Properties.Source.Enum
+}
+
+// TestDownloadSchemaReflectsEnabledSources verifies the download tool advertises
+// only the enabled sources — both in the source enum and in the prose — so the
+// model never selects a disabled provider (including unpaywall, which is gated on
+// a contact email).
+func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
+	base := func() *config.Config {
+		return &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	}
+	cases := []struct {
+		name       string
+		mutate     func(*config.Config)
+		wantEnum   []string
+		wantAbsent []string
+	}{
+		{
+			name:       "book sources only",
+			mutate:     func(c *config.Config) { c.Sources = []string{"libgen", "randombook"} },
+			wantEnum:   []string{"libgen", "randombook"},
+			wantAbsent: []string{"unpaywall", "scihub"},
+		},
+		{
+			name:       "default without email disables unpaywall",
+			mutate:     func(*config.Config) {},
+			wantEnum:   []string{"scihub", "libgen", "randombook"},
+			wantAbsent: []string{"unpaywall"},
+		},
+		{
+			name:       "unpaywall enabled once an email is set",
+			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
+			wantEnum:   []string{"unpaywall", "scihub", "libgen", "randombook"},
+			wantAbsent: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := base()
+			tc.mutate(cfg)
+			dl := downloadToolSchema(t, cfg)
+			if got := sourceEnum(t, dl.InputSchema); !slices.Equal(got, tc.wantEnum) {
+				t.Errorf("source enum = %v, want %v", got, tc.wantEnum)
+			}
+			for _, absent := range tc.wantAbsent {
+				if strings.Contains(dl.Description, absent) {
+					t.Errorf("description advertises disabled source %q:\n%s", absent, dl.Description)
+				}
+			}
+		})
 	}
 }
 
