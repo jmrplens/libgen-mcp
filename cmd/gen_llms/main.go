@@ -42,6 +42,7 @@ const (
 	llmsSummaryItemFormat = "- %s: %s\n"
 	llmsBoldTitleFormat   = "**%s**\n\n"
 	docsSiteURL           = "https://jmrplens.github.io/libgen-mcp/"
+	repoBlobURL           = "https://github.com/jmrplens/libgen-mcp/blob/main/"
 )
 
 func main() {
@@ -231,17 +232,20 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	}
 	b.WriteString("\n")
 
+	// Absolute URLs so the links resolve when llms.txt is fetched from its served
+	// location (…/libgen-mcp/llms.txt), not just from the repo root. Doc pages point
+	// at the rendered site; repo-only files point at their GitHub blob.
 	b.WriteString("## Documentation\n\n")
-	writeLLMSLink(&b, "Getting started", "docs/getting-started.md", "Installation and first-run guide")
-	writeLLMSLink(&b, "Configuration", "docs/configuration.md", "Full environment-variable configuration reference")
-	writeLLMSLink(&b, "Tools", "docs/tools.md", "Per-tool reference for search, get_details and download")
-	writeLLMSLink(&b, "Architecture", "docs/architecture.md", "Internal architecture, mirror discovery and download sources")
-	writeLLMSLink(&b, "Troubleshooting", "docs/troubleshooting.md", "Common setup and runtime issues")
-	writeLLMSLink(&b, "Privacy policy", "PRIVACY.md", "No telemetry; requests go only to Library Genesis mirrors and article sources")
-	writeLLMSLink(&b, "Headless install", "llms-install.md", "Machine-readable install guide for AI assistants")
+	writeLLMSLink(&b, "Getting started", docsSiteURL+"getting-started/", "Installation and first-run guide")
+	writeLLMSLink(&b, "Configuration", docsSiteURL+"configuration/", "Full environment-variable configuration reference")
+	writeLLMSLink(&b, "Tools", docsSiteURL+"tools/", "Per-tool reference for search, get_details and download")
+	writeLLMSLink(&b, "Architecture", docsSiteURL+"architecture/", "Internal architecture, mirror discovery and download sources")
+	writeLLMSLink(&b, "Troubleshooting", docsSiteURL+"troubleshooting/", "Common setup and runtime issues")
+	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to Library Genesis mirrors and article sources")
+	writeLLMSLink(&b, "Headless install", repoBlobURL+"llms-install.md", "Machine-readable install guide for AI assistants")
 
 	b.WriteString("\n## Optional\n\n")
-	writeLLMSLink(&b, "Full LLM reference", llmsFullFileName, "Generated companion reference with full tool schemas")
+	writeLLMSLink(&b, "Full LLM reference", docsSiteURL+llmsFullFileName, "Generated companion reference with full tool schemas")
 	writeLLMSLink(&b, "Documentation site", docsSiteURL, "Rendered documentation site")
 
 	content := b.String()

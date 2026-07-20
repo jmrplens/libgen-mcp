@@ -56,15 +56,15 @@ Tools:
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md): Installation and first-run guide
-- [Configuration](docs/configuration.md): Full environment-variable configuration reference
-- [Tools](docs/tools.md): Per-tool reference for search, get_details and download
-- [Architecture](docs/architecture.md): Internal architecture, mirror discovery and download sources
-- [Troubleshooting](docs/troubleshooting.md): Common setup and runtime issues
-- [Privacy policy](PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources
-- [Headless install](llms-install.md): Machine-readable install guide for AI assistants
+- [Getting started](https://jmrplens.github.io/libgen-mcp/getting-started/): Installation and first-run guide
+- [Configuration](https://jmrplens.github.io/libgen-mcp/configuration/): Full environment-variable configuration reference
+- [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details and download
+- [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
+- [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
+- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources
+- [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
 ## Optional
 
-- [Full LLM reference](llms-full.txt): Generated companion reference with full tool schemas
+- [Full LLM reference](https://jmrplens.github.io/libgen-mcp/llms-full.txt): Generated companion reference with full tool schemas
 - [Documentation site](https://jmrplens.github.io/libgen-mcp/): Rendered documentation site

@@ -6,7 +6,7 @@ import starlightLinksValidator from "starlight-links-validator";
 import mermaid from "astro-mermaid";
 
 const siteDescription =
-	"Open source Model Context Protocol server for Library Genesis — search books and resolve download links from your AI assistant.";
+	"Open-source MCP server in Go for Library Genesis: three tools to search and download books, papers and more from your AI assistant — no account required.";
 
 // --- Identity, URLs and structured-data ids ------------------------------
 const siteUrl = "https://jmrplens.github.io";
@@ -131,16 +131,12 @@ const jsonLd = JSON.stringify({
 			url: repositoryUrl,
 			downloadUrl: "https://github.com/jmrplens/libgen-mcp/releases/latest",
 			installUrl: "https://jmrplens.github.io/libgen-mcp/getting-started/",
-			releaseNotes:
-				"https://github.com/jmrplens/libgen-mcp/releases/tag/v1.0.0",
+			// Track the current release so this never lags behind softwareVersion.
+			releaseNotes: softwareVersion
+				? `https://github.com/jmrplens/libgen-mcp/releases/tag/v${softwareVersion}`
+				: "https://github.com/jmrplens/libgen-mcp/releases/latest",
 			codeRepository: repositoryUrl,
 			image: socialImage,
-			screenshot: {
-				"@type": "ImageObject",
-				url: socialImageUrl,
-				width: 1200,
-				height: 630,
-			},
 			license: "https://opensource.org/licenses/MIT",
 			isAccessibleForFree: true,
 			datePublished,
