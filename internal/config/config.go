@@ -22,6 +22,16 @@ const maxDownloadBytesLimit int64 = 50 * 1024 * 1024 * 1024
 // maxTimeout is the allowed ceiling for Timeout.
 const maxTimeout = 10 * time.Minute
 
+// maxStallTimeout is the allowed ceiling for DownloadStallTimeout.
+const maxStallTimeout = time.Hour
+
+// maxStartRetryWait is the allowed ceiling for a single start-retry wait, and
+// maxStartRetries caps how many waits the schedule may list.
+const (
+	maxStartRetryWait = 10 * time.Minute
+	maxStartRetries   = 20
+)
+
 // Config groups the server configuration read from the environment.
 type Config struct {
 	Mirror                 string        // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
@@ -36,6 +46,26 @@ type Config struct {
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
 	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	// DownloadStartRetryWaits is the staged wait schedule between attempts to get a
+	// download to BEGIN (resolve + connect + first bytes). LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS,
+	// a comma-separated list of Go durations. len(waits) waits means len(waits)+1
+	// attempts. Default: 5s,5s,5s,10s,10s,10s,15s (8 attempts over ~60s).
+	DownloadStartRetryWaits []time.Duration
+	// DownloadStallTimeout is the progress-resetting stall window while streaming: a
+	// download is aborted only when NO bytes arrive for this long, never merely for
+	// being slow. LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT, a Go duration. Default: 60s.
+	DownloadStallTimeout time.Duration
+}
+
+// defaultStartRetryWaits returns the built-in start-retry schedule: three waits
+// of 5s, then three of 10s, then one of 15s — eight attempts spread over ~60s
+// before a source is considered unable to start.
+func defaultStartRetryWaits() []time.Duration {
+	return []time.Duration{
+		5 * time.Second, 5 * time.Second, 5 * time.Second,
+		10 * time.Second, 10 * time.Second, 10 * time.Second,
+		15 * time.Second,
+	}
 }
 
 // KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
@@ -55,16 +85,18 @@ var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci
 // silently falling back to the default.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Mirror:                 strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/"),
-		Timeout:                30 * time.Second,
-		LogLevel:               slog.LevelInfo,
-		RateRPS:                1,
-		RateBurst:              1,
-		MaxDownloadBytes:       0,
-		MaxConcurrentDownloads: 2,
-		RetryAttempts:          3,
-		UnpaywallEmail:         "mail@jmrp.io",
-		ScihubHosts:            append([]string(nil), defaultScihubHosts...),
+		Mirror:                  strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/"),
+		Timeout:                 30 * time.Second,
+		LogLevel:                slog.LevelInfo,
+		RateRPS:                 1,
+		RateBurst:               1,
+		MaxDownloadBytes:        0,
+		MaxConcurrentDownloads:  2,
+		RetryAttempts:           3,
+		UnpaywallEmail:          "mail@jmrp.io",
+		ScihubHosts:             append([]string(nil), defaultScihubHosts...),
+		DownloadStartRetryWaits: defaultStartRetryWaits(),
+		DownloadStallTimeout:    60 * time.Second,
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
@@ -98,10 +130,55 @@ func Load() (*Config, error) {
 		}
 		cfg.LogLevel = level
 	}
+	if err := loadDownloadTuning(cfg); err != nil {
+		return nil, err
+	}
 	if err := loadNumeric(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// loadDownloadTuning fills the download-tuning fields (the stall timeout and the
+// start-retry schedule) from the environment, leaving the spec defaults in place
+// when the variables are unset.
+func loadDownloadTuning(cfg *Config) error {
+	if v := os.Getenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: %w", err)
+		}
+		cfg.DownloadStallTimeout = d
+	}
+	if v := os.Getenv("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS"); v != "" {
+		waits, err := parseDurations(v)
+		if err != nil {
+			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: %w", err)
+		}
+		cfg.DownloadStartRetryWaits = waits
+	}
+	return nil
+}
+
+// parseDurations parses a comma-separated list of Go durations (e.g.
+// "5s,5s,10s"), trimming whitespace and dropping empty entries. An unparseable
+// entry is an error so a malformed schedule fails fast rather than being
+// silently ignored.
+func parseDurations(v string) ([]time.Duration, error) {
+	parts := strings.Split(v, ",")
+	waits := make([]time.Duration, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		d, err := time.ParseDuration(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid duration %q: %w", p, err)
+		}
+		waits = append(waits, d)
+	}
+	return waits, nil
 }
 
 // loadNumeric fills the numeric fields of cfg from the environment.
@@ -185,6 +262,9 @@ func (c *Config) Validate() error {
 	if err := c.validateRanges(); err != nil {
 		return err
 	}
+	if err := c.validateDownloadTuning(); err != nil {
+		return err
+	}
 	if err := validateUnpaywallEmail(c.UnpaywallEmail); err != nil {
 		return err
 	}
@@ -220,6 +300,25 @@ func (c *Config) validateRanges() error {
 	}
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
+	}
+	return nil
+}
+
+// validateDownloadTuning checks the start-retry schedule and the stall timeout:
+// the stall window must be positive and within its ceiling, the schedule must not
+// list more than maxStartRetries waits, and each wait must be positive and within
+// its ceiling.
+func (c *Config) validateDownloadTuning() error {
+	if c.DownloadStallTimeout <= 0 || c.DownloadStallTimeout > maxStallTimeout {
+		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT must be in (0, %v], got %v", maxStallTimeout, c.DownloadStallTimeout)
+	}
+	if len(c.DownloadStartRetryWaits) > maxStartRetries {
+		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS must list at most %d waits, got %d", maxStartRetries, len(c.DownloadStartRetryWaits))
+	}
+	for _, w := range c.DownloadStartRetryWaits {
+		if w <= 0 || w > maxStartRetryWait {
+			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS entries must be in (0, %v], got %v", maxStartRetryWait, w)
+		}
 	}
 	return nil
 }

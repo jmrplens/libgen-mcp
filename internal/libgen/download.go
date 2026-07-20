@@ -157,6 +157,28 @@ type DownloadResult struct {
 // does not match the requested md5 (corrupt or tampered download).
 var errIntegrityCheckFailed = errors.New("integrity check failed: MD5 mismatch")
 
+// errStartFailed marks the errors that the staged start-retry schedule retries:
+// a resolve error, a connection error, a non-2xx status, or a 2xx response that
+// yields no first byte. Once bytes flow the download is "begun" and later
+// failures (HTML page, size cap, stall, short read, MD5 mismatch) are returned
+// unwrapped so start-retries do not fire for them.
+var errStartFailed = errors.New("could not begin the download")
+
+// errDownloadCouldNotStart is the actionable error surfaced when a source (and,
+// once joined by DownloadItem, every source) fails to get a download started
+// within the full retry schedule. Its message guides the model on how to recover.
+var errDownloadCouldNotStart = errors.New("download could not be started after the retry schedule (resolve/connect/first-byte kept failing); you can retry now, retry later once the mirror recovers, or ask the user how they want to proceed")
+
+// errStalled is returned when a streaming download receives no bytes for the
+// configured stall window. The partial is kept so a later call can resume.
+var errStalled = errors.New("download stalled: no bytes received within the stall timeout")
+
+// startErr wraps err as a start-phase failure (one the start-retry schedule
+// should retry).
+func startErr(err error) error {
+	return fmt.Errorf("%w: %w", errStartFailed, err)
+}
+
 // FileMeta carries the bibliographic fields used to build a clean, human-readable
 // download filename when the mirror announces no name. Any field may be empty;
 // cleanFileName omits the empty pieces.
@@ -339,13 +361,45 @@ type downloadReq struct {
 	onProgress ProgressFunc
 }
 
-// downloadFrom resolves req.item through a single source, then streams the file
-// through the shared pipeline under the per-partial lock. A resolution error or a
-// rejected stream is returned so Download can advance to the next source.
+// downloadFrom runs a single source under the staged start-retry schedule: it
+// keeps re-attempting to get the download STARTED (resolve a fresh URL, connect,
+// and pull the first byte) on the configured wait schedule, and once bytes flow
+// it hands off to streaming. A start that never succeeds within the schedule
+// yields the actionable errDownloadCouldNotStart; a failure after streaming began
+// (HTML page, stall, short read, MD5 mismatch, ...) is returned as-is so the
+// caller can advance to the next source. Context cancellation between or within
+// waits aborts immediately.
 func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
+	waits := c.startRetryWaits
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		res, err := c.startAttempt(ctx, src, req)
+		if err == nil {
+			return res, nil
+		}
+		// Only resolve/connect/status/no-first-byte failures are start-retryable;
+		// anything raised once bytes were flowing is returned to the source loop.
+		if !errors.Is(err, errStartFailed) {
+			return nil, err
+		}
+		lastErr = err
+		if attempt >= len(waits) {
+			return nil, fmt.Errorf("%w: %w", errDownloadCouldNotStart, lastErr)
+		}
+		if werr := waitOrCancel(ctx, waits[attempt]); werr != nil {
+			return nil, werr
+		}
+	}
+}
+
+// startAttempt makes one attempt to start and complete a download from src: it
+// resolves the item afresh (so an expired key is renewed on each retry), takes
+// the per-partial lock, and streams. Start-phase failures are wrapped with
+// errStartFailed so downloadFrom retries them on the schedule.
+func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
 	resolved, err := src.Resolve(ctx, req.item)
 	if err != nil {
-		return nil, err
+		return nil, startErr(err)
 	}
 	// A stable partial path lets an interrupted download resume: if bytes are
 	// already on disk, ask the CDN to continue from that offset with a Range. It is
@@ -376,6 +430,19 @@ func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downl
 	return c.streamResolved(ctx, src, req, resolved, partPath)
 }
 
+// waitOrCancel blocks for d or until ctx is canceled, returning the context error
+// when canceled so the start-retry schedule aborts immediately on cancellation.
+func waitOrCancel(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // streamResolved runs the shared download pipeline for one resolved source:
 // fetch (with resume), validate (HTML sniff + size cap), stream to the partial
 // with optional MD5 verification, then atomically rename into place. It returns a
@@ -384,15 +451,21 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 	base := mirrorOf(resolved.FileURL)
 	resumeFrom := partialSize(partPath)
 
-	resp, err := c.fetchFile(ctx, resolved.FileURL, resumeFrom, resolved.Header)
+	// Derive a cancelable context for this transfer: the stall guard cancels it
+	// when no bytes arrive within the window, which unblocks the in-flight body
+	// read. Caller cancellation still propagates through it as well.
+	streamCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+
+	resp, err := c.fetchFile(streamCtx, resolved.FileURL, resumeFrom, resolved.Header)
 	if err != nil {
-		return nil, err
+		return nil, startErr(err) // connection error: retryable
 	}
 	defer resp.Body.Close()
 
 	resume, err := resumeDecision(resp, resumeFrom, base)
 	if err != nil {
-		return nil, err
+		return nil, startErr(err) // non-2xx status: retryable
 	}
 
 	// Full expected size: on a resumed 206, Content-Length covers only the range,
@@ -401,6 +474,8 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 	if resume && resp.ContentLength >= 0 {
 		totalLen = resumeFrom + resp.ContentLength
 	}
+	// validateFileResponse tags a no-first-byte response with errStartFailed
+	// (retryable); an HTML page or size-cap breach is returned unwrapped.
 	body, original, err := c.validateFileResponse(resp, totalLen)
 	if err != nil {
 		return nil, err
@@ -415,7 +490,9 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		return nil, derr
 	}
 	dest := filepath.Join(req.dir, name)
-	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, body, streamOpts{
+	// Bytes are flowing: guard the stream against stalls (no wall-clock cap), then
+	// stream to the partial. A stall aborts via streamCtx and keeps the .part.
+	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, c.guardStall(streamCtx, body, cancel), streamOpts{
 		resume: resume, existingSize: resumeFrom, contentLength: resp.ContentLength,
 		total: totalLen, verify: resolved.VerifyMD5, progress: req.onProgress,
 	})
@@ -431,6 +508,50 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		Verified:         resolved.VerifyMD5,
 		Resumed:          resume,
 	}, nil
+}
+
+// guardStall wraps r in a stall-detecting reader when a stall timeout is
+// configured. The reader cancels streamCtx (via cancel) when no bytes arrive
+// within the window, aborting the in-flight body read; a non-positive timeout
+// leaves r unwrapped so slow-but-progressing transfers are never capped by a
+// wall-clock deadline.
+func (c *Client) guardStall(streamCtx context.Context, r io.Reader, cancel context.CancelCauseFunc) io.Reader {
+	if c.stallTimeout <= 0 {
+		return r
+	}
+	return &stallReader{ctx: streamCtx, r: r, timeout: c.stallTimeout, cancel: cancel}
+}
+
+// stallReader enforces a progress-resetting read deadline: the timer is armed for
+// timeout at the start of each Read and re-armed on the next, so a transfer is
+// aborted only when NO bytes arrive within the window — never for being slow.
+// When the timer fires it cancels ctx with errStalled, which unblocks the
+// underlying body read; the resulting error is reported as errStalled so callers
+// see a clear stall rather than a bare context cancellation.
+type stallReader struct {
+	ctx     context.Context
+	r       io.Reader
+	timeout time.Duration
+	cancel  context.CancelCauseFunc
+	timer   *time.Timer
+}
+
+// Read forwards to the wrapped reader while keeping the stall timer armed, and
+// translates a stall-triggered cancellation into errStalled.
+func (s *stallReader) Read(p []byte) (int, error) {
+	if s.timer == nil {
+		s.timer = time.AfterFunc(s.timeout, func() { s.cancel(errStalled) })
+	} else {
+		s.timer.Reset(s.timeout)
+	}
+	n, err := s.r.Read(p)
+	if err != nil {
+		s.timer.Stop()
+		if errors.Is(context.Cause(s.ctx), errStalled) {
+			return n, errStalled
+		}
+	}
+	return n, err
 }
 
 // resumeDecision inspects the download response against the bytes already on disk
@@ -536,11 +657,16 @@ func (c *Client) validateFileResponse(resp *http.Response, totalLen int64) (*buf
 	}
 	// Some CDNs serve error pages as application/octet-stream (or with no
 	// Content-Type). Sniff the first bytes without consuming them: Peek leaves
-	// the bytes in the bufio.Reader so io.Copy can read them again.
+	// the bytes in the bufio.Reader so io.Copy can read them again. A read error
+	// before any byte, or a 2xx that yields no bytes at all, is a "did not begin"
+	// failure the start-retry schedule should retry, so it is tagged accordingly.
 	body := bufio.NewReader(resp.Body)
 	head, err := body.Peek(512)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, "", fmt.Errorf("reading file header: %w", err)
+		return nil, "", startErr(fmt.Errorf("reading first bytes: %w", err))
+	}
+	if len(head) == 0 {
+		return nil, "", startErr(errors.New("response yielded no bytes"))
 	}
 	if looksLikeHTML(head) {
 		return nil, "", errors.New("mirror returned what looks like an HTML page instead of the file (key expired or download blocked)")

@@ -34,16 +34,23 @@ Todas las peticiones salientes (peticiones de página y flujos de archivo por ig
 
 ## Canalización de descarga
 
-Las descargas usan un cliente HTTP aparte **sin timeout global** — las transferencias largas están acotadas por el contexto de la petición, no por un plazo fijo. La concurrencia está limitada por un semáforo de tamaño `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`; las descargas extra hacen cola por un hueco (y pueden cancelarse mientras están en cola, antes de tocar la red).
+Las descargas usan un cliente HTTP aparte **sin timeout global** — las transferencias largas están acotadas por el contexto de la petición y por un guardián de estancamiento consciente del progreso, no por un plazo fijo. La concurrencia está limitada por un semáforo de tamaño `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`; las descargas extra hacen cola por un hueco (y pueden cancelarse mientras están en cola, antes de tocar la red).
+
+### Reintentos de inicio y el guardián de estancamiento
+
+Dos mecanismos hacen que las descargas sean resilientes sin cortar nunca una transferencia sana:
+
+- **Reintentos de inicio escalonados.** Conseguir que una descarga _empiece_ — resolver una URL nueva, conectar y obtener el primer byte — se reintenta con un programa (`LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS`, por defecto `5s,5s,5s,10s,10s,10s,15s`: 8 intentos en ~60 s). Un error de resolución, de conexión, un estado no 2xx, o una respuesta 2xx que no entrega bytes se reintenta; cada reintento resuelve de nuevo, de modo que una clave caducada se renueva. En cuanto fluyen bytes, los reintentos de inicio se detienen y comienza el streaming. Esto envuelve el intento de una _sola_ fuente — la cadena multifuente sigue avanzando a la siguiente fuente cuando una se agota. Cuando todas las fuentes fallan al iniciar, la descarga devuelve un error accionable que guía a quien llama a reintentar ahora, reintentar más tarde o preguntar al usuario.
+- **Timeout de estancamiento que se reinicia con el progreso.** Durante el streaming, una descarga se aborta solo cuando **no** llega ningún byte dentro de `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` (por defecto 60 s). Cada byte recibido reinicia la ventana, así que una transferencia lenta pero que progresa (20–50 kB/s es habitual) nunca se corta, mientras que una conexión realmente muerta se descarta tras la ventana conservando su `.part` para reanudar. El `LIBGEN_MCP_TIMEOUT` por petición nunca se aplica a un stream; la cancelación de quien llama (el LLM) aborta de inmediato.
 
 Para un elemento dado, la canalización:
 
 1. **Resuelve** el elemento contra una fuente a una URL concreta y transmisible (más cualquier cabecera, un flag de verificación MD5 y una extensión de reserva).
 2. Calcula una **ruta parcial (`.part`)** determinista, con espacio de nombres por el nombre de la fuente y una clave (el MD5 para libros, o un hash del DOI/URL en otro caso), y toma un lock por parcial para que dos descargas del mismo objetivo nunca se corrompan entre sí.
-3. **Obtiene** el archivo; si ya hay bytes en disco, envía una cabecera `Range` para **reanudar** desde ese offset.
+3. **Obtiene** el archivo bajo el programa de reintentos de inicio (resolviendo de nuevo en cada intento); si ya hay bytes en disco, envía una cabecera `Range` para **reanudar** desde ese offset.
 4. Inspecciona la respuesta: un `206` cuyo inicio de `Content-Range` coincide con los bytes existentes reanuda; un `200` reinicia desde cero; cualquier otra cosa es un fallo.
 5. **Valida** la respuesta — rechaza páginas HTML de error (por `Content-Type` e inspeccionando los primeros 512 bytes), aplica el límite de tamaño contra el tamaño total esperado y comprueba el espacio libre en disco.
-6. **Transmite** el cuerpo al archivo `.part` mientras calcula su MD5 e informa el progreso de forma regulada. En reanudación, vuelve a calcular el hash de los bytes ya en disco para que el digest final cubra todo el archivo.
+6. **Transmite** el cuerpo al archivo `.part` mientras calcula su MD5 e informa el progreso de forma regulada, bajo el guardián de estancamiento que se reinicia con el progreso. En reanudación, vuelve a calcular el hash de los bytes ya en disco para que el digest final cubra todo el archivo.
 7. **Verifica** (para fuentes con clave MD5) el digest contra el MD5 solicitado. Una discrepancia o una transferencia sobredimensionada elimina el parcial; una lectura corta transitoria lo conserva para que una llamada posterior pueda reanudar.
 8. **Renombra atómicamente** el `.part` completado a su destino final.
 

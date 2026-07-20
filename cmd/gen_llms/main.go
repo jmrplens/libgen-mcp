@@ -209,6 +209,8 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("- LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes, 0 = no limit (default: 0)\n")
 	b.WriteString("- LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads (default: 2)\n")
 	b.WriteString("- LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)\n")
+	b.WriteString("- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: staged waits between attempts to start a download — resolve/connect/first byte (default: `5s,5s,5s,10s,10s,10s,15s`, ~8 attempts over ~60s)\n")
+	b.WriteString("- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)\n")
 	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API for article downloads\n")
 	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
 	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)\n\n")
@@ -407,6 +409,8 @@ var configEnvVars = []envVarDoc{
 	{"LIBGEN_MCP_MAX_DOWNLOAD_BYTES", "0", "[0, 53687091200] (0 = no limit, ceiling 50 GiB)", "Maximum download size in bytes."},
 	{"LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS", "2", "[1, 16]", "Number of simultaneous downloads."},
 	{"LIBGEN_MCP_RETRY_ATTEMPTS", "3", "[1, 10]", "Retries per request."},
+	{"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "5s,5s,5s,10s,10s,10s,15s", "comma-separated Go durations; each in (0, 10m]; at most 20", "Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default)."},
+	{"LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "60s", "(0, 1h]", "Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed."},
 	{"LIBGEN_MCP_UNPAYWALL_EMAIL", "mail@jmrp.io", "email with @ and a dotted domain", "Contact email required by the Unpaywall API for article (DOI) downloads."},
 	{"LIBGEN_MCP_SCIHUB_HOSTS", "sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf", "comma-separated bare hosts (no scheme, no path)", "Ordered Sci-Hub mirror hosts, tried in order until one serves an article."},
 	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, libgen, randombook", "Enabled/ordered download sources. Empty enables all."},
