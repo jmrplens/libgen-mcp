@@ -388,6 +388,21 @@ func TestDownloadToolBadMD5(t *testing.T) {
 	}
 }
 
+// TestDownloadToolBadSource verifies the tool rejects an unknown source name.
+func TestDownloadToolBadSource(t *testing.T) {
+	session := newSession(t)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee", "source": "nosuchsource"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Error("download with an unknown source should be a tool error")
+	}
+}
+
 // md5ErrSource is a DownloadSource that supports md5 items but always fails to
 // resolve, so the download handler's error path can be exercised without a network.
 type md5ErrSource struct{}

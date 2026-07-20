@@ -265,12 +265,22 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	}
 	defer c.releaseSlot()
 
+	// When the item names a source, restrict the download to that single source;
+	// otherwise try the whole configured chain in order.
+	sources := c.sources
+	if item.Source != "" {
+		sources = sourcesNamed(c.sources, item.Source)
+		if len(sources) == 0 {
+			return nil, fmt.Errorf("download source %q is not enabled (check LIBGEN_MCP_SOURCES)", item.Source)
+		}
+	}
+
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
 	// Try each supporting source in order: a source that fails to resolve or whose
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to
 	// the next. The first success returns; if all fail, the joined errors surface.
 	var errs []error
-	for _, src := range c.sources {
+	for _, src := range sources {
 		if !src.Supports(item) {
 			continue
 		}
@@ -285,9 +295,24 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		}
 	}
 	if len(errs) == 0 {
+		if item.Source != "" {
+			return nil, fmt.Errorf("source %q cannot serve md5=%q doi=%q (md5 uses libgen/randombook; doi uses unpaywall/scihub)", item.Source, item.MD5, item.DOI)
+		}
 		return nil, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
 	}
 	return nil, errors.Join(errs...)
+}
+
+// sourcesNamed returns the single source whose Name matches name (case-insensitive),
+// or nil when no enabled source has that name.
+func sourcesNamed(all []DownloadSource, name string) []DownloadSource {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, s := range all {
+		if s.Name() == name {
+			return []DownloadSource{s}
+		}
+	}
+	return nil
 }
 
 // acquireSlot takes a download concurrency slot, honoring context cancellation so
