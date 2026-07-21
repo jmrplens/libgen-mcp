@@ -5,6 +5,7 @@
 <p align="center">
 
 [![GitHub Release](https://img.shields.io/github/v/release/jmrplens/libgen-mcp?style=flat&logo=github&label=Release)](https://github.com/jmrplens/libgen-mcp/releases/latest)
+[![Live on Fly.io](https://img.shields.io/badge/Live-Fly.io-8b5cf6?style=flat&logo=flydotio&logoColor=white)](https://libgen-mcp.fly.dev/health)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Windows%20%7C%20Linux%20%7C%20macOS-amd64%20%26%20arm64-lightgrey?style=flat&logo=windows-terminal&logoColor=white)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_libgen-mcp2&metric=alert_status)](https://sonarcloud.io/summary/overall?id=jmrplens_libgen-mcp2)
