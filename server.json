@@ -14,7 +14,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-linux-amd64",
       "version": "1.2.0",
-      "fileSha256": "ada35cf3049a68c8fcf3efde916b245b6e62f08402d0460a045fbfad1be4d6ed",
+      "fileSha256": "feca3ab68737b148ebd9cbec6b330163c7dba2e80720338926c527df94a6279b",
       "transport": {
         "type": "stdio"
       },
@@ -43,7 +43,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-linux-arm64",
       "version": "1.2.0",
-      "fileSha256": "65ae4f276b6e39bdc6cdaae845b66586402e98787b724bf5e71d76b4572704b7",
+      "fileSha256": "19a7a568e322879c06a2609dabac69fc87b45bcc805e331c80b6802fce8c4df7",
       "transport": {
         "type": "stdio"
       },
@@ -72,7 +72,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-darwin-amd64",
       "version": "1.2.0",
-      "fileSha256": "7f04d394d15c9a2cdcc5042253fb702d9c0d94905f00f85fbdc0ed768a19458a",
+      "fileSha256": "0c1e335d2c82d7f924004817f5e813c30006259991e23b9d5961824e2a49182a",
       "transport": {
         "type": "stdio"
       },
@@ -101,7 +101,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-darwin-arm64",
       "version": "1.2.0",
-      "fileSha256": "a55595ed19958fe6d21997d15c7bc6f5ff51c4cbe97ca450c3972240ce6b62b4",
+      "fileSha256": "c8dfa7c73da4f8556b610bf36bc053a35945ee20e61c03913201224f7e45ead2",
       "transport": {
         "type": "stdio"
       },
@@ -130,7 +130,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-windows-amd64.exe",
       "version": "1.2.0",
-      "fileSha256": "09ad7bc16c6b8ed4a32109f421e0a8b7a815334c68b2e88f7e1fd586f1f08341",
+      "fileSha256": "edde2ed5e2509fd9ceed881dd5d76cd43769e9ce2eb51c63d40a72907667d50d",
       "transport": {
         "type": "stdio"
       },
@@ -159,7 +159,7 @@
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.2.0/libgen-mcp-windows-arm64.exe",
       "version": "1.2.0",
-      "fileSha256": "d889044024914eaa520b8007493f28eec0a14fcc2c5ffc5da5f84d99a2b6f3c0",
+      "fileSha256": "650af564c800f1d4bfdccd278739fd6df06551234e473e60deb764cb2c6207e1",
       "transport": {
         "type": "stdio"
       },
