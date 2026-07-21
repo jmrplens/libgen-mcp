@@ -113,9 +113,6 @@ func Load() (*Config, error) {
 	if v := os.Getenv("LIBGEN_MCP_SOURCES"); v != "" {
 		cfg.Sources = splitHosts(v)
 	}
-	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
-		return nil, err
-	}
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
 	} else {
@@ -190,8 +187,12 @@ func parseDurations(v string) ([]time.Duration, error) {
 	return waits, nil
 }
 
-// loadNumeric fills the numeric fields of cfg from the environment.
+// loadNumeric fills the numeric and boolean scalar fields of cfg from the
+// environment.
 func loadNumeric(cfg *Config) error {
+	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
+		return err
+	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
 		return err
 	}
