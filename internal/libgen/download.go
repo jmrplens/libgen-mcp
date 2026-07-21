@@ -292,6 +292,58 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 	return sources, nil
 }
 
+// ResolvedDownload is a direct download URL produced by ResolveLink: the bytes
+// are NOT fetched, so the caller (a remote MCP client, or an agent's own fetch
+// tool) can retrieve the file itself, wherever it is running. Header carries any
+// request headers the URL requires (e.g. a Referer for Sci-Hub); it is nil when
+// the URL is fetchable as-is (libgen and randombook resolve to bare CDN URLs).
+type ResolvedDownload struct {
+	URL       string
+	Header    http.Header
+	VerifyMD5 bool
+	Ext       string
+	Source    string
+}
+
+// ResolveLink resolves item to a direct download URL through the configured
+// source chain (honoring item.Source) WITHOUT downloading any bytes, returning
+// the first source that resolves. It is the remote-friendly counterpart of
+// DownloadItem: use it when the file must be fetched by the caller rather than
+// written to this server's disk (e.g. a hosted HTTP deployment, where the server
+// and the user are different machines). The first supporting source that resolves
+// wins; if none do, the joined per-source errors are returned.
+func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, error) {
+	sources, err := c.selectSources(item.Source)
+	if err != nil {
+		return ResolvedDownload{}, err
+	}
+	var errs []error
+	for _, src := range sources {
+		if !src.Supports(item) {
+			continue
+		}
+		resolved, rerr := src.Resolve(ctx, item)
+		if rerr != nil {
+			errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), rerr))
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		return ResolvedDownload{
+			URL:       resolved.FileURL,
+			Header:    resolved.Header,
+			VerifyMD5: resolved.VerifyMD5,
+			Ext:       resolved.Ext,
+			Source:    src.Name(),
+		}, nil
+	}
+	if len(errs) == 0 {
+		return ResolvedDownload{}, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
+	}
+	return ResolvedDownload{}, errors.Join(errs...)
+}
+
 // DownloadItem downloads the file identified by item (an md5, a DOI, or both)
 // into dir, trying each supporting source in the configured chain until one
 // succeeds. The output name is chosen as documented on Download. An optional

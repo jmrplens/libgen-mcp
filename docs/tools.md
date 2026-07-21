@@ -97,13 +97,14 @@ at least one is required. Returns the saved path, size, and the source that serv
 
 ### download input
 
-| Parameter  | Type   | Required | Description                                                                                                                                                                                                                                                    |
-| ---------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                                                                                                    |
-| `doi`      | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                |
-| `path`     | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                               |
-| `filename` | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                     |
-| `source`   | string | no       | Restrict the download to a single source: `libgen`/`randombook` (books, `md5`) or `unpaywall`/`scihub` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set. Omit to try every compatible source in order with failover. |
+| Parameter      | Type   | Required | Description                                                                                                                                                                                                                                                                                           |
+| -------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`          | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                                                                                                                                           |
+| `doi`          | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                                                       |
+| `path`         | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                                                                      |
+| `filename`     | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                                                            |
+| `source`       | string | no       | Restrict the download to a single source: `libgen`/`randombook` (books, `md5`) or `unpaywall`/`scihub` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set. Omit to try every compatible source in order with failover.                                        |
+| `resolve_only` | bool   | no       | When `true`, resolve the direct download **URL** and return it as a link (a `resource_link` block plus a `resolved` object) **without** downloading. Use for a remote/hosted server, which cannot write to your machine, or to fetch the file with your own tool. Default `false` (download to disk). |
 
 At least one of `md5` or `doi` is required. A malformed `md5` (not 32 hex chars) is
 rejected before any work.
@@ -133,6 +134,21 @@ result names it. See [Architecture](architecture.md) for the full chain.
 | `source`            | string | The source that succeeded: `libgen`, `randombook`, `unpaywall`, or `scihub`.                                                                     |
 | `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest. |
 | `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                       |
+
+With `resolve_only: true` the tool does **not** save a file: the `path`/`size_bytes` fields stay empty and the output instead carries a `resolved` object plus a `resource_link` content block:
+
+| Field                 | Type   | Description                                                                                       |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------------- |
+| `resolved.url`        | string | The direct URL to download the file from.                                                         |
+| `resolved.source`     | string | The source that resolved it (`libgen`, `randombook`, `unpaywall`, `scihub`).                      |
+| `resolved.filename`   | string | A suggested filename.                                                                             |
+| `resolved.mime_type`  | string | The likely content type (e.g. `application/pdf`).                                                 |
+| `resolved.headers`    | object | Request headers to set when fetching (e.g. a `Referer` for sci-hub); absent when none are needed. |
+| `resolved.verify_md5` | bool   | `true` when the fetched bytes should hash to the requested `md5` (book downloads).                |
+
+### Where the file goes: local vs. remote
+
+By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download directory — ideal for autonomous local agents. A **remote/hosted** server runs elsewhere and cannot write to your disk; there, pass `resolve_only: true` to get the direct URL back (with any required `headers`), which you — or your agent's own fetch/HTTP tool — retrieve, so the file ends up wherever that fetch runs. MCP has no way for a tool to push bytes to the client, so a link is the only way a remote server can deliver a multi-megabyte file.
 
 ### Behavior and errors
 

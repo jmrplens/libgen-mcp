@@ -313,7 +313,48 @@ func scenarios() []scenario {
 			// download links in its written answer.
 			Assert: assertOrderedTableWithLinks,
 		},
+		{
+			ID: "S16",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie, then ` +
+				`give me the direct download URL — do NOT download the file, I just want the link.`,
+			// resolve_only path: the model must discover it can set resolve_only=true to
+			// get a link back instead of downloading, and the tool must return a
+			// resolved URL. A live resolve failure is a SKIP.
+			Assert: assertResolveOnlyLink,
+		},
 	}
+}
+
+// assertResolveOnlyLink checks the resolve-only path: the model sets
+// resolve_only=true on a valid md5/doi download call, and the tool returns a
+// resolved URL without downloading. A live resolve failure is a SKIP.
+func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if ro, _ := call.Input["resolve_only"].(bool); !ro {
+		return false, "model did not set resolve_only=true"
+	}
+	if !isMD5(stringField(call.Input, "md5")) && !isDOI(stringField(call.Input, "doi")) {
+		return false, "resolve call carried neither a valid md5 nor doi"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " model set resolve_only correctly but the live resolve failed (mirror/network)"
+	}
+	var out struct {
+		Resolved *struct {
+			URL    string `json:"url"`
+			Source string `json:"source"`
+		} `json:"resolved"`
+	}
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if out.Resolved == nil || !strings.HasPrefix(out.Resolved.URL, "http") {
+		return false, "resolve_only returned no resolved URL"
+	}
+	return true, fmt.Sprintf("resolved a URL via %s without downloading: %s", out.Resolved.Source, out.Resolved.URL)
 }
 
 // assertOrderedTableWithLinks checks a large, ordered results request that asks

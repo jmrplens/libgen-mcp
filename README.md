@@ -138,13 +138,16 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 
 Download a file to a local directory. Provide `md5` for a book **or** `doi` for an article (at least one is required); the server resolves the appropriate source chain and, for book (`md5`) downloads, verifies the result against the expected hash (DOI/article downloads are not MD5-verified). Returns the saved path, size, and the source that served it.
 
-| Parameter  | Type   | Required | Description                                                                                                                           |
-| ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | one of   | File MD5 hash from a book search result.                                                                                              |
-| `doi`      | string | one of   | DOI from an article search result; articles are fetched by DOI.                                                                       |
-| `path`     | string | no       | Destination directory (default: `LIBGEN_MCP_DOWNLOAD_DIR` or `~/Downloads`).                                                          |
-| `filename` | string | no       | Destination filename (default: a clean name from the record metadata or the mirror).                                                  |
-| `source`   | string | no       | Restrict the download to one source: `libgen`/`randombook` (books) or `unpaywall`/`scihub` (articles). Omit to try all with failover. |
+| Parameter      | Type   | Required | Description                                                                                                                                                                                    |
+| -------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`          | string | one of   | File MD5 hash from a book search result.                                                                                                                                                       |
+| `doi`          | string | one of   | DOI from an article search result; articles are fetched by DOI.                                                                                                                                |
+| `path`         | string | no       | Destination directory (default: `LIBGEN_MCP_DOWNLOAD_DIR` or `~/Downloads`).                                                                                                                   |
+| `filename`     | string | no       | Destination filename (default: a clean name from the record metadata or the mirror).                                                                                                           |
+| `source`       | string | no       | Restrict the download to one source: `libgen`/`randombook` (books) or `unpaywall`/`scihub` (articles). Omit to try all with failover.                                                          |
+| `resolve_only` | bool   | no       | Return the direct download **URL** as a link instead of downloading. Use for a remote/hosted server (it can't write to your machine) or to fetch the file with your own tool. Default `false`. |
+
+> **Where the file goes — local vs. remote.** By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download dir (great for autonomous local agents). A **remote/hosted** server runs elsewhere and cannot write to your disk — there, pass `resolve_only: true` to get a URL back (as a `resource_link` + a `resolved` object with any required `headers`), which you or your agent's fetch tool retrieve, so the file ends up where the fetch runs.
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
 

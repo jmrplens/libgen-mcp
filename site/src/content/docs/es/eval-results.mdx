@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 16 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 17 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -41,30 +41,31 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Dieciséis escenarios (S1–S15, más una variante S6b) cubren búsqueda, detalles,
+Diecisiete escenarios (S1–S16, más una variante S6b) cubren búsqueda, detalles,
 descargas, selección de fuente, recuperación de errores, progreso y — de forma
 importante — prompts **sin guía** que no dan pistas al modelo, para comprobar si
 la superficie de herramientas es lo bastante auto-descriptiva para que un LLM la
 use sin ayuda.
 
-| ID  | Qué comprueba                                                                                                                                                                            |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                           |
-| S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                               |
-| S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                    |
-| S4  | `get_details` sobre un md5 tomado de un resultado de búsqueda previo                                                                                                                     |
-| S5  | Descarga de libro por md5: ruta guardada + tamaño no nulo                                                                                                                                |
-| S6  | Descarga **eligiendo fuente**: el modelo pone `source:"scihub"` para un DOI de artículo de pago                                                                                          |
-| S6b | Descarga eligiendo fuente de libro: el modelo pone `source:"randombook"` para un md5                                                                                                     |
-| S7  | Artículo de acceso abierto por DOI vía unpaywall (necesita email de contacto)                                                                                                            |
-| S8  | Ambiguo "encuéntrame un buen libro" — pasa si el modelo pide aclaración o la herramienta lo rechaza                                                                                      |
-| S9  | **Reintentos de arranque**: Sci-Hub apuntado a un host muerto; el schedule escalonado debe agotarse y devolver el error accionable "could not start", y el modelo no debe fabricar éxito |
-| S10 | **Búsqueda de libro sin guía** ("quiero leer _Dune_…") — el modelo forma una búsqueda desde una petición simple, sin pistas de colección/campos                                          |
-| S11 | **Búsqueda de cómics sin guía** ("encuentra la novela gráfica _Watchmen_") — el modelo debe descubrir la colección correcta sin ayuda                                                    |
-| S12 | **Descarga de libro sin guía** ("descarga _Clean Code_…") — el modelo busca y descarga por un md5 que descubrió, eligiendo la fuente él mismo                                            |
-| S13 | **Descarga de artículo sin guía** ("dame un PDF de _Hallmarks of Cancer_") — el modelo debe descubrir que los artículos van por DOI, no por md5                                          |
-| S14 | **Progreso de descarga** — se adjunta un token de progreso; las notificaciones deben llegar al cliente de punta a punta durante una descarga en vivo                                     |
-| S15 | **Tabla ordenada con enlaces** — una petición grande y ordenada; el modelo debe fijar un tamaño de página grande + orden e incluir los enlaces de descarga en su respuesta               |
+| ID  | Qué comprueba                                                                                                                                                                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                                                                                       |
+| S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                                                                                           |
+| S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                                                                                |
+| S4  | `get_details` sobre un md5 tomado de un resultado de búsqueda previo                                                                                                                                                                                 |
+| S5  | Descarga de libro por md5: ruta guardada + tamaño no nulo                                                                                                                                                                                            |
+| S6  | Descarga **eligiendo fuente**: el modelo pone `source:"scihub"` para un DOI de artículo de pago                                                                                                                                                      |
+| S6b | Descarga eligiendo fuente de libro: el modelo pone `source:"randombook"` para un md5                                                                                                                                                                 |
+| S7  | Artículo de acceso abierto por DOI vía unpaywall (necesita email de contacto)                                                                                                                                                                        |
+| S8  | Ambiguo "encuéntrame un buen libro" — pasa si el modelo pide aclaración o la herramienta lo rechaza                                                                                                                                                  |
+| S9  | **Reintentos de arranque**: Sci-Hub apuntado a un host muerto; el schedule escalonado debe agotarse y devolver el error accionable "could not start", y el modelo no debe fabricar éxito                                                             |
+| S10 | **Búsqueda de libro sin guía** ("quiero leer _Dune_…") — el modelo forma una búsqueda desde una petición simple, sin pistas de colección/campos                                                                                                      |
+| S11 | **Búsqueda de cómics sin guía** ("encuentra la novela gráfica _Watchmen_") — el modelo debe descubrir la colección correcta sin ayuda                                                                                                                |
+| S12 | **Descarga de libro sin guía** ("descarga _Clean Code_…") — el modelo busca y descarga por un md5 que descubrió, eligiendo la fuente él mismo                                                                                                        |
+| S13 | **Descarga de artículo sin guía** ("dame un PDF de _Hallmarks of Cancer_") — el modelo debe descubrir que los artículos van por DOI, no por md5                                                                                                      |
+| S14 | **Progreso de descarga** — se adjunta un token de progreso; las notificaciones deben llegar al cliente de punta a punta durante una descarga en vivo                                                                                                 |
+| S15 | **Tabla ordenada con enlaces** — una petición grande y ordenada; el modelo debe fijar un tamaño de página grande + orden e incluir los enlaces de descarga en su respuesta                                                                           |
+| S16 | **Enlace resolve-only** ("dame la URL directa de descarga, no lo descargues") — el modelo debe poner `resolve_only=true`, y la herramienta devuelve una URL (como `resource_link`) en vez de un archivo guardado — la vía de entrega remota/hosteada |
 
 ## Últimos resultados
 
@@ -91,6 +92,7 @@ modelo.
 | S13 | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                            |
 | S14 | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`               |
 | S15 | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta       |
+| S16 | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)               |
 
 ## Cómo ejecutarlo
 

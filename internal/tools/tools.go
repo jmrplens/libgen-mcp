@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"runtime/debug"
 	"slices"
@@ -71,23 +72,38 @@ type DetailsOutput struct {
 	Edition   map[string]any `json:"edition,omitempty" jsonschema:"the edition record (present for an md5 lookup's related edition, or an id lookup with object=edition)"`
 }
 
-// DownloadOutput wraps the domain download result with leading NextSteps guidance.
-// The embedded DownloadResult's fields are promoted, so the wire shape is the
-// result fields plus a leading next_steps; the domain type stays free of any
-// MCP-presentation concern.
+// ResolvedLink is the result of a resolve-only download: a direct URL the caller
+// fetches itself, instead of the server writing a file to its own disk. It is
+// what a remote/hosted deployment returns, since the server cannot write to the
+// client's machine — the client (or an agent's own fetch tool) retrieves the URL.
+type ResolvedLink struct {
+	URL       string            `json:"url" jsonschema:"the direct URL to download the file from"`
+	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook, unpaywall or scihub"`
+	Filename  string            `json:"filename,omitempty" jsonschema:"a suggested filename for the saved file"`
+	MIMEType  string            `json:"mime_type,omitempty" jsonschema:"the likely content type of the file"`
+	Headers   map[string]string `json:"headers,omitempty" jsonschema:"request headers to set when fetching the URL (e.g. Referer for sci-hub); absent when the URL is fetchable as-is"`
+	VerifyMD5 bool              `json:"verify_md5" jsonschema:"true when the fetched bytes should hash to the requested md5 (book downloads)"`
+}
+
+// DownloadOutput wraps the download result with leading NextSteps guidance. In
+// the default (fetch) mode the embedded DownloadResult's fields are promoted (the
+// saved file's path, size, source, …); in resolve-only mode Resolved carries the
+// direct URL instead and the DownloadResult fields stay zero.
 type DownloadOutput struct {
-	NextSteps []string `json:"next_steps,omitempty" jsonschema:"suggested follow-up now that the file is saved"`
+	NextSteps []string      `json:"next_steps,omitempty" jsonschema:"suggested follow-up now that the file is saved (or the link resolved)"`
+	Resolved  *ResolvedLink `json:"resolved,omitempty" jsonschema:"present only when resolve_only was set: the direct URL to fetch instead of a saved file"`
 	libgen.DownloadResult
 }
 
 // DownloadInput holds the parameters for the download tool. Provide md5 (books)
 // or doi (articles); at least one is required.
 type DownloadInput struct {
-	MD5      string `json:"md5,omitempty" jsonschema:"file md5 hash from a book search result; provide md5 or doi"`
-	DOI      string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5 or doi"`
-	Path     string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)"`
-	Filename string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
-	Source   string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover"`
+	MD5         string `json:"md5,omitempty" jsonschema:"file md5 hash from a book search result; provide md5 or doi"`
+	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5 or doi"`
+	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
+	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
+	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover"`
+	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 }
 
 // Register wires the search, get_details and download tools onto the MCP server,
@@ -181,7 +197,9 @@ func downloadToolDescription(book, article []string) string {
 	}
 	fmt.Fprintf(&b, "Set source to restrict the download to a single enabled provider (%s) instead of trying them all. ",
 		strings.Join(orderedEnabledSources(book, article), ", "))
-	b.WriteString("The md5/doi come from a prior search result. Returns the saved path, size and the source that served it. See also: search (to find the md5/doi).")
+	b.WriteString("The md5/doi come from a prior search result. Returns the saved path, size and the source that served it. ")
+	b.WriteString("Set resolve_only=true to instead get the direct download URL back (as a link) WITHOUT downloading — use this when the server runs remotely from you (it cannot write to your disk), or to fetch the file with your own tool. ")
+	b.WriteString("See also: search (to find the md5/doi).")
 	return b.String()
 }
 
@@ -424,16 +442,21 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 		if err != nil {
 			return nil, zero, err
 		}
+		item := libgen.Item{MD5: md5, DOI: doi, Source: source}
+		// For a book with no explicit name, fill bibliographic metadata so the file
+		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details
+		// lookup failure must not fail the request.
+		if md5 != "" && in.Filename == "" {
+			item.Meta = bookMeta(ctx, c, md5)
+		}
+
+		if in.ResolveOnly {
+			return resolveDownload(ctx, c, item, in.Filename)
+		}
+
 		dir := in.Path
 		if dir == "" {
 			dir = cfg.DownloadDir
-		}
-		item := libgen.Item{MD5: md5, DOI: doi, Source: source}
-		// For a book download with no explicit name, fill bibliographic metadata so
-		// the file lands under a clean "Author - Title (Year).ext" name. Best-effort:
-		// a details lookup failure must not fail the download.
-		if md5 != "" && in.Filename == "" {
-			item.Meta = bookMeta(ctx, c, md5)
 		}
 		res, err := c.DownloadItem(ctx, item, dir, in.Filename, progressNotifier(ctx, req))
 		if err != nil {
@@ -442,6 +465,169 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 		out := DownloadOutput{NextSteps: downloadNextSteps(*res), DownloadResult: *res}
 		return markdownResult(renderDownloadMarkdown(out)), out, nil
 	}
+}
+
+// resolveDownload handles the resolve_only path: it resolves the direct URL
+// without fetching, and returns it as a resource_link content block plus
+// structured output, so a remote client or an agent's own fetch tool can retrieve
+// the file itself.
+func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, filename string) (*mcp.CallToolResult, DownloadOutput, error) {
+	var zero DownloadOutput
+	r, err := c.ResolveLink(ctx, item)
+	if err != nil {
+		return nil, zero, err
+	}
+	link := ResolvedLink{
+		URL:       r.URL,
+		Source:    r.Source,
+		Filename:  resolveFilename(item, filename, r.Ext),
+		MIMEType:  mimeForExt(r.Ext, item),
+		Headers:   headerMap(r.Header),
+		VerifyMD5: r.VerifyMD5,
+	}
+	out := DownloadOutput{NextSteps: resolveNextSteps(link), Resolved: &link}
+	res := &mcp.CallToolResult{Content: []mcp.Content{
+		&mcp.ResourceLink{URI: link.URL, Name: link.Filename, MIMEType: link.MIMEType, Title: link.Filename},
+		&mcp.TextContent{Text: renderResolvedMarkdown(link)},
+	}}
+	return res, out, nil
+}
+
+// resolveFilename picks a filename for a resolved link: an explicit filename, a
+// clean "Author - Title (Year).ext" from bibliographic metadata, or the
+// identifier plus extension.
+func resolveFilename(item libgen.Item, explicit, ext string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if ext == "" {
+		if item.DOI != "" {
+			ext = "pdf" // articles resolve to PDFs
+		}
+	}
+	if m := item.Meta; m != nil && strings.TrimSpace(m.Title) != "" {
+		name := m.Title
+		if strings.TrimSpace(m.Author) != "" {
+			name = m.Author + " - " + m.Title
+		}
+		if strings.TrimSpace(m.Year) != "" {
+			name += " (" + m.Year + ")"
+		}
+		return sanitizeName(name) + extSuffix(ext)
+	}
+	base := item.MD5
+	if base == "" {
+		base = sanitizeName(item.DOI)
+	}
+	return base + extSuffix(ext)
+}
+
+// extSuffix returns ".ext" for a non-empty extension, else "".
+func extSuffix(ext string) string {
+	if ext == "" {
+		return ""
+	}
+	return "." + strings.TrimPrefix(ext, ".")
+}
+
+// sanitizeName strips path-hostile characters from a filename component.
+func sanitizeName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\:*?"<>|`, r) {
+			return '-'
+		}
+		return r
+	}, strings.TrimSpace(s))
+}
+
+// mimeForExt maps a file extension (and the item kind) to a likely content type.
+func mimeForExt(ext string, item libgen.Item) string {
+	switch strings.ToLower(strings.TrimPrefix(ext, ".")) {
+	case "pdf":
+		return "application/pdf"
+	case "epub":
+		return "application/epub+zip"
+	case "mobi":
+		return "application/x-mobipocket-ebook"
+	case "djvu":
+		return "image/vnd.djvu"
+	case "cbr":
+		return "application/vnd.comicbook-rar"
+	case "cbz":
+		return "application/vnd.comicbook+zip"
+	case "txt":
+		return "text/plain"
+	case "":
+		if item.DOI != "" {
+			return "application/pdf" // articles resolve to PDFs
+		}
+		return "application/octet-stream"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// headerMap flattens the required request headers into a plain map (first value
+// per key), or nil when none are needed.
+func headerMap(h http.Header) map[string]string {
+	if len(h) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(h))
+	for k := range h {
+		if v := h.Get(k); v != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// resolveNextSteps guides the caller on how to fetch the resolved URL.
+func resolveNextSteps(link ResolvedLink) []string {
+	step := "Download the file by fetching this URL: " + link.URL
+	if len(link.Headers) > 0 {
+		step += " — set these request headers when fetching: " + headerList(link.Headers) + "."
+	} else {
+		step += " — it is fetchable directly (open it, or pass it to your HTTP/fetch tool)."
+	}
+	steps := []string{step}
+	if link.VerifyMD5 {
+		steps = append(steps, "After downloading, verify the bytes' MD5 matches the requested md5 (this is a book source).")
+	}
+	return steps
+}
+
+// renderResolvedMarkdown renders a resolved link as a short human-readable block.
+func renderResolvedMarkdown(link ResolvedLink) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Resolved a download link via **%s** (not downloaded — fetch it yourself):\n", mdCell(link.Source))
+	fmt.Fprintf(&b, "- URL: %s\n", link.URL)
+	if link.Filename != "" {
+		fmt.Fprintf(&b, "- Suggested filename: %s\n", mdCell(link.Filename))
+	}
+	if len(link.Headers) > 0 {
+		fmt.Fprintf(&b, "- Required headers: %s\n", mdCell(headerList(link.Headers)))
+	}
+	writeNextSteps(&b, resolveNextSteps(link))
+	return b.String()
+}
+
+// headerList renders a header map as "Key: value" pairs joined by "; ", in a
+// stable order.
+func headerList(h map[string]string) string {
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+": "+h[k])
+	}
+	return strings.Join(parts, "; ")
 }
 
 // bookMeta fetches bibliographic fields for a book md5 to build a clean download
