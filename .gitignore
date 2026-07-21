@@ -2,6 +2,10 @@
 /probe
 /server
 /eval
+/gen_llms
+/godoc_tool
+/audit_tokens
+/format_md_tables
 /dist/
 coverage.out
 coverage.internal.out
