@@ -154,6 +154,16 @@ libgen-mcp --http :8080
 In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200`
 while serving, handy for container and load-balancer health checks.
 
+Because an HTTP server runs elsewhere and cannot write to your disk, `download` returns a
+link (a `resource_link` plus a `resolved` object) instead of saving a file — you don't need
+to set `resolve_only` in this mode. See [Tools](tools.md#where-the-file-goes-local-vs-remote)
+for details.
+
+Hosting a **stdio** server remotely instead (e.g. behind `mcp-proxy` so it can be listed on a
+catalog like Glama) puts you in the same situation without `--http`: the disk is remote and
+the client can't reach it. Set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` to put that stdio server into
+the same remote-download mode.
+
 See [Configuration](configuration.md) for the environment variables you can set on any of
 these, and [Architecture](architecture.md) for how the transports work.
 

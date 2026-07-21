@@ -171,4 +171,7 @@ The server speaks MCP over one of two transports, selected at startup:
 
 Both transports share the same tools, HTTP client, and download pipeline; only the
 request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
-and shut the active transport down gracefully.
+and shut the active transport down gracefully. Because a `--http` server runs elsewhere and
+cannot write to the client's disk, it flips `download` into remote download mode: every call
+returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. See
+[Tools](tools.md#where-the-file-goes-local-vs-remote) for details.

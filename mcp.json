@@ -34,6 +34,8 @@
                 "LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS",
                 "-e",
                 "LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT",
+                "-e",
+                "LIBGEN_MCP_REMOTE_DOWNLOADS",
                 "ghcr.io/jmrplens/libgen-mcp:latest"
             ],
             "env": {
@@ -50,7 +52,8 @@
                 "LIBGEN_MCP_SCIHUB_HOSTS": "${LIBGEN_MCP_SCIHUB_HOSTS:-}",
                 "LIBGEN_MCP_SOURCES": "${LIBGEN_MCP_SOURCES:-}",
                 "LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "${LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS:-5s,5s,5s,10s,10s,10s,15s}",
-                "LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT": "${LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT:-60s}"
+                "LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT": "${LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT:-60s}",
+                "LIBGEN_MCP_REMOTE_DOWNLOADS": "${LIBGEN_MCP_REMOTE_DOWNLOADS:-false}"
             }
         }
     }

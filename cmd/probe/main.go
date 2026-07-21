@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -17,45 +18,68 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 )
 
-// checker accumulates the state of the checks and prints their results.
-type checker struct{ failed bool }
+// checker accumulates the state of the checks and prints their results to w.
+type checker struct {
+	w      io.Writer
+	failed bool
+}
 
 func (c *checker) report(name string, err error, okMsg string) {
 	if err != nil {
 		c.failed = true
-		fmt.Printf("[FAIL] %s: %v\n", name, err)
+		fmt.Fprintf(c.w, "[FAIL] %s: %v\n", name, err)
 		return
 	}
-	fmt.Printf("[OK]   %s: %s\n", name, okMsg)
+	fmt.Fprintf(c.w, "[OK]   %s: %s\n", name, okMsg)
 }
 
 func main() {
-	os.Exit(run())
+	os.Exit(run(os.Stdout, os.Args[1:]))
 }
 
-func run() int {
-	mirror := flag.String("mirror", "", "force a specific mirror base URL")
-	flag.Parse()
+// newManager builds the mirror manager. It is a test seam (overridden in tests
+// so the probe runs against a local server instead of the live discovery page).
+var newManager = mirrors.NewManager
+
+// run parses flags, builds the client stack from configuration and drives the
+// probe, returning the process exit code. All output goes to w.
+func run(w io.Writer, args []string) int {
+	fs := flag.NewFlagSet("probe", flag.ContinueOnError)
+	fs.SetOutput(w)
+	mirror := fs.String("mirror", "", "force a specific mirror base URL")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Println("[FAIL] config:", err)
+		fmt.Fprintln(w, "[FAIL] config:", err)
 		return 1
 	}
 	if *mirror != "" {
 		cfg.Mirror = *mirror
 	}
-	mgr, err := mirrors.NewManager(cfg)
+	mgr, err := newManager(cfg)
 	if err != nil {
-		fmt.Println("[FAIL] mirrors manager:", err)
+		fmt.Fprintln(w, "[FAIL] mirrors manager:", err)
 		return 1
 	}
 	client := libgen.New(mgr, cfg)
+	return probe(ctx, w, mgr, client)
+}
 
-	c := &checker{}
+// mirrorLister is the subset of the mirror manager the probe depends on.
+type mirrorLister interface {
+	Mirrors(ctx context.Context) []string
+}
+
+// probe runs the full smoke check (mirrors → search → details → download) against
+// the supplied mirror lister and client, returning the process exit code.
+func probe(ctx context.Context, w io.Writer, mgr mirrorLister, client *libgen.Client) int {
+	c := &checker{w: w}
 	list := mgr.Mirrors(ctx)
 	if len(list) == 0 {
 		c.report("mirrors", errors.New("no mirrors discovered"), "")
@@ -65,7 +89,7 @@ func run() int {
 
 	sampleMD5 := c.runSearches(ctx, client)
 	if sampleMD5 == "" {
-		fmt.Println("[FAIL] no sample md5 available, skipping details/download checks")
+		fmt.Fprintln(w, "[FAIL] no sample md5 available, skipping details/download checks")
 		return 1
 	}
 

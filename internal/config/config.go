@@ -46,6 +46,12 @@ type Config struct {
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
 	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	// RemoteDownloads forces the download tool to always return a direct link (a
+	// resource_link + resolved object) instead of saving a file, regardless of
+	// transport. LIBGEN_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
+	// set it for a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the
+	// client cannot reach, so downloads are delivered as links the client fetches.
+	RemoteDownloads bool
 	// DownloadStartRetryWaits is the staged wait schedule between attempts to get a
 	// download to BEGIN (resolve + connect + first bytes). LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS,
 	// a comma-separated list of Go durations. len(waits) waits means len(waits)+1
@@ -181,8 +187,12 @@ func parseDurations(v string) ([]time.Duration, error) {
 	return waits, nil
 }
 
-// loadNumeric fills the numeric fields of cfg from the environment.
+// loadNumeric fills the numeric and boolean scalar fields of cfg from the
+// environment.
 func loadNumeric(cfg *Config) error {
+	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
+		return err
+	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
 		return err
 	}
@@ -212,6 +222,21 @@ func splitHosts(v string) []string {
 		}
 	}
 	return hosts
+}
+
+// envBool overwrites *dst with the boolean read from the variable key if present.
+// It accepts the forms strconv.ParseBool understands (1/0, t/f, true/false).
+func envBool(key string, dst *bool) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	*dst = b
+	return nil
 }
 
 // envInt overwrites *dst with the integer read from the variable key if present.
@@ -411,6 +436,15 @@ func validateMirror(mirror string) error {
 	return nil
 }
 
+// Test seams for the write-test cleanup steps. Closing a freshly created temp
+// file and removing it from an already-verified-writable directory cannot fail
+// deterministically on a real filesystem, so these are overridden in tests to
+// exercise the defensive error branches below.
+var (
+	closeWriteTestFile  = (*os.File).Close
+	removeWriteTestFile = os.Remove
+)
+
 // validateDownloadDir creates the download directory if missing and checks that
 // it is writable using a temporary file.
 func validateDownloadDir(dir string) error {
@@ -425,10 +459,10 @@ func validateDownloadDir(dir string) error {
 		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q is not writable: %w", dir, err)
 	}
 	name := f.Name()
-	if closeErr := f.Close(); closeErr != nil {
+	if closeErr := closeWriteTestFile(f); closeErr != nil {
 		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q write test: %w", dir, closeErr)
 	}
-	if rmErr := os.Remove(name); rmErr != nil {
+	if rmErr := removeWriteTestFile(name); rmErr != nil {
 		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q write test cleanup: %w", dir, rmErr)
 	}
 	return nil

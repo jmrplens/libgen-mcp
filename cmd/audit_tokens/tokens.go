@@ -29,7 +29,13 @@ func tokenCodec() tokenizer.Codec {
 // (the GPT-4 / GPT-3.5 encoding, a good proxy across modern LLMs). It falls back
 // to the bytes/4 heuristic when the tokenizer is unavailable.
 func countTokens(data []byte) int {
-	codec := tokenCodec()
+	return countTokensWith(tokenCodec(), data)
+}
+
+// countTokensWith counts tokens with an explicit codec so the fallback branches
+// (nil codec, encode error) are testable without depending on the process-wide
+// tokenizer, which always initializes successfully in practice.
+func countTokensWith(codec tokenizer.Codec, data []byte) int {
 	if codec == nil {
 		return len(data) / 4
 	}

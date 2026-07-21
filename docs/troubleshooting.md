@@ -131,3 +131,13 @@ disk.
   them (they live in the download directory, named `.libgen-mcp-*.part`).
 - Under Docker, make sure the mounted download volume is large enough and writable by UID
   `10001`.
+
+This check only applies to a local stdio/Docker server saving to disk. A remote/hosted
+server (started with `--http`) never writes a file at all — `download` always returns a
+link (a `resource_link` plus a `resolved` object) instead — so this error cannot occur
+there. See [Tools](tools.md#where-the-file-goes-local-vs-remote) for details.
+
+If you're hosting the server as **stdio** behind a proxy (e.g. `mcp-proxy`) on a remote or
+ephemeral machine, set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` — its disk is just as unreachable by
+the client as an HTTP deployment's, so downloads should come back as links too, not land on
+disk there.

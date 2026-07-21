@@ -146,11 +146,16 @@ func extractScihubPDF(body []byte) (string, bool) {
 	return "", false
 }
 
+// htmlParse is a seam over html.Parse so a test can force the (in practice
+// unreachable, since the tokenizer never errors on in-memory bytes) parse-error
+// branch of pdfElementSrc. Production always uses the real parser.
+var htmlParse = html.Parse
+
 // pdfElementSrc parses the HTML body and returns the src attribute of the first
 // element carrying id="pdf". The bool reports whether such an element with a
 // non-empty src was found.
 func pdfElementSrc(body []byte) (string, bool) {
-	doc, err := html.Parse(strings.NewReader(string(body)))
+	doc, err := htmlParse(strings.NewReader(string(body)))
 	if err != nil {
 		return "", false
 	}

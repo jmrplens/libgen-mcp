@@ -42,7 +42,7 @@ head:
             "name": "¿Dónde guarda libgen-mcp los archivos descargados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Por defecto en ~/Downloads. Puedes cambiar el directorio con la variable LIBGEN_MCP_DOWNLOAD_DIR o con el argumento path de la herramienta download en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID 10001."
+              "text": "Por defecto en ~/Downloads. Puedes cambiar el directorio con la variable LIBGEN_MCP_DOWNLOAD_DIR o con el argumento path de la herramienta download en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID 10001. Eso aplica a un servidor local stdio/Docker; un servidor remoto/alojado iniciado con --http no puede escribir en disco en absoluto, así que download devuelve siempre un enlace (un resource_link más un objeto resolved) en lugar de guardar el archivo. Un servidor stdio alojado, por ejemplo detrás de mcp-proxy en un catálogo como Glama, debería fijar LIBGEN_MCP_REMOTE_DOWNLOADS=1 para que sus descargas también vuelvan como enlaces."
             }
           }
         ]
@@ -161,3 +161,5 @@ Los artículos se obtienen por DOI a través de dos fuentes por orden: `unpaywal
 ### ¿Dónde guarda libgen-mcp los archivos descargados?
 
 Por defecto en `~/Downloads`. Puedes cambiar el directorio con la variable `LIBGEN_MCP_DOWNLOAD_DIR` o con el argumento `path` de la herramienta `download` en cada llamada; el campo `path` del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo `.part` (con nombre `.libgen-mcp-*.part`) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID `10001`.
+
+Eso aplica a un servidor local stdio/Docker. Un servidor remoto/alojado (iniciado con `--http`) no puede escribir en disco en absoluto, así que nunca guarda ningún archivo: `download` devuelve siempre un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar el archivo — `resolve_only` queda implícito y no hace falta indicarlo. Un servidor **stdio** alojado —por ejemplo detrás de `mcp-proxy` en un catálogo como Glama— está en la misma situación remota/efímera aunque no tenga un listener HTTP; fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1` en él para que sus descargas también vuelvan como enlaces. Consulta [Herramientas](/libgen-mcp/es/tools/#download) para más detalle.

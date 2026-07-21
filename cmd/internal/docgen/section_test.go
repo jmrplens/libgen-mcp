@@ -62,3 +62,20 @@ func TestReplaceSection_MissingFileErrors(t *testing.T) {
 		t.Fatal("ReplaceSection on missing file: error = nil, want read error")
 	}
 }
+
+// TestReplaceSection_MissingMarkerErrors verifies that a readable file whose
+// content lacks the markers surfaces the ComputeReplacedSection error rather
+// than writing a malformed file.
+func TestReplaceSection_MissingMarkerErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.md")
+	if err := os.WriteFile(path, []byte("no markers here"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := ReplaceSection(path, "<!-- S -->", "<!-- E -->", "NEW")
+	if err == nil {
+		t.Fatal("ReplaceSection with missing marker: error = nil, want compute error")
+	}
+	if !strings.Contains(err.Error(), "start marker") {
+		t.Fatalf("ReplaceSection error = %v, want start marker not found", err)
+	}
+}

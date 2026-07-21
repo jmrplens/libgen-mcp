@@ -191,8 +191,13 @@ func (m *Manager) readCache() (*cacheFile, error) {
 	return &c, nil
 }
 
+// jsonMarshal is a test seam. Marshaling a cacheFile (a time.Time plus a
+// []string) cannot fail for values produced at runtime, so it is overridden in
+// tests to exercise the defensive marshal-error branch below.
+var jsonMarshal = json.Marshal
+
 func (m *Manager) writeCache(list []string) {
-	data, err := json.Marshal(cacheFile{FetchedAt: time.Now(), Mirrors: list})
+	data, err := jsonMarshal(cacheFile{FetchedAt: time.Now(), Mirrors: list})
 	if err != nil {
 		return
 	}

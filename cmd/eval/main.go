@@ -105,7 +105,7 @@ func runEval(only string, keep bool, resultsDoc string) int {
 // harness/API error is an "error"; an assertion SKIP message is a "skip".
 func runOne(ctx context.Context, ac *anthropicClient, sc scenario) outcome {
 	tr, err := runScenario(ctx, ac, sc)
-	oc := outcome{ID: sc.ID, Calls: len(tr.Calls)}
+	oc := outcome{ID: sc.ID, Calls: len(tr.Calls), Remote: sc.Remote}
 	if err != nil {
 		oc.Status = statusError
 		oc.Message = err.Error()
