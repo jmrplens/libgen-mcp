@@ -176,6 +176,14 @@ libgen-mcp --http :8080
 
 En modo HTTP el servidor expone además un endpoint `GET /health` que devuelve `200` cuando está sirviendo, útil para sondas de disponibilidad. Como en este modo el servidor es remoto y no puede escribir en tu disco, la herramienta `download` devuelve siempre un enlace de descarga (en vez de guardar el archivo) — `resolve_only` queda implícito, no hace falta indicarlo.
 
+<Aside type="note">
+	Alojar en su lugar un servidor **stdio** — por ejemplo detrás de `mcp-proxy`
+	en un catálogo como Glama — también lo coloca en una máquina remota o efímera,
+	solo que sin un listener HTTP. Fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1` para poner
+	a ese servidor stdio en el mismo modo de descarga remota que `--http` obtiene
+	automáticamente.
+</Aside>
+
 Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de entorno que puedes fijar en cualquiera de estos casos, y [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo funcionan los transportes.
 
 ## Tu primera búsqueda

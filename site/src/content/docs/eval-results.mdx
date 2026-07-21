@@ -80,27 +80,27 @@ Across the most recent live runs (real API + real mirrors), **every scenario
 passes**, with `S6b` skipping when the randombook fresh-mirror lookup is
 unavailable — a live-mirror condition, not a model failure.
 
-| ID  | Result  | Evidence                                                                  |
-| --- | ------- | ------------------------------------------------------------------------- |
-| S1  | ✅ PASS | nonfiction search, 25 results, first md5 valid                            |
-| S2  | ✅ PASS | articles search, result with a valid DOI                                  |
-| S3  | ✅ PASS | standards search, 25 results                                              |
-| S4  | ✅ PASS | `get_details` returned a File/Edition record                              |
-| S5  | ✅ PASS | downloaded a book via `libgen` (MD5-verified)                             |
-| S6  | ✅ PASS | model set `source:"scihub"`; downloaded ~6.4 MB                           |
-| S6b | ⏭️ SKIP | model set `source:"randombook"` correctly; live mirror returned 404       |
-| S7  | ✅ PASS | downloaded a DOI via `unpaywall`                                          |
-| S8  | ✅ PASS | model asked to clarify instead of guessing                                |
-| S9  | ✅ PASS | start-retries exhausted; actionable error surfaced; no fabricated success |
-| S10 | ✅ PASS | picked `topics:[fiction]` unaided                                         |
-| S11 | ✅ PASS | picked `topics:[comics]` unaided                                          |
-| S12 | ✅ PASS | searched, then downloaded by md5 via `libgen`                             |
-| S13 | ✅ PASS | searched → found DOI → downloaded via `scihub`                            |
-| S14 | ✅ PASS | received 18 progress notifications, final `982888/982888`                 |
-| S15 | ✅ PASS | ordered page of 50; model surfaced the download links in its answer       |
-| S16 | ✅ PASS | resolved a URL via `libgen` without downloading (`resolve_only`)          |
-| S17 | ✅ PASS | remote mode: model got a link; harness fetched ~1.0 MB to local disk      |
-| S18 | ✅ PASS | remote mode: model got a link; harness fetched ~6.5 MB to local disk      |
+| ID  | Mode   | Result  | Evidence                                                                  |
+| --- | ------ | ------- | ------------------------------------------------------------------------- |
+| S1  | local  | ✅ PASS | nonfiction search, 25 results, first md5 valid                            |
+| S2  | local  | ✅ PASS | articles search, result with a valid DOI                                  |
+| S3  | local  | ✅ PASS | standards search, 25 results                                              |
+| S4  | local  | ✅ PASS | `get_details` returned a File/Edition record                              |
+| S5  | local  | ✅ PASS | downloaded a book via `libgen` (MD5-verified)                             |
+| S6  | local  | ✅ PASS | model set `source:"scihub"`; downloaded ~6.4 MB                           |
+| S6b | local  | ⏭️ SKIP | model set `source:"randombook"` correctly; live mirror returned 404       |
+| S7  | local  | ✅ PASS | downloaded a DOI via `unpaywall`                                          |
+| S8  | local  | ✅ PASS | model asked to clarify instead of guessing                                |
+| S9  | local  | ✅ PASS | start-retries exhausted; actionable error surfaced; no fabricated success |
+| S10 | local  | ✅ PASS | picked `topics:[fiction]` unaided                                         |
+| S11 | local  | ✅ PASS | picked `topics:[comics]` unaided                                          |
+| S12 | local  | ✅ PASS | searched, then downloaded by md5 via `libgen`                             |
+| S13 | local  | ✅ PASS | searched → found DOI → downloaded via `scihub`                            |
+| S14 | local  | ✅ PASS | received 18 progress notifications, final `982888/982888`                 |
+| S15 | local  | ✅ PASS | ordered page of 50; model surfaced the download links in its answer       |
+| S16 | local  | ✅ PASS | resolved a URL via `libgen` without downloading (`resolve_only`)          |
+| S17 | remote | ✅ PASS | remote mode: model got a link; harness fetched ~1.0 MB to local disk      |
+| S18 | remote | ✅ PASS | remote mode: model got a link; harness fetched ~6.5 MB to local disk      |
 
 ## Running it yourself
 

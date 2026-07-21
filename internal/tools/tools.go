@@ -179,8 +179,12 @@ func orderedEnabledSources(book, article []string) []string {
 // sources: an enum so the model cannot select a disabled provider, plus a matching
 // description. A nil result makes AddTool fall back to the default inferred schema
 // (no enum), which only happens if inference of the static struct ever fails.
+// downloadSchemaFor is a seam for tests to exercise the defensive
+// schema-inference error guard below; it defaults to the real jsonschema.For.
+var downloadSchemaFor = jsonschema.For[DownloadInput]
+
 func downloadInputSchema(enabled []string) *jsonschema.Schema {
-	schema, err := jsonschema.For[DownloadInput](nil)
+	schema, err := downloadSchemaFor(nil)
 	if err != nil {
 		return nil
 	}

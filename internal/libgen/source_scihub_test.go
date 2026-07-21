@@ -2,11 +2,15 @@ package libgen
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 // scihubFixture loads the captured Sci-Hub article page used across tests.
@@ -30,6 +34,19 @@ func TestScihubExtractPDF(t *testing.T) {
 	const want = "https://sci.bban.top/pdf/10.1016/j.cell.2016.01.043.pdf"
 	if url != want {
 		t.Errorf("extractScihubPDF() = %q, want %q", url, want)
+	}
+}
+
+// TestPDFElementSrcParseError covers pdfElementSrc's parse-failure branch by
+// overriding the htmlParse seam to return an error. The real html.Parse never
+// errors on in-memory bytes, so this guard is otherwise unreachable.
+func TestPDFElementSrcParseError(t *testing.T) {
+	orig := htmlParse
+	htmlParse = func(io.Reader) (*html.Node, error) { return nil, errors.New("forced parse error") }
+	t.Cleanup(func() { htmlParse = orig })
+
+	if src, ok := pdfElementSrc([]byte(`<iframe id="pdf" src="x.pdf"></iframe>`)); ok || src != "" {
+		t.Errorf("pdfElementSrc on a parse error = (%q, %v), want (\"\", false)", src, ok)
 	}
 }
 

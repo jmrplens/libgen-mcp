@@ -414,6 +414,100 @@ func TestFormatMarkdownTableFile_WriteError(t *testing.T) {
 	}
 }
 
+// TestFormatFiles_ReadErrorPropagates verifies formatFiles returns (nil, err)
+// when a listed file cannot be formatted (here, it no longer exists on disk).
+func TestFormatFiles_ReadErrorPropagates(t *testing.T) {
+	root := t.TempDir()
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatalf("open root: %v", err)
+	}
+	defer rootFS.Close()
+
+	changed, err := formatFiles(rootFS, []string{"ghost.md"}, false)
+	if err == nil {
+		t.Fatal("formatFiles() error = nil, want read failure")
+	}
+	if changed != nil {
+		t.Fatalf("formatFiles() changed = %v, want nil on error", changed)
+	}
+	if !strings.Contains(err.Error(), "read ghost.md") {
+		t.Fatalf("formatFiles() error = %v, want read ghost.md", err)
+	}
+}
+
+// TestReportResults_PerFileWriteError verifies that a write failure while
+// emitting the per-file change list (after the header write succeeds) is
+// returned to the caller.
+func TestReportResults_PerFileWriteError(t *testing.T) {
+	err := reportResults(&countingErrWriter{failAfter: 1}, []string{"README.md"}, false)
+	if err == nil {
+		t.Fatal("reportResults() error = nil, want per-file write failure")
+	}
+	if !strings.Contains(err.Error(), "write stdout") {
+		t.Fatalf("reportResults() error = %v, want write stdout", err)
+	}
+}
+
+// countingErrWriter succeeds for the first failAfter writes, then fails. It lets
+// a test target a specific write in a multi-write sequence.
+type countingErrWriter struct {
+	failAfter int
+	count     int
+}
+
+func (w *countingErrWriter) Write(p []byte) (int, error) {
+	w.count++
+	if w.count > w.failAfter {
+		return 0, errors.New("write failed")
+	}
+	return len(p), nil
+}
+
+// TestResolveInputPath_RelError verifies that filepath.Rel failures (a relative
+// root against an absolute item) are wrapped and reported.
+func TestResolveInputPath_RelError(t *testing.T) {
+	_, err := resolveInputPath("relative-root", string(filepath.Separator)+"absolute-item")
+	if err == nil {
+		t.Fatal("resolveInputPath() error = nil, want filepath.Rel failure")
+	}
+	if !strings.Contains(err.Error(), "resolve") {
+		t.Fatalf("resolveInputPath() error = %v, want resolve prefix", err)
+	}
+}
+
+// TestRun_FormatFilesErrorPropagates verifies run surfaces a formatFiles error.
+// A read-only Markdown file that needs formatting makes the downstream write
+// fail; the error must propagate out of run. Skipped where POSIX file modes do
+// not enforce the write failure (Windows, or running as root).
+func TestRun_FormatFilesErrorPropagates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce POSIX read-only via os.Chmod")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses POSIX file mode checks; cannot trigger a write failure via chmod")
+	}
+	root := t.TempDir()
+	target := filepath.Join(root, "README.md")
+	writeTestFile(t, target, "| A | B |\n| --- | ---: |\n| one | 2 |\n")
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o750); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.Chmod(target, 0o400); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(target, 0o600) })
+
+	var stdout bytes.Buffer
+	err := run([]string{"--root", root}, &stdout)
+	if err == nil {
+		t.Fatal("run() error = nil, want write failure from formatFiles")
+	}
+	if !strings.Contains(err.Error(), "write README.md") {
+		t.Fatalf("run() error = %v, want write README.md", err)
+	}
+}
+
 func writeTestFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -572,5 +573,19 @@ func TestClientSearch(t *testing.T) {
 	}
 	if mirror != srv.URL || len(page.Results) == 0 {
 		t.Errorf("Search() mirror=%q results=%d", mirror, len(page.Results))
+	}
+}
+
+// TestTopicNames verifies TopicNames returns the recognized collection names,
+// including the documented ones used in no-result guidance.
+func TestTopicNames(t *testing.T) {
+	names := TopicNames()
+	if len(names) == 0 {
+		t.Fatal("TopicNames() returned no topics")
+	}
+	for _, want := range []string{"nonfiction", "fiction", "articles"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("TopicNames() = %v, missing %q", names, want)
+		}
 	}
 }

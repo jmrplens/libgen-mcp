@@ -222,12 +222,16 @@ func listPackages() ([]packageInfo, error) {
 }
 
 // goExecutable returns the absolute Go tool path from the runtime installation.
+// It uses runtime.GOROOT() deliberately to avoid a PATH lookup (Sonar go:S4036,
+// gosec G204). This is a dev-only tool that always runs under the toolchain that
+// built it, where GOROOT() is accurate, so the deprecation note — which concerns
+// binaries copied to a different machine — does not apply here.
 func goExecutable() string {
 	name := "go"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	return filepath.Join(runtime.GOROOT(), "bin", name) //nolint:staticcheck // Avoid PATH lookup for Sonar go:S4036.
+	return filepath.Join(runtime.GOROOT(), "bin", name) //nolint:staticcheck // deprecated GOROOT accepted: avoids PATH lookup (Sonar go:S4036); dev tool runs under its build toolchain.
 }
 
 // auditPackage parses source files for one package and checks documentation.
@@ -570,7 +574,8 @@ func renderMarkdown(report report) string {
 }
 
 func writeCountTable(b *strings.Builder, title string, counts map[string]int, limit int) {
-	b.WriteString(title + "\n\n")
+	b.WriteString(title)
+	b.WriteString("\n\n")
 	if len(counts) == 0 {
 		b.WriteString("No entries.\n\n")
 		return

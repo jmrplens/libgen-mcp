@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -54,6 +55,55 @@ func TestLoadBadTimeout(t *testing.T) {
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() with an invalid timeout should fail")
 	}
+}
+
+// TestLoadRemoteDownloads checks LIBGEN_MCP_REMOTE_DOWNLOADS: unset defaults to
+// false, the truthy forms strconv.ParseBool accepts set it, and a non-boolean
+// value is a load error rather than a silent fallback.
+func TestLoadRemoteDownloads(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir()) // keep Load() offline/valid
+
+	t.Run("default false", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_REMOTE_DOWNLOADS", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.RemoteDownloads {
+			t.Error("RemoteDownloads = true, want false when unset")
+		}
+	})
+
+	for _, v := range []string{"1", "true", "TRUE", "t"} {
+		t.Run("true via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_REMOTE_DOWNLOADS", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !cfg.RemoteDownloads {
+				t.Errorf("RemoteDownloads = false for %q, want true", v)
+			}
+		})
+	}
+
+	t.Run("false via 0", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_REMOTE_DOWNLOADS", "0")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.RemoteDownloads {
+			t.Error("RemoteDownloads = true for \"0\", want false")
+		}
+	})
+
+	t.Run("invalid errors", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_REMOTE_DOWNLOADS", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() with a non-boolean LIBGEN_MCP_REMOTE_DOWNLOADS should fail")
+		}
+	})
 }
 
 // TestLoadNewDefaults verifies LoadNewDefaults.
@@ -508,5 +558,37 @@ func TestValidateUnwritableDownloadDir(t *testing.T) {
 	cfg.DownloadDir = filepath.Join(f.Name(), "sub")
 	if cfg.Validate() == nil {
 		t.Fatal("Validate() with an unwritable DownloadDir should fail")
+	}
+}
+
+// TestValidateDownloadDirCloseError covers the write-test Close-error branch of
+// validateDownloadDir. Closing a freshly created temp file does not fail on a
+// real filesystem, so the failure is injected through the closeWriteTestFile
+// seam.
+func TestValidateDownloadDirCloseError(t *testing.T) {
+	orig := closeWriteTestFile
+	t.Cleanup(func() { closeWriteTestFile = orig })
+	closeWriteTestFile = func(f *os.File) error {
+		_ = f.Close() // close the real fd, then report a synthetic failure
+		return errors.New("synthetic close failure")
+	}
+	if err := validateDownloadDir(t.TempDir()); err == nil {
+		t.Fatal("validateDownloadDir() should fail when the write-test file cannot be closed")
+	}
+}
+
+// TestValidateDownloadDirRemoveError covers the write-test cleanup Remove-error
+// branch of validateDownloadDir. Removing the temp file from an already-writable
+// directory does not fail on a real filesystem, so the failure is injected
+// through the removeWriteTestFile seam.
+func TestValidateDownloadDirRemoveError(t *testing.T) {
+	orig := removeWriteTestFile
+	t.Cleanup(func() { removeWriteTestFile = orig })
+	removeWriteTestFile = func(name string) error {
+		_ = os.Remove(name) // remove the real temp file, then report a synthetic failure
+		return errors.New("synthetic remove failure")
+	}
+	if err := validateDownloadDir(t.TempDir()); err == nil {
+		t.Fatal("validateDownloadDir() should fail when the write-test cleanup cannot remove the file")
 	}
 }

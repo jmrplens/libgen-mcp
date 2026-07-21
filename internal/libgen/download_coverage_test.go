@@ -184,6 +184,21 @@ func TestValidateFileResponsePeekError(t *testing.T) {
 	}
 }
 
+// TestValidateFileResponseNoBytes covers validateFileResponse's no-first-byte
+// branch: a 2xx whose body yields no bytes at all is a "did not begin" failure
+// (tagged for the start-retry schedule) rather than a valid empty file.
+func TestValidateFileResponseNoBytes(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	resp := &http.Response{Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}
+	_, _, err := c.validateFileResponse(resp, -1)
+	if err == nil {
+		t.Fatal("validateFileResponse should fail when the response yields no bytes")
+	}
+	if !errors.Is(err, errStartFailed) {
+		t.Errorf("err = %v, want it tagged as a start failure", err)
+	}
+}
+
 // TestStreamToPartOpenError covers openPartForStream's OpenFile failure (and its
 // propagation through streamToPartAndVerify): a partial path that is an existing
 // directory cannot be opened for writing.

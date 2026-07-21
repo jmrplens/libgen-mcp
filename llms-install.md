@@ -115,6 +115,7 @@ user asks for the behavior:
 | `LIBGEN_MIRROR`              | auto-discovery | Pin a specific Library Genesis mirror, e.g. `https://libgen.li`.          |
 | `LIBGEN_MCP_LOG_LEVEL`       | `info`         | `debug`, `info`, `warn`, or `error`.                                      |
 | `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources: `unpaywall`, `scihub`, `libgen`, `randombook`. |
+| `LIBGEN_MCP_REMOTE_DOWNLOADS` | `false`       | Set to `1` when hosting the stdio server remotely (e.g. behind `mcp-proxy`): `download` returns a link instead of saving a file to an unreachable disk. |
 
 Full reference: <https://jmrplens.github.io/libgen-mcp/configuration/>
 

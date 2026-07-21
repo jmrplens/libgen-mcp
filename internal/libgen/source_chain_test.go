@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,50 @@ func TestResolveLink(t *testing.T) {
 	c3 := New(staticMirrors{}, cfg, WithSources(stubSource{name: "x", supports: false}))
 	if _, err3 := c3.ResolveLink(context.Background(), Item{MD5: "abc"}); err3 == nil {
 		t.Error("want error when no source supports the item")
+	}
+
+	// A named source that is not in the chain surfaces the selectSources error
+	// straight out of ResolveLink (before any resolution is attempted).
+	if _, err4 := c.ResolveLink(context.Background(), Item{MD5: "abc", Source: "nope"}); err4 == nil {
+		t.Error("want error when the named source is not enabled")
+	}
+
+	// When every supporting source errors, the per-source errors are joined and
+	// returned.
+	c5 := New(staticMirrors{}, cfg, WithSources(bad))
+	if _, err5 := c5.ResolveLink(context.Background(), Item{MD5: "abc"}); err5 == nil {
+		t.Error("want joined error when all sources fail to resolve")
+	}
+
+	// A canceled context stops the failover loop after the first erroring source
+	// rather than trying the rest.
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	c6 := New(staticMirrors{}, cfg, WithSources(bad, good))
+	r6, err6 := c6.ResolveLink(canceled, Item{MD5: "abc"})
+	if err6 == nil {
+		t.Error("want error when the context is canceled mid-chain")
+	}
+	if r6.Source == "libgen" {
+		t.Error("a canceled context should stop before the second source resolves")
+	}
+}
+
+// TestSelectSourcesUnpaywallHint verifies that asking for the unpaywall source when
+// it is not enabled yields the actionable error naming its email gate.
+func TestSelectSourcesUnpaywallHint(t *testing.T) {
+	c := New(staticMirrors{}, baseChainConfig(), WithSources(stubSource{name: "libgen", supports: true}))
+
+	if _, err := c.selectSources("scihub"); err == nil {
+		t.Error("want error when a non-unpaywall source is not enabled")
+	}
+
+	_, err := c.selectSources("unpaywall")
+	if err == nil {
+		t.Fatal("want error when unpaywall is not enabled")
+	}
+	if !strings.Contains(err.Error(), "LIBGEN_MCP_UNPAYWALL_EMAIL") {
+		t.Errorf("unpaywall error %q should point at the email gate", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -127,6 +128,39 @@ func TestUnpaywallDefaultClientTransportError(t *testing.T) {
 	s := unpaywallSource{email: "mail@jmrp.io", baseURL: "http://127.0.0.1:0"}
 	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
 		t.Error("Resolve should fail when the Unpaywall request cannot be sent")
+	}
+}
+
+// unpaywallRoundTripper records the requested URL and replies with a canned OA
+// response, so a test can drive Resolve without a real network host.
+type unpaywallRoundTripper struct{ gotURL string }
+
+func (rt *unpaywallRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	rt.gotURL = r.URL.String()
+	body := `{"is_oa":true,"best_oa_location":{"url_for_pdf":"https://cdn.example/x.pdf"}}`
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}, nil
+}
+
+// TestUnpaywallDefaultBaseURL covers the base-URL fallback: with baseURL empty the
+// source targets the documented public API host (unpaywallAPIBase). A stub
+// transport intercepts the request so no real network call is made.
+func TestUnpaywallDefaultBaseURL(t *testing.T) {
+	rt := &unpaywallRoundTripper{}
+	s := unpaywallSource{email: "mail@jmrp.io", http: &http.Client{Transport: rt}}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL != "https://cdn.example/x.pdf" {
+		t.Errorf("FileURL = %q, want the stubbed PDF URL", res.FileURL)
+	}
+	if !strings.HasPrefix(rt.gotURL, unpaywallAPIBase) {
+		t.Errorf("request URL %q should default to the public API base %q", rt.gotURL, unpaywallAPIBase)
 	}
 }
 

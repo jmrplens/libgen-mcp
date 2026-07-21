@@ -88,27 +88,27 @@ escenarios pasan**, con `S6b` en SKIP cuando el descubrimiento de mirror fresco 
 randombook no está disponible — una condición de mirror en vivo, no un fallo del
 modelo.
 
-| ID  | Resultado | Evidencia                                                                        |
-| --- | --------- | -------------------------------------------------------------------------------- |
-| S1  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                            |
-| S2  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                      |
-| S3  | ✅ PASS   | búsqueda standards, 25 resultados                                                |
-| S4  | ✅ PASS   | `get_details` devolvió un registro File/Edition                                  |
-| S5  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                                  |
-| S6  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                               |
-| S6b | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404       |
-| S7  | ✅ PASS   | descargó un DOI vía `unpaywall`                                                  |
-| S8  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                                    |
-| S9  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                       |
-| S10 | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                              |
-| S11 | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                               |
-| S12 | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                            |
-| S13 | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                                  |
-| S14 | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`                     |
-| S15 | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta             |
-| S16 | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                     |
-| S17 | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~1,0 MB a disco local |
-| S18 | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
+| ID  | Modo   | Resultado | Evidencia                                                                        |
+| --- | ------ | --------- | -------------------------------------------------------------------------------- |
+| S1  | local  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                            |
+| S2  | local  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                      |
+| S3  | local  | ✅ PASS   | búsqueda standards, 25 resultados                                                |
+| S4  | local  | ✅ PASS   | `get_details` devolvió un registro File/Edition                                  |
+| S5  | local  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                                  |
+| S6  | local  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                               |
+| S6b | local  | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404       |
+| S7  | local  | ✅ PASS   | descargó un DOI vía `unpaywall`                                                  |
+| S8  | local  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                                    |
+| S9  | local  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                       |
+| S10 | local  | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                              |
+| S11 | local  | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                               |
+| S12 | local  | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                            |
+| S13 | local  | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                                  |
+| S14 | local  | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`                     |
+| S15 | local  | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta             |
+| S16 | local  | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                     |
+| S17 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~1,0 MB a disco local |
+| S18 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
 
 ## Cómo ejecutarlo
 

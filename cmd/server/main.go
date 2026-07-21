@@ -99,10 +99,12 @@ func run(ctx context.Context, httpAddr string) error {
 	}
 	client := libgen.New(mgr, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: version}, nil)
-	// In HTTP (remote) mode the server cannot write to the client's disk, so the
-	// download tool returns a link to fetch instead of saving a file.
+	// When the server can't write to the client's disk, the download tool returns a
+	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
+	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via
+	// LIBGEN_MCP_REMOTE_DOWNLOADS, since its filesystem is unreachable/ephemeral too.
 	var regOpts []tools.RegisterOption
-	if httpAddr != "" {
+	if httpAddr != "" || cfg.RemoteDownloads {
 		regOpts = append(regOpts, tools.WithRemoteDownloads())
 	}
 	tools.Register(server, client, cfg, regOpts...)

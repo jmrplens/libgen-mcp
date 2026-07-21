@@ -309,6 +309,24 @@ func TestWriteCacheMkdirError(t *testing.T) {
 	}
 }
 
+// TestWriteCacheMarshalError covers the marshal-error branch of writeCache.
+// Marshaling a cacheFile cannot fail for runtime values, so the failure is
+// injected through the jsonMarshal seam; writeCache must give up without
+// writing a file.
+func TestWriteCacheMarshalError(t *testing.T) {
+	orig := jsonMarshal
+	t.Cleanup(func() { jsonMarshal = orig })
+	jsonMarshal = func(any) ([]byte, error) {
+		return nil, errors.New("synthetic marshal failure")
+	}
+	cachePath := filepath.Join(t.TempDir(), "mirrors.json")
+	m := &Manager{CachePath: cachePath}
+	m.writeCache([]string{"https://libgen.li"})
+	if _, err := os.Stat(cachePath); err == nil {
+		t.Fatal("writeCache() should not create a file when marshaling fails")
+	}
+}
+
 // TestNewManagerCacheDirError verifies that NewManager fails when the OS cache
 // directory cannot be resolved.
 func TestNewManagerCacheDirError(t *testing.T) {
