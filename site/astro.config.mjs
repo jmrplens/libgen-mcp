@@ -158,6 +158,7 @@ const jsonLd = JSON.stringify({
 				repositoryUrl,
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
+				"https://smithery.ai/servers/jmrp/libgen-mcp",
 				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
 			],
 		},
