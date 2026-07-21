@@ -183,6 +183,8 @@ libgen-mcp --http :8080
 
 In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200` while serving, handy for container and load-balancer health checks.
 
+Because an HTTP server runs elsewhere and cannot write to your disk, `download` returns a link (a `resource_link` plus a `resolved` object) instead of saving a file — you don't need to set `resolve_only` in this mode. See [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote) for details.
+
 See [Configuration](/libgen-mcp/configuration/) for the environment variables you can set on any of these, and [Architecture](/libgen-mcp/architecture/) for how the transports work.
 
 ## Your first search

@@ -147,7 +147,7 @@ Download a file to a local directory. Provide `md5` for a book **or** `doi` for 
 | `source`       | string | no       | Restrict the download to one source: `libgen`/`randombook` (books) or `unpaywall`/`scihub` (articles). Omit to try all with failover.                                                          |
 | `resolve_only` | bool   | no       | Return the direct download **URL** as a link instead of downloading. Use for a remote/hosted server (it can't write to your machine) or to fetch the file with your own tool. Default `false`. |
 
-> **Where the file goes — local vs. remote.** By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download dir (great for autonomous local agents). A **remote/hosted** server runs elsewhere and cannot write to your disk — there, pass `resolve_only: true` to get a URL back (as a `resource_link` + a `resolved` object with any required `headers`), which you or your agent's fetch tool retrieve, so the file ends up where the fetch runs.
+> **Where the file goes — local vs. remote.** By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download dir (great for autonomous local agents). A **remote/hosted** server (started with `--http`) runs elsewhere and cannot write to your disk, so there `download` **always returns a link** instead — a `resource_link` + a `resolved` object with any required `headers` — and you don't need to set `resolve_only`; it's implied. You (or your agent's fetch tool) retrieve that URL, so the file ends up where the fetch runs. On a local server you can still pass `resolve_only: true` to opt into the same link behavior per call.
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
 
@@ -233,7 +233,7 @@ make lint          # golangci-lint + govulncheck
 make format-md-tables  # normalize Markdown pipe tables
 ```
 
-By default the server speaks MCP over **stdio**. To serve **streamable HTTP** instead, pass `--http` with an address (`libgen-mcp --http :8080`); HTTP mode also exposes a `GET /health` readiness endpoint that returns `200` while serving. Print the version with `--version`.
+By default the server speaks MCP over **stdio**. To serve **streamable HTTP** instead, pass `--http` with an address (`libgen-mcp --http :8080`); HTTP mode also exposes a `GET /health` readiness endpoint that returns `200` while serving. Because an HTTP server is remote and cannot write to a client's disk, in this mode `download` automatically returns a link (see [local vs. remote](#download) above) rather than saving a file. Print the version with `--version`.
 
 ## Maintenance
 

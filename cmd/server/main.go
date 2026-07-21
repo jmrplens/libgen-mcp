@@ -99,7 +99,13 @@ func run(ctx context.Context, httpAddr string) error {
 	}
 	client := libgen.New(mgr, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: version}, nil)
-	tools.Register(server, client, cfg)
+	// In HTTP (remote) mode the server cannot write to the client's disk, so the
+	// download tool returns a link to fetch instead of saving a file.
+	var regOpts []tools.RegisterOption
+	if httpAddr != "" {
+		regOpts = append(regOpts, tools.WithRemoteDownloads())
+	}
+	tools.Register(server, client, cfg, regOpts...)
 
 	if httpAddr != "" {
 		return serveHTTP(ctx, server, httpAddr)
