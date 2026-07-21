@@ -20,7 +20,7 @@ import (
 // libgen mirrors and download sources. The cleanup closes the client and drains
 // the server session. Construction is offline: config.Load and
 // mirrors.NewManager do no network I/O.
-func newHostSession(ctx context.Context) (session *mcp.ClientSession, progress *progressCapture, cleanup func(), err error) {
+func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSession, progress *progressCapture, cleanup func(), err error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("load config: %w", err)
@@ -32,7 +32,13 @@ func newHostSession(ctx context.Context) (session *mcp.ClientSession, progress *
 	client := libgen.New(mgr, cfg)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-eval", Version: "0.0.1"}, nil)
-	tools.Register(server, client, cfg)
+	// Remote block: register the download tool in remote mode (returns a link
+	// instead of writing to disk), matching a hosted HTTP deployment.
+	var regOpts []tools.RegisterOption
+	if remote {
+		regOpts = append(regOpts, tools.WithRemoteDownloads())
+	}
+	tools.Register(server, client, cfg, regOpts...)
 
 	st, ct := mcp.NewInMemoryTransports()
 

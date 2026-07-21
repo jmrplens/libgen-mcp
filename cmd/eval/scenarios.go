@@ -52,7 +52,11 @@ type scenario struct {
 	Prompt     string
 	ToolChoice string
 	SetupEnv   map[string]string
-	Assert     func(transcript) (bool, string)
+	// Remote runs the scenario against the server in remote mode (download returns
+	// a link instead of writing to disk); the harness then fetches the link to the
+	// sandbox dir, so the file still ends up local.
+	Remote bool
+	Assert func(transcript) (bool, string)
 }
 
 var (
@@ -322,7 +326,51 @@ func scenarios() []scenario {
 			// resolved URL. A live resolve failure is a SKIP.
 			Assert: assertResolveOnlyLink,
 		},
+		// S17–S18 are the REMOTE block: the same "download this" requests, but the
+		// server runs in remote mode (download returns a link, never a saved file).
+		// The model just calls download as usual; the harness then fetches the link
+		// to the sandbox dir (as an agent's own fetch tool would), so the file still
+		// ends up local. The local block is the ordinary download scenarios (S5/S12/
+		// S13), which write to disk directly. Together they verify: same LLM behavior,
+		// different server behavior, file local in both.
+		{
+			ID:     "S17",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie and download it.`,
+			Remote: true,
+			Assert: assertRemoteDownloadLandsLocal,
+		},
+		{
+			ID:     "S18",
+			Prompt: fmt.Sprintf("Download the article with DOI %s.", scihubDOI),
+			Remote: true,
+			Assert: assertRemoteDownloadLandsLocal,
+		},
 	}
+}
+
+// assertRemoteDownloadLandsLocal checks the remote block: the model calls
+// download (which, in remote mode, returns a link), and the harness — acting as
+// the agent's own fetch tool — pulls that link to local disk. A live resolve or
+// fetch failure is a SKIP, since the model behavior under test was still correct.
+func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " remote resolve failed live (mirror/network)"
+	}
+	for _, f := range tr.Fetched {
+		if f.Err == "" && f.Size > 0 {
+			return true, fmt.Sprintf("remote: model got a link, harness fetched %d bytes to local disk", f.Size)
+		}
+	}
+	for _, f := range tr.Fetched {
+		if f.Err != "" {
+			return true, skipPrefix + " resolved a link but the live fetch failed: " + f.Err
+		}
+	}
+	return false, "remote download returned no fetchable link that landed locally"
 }
 
 // assertResolveOnlyLink checks the resolve-only path: the model sets

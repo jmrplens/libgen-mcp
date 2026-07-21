@@ -5,12 +5,86 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// fetchedFile records the harness fetching a resolve-only download URL to local
+// disk, simulating an agent's own fetch tool in the remote block: it proves the
+// file ends up local even when the (remote) server only returned a link.
+type fetchedFile struct {
+	URL  string
+	Path string
+	Size int64
+	Err  string
+}
+
+// maybeFetchResolved fetches the resolved download URL from a download tool call
+// (if any) to the sandbox download dir, returning nil when the call is not a
+// resolve-only download. It sets up no state on the server — it acts purely as
+// the caller's own fetch capability would.
+func maybeFetchResolved(ctx context.Context, call toolCall) *fetchedFile {
+	if call.Name != "download" || call.Result == nil || call.Result.IsError {
+		return nil
+	}
+	var out struct {
+		Resolved *struct {
+			URL      string            `json:"url"`
+			Filename string            `json:"filename"`
+			Headers  map[string]string `json:"headers"`
+		} `json:"resolved"`
+	}
+	if decodeStructured(call.Structured, &out) != nil || out.Resolved == nil || out.Resolved.URL == "" {
+		return nil
+	}
+	name := out.Resolved.Filename
+	if name == "" {
+		name = "resolved.bin"
+	}
+	// filepath.Base strips any path components, and the dir is the eval's own
+	// sandbox, so the resolved filename cannot escape it.
+	path := filepath.Join(os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"), filepath.Base(name))
+	fetched := &fetchedFile{URL: out.Resolved.URL, Path: path}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, out.Resolved.URL, http.NoBody)
+	if err != nil {
+		fetched.Err = err.Error()
+		return fetched
+	}
+	for k, v := range out.Resolved.Headers {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("User-Agent", "libgen-mcp-eval-fetch")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fetched.Err = err.Error()
+		return fetched
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		fetched.Err = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return fetched
+	}
+	f, err := os.Create(path) //nolint:gosec // path is sandbox dir + filepath.Base(name); cannot escape
+	if err != nil {
+		fetched.Err = err.Error()
+		return fetched
+	}
+	n, cerr := io.Copy(f, io.LimitReader(resp.Body, maxDownloadBytes))
+	_ = f.Close()
+	fetched.Size = n
+	if cerr != nil {
+		fetched.Err = cerr.Error()
+	}
+	return fetched
+}
 
 // maxTurns bounds how many model calls one scenario conversation may make.
 const maxTurns = 4
@@ -63,6 +137,9 @@ type transcript struct {
 	Calls     []toolCall
 	FinalText string
 	Progress  []mcp.ProgressNotificationParams
+	// Fetched records files the harness pulled from resolve-only download links
+	// (remote block), acting as the agent's own fetch tool.
+	Fetched []fetchedFile
 }
 
 // runScenario drives one scenario to completion: it applies any per-scenario
@@ -74,7 +151,7 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 	restore := applyEnv(sc.SetupEnv)
 	defer restore()
 
-	session, progress, cleanup, err := newHostSession(ctx)
+	session, progress, cleanup, err := newHostSession(ctx, sc.Remote)
 	if err != nil {
 		return transcript{}, err
 	}
@@ -118,6 +195,11 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 			call, block := executeTool(ctx, session, use)
 			tr.Calls = append(tr.Calls, call)
 			results = append(results, block)
+			// Simulate the agent's own fetch tool: pull any resolve-only download
+			// link to local disk (remote block).
+			if f := maybeFetchResolved(ctx, call); f != nil {
+				tr.Fetched = append(tr.Fetched, *f)
+			}
 		}
 		messages = append(messages, message{Role: "user", Content: results})
 	}

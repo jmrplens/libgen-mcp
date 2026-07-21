@@ -49,6 +49,9 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover that articles are keyed by DOI, not md5 |
 | S14 | **Download progress** — attaches a progress token to the download and asserts progress notifications actually reach the client end to end |
 | S15 | **Ordered table with links** — a large, sorted results request; asserts the model sets a big page size + ordering and includes the results' download links in its answer (the tool's next_steps instructs it to) |
+| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — asserts the model sets `resolve_only=true` and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path |
+| S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk |
+| S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -81,6 +84,15 @@ at `127.0.0.1` (connection refused instantly), and shrinks
 runs sub-second. It asserts the tool returns the actionable could-not-start error
 (naming retry-now / retry-later / ask-the-user recovery) and that the model
 reacts — relaying the failure or retrying — instead of claiming a saved file.
+
+**S17–S18 are a remote block.** Every other scenario runs against a **local**
+server, where `download` saves the file to disk. S17–S18 run the same download
+requests (book, then paywalled DOI) against a server started in **remote mode**
+(as if launched with `--http`), where `download` returns a link (a
+`resource_link` + a `resolved` object) instead of saving a file. The harness
+then acts as the agent's own fetch tool: it fetches the resolved URL to the
+sandbox download dir, so the file lands locally either way — verifying the
+model behaves the same while the server's delivery mechanism differs.
 
 ## Running
 

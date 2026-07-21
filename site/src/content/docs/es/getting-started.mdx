@@ -174,7 +174,7 @@ Para ejecutar el servidor de forma centralizada y conectarte por HTTP en lugar d
 libgen-mcp --http :8080
 ```
 
-En modo HTTP el servidor expone además un endpoint `GET /health` que devuelve `200` cuando está sirviendo, útil para sondas de disponibilidad.
+En modo HTTP el servidor expone además un endpoint `GET /health` que devuelve `200` cuando está sirviendo, útil para sondas de disponibilidad. Como en este modo el servidor es remoto y no puede escribir en tu disco, la herramienta `download` devuelve siempre un enlace de descarga (en vez de guardar el archivo) — `resolve_only` queda implícito, no hace falta indicarlo.
 
 Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de entorno que puedes fijar en cualquiera de estos casos, y [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo funcionan los transportes.
 

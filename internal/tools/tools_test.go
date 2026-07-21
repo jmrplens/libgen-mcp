@@ -951,6 +951,62 @@ func TestDownloadToolResolveOnly(t *testing.T) {
 	}
 }
 
+// TestDownloadToolRemoteMode verifies WithRemoteDownloads makes the download tool
+// always resolve a link (even without resolve_only) and never write a file, and
+// that its description advertises the remote behavior.
+func TestDownloadToolRemoteMode(t *testing.T) {
+	payload := []byte("%PDF-1.4 remote-mode payload")
+	srv := downloadMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	dir := t.TempDir()
+	cfg := &config.Config{DownloadDir: dir, Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg, WithRemoteDownloads())
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	// No resolve_only in the arguments — remote mode must still resolve a link.
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "download", Arguments: map[string]any{"md5": wantMD5}})
+	if err != nil || res.IsError {
+		t.Fatalf("CallTool: err=%v result=%+v", err, res)
+	}
+	var out DownloadOutput
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatal(merr)
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if out.Resolved == nil || !strings.Contains(out.Resolved.URL, srv.URL) {
+		t.Fatalf("remote mode should resolve a link without resolve_only; got %s", data)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("remote mode wrote %d file(s) to disk, want 0", len(entries))
+	}
+
+	tools, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name == "download" && !strings.Contains(tl.Description, "runs remotely") {
+			t.Errorf("remote download description should note remote behavior; got:\n%s", tl.Description)
+		}
+	}
+}
+
 // TestDownloadToolWithProgressToken exercises the download tool wiring: when the
 // client supplies a progress token, the handler must forward download progress
 // as MCP notifications/progress and the final notification must report the full

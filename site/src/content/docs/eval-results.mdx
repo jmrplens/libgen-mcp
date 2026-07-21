@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries and progress across 17 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries and progress across 19 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -37,30 +37,42 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Seventeen scenarios (S1–S16, plus a S6b variant) cover search, details, downloads,
+Nineteen scenarios (S1–S18, plus a S6b variant) cover search, details, downloads,
 source selection, error recovery, progress, link resolution, and — importantly —
 **unguided** prompts that give the model no hints, testing whether the tool
 surface is self-describing enough for an LLM to use unaided.
 
-| ID  | What it checks                                                                                                                                                                                                                     |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                                                                 |
-| S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                                                               |
-| S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                                                                   |
-| S4  | `get_details` on an md5 taken from a prior search result                                                                                                                                                                           |
-| S5  | Book download by md5: saved path + non-zero size                                                                                                                                                                                   |
-| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI                                                                                                                                           |
-| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5                                                                                                                                                       |
-| S7  | Open-access article by DOI via unpaywall (needs a contact email)                                                                                                                                                                   |
-| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it                                                                                                                                             |
-| S9  | **Start-retries**: Sci-Hub pinned to a dead host; the staged retry schedule must exhaust and surface the actionable "could not start" error, and the model must not fabricate success                                              |
-| S10 | **Unguided book search** ("I want to read _Dune_…") — model forms a search from a bare request, no collection/field hints                                                                                                          |
-| S11 | **Unguided comics search** ("find the graphic novel _Watchmen_") — model must discover the right collection unaided                                                                                                                |
-| S12 | **Unguided book download** ("download _Clean Code_…") — model searches, then downloads by an md5 it discovered, choosing the source itself                                                                                         |
-| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover articles are keyed by DOI, not md5                                                                                                   |
-| S14 | **Download progress** — a progress token is attached; progress notifications must reach the client end to end during a live download                                                                                               |
-| S15 | **Ordered table with links** — a large sorted request; the model must set a big page size + ordering and include the results' download links in its answer                                                                         |
-| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — the model must set `resolve_only=true`, and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path |
+| ID  | What it checks                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                                                                               |
+| S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                                                                             |
+| S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                                                                                 |
+| S4  | `get_details` on an md5 taken from a prior search result                                                                                                                                                                                         |
+| S5  | Book download by md5: saved path + non-zero size                                                                                                                                                                                                 |
+| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI                                                                                                                                                         |
+| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5                                                                                                                                                                     |
+| S7  | Open-access article by DOI via unpaywall (needs a contact email)                                                                                                                                                                                 |
+| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it                                                                                                                                                           |
+| S9  | **Start-retries**: Sci-Hub pinned to a dead host; the staged retry schedule must exhaust and surface the actionable "could not start" error, and the model must not fabricate success                                                            |
+| S10 | **Unguided book search** ("I want to read _Dune_…") — model forms a search from a bare request, no collection/field hints                                                                                                                        |
+| S11 | **Unguided comics search** ("find the graphic novel _Watchmen_") — model must discover the right collection unaided                                                                                                                              |
+| S12 | **Unguided book download** ("download _Clean Code_…") — model searches, then downloads by an md5 it discovered, choosing the source itself                                                                                                       |
+| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover articles are keyed by DOI, not md5                                                                                                                 |
+| S14 | **Download progress** — a progress token is attached; progress notifications must reach the client end to end during a live download                                                                                                             |
+| S15 | **Ordered table with links** — a large sorted request; the model must set a big page size + ordering and include the results' download links in its answer                                                                                       |
+| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — the model must set `resolve_only=true`, and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path               |
+| S17 | **Remote download (book)** — same "download _The C Programming Language_" request, but the server runs in **remote mode** (`--http`): `download` returns a link, and the harness — acting as the agent's own fetch tool — pulls it to local disk |
+| S18 | **Remote download (article)** — same for a paywalled DOI; the model just calls `download`, the remote server returns a link, and the harness fetches it to local disk                                                                            |
+
+## Local and remote blocks
+
+Most scenarios run against a **local** server, where `download` writes the file to
+disk. S17–S18 form a **remote block**: the same download requests run against a
+server in remote mode (`--http`), where `download` returns a link instead of
+saving a file. The harness then fetches that link to the sandbox — standing in
+for an agent's own fetch tool — so the file lands locally in both cases.
+Together the two blocks verify the model behaves the same while the server
+behaves differently, and the file ends up local either way.
 
 ## Latest results
 
@@ -87,6 +99,8 @@ unavailable — a live-mirror condition, not a model failure.
 | S14 | ✅ PASS | received 18 progress notifications, final `982888/982888`                 |
 | S15 | ✅ PASS | ordered page of 50; model surfaced the download links in its answer       |
 | S16 | ✅ PASS | resolved a URL via `libgen` without downloading (`resolve_only`)          |
+| S17 | ✅ PASS | remote mode: model got a link; harness fetched ~1.0 MB to local disk      |
+| S18 | ✅ PASS | remote mode: model got a link; harness fetched ~6.5 MB to local disk      |
 
 ## Running it yourself
 

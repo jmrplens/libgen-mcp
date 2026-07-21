@@ -106,9 +106,27 @@ type DownloadInput struct {
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 }
 
+// registerOptions holds the optional Register knobs.
+type registerOptions struct{ remoteDownloads bool }
+
+// RegisterOption customizes Register.
+type RegisterOption func(*registerOptions)
+
+// WithRemoteDownloads configures the download tool for a remote/hosted deployment:
+// because a remote server cannot write to the client's machine, download always
+// resolves and returns a direct link (as if resolve_only were set) instead of
+// saving a file, and its description says so. Use it when serving over HTTP.
+func WithRemoteDownloads() RegisterOption {
+	return func(o *registerOptions) { o.remoteDownloads = true }
+}
+
 // Register wires the search, get_details and download tools onto the MCP server,
 // each wrapped with panic recovery and call metrics.
-func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
+func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opts ...RegisterOption) {
+	var o registerOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	truthy, falsy := true, false
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search",
@@ -123,13 +141,17 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config) {
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client)))
 	book, article := client.EnabledSourceNames()
+	desc := downloadToolDescription(book, article)
+	if o.remoteDownloads {
+		desc += " NOTE: this server runs remotely, so download ALWAYS returns a direct link (a resource_link) for you to fetch yourself — it never saves a file here, and resolve_only is implied."
+	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download",
 		Title:       "Download file",
-		Description: downloadToolDescription(book, article),
+		Description: desc,
 		InputSchema: downloadInputSchema(orderedEnabledSources(book, article)),
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("download", downloadHandler(client, cfg)))
+	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads)))
 }
 
 // orderedEnabledSources merges the enabled book (md5) and article (doi) source
@@ -435,7 +457,7 @@ func validateDownloadInput(in DownloadInput) (md5, doi, source string, err error
 	return md5, doi, source, nil
 }
 
-func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
+func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
 		md5, doi, source, err := validateDownloadInput(in)
@@ -450,7 +472,9 @@ func downloadHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Do
 			item.Meta = bookMeta(ctx, c, md5)
 		}
 
-		if in.ResolveOnly {
+		// A remote server cannot write to the client's disk, so it always resolves
+		// a link; a local server honors resolve_only per call.
+		if remote || in.ResolveOnly {
 			return resolveDownload(ctx, c, item, in.Filename)
 		}
 

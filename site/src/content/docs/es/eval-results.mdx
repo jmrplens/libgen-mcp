@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 17 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 19 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -41,31 +41,45 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Diecisiete escenarios (S1–S16, más una variante S6b) cubren búsqueda, detalles,
+Diecinueve escenarios (S1–S18, más una variante S6b) cubren búsqueda, detalles,
 descargas, selección de fuente, recuperación de errores, progreso y — de forma
 importante — prompts **sin guía** que no dan pistas al modelo, para comprobar si
 la superficie de herramientas es lo bastante auto-descriptiva para que un LLM la
 use sin ayuda.
 
-| ID  | Qué comprueba                                                                                                                                                                                                                                        |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                                                                                       |
-| S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                                                                                           |
-| S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                                                                                |
-| S4  | `get_details` sobre un md5 tomado de un resultado de búsqueda previo                                                                                                                                                                                 |
-| S5  | Descarga de libro por md5: ruta guardada + tamaño no nulo                                                                                                                                                                                            |
-| S6  | Descarga **eligiendo fuente**: el modelo pone `source:"scihub"` para un DOI de artículo de pago                                                                                                                                                      |
-| S6b | Descarga eligiendo fuente de libro: el modelo pone `source:"randombook"` para un md5                                                                                                                                                                 |
-| S7  | Artículo de acceso abierto por DOI vía unpaywall (necesita email de contacto)                                                                                                                                                                        |
-| S8  | Ambiguo "encuéntrame un buen libro" — pasa si el modelo pide aclaración o la herramienta lo rechaza                                                                                                                                                  |
-| S9  | **Reintentos de arranque**: Sci-Hub apuntado a un host muerto; el schedule escalonado debe agotarse y devolver el error accionable "could not start", y el modelo no debe fabricar éxito                                                             |
-| S10 | **Búsqueda de libro sin guía** ("quiero leer _Dune_…") — el modelo forma una búsqueda desde una petición simple, sin pistas de colección/campos                                                                                                      |
-| S11 | **Búsqueda de cómics sin guía** ("encuentra la novela gráfica _Watchmen_") — el modelo debe descubrir la colección correcta sin ayuda                                                                                                                |
-| S12 | **Descarga de libro sin guía** ("descarga _Clean Code_…") — el modelo busca y descarga por un md5 que descubrió, eligiendo la fuente él mismo                                                                                                        |
-| S13 | **Descarga de artículo sin guía** ("dame un PDF de _Hallmarks of Cancer_") — el modelo debe descubrir que los artículos van por DOI, no por md5                                                                                                      |
-| S14 | **Progreso de descarga** — se adjunta un token de progreso; las notificaciones deben llegar al cliente de punta a punta durante una descarga en vivo                                                                                                 |
-| S15 | **Tabla ordenada con enlaces** — una petición grande y ordenada; el modelo debe fijar un tamaño de página grande + orden e incluir los enlaces de descarga en su respuesta                                                                           |
-| S16 | **Enlace resolve-only** ("dame la URL directa de descarga, no lo descargues") — el modelo debe poner `resolve_only=true`, y la herramienta devuelve una URL (como `resource_link`) en vez de un archivo guardado — la vía de entrega remota/hosteada |
+| ID  | Qué comprueba                                                                                                                                                                                                                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                                                                                                             |
+| S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                                                                                                                 |
+| S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                                                                                                      |
+| S4  | `get_details` sobre un md5 tomado de un resultado de búsqueda previo                                                                                                                                                                                                       |
+| S5  | Descarga de libro por md5: ruta guardada + tamaño no nulo                                                                                                                                                                                                                  |
+| S6  | Descarga **eligiendo fuente**: el modelo pone `source:"scihub"` para un DOI de artículo de pago                                                                                                                                                                            |
+| S6b | Descarga eligiendo fuente de libro: el modelo pone `source:"randombook"` para un md5                                                                                                                                                                                       |
+| S7  | Artículo de acceso abierto por DOI vía unpaywall (necesita email de contacto)                                                                                                                                                                                              |
+| S8  | Ambiguo "encuéntrame un buen libro" — pasa si el modelo pide aclaración o la herramienta lo rechaza                                                                                                                                                                        |
+| S9  | **Reintentos de arranque**: Sci-Hub apuntado a un host muerto; el schedule escalonado debe agotarse y devolver el error accionable "could not start", y el modelo no debe fabricar éxito                                                                                   |
+| S10 | **Búsqueda de libro sin guía** ("quiero leer _Dune_…") — el modelo forma una búsqueda desde una petición simple, sin pistas de colección/campos                                                                                                                            |
+| S11 | **Búsqueda de cómics sin guía** ("encuentra la novela gráfica _Watchmen_") — el modelo debe descubrir la colección correcta sin ayuda                                                                                                                                      |
+| S12 | **Descarga de libro sin guía** ("descarga _Clean Code_…") — el modelo busca y descarga por un md5 que descubrió, eligiendo la fuente él mismo                                                                                                                              |
+| S13 | **Descarga de artículo sin guía** ("dame un PDF de _Hallmarks of Cancer_") — el modelo debe descubrir que los artículos van por DOI, no por md5                                                                                                                            |
+| S14 | **Progreso de descarga** — se adjunta un token de progreso; las notificaciones deben llegar al cliente de punta a punta durante una descarga en vivo                                                                                                                       |
+| S15 | **Tabla ordenada con enlaces** — una petición grande y ordenada; el modelo debe fijar un tamaño de página grande + orden e incluir los enlaces de descarga en su respuesta                                                                                                 |
+| S16 | **Enlace resolve-only** ("dame la URL directa de descarga, no lo descargues") — el modelo debe poner `resolve_only=true`, y la herramienta devuelve una URL (como `resource_link`) en vez de un archivo guardado — la vía de entrega remota/hosteada                       |
+| S17 | **Descarga remota (libro)** — la misma petición "descarga _The C Programming Language_", pero el servidor corre en **modo remoto** (`--http`): `download` devuelve un enlace, y el arnés — actuando como la propia herramienta de fetch del agente — lo trae a disco local |
+| S18 | **Descarga remota (artículo)** — lo mismo para un DOI de pago; el modelo simplemente llama a `download`, el servidor remoto devuelve un enlace, y el arnés lo descarga a disco local                                                                                       |
+
+## Bloques local y remoto
+
+La mayoría de los escenarios corre contra un servidor **local**, donde `download`
+escribe el archivo en disco. S17–S18 forman un **bloque remoto**: las mismas
+peticiones de descarga corren contra un servidor en modo remoto (`--http`),
+donde `download` devuelve un enlace en vez de guardar un archivo. El arnés
+entonces descarga ese enlace al sandbox — haciendo las veces de la propia
+herramienta de fetch de un agente — de modo que el archivo termina en local en
+ambos casos. Juntos, los dos bloques verifican que el modelo se comporta igual
+aunque el servidor se comporte de forma distinta, y que el archivo acaba en
+local de cualquier manera.
 
 ## Últimos resultados
 
@@ -74,25 +88,27 @@ escenarios pasan**, con `S6b` en SKIP cuando el descubrimiento de mirror fresco 
 randombook no está disponible — una condición de mirror en vivo, no un fallo del
 modelo.
 
-| ID  | Resultado | Evidencia                                                                  |
-| --- | --------- | -------------------------------------------------------------------------- |
-| S1  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                      |
-| S2  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                |
-| S3  | ✅ PASS   | búsqueda standards, 25 resultados                                          |
-| S4  | ✅ PASS   | `get_details` devolvió un registro File/Edition                            |
-| S5  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                            |
-| S6  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                         |
-| S6b | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404 |
-| S7  | ✅ PASS   | descargó un DOI vía `unpaywall`                                            |
-| S8  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                              |
-| S9  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                 |
-| S10 | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                        |
-| S11 | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                         |
-| S12 | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                      |
-| S13 | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                            |
-| S14 | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`               |
-| S15 | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta       |
-| S16 | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)               |
+| ID  | Resultado | Evidencia                                                                        |
+| --- | --------- | -------------------------------------------------------------------------------- |
+| S1  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                            |
+| S2  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                      |
+| S3  | ✅ PASS   | búsqueda standards, 25 resultados                                                |
+| S4  | ✅ PASS   | `get_details` devolvió un registro File/Edition                                  |
+| S5  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                                  |
+| S6  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                               |
+| S6b | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404       |
+| S7  | ✅ PASS   | descargó un DOI vía `unpaywall`                                                  |
+| S8  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                                    |
+| S9  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                       |
+| S10 | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                              |
+| S11 | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                               |
+| S12 | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                            |
+| S13 | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                                  |
+| S14 | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`                     |
+| S15 | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta             |
+| S16 | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                     |
+| S17 | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~1,0 MB a disco local |
+| S18 | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
 
 ## Cómo ejecutarlo
 
