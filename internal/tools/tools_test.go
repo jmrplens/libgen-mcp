@@ -814,6 +814,143 @@ func downloadMirror(t *testing.T, payload []byte) *httptest.Server {
 	return srv
 }
 
+// TestResolveHelpers covers the resolve-only helper branches the end-to-end test
+// does not reach: filename derivation, MIME mapping, header flattening, and the
+// headers path of the guidance/markdown builders.
+func TestResolveHelpers(t *testing.T) {
+	// resolveFilename: explicit wins; meta builds "Author - Title (Year).ext";
+	// doi falls back to a .pdf name; md5 falls back to md5+ext.
+	if got := resolveFilename(libgen.Item{MD5: "x"}, "given.pdf", "pdf"); got != "given.pdf" {
+		t.Errorf("explicit filename: %q", got)
+	}
+	meta := resolveFilename(libgen.Item{MD5: "x", Meta: &libgen.FileMeta{Title: "T/it:le", Author: "A", Year: "2020"}}, "", "epub")
+	if meta != "A - T-it-le (2020).epub" {
+		t.Errorf("meta filename: %q", meta)
+	}
+	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", ""); got != "10.1-x.pdf" {
+		t.Errorf("doi fallback filename: %q", got)
+	}
+	if got := resolveFilename(libgen.Item{MD5: "abc"}, "", ""); got != "abc" {
+		t.Errorf("md5 fallback filename: %q", got)
+	}
+
+	// mimeForExt across the mapped types + defaults.
+	for ext, want := range map[string]string{
+		"pdf": "application/pdf", "epub": "application/epub+zip", "mobi": "application/x-mobipocket-ebook",
+		"djvu": "image/vnd.djvu", "cbr": "application/vnd.comicbook-rar", "cbz": "application/vnd.comicbook+zip",
+		"txt": "text/plain", "zzz": "application/octet-stream",
+	} {
+		if got := mimeForExt(ext, libgen.Item{}); got != want {
+			t.Errorf("mimeForExt(%q) = %q, want %q", ext, got, want)
+		}
+	}
+	if mimeForExt("", libgen.Item{DOI: "10.1/x"}) != "application/pdf" {
+		t.Error("empty ext + doi should default to pdf")
+	}
+	if mimeForExt("", libgen.Item{MD5: "x"}) != "application/octet-stream" {
+		t.Error("empty ext + md5 should default to octet-stream")
+	}
+
+	// headerMap / headerList.
+	if headerMap(nil) != nil {
+		t.Error("nil header should map to nil")
+	}
+	hm := headerMap(http.Header{"Referer": {"https://h/"}, "Empty": {""}})
+	if hm["Referer"] != "https://h/" || len(hm) != 1 {
+		t.Errorf("headerMap dropped/kept wrong keys: %v", hm)
+	}
+	if got := headerList(map[string]string{"B": "2", "A": "1"}); got != "A: 1; B: 2" {
+		t.Errorf("headerList order: %q", got)
+	}
+
+	// resolveNextSteps + renderResolvedMarkdown with headers present.
+	link := ResolvedLink{
+		URL: "https://x/y", Source: "scihub", Filename: "p.pdf",
+		Headers: map[string]string{"Referer": "https://h/"}, VerifyMD5: true,
+	}
+	steps := strings.Join(resolveNextSteps(link), "\n")
+	if !strings.Contains(steps, "Referer: https://h/") || !strings.Contains(steps, "verify") {
+		t.Errorf("resolveNextSteps with headers: %q", steps)
+	}
+	md := renderResolvedMarkdown(link)
+	if !strings.Contains(md, "scihub") || !strings.Contains(md, "https://x/y") || !strings.Contains(md, "Referer") {
+		t.Errorf("renderResolvedMarkdown: %q", md)
+	}
+}
+
+// TestDownloadToolResolveOnly verifies the resolve_only path returns a direct URL
+// as a resource_link content block plus structured `resolved` output, WITHOUT
+// writing a file to disk.
+func TestDownloadToolResolveOnly(t *testing.T) {
+	payload := []byte("%PDF-1.4 resolve-only payload")
+	srv := downloadMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	dir := t.TempDir()
+	cfg := &config.Config{DownloadDir: dir, Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5, "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("resolve_only returned a tool error: %+v", res.Content)
+	}
+
+	// A resource_link content block must carry the resolved URL.
+	var linkURI string
+	for _, c := range res.Content {
+		if rl, ok := c.(*mcp.ResourceLink); ok {
+			linkURI = rl.URI
+		}
+	}
+	if !strings.Contains(linkURI, srv.URL) {
+		t.Errorf("resource_link URI %q does not point at the resolved source", linkURI)
+	}
+
+	var out DownloadOutput
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatal(merr)
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if out.Resolved == nil {
+		t.Fatalf("structured output has no `resolved`; got %s", data)
+	}
+	if out.Resolved.Source != "libgen" || !out.Resolved.VerifyMD5 || !strings.Contains(out.Resolved.URL, srv.URL) {
+		t.Errorf("resolved = %+v", out.Resolved)
+	}
+	if out.Path != "" {
+		t.Errorf("resolve_only must not save a file, but Path=%q", out.Path)
+	}
+
+	// No file was written to the download dir.
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("resolve_only wrote %d file(s) to disk, want 0", len(entries))
+	}
+}
+
 // TestDownloadToolWithProgressToken exercises the download tool wiring: when the
 // client supplies a progress token, the handler must forward download progress
 // as MCP notifications/progress and the final notification must report the full

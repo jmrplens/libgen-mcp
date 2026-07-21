@@ -1,12 +1,49 @@
 package libgen
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 )
+
+// TestResolveLink verifies the resolve-only path returns the first resolving
+// source's URL, headers and flags without downloading, fails over past a source
+// that errors, and errors when nothing supports the item.
+func TestResolveLink(t *testing.T) {
+	cfg := baseChainConfig()
+	good := stubSource{
+		name: "libgen", supports: true,
+		resolved: Resolved{FileURL: "https://cdn/x.pdf", VerifyMD5: true, Ext: "pdf", Header: http.Header{"Referer": {"https://h/"}}},
+	}
+
+	c := New(staticMirrors{}, cfg, WithSources(good))
+	r, err := c.ResolveLink(context.Background(), Item{MD5: "abc"})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if r.URL != "https://cdn/x.pdf" || r.Source != "libgen" || !r.VerifyMD5 || r.Ext != "pdf" {
+		t.Errorf("resolved = %+v", r)
+	}
+	if r.Header.Get("Referer") != "https://h/" {
+		t.Error("required header not carried through")
+	}
+
+	bad := stubSource{name: "bad", supports: true, resolveErr: errors.New("boom")}
+	c2 := New(staticMirrors{}, cfg, WithSources(bad, good))
+	if r2, err2 := c2.ResolveLink(context.Background(), Item{MD5: "abc"}); err2 != nil || r2.Source != "libgen" {
+		t.Errorf("failover: got %+v err=%v", r2, err2)
+	}
+
+	c3 := New(staticMirrors{}, cfg, WithSources(stubSource{name: "x", supports: false}))
+	if _, err3 := c3.ResolveLink(context.Background(), Item{MD5: "abc"}); err3 == nil {
+		t.Error("want error when no source supports the item")
+	}
+}
 
 // sourceNames returns the Name() of every source in the client's chain, in order.
 func sourceNames(c *Client) []string {

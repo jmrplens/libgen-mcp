@@ -48,14 +48,15 @@ Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
 
 **Download file**
 
-Download a file to a local directory. Provide md5 for a book or doi for an article (at least one is required). Books are tried against libgen then randombook; articles against unpaywall then scihub. If both md5 and doi are given, article sources are tried first, then book sources. Set source to restrict the download to a single enabled provider (unpaywall, scihub, libgen, randombook) instead of trying them all. The md5/doi come from a prior search result. Returns the saved path, size and the source that served it. See also: search (to find the md5/doi).
+Download a file to a local directory.
 
 **Parameters:**
 
 - `doi` (string): DOI from an article search result; articles are fetched by DOI; provide md5 or doi
 - `filename` (string): destination filename (default: a clean name from the record metadata or the name the mirror announces)
 - `md5` (string): file md5 hash from a book search result; provide md5 or doi
-- `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads)
+- `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
+- `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
 - `source` (string): restrict the download to a single enabled source: unpaywall, scihub, libgen, randombook. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
