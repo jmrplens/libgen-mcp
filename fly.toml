@@ -1,0 +1,46 @@
+# fly.toml — Fly.io deployment for libgen-mcp (public, no auth required)
+#
+# Deploy: fly deploy
+# Logs:   fly logs
+# Status: fly status
+# Health: curl https://<app-name>.fly.dev/health
+# MCP:    https://<app-name>.fly.dev/
+#
+# libgen-mcp needs NO credentials or token — Library Genesis is public. This is
+# an open streamable-HTTP endpoint. Because a hosted server cannot write to the
+# client's disk, HTTP mode puts the download tool in remote mode: it returns a
+# direct link (a resource_link) for the client to fetch, instead of saving a file.
+
+app = "libgen-mcp"
+primary_region = "cdg"
+
+kill_signal = "SIGTERM"
+kill_timeout = 10
+
+[build]
+  dockerfile = "Dockerfile"
+  [build.args]
+    VERSION = "1.2.0"
+
+# libgen-mcp takes a single --http <addr> flag (unlike gitlab-mcp-server's
+# --http/--http-addr split). Override the Dockerfile ENTRYPOINT args to serve
+# streamable HTTP on the internal port. --http implies remote-download mode.
+[experimental]
+  cmd = ["--http", "0.0.0.0:8080"]
+
+[env]
+  LIBGEN_MCP_LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
