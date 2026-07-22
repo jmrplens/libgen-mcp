@@ -9,7 +9,8 @@
         format-md-tables check-md-tables \
         godoc-audit godoc-check \
         gen-llms check-llms audit-tokens \
-        install-tools release-check check-server-json check-mcpb-manifest mcpb sonar clean help \
+        install-tools release-check check-server-json check-mcpb-manifest check-lhm-manifest \
+        mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
 
@@ -188,8 +189,34 @@ check-mcpb-manifest: ## Verify mcpb/manifest.json parses and matches the VERSION
 	fi; \
 	echo "mcpb/manifest.json version matches VERSION ($$VF)"
 
+check-lhm-manifest: ## Verify lhm.plugin.json parses and matches the VERSION file
+	@jq empty lhm.plugin.json && echo "lhm.plugin.json: valid JSON"
+	@LV=$$(jq -r '.version' lhm.plugin.json); VF=$$(cat VERSION | tr -d '[:space:]'); \
+	if [ "$$LV" != "$$VF" ]; then \
+		echo "FAIL: lhm.plugin.json version ($$LV) != VERSION ($$VF)"; exit 1; \
+	fi; \
+	echo "lhm.plugin.json version matches VERSION ($$VF)"
+
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
+
+## publish-lobehub: publish the current version to the LobeHub Marketplace.
+## Reads lhm.plugin.json (version kept in sync by scripts/update-server-json-sha.sh
+## on each release) and posts it via the @lobehub/market-cli. Requires a one-time
+## interactive `lhm login` + `lhm github connect` first — LobeHub has no
+## non-interactive publish path, so this cannot run in CI.
+publish-lobehub:
+	@command -v node >/dev/null || { echo "ERROR: Node.js >= 22 is required"; exit 1; }
+	@NODE_MAJOR=$$(node -v | sed 's/^v\([0-9]*\).*/\1/'); \
+	if [ "$$NODE_MAJOR" -lt 22 ]; then echo "ERROR: Node.js >= 22 is required (found $$(node -v))"; exit 1; fi
+	@command -v jq >/dev/null || { echo "ERROR: jq is required"; exit 1; }
+	@VER=$$(tr -d '[:space:]' < VERSION); \
+	MVER=$$(jq -r '.version' lhm.plugin.json); \
+	if [ "$$VER" != "$$MVER" ]; then \
+		echo "ERROR: VERSION ($$VER) != lhm.plugin.json version ($$MVER); run a release stamp first"; exit 1; \
+	fi; \
+	echo "Publishing jmrplens-libgen-mcp v$$VER to LobeHub..."; \
+	npx -y @lobehub/market-cli plugin publish --dir "$(CURDIR)"
 
 sonar: ## Run the SonarCloud scanner locally (needs sonar-scanner + SONAR_TOKEN)
 	@command -v sonar-scanner >/dev/null || { echo "sonar-scanner not installed"; exit 1; }
