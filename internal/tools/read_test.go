@@ -167,6 +167,51 @@ func TestReadTool_FindReturnsMatches(t *testing.T) {
 	}
 }
 
+// TestReadTool_FindZeroMatches verifies that a find query absent from the
+// document is a legitimate zero-match find result, not a fallback to the
+// sequential-extraction render: the structured output carries Query set and
+// MatchCount/len(Matches) at zero, the Markdown reports "No matches" rather
+// than the sequential "Extracted text" header, and next_steps still leads
+// with the UNTRUSTED warning.
+func TestReadTool_FindZeroMatches(t *testing.T) {
+	payload, sampleMD5 := samplePDFBytesAndMD5(t)
+	srv := downloadMirror(t, payload)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "read",
+		Arguments: map[string]any{"md5": sampleMD5, "find": "zzznotinthisdocument"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(read find) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a zero-match find should not be a tool error: %+v", res.Content)
+	}
+	out := decodeReadOutput(t, res)
+	if out.Query != "zzznotinthisdocument" {
+		t.Errorf("Query = %q, want %q", out.Query, "zzznotinthisdocument")
+	}
+	if out.MatchCount != 0 {
+		t.Errorf("MatchCount = %d, want 0", out.MatchCount)
+	}
+	if len(out.Matches) != 0 {
+		t.Errorf("len(Matches) = %d, want 0", len(out.Matches))
+	}
+
+	md := textContent(res)
+	if !strings.Contains(md, "No matches") {
+		t.Errorf("Markdown should report zero matches distinctly, got %q", md)
+	}
+	if strings.Contains(md, "Extracted text") {
+		t.Errorf("Markdown must not fall through to the sequential-extraction header, got %q", md)
+	}
+	if len(out.NextSteps) == 0 || !strings.Contains(strings.ToUpper(out.NextSteps[0]), "UNTRUSTED") {
+		t.Errorf("next_steps[0] should carry the UNTRUSTED warning, got %v", out.NextSteps)
+	}
+}
+
 // TestReadTool_FindPagination verifies match pagination: with max_matches=1 and a
 // term that hits more than once ("the"), the first call returns a single match,
 // reports more remain and hands back a cursor; following that cursor returns a
