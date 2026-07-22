@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.2.0 | 3 tools
+> Version 1.2.0 | 4 tools
 
 ## Tools
 
@@ -60,6 +60,26 @@ Download a file to a local directory.
 - `source` (string): restrict the download to a single enabled source: unpaywall, scihub, libgen, randombook. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
+
+### read
+
+**Read file text**
+
+Extract and paginate the text of a book or paper so you can read it without downloading the whole file.
+
+**Parameters:**
+
+- `cursor` (string): opaque cursor from a previous read's response to fetch the next chunk; overrides start_page/offset
+- `doi` (string): DOI from an article search result; provide md5, doi, or path
+- `max_chars` (integer): max characters to return this call
+- `max_pages` (integer): max pages to read this call (PDF)
+- `md5` (string): file md5 from a book search result; provide md5, doi, or path
+- `offset` (integer): character offset to start from (EPUB/TXT); ignored when cursor is set
+- `path` (string): read an already-downloaded local file by absolute path (local server only; ignored/rejected on a remote server)
+- `source` (string): restrict the fetch to one source (libgen/randombook for md5; unpaywall/scihub for doi)
+- `start_page` (integer): first page to read (PDF), 1-based; ignored when cursor is set
+
+Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
 
 ## Configuration
 
