@@ -20,6 +20,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
@@ -108,6 +109,7 @@ func run(ctx context.Context, httpAddr string) error {
 		regOpts = append(regOpts, tools.WithRemoteDownloads())
 	}
 	tools.Register(server, client, cfg, regOpts...)
+	prompts.Register(server, client, cfg)
 
 	if httpAddr != "" {
 		return serveHTTP(ctx, server, httpAddr)
