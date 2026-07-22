@@ -72,11 +72,12 @@ Metadatos completos de un registro vía la API JSON de LibGen — descripción, 
 
 ### salida de get_details
 
-| Campo        | Tipo   | Descripción                                                                                                                                                                  |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next_steps` | array  | Llamada de seguimiento sugerida — p. ej. una llamada a `download` con el `md5` (libro) o `doi` (artículo) de este registro. Presente para guiar al modelo; se puede ignorar. |
-| `file`       | object | El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).                                                                     |
-| `edition`    | object | El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).                                        |
+| Campo        | Tipo   | Descripción                                                                                                                                                                                                                                                    |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Llamada de seguimiento sugerida — p. ej. una llamada a `download` con el `md5` (libro) o `doi` (artículo) de este registro. Presente para guiar al modelo; se puede ignorar.                                                                                   |
+| `file`       | object | El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).                                                                                                                                                       |
+| `edition`    | object | El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).                                                                                                                          |
+| `citations`  | object | `{"bibtex": ..., "ris": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro. Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil); el ISBN nunca se inventa cuando falta. |
 
 Una consulta por `md5` devuelve `file` y, en la medida de lo posible, su `edition` relacionada. Una consulta por `id` devuelve el objeto que se haya pedido. Una consulta que no coincide con nada devuelve un error "no file found".
 
@@ -150,3 +151,55 @@ Si todas las fuentes aplicables fallan, la herramienta devuelve los errores por 
 Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servidor**. Con un servidor **local** por stdio o Docker esa máquina es la tuya, así que los archivos quedan en tu directorio de descargas — ideal para agentes locales autónomos.
 
 Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio. Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
+
+## Prompts
+
+Además de las tres herramientas anteriores, `libgen-mcp` registra cuatro **prompts** MCP — plantillas de instrucciones reutilizables que un cliente MCP puede ofrecer como acciones rápidas o comandos de barra. El handler de cada prompt devuelve un único mensaje Markdown con rol `user` que le indica al modelo exactamente qué herramienta llamar a continuación (`get_details`, `download`) y con qué argumentos; un prompt nunca busca más de lo necesario para construir ese plan, y nunca descarga ni escribe nada por sí mismo.
+
+### acquire_book
+
+Busca un libro y obtén instrucciones paso a paso para confirmar y descargar la edición que mejor coincide.
+
+| Argumento  | Requerido | Descripción                                          |
+| ---------- | --------- | ---------------------------------------------------- |
+| `title`    | sí        | Título del libro a buscar.                           |
+| `author`   | no        | Nombre del autor para acotar la búsqueda.            |
+| `format`   | no        | Formato de archivo preferido, p. ej. `pdf` o `epub`. |
+| `language` | no        | Idioma preferido.                                    |
+
+Busca en no ficción y ficción, clasifica los candidatos según coincidencia de formato/idioma (relajando a solo formato, y luego al primer resultado, cuando nada coincide exactamente), y devuelve una tabla de candidatos más un plan de dos pasos `get_details` → `download` para la mejor coincidencia.
+
+### research_topic
+
+Busca artículos y/o libros sobre un tema y construye una lista de lectura con instrucciones para descargar cada uno y elaborar una bibliografía anotada.
+
+| Argumento | Requerido | Descripción                                                                     |
+| --------- | --------- | ------------------------------------------------------------------------------- |
+| `topic`   | sí        | Tema a investigar.                                                              |
+| `kind`    | no        | Qué tipos de registro buscar: `articles`, `books` o `both`. Por defecto `both`. |
+| `limit`   | no        | Filas máximas por sección. Por defecto `10`.                                    |
+
+Devuelve una lista de lectura Markdown de dos secciones — Papers (identificados por DOI) y Books (identificados por md5) — seguida de un plan para descargar cada elemento y elaborar una bibliografía anotada a partir de los resultados.
+
+### get_paper
+
+Resuelve un artículo concreto por DOI o por una cita en texto libre, y obtén instrucciones para descargarlo. Proporciona exactamente uno de `doi` o `citation`.
+
+| Argumento  | Requerido | Descripción                                                                     |
+| ---------- | --------- | ------------------------------------------------------------------------------- |
+| `doi`      | uno de    | DOI del artículo a obtener directamente (mutuamente excluyente con `citation`). |
+| `citation` | uno de    | Cita o referencia en texto libre a buscar (mutuamente excluyente con `doi`).    |
+
+Con `doi`, el prompt devuelve un plan directo `download {"doi": ...}` — indica explícitamente que `get_details` **no** acepta un DOI a secas como entrada, para que el modelo no se equivoque de ruta. Con `citation`, busca en artículos una coincidencia, reintentando una vez entre los libros (algunos papers están catalogados así) cuando no aparece nada, y enumera los candidatos a descargar por DOI.
+
+### download_troubleshoot
+
+Diagnostica una descarga fallida o atascada y produce un plan de recuperación paso a paso adaptado al identificador, a los proveedores habilitados y a cualquier mensaje de error.
+
+| Argumento | Requerido | Descripción                                                            |
+| --------- | --------- | ---------------------------------------------------------------------- |
+| `md5`     | no        | md5 de la descarga de libro que falló.                                 |
+| `doi`     | no        | DOI de la descarga de artículo que falló.                              |
+| `error`   | no        | El mensaje de error que devolvió la herramienta `download`, si lo hay. |
+
+Todos los argumentos son opcionales. El árbol de decisión resultante solo nombra los proveedores de descarga que están realmente **habilitados** en este servidor (vía `LIBGEN_MCP_SOURCES`), sugiere volver a ejecutar `search` para descartar un identificador obsoleto, guía cómo fijar el parámetro `source` de `download` para aislar un proveedor que falla y —cuando se reconoce un mensaje de error conocido— añade consejos específicos (p. ej. un md5 malformado, una `LIBGEN_MCP_UNPAYWALL_EMAIL` sin fijar, una transferencia estancada o un fallo de verificación de integridad).

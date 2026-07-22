@@ -33,6 +33,32 @@ func mdCell(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// fencedBlock wraps content in a Markdown fenced code block whose fence is long
+// enough that the content can never close it early. Per the CommonMark rule, a
+// closing fence must be at least as long as the opening one, so we open with
+// max(3, longestBacktickRun(content)+1) backticks. This keeps untrusted-derived
+// content (e.g. a BibTeX entry built from catalog metadata) from breaking out of
+// the fence and being rendered as Markdown/instructions. lang is the info string.
+func fencedBlock(lang, content string) string {
+	fence := strings.Repeat("`", max(3, longestBacktickRun(content)+1))
+	return fence + lang + "\n" + content + "\n" + fence
+}
+
+// longestBacktickRun returns the length of the longest run of consecutive
+// backticks in s, or 0 when s contains none.
+func longestBacktickRun(s string) int {
+	longest, run := 0, 0
+	for _, r := range s {
+		if r == '`' {
+			run++
+			longest = max(longest, run)
+			continue
+		}
+		run = 0
+	}
+	return longest
+}
+
 // resultIdentifier returns the pivot identifier for a result: its md5 (books) or
 // doi (articles), labeled so the reader knows which key it is.
 func resultIdentifier(r libgen.Result) string {
@@ -115,6 +141,11 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 		if v := stringField(rec, f.key); v != "" {
 			fmt.Fprintf(&b, "- %s: %s\n", f.label, mdCell(v))
 		}
+	}
+	if out.Citations != nil && out.Citations.BibTeX != "" {
+		b.WriteString("\n### Citation (BibTeX)\n\n")
+		b.WriteString(fencedBlock("bibtex", out.Citations.BibTeX))
+		b.WriteString("\n")
 	}
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
