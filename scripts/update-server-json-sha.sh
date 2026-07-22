@@ -59,3 +59,14 @@ done <"$CHECKSUMS_FILE"
 
 total=$(jq '.packages | length' "$SERVER_JSON")
 echo "Updated $updated of $total package entries"
+
+# 5. Stamp the LobeHub Marketplace manifest version (if present). The actual
+# publish to LobeHub is a manual step (`make publish-lobehub`) — the CLI has no
+# non-interactive auth — but the version is kept in sync here on every release.
+LHM_JSON="lhm.plugin.json"
+if [[ -f "$LHM_JSON" ]]; then
+  jq --arg v "$VERSION" '.version = $v' "$LHM_JSON" >tmp.$$.json && mv tmp.$$.json "$LHM_JSON"
+  echo "$LHM_JSON version set to $VERSION"
+else
+  echo "NOTE: $LHM_JSON not found, skipping LobeHub manifest update"
+fi

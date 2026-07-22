@@ -118,11 +118,12 @@ jobs:
           git checkout main
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
           git add server.json
+          [ -f lhm.plugin.json ] && git add lhm.plugin.json
           if git diff --cached --quiet; then
-            echo "::notice::No server.json changes to commit"
+            echo "::notice::No manifest changes to commit"
             exit 0
           fi
-          git commit -m "chore: pin server.json for v${VERSION}"
+          git commit -m "chore: pin server.json + stamp lhm.plugin.json for v${VERSION}"
           git push origin main
 
   docker:
