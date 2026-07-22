@@ -1,5 +1,5 @@
 // Command gen_llms generates llms.txt and llms-full.txt files. It creates an
-// in-memory MCP server with libgen-mcp's three tools registered, introspects
+// in-memory MCP server with libgen-mcp's tools registered, introspects
 // them via the SDK, and writes two files to the project root:
 //
 //   - llms.txt: concise llmstxt.org index for LLM discovery
@@ -187,6 +187,16 @@ func toolOrder(name string) int {
 	}
 }
 
+// toolNames returns the registered tool names as a comma-separated list, so the
+// generated prose stays in sync with the actual tool set instead of hardcoding it.
+func toolNames(toolList []*mcp.Tool) string {
+	names := make([]string, len(toolList))
+	for i, t := range toolList {
+		names[i] = t.Name
+	}
+	return strings.Join(names, ", ")
+}
+
 // writeLLMSTxt generates the concise llms.txt overview.
 func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	var b strings.Builder
@@ -194,7 +204,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("# libgen-mcp\n\n")
 	b.WriteString("> A Model Context Protocol (MCP) server that searches and downloads books, papers, comics, magazines and standards from Library Genesis for AI assistants.\n\n")
 	fmt.Fprintf(&b, "libgen-mcp v%s is a single static Go binary that runs locally via stdio or remotely via HTTP transport.\n", version)
-	fmt.Fprintf(&b, "It provides exactly %d MCP tools (search, get_details, download) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList))
+	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
 
 	b.WriteString("Quick start:\n\n")
 	b.WriteString("1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)\n")
@@ -377,7 +387,7 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, checkOnly bool) erro
 	fmt.Fprintf(&b, "> Version %s | %d tools\n\n", version, len(toolList))
 
 	b.WriteString("## Tools\n\n")
-	b.WriteString("libgen-mcp exposes three tools over the libgen.li family of mirrors. No account or token is required.\n\n")
+	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the libgen.li family of mirrors. No account or token is required.\n\n", len(toolList))
 	for _, tool := range toolList {
 		writeLLMSFullTool(&b, tool)
 	}

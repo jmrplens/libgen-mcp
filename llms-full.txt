@@ -4,7 +4,7 @@
 
 ## Tools
 
-libgen-mcp exposes three tools over the libgen.li family of mirrors. No account or token is required.
+libgen-mcp exposes 4 tools over the libgen.li family of mirrors. No account or token is required.
 
 ### search
 
