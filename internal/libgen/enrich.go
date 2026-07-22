@@ -119,7 +119,10 @@ func (c *Client) enrichGet(ctx context.Context, rawURL string) *http.Response {
 // fetchCrossref requests the Crossref work for a DOI and parses it, returning nil
 // on any failure (non-200, transport error, or unparseable body).
 func (c *Client) fetchCrossref(ctx context.Context, doi string) *CrossrefWork {
-	resp := c.enrichGet(ctx, crossrefBase+"/works/"+url.PathEscape(doi))
+	// Preserve the DOI's slashes: escapeDOIPath escapes each path segment but
+	// keeps "/" literal, since Crossref routes on the raw DOI path (a %2F-encoded
+	// slash can miss the record). Same reason the download DOI sources use it.
+	resp := c.enrichGet(ctx, crossrefBase+"/works/"+escapeDOIPath(doi))
 	if resp == nil {
 		return nil
 	}

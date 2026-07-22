@@ -41,7 +41,9 @@ func setEnrichBases(t *testing.T, crossref, openLibrary string) {
 // server yields a populated CrossrefWork (container title, ISSN, volume, citation
 // count and published year) and no OpenLibrary side.
 func TestEnrich_CrossrefByDOI(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
 		_, _ = w.Write([]byte(crossrefFixture))
 	}))
 	defer srv.Close()
@@ -49,6 +51,11 @@ func TestEnrich_CrossrefByDOI(t *testing.T) {
 
 	c := newTestClient(staticMirrors{})
 	e := c.Enrich(context.Background(), "10.1000/xyz123", "")
+	// The DOI's slash must survive into the request path (not be %2F-encoded),
+	// or Crossref may miss the record.
+	if gotPath != "/works/10.1000/xyz123" {
+		t.Errorf("request path = %q, want /works/10.1000/xyz123 (DOI slash preserved)", gotPath)
+	}
 	if e == nil || e.Crossref == nil {
 		t.Fatalf("Enrich() = %+v, want non-nil Crossref", e)
 	}
