@@ -185,31 +185,46 @@ func candidateText(title, author, format, language string, results []libgen.Resu
 	return b.String()
 }
 
-// renderCandidates renders up to maxCandidates results as a Markdown table.
-func renderCandidates(results []libgen.Result) string {
+// renderTable builds a Markdown table: a header row, a separator, and one row
+// per entry in rows. Each rows[i] holds the pre-formatted cell strings for that
+// row (already run through cell() where empties are possible). The separator
+// dashes match each header cell's width so the output is stable across callers.
+func renderTable(headers []string, rows [][]string) string {
 	var b strings.Builder
-	b.WriteString("| # | Title | Authors | Year | Ext | Lang | md5 |\n")
-	b.WriteString("|---|-------|---------|------|-----|------|-----|\n")
-	n := min(len(results), maxCandidates)
-	for i := range n {
-		r := results[i]
+	b.WriteString("| ")
+	b.WriteString(strings.Join(headers, " | "))
+	b.WriteString(" |\n|")
+	for _, h := range headers {
+		b.WriteString(strings.Repeat("-", len(h)+2))
+		b.WriteByte('|')
+	}
+	b.WriteString("\n")
+	for _, row := range rows {
 		b.WriteString("| ")
-		b.WriteString(strconv.Itoa(i + 1))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Title))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Authors))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Year))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Extension))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Language))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.MD5))
+		b.WriteString(strings.Join(row, " | "))
 		b.WriteString(" |\n")
 	}
 	return b.String()
+}
+
+// renderCandidates renders up to maxCandidates results as a Markdown table.
+func renderCandidates(results []libgen.Result) string {
+	headers := []string{"#", "Title", "Authors", "Year", "Ext", "Lang", "md5"}
+	n := min(len(results), maxCandidates)
+	rows := make([][]string, 0, n)
+	for i := range n {
+		r := results[i]
+		rows = append(rows, []string{
+			strconv.Itoa(i + 1),
+			cell(r.Title),
+			cell(r.Authors),
+			cell(r.Year),
+			cell(r.Extension),
+			cell(r.Language),
+			cell(r.MD5),
+		})
+	}
+	return renderTable(headers, rows)
 }
 
 // researchTopicMaxLimit bounds how many rows the research_topic prompt will
@@ -337,30 +352,25 @@ func writeSection(b *strings.Builder, heading string, results []libgen.Result, i
 	b.WriteString("## ")
 	b.WriteString(heading)
 	b.WriteString("\n\n")
-	b.WriteString("| # | Title | Authors | Year | ")
-	b.WriteString(idCol)
-	b.WriteString(" |\n")
-	b.WriteString("|---|-------|---------|------|-----|\n")
 
+	headers := []string{"#", "Title", "Authors", "Year", idCol}
 	n := min(len(results), limit)
+	rows := make([][]string, 0, n)
 	for i := range n {
 		r := results[i]
 		id := r.MD5
 		if idCol == "DOI" {
 			id = r.DOI
 		}
-		b.WriteString("| ")
-		b.WriteString(strconv.Itoa(i + 1))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Title))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Authors))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Year))
-		b.WriteString(" | ")
-		b.WriteString(cell(id))
-		b.WriteString(" |\n")
+		rows = append(rows, []string{
+			strconv.Itoa(i + 1),
+			cell(r.Title),
+			cell(r.Authors),
+			cell(r.Year),
+			cell(id),
+		})
 	}
+	b.WriteString(renderTable(headers, rows))
 	b.WriteString("\n")
 }
 
@@ -485,27 +495,21 @@ func paperCandidatesText(citation string, results []libgen.Result) string {
 // renderPaperCandidates renders up to maxCandidates results as a Markdown
 // table of paper metadata.
 func renderPaperCandidates(results []libgen.Result) string {
-	var b strings.Builder
-	b.WriteString("| # | Title | Authors | Year | Publisher | DOI |\n")
-	b.WriteString("|---|-------|---------|------|-----------|-----|\n")
+	headers := []string{"#", "Title", "Authors", "Year", "Publisher", "DOI"}
 	n := min(len(results), maxCandidates)
+	rows := make([][]string, 0, n)
 	for i := range n {
 		r := results[i]
-		b.WriteString("| ")
-		b.WriteString(strconv.Itoa(i + 1))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Title))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Authors))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Year))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.Publisher))
-		b.WriteString(" | ")
-		b.WriteString(cell(r.DOI))
-		b.WriteString(" |\n")
+		rows = append(rows, []string{
+			strconv.Itoa(i + 1),
+			cell(r.Title),
+			cell(r.Authors),
+			cell(r.Year),
+			cell(r.Publisher),
+			cell(r.DOI),
+		})
 	}
-	return b.String()
+	return renderTable(headers, rows)
 }
 
 // pickCandidate chooses the best result: prefer one whose extension matches the
