@@ -18,6 +18,7 @@
 [![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/libgen-mcp)
 [![libgen-mcp MCP server](https://glama.ai/mcp/servers/jmrplens/libgen-mcp/badges/score.svg)](https://glama.ai/mcp/servers/jmrplens/libgen-mcp)
 [![smithery badge](https://smithery.ai/badge/jmrp/libgen-mcp)](https://smithery.ai/servers/jmrp/libgen-mcp)
+[![MCP Badge](https://lobehub.com/badge/mcp/jmrplens-libgen-mcp)](https://lobehub.com/mcp/jmrplens-libgen-mcp)
 [![Live on Fly.io](https://img.shields.io/badge/Live-Fly.io-8b5cf6?style=flat&logo=flydotio&logoColor=white)](https://libgen-mcp.fly.dev/health)
 
 </p>
