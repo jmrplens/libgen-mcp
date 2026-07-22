@@ -11,7 +11,8 @@ from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books,
 research papers, magazines, comics, and standards. It exposes four tools over
 stdio: `search`, `get_details`, `download`, and `read`. Books resolve by MD5
 (libgen + randombook); articles resolve by DOI (Unpaywall + Sci-Hub); `read`
-extracts and paginates the text of a previously downloaded file.
+extracts and paginates text — fetched server-side by MD5 or DOI, or read
+from an absolute local path.
 
 **No account, token, or credentials are required.** Unlike many MCP servers,
 there is nothing to authenticate — skip straight to installation.

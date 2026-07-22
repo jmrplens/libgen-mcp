@@ -202,7 +202,8 @@ has the model search, then call `read` with the DOI (or `md5` for a book) from t
 
 ```json
 {
-  "doi": "10.48550/arXiv.1706.03762"
+  "doi": "10.48550/arXiv.1706.03762",
+  "max_pages": 1
 }
 ```
 

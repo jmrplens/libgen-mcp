@@ -109,9 +109,9 @@ Enrichment is **opt-in per call** (`enrich` defaults to `false`) and can additio
 [Configuration](configuration.md)). It is strictly best-effort: a missing DOI/ISBN, a slow or
 failing upstream, or exceeding the 6s budget all degrade silently to an absent `enrichment` field
 (`crossref`/`open_library` are each omitted individually when their lookup found nothing).
-Enrichment **never fails the `get_details` call and never delays it beyond its own budget** — the
-core response (`file`, `edition`, `citations`) is unaffected either way. No API key is required;
-both APIs are used keyless.
+Enrichment runs synchronously within the `get_details` call: it **never fails the core result**
+(`file`, `edition`, `citations` are always returned), but it **may add bounded latency** — up to
+the ~6s budget — before the response returns. No API key is required; both APIs are used keyless.
 
 ## download
 

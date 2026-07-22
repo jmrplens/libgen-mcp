@@ -96,10 +96,11 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 	`LIBGEN_MCP_ENRICH=false` (por defecto `true`, es decir, permitido — ver
 	[Configuración](/libgen-mcp/es/configuration/)). Es estrictamente best-effort:
 	un DOI/ISBN ausente, una API lenta o que falla, o exceder el presupuesto de 6s
-	degradan en silencio a un campo `enrichment` ausente. El enriquecimiento nunca
-	hace fallar la llamada a `get_details` ni la retrasa más allá de su propio
-	presupuesto — la respuesta principal no se ve afectada. No se requiere clave
-	de API; ambas APIs se usan sin autenticación.
+	degradan en silencio a un campo `enrichment` ausente. El enriquecimiento se
+	ejecuta de forma síncrona dentro de la llamada a `get_details`: nunca hace
+	fallar el resultado principal, pero puede añadir una latencia acotada — hasta
+	el presupuesto de ~6s — antes de que la respuesta se devuelva. No se requiere
+	clave de API; ambas APIs se usan sin autenticación.
 </Aside>
 
 ## download

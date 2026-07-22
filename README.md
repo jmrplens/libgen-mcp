@@ -146,7 +146,7 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 
 The output also carries a `citations` field: a `{"bibtex": ..., "ris": ...}` object built from the record's metadata, ready to paste into a reference manager. It's omitted when the record has no title (the minimum needed for a usable citation), and ISBN is never fabricated when absent.
 
-An opt-in `enrich: true` boolean adds a best-effort `enrichment` object with keyless metadata from [Crossref](https://www.crossref.org/) (by DOI: journal/container title, ISSN, volume/issue, publisher, year, citation/reference counts, subjects) and [OpenLibrary](https://openlibrary.org/) (by ISBN: subjects, description, cover URL). It's off by default, never fails or slows the core response (6s budget, silent degrade to no `enrichment` field), and can be disabled deployment-wide with `LIBGEN_MCP_ENRICH=false`.
+An opt-in `enrich: true` boolean adds a best-effort `enrichment` object with keyless metadata from [Crossref](https://www.crossref.org/) (by DOI: journal/container title, ISSN, volume/issue, publisher, year, citation/reference counts, subjects) and [OpenLibrary](https://openlibrary.org/) (by ISBN: subjects, description, cover URL). It's off by default and runs synchronously within the `get_details` call: it never fails the core result (silent degrade to no `enrichment` field) but may add bounded latency — up to the ~6s enrichment budget — before the response returns. It can be disabled deployment-wide with `LIBGEN_MCP_ENRICH=false`.
 
 ### `download`
 

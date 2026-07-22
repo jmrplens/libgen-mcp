@@ -2,6 +2,7 @@ package extract
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -265,6 +266,33 @@ func TestExtract_TXTCharPagination(t *testing.T) {
 	}
 	if c.CharStart != 0 || c.CharEnd != 10 {
 		t.Errorf("want CharStart=0 CharEnd=10, got %d/%d", c.CharStart, c.CharEnd)
+	}
+}
+
+// TestExtract_TXTOverCapMarksTruncated verifies that a plain-text file just
+// over the maxTextFileBytes extraction cap is read up to the cap and the
+// returned Chunk is flagged Truncated with an explanatory Reason, so the
+// dropped tail is signaled honestly rather than silently lost. The oversized
+// file is built in t.TempDir() to avoid committing a large fixture.
+func TestExtract_TXTOverCapMarksTruncated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "oversized.txt")
+	// One byte past the cap is enough to saturate the LimitReader.
+	data := bytes.Repeat([]byte("a"), maxTextFileBytes+1)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Extractable {
+		t.Fatalf("expected extractable chunk, got %+v", c)
+	}
+	if !c.Truncated {
+		t.Error("Truncated = false, want true for a file over the 8 MiB cap")
+	}
+	if !strings.Contains(c.Reason, "8 MiB extraction cap") {
+		t.Errorf("Reason should note the extraction cap, got %q", c.Reason)
 	}
 }
 

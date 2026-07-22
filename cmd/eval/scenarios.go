@@ -652,11 +652,13 @@ func assertS4(tr transcript) (pass bool, detail string) {
 	return true, "get_details returned a File or Edition record"
 }
 
-// assertReadSummary checks the search -> read -> summarize flow: a read call
-// keyed by a DOI that came from a prior search result, whose extracted text (when
-// the file turned out to be extractable) the model then summarized in its own
-// words rather than dumping verbatim. A not-extractable file or a live fetch
-// failure is a SKIP, since the model's tool-use was still correct.
+// assertReadSummary checks the search -> read -> summarize flow: the model must
+// resolve the file via read (keyed by a DOI or md5 from a prior search result)
+// rather than downloading the whole file, then summarize the extracted text in
+// its own words rather than dumping it verbatim. It enforces the "read, don't
+// download" intent by requiring a read call and asserting NO download call
+// occurred in the transcript. A not-extractable file or a live fetch failure is
+// a SKIP, since the model's tool-use was still correct.
 func assertReadSummary(tr transcript) (pass bool, detail string) {
 	if _, ok := findCall(tr, "search"); !ok {
 		return false, "no search call"
@@ -665,15 +667,29 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, "no read call"
 	}
+	// The intended flow reads the first page instead of fetching the whole file;
+	// a download call means the model took the wrong path.
+	if _, ok := findCall(tr, "download"); ok {
+		return false, "model downloaded the file instead of reading it"
+	}
+	// read must be keyed by an identifier from a prior search result: a DOI
+	// (validated and traced back to search) or an md5.
 	doi := stringField(call.Input, "doi")
-	if doi == "" {
-		return false, "read call did not set doi"
-	}
-	if !isDOI(doi) {
-		return false, "read doi is not a valid DOI"
-	}
-	if !doiInSearchResults(tr, doi) {
-		return false, "read doi did not come from a prior search result"
+	md5 := stringField(call.Input, "md5")
+	switch {
+	case doi != "":
+		if !isDOI(doi) {
+			return false, "read doi is not a valid DOI"
+		}
+		if !doiInSearchResults(tr, doi) {
+			return false, "read doi did not come from a prior search result"
+		}
+	case md5 != "":
+		if !isMD5(md5) {
+			return false, "read md5 is not 32-hex"
+		}
+	default:
+		return false, "read call set neither doi nor md5"
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read failed against the live mirror/source chain"

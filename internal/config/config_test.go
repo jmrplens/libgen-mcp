@@ -106,6 +106,44 @@ func TestLoadRemoteDownloads(t *testing.T) {
 	})
 }
 
+// TestLoadEnrichEnabled checks LIBGEN_MCP_ENRICH (parsed via envBool, default
+// true): unset leaves enrichment allowed, an explicit false form disables it,
+// and a non-boolean value is a load error rather than a silent fallback.
+func TestLoadEnrichEnabled(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir()) // keep Load() offline/valid
+
+	t.Run("default true", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_ENRICH", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !cfg.EnrichEnabled {
+			t.Error("EnrichEnabled = false, want true when unset")
+		}
+	})
+
+	for _, v := range []string{"false", "FALSE", "f", "0"} {
+		t.Run("false via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_ENRICH", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.EnrichEnabled {
+				t.Errorf("EnrichEnabled = true for %q, want false", v)
+			}
+		})
+	}
+
+	t.Run("invalid errors", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_ENRICH", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() with a non-boolean LIBGEN_MCP_ENRICH should fail")
+		}
+	})
+}
+
 // TestLoadNewDefaults verifies LoadNewDefaults.
 func TestLoadNewDefaults(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_LOG_LEVEL", "")

@@ -45,7 +45,7 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 	}
 	defer func() { _ = zr.Close() }()
 
-	full, err := readEPUBText(ctx, zr)
+	full, truncated, err := readEPUBText(ctx, zr)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return Chunk{}, err
@@ -55,19 +55,26 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 	if strings.TrimSpace(full) == "" {
 		return Chunk{Format: "epub", Reason: "no extractable text found in EPUB spine"}, nil
 	}
-	return paginateChars(full, "epub", r), nil
+	c := paginateChars(full, "epub", r)
+	if truncated {
+		c.Truncated = true
+		c.Reason = appendNote(c.Reason, capExceededNote)
+	}
+	return c, nil
 }
 
 // readEPUBText resolves the OPF, walks the spine in order and returns the
-// concatenated plain text of all chapter documents.
-func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (string, error) {
+// concatenated plain text of all chapter documents. The returned bool reports
+// whether any spine document was clipped at the per-entry maxTextFileBytes cap,
+// so its remaining text is unavailable.
+func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (text string, truncated bool, err error) {
 	opf, err := opfPath(zr)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	pkg, err := parseOPF(zr, opf)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	hrefByID := make(map[string]string, len(pkg.Items))
@@ -79,26 +86,29 @@ func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (string, error) {
 	var sb strings.Builder
 	for _, ref := range pkg.ItemRefs {
 		if e := ctx.Err(); e != nil {
-			return "", e
+			return "", false, e
 		}
 		href, ok := hrefByID[ref.IDRef]
 		if !ok || href == "" {
 			continue
 		}
 		name := path.Join(baseDir, href)
-		data, rerr := readZipEntry(zr, name)
+		data, clipped, rerr := readZipEntry(zr, name)
 		if rerr != nil {
 			continue
+		}
+		if clipped {
+			truncated = true
 		}
 		sb.WriteString(htmlToText(strings.NewReader(string(data))))
 		sb.WriteByte('\n')
 	}
-	return sb.String(), nil
+	return sb.String(), truncated, nil
 }
 
 // opfPath returns the OPF package path referenced by META-INF/container.xml.
 func opfPath(zr *zip.ReadCloser) (string, error) {
-	data, err := readZipEntry(zr, "META-INF/container.xml")
+	data, _, err := readZipEntry(zr, "META-INF/container.xml")
 	if err != nil {
 		return "", fmt.Errorf("read container.xml: %w", err)
 	}
@@ -114,7 +124,7 @@ func opfPath(zr *zip.ReadCloser) (string, error) {
 
 // parseOPF reads and unmarshals the OPF package document at name.
 func parseOPF(zr *zip.ReadCloser, name string) (opfPackage, error) {
-	data, err := readZipEntry(zr, name)
+	data, _, err := readZipEntry(zr, name)
 	if err != nil {
 		return opfPackage{}, fmt.Errorf("read OPF: %w", err)
 	}
@@ -126,8 +136,10 @@ func parseOPF(zr *zip.ReadCloser, name string) (opfPackage, error) {
 }
 
 // readZipEntry reads the named entry from the archive, capping the read to
-// avoid unbounded memory use on a malicious archive.
-func readZipEntry(zr *zip.ReadCloser, name string) ([]byte, error) {
+// avoid unbounded memory use on a malicious archive. The returned bool reports
+// whether the entry was clipped at maxTextFileBytes (its content is at least
+// that large), so remaining bytes were dropped.
+func readZipEntry(zr *zip.ReadCloser, name string) (data []byte, clipped bool, err error) {
 	var entry *zip.File
 	for _, f := range zr.File {
 		if f.Name == name {
@@ -136,14 +148,24 @@ func readZipEntry(zr *zip.ReadCloser, name string) ([]byte, error) {
 		}
 	}
 	if entry == nil {
-		return nil, fmt.Errorf("entry not found: %s", name)
+		return nil, false, fmt.Errorf("entry not found: %s", name)
 	}
 	rc, err := entry.Open()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = rc.Close() }()
-	return io.ReadAll(io.LimitReader(rc, maxTextFileBytes))
+	// Read one byte past the cap so a saturated LimitReader is detectable, then
+	// clip back to the cap.
+	data, err = io.ReadAll(io.LimitReader(rc, maxTextFileBytes+1))
+	if err != nil {
+		return nil, false, err
+	}
+	clipped = len(data) > maxTextFileBytes
+	if clipped {
+		data = data[:maxTextFileBytes]
+	}
+	return data, clipped, nil
 }
 
 // htmlToText tokenizes an XHTML document and returns its visible text,

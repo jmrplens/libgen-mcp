@@ -96,10 +96,10 @@ Set `enrich: true` to add a best-effort `enrichment` object with keyless data fr
 	(default `true`, i.e. allowed — see
 	[Configuration](/libgen-mcp/configuration/)). It is strictly best-effort: a
 	missing DOI/ISBN, a slow or failing upstream, or exceeding the 6s budget all
-	degrade silently to an absent `enrichment` field. Enrichment never fails the
-	`get_details` call and never delays it beyond its own budget — the core
-	response is unaffected either way. No API key is required; both APIs are used
-	keyless.
+	degrade silently to an absent `enrichment` field. Enrichment runs synchronously
+	within the `get_details` call: it never fails the core result, but it may add
+	bounded latency — up to the ~6s budget — before the response returns. No API
+	key is required; both APIs are used keyless.
 </Aside>
 
 ## download

@@ -34,9 +34,10 @@ type Req struct {
 
 // Chunk is the result of an extraction. When Extractable is false, Reason
 // explains why and Text is empty. Page fields are populated for PDFs; Char
-// fields for EPUB/TXT. HasMore reports whether more content remains, Truncated
-// reports whether this chunk was cut short by a limit, and NextCursor points at
-// the resume position for the next call.
+// fields for EPUB/TXT. HasMore reports whether more content remains and
+// NextCursor points at the resume position for the next call. Truncated is true
+// only when this chunk was cut short mid-content by max_chars; a clean
+// max_pages/offset boundary sets HasMore, not Truncated.
 type Chunk struct {
 	Text        string
 	Format      string
@@ -60,6 +61,21 @@ const (
 	defaultStartPage = 1
 	maxTextFileBytes = 8 << 20 // 8 MiB cap for plain-text reads.
 )
+
+// capExceededNote is appended to Chunk.Reason (and Truncated is set) when a TXT
+// or EPUB document is at least maxTextFileBytes, so its text is clipped at the
+// extraction cap and content beyond it is silently unavailable. This is an
+// honest signal only; seek-based streaming past the cap is not implemented.
+const capExceededNote = "document exceeds the 8 MiB extraction cap; text beyond it is not available"
+
+// appendNote joins an existing reason with note using "; " as the separator,
+// or returns note alone when reason is empty.
+func appendNote(reason, note string) string {
+	if reason == "" {
+		return note
+	}
+	return reason + "; " + note
+}
 
 // Extract reads path and returns a paginated Chunk of its text. It dispatches
 // on the lowercased file extension: PDF, EPUB and TXT are extracted; DjVu,
