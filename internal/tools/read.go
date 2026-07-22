@@ -174,7 +174,10 @@ func readNextSteps(out ReadOutput) []string {
 // server-side temp file, returning the caller-owned release func.
 func resolveReadPath(ctx context.Context, c *libgen.Client, in ReadInput) (path string, release func(), err error) {
 	if in.Path != "" {
-		return in.Path, func() {}, nil
+		// A caller-supplied local path owns no temp file, so its release is a no-op.
+		return in.Path, func() {
+			// Intentionally empty: nothing to release for a local path.
+		}, nil
 	}
 	return c.FetchToTemp(ctx, libgen.Item{MD5: in.MD5, DOI: in.DOI, Source: in.Source})
 }

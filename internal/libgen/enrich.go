@@ -130,22 +130,29 @@ func (c *Client) fetchCrossref(ctx context.Context, doi string) *CrossrefWork {
 	return parseCrossref(io.LimitReader(resp.Body, enrichMaxBody))
 }
 
-// crossrefEnvelope is the subset of the Crossref `{"message":{...}}` response that
-// enrichment reads; field tags map the hyphenated JSON keys onto Go fields.
+// crossrefPublished is the Crossref `published` field, whose date-parts carry the
+// publication year at date-parts[0][0].
+type crossrefPublished struct {
+	DateParts [][]int `json:"date-parts"`
+}
+
+// crossrefMessage is the subset of the Crossref work object that enrichment reads;
+// field tags map the hyphenated JSON keys onto Go fields.
+type crossrefMessage struct {
+	ContainerTitle  []string          `json:"container-title"`
+	ISSN            []string          `json:"ISSN"`
+	Volume          string            `json:"volume"`
+	Issue           string            `json:"issue"`
+	Publisher       string            `json:"publisher"`
+	Published       crossrefPublished `json:"published"`
+	ReferencesCount int               `json:"references-count"`
+	IsReferencedBy  int               `json:"is-referenced-by-count"`
+	Subject         []string          `json:"subject"`
+}
+
+// crossrefEnvelope is the `{"message":{...}}` wrapper of the Crossref response.
 type crossrefEnvelope struct {
-	Message struct {
-		ContainerTitle []string `json:"container-title"`
-		ISSN           []string `json:"ISSN"`
-		Volume         string   `json:"volume"`
-		Issue          string   `json:"issue"`
-		Publisher      string   `json:"publisher"`
-		Published      struct {
-			DateParts [][]int `json:"date-parts"`
-		} `json:"published"`
-		ReferencesCount int      `json:"references-count"`
-		IsReferencedBy  int      `json:"is-referenced-by-count"`
-		Subject         []string `json:"subject"`
-	} `json:"message"`
+	Message crossrefMessage `json:"message"`
 }
 
 // parseCrossref decodes a Crossref work envelope into a CrossrefWork, mapping the

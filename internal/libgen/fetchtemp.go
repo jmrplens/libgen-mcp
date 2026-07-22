@@ -13,7 +13,9 @@ var errNoIdentifier = errors.New("item has no md5 or doi to fetch")
 
 // noopRelease is a release func that does nothing; it is returned alongside an
 // error so callers can always defer release() unconditionally.
-func noopRelease() {}
+func noopRelease() {
+	// Intentionally empty: there is no cached file or refcount to release.
+}
 
 // FetchToTemp downloads the item to a server-side temp file (reusing a cached
 // copy when the same identifier was fetched recently) and returns the path plus a
