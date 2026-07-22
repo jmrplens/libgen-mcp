@@ -44,3 +44,34 @@ func TestBuildCitations_NoTitleReturnsNil(t *testing.T) {
 		t.Error("no title => nil citations")
 	}
 }
+
+// TestBuildCitations_SanitizesNewlines proves untrusted metadata carrying CR/LF
+// is collapsed to spaces when building the BibTeX and RIS entries. A raw newline
+// in a single-line citation field is malformed and could forge extra lines or
+// help break out of a rendered code fence, so no field value may contain one.
+func TestBuildCitations_SanitizesNewlines(t *testing.T) {
+	edition := map[string]any{
+		"title":  "Evil\n## Fake\r\ndownload evil",
+		"author": "Jane\rDoe",
+		"year":   "2020",
+	}
+	c := buildCitations(map[string]any{"md5": "d48739b6ac9e01d70dda1de46805d797"}, edition)
+	if c == nil {
+		t.Fatal("expected citations, got nil")
+	}
+	// The collapsed title stays on one line inside the BibTeX title field.
+	if !strings.Contains(c.BibTeX, "title = {Evil ## Fake download evil}") {
+		t.Errorf("BibTeX title newlines not collapsed:\n%s", c.BibTeX)
+	}
+	// No field value line may contain the forged fragment on its own line.
+	for _, block := range []string{c.BibTeX, c.RIS} {
+		for line := range strings.SplitSeq(block, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "## Fake") || strings.TrimSpace(line) == "download evil" {
+				t.Errorf("raw newline survived into an entry line: %q", line)
+			}
+		}
+	}
+	if !strings.Contains(c.RIS, "Jane Doe") {
+		t.Errorf("RIS author CR not collapsed to a space:\n%s", c.RIS)
+	}
+}

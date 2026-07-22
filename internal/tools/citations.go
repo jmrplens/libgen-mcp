@@ -21,9 +21,9 @@ type citeFields struct {
 func buildCitations(file, edition map[string]any) *Citations {
 	get := func(key string) string {
 		if v := stringField(edition, key); v != "" {
-			return v
+			return oneLine(v)
 		}
-		return stringField(file, key)
+		return oneLine(stringField(file, key))
 	}
 	title := get("title")
 	if title == "" {
@@ -36,10 +36,26 @@ func buildCitations(file, edition map[string]any) *Citations {
 		pages:  get("pages"),
 		volume: get("issue_volume"), number: get("issue_number"),
 		startPg: get("issue_first_page"), endPg: get("issue_last_page"),
-		doi: get("doi"), md5: stringField(file, "md5"),
+		doi: get("doi"), md5: oneLine(stringField(file, "md5")),
 	}
 	f.isArticle = f.doi != "" || get("type") == "a" || get("libgen_topic") == "a"
 	return &Citations{BibTeX: renderBibTeX(f), RIS: renderRIS(f)}
+}
+
+// oneLine collapses any CR/LF/tab whitespace in a metadata value to a single
+// space. BibTeX and RIS field values are single-line by nature, so a raw
+// newline is malformed anyway; collapsing it here hardens both the structured
+// citations JSON and any Markdown that later wraps these values, since an
+// embedded newline could otherwise forge instruction lines or help break out
+// of a rendered code fence.
+func oneLine(s string) string {
+	replacer := strings.NewReplacer(
+		"\r\n", " ",
+		"\n", " ",
+		"\r", " ",
+		"\t", " ",
+	)
+	return strings.TrimSpace(replacer.Replace(s))
 }
 
 type kv struct{ k, v string }

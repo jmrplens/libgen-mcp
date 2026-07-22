@@ -72,16 +72,6 @@ func titleize(name string) string {
 	return strings.Join(words, " ")
 }
 
-// firstNonEmpty returns the first argument that is not empty, or "".
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // cell renders a table cell, showing an em dash for empty values. Untrusted
 // catalog fields are rendered into Markdown tables that become "user"-role
 // instruction messages, so the value is neutralized first: newlines and tabs
@@ -188,17 +178,27 @@ func candidateText(title, author, format, language string, results []libgen.Resu
 	b.WriteString(requestedLine(title, author, format, language))
 	b.WriteString(".\n\n")
 	b.WriteString(renderCandidates(results))
+	// The chosen result's Title and MD5 come from the untrusted catalog, so they
+	// are neutralized with cell() (collapsing newlines/tabs, escaping pipes)
+	// before being interpolated into this user-role instruction prose. Otherwise
+	// a Title/MD5 containing a newline could push forged text onto its own line
+	// ahead of the untrusted caveat. The request title is the user's own input.
+	bestMatch := title
+	if strings.TrimSpace(chosen.Title) != "" {
+		bestMatch = cell(chosen.Title)
+	}
+	md5 := cell(chosen.MD5)
 	b.WriteString("\nThe best match appears to be **")
-	b.WriteString(firstNonEmpty(chosen.Title, title))
+	b.WriteString(bestMatch)
 	b.WriteString("** (md5 `")
-	b.WriteString(chosen.MD5)
+	b.WriteString(md5)
 	b.WriteString("`).\n")
 	b.WriteString("\n## Next actions\n\n")
 	b.WriteString("1. Call the `get_details` tool with `{\"md5\": \"")
-	b.WriteString(chosen.MD5)
+	b.WriteString(md5)
 	b.WriteString("\"}` to confirm this edition (title, author, year, size, format).\n")
 	b.WriteString("2. Call the `download` tool with `{\"md5\": \"")
-	b.WriteString(chosen.MD5)
+	b.WriteString(md5)
 	b.WriteString("\"}` to fetch it — add `\"resolve_only\": true` if this server runs remotely and cannot write to your disk.\n\n")
 	b.WriteString(untrustedCaveat)
 	return b.String()
