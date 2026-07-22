@@ -147,8 +147,39 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 		b.WriteString(fencedBlock("bibtex", out.Citations.BibTeX))
 		b.WriteString("\n")
 	}
+	writeEnrichment(&b, out.Enrichment)
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// writeEnrichment appends a short "External metadata" section for the best-effort
+// Crossref/OpenLibrary enrichment. Untrusted free-text values (a journal title, a
+// book description) go through mdCell so they cannot break the layout. It is a
+// no-op when no enrichment was gathered.
+func writeEnrichment(b *strings.Builder, e *libgen.Enrichment) {
+	if e == nil {
+		return
+	}
+	b.WriteString("\n### External metadata\n")
+	if cr := e.Crossref; cr != nil {
+		if cr.ContainerTitle != "" {
+			fmt.Fprintf(b, "- Crossref container: %s\n", mdCell(cr.ContainerTitle))
+		}
+		if cr.PublishedYear > 0 {
+			fmt.Fprintf(b, "- Crossref year: %d\n", cr.PublishedYear)
+		}
+		if cr.CitationCount > 0 {
+			fmt.Fprintf(b, "- Crossref citations: %d\n", cr.CitationCount)
+		}
+	}
+	if ol := e.OpenLibrary; ol != nil {
+		if ol.OpenLibURL != "" {
+			fmt.Fprintf(b, "- OpenLibrary: %s\n", mdCell(ol.OpenLibURL))
+		}
+		if ol.Description != "" {
+			fmt.Fprintf(b, "- OpenLibrary description: %s\n", mdCell(ol.Description))
+		}
+	}
 }
 
 // renderReadMarkdown renders one extracted chunk as a short human-readable block:

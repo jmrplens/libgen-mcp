@@ -50,10 +50,19 @@ type MirrorLister interface {
 // Client talks to the libgen family of mirrors with failover, rate limiting,
 // retries with growing backoff and a per-mirror cooldown after failures.
 type Client struct {
-	mirrors     MirrorLister
-	http        *http.Client // pages: with timeout
-	dl          *http.Client // streaming downloads: no global timeout, governed by ctx
-	limiter     *rate.Limiter
+	mirrors MirrorLister
+	http    *http.Client // pages: with timeout
+	dl      *http.Client // streaming downloads: no global timeout, governed by ctx
+	limiter *rate.Limiter
+	// enrichLimiter governs the keyless metadata-enrichment APIs (Crossref,
+	// OpenLibrary). It is deliberately SEPARATE from limiter: the mirror limiter is
+	// throttled to ~1 rps for the libgen family, whereas the public enrichment APIs
+	// tolerate a higher rate, so enrichment must never be starved by (or starve) the
+	// mirror budget.
+	enrichLimiter *rate.Limiter
+	// enrichEmail is the contact address advertised to Crossref's polite pool via
+	// the User-Agent mailto. It reuses cfg.UnpaywallEmail and may be empty.
+	enrichEmail string
 	retry       int           // maximum number of passes over the mirrors
 	backoffBase time.Duration // backoff base; injectable for tests
 	// maxDownloadBytes is the download size cap in bytes (0 = no limit).
@@ -168,6 +177,8 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		http:             &http.Client{Timeout: cfg.Timeout},
 		dl:               &http.Client{},
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
+		enrichLimiter:    rate.NewLimiter(5, 5),
+		enrichEmail:      cfg.UnpaywallEmail,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,

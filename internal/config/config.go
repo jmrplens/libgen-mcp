@@ -75,6 +75,11 @@ type Config struct {
 	// before eviction, so successive pages of one read reuse a single fetch while
 	// idle files are reclaimed. LIBGEN_MCP_READ_CACHE_TTL.
 	ReadCacheTTL time.Duration
+	// EnrichEnabled is the deployment kill-switch for get_details' opt-in metadata
+	// enrichment (Crossref/OpenLibrary). LIBGEN_MCP_ENRICH, default true: a
+	// deployment sets it false to forbid enrichment entirely, regardless of the
+	// per-call enrich flag.
+	EnrichEnabled bool
 }
 
 // defaultStartRetryWaits returns the built-in start-retry schedule: three waits
@@ -121,6 +126,7 @@ func Load() (*Config, error) {
 		ReadDefaultPages:        5,
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		ReadCacheTTL:            10 * time.Minute,
+		EnrichEnabled:           true,
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
@@ -209,6 +215,9 @@ func parseDurations(v string) ([]time.Duration, error) {
 // environment.
 func loadNumeric(cfg *Config) error {
 	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
+		return err
+	}
+	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
 		return err
 	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {

@@ -38,6 +38,7 @@ Full metadata for a Library Genesis record (description, identifiers, DOI, cover
 
 **Parameters:**
 
+- `enrich` (boolean): when true, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN); best-effort and off by default
 - `id` (string): edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field
 - `md5` (string): file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field
 - `object` (string): with id: a single value edition (default) or file

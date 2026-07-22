@@ -63,15 +63,17 @@ type DetailsInput struct {
 	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field"`
 	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field"`
 	Object string `json:"object,omitempty" jsonschema:"with id: a single value edition (default) or file"`
+	Enrich bool   `json:"enrich,omitempty" jsonschema:"when true, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN); best-effort and off by default"`
 }
 
 // DetailsOutput holds the file and/or edition record returned by get_details.
 // NextSteps leads so the model sees the download follow-up before the payload.
 type DetailsOutput struct {
-	NextSteps []string       `json:"next_steps,omitempty" jsonschema:"suggested follow-up (e.g. download this record by its md5 or doi)"`
-	File      map[string]any `json:"file,omitempty" jsonschema:"the file record (present for an md5 lookup, or an id lookup with object=file)"`
-	Edition   map[string]any `json:"edition,omitempty" jsonschema:"the edition record (present for an md5 lookup's related edition, or an id lookup with object=edition)"`
-	Citations *Citations     `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
+	NextSteps  []string           `json:"next_steps,omitempty" jsonschema:"suggested follow-up (e.g. download this record by its md5 or doi)"`
+	File       map[string]any     `json:"file,omitempty" jsonschema:"the file record (present for an md5 lookup, or an id lookup with object=file)"`
+	Edition    map[string]any     `json:"edition,omitempty" jsonschema:"the edition record (present for an md5 lookup's related edition, or an id lookup with object=edition)"`
+	Citations  *Citations         `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
+	Enrichment *libgen.Enrichment `json:"enrichment,omitempty" jsonschema:"best-effort external metadata (Crossref/OpenLibrary), present only when enrich was requested and something was found"`
 }
 
 // ResolvedLink is the result of a resolve-only download: a direct URL the caller
@@ -141,7 +143,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Get record details",
 		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("get_details", detailsHandler(client)))
+	}, withRecovery("get_details", detailsHandler(client, cfg)))
 	book, article := client.EnabledSourceNames()
 	desc := downloadToolDescription(book, article)
 	if o.remoteDownloads {
@@ -394,7 +396,7 @@ func markdownResult(md string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: md}}}
 }
 
-func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
+func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
 		var (
@@ -416,8 +418,27 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 		}
 		out.NextSteps = detailsNextSteps(out)
 		out.Citations = buildCitations(out.File, out.Edition)
+		if in.Enrich && cfg.EnrichEnabled {
+			detailsEnrich(ctx, c, &out)
+		}
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// detailsEnrich augments out with best-effort external metadata: the DOI comes
+// from the edition record (falling back to the file record) and the ISBN from the
+// edition's isbn/identifier field when present. A nil Enrich result simply means
+// nothing was found — it is never an error, so the core response is unaffected.
+func detailsEnrich(ctx context.Context, c *libgen.Client, out *DetailsOutput) {
+	doi := stringField(out.Edition, "doi")
+	if doi == "" {
+		doi = stringField(out.File, "doi")
+	}
+	isbn := stringField(out.Edition, "isbn")
+	if isbn == "" {
+		isbn = stringField(out.Edition, "identifier")
+	}
+	out.Enrichment = c.Enrich(ctx, doi, isbn)
 }
 
 // detailsByMD5 validates the md5 and returns the file plus its related edition.
