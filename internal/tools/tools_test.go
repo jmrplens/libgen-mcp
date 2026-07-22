@@ -574,6 +574,9 @@ func TestGetDetailsTool(t *testing.T) {
 	if !strings.Contains(string(data), "87a4ebdaf21fa6cc70009a3dd63194ee") {
 		t.Errorf("output without md5: %s", data)
 	}
+	if !strings.Contains(string(data), "\"citations\"") || !strings.Contains(string(data), "@") {
+		t.Errorf("handler did not populate citations: %s", data)
+	}
 }
 
 // TestGetDetailsToolValidation verifies GetDetailsToolValidation.

@@ -70,6 +70,7 @@ type DetailsOutput struct {
 	NextSteps []string       `json:"next_steps,omitempty" jsonschema:"suggested follow-up (e.g. download this record by its md5 or doi)"`
 	File      map[string]any `json:"file,omitempty" jsonschema:"the file record (present for an md5 lookup, or an id lookup with object=file)"`
 	Edition   map[string]any `json:"edition,omitempty" jsonschema:"the edition record (present for an md5 lookup's related edition, or an id lookup with object=edition)"`
+	Citations *Citations     `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
 }
 
 // ResolvedLink is the result of a resolve-only download: a direct URL the caller
@@ -407,6 +408,7 @@ func detailsHandler(c *libgen.Client) mcp.ToolHandlerFor[DetailsInput, DetailsOu
 			return nil, zero, err
 		}
 		out.NextSteps = detailsNextSteps(out)
+		out.Citations = buildCitations(out.File, out.Edition)
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
 }

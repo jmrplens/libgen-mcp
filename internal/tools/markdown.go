@@ -116,6 +116,9 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 			fmt.Fprintf(&b, "- %s: %s\n", f.label, mdCell(v))
 		}
 	}
+	if out.Citations != nil && out.Citations.BibTeX != "" {
+		b.WriteString("\n### Citation (BibTeX)\n\n```bibtex\n" + out.Citations.BibTeX + "\n```\n")
+	}
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
 }
