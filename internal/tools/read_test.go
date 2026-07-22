@@ -367,6 +367,111 @@ func TestReadNextSteps_ReasonWithNewlineIsSanitized(t *testing.T) {
 	}
 }
 
+// TestReadTool_OutlinePDF verifies the outline mode over a local PDF that carries
+// bookmarks: a read with outline set returns the document's table of contents
+// (three chapters) instead of text, reports it as extractable, exposes each
+// entry's title, level and page, renders a "Table of contents" Markdown block
+// with the chapter titles, and still leads next_steps with the UNTRUSTED warning
+// (catalog/document titles are untrusted data).
+func TestReadTool_OutlinePDF(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path:    "../extract/testdata/bookmarked.pdf",
+		Outline: true,
+	})
+	if err != nil {
+		t.Fatalf("readHandler(outline) returned an error: %v", err)
+	}
+	if res == nil || res.IsError {
+		t.Fatalf("outline read must not be a tool error, got %+v", res)
+	}
+	if !out.Extractable {
+		t.Fatalf("Extractable = false, reason %q", out.Reason)
+	}
+	if len(out.Outline) != 3 {
+		t.Fatalf("len(Outline) = %d, want 3", len(out.Outline))
+	}
+	if !strings.Contains(out.Outline[0].Title, "Chapter 1") {
+		t.Errorf("Outline[0].Title = %q, want it to contain %q", out.Outline[0].Title, "Chapter 1")
+	}
+	if out.Outline[0].Page != 1 {
+		t.Errorf("Outline[0].Page = %d, want 1", out.Outline[0].Page)
+	}
+	md := textContent(res)
+	if !strings.Contains(md, "Table of contents") {
+		t.Errorf("Markdown should carry a Table of contents header, got %q", md)
+	}
+	if !strings.Contains(md, "Chapter 1") || !strings.Contains(md, "Chapter 3") {
+		t.Errorf("Markdown should list the chapter titles, got %q", md)
+	}
+	if len(out.NextSteps) == 0 || !strings.Contains(strings.ToUpper(out.NextSteps[0]), "UNTRUSTED") {
+		t.Errorf("next_steps[0] should carry the UNTRUSTED warning, got %v", out.NextSteps)
+	}
+}
+
+// TestReadTool_OutlineNoToc verifies that requesting the outline of a supported
+// document with no embedded table of contents is a normal result, not an error:
+// the sample PDF (no bookmarks) reports extractable with zero entries, and the
+// Markdown states plainly that no table of contents was found.
+func TestReadTool_OutlineNoToc(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path:    "../extract/testdata/sample.pdf",
+		Outline: true,
+	})
+	if err != nil {
+		t.Fatalf("readHandler(outline) returned an error: %v", err)
+	}
+	if res == nil || res.IsError {
+		t.Fatalf("outline read of a TOC-less document must not be a tool error, got %+v", res)
+	}
+	if !out.Extractable {
+		t.Fatalf("Extractable = false, reason %q", out.Reason)
+	}
+	if len(out.Outline) != 0 {
+		t.Fatalf("len(Outline) = %d, want 0", len(out.Outline))
+	}
+	md := textContent(res)
+	if !strings.Contains(strings.ToLower(md), "no table of contents") {
+		t.Errorf("Markdown should state that no table of contents was found, got %q", md)
+	}
+}
+
+// TestReadTool_OutlineDoesNotBreakFindOrSequential is a regression guard proving
+// the new outline branch left the other two read modes intact: a plain local
+// read (no outline, no find) still returns sequential text with no outline
+// entries, and a find over the same file still returns matches.
+func TestReadTool_OutlineDoesNotBreakFindOrSequential(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+
+	seqRes, seq, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path: "../extract/testdata/sample.txt",
+	})
+	if err != nil || seqRes == nil || seqRes.IsError {
+		t.Fatalf("sequential read failed: err=%v res=%+v", err, seqRes)
+	}
+	if seq.Text == "" {
+		t.Error("sequential read should return non-empty Text")
+	}
+	if len(seq.Outline) != 0 {
+		t.Errorf("sequential read should carry no Outline, got %d entries", len(seq.Outline))
+	}
+
+	findRes, find, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path: "../extract/testdata/sample.txt",
+		Find: "brown",
+	})
+	if err != nil || findRes == nil || findRes.IsError {
+		t.Fatalf("find read failed: err=%v res=%+v", err, findRes)
+	}
+	if find.Query != "brown" {
+		t.Errorf("find read Query = %q, want %q", find.Query, "brown")
+	}
+	if find.MatchCount < 1 {
+		t.Errorf("find read should return at least one match for %q, got %d", "brown", find.MatchCount)
+	}
+}
+
 // TestRenderRead_TextFenceIsBreakoutSafe verifies that extracted UNTRUSTED text
 // containing a Markdown code-fence sequence cannot close the rendered fence early:
 // the opening fence must be longer than the longest backtick run in the text.
