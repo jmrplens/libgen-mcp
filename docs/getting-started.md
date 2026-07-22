@@ -185,5 +185,21 @@ drives the `search` tool with roughly these arguments:
 
 Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to
 `get_details` for full metadata, then to `download` to fetch the file — or feed a `doi`
-straight to `download` for an article. See [Tools](tools.md) for the full input and output
-shapes.
+straight to `download` for an article. `get_details` also returns a `citations` field
+(`bibtex`/`ris`) you can paste straight into a reference manager. See [Tools](tools.md)
+for the full input and output shapes.
+
+## Prompts
+
+Besides the three tools, the server registers four MCP **prompts** your client can offer
+as quick actions — each one turns a common request into a ready-to-run plan of tool calls,
+without downloading anything itself:
+
+| Prompt                  | Arguments                                                       | What it does                                                                              |
+| ----------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `acquire_book`          | `title` (required), `author`, `format`, `language`              | Find and confirm the best-matching edition of a book, then download it.                   |
+| `research_topic`        | `topic` (required), `kind` (`articles`/`books`/`both`), `limit` | Build a reading list of papers and/or books on a topic, then download and summarize each. |
+| `get_paper`             | one of `doi` or `citation`                                      | Fetch a specific paper directly by DOI, or find it by a free-text citation.               |
+| `download_troubleshoot` | `md5`, `doi`, `error` (all optional)                            | Get a decision tree to diagnose and recover from a failed download.                       |
+
+See [Tools](tools.md#prompts) for each prompt's full argument table and behavior.

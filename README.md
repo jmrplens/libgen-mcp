@@ -23,13 +23,15 @@
 
 </p>
 
-**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards.** It ships as one static binary (or a container) with three focused tools: `search`, `get_details`, and `download`. It works with Claude, Cursor, VS Code, and any MCP client.
+**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards.** It ships as one static binary (or a container) with three focused tools plus guided prompts: `search`, `get_details`, and `download`. It works with Claude, Cursor, VS Code, and any MCP client.
+
+Four MCP **prompts** (`acquire_book`, `research_topic`, `get_paper`, `download_troubleshoot`) turn common requests into ready-to-run tool plans, and `get_details` can return a `citations` field with a ready-to-paste BibTeX/RIS export for the record.
 
 You talk to your AI assistant; it does the searching and fetching. You don't need to track mirrors, MD5 hashes, or download URLs. Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down.
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR."
 
-**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the three tools add **~1,900 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrplens.github.io/libgen-mcp/eval-results/).
+**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the three tools add **~2,400 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrplens.github.io/libgen-mcp/eval-results/).
 
 ---
 
@@ -142,6 +144,8 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 | `id`      | string | one of   | Edition or file id.                                                  |
 | `object`  | string | no       | With `id`: `edition` (default) or `file`.                            |
 
+The output also carries a `citations` field: a `{"bibtex": ..., "ris": ...}` object built from the record's metadata, ready to paste into a reference manager. It's omitted when the record has no title (the minimum needed for a usable citation), and ISBN is never fabricated when absent.
+
 ### `download`
 
 Download a file to a local directory. Provide `md5` for a book **or** `doi` for an article (at least one is required); the server resolves the appropriate source chain and, for book (`md5`) downloads, verifies the result against the expected hash (DOI/article downloads are not MD5-verified). Returns the saved path, size, and the source that served it.
@@ -158,6 +162,17 @@ Download a file to a local directory. Provide `md5` for a book **or** `doi` for 
 > **Where the file goes — local vs. remote.** By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download dir (great for autonomous local agents). A **remote/hosted** server runs elsewhere and cannot write to your disk, so there `download` **always returns a link** instead — a `resource_link` + a `resolved` object with any required `headers` — and you don't need to set `resolve_only`; it's implied. A server is in remote mode when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set (for a hosted **stdio** deployment — e.g. behind `mcp-proxy` on a catalog like Glama — whose disk is ephemeral/unreachable). You (or your agent's fetch tool) retrieve that URL, so the file ends up where the fetch runs. On a local server you can still pass `resolve_only: true` to opt into the same link behavior per call.
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
+
+## Prompts
+
+Alongside the three tools, the server registers four MCP **prompts** — reusable instruction templates an MCP client can surface as quick actions or slash-commands. A prompt never downloads or writes anything itself: it (optionally) searches the catalog, then returns a plan naming the exact `get_details`/`download` calls to make next. See the [tools reference](docs/tools.md#prompts) for full argument tables.
+
+| Prompt                  | Arguments                                                                                      | What it does                                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `acquire_book`          | `title` (required), `author`, `format`, `language`                                             | Searches books, ranks candidates by format/language, and hands back a `get_details` → `download` plan for the best match.                                                                        |
+| `research_topic`        | `topic` (required), `kind` (`articles`/`books`/`both`, default `both`), `limit` (default `10`) | Builds a two-section reading list (Papers / Books) and a plan to download each and produce an annotated bibliography.                                                                            |
+| `get_paper`             | exactly one of `doi` or `citation`                                                             | With `doi`, hands back a direct `download` plan (`get_details` does not accept a bare DOI). With `citation`, searches articles (retrying once among books) and lists matches to download by DOI. |
+| `download_troubleshoot` | `md5`, `doi`, `error` (all optional)                                                           | Produces a decision tree — using only the server's enabled sources — to diagnose a failed download and suggest source-pinning, `resolve_only`, or re-searching.                                  |
 
 ## Configuration
 

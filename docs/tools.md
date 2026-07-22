@@ -80,11 +80,12 @@ Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is 
 
 ### get_details output
 
-| Field        | Type   | Description                                                                                                    |
-| ------------ | ------ | -------------------------------------------------------------------------------------------------------------- |
-| `next_steps` | array  | Model-facing follow-up suggestion, e.g. a `download` call using this record's `md5` (book) or `doi` (article). |
-| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                          |
-| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).  |
+| Field        | Type   | Description                                                                                                                                                                                                                     |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Model-facing follow-up suggestion, e.g. a `download` call using this record's `md5` (book) or `doi` (article).                                                                                                                  |
+| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                                                                                                                                           |
+| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).                                                                                                                   |
+| `citations`  | object | `{"bibtex": ..., "ris": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata. Omitted when the record has no title (the minimum needed for a usable citation); ISBN is never fabricated when absent. |
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
 returns whichever object was requested. A lookup that matches nothing returns a
@@ -182,3 +183,78 @@ link is the only way a remote server can deliver a multi-megabyte file. See
 
 If every applicable source fails, the tool returns the joined per-source errors. See
 [Troubleshooting](troubleshooting.md) for how to read them.
+
+## Prompts
+
+In addition to the three tools above, `libgen-mcp` registers four MCP **prompts** —
+reusable instruction templates that an MCP client can surface as quick actions or
+slash-commands. Each prompt's handler returns a single `user`-role Markdown message
+telling the calling model exactly which tool to call next (`get_details`, `download`)
+and with what arguments; a prompt never searches beyond what it needs to build that
+plan, and never downloads or writes anything itself.
+
+### acquire_book
+
+Search for a book and get step-by-step instructions to confirm and download the best
+matching edition.
+
+| Argument   | Required | Description                                  |
+| ---------- | -------- | -------------------------------------------- |
+| `title`    | yes      | Book title to search for.                    |
+| `author`   | no       | Author name to narrow the search.            |
+| `format`   | no       | Preferred file format, e.g. `pdf` or `epub`. |
+| `language` | no       | Preferred language.                          |
+
+Searches nonfiction and fiction, ranks the candidates by matching format/language
+(relaxing to format-only, then to the first result, when nothing matches exactly), and
+returns a candidate table plus a two-step `get_details` → `download` plan for the best
+match.
+
+### research_topic
+
+Search for papers and/or books on a topic and build a reading list with instructions to
+download each and produce an annotated bibliography.
+
+| Argument | Required | Description                                                                   |
+| -------- | -------- | ----------------------------------------------------------------------------- |
+| `topic`  | yes      | Topic to research.                                                            |
+| `kind`   | no       | Which record types to search: `articles`, `books`, or `both`. Default `both`. |
+| `limit`  | no       | Maximum rows per section. Default `10`.                                       |
+
+Returns a two-section Markdown reading list — Papers (identified by DOI) and Books
+(identified by md5) — followed by a plan to download each item and produce an annotated
+bibliography from the results.
+
+### get_paper
+
+Resolve a specific paper by DOI or by a free-text citation and get instructions to
+download it. Provide exactly one of `doi` or `citation`.
+
+| Argument   | Required | Description                                                                    |
+| ---------- | -------- | ------------------------------------------------------------------------------ |
+| `doi`      | one of   | DOI of the paper to fetch directly (mutually exclusive with `citation`).       |
+| `citation` | one of   | Free-text citation or reference to search for (mutually exclusive with `doi`). |
+
+With `doi`, the prompt hands back a direct `download {"doi": ...}` plan — it explicitly
+notes that `get_details` does **not** accept a bare DOI as input, so the model doesn't
+misroute there. With `citation`, it searches articles for a match, retrying once among
+books (some papers are cataloged that way) when nothing turns up, and lists the
+candidates to download by DOI.
+
+### download_troubleshoot
+
+Diagnose a failed or stuck download and produce a step-by-step recovery plan tailored to
+the identifier, the enabled providers, and any error message.
+
+| Argument | Required | Description                                             |
+| -------- | -------- | ------------------------------------------------------- |
+| `md5`    | no       | md5 of the book download that failed.                   |
+| `doi`    | no       | DOI of the article download that failed.                |
+| `error`  | no       | The error message the `download` tool returned, if any. |
+
+All arguments are optional. The resulting decision tree only names download providers
+that are actually **enabled** on this server (via `LIBGEN_MCP_SOURCES`), suggests
+re-running `search` to rule out a stale identifier, walks through pinning `download`'s
+`source` parameter to isolate a failing provider, and — when a known error message is
+recognized — adds tailored advice for it (e.g. a malformed md5, a missing
+`LIBGEN_MCP_UNPAYWALL_EMAIL`, a stalled transfer, or an integrity-check failure).

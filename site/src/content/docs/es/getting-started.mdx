@@ -209,7 +209,20 @@ acciona la herramienta `search` con más o menos estos argumentos:
 }
 ```
 
-Cada resultado incluye un `md5` (para libros) o un `doi` (para artículos). Pasa un `md5` a `get_details` para obtener los metadatos completos, y luego a `download` para descargar el archivo — o pasa un `doi` directamente a `download` para un artículo. Consulta [Herramientas](/libgen-mcp/es/tools/) para ver todas las formas de entrada y salida.
+Cada resultado incluye un `md5` (para libros) o un `doi` (para artículos). Pasa un `md5` a `get_details` para obtener los metadatos completos, y luego a `download` para descargar el archivo — o pasa un `doi` directamente a `download` para un artículo. `get_details` también devuelve un campo `citations` (`bibtex`/`ris`) que puedes pegar directamente en un gestor de referencias. Consulta [Herramientas](/libgen-mcp/es/tools/) para ver todas las formas de entrada y salida.
+
+## Prompts
+
+Además de las tres herramientas, el servidor registra cuatro **prompts** MCP que tu cliente puede ofrecer como acciones rápidas — cada uno convierte una petición habitual en un plan de llamadas a herramientas listo para ejecutar, sin descargar nada por sí mismo:
+
+| Prompt                  | Argumentos                                                       | Qué hace                                                                                     |
+| ----------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `acquire_book`          | `title` (requerido), `author`, `format`, `language`              | Encuentra y confirma la edición de un libro que mejor coincide, y la descarga.               |
+| `research_topic`        | `topic` (requerido), `kind` (`articles`/`books`/`both`), `limit` | Construye una lista de lectura de artículos y/o libros sobre un tema, los descarga y resume. |
+| `get_paper`             | uno de `doi` o `citation`                                        | Obtiene un artículo concreto directamente por DOI, o lo busca por una cita en texto libre.   |
+| `download_troubleshoot` | `md5`, `doi`, `error` (todos opcionales)                         | Obtiene un árbol de decisión para diagnosticar y recuperarse de una descarga fallida.        |
+
+Consulta [Herramientas](/libgen-mcp/es/tools/#prompts) para ver la tabla completa de argumentos y el comportamiento de cada prompt.
 
 <LinkCard
 	title="Siguiente: Configuración"
