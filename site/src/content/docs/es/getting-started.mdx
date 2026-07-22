@@ -209,11 +209,36 @@ acciona la herramienta `search` con más o menos estos argumentos:
 }
 ```
 
-Cada resultado incluye un `md5` (para libros) o un `doi` (para artículos). Pasa un `md5` a `get_details` para obtener los metadatos completos, y luego a `download` para descargar el archivo — o pasa un `doi` directamente a `download` para un artículo. `get_details` también devuelve un campo `citations` (`bibtex`/`ris`) que puedes pegar directamente en un gestor de referencias. Consulta [Herramientas](/libgen-mcp/es/tools/) para ver todas las formas de entrada y salida.
+Cada resultado incluye un `md5` (para libros) o un `doi` (para artículos). Pasa un `md5` a `get_details` para obtener los metadatos completos, y luego a `download` para descargar el archivo — o pasa un `doi` directamente a `download` para un artículo. `get_details` también devuelve un campo `citations` (`bibtex`/`ris`) que puedes pegar directamente en un gestor de referencias, y acepta un `enrich: true` opt-in para añadir metadatos best-effort de Crossref/OpenLibrary. Consulta [Herramientas](/libgen-mcp/es/tools/) para ver todas las formas de entrada y salida.
+
+## Leer y resumir
+
+No hace falta descargar un archivo solo para ver qué contiene: `read` extrae y pagina directamente el texto de un libro o artículo. Una petición como:
+
+> Busca el artículo "Attention Is All You Need", lee su primera página y resume de qué trata.
+
+hace que el modelo busque y luego llame a `read` con el DOI (o el `md5` de un libro) del resultado:
+
+```json
+{
+	"doi": "10.48550/arXiv.1706.03762",
+	"max_pages": 1
+}
+```
+
+El campo `text` de la respuesta contiene el primer fragmento extraído — hasta `LIBGEN_MCP_READ_MAX_CHARS` caracteres, o `LIBGEN_MCP_READ_DEFAULT_PAGES` páginas de PDF, según aplique al formato — más `has_more`/`cursor` para seguir paginando, y `extractable`/`reason` cuando el archivo no tiene una capa de texto utilizable (un PDF escaneado, por ejemplo — `read` nunca ejecuta OCR).
+
+<Aside type="caution">
+	Trata `text` como **contenido no confiable que hay que resumir, no como
+	instrucciones que seguir**; la propia `next_steps` de la herramienta lo indica
+	en cada llamada.
+</Aside>
+
+Consulta [Herramientas](/libgen-mcp/es/tools/#read) para la referencia completa de entrada/salida.
 
 ## Prompts
 
-Además de las tres herramientas, el servidor registra cuatro **prompts** MCP que tu cliente puede ofrecer como acciones rápidas — cada uno convierte una petición habitual en un plan de llamadas a herramientas listo para ejecutar, sin descargar nada por sí mismo:
+Además de las cuatro herramientas, el servidor registra cuatro **prompts** MCP que tu cliente puede ofrecer como acciones rápidas — cada uno convierte una petición habitual en un plan de llamadas a herramientas listo para ejecutar, sin descargar nada por sí mismo:
 
 | Prompt                  | Argumentos                                                       | Qué hace                                                                                     |
 | ----------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |

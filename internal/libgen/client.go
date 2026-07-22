@@ -50,10 +50,19 @@ type MirrorLister interface {
 // Client talks to the libgen family of mirrors with failover, rate limiting,
 // retries with growing backoff and a per-mirror cooldown after failures.
 type Client struct {
-	mirrors     MirrorLister
-	http        *http.Client // pages: with timeout
-	dl          *http.Client // streaming downloads: no global timeout, governed by ctx
-	limiter     *rate.Limiter
+	mirrors MirrorLister
+	http    *http.Client // pages: with timeout
+	dl      *http.Client // streaming downloads: no global timeout, governed by ctx
+	limiter *rate.Limiter
+	// enrichLimiter governs the keyless metadata-enrichment APIs (Crossref,
+	// OpenLibrary). It is deliberately SEPARATE from limiter: the mirror limiter is
+	// throttled to ~1 rps for the libgen family, whereas the public enrichment APIs
+	// tolerate a higher rate, so enrichment must never be starved by (or starve) the
+	// mirror budget.
+	enrichLimiter *rate.Limiter
+	// enrichEmail is the contact address advertised to Crossref's polite pool via
+	// the User-Agent mailto. It reuses cfg.UnpaywallEmail and may be empty.
+	enrichEmail string
 	retry       int           // maximum number of passes over the mirrors
 	backoffBase time.Duration // backoff base; injectable for tests
 	// maxDownloadBytes is the download size cap in bytes (0 = no limit).
@@ -86,6 +95,11 @@ type Client struct {
 	// grow unbounded over the lifetime of a long-running process.
 	partialMu    sync.Mutex
 	partialLocks map[string]*refLock
+
+	// tempCache holds server-side temp files fetched by FetchToTemp so a paginated
+	// read can fetch a file once and reuse it across page requests. It is bounded
+	// by a total-size cap and a per-entry TTL and refcounts in-progress reads.
+	tempCache *tempCache
 
 	mu       sync.Mutex           // protects cooldown
 	cooldown map[string]time.Time // mirror base → instant at which the cooldown expires
@@ -163,6 +177,8 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		http:             &http.Client{Timeout: cfg.Timeout},
 		dl:               &http.Client{},
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
+		enrichLimiter:    rate.NewLimiter(5, 5),
+		enrichEmail:      cfg.UnpaywallEmail,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,
@@ -170,6 +186,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
+		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
 	}
 	c.sources = c.buildSourceChain(cfg)
 	for _, opt := range opts {

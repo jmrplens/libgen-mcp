@@ -35,16 +35,16 @@ func newProjectRoot(t *testing.T, version string) string {
 
 // TestListTools_ReturnsOrderedRealTools verifies the in-memory MCP session
 // (newSession) lists the real registered tools and toolOrder sorts them into the
-// natural search/get_details/download workflow order.
+// natural search/get_details/download/read workflow order.
 func TestListTools_ReturnsOrderedRealTools(t *testing.T) {
 	toolList, err := listTools()
 	if err != nil {
 		t.Fatalf("listTools() error: %v", err)
 	}
-	if len(toolList) != 3 {
-		t.Fatalf("listTools() returned %d tools, want 3", len(toolList))
+	if len(toolList) != 4 {
+		t.Fatalf("listTools() returned %d tools, want 4", len(toolList))
 	}
-	want := []string{"search", "get_details", "download"}
+	want := []string{"search", "get_details", "download", "read"}
 	for i, name := range want {
 		if toolList[i].Name != name {
 			t.Fatalf("tool[%d] = %q, want %q", i, toolList[i].Name, name)
@@ -89,7 +89,7 @@ func TestRun_GeneratesAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read llms-full.txt: %v", err)
 	}
-	for _, want := range []string{"## Tools", "### search", "### get_details", "### download", "## Configuration"} {
+	for _, want := range []string{"## Tools", "### search", "### get_details", "### download", "### read", "## Configuration"} {
 		if !strings.Contains(string(full), want) {
 			t.Fatalf("llms-full.txt missing %q", want)
 		}

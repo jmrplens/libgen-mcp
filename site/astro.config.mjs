@@ -6,7 +6,7 @@ import starlightLinksValidator from "starlight-links-validator";
 import mermaid from "astro-mermaid";
 
 const siteDescription =
-	"Open-source MCP server in Go for Library Genesis: three tools to search and download books, papers and more from your AI assistant — no account required.";
+	"Open-source MCP server in Go for Library Genesis: four tools to search, read and download books, papers and more from your AI assistant — no account required.";
 
 // --- Identity, URLs and structured-data ids ------------------------------
 const siteUrl = "https://jmrplens.github.io";
@@ -60,7 +60,7 @@ const dateModified = (() => {
 // do?" and "what do I need?" queries directly from structured data.
 const featureList = [
 	"Search Library Genesis for books, papers, comics, magazines and standards",
-	"Three MCP tools: search, get_details, download",
+	"Four MCP tools: search, get_details, download, read",
 	"Multi-source downloads: libgen and randombook for books; Unpaywall and Sci-Hub for articles by DOI",
 	"Automatic mirror discovery, caching and transparent failover",
 	"Single cross-platform static Go binary (Linux, macOS, Windows; amd64 and arm64)",

@@ -61,6 +61,25 @@ type Config struct {
 	// download is aborted only when NO bytes arrive for this long, never merely for
 	// being slow. LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT, a Go duration. Default: 60s.
 	DownloadStallTimeout time.Duration
+	// ReadMaxChars is the max characters the read tool returns per call by
+	// default, used when a call omits max_chars. LIBGEN_MCP_READ_MAX_CHARS.
+	ReadMaxChars int
+	// ReadDefaultPages is the default max PDF pages per read call, used when a
+	// call omits max_pages. LIBGEN_MCP_READ_DEFAULT_PAGES.
+	ReadDefaultPages int
+	// ReadCacheBytes is the total-size cap of the FetchToTemp temp cache:
+	// downloaded read files past this aggregate size are evicted (least-recently
+	// used first, never while a read holds a reference). LIBGEN_MCP_READ_CACHE_BYTES.
+	ReadCacheBytes int64
+	// ReadCacheTTL is how long an unreferenced FetchToTemp temp file lingers
+	// before eviction, so successive pages of one read reuse a single fetch while
+	// idle files are reclaimed. LIBGEN_MCP_READ_CACHE_TTL.
+	ReadCacheTTL time.Duration
+	// EnrichEnabled is the deployment kill-switch for get_details' opt-in metadata
+	// enrichment (Crossref/OpenLibrary). LIBGEN_MCP_ENRICH, default true: a
+	// deployment sets it false to forbid enrichment entirely, regardless of the
+	// per-call enrich flag.
+	EnrichEnabled bool
 }
 
 // defaultStartRetryWaits returns the built-in start-retry schedule: three waits
@@ -103,6 +122,11 @@ func Load() (*Config, error) {
 		ScihubHosts:             append([]string(nil), defaultScihubHosts...),
 		DownloadStartRetryWaits: defaultStartRetryWaits(),
 		DownloadStallTimeout:    60 * time.Second,
+		ReadMaxChars:            6000,
+		ReadDefaultPages:        5,
+		ReadCacheBytes:          512 << 20, // 512 MiB
+		ReadCacheTTL:            10 * time.Minute,
+		EnrichEnabled:           true,
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
@@ -193,6 +217,9 @@ func loadNumeric(cfg *Config) error {
 	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
 		return err
 	}
+	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
+		return err
+	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
 		return err
 	}
@@ -206,6 +233,18 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	if err := envInt("LIBGEN_MCP_RETRY_ATTEMPTS", &cfg.RetryAttempts); err != nil {
+		return err
+	}
+	if err := envInt("LIBGEN_MCP_READ_MAX_CHARS", &cfg.ReadMaxChars); err != nil {
+		return err
+	}
+	if err := envInt("LIBGEN_MCP_READ_DEFAULT_PAGES", &cfg.ReadDefaultPages); err != nil {
+		return err
+	}
+	if err := envInt64("LIBGEN_MCP_READ_CACHE_BYTES", &cfg.ReadCacheBytes); err != nil {
+		return err
+	}
+	if err := envDuration("LIBGEN_MCP_READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
 		return err
 	}
 	return nil
@@ -281,10 +320,28 @@ func envFloat(key string, dst *float64) error {
 	return nil
 }
 
+// envDuration overwrites *dst with the Go duration read from the variable key if
+// present.
+func envDuration(key string, dst *time.Duration) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	*dst = d
+	return nil
+}
+
 // Validate checks that the configuration values are within range and that the
 // mirror and download directory are usable.
 func (c *Config) Validate() error {
 	if err := c.validateRanges(); err != nil {
+		return err
+	}
+	if err := c.validateReadRanges(); err != nil {
 		return err
 	}
 	if err := c.validateDownloadTuning(); err != nil {
@@ -325,6 +382,26 @@ func (c *Config) validateRanges() error {
 	}
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
+	}
+	return nil
+}
+
+// validateReadRanges checks that the read-tool and temp-cache tuning fields
+// (ReadMaxChars, ReadDefaultPages, ReadCacheBytes, ReadCacheTTL) fall within
+// their allowed bounds, reporting the first out-of-range field in declaration
+// order.
+func (c *Config) validateReadRanges() error {
+	if c.ReadMaxChars < 500 || c.ReadMaxChars > 200000 {
+		return fmt.Errorf("LIBGEN_MCP_READ_MAX_CHARS must be in [500, 200000], got %d", c.ReadMaxChars)
+	}
+	if c.ReadDefaultPages < 1 || c.ReadDefaultPages > 200 {
+		return fmt.Errorf("LIBGEN_MCP_READ_DEFAULT_PAGES must be in [1, 200], got %d", c.ReadDefaultPages)
+	}
+	if c.ReadCacheBytes < 1<<20 || c.ReadCacheBytes > maxDownloadBytesLimit {
+		return fmt.Errorf("LIBGEN_MCP_READ_CACHE_BYTES must be in [%d, %d], got %d", int64(1<<20), maxDownloadBytesLimit, c.ReadCacheBytes)
+	}
+	if c.ReadCacheTTL < time.Second || c.ReadCacheTTL > 24*time.Hour {
+		return fmt.Errorf("LIBGEN_MCP_READ_CACHE_TTL must be in [%v, %v], got %v", time.Second, 24*time.Hour, c.ReadCacheTTL)
 	}
 	return nil
 }

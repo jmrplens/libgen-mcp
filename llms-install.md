@@ -8,9 +8,11 @@ deterministic — no build from source is required.
 
 A single-binary MCP server (Go) that lets an AI assistant search and download
 from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books,
-research papers, magazines, comics, and standards. It exposes three tools over
-stdio: `search`, `get_details`, and `download`. Books resolve by MD5 (libgen +
-randombook); articles resolve by DOI (Unpaywall + Sci-Hub).
+research papers, magazines, comics, and standards. It exposes four tools over
+stdio: `search`, `get_details`, `download`, and `read`. Books resolve by MD5
+(libgen + randombook); articles resolve by DOI (Unpaywall + Sci-Hub); `read`
+extracts and paginates text — fetched server-side by MD5 or DOI, or read
+from an absolute local path.
 
 **No account, token, or credentials are required.** Unlike many MCP servers,
 there is nothing to authenticate — skip straight to installation.
@@ -122,8 +124,8 @@ Full reference: <https://jmrplens.github.io/libgen-mcp/configuration/>
 ## Step 3 — Verify the installation
 
 1. Restart or reload the MCP client so it picks up the new configuration.
-2. The server should appear as connected with three tools: `search`,
-   `get_details`, and `download`.
+2. The server should appear as connected with four tools: `search`,
+   `get_details`, `download`, and `read`.
 3. Smoke test: call `search` with `{ "query": "the go programming language",
    "topics": ["nonfiction"], "results_per_page": 25 }`. A successful response
    returns a page of file records, each with an `md5` (books) or `doi`

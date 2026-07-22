@@ -15,7 +15,7 @@ import (
 )
 
 // newHostSession loads the configuration from the environment, builds a real
-// libgen-mcp server with its three tools registered, and connects an in-memory
+// libgen-mcp server with its tools registered, and connects an in-memory
 // MCP client to it over ctx. Tool calls on the returned session hit the real
 // libgen mirrors and download sources. The cleanup closes the client and drains
 // the server session. Construction is offline: config.Load and

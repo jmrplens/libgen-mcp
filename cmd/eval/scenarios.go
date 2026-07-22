@@ -345,6 +345,17 @@ func scenarios() []scenario {
 			Remote: true,
 			Assert: assertRemoteDownloadLandsLocal,
 		},
+		{
+			ID: "S19",
+			Prompt: `Search Library Genesis articles for the paper "Hallmarks of Cancer: The Next Generation" ` +
+				`by Hanahan and Weinberg, then read the first page of the PDF (do NOT download the whole file) ` +
+				`and give me a two- or three-sentence summary of what it covers.`,
+			// Exercises the search -> read -> summarize flow: the model must find the
+			// paper's DOI via search, call read (not download) with that DOI to extract
+			// the first page's text, then write its own summary of the UNTRUSTED
+			// extracted text rather than dumping it verbatim.
+			Assert: assertReadSummary,
+		},
 	}
 }
 
@@ -639,6 +650,75 @@ func assertS4(tr transcript) (pass bool, detail string) {
 		return false, "details had neither File nor Edition"
 	}
 	return true, "get_details returned a File or Edition record"
+}
+
+// assertReadSummary checks the search -> read -> summarize flow: the model must
+// resolve the file via read (keyed by a DOI or md5 from a prior search result)
+// rather than downloading the whole file, then summarize the extracted text in
+// its own words rather than dumping it verbatim. It enforces the "read, don't
+// download" intent by requiring a read call and asserting NO download call
+// occurred in the transcript. A not-extractable file or a live fetch failure is
+// a SKIP, since the model's tool-use was still correct.
+// readIdentifierOK verifies the read call was keyed by an identifier from a prior
+// search result: a valid DOI traced back to search, or a 32-hex md5.
+func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
+	doi := stringField(call.Input, "doi")
+	md5 := stringField(call.Input, "md5")
+	switch {
+	case doi != "":
+		if !isDOI(doi) {
+			return false, "read doi is not a valid DOI"
+		}
+		if !doiInSearchResults(tr, doi) {
+			return false, "read doi did not come from a prior search result"
+		}
+	case md5 != "":
+		if !isMD5(md5) {
+			return false, "read md5 is not 32-hex"
+		}
+	default:
+		return false, "read call set neither doi nor md5"
+	}
+	return true, ""
+}
+
+func assertReadSummary(tr transcript) (pass bool, detail string) {
+	if _, ok := findCall(tr, "search"); !ok {
+		return false, "no search call"
+	}
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "no read call"
+	}
+	// The intended flow reads the first page instead of fetching the whole file;
+	// a download call means the model took the wrong path.
+	if _, ok := findCall(tr, "download"); ok {
+		return false, "model downloaded the file instead of reading it"
+	}
+	// read must be keyed by an identifier from a prior search result.
+	if ok, detail := readIdentifierOK(tr, call); !ok {
+		return false, detail
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " read failed against the live mirror/source chain"
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if !out.Extractable {
+		return true, skipPrefix + " file was not extractable (" + out.Reason + ")"
+	}
+	if strings.TrimSpace(out.Text) == "" {
+		return false, "extractable read returned no text"
+	}
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return false, "model produced no final summary"
+	}
+	if strings.Contains(tr.FinalText, out.Text) {
+		return false, "model dumped the extracted text verbatim instead of summarizing it"
+	}
+	return true, fmt.Sprintf("read %s (%d chars); model summarized it in %d chars", out.Format, len(out.Text), len(tr.FinalText))
 }
 
 // assertS5 checks a book download by md5 produces a saved, non-empty file.

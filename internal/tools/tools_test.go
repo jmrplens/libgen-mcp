@@ -435,13 +435,13 @@ func TestToolsRegistered(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = true
 	}
-	for _, want := range []string{"search", "get_details", "download"} {
+	for _, want := range []string{"search", "get_details", "download", "read"} {
 		if !names[want] {
 			t.Errorf("missing tool %q; registered: %v", want, names)
 		}
 	}
-	if len(res.Tools) != 3 {
-		t.Errorf("got %d tools, want 3", len(res.Tools))
+	if len(res.Tools) != 4 {
+		t.Errorf("got %d tools, want 4", len(res.Tools))
 	}
 }
 

@@ -14,8 +14,8 @@ It is deliberately **not** a unit test. It is:
 
 ## What it exercises
 
-The model talks to libgen-mcp's three tools (`search`, `get_details`,
-`download`) registered on an **in-process** MCP server (`mcp.NewServer` +
+The model talks to libgen-mcp's four tools (`search`, `get_details`,
+`download`, `read`) registered on an **in-process** MCP server (`mcp.NewServer` +
 `tools.Register` + `mcp.NewInMemoryTransports`). Every tool call the model makes
 is executed for real against Library Genesis via `session.CallTool` — real
 search pages, real details lookups, real downloads.
@@ -52,6 +52,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — asserts the model sets `resolve_only=true` and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path |
 | S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk |
 | S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally |
+| S19 | **Search → read → summarize**: model searches for a paper by title, calls `read` (not `download`) with the DOI found in the search results, and writes its own summary of the extracted first page rather than dumping the UNTRUSTED text verbatim |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 

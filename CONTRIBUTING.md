@@ -55,16 +55,16 @@ internal/
 ├── libgen/            # Search, details, and the multi-source download chain
 ├── mirrors/           # Mirror discovery, caching, and failover
 ├── logging/           # Structured logging to stderr
-└── tools/             # MCP tool registration (search, get_details, download)
+└── tools/             # MCP tool registration (search, get_details, download, read)
 test/e2e/              # Opt-in live end-to-end suite (build tag: e2e)
 docs/                  # Markdown guides (getting started, configuration, …)
 site/                  # Astro Starlight documentation site (bilingual EN/ES)
 mcpb/                  # Claude Desktop .mcpb bundle manifest
 ```
 
-The server exposes exactly three MCP tools — `search`, `get_details`, and
-`download`. New capabilities are usually additions to `internal/libgen` (a new
-download source, a new parser) rather than new tools.
+The server exposes exactly four MCP tools — `search`, `get_details`,
+`download`, and `read`. New capabilities are usually additions to
+`internal/libgen` (a new download source, a new parser) rather than new tools.
 
 ## Building and Testing
 

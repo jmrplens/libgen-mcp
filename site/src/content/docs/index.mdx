@@ -1,6 +1,6 @@
 ---
 title: LibGen MCP
-description: "Open-source MCP server in Go for Library Genesis: three tools to search and download books, papers and more from your AI assistant — no account required."
+description: "Open-source MCP server in Go for Library Genesis: four tools to search, download, and read books, papers and more from your AI assistant — no account required."
 head:
   - tag: title
     content: "LibGen MCP — MCP server for Library Genesis book & paper search"
@@ -20,7 +20,7 @@ head:
             "name": "What is libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the libgen.li mirror family). It exposes three tools — search, get_details, and download — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books and resolve download links in plain language."
+              "text": "libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the libgen.li mirror family). It exposes four tools — search, get_details, download, and read — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books, resolve download links, and read/summarize text in plain language."
             }
           },
           {
@@ -50,7 +50,7 @@ head:
         ]
       }
 hero:
-  tagline: A Go MCP server with three tools — search, get_details, download — that lets your AI assistant search Library Genesis and resolve download links in plain language. No account or API key.
+  tagline: A Go MCP server with four tools — search, get_details, download, read — that lets your AI assistant search Library Genesis, resolve download links, and read/summarize text in plain language. No account or API key.
   image:
     dark: ../../assets/logo-dark.svg
     light: ../../assets/logo-light.svg
@@ -67,14 +67,15 @@ hero:
 
 import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
-**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes three tools — `search`, `get_details`, and `download` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
+**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
 Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched from open-access and Sci-Hub sources by DOI.
 
 <CardGrid>
-	<Card title="Three tools" icon="puzzle">
-		`search`, `get_details`, and `download` — read-only search and metadata plus
-		a non-destructive, resumable download.
+	<Card title="Four tools" icon="puzzle">
+		`search`, `get_details`, `download`, and `read` — read-only search,
+		metadata, and paginated text extraction plus a non-destructive, resumable
+		download.
 	</Card>
 	<Card title="Resilient mirrors" icon="random">
 		Automatic mirror discovery, failover, retry with cooldown, and a shared rate
@@ -98,7 +99,7 @@ Mirrors are discovered automatically and cached, with transparent failover, so t
 />
 <LinkCard
 	title="Tools"
-	description="The search, get_details, and download tools — inputs, outputs, and error behavior."
+	description="The search, get_details, download, and read tools — inputs, outputs, and error behavior."
 	href="/libgen-mcp/tools/"
 />
 <LinkCard
@@ -119,7 +120,7 @@ Mirrors are discovered automatically and cached, with transparent failover, so t
 
 ### What is libgen-mcp?
 
-libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the `libgen.li` mirror family). It exposes three tools — `search`, `get_details`, and `download` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books and resolve download links in plain language.
+libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books, resolve download links, and read/summarize text in plain language.
 
 ### What can libgen-mcp do?
 
