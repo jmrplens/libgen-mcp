@@ -228,6 +228,110 @@ func TestGetPaper_RequiresExactlyOne(t *testing.T) {
 	}
 }
 
+// stubSource is a minimal DownloadSource used to build a client with a known,
+// restricted set of enabled sources so the troubleshoot prompt's output can be
+// asserted to name only the enabled ones.
+type stubSource struct {
+	name          string
+	book, article bool
+}
+
+func (s stubSource) Name() string { return s.name }
+
+func (s stubSource) Supports(it libgen.Item) bool {
+	if it.MD5 != "" {
+		return s.book
+	}
+	if it.DOI != "" {
+		return s.article
+	}
+	return false
+}
+
+func (s stubSource) Resolve(context.Context, libgen.Item) (libgen.Resolved, error) {
+	return libgen.Resolved{}, nil
+}
+
+// newRestrictedSourceClient builds a client whose enabled download sources are
+// exactly those passed, via the exported WithSources option. No search is
+// performed by the troubleshoot prompt, so the mirror list can be empty.
+func newRestrictedSourceClient(t *testing.T, sources ...libgen.DownloadSource) *libgen.Client {
+	t.Helper()
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{}, cfg, libgen.WithSources(sources...))
+}
+
+func runTroubleshoot(t *testing.T, client *libgen.Client, args map[string]string) string {
+	t.Helper()
+	res, err := handleDownloadTroubleshoot(client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: args},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Messages) != 1 || res.Messages[0].Role != "user" {
+		t.Fatalf("want one user-role message, got %+v", res.Messages)
+	}
+	return res.Messages[0].Content.(*mcp.TextContent).Text
+}
+
+// TestDownloadTroubleshoot_OnlyEnabledSources proves the message names only the
+// enabled sources and never mentions a disabled provider (randombook, unpaywall).
+func TestDownloadTroubleshoot_OnlyEnabledSources(t *testing.T) {
+	client := newRestrictedSourceClient(t,
+		stubSource{name: "libgen", book: true},
+		stubSource{name: "scihub", article: true},
+	)
+	txt := runTroubleshoot(t, client, map[string]string{"md5": "abc"})
+	if !strings.Contains(txt, "libgen") {
+		t.Errorf("expected the enabled source libgen to be named:\n%s", txt)
+	}
+	if strings.Contains(txt, "randombook") {
+		t.Errorf("disabled provider randombook must not be named:\n%s", txt)
+	}
+	if strings.Contains(txt, "unpaywall") {
+		t.Errorf("disabled provider unpaywall must not be named:\n%s", txt)
+	}
+}
+
+// TestDownloadTroubleshoot_InterpretsError proves a known error string yields
+// tailored guidance and an unknown one still returns a sensible generic message.
+func TestDownloadTroubleshoot_InterpretsError(t *testing.T) {
+	client := newRestrictedSourceClient(t, stubSource{name: "libgen", book: true})
+
+	txt := runTroubleshoot(t, client, map[string]string{
+		"error": "all libgen mirrors unreachable (network block? try a VPN or different DNS)",
+	})
+	low := strings.ToLower(txt)
+	if !strings.Contains(low, "retry") {
+		t.Errorf("expected retry guidance for the all-mirrors error:\n%s", txt)
+	}
+	if !strings.Contains(low, "provider") && !strings.Contains(low, "mirror") {
+		t.Errorf("expected provider/mirror guidance for the all-mirrors error:\n%s", txt)
+	}
+
+	generic := runTroubleshoot(t, client, map[string]string{"error": "some entirely unexpected failure xyzzy"})
+	if strings.TrimSpace(generic) == "" {
+		t.Errorf("expected a non-empty generic message for an unknown error")
+	}
+}
+
+// TestDownloadTroubleshoot_NoArgs proves that with no identifier the message
+// still explains both the md5 (book) and doi (article) paths.
+func TestDownloadTroubleshoot_NoArgs(t *testing.T) {
+	client := newRestrictedSourceClient(t,
+		stubSource{name: "libgen", book: true},
+		stubSource{name: "scihub", article: true},
+	)
+	txt := runTroubleshoot(t, client, map[string]string{})
+	if !strings.Contains(txt, "md5") {
+		t.Errorf("expected the md5 path to be explained:\n%s", txt)
+	}
+	if !strings.Contains(txt, "doi") && !strings.Contains(txt, "DOI") {
+		t.Errorf("expected the doi path to be explained:\n%s", txt)
+	}
+}
+
 func TestResearchTopic_RequiresTopic(t *testing.T) {
 	client := newFixtureClient(t)
 	_, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{

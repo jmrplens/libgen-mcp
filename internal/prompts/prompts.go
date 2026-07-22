@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,7 @@ func Register(server *mcp.Server, client *libgen.Client, _ *config.Config) {
 	registerAcquireBook(server, client)
 	registerResearchTopic(server, client)
 	registerGetPaper(server, client)
+	registerDownloadTroubleshoot(server, client)
 }
 
 // promptResult wraps text in a single user-role prompt message. The role is
@@ -541,4 +543,184 @@ func pickCandidate(results []libgen.Result, format, language string) libgen.Resu
 		return *formatOnly
 	}
 	return results[0]
+}
+
+// registerDownloadTroubleshoot registers the download_troubleshoot prompt: a
+// decision tree that diagnoses a failed download. It reads no arguments during
+// registration; the closure defers to handleDownloadTroubleshoot, which needs
+// only the client (no search, hence no ctx).
+func registerDownloadTroubleshoot(server *mcp.Server, client *libgen.Client) {
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "download_troubleshoot",
+		Title:       "Troubleshoot a Download",
+		Description: "Diagnose a failed or stuck download and produce a step-by-step recovery plan tailored to the identifier, the enabled providers, and any error message.",
+		Arguments: []*mcp.PromptArgument{
+			arg("md5", "md5 of the book download that failed (optional).", false),
+			arg("doi", "DOI of the article download that failed (optional).", false),
+			arg("error", "The error message the download tool returned, if any (optional).", false),
+		},
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return handleDownloadTroubleshoot(client, req)
+	})
+}
+
+// handleDownloadTroubleshoot builds a Markdown troubleshooting message for a
+// failed download. It performs no search and never downloads: it inspects the
+// provided identifier(s) and error string and returns a decision tree that only
+// names the currently enabled download providers.
+func handleDownloadTroubleshoot(client *libgen.Client, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	args := req.Params.Arguments
+	md5 := strings.TrimSpace(args["md5"])
+	doi := strings.TrimSpace(args["doi"])
+	errMsg := strings.TrimSpace(args["error"])
+
+	book, article := client.EnabledSourceNames()
+	return promptResult(troubleshootText(md5, doi, errMsg, book, article)), nil
+}
+
+// troubleshootText assembles the full troubleshooting message from its sections:
+// an intro identifying the kind, the stale-identifier check, the per-provider
+// isolation step, the Unpaywall open-access note, the remote resolve_only note,
+// and (when present) an interpretation of the reported error.
+func troubleshootText(md5, doi, errMsg string, book, article []string) string {
+	var b strings.Builder
+	b.WriteString(kindIntro(md5, doi))
+	b.WriteString(staleCheckSection(md5, doi))
+	b.WriteString(pinProvidersSection(md5, doi, book, article))
+	if slices.Contains(article, "unpaywall") {
+		b.WriteString(unpaywallNote)
+	}
+	b.WriteString(remoteNote)
+	if errMsg != "" {
+		b.WriteString("\n## What the error means\n\n")
+		b.WriteString(interpretDownloadError(errMsg))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// kindIntro opens the message by naming what kind of download failed, derived
+// from which identifier was supplied.
+func kindIntro(md5, doi string) string {
+	switch {
+	case md5 != "":
+		return "Troubleshooting a failed **book** download (md5 `" + md5 + "`).\n\n" +
+			"Books are keyed by their md5 and resolved through the book providers.\n\n"
+	case doi != "":
+		return "Troubleshooting a failed **article** download (DOI `" + doi + "`).\n\n" +
+			"Articles are keyed by their DOI and resolved through the article providers.\n\n"
+	default:
+		return "Troubleshooting a failed download.\n\n" +
+			"There are two paths: a **book** is fetched by its `md5` (book providers), " +
+			"while an **article** is fetched by its `doi` (article providers). " +
+			"Supply the `md5` or `doi` that failed for more specific guidance.\n\n"
+	}
+}
+
+// staleCheckSection suggests re-running search to confirm the identifier still
+// resolves, since catalog records are removed or re-hashed over time.
+func staleCheckSection(md5, doi string) string {
+	var b strings.Builder
+	b.WriteString("## 1. Confirm the identifier is still valid\n\n")
+	switch {
+	case md5 != "":
+		b.WriteString("Records get removed or re-hashed, so a once-valid md5 can go stale. " +
+			"Re-run the `search` tool for this title and copy the md5 from a current result; " +
+			"if the md5 changed, retry `download` with the new one.\n\n")
+	case doi != "":
+		b.WriteString("Re-run the `search` tool for this article (or verify the DOI at the publisher) " +
+			"to confirm the DOI is correct and still indexed before retrying `download`.\n\n")
+	default:
+		b.WriteString("Re-run the `search` tool for the title or citation and copy a current `md5` " +
+			"(book) or `doi` (article) from the results, since catalog records are removed or re-hashed " +
+			"over time.\n\n")
+	}
+	return b.String()
+}
+
+// pinProvidersSection lists the enabled providers relevant to the identifier and
+// instructs the caller to pin download's `source` to each in turn to isolate a
+// single failing provider. Only enabled providers are named.
+func pinProvidersSection(md5, doi string, book, article []string) string {
+	providers := troubleshootProviders(md5, doi, book, article)
+	var b strings.Builder
+	b.WriteString("## 2. Isolate a failing provider\n\n")
+	if len(providers) == 0 {
+		b.WriteString("No download providers are enabled for this identifier on this server, " +
+			"so the download cannot succeed. Enable a provider via `LIBGEN_MCP_SOURCES` and retry.\n\n")
+		return b.String()
+	}
+	b.WriteString("Call `download` again pinning the `source` parameter to each enabled provider in turn " +
+		"to find which one is failing:\n\n")
+	for _, name := range providers {
+		b.WriteString("- `{\"source\": \"" + name + "\", ...}`\n")
+	}
+	b.WriteString("\nIf one provider succeeds, the others were the problem; if all fail the issue is " +
+		"upstream (network or a stale identifier).\n\n")
+	return b.String()
+}
+
+// troubleshootProviders selects which enabled providers to advertise: the book
+// chain for an md5, the article chain for a doi, or the union (books first, then
+// articles) when no identifier is given.
+func troubleshootProviders(md5, doi string, book, article []string) []string {
+	switch {
+	case md5 != "":
+		return book
+	case doi != "":
+		return article
+	default:
+		return append(slices.Clone(book), article...)
+	}
+}
+
+// unpaywallNote explains that Unpaywall open-access resolution needs a server
+// email. Only appended when unpaywall is an enabled article provider.
+const unpaywallNote = "## 3. Open-access resolution (Unpaywall)\n\n" +
+	"Open-access lookups via Unpaywall require the `LIBGEN_MCP_UNPAYWALL_EMAIL` environment variable " +
+	"to be set on the server. If it is unset, that provider is skipped; ask the server operator to set it.\n\n"
+
+// remoteNote suggests resolve_only when the server cannot write to the caller's
+// disk.
+const remoteNote = "## Remote servers\n\n" +
+	"If this server runs remotely and cannot write to your disk, call `download` with " +
+	"`\"resolve_only\": true` to get the direct file URL back instead of a saved file.\n\n"
+
+// downloadErrorHint maps a lowercased substring of a real download error to
+// tailored recovery advice.
+type downloadErrorHint struct {
+	substr string
+	advice string
+}
+
+// downloadErrorHints is scanned in order (most specific first) against the
+// lowercased error message; substrings are taken from the real error strings the
+// libgen and tools packages produce.
+var downloadErrorHints = []downloadErrorHint{
+	{"32-char hex", "The md5 is malformed. Re-copy the exact 32-character hexadecimal md5 from a fresh `search` result and retry."},
+	{"no file found", "The md5 is not in the catalog — records get removed or re-hashed. Re-run `search` to obtain a current md5, then retry."},
+	{"no open-access", "No open-access copy was found for this DOI. Verify `LIBGEN_MCP_UNPAYWALL_EMAIL` is set on the server, try again later, or obtain the article another way."},
+	{"no download source supports", "No enabled provider can serve this identifier (an md5 needs a book provider; a DOI needs an article provider). Check `LIBGEN_MCP_SOURCES` and confirm you passed the right identifier."},
+	{"is not enabled", "The `source` you pinned is disabled on this server. Retry without `source`, or pin one of the enabled providers listed above."},
+	{"mirrors unreachable", "All mirrors/providers were unreachable — usually a transient network block. Retry in a few minutes, pin `source` to a specific provider, or try a different network/DNS."},
+	{"rejected by all mirrors", "Every mirror rejected the request — usually transient. Retry shortly, or pin `source` to a specific provider."},
+	{"retry schedule", "The download could not start after the retry schedule; the mirror kept failing to connect. Retry now or later once the provider recovers."},
+	{"stalled", "The transfer stalled with no bytes received. Retry — if it keeps stalling, pin a different `source` provider."},
+	{"integrity check failed", "The downloaded bytes did not match the expected md5 (corrupt or wrong file). Retry the download; if it persists, re-search for a fresh md5."},
+	{"html page instead of the file", "The mirror returned a web page instead of the file, so its download key expired or was blocked. Retry to obtain a fresh key, or pin a different `source`."},
+}
+
+// interpretDownloadError maps a reported error to tailored guidance, falling back
+// to generic advice when no known pattern matches.
+func interpretDownloadError(msg string) string {
+	low := strings.ToLower(msg)
+	for _, h := range downloadErrorHints {
+		if strings.Contains(low, h.substr) {
+			return "> " + msg + "\n\n" + h.advice
+		}
+	}
+	return "> " + msg + "\n\n" +
+		"This error isn't one of the common ones. Re-run `search` to confirm the identifier is current, " +
+		"retry the `download` pinning `source` to each enabled provider in turn, and retry later if the " +
+		"failure looks like a transient network issue."
 }
