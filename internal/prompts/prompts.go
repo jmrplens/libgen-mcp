@@ -231,8 +231,7 @@ func renderCandidates(results []libgen.Result) string {
 	headers := []string{"#", "Title", "Authors", "Year", "Ext", "Lang", "md5"}
 	n := min(len(results), maxCandidates)
 	rows := make([][]string, 0, n)
-	for i := range n {
-		r := results[i]
+	for i, r := range results[:n] {
 		rows = append(rows, []string{
 			strconv.Itoa(i + 1),
 			cell(r.Title),
@@ -375,8 +374,7 @@ func writeSection(b *strings.Builder, heading string, results []libgen.Result, i
 	headers := []string{"#", "Title", "Authors", "Year", idCol}
 	n := min(len(results), limit)
 	rows := make([][]string, 0, n)
-	for i := range n {
-		r := results[i]
+	for i, r := range results[:n] {
 		id := r.MD5
 		if idCol == "DOI" {
 			id = r.DOI
@@ -515,8 +513,7 @@ func renderPaperCandidates(results []libgen.Result) string {
 	headers := []string{"#", "Title", "Authors", "Year", "Publisher", "DOI"}
 	n := min(len(results), maxCandidates)
 	rows := make([][]string, 0, n)
-	for i := range n {
-		r := results[i]
+	for i, r := range results[:n] {
 		rows = append(rows, []string{
 			strconv.Itoa(i + 1),
 			cell(r.Title),

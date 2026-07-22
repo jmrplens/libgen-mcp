@@ -350,7 +350,7 @@ func TestCell_EscapesUntrustedContent(t *testing.T) {
 	// The row holding the malicious title must be a single line (no injected
 	// newline splitting it into a forged instruction row).
 	var row string
-	for _, line := range strings.Split(table, "\n") {
+	for line := range strings.SplitSeq(table, "\n") {
 		if strings.Contains(line, "Evil") {
 			row = line
 			break
