@@ -70,9 +70,11 @@ Extract and paginate the text of a book or paper so you can read it without down
 
 **Parameters:**
 
-- `cursor` (string): opaque cursor from a previous read's response to fetch the next chunk; overrides start_page/offset
+- `cursor` (string): opaque cursor from a previous read's response to fetch the next chunk (sequential) or the next matches (find); overrides start_page/offset
 - `doi` (string): DOI from an article search result; provide md5, doi, or path
+- `find` (string): search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet
 - `max_chars` (integer): max characters to return this call
+- `max_matches` (integer): max matches to return per call when find is set
 - `max_pages` (integer): max pages to read this call (PDF)
 - `md5` (string): file md5 from a book search result; provide md5, doi, or path
 - `offset` (integer): character offset to start from (EPUB/TXT); ignored when cursor is set

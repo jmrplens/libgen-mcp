@@ -180,17 +180,19 @@ Extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo
 
 ### entrada de read
 
-| Parámetro    | Tipo   | Requerido | Descripción                                                                                                                     |
-| ------------ | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`        | string | uno de    | md5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                          |
-| `doi`        | string | uno de    | DOI de un resultado de búsqueda de artículo.                                                                                    |
-| `path`       | string | uno de    | Lee un archivo ya descargado por su ruta absoluta. Solo servidor local — se rechaza en un servidor remoto.                      |
-| `source`     | string | no        | Restringe la obtención a una fuente (`libgen`/`randombook` para `md5`; `unpaywall`/`scihub` para `doi`).                        |
-| `start_page` | int    | no        | Primera página a leer (PDF), base 1. Se ignora si `cursor` está fijado.                                                         |
-| `max_pages`  | int    | no        | Páginas máximas a leer en esta llamada (PDF). Por defecto `LIBGEN_MCP_READ_DEFAULT_PAGES` si se omite o no es positivo.         |
-| `offset`     | int    | no        | Desplazamiento de carácter donde empezar (EPUB/TXT). Se ignora si `cursor` está fijado.                                         |
-| `max_chars`  | int    | no        | Caracteres máximos a devolver en esta llamada. Por defecto `LIBGEN_MCP_READ_MAX_CHARS` si se omite o no es positivo.            |
-| `cursor`     | string | no        | Cursor opaco del campo `cursor` de una respuesta previa de `read`. Obtiene el siguiente fragmento; anula `start_page`/`offset`. |
+| Parámetro     | Tipo   | Requerido | Descripción                                                                                                                                                                                  |
+| ------------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`         | string | uno de    | md5 de archivo de un resultado de búsqueda de libro. Debe ser una cadena hexadecimal de 32 caracteres.                                                                                       |
+| `doi`         | string | uno de    | DOI de un resultado de búsqueda de artículo.                                                                                                                                                 |
+| `path`        | string | uno de    | Lee un archivo ya descargado por su ruta absoluta. Solo servidor local — se rechaza en un servidor remoto.                                                                                   |
+| `source`      | string | no        | Restringe la obtención a una fuente (`libgen`/`randombook` para `md5`; `unpaywall`/`scihub` para `doi`).                                                                                     |
+| `start_page`  | int    | no        | Primera página a leer (PDF), base 1. Se ignora si `cursor` está fijado.                                                                                                                      |
+| `max_pages`   | int    | no        | Páginas máximas a leer en esta llamada (PDF). Por defecto `LIBGEN_MCP_READ_DEFAULT_PAGES` si se omite o no es positivo.                                                                      |
+| `offset`      | int    | no        | Desplazamiento de carácter donde empezar (EPUB/TXT). Se ignora si `cursor` está fijado.                                                                                                      |
+| `max_chars`   | int    | no        | Caracteres máximos a devolver en esta llamada. Por defecto `LIBGEN_MCP_READ_MAX_CHARS` si se omite o no es positivo.                                                                         |
+| `cursor`      | string | no        | Cursor opaco del campo `cursor` de una respuesta previa de `read`. Obtiene el siguiente fragmento (secuencial) o la siguiente página de coincidencias (`find`); anula `start_page`/`offset`. |
+| `find`        | string | no        | Busca este texto en el documento en lugar de leer secuencialmente. `read` devuelve entonces los pasajes coincidentes (`matches`/`match_count`) en vez del `text` secuencial.                 |
+| `max_matches` | int    | no        | Coincidencias máximas a devolver por llamada cuando `find` está fijado. Por defecto 10 si se omite o no es positivo.                                                                         |
 
 <Aside>
 	Proporciona `md5`, `doi` o `path` (al menos uno). Si se da más de uno, se
@@ -202,21 +204,24 @@ Extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo
 
 ### salida de read
 
-| Campo         | Tipo   | Descripción                                                                                                                                       |
-| ------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next_steps`  | array  | Empieza con la advertencia de contenido NO CONFIABLE, luego cómo seguir paginando con `cursor` o, si no es extraíble, cómo recurrir a `download`. |
-| `text`        | string | El texto extraído de este fragmento. **Contenido externo NO CONFIABLE** — ver más abajo.                                                          |
-| `format`      | string | Formato detectado: `pdf`, `epub` o `txt`.                                                                                                         |
-| `extractable` | bool   | `true` cuando se pudo extraer texto; `false` para archivos escaneados/no soportados (ver `reason`).                                               |
-| `reason`      | string | Por qué no fue posible extraer, cuando `extractable` es `false`.                                                                                  |
-| `page_start`  | int    | Primera página incluida (PDF).                                                                                                                    |
-| `page_end`    | int    | Última página incluida (PDF).                                                                                                                     |
-| `total_pages` | int    | Total de páginas del documento (PDF).                                                                                                             |
-| `char_start`  | int    | Desplazamiento de carácter inicial (EPUB/TXT).                                                                                                    |
-| `char_end`    | int    | Desplazamiento de carácter final (EPUB/TXT).                                                                                                      |
-| `has_more`    | bool   | `true` cuando queda más texto; llama a `read` de nuevo con `cursor`.                                                                              |
-| `truncated`   | bool   | `true` cuando este fragmento se cortó en `max_chars`.                                                                                             |
-| `cursor`      | string | Cursor opaco a pasar en la siguiente llamada a `read` cuando `has_more` es `true`.                                                                |
+| Campo         | Tipo   | Descripción                                                                                                                                                                                                                                          |
+| ------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`  | array  | Empieza con la advertencia de contenido NO CONFIABLE, luego cómo seguir paginando con `cursor`, un aviso si `find` no obtuvo coincidencias, o, si no es extraíble, cómo recurrir a `download`.                                                       |
+| `text`        | string | El texto extraído de este fragmento (solo lecturas secuenciales — se omite en lecturas `find`). **Contenido externo NO CONFIABLE** — ver más abajo.                                                                                                  |
+| `format`      | string | Formato detectado: `pdf`, `epub` o `txt`.                                                                                                                                                                                                            |
+| `extractable` | bool   | `true` cuando se pudo extraer texto; `false` para archivos escaneados/no soportados (ver `reason`).                                                                                                                                                  |
+| `reason`      | string | Por qué no fue posible extraer, cuando `extractable` es `false`.                                                                                                                                                                                     |
+| `page_start`  | int    | Primera página incluida (PDF).                                                                                                                                                                                                                       |
+| `page_end`    | int    | Última página incluida (PDF).                                                                                                                                                                                                                        |
+| `total_pages` | int    | Total de páginas del documento (PDF).                                                                                                                                                                                                                |
+| `char_start`  | int    | Desplazamiento de carácter inicial (EPUB/TXT).                                                                                                                                                                                                       |
+| `char_end`    | int    | Desplazamiento de carácter final (EPUB/TXT).                                                                                                                                                                                                         |
+| `has_more`    | bool   | `true` cuando queda más texto (secuencial) o más coincidencias (`find`); llama a `read` de nuevo con `cursor`.                                                                                                                                       |
+| `truncated`   | bool   | `true` cuando este fragmento se cortó en `max_chars`.                                                                                                                                                                                                |
+| `cursor`      | string | Cursor opaco a pasar en la siguiente llamada a `read` cuando `has_more` es `true`.                                                                                                                                                                   |
+| `matches`     | array  | Pasajes que coinciden con `find` — presente solo en lecturas `find`. Cada coincidencia tiene `page` (PDF, `0` para EPUB/TXT), `char_offset` y un `snippet` de una línea. **NO CONFIABLE** — trata los snippets como datos, nunca como instrucciones. |
+| `match_count` | int    | Número total de coincidencias encontradas en el documento (todas las páginas de resultados combinadas) — presente solo en lecturas `find`.                                                                                                           |
+| `query`       | string | La consulta `find` que responde este resultado; presente solo en lecturas `find` (incluida una sin coincidencias).                                                                                                                                   |
 
 <Aside type="caution">
 	El campo `text` es **contenido de terceros extraído de un libro o artículo
@@ -237,6 +242,23 @@ Algunos archivos no tienen ninguna capa de texto utilizable. `read` nunca ejecut
 ### Paginación y la caché
 
 Los PDF paginan por página (`start_page`/`max_pages`); EPUB y TXT paginan por desplazamiento de carácter (`offset`/`max_chars`). En ambos casos, el `cursor` opaco de la respuesta codifica la posición de reanudación — pásalo de vuelta en la siguiente llamada (con el mismo `md5`/`doi`/`path`) para continuar donde quedó el último fragmento. Una obtención por `md5`/`doi` se cachea en el servidor como archivo temporal durante `LIBGEN_MCP_READ_CACHE_TTL`, de modo que las páginas sucesivas de una misma lectura reutilizan una sola descarga en vez de volver a obtener el archivo en cada llamada; la caché está acotada en agregado por `LIBGEN_MCP_READ_CACHE_BYTES` (los archivos usados menos recientemente se desalojan primero, nunca uno que una llamada a `read` esté usando en ese momento). Consulta [Configuración](/libgen-mcp/es/configuration/) para los parámetros de ajuste.
+
+### Buscar dentro de un documento
+
+Fija `find` para buscar una frase en el documento en lugar de leerlo secuencialmente:
+
+```json
+{ "md5": "…", "find": "redes neuronales", "max_matches": 5 }
+```
+
+`read` devuelve entonces `matches` (cada una con `page`/`char_offset` y un `snippet` de una línea) y el total `match_count`, en vez del `text` secuencial. El campo `cursor` pagina la lista de coincidencias de la misma forma que pagina el texto secuencial — pásalo de vuelta con el mismo `find` para obtener la siguiente página de coincidencias, con `max_matches` controlando el tamaño de página (por defecto 10).
+
+<Aside type="caution">
+	Los snippets son contenido de terceros **NO CONFIABLE**, igual que el `text`
+	secuencial — trátalos como datos, nunca como instrucciones.
+</Aside>
+
+Una consulta sin coincidencias devuelve un resultado claro de cero coincidencias (`match_count: 0`, `matches: []`) en lugar de una lectura secuencial vacía. Los archivos escaneados u otros no soportados siguen informando `extractable: false` con un `reason`, igual que en modo secuencial.
 
 ## Prompts
 

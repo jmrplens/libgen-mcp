@@ -52,18 +52,18 @@ loop already built.
 
 Sources evaluated:
 
-| Source | Keyless (2026) | Role | Verdict |
-| --- | --- | --- | --- |
-| **arXiv** export API | Yes | OA preprint search + direct PDF (`arxiv.org/pdf/{id}`) | **GO** — real OA full-text libgen lags on; Atom XML + 3s courtesy delay + attribution string |
-| **Crossref** REST | Yes (already used for enrichment) | DOI/work search, `has-full-text`/license filters | **GO** — extend existing integration into discovery |
-| **OpenLibrary** `search.json` | Yes | Query resolver: fuzzy title/author → ISBN/OCLC/work id feeding libgen search | **GO (resolver only, not a download stream)** |
-| DOAJ | Yes | OA article/journal search | MAYBE — overlaps Unpaywall/Crossref; defer |
-| DOAB | Yes | OA scholarly books (DSpace REST) | MAYBE — endpoint fragility; defer |
-| Internet Archive | Yes | Scans, public-domain, lending | MAYBE — noisy; per-item availability varies; defer |
-| Gutendex / Project Gutenberg | Yes | Public-domain classics | MAYBE — narrow; libgen already carries most; defer |
-| **OpenAlex** | **No (changed 2026-02-13)** | Rich metadata + OA links | **NO-GO** — API key now required, polite email pool discontinued |
-| Semantic Scholar (keyless tier) | Partial | Scholarly graph + OA PDF | NO-GO — keyless shared pool too throttled to depend on |
-| CORE | No | OA aggregator full-text | NO-GO — registered key required |
+| Source                          | Keyless (2026)                    | Role                                                                         | Verdict                                                                                      |
+| ------------------------------- | --------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **arXiv** export API            | Yes                               | OA preprint search + direct PDF (`arxiv.org/pdf/{id}`)                       | **GO** — real OA full-text libgen lags on; Atom XML + 3s courtesy delay + attribution string |
+| **Crossref** REST               | Yes (already used for enrichment) | DOI/work search, `has-full-text`/license filters                             | **GO** — extend existing integration into discovery                                          |
+| **OpenLibrary** `search.json`   | Yes                               | Query resolver: fuzzy title/author → ISBN/OCLC/work id feeding libgen search | **GO (resolver only, not a download stream)**                                                |
+| DOAJ                            | Yes                               | OA article/journal search                                                    | MAYBE — overlaps Unpaywall/Crossref; defer                                                   |
+| DOAB                            | Yes                               | OA scholarly books (DSpace REST)                                             | MAYBE — endpoint fragility; defer                                                            |
+| Internet Archive                | Yes                               | Scans, public-domain, lending                                                | MAYBE — noisy; per-item availability varies; defer                                           |
+| Gutendex / Project Gutenberg    | Yes                               | Public-domain classics                                                       | MAYBE — narrow; libgen already carries most; defer                                           |
+| **OpenAlex**                    | **No (changed 2026-02-13)**       | Rich metadata + OA links                                                     | **NO-GO** — API key now required, polite email pool discontinued                             |
+| Semantic Scholar (keyless tier) | Partial                           | Scholarly graph + OA PDF                                                     | NO-GO — keyless shared pool too throttled to depend on                                       |
+| CORE                            | No                                | OA aggregator full-text                                                      | NO-GO — registered key required                                                              |
 
 First wave: arXiv + Crossref search + OpenLibrary resolver. The MAYBE rows are gated behind
 demand. Federated results must dedup against libgen and be clearly labeled by origin.
