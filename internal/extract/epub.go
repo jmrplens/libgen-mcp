@@ -21,15 +21,22 @@ type containerXML struct {
 	} `xml:"rootfiles>rootfile"`
 }
 
-// opfPackage models the OPF manifest (id to href) and spine (reading order).
+// opfPackage models the OPF manifest (id to href, with the media-type and
+// properties needed to locate the navigation document) and spine (reading order
+// plus its optional NCX toc reference).
 type opfPackage struct {
 	Items []struct {
-		ID   string `xml:"id,attr"`
-		Href string `xml:"href,attr"`
+		ID         string `xml:"id,attr"`
+		Href       string `xml:"href,attr"`
+		MediaType  string `xml:"media-type,attr"`
+		Properties string `xml:"properties,attr"`
 	} `xml:"manifest>item"`
-	ItemRefs []struct {
-		IDRef string `xml:"idref,attr"`
-	} `xml:"spine>itemref"`
+	Spine struct {
+		TOC      string `xml:"toc,attr"`
+		ItemRefs []struct {
+			IDRef string `xml:"idref,attr"`
+		} `xml:"itemref"`
+	} `xml:"spine"`
 }
 
 // extractEPUB reads an EPUB as a ZIP archive, concatenates the text of its
@@ -84,7 +91,7 @@ func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (text string, truncat
 	baseDir := path.Dir(opf)
 
 	var sb strings.Builder
-	for _, ref := range pkg.ItemRefs {
+	for _, ref := range pkg.Spine.ItemRefs {
 		if e := ctx.Err(); e != nil {
 			return "", false, e
 		}
