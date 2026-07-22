@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -80,4 +81,14 @@ func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status
 		return resp.StatusCode, nil, err
 	}
 	return resp.StatusCode, body, nil
+}
+
+// firstNonEmpty returns the first trimmed non-empty string in the slice, or "".
+func firstNonEmpty(values []string) string {
+	for _, v := range values {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
 }

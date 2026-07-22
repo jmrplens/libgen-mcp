@@ -175,16 +175,6 @@ func crossrefItemToResult(item crossrefWorkItem) DiscoveryResult {
 	}
 }
 
-// firstNonEmpty returns the first trimmed non-empty string in the slice, or "".
-func firstNonEmpty(values []string) string {
-	for _, v := range values {
-		if s := strings.TrimSpace(v); s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
 // crossrefAuthors joins author records as "Given Family" with "; ", skipping any
 // entry that collapses to an empty name.
 func crossrefAuthors(authors []crossrefAuthor) string {
