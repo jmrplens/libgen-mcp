@@ -124,6 +124,153 @@ func TestReadTool_MD5ExtractsAndPaginates(t *testing.T) {
 	}
 }
 
+// TestReadTool_FindReturnsMatches verifies the find mode: a read carrying a find
+// term returns in-document matches (page/offset + snippet) instead of a
+// sequential text chunk. The term "Second" occurs only on page 2 of the fixture,
+// so the first match must report Page 2 and a snippet containing it, the result
+// must be extractable and not a tool error, and next_steps must still lead with
+// the UNTRUSTED warning.
+func TestReadTool_FindReturnsMatches(t *testing.T) {
+	payload, sampleMD5 := samplePDFBytesAndMD5(t)
+	srv := downloadMirror(t, payload)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "read",
+		Arguments: map[string]any{"md5": sampleMD5, "find": "Second"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(read find) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("read find returned a tool error: %+v", res.Content)
+	}
+	out := decodeReadOutput(t, res)
+	if !out.Extractable {
+		t.Fatalf("Extractable = false, reason %q", out.Reason)
+	}
+	if out.MatchCount < 1 || len(out.Matches) < 1 {
+		t.Fatalf("expected >=1 match, got MatchCount=%d len=%d", out.MatchCount, len(out.Matches))
+	}
+	if out.Matches[0].Page != 2 {
+		t.Errorf("Matches[0].Page = %d, want 2", out.Matches[0].Page)
+	}
+	if !strings.Contains(out.Matches[0].Snippet, "Second") {
+		t.Errorf("Matches[0].Snippet should contain %q, got %q", "Second", out.Matches[0].Snippet)
+	}
+	if out.Text != "" {
+		t.Errorf("find mode should not return sequential Text, got %q", out.Text)
+	}
+	if len(out.NextSteps) == 0 || !strings.Contains(strings.ToUpper(out.NextSteps[0]), "UNTRUSTED") {
+		t.Errorf("next_steps[0] should carry the UNTRUSTED warning, got %v", out.NextSteps)
+	}
+}
+
+// TestReadTool_FindPagination verifies match pagination: with max_matches=1 and a
+// term that hits more than once ("the"), the first call returns a single match,
+// reports more remain and hands back a cursor; following that cursor returns a
+// further match at a different position, proving the tool-level cursor carries a
+// match index.
+func TestReadTool_FindPagination(t *testing.T) {
+	payload, sampleMD5 := samplePDFBytesAndMD5(t)
+	srv := downloadMirror(t, payload)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "read",
+		Arguments: map[string]any{"md5": sampleMD5, "find": "the", "max_matches": 1},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(read find) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("read find returned a tool error: %+v", res.Content)
+	}
+	out := decodeReadOutput(t, res)
+	if out.MatchCount <= 1 {
+		t.Fatalf("MatchCount = %d, want > 1 so pagination is exercised", out.MatchCount)
+	}
+	if len(out.Matches) != 1 {
+		t.Fatalf("len(Matches) = %d, want 1 (max_matches=1)", len(out.Matches))
+	}
+	if !out.HasMore || out.Cursor == "" {
+		t.Fatalf("expected HasMore with a cursor; HasMore=%v Cursor=%q", out.HasMore, out.Cursor)
+	}
+	first := out.Matches[0]
+
+	res2, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "read",
+		Arguments: map[string]any{"md5": sampleMD5, "find": "the", "cursor": out.Cursor},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(read find page 2) error = %v", err)
+	}
+	if res2.IsError {
+		t.Fatalf("read find page 2 returned a tool error: %+v", res2.Content)
+	}
+	out2 := decodeReadOutput(t, res2)
+	if len(out2.Matches) < 1 {
+		t.Fatalf("second call should return a further match, got none")
+	}
+	next := out2.Matches[0]
+	if next.Page == first.Page && next.CharOffset == first.CharOffset {
+		t.Errorf("cursor should advance to a new match; got same page/offset %d/%d", first.Page, first.CharOffset)
+	}
+}
+
+// TestReadTool_FindEmptyStillReadsSequential is a regression guard: a read with no
+// find term must keep the original sequential-text behavior (non-empty Text, no
+// Matches), so adding find mode did not change the default read path.
+func TestReadTool_FindEmptyStillReadsSequential(t *testing.T) {
+	payload, sampleMD5 := samplePDFBytesAndMD5(t)
+	srv := downloadMirror(t, payload)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "read",
+		Arguments: map[string]any{"md5": sampleMD5, "max_pages": 1},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(read) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("read returned a tool error: %+v", res.Content)
+	}
+	out := decodeReadOutput(t, res)
+	if out.Text == "" {
+		t.Error("sequential read should return non-empty Text")
+	}
+	if len(out.Matches) != 0 {
+		t.Errorf("sequential read should carry no Matches, got %d", len(out.Matches))
+	}
+}
+
+// TestReadTool_FindUnsupportedFormat verifies that a find over an unsupported
+// local file (djvu) is a normal not-extractable result — Extractable false with a
+// reason — rather than a tool error, mirroring the sequential unsupported path.
+func TestReadTool_FindUnsupportedFormat(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path: "../extract/testdata/unsupported.djvu",
+		Find: "anything",
+	})
+	if err != nil {
+		t.Fatalf("readHandler returned an error for an unsupported file: %v", err)
+	}
+	if res == nil || res.IsError {
+		t.Fatalf("unsupported file must not be a tool error, got %+v", res)
+	}
+	if out.Extractable {
+		t.Error("Extractable should be false for an unsupported format")
+	}
+	if out.Reason == "" {
+		t.Error("Reason should explain why extraction was not possible")
+	}
+}
+
 // TestReadTool_LocalPathUnsupported verifies that reading an unsupported local
 // file (djvu) in local mode is NOT a tool error: it returns a normal result with
 // Extractable false and an explanatory reason.
