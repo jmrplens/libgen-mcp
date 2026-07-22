@@ -184,7 +184,9 @@ func searchEPUB(ctx context.Context, path, query string, o SearchOpts) (SearchRe
 	}
 	defer func() { _ = zr.Close() }()
 
-	full, err := readEPUBText(ctx, zr)
+	// readEPUBText also reports whether the 8 MiB extraction cap was hit; search
+	// scans whatever text was extracted, so the truncation flag is not needed here.
+	full, _, err := readEPUBText(ctx, zr)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return SearchResult{}, err
