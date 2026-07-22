@@ -47,10 +47,10 @@ type ncxNavPoint struct {
 }
 
 // Outline reads path and returns its table of contents. It dispatches on the
-// lowercased file extension: EPUB outlines are parsed natively; PDF returns a
-// placeholder pending Task B2; TXT has no outline; DjVu, comic archives and
-// proprietary e-book formats are reported as unsupported. A canceled ctx yields
-// the context error.
+// lowercased file extension: EPUB outlines are parsed natively; PDF outlines are
+// read best-effort via pdfcpu bookmarks; TXT has no outline; DjVu, comic
+// archives and proprietary e-book formats are reported as unsupported. A
+// canceled ctx yields the context error.
 func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
@@ -60,11 +60,7 @@ func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
 	case ".epub":
 		return epubOutline(ctx, filePath)
 	case ".pdf":
-		return OutlineResult{
-			Format:      "pdf",
-			Extractable: true,
-			Reason:      "PDF outline extraction is added in a later step",
-		}, nil
+		return pdfOutline(ctx, filePath)
 	case ".txt":
 		return OutlineResult{Format: "txt", Extractable: true}, nil
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
