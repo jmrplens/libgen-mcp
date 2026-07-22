@@ -164,7 +164,7 @@ func readNextSteps(out ReadOutput) []string {
 	case out.Extractable && out.HasMore:
 		steps = append(steps, "Call read again with the same md5/doi/path and cursor=\""+out.Cursor+"\" to get the next chunk.")
 	case !out.Extractable:
-		steps = append(steps, "This file's text can't be extracted ("+out.Reason+"). Use the download tool to fetch the raw file instead.")
+		steps = append(steps, "This file's text can't be extracted ("+mdCell(out.Reason)+"). Use the download tool to fetch the raw file instead.")
 	}
 	return steps
 }

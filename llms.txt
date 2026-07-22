@@ -60,7 +60,7 @@ Tools:
 
 - [Getting started](https://jmrplens.github.io/libgen-mcp/getting-started/): Installation and first-run guide
 - [Configuration](https://jmrplens.github.io/libgen-mcp/configuration/): Full environment-variable configuration reference
-- [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details and download
+- [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
 - [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
 - [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources

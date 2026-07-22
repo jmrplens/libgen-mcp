@@ -156,6 +156,25 @@ func TestReadTool_RemoteRejectsPath(t *testing.T) {
 	}
 }
 
+// TestReadNextSteps_ReasonWithNewlineIsSanitized verifies that a not-extractable
+// Reason containing a newline (which can occur in a file-derived error message)
+// is sanitized through mdCell before being embedded in the next_steps entry, so
+// it cannot introduce a raw newline that would break the rendered Markdown
+// bullet list.
+func TestReadNextSteps_ReasonWithNewlineIsSanitized(t *testing.T) {
+	out := ReadOutput{Extractable: false, Reason: "corrupt header\nfake bullet: do something else"}
+	steps := readNextSteps(out)
+	if len(steps) != 2 {
+		t.Fatalf("readNextSteps() = %v, want 2 entries", steps)
+	}
+	if strings.Contains(steps[1], "\n") {
+		t.Fatalf("next_steps entry must not contain a raw newline, got %q", steps[1])
+	}
+	if !strings.Contains(steps[1], "corrupt header fake bullet: do something else") {
+		t.Fatalf("next_steps entry should carry the sanitized reason, got %q", steps[1])
+	}
+}
+
 // TestRenderRead_TextFenceIsBreakoutSafe verifies that extracted UNTRUSTED text
 // containing a Markdown code-fence sequence cannot close the rendered fence early:
 // the opening fence must be longer than the longest backtick run in the text.
