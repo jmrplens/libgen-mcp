@@ -164,6 +164,101 @@ func TestOutline_EPUB2NCX(t *testing.T) {
 	}
 }
 
+// TestOutline_EPUB2NCXNested verifies that flattenNCX recurses into nested
+// navPoints: a chapter navPoint containing a child navPoint (sub-section)
+// produces two entries in document order, with the child's Level exactly one
+// deeper than its parent's.
+func TestOutline_EPUB2NCXNested(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/toc.ncx": `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<navMap>
+  <navPoint id="np1" playOrder="1"><navLabel><text>Chapter With Sub-Section</text></navLabel><content src="chapter1.xhtml"/>
+    <navPoint id="np1-1" playOrder="2"><navLabel><text>Nested Sub-Section</text></navLabel><content src="chapter1.xhtml#s1"/></navPoint>
+  </navPoint>
+</navMap>
+</ncx>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "ncx-nested.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 2 {
+		t.Fatalf("want 2 entries, got %d: %+v", len(res.Entries), res.Entries)
+	}
+	if res.Entries[0].Title != "Chapter With Sub-Section" || res.Entries[0].Level != 0 {
+		t.Errorf("entry 0 wrong: %+v", res.Entries[0])
+	}
+	if res.Entries[1].Title != "Nested Sub-Section" || res.Entries[1].Level != res.Entries[0].Level+1 {
+		t.Errorf("entry 1 wrong: %+v", res.Entries[1])
+	}
+}
+
+// TestOutline_EPUB3NavWithoutTocType verifies findTocNav's fallback: when the
+// nav document's <nav> element has no epub:type="toc" attribute, Outline still
+// extracts the entries from that first <nav>.
+func TestOutline_EPUB3NavWithoutTocType(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/nav.xhtml": `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>TOC</title></head>
+<body>
+<nav>
+  <h1>Contents</h1>
+  <ol>
+    <li><a href="chapter1.xhtml">Untyped Nav Chapter</a></li>
+  </ol>
+</nav>
+</body></html>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "nav-no-toctype.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(res.Entries), res.Entries)
+	}
+	if res.Entries[0].Title != "Untyped Nav Chapter" || res.Entries[0].Level != 0 {
+		t.Errorf("entry 0 wrong: %+v", res.Entries[0])
+	}
+}
+
 // TestOutline_EPUBNoToc verifies that a valid EPUB with neither a nav document
 // nor an NCX is reported as extractable with no entries and no error: a missing
 // table of contents is valid, not a failure.
