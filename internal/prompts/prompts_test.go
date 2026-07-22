@@ -62,3 +62,52 @@ func TestAcquireBook_ReturnsUserInstruction(t *testing.T) {
 		t.Errorf("missing Next actions block:\n%s", txt)
 	}
 }
+
+func TestResearchTopic_RequiresTopic(t *testing.T) {
+	client := newFixtureClient(t)
+	_, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{}},
+	})
+	if err == nil {
+		t.Fatal("expected error when topic is missing")
+	}
+}
+
+func TestResearchTopic_BothSections(t *testing.T) {
+	client := newFixtureClient(t)
+	res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "kind": "both"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Messages) != 1 || res.Messages[0].Role != "user" {
+		t.Fatalf("want one user-role message, got %+v", res.Messages)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, "## Papers") {
+		t.Errorf("missing Papers section:\n%s", txt)
+	}
+	if !strings.Contains(txt, "## Books") {
+		t.Errorf("missing Books section:\n%s", txt)
+	}
+	if !strings.Contains(txt, "Next actions") {
+		t.Errorf("missing Next actions block:\n%s", txt)
+	}
+}
+
+func TestResearchTopic_BadLimitClamped(t *testing.T) {
+	client := newFixtureClient(t)
+	for _, limit := range []string{"0", "-3", "abc"} {
+		res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+			Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "limit": limit}},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error for limit=%q: %v", limit, err)
+		}
+		txt := res.Messages[0].Content.(*mcp.TextContent).Text
+		if txt == "" {
+			t.Errorf("expected non-empty message for limit=%q", limit)
+		}
+	}
+}
