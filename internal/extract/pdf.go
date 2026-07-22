@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -58,6 +59,14 @@ func readPDFPages(ctx context.Context, path string, startPage, maxPages, maxChar
 	defer func() { _ = f.Close() }()
 
 	total := r.NumPage()
+	if total > 0 && startPage > total {
+		return Chunk{
+			Format:     "pdf",
+			TotalPages: total,
+			Reason:     fmt.Sprintf("start page %d is beyond the document's last page (%d pages)", startPage, total),
+		}, nil
+	}
+
 	scan, err := scanPDFPages(ctx, r, total, startPage, maxPages, maxChars)
 	if err != nil {
 		return Chunk{}, err
@@ -93,12 +102,13 @@ func scanPDFPages(ctx context.Context, r *pdf.Reader, total, startPage, maxPages
 	var sb strings.Builder
 	var s pdfScan
 	pagesRead := 0
+	charCount := 0
 
 	for i := startPage; i <= total; i++ {
 		if e := ctx.Err(); e != nil {
 			return pdfScan{}, e
 		}
-		if maxChars > 0 && sb.Len() >= maxChars {
+		if maxChars > 0 && charCount >= maxChars {
 			s.hasMore = true
 			s.truncated = true
 			s.nextPage = i
@@ -110,6 +120,7 @@ func scanPDFPages(ctx context.Context, r *pdf.Reader, total, startPage, maxPages
 		}
 		text, _ := p.GetPlainText(nil)
 		sb.WriteString(text)
+		charCount += utf8.RuneCountInString(text)
 		pagesRead++
 		s.pageEnd = i
 		if pagesRead >= maxPages {

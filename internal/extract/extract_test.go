@@ -131,6 +131,66 @@ func TestExtract_ScannedPDFNoTextLayer(t *testing.T) {
 	}
 }
 
+// TestExtract_PDFStartPageBeyondEnd verifies that requesting a StartPage past
+// the document's last page is reported as not extractable with a reason that
+// mentions the out-of-range condition, rather than the misleading "scanned/no
+// text layer" reason used for genuinely empty in-range pages.
+func TestExtract_PDFStartPageBeyondEnd(t *testing.T) {
+	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 99})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "beyond") {
+		t.Errorf("reason should mention the page being beyond the document, got %q", c.Reason)
+	}
+	if strings.Contains(c.Reason, "scanned") || strings.Contains(c.Reason, "text layer") {
+		t.Errorf("reason must not reuse the scanned/text-layer wording, got %q", c.Reason)
+	}
+}
+
+// TestExtract_MalformedEPUB verifies that a ZIP archive missing the required
+// META-INF/container.xml entry (a structurally invalid EPUB) is reported as
+// not extractable with a non-empty reason and a nil error, rather than
+// failing the caller with a hard error.
+func TestExtract_MalformedEPUB(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.epub")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create broken epub: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	// A valid ZIP archive, but with no META-INF/container.xml entry: the
+	// structural EPUB parse must fail while the ZIP itself opens fine.
+	w, err := zw.Create("README.txt")
+	if err != nil {
+		t.Fatalf("create entry: %v", err)
+	}
+	if _, err = w.Write([]byte("not an epub")); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+	if err = zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	if err = f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error for malformed EPUB, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if c.Reason == "" {
+		t.Fatal("expected a non-empty reason")
+	}
+}
+
 // TestExtract_EPUB verifies that a minimal EPUB extracts XHTML chapter text in
 // spine order, reporting the epub format.
 func TestExtract_EPUB(t *testing.T) {

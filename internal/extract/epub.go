@@ -47,7 +47,10 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 
 	full, err := readEPUBText(ctx, zr)
 	if err != nil {
-		return Chunk{}, err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return Chunk{}, err
+		}
+		return Chunk{Format: "epub", Extractable: false, Reason: "not a readable EPUB: " + err.Error()}, nil
 	}
 	if strings.TrimSpace(full) == "" {
 		return Chunk{Format: "epub", Reason: "no extractable text found in EPUB spine"}, nil
