@@ -36,6 +36,7 @@ func newFixtureClient(t *testing.T) *libgen.Client {
 	return libgen.New(staticMirrors{srv.URL}, cfg)
 }
 
+// TestAcquireBook_RequiresTitle verifies acquire_book errors when the title argument is missing.
 func TestAcquireBook_RequiresTitle(t *testing.T) {
 	client := newFixtureClient(t)
 	_, err := handleAcquireBook(context.Background(), client, &mcp.GetPromptRequest{
@@ -46,6 +47,7 @@ func TestAcquireBook_RequiresTitle(t *testing.T) {
 	}
 }
 
+// TestAcquireBook_ReturnsUserInstruction verifies acquire_book returns one user-role message carrying a Next actions block.
 func TestAcquireBook_ReturnsUserInstruction(t *testing.T) {
 	client := newFixtureClient(t)
 	res, err := handleAcquireBook(context.Background(), client, &mcp.GetPromptRequest{
@@ -77,6 +79,7 @@ func newNoSearchClient(t *testing.T) *libgen.Client {
 	return libgen.New(staticMirrors{srv.URL}, cfg)
 }
 
+// TestGetPaper_DOINoSearch verifies the get_paper DOI path returns download guidance without performing a search.
 func TestGetPaper_DOINoSearch(t *testing.T) {
 	client := newNoSearchClient(t)
 	res, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
@@ -100,6 +103,7 @@ func TestGetPaper_DOINoSearch(t *testing.T) {
 	}
 }
 
+// TestGetPaper_CitationSearches verifies the get_paper citation path searches articles and renders candidate matches.
 func TestGetPaper_CitationSearches(t *testing.T) {
 	client := newFixtureClient(t)
 	res, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
@@ -214,6 +218,7 @@ func TestGetPaper_CitationSearchError(t *testing.T) {
 	}
 }
 
+// TestGetPaper_RequiresExactlyOne verifies get_paper errors unless exactly one of doi or citation is provided.
 func TestGetPaper_RequiresExactlyOne(t *testing.T) {
 	client := newFixtureClient(t)
 	if _, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
@@ -385,6 +390,7 @@ func TestDownloadTroubleshoot_HasUntrustedCaveat(t *testing.T) {
 	}
 }
 
+// TestResearchTopic_RequiresTopic verifies research_topic errors when the topic argument is missing.
 func TestResearchTopic_RequiresTopic(t *testing.T) {
 	client := newFixtureClient(t)
 	_, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
@@ -395,6 +401,7 @@ func TestResearchTopic_RequiresTopic(t *testing.T) {
 	}
 }
 
+// TestResearchTopic_BothSections verifies research_topic renders both the Papers and Books sections when both searches return rows.
 func TestResearchTopic_BothSections(t *testing.T) {
 	client := newFixtureClient(t)
 	res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
@@ -418,6 +425,7 @@ func TestResearchTopic_BothSections(t *testing.T) {
 	}
 }
 
+// TestResearchTopic_BadLimitClamped verifies research_topic clamps an invalid limit argument without panicking.
 func TestResearchTopic_BadLimitClamped(t *testing.T) {
 	client := newFixtureClient(t)
 	for _, limit := range []string{"0", "-3", "abc"} {

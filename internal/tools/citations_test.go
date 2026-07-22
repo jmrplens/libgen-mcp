@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestBuildCitations_Book verifies a book record yields a well-formed @book entry and RIS block.
 func TestBuildCitations_Book(t *testing.T) {
 	edition := map[string]any{"title": "Clean Code", "author": "Robert C. Martin", "year": "2008", "publisher": "Prentice Hall"}
 	file := map[string]any{"md5": "d48739b6ac9e01d70dda1de46805d797", "extension": "pdf"}
@@ -25,6 +26,7 @@ func TestBuildCitations_Book(t *testing.T) {
 	}
 }
 
+// TestBuildCitations_ArticleByDOI verifies a DOI-bearing record yields an @article/JOUR citation and never emits an ISBN line.
 func TestBuildCitations_ArticleByDOI(t *testing.T) {
 	edition := map[string]any{"title": "Hallmarks of Cancer", "author": "Hanahan; Weinberg", "year": "2011", "doi": "10.1016/j.cell.2011.02.013"}
 	c := buildCitations(map[string]any{"md5": "x"}, edition)
@@ -36,6 +38,7 @@ func TestBuildCitations_ArticleByDOI(t *testing.T) {
 	}
 }
 
+// TestBuildCitations_NoTitleReturnsNil verifies buildCitations returns nil when the record has no title.
 func TestBuildCitations_NoTitleReturnsNil(t *testing.T) {
 	if buildCitations(map[string]any{"md5": "x"}, map[string]any{}) != nil {
 		t.Error("no title => nil citations")
