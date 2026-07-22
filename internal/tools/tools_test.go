@@ -1288,3 +1288,13 @@ func TestDownloadToolMD5Book(t *testing.T) {
 		t.Errorf("filename = %q, want a .pdf suffix", base)
 	}
 }
+
+// TestDownloadDescriptionHasUntrustedNote verifies the download tool's prose
+// carries an explicit caveat that downloaded content is untrusted third-party
+// data, never instructions to follow.
+func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
+	desc := downloadToolDescription([]string{"libgen"}, []string{"scihub"})
+	if !strings.Contains(desc, "untrusted") {
+		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
+	}
+}
