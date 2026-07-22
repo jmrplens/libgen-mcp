@@ -28,6 +28,11 @@ your shell, or with `-e` flags on `docker run`.
 | `LIBGEN_MCP_SCIHUB_HOSTS`               | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Comma-separated bare hosts (no scheme, no path); at least one           | Ordered Sci-Hub mirror hosts tried when resolving an article by DOI. The source builds `https://<host>/<doi>` itself, so each entry must be a bare host. Falls through the list until one serves an article page.                                                                                                                                                                                   |
 | `LIBGEN_MCP_SOURCES`                    | *(all enabled)*                                          | Comma-separated subset of `unpaywall`, `scihub`, `libgen`, `randombook` | Restrict which download sources are active. Empty means all are enabled. Unknown names are rejected at startup. Order in the variable does not matter — the chain order is fixed (see below).                                                                                                                                                                                                       |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS`           | `false`                                                  | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)               | Forces the `download` tool into remote mode: it always returns a link (a `resource_link` plus a `resolved` object with any required `headers`) instead of saving a file — the same behavior `--http` already triggers. Set it for a hosted stdio deployment (e.g. behind `mcp-proxy` on a catalog) whose disk is remote/ephemeral and unreachable by the client. A non-boolean value fails startup. |
+| `LIBGEN_MCP_READ_MAX_CHARS`             | `6000`                                                   | `[500, 200000]`, int                                                    | Max characters the `read` tool returns per call, used when a call omits `max_chars`.                                                                                                                                                                                                                                                                                                                |
+| `LIBGEN_MCP_READ_DEFAULT_PAGES`         | `5`                                                      | `[1, 200]`, int                                                         | Default max PDF pages per `read` call, used when a call omits `max_pages`.                                                                                                                                                                                                                                                                                                                          |
+| `LIBGEN_MCP_READ_CACHE_BYTES`           | `536870912` (512 MiB)                                    | `[1048576, 53687091200]` (1 MiB–50 GiB), int                            | Total-size cap of the `read` tool's server-side temp-file cache (built by `FetchToTemp`): downloaded read files past this aggregate size are evicted, least-recently-used first, never while a `read` call holds a reference.                                                                                                                                                                       |
+| `LIBGEN_MCP_READ_CACHE_TTL`             | `10m`                                                    | `[1s, 24h]`, Go duration                                                | How long an unreferenced `read` temp file lingers before eviction, so successive pages of one read reuse a single fetch while idle files are reclaimed.                                                                                                                                                                                                                                             |
+| `LIBGEN_MCP_ENRICH`                     | `true`                                                   | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)               | Deployment kill-switch for `get_details`' opt-in `enrich` metadata (Crossref/OpenLibrary). Default `true` means enrichment is *allowed*; set `false` to *forbid* it entirely, regardless of the per-call `enrich` flag. A non-boolean value fails startup.                                                                                                                                          |
 
 ## Notes on specific variables
 
@@ -95,3 +100,33 @@ running behind `mcp-proxy` so it can be listed on a catalog like Glama) whose di
 client cannot reach either. Set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` on such a deployment and
 `download` always returns a link instead of attempting to save a file nobody can retrieve.
 See [Tools](tools.md#where-the-file-goes-local-vs-remote) for the resulting output shape.
+
+### `LIBGEN_MCP_READ_MAX_CHARS` and `LIBGEN_MCP_READ_DEFAULT_PAGES`
+
+These bound how much text a single `read` call returns by default: `LIBGEN_MCP_READ_MAX_CHARS`
+caps EPUB/TXT chunks by character count, `LIBGEN_MCP_READ_DEFAULT_PAGES` caps PDF chunks by page
+count. Both are only fallbacks — a call's own `max_chars`/`max_pages` argument always takes
+precedence when set to a positive value. Raise them to return more text per call (fewer round
+trips, more tokens per response) or lower them to keep individual responses small. See
+[Tools](tools.md#read) for the full `read` reference.
+
+### `LIBGEN_MCP_READ_CACHE_BYTES` and `LIBGEN_MCP_READ_CACHE_TTL`
+
+`read` fetches an `md5`/`doi`-identified file to a server-side temp file once, then serves
+successive pages/chunks from that same file as the model pages through it with `cursor` —
+without `LIBGEN_MCP_READ_CACHE_TTL`, every page would re-download the whole file.
+`LIBGEN_MCP_READ_CACHE_TTL` is how long an unreferenced temp file lingers after its last use
+before eviction; `LIBGEN_MCP_READ_CACHE_BYTES` is the cache's total-size ceiling, past which the
+least-recently-used files are evicted first (a file a `read` call is actively using is never
+evicted). Neither variable affects `download`, which always writes directly to
+`LIBGEN_MCP_DOWNLOAD_DIR` and keeps no server-side temp cache.
+
+### `LIBGEN_MCP_ENRICH`
+
+Controls whether `get_details`' opt-in `enrich: true` argument is honored at all. The default
+`true` means a caller *may* request enrichment (it still stays off unless a call sets
+`enrich: true`); setting it to `false` makes the server ignore `enrich` entirely, so no
+Crossref/OpenLibrary calls are ever made on this deployment. Use this to fully disable outbound
+calls to those two third-party APIs, for example in a locked-down or offline-preferring
+deployment. See [Tools](tools.md#metadata-enrichment) for what enrichment adds and its 6-second
+best-effort budget.

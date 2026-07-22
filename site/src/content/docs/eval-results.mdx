@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries and progress across 19 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries and progress across 20 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -17,7 +17,7 @@ correct handling of the structured output.
 For each scenario the harness:
 
 1. Applies any per-scenario environment, then builds a fresh in-process
-   libgen-mcp server with the three tools registered.
+   libgen-mcp server with the four tools registered.
 2. Sends the scenario's natural-language prompt plus the tool definitions to the
    model (up to four turns).
 3. Executes every tool call the model makes **against the real server** (real
@@ -37,10 +37,11 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Nineteen scenarios (S1–S18, plus a S6b variant) cover search, details, downloads,
-source selection, error recovery, progress, link resolution, and — importantly —
-**unguided** prompts that give the model no hints, testing whether the tool
-surface is self-describing enough for an LLM to use unaided.
+Twenty scenarios (S1–S19, plus a S6b variant) cover search, details, downloads,
+source selection, error recovery, progress, link resolution, reading/summarizing
+extracted text, and — importantly — **unguided** prompts that give the model no
+hints, testing whether the tool surface is self-describing enough for an LLM to
+use unaided.
 
 | ID  | What it checks                                                                                                                                                                                                                                   |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -63,6 +64,7 @@ surface is self-describing enough for an LLM to use unaided.
 | S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — the model must set `resolve_only=true`, and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path               |
 | S17 | **Remote download (book)** — same "download _The C Programming Language_" request, but the server runs in **remote mode** (`--http`): `download` returns a link, and the harness — acting as the agent's own fetch tool — pulls it to local disk |
 | S18 | **Remote download (article)** — same for a paywalled DOI; the model just calls `download`, the remote server returns a link, and the harness fetches it to local disk                                                                            |
+| S19 | **Search → read → summarize** — model searches for a paper by title, calls `read` (not `download`) with the DOI found in the results, and writes its own summary of the extracted first page instead of dumping the UNTRUSTED text verbatim      |
 
 ## Local and remote blocks
 
@@ -101,6 +103,11 @@ unavailable — a live-mirror condition, not a model failure.
 | S16 | local  | ✅ PASS | resolved a URL via `libgen` without downloading (`resolve_only`)          |
 | S17 | remote | ✅ PASS | remote mode: model got a link; harness fetched ~1.0 MB to local disk      |
 | S18 | remote | ✅ PASS | remote mode: model got a link; harness fetched ~6.5 MB to local disk      |
+
+<Aside type="note">
+	S19 (search → read → summarize) was added after this run and is not yet
+	reflected in the table above; run `make eval` to include it.
+</Aside>
 
 ## Running it yourself
 

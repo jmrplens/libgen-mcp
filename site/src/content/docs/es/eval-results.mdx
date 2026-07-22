@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 19 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 20 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -18,7 +18,7 @@ estructurada.
 Para cada escenario, el arnés:
 
 1. Aplica el entorno propio del escenario y construye un servidor libgen-mcp
-   fresco en proceso con las tres herramientas registradas.
+   fresco en proceso con las cuatro herramientas registradas.
 2. Envía el prompt en lenguaje natural del escenario más las definiciones de las
    herramientas al modelo (hasta cuatro turnos).
 3. Ejecuta cada llamada de herramienta del modelo **contra el servidor real**
@@ -41,11 +41,11 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Diecinueve escenarios (S1–S18, más una variante S6b) cubren búsqueda, detalles,
-descargas, selección de fuente, recuperación de errores, progreso y — de forma
-importante — prompts **sin guía** que no dan pistas al modelo, para comprobar si
-la superficie de herramientas es lo bastante auto-descriptiva para que un LLM la
-use sin ayuda.
+Veinte escenarios (S1–S19, más una variante S6b) cubren búsqueda, detalles,
+descargas, selección de fuente, recuperación de errores, progreso, resolución de
+enlaces, lectura/resumen de texto extraído y — de forma importante — prompts
+**sin guía** que no dan pistas al modelo, para comprobar si la superficie de
+herramientas es lo bastante auto-descriptiva para que un LLM la use sin ayuda.
 
 | ID  | Qué comprueba                                                                                                                                                                                                                                                              |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -68,6 +68,7 @@ use sin ayuda.
 | S16 | **Enlace resolve-only** ("dame la URL directa de descarga, no lo descargues") — el modelo debe poner `resolve_only=true`, y la herramienta devuelve una URL (como `resource_link`) en vez de un archivo guardado — la vía de entrega remota/hosteada                       |
 | S17 | **Descarga remota (libro)** — la misma petición "descarga _The C Programming Language_", pero el servidor corre en **modo remoto** (`--http`): `download` devuelve un enlace, y el arnés — actuando como la propia herramienta de fetch del agente — lo trae a disco local |
 | S18 | **Descarga remota (artículo)** — lo mismo para un DOI de pago; el modelo simplemente llama a `download`, el servidor remoto devuelve un enlace, y el arnés lo descarga a disco local                                                                                       |
+| S19 | **Buscar → leer → resumir** — el modelo busca un artículo por título, llama a `read` (no a `download`) con el DOI encontrado en los resultados, y escribe su propio resumen de la primera página extraída en vez de volcar el texto NO CONFIABLE tal cual                  |
 
 ## Bloques local y remoto
 
@@ -109,6 +110,11 @@ modelo.
 | S16 | local  | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                     |
 | S17 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~1,0 MB a disco local |
 | S18 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
+
+<Aside type="note">
+	S19 (buscar → leer → resumir) se añadió después de esta corrida y todavía no
+	aparece en la tabla anterior; ejecuta `make eval` para incluirlo.
+</Aside>
 
 ## Cómo ejecutarlo
 
