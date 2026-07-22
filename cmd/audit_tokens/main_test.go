@@ -105,7 +105,7 @@ func TestRun_ConfigLoadFallback(t *testing.T) {
 	if err := run(&b); err != nil {
 		t.Fatalf("run() with unusable config: %v", err)
 	}
-	if !strings.Contains(b.String(), "TOTAL (3 tools)") {
+	if !strings.Contains(b.String(), "TOTAL (4 tools)") {
 		t.Fatalf("report missing TOTAL row; got:\n%s", b.String())
 	}
 }
@@ -141,14 +141,14 @@ func TestWriteReport(t *testing.T) {
 }
 
 // TestRunEndToEnd exercises the real registration path: it builds the in-memory
-// server, lists the 3 tools, and asserts a positive footprint is reported.
+// server, lists the 4 tools, and asserts a positive footprint is reported.
 func TestRunEndToEnd(t *testing.T) {
 	var b bytes.Buffer
 	if err := run(&b); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	out := b.String()
-	for _, want := range []string{"search", "get_details", "download", "TOTAL (3 tools)"} {
+	for _, want := range []string{"search", "get_details", "download", "read", "TOTAL (4 tools)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q; got:\n%s", want, out)
 		}

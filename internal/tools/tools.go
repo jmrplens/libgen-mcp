@@ -1,4 +1,5 @@
-// Package tools registers the server's MCP tools: search, get_details and download.
+// Package tools registers the server's MCP tools: search, get_details, download
+// and read.
 package tools
 
 import (
@@ -121,8 +122,8 @@ func WithRemoteDownloads() RegisterOption {
 	return func(o *registerOptions) { o.remoteDownloads = true }
 }
 
-// Register wires the search, get_details and download tools onto the MCP server,
-// each wrapped with panic recovery and call metrics.
+// Register wires the search, get_details, download and read tools onto the MCP
+// server, each wrapped with panic recovery and call metrics.
 func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opts ...RegisterOption) {
 	var o registerOptions
 	for _, opt := range opts {
@@ -153,6 +154,12 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		InputSchema: downloadInputSchema(orderedEnabledSources(book, article)),
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads)))
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "read",
+		Title:       "Read file text",
+		Description: readToolDescription,
+		Annotations: &mcp.ToolAnnotations{Title: "Read file text", ReadOnlyHint: true, OpenWorldHint: &truthy},
+	}, withRecovery("read", readHandler(client, o.remoteDownloads)))
 }
 
 // orderedEnabledSources merges the enabled book (md5) and article (doi) source
