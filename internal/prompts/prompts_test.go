@@ -63,6 +63,77 @@ func TestAcquireBook_ReturnsUserInstruction(t *testing.T) {
 	}
 }
 
+// newNoSearchClient builds a libgen client whose /index.php handler fails the
+// test if hit, proving a code path performs no search.
+func newNoSearchClient(t *testing.T) *libgen.Client {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(_ http.ResponseWriter, _ *http.Request) {
+		t.Errorf("get_paper DOI path must not search")
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{srv.URL}, cfg)
+}
+
+func TestGetPaper_DOINoSearch(t *testing.T) {
+	client := newNoSearchClient(t)
+	res, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"doi": "10.1/x"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Messages) != 1 || res.Messages[0].Role != "user" {
+		t.Fatalf("want one user-role message, got %+v", res.Messages)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, "download") {
+		t.Errorf("missing download instruction:\n%s", txt)
+	}
+	if !strings.Contains(txt, "10.1/x") {
+		t.Errorf("missing DOI in message:\n%s", txt)
+	}
+	if !strings.Contains(txt, "get_details") {
+		t.Errorf("missing get_details caveat:\n%s", txt)
+	}
+}
+
+func TestGetPaper_CitationSearches(t *testing.T) {
+	client := newFixtureClient(t)
+	res, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"citation": "hallmarks of cancer"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Messages) != 1 || res.Messages[0].Role != "user" {
+		t.Fatalf("want one user-role message, got %+v", res.Messages)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, "| # | Title | Authors | Year | Publisher | DOI |") {
+		t.Errorf("missing candidate table:\n%s", txt)
+	}
+	if !strings.Contains(txt, "Next actions") {
+		t.Errorf("missing Next actions block:\n%s", txt)
+	}
+}
+
+func TestGetPaper_RequiresExactlyOne(t *testing.T) {
+	client := newFixtureClient(t)
+	if _, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{}},
+	}); err == nil {
+		t.Fatal("expected error when neither doi nor citation is given")
+	}
+	if _, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"doi": "10.1/x", "citation": "y"}},
+	}); err == nil {
+		t.Fatal("expected error when both doi and citation are given")
+	}
+}
+
 func TestResearchTopic_RequiresTopic(t *testing.T) {
 	client := newFixtureClient(t)
 	_, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
