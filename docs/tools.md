@@ -227,9 +227,10 @@ pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
 | `max_chars`  | int    | no       | Max characters to return this call. Defaults to `LIBGEN_MCP_READ_MAX_CHARS` when omitted or non-positive.                |
 | `cursor`     | string | no       | Opaque cursor from a previous `read` response's `cursor` field. Fetches the next chunk; overrides `start_page`/`offset`. |
 
-Provide exactly one of `md5`, `doi`, or `path`. A `path` on a remote server (`--http`, or a
-stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is rejected — the server cannot see the
-client's filesystem.
+Provide `md5`, `doi`, or `path` (at least one). If more than one is given, they are tried in
+order: `md5`, then `doi`, then `path`. A `path` on a remote server (`--http`, or a stdio server
+with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is rejected — the server cannot see the client's
+filesystem.
 
 ### read output
 

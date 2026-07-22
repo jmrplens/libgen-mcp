@@ -193,9 +193,11 @@ Extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo
 | `cursor`     | string | no        | Cursor opaco del campo `cursor` de una respuesta previa de `read`. Obtiene el siguiente fragmento; anula `start_page`/`offset`. |
 
 <Aside>
-	Proporciona exactamente uno de `md5`, `doi` o `path`. Un `path` en un servidor
-	remoto (`--http`, o un servidor stdio con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) se
-	rechaza — el servidor no puede ver el sistema de archivos del cliente.
+	Proporciona `md5`, `doi` o `path` (al menos uno). Si se da más de uno, se
+	prueban en este orden: `md5`, luego `doi`, luego `path`. Un `path` en un
+	servidor remoto (`--http`, o un servidor stdio con
+	`LIBGEN_MCP_REMOTE_DOWNLOADS=1`) se rechaza — el servidor no puede ver el
+	sistema de archivos del cliente.
 </Aside>
 
 ### salida de read

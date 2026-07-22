@@ -96,10 +96,10 @@ Set `enrich: true` to add a best-effort `enrichment` object with keyless data fr
 	(default `true`, i.e. allowed — see
 	[Configuration](/libgen-mcp/configuration/)). It is strictly best-effort: a
 	missing DOI/ISBN, a slow or failing upstream, or exceeding the 6s budget all
-	degrade silently to an absent `enrichment` field. Enrichment runs synchronously
-	within the `get_details` call: it never fails the core result, but it may add
-	bounded latency — up to the ~6s budget — before the response returns. No API
-	key is required; both APIs are used keyless.
+	degrade silently to an absent `enrichment` field. Enrichment runs
+	synchronously within the `get_details` call: it never fails the core result,
+	but it may add bounded latency — up to the ~6s budget — before the response
+	returns. No API key is required; both APIs are used keyless.
 </Aside>
 
 ## download
@@ -191,9 +191,10 @@ Extract and paginate the text of a book or paper so a model can read it without 
 | `cursor`     | string | no       | Opaque cursor from a previous `read` response's `cursor` field. Fetches the next chunk; overrides `start_page`/`offset`. |
 
 <Aside type="note">
-	Provide exactly one of `md5`, `doi`, or `path`. A `path` on a remote server
-	(`--http`, or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is rejected
-	— the server cannot see the client's filesystem.
+	Provide `md5`, `doi`, or `path` (at least one). If more than one is given,
+	they are tried in order: `md5`, then `doi`, then `path`. A `path` on a remote
+	server (`--http`, or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is
+	rejected — the server cannot see the client's filesystem.
 </Aside>
 
 ### read output
