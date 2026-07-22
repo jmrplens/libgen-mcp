@@ -659,21 +659,9 @@ func assertS4(tr transcript) (pass bool, detail string) {
 // download" intent by requiring a read call and asserting NO download call
 // occurred in the transcript. A not-extractable file or a live fetch failure is
 // a SKIP, since the model's tool-use was still correct.
-func assertReadSummary(tr transcript) (pass bool, detail string) {
-	if _, ok := findCall(tr, "search"); !ok {
-		return false, "no search call"
-	}
-	call, ok := findCall(tr, "read")
-	if !ok {
-		return false, "no read call"
-	}
-	// The intended flow reads the first page instead of fetching the whole file;
-	// a download call means the model took the wrong path.
-	if _, ok := findCall(tr, "download"); ok {
-		return false, "model downloaded the file instead of reading it"
-	}
-	// read must be keyed by an identifier from a prior search result: a DOI
-	// (validated and traced back to search) or an md5.
+// readIdentifierOK verifies the read call was keyed by an identifier from a prior
+// search result: a valid DOI traced back to search, or a 32-hex md5.
+func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
 	doi := stringField(call.Input, "doi")
 	md5 := stringField(call.Input, "md5")
 	switch {
@@ -690,6 +678,26 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		}
 	default:
 		return false, "read call set neither doi nor md5"
+	}
+	return true, ""
+}
+
+func assertReadSummary(tr transcript) (pass bool, detail string) {
+	if _, ok := findCall(tr, "search"); !ok {
+		return false, "no search call"
+	}
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "no read call"
+	}
+	// The intended flow reads the first page instead of fetching the whole file;
+	// a download call means the model took the wrong path.
+	if _, ok := findCall(tr, "download"); ok {
+		return false, "model downloaded the file instead of reading it"
+	}
+	// read must be keyed by an identifier from a prior search result.
+	if ok, detail := readIdentifierOK(tr, call); !ok {
+		return false, detail
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read failed against the live mirror/source chain"
