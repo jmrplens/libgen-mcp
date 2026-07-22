@@ -28,6 +28,14 @@ func samplePDFBytesAndMD5(t *testing.T) ([]byte, string) {
 	return data, hex.EncodeToString(sum[:])
 }
 
+// readTestCfg returns a minimal config with the read-tool defaults populated
+// (ReadMaxChars/ReadDefaultPages), matching the values Load's own defaults use,
+// so a directly constructed readHandler in these tests behaves like a handler
+// built through Register.
+func readTestCfg() *config.Config {
+	return &config.Config{ReadMaxChars: 6000, ReadDefaultPages: 5}
+}
+
 // decodeReadOutput unmarshals a read tool result's structured content into a
 // ReadOutput so tests can assert on the typed fields.
 func decodeReadOutput(t *testing.T, res *mcp.CallToolResult) ReadOutput {
@@ -120,7 +128,7 @@ func TestReadTool_MD5ExtractsAndPaginates(t *testing.T) {
 // file (djvu) in local mode is NOT a tool error: it returns a normal result with
 // Extractable false and an explanatory reason.
 func TestReadTool_LocalPathUnsupported(t *testing.T) {
-	h := readHandler(nil, false)
+	h := readHandler(nil, readTestCfg(), false)
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path: "../extract/testdata/unsupported.djvu",
 	})
@@ -141,7 +149,7 @@ func TestReadTool_LocalPathUnsupported(t *testing.T) {
 // TestReadTool_RemoteRejectsPath verifies that, on a remote server, a read by
 // local path is rejected: the client cannot expose its filesystem to the host.
 func TestReadTool_RemoteRejectsPath(t *testing.T) {
-	h := readHandler(nil, true)
+	h := readHandler(nil, readTestCfg(), true)
 	res, _, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: "x"})
 	if err == nil && (res == nil || !res.IsError) {
 		t.Fatal("remote mode should reject a read by path")

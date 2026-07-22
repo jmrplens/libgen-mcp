@@ -29,16 +29,6 @@ const (
 	defaultBackoffBase = 200 * time.Millisecond
 	// maxBackoff caps the duration of a single backoff wait.
 	maxBackoff = 30 * time.Second
-
-	// defaultReadCacheBytes is the total-size cap of the FetchToTemp temp cache:
-	// downloaded read files past this aggregate size are evicted (least-recently
-	// used first, never while a read holds a reference). Task 2.4 will make it
-	// configurable.
-	defaultReadCacheBytes = 512 << 20 // 512 MiB
-	// defaultReadCacheTTL is how long an unreferenced FetchToTemp file lingers
-	// before eviction, so successive pages of one read reuse a single fetch while
-	// idle files are reclaimed. Task 2.4 will make it configurable.
-	defaultReadCacheTTL = 10 * time.Minute
 )
 
 // ErrAllMirrorsFailed indicates that no mirror responded successfully because of
@@ -185,7 +175,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
-		tempCache:        newTempCache(defaultReadCacheBytes, defaultReadCacheTTL),
+		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
 	}
 	c.sources = c.buildSourceChain(cfg)
 	for _, opt := range opts {

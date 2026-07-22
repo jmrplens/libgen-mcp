@@ -159,7 +159,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Read file text",
 		Description: readToolDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Read file text", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("read", readHandler(client, o.remoteDownloads)))
+	}, withRecovery("read", readHandler(client, cfg, o.remoteDownloads)))
 }
 
 // orderedEnabledSources merges the enabled book (md5) and article (doi) source

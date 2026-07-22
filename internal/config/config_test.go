@@ -368,6 +368,76 @@ func TestLoadBadNumericEnv(t *testing.T) {
 	}
 }
 
+// TestLoadReadDefaults verifies the four read/temp-cache knobs (ReadMaxChars,
+// ReadDefaultPages, ReadCacheBytes, ReadCacheTTL) fall back to their spec
+// defaults when their environment variables are unset.
+func TestLoadReadDefaults(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_READ_MAX_CHARS", "")
+	t.Setenv("LIBGEN_MCP_READ_DEFAULT_PAGES", "")
+	t.Setenv("LIBGEN_MCP_READ_CACHE_BYTES", "")
+	t.Setenv("LIBGEN_MCP_READ_CACHE_TTL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.ReadMaxChars != 6000 {
+		t.Errorf("ReadMaxChars = %d, want 6000", cfg.ReadMaxChars)
+	}
+	if cfg.ReadDefaultPages != 5 {
+		t.Errorf("ReadDefaultPages = %d, want 5", cfg.ReadDefaultPages)
+	}
+	if cfg.ReadCacheBytes != 512<<20 {
+		t.Errorf("ReadCacheBytes = %d, want %d", cfg.ReadCacheBytes, int64(512<<20))
+	}
+	if cfg.ReadCacheTTL != 10*time.Minute {
+		t.Errorf("ReadCacheTTL = %v, want 10m", cfg.ReadCacheTTL)
+	}
+}
+
+// TestLoadReadOverrides verifies the four read/temp-cache knobs parse from the
+// environment when set.
+func TestLoadReadOverrides(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_READ_MAX_CHARS", "8000")
+	t.Setenv("LIBGEN_MCP_READ_DEFAULT_PAGES", "10")
+	t.Setenv("LIBGEN_MCP_READ_CACHE_BYTES", "1048576")
+	t.Setenv("LIBGEN_MCP_READ_CACHE_TTL", "5m")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.ReadMaxChars != 8000 {
+		t.Errorf("ReadMaxChars = %d, want 8000", cfg.ReadMaxChars)
+	}
+	if cfg.ReadDefaultPages != 10 {
+		t.Errorf("ReadDefaultPages = %d, want 10", cfg.ReadDefaultPages)
+	}
+	if cfg.ReadCacheBytes != 1048576 {
+		t.Errorf("ReadCacheBytes = %d, want 1048576", cfg.ReadCacheBytes)
+	}
+	if cfg.ReadCacheTTL != 5*time.Minute {
+		t.Errorf("ReadCacheTTL = %v, want 5m", cfg.ReadCacheTTL)
+	}
+}
+
+// TestLoadBadReadEnv verifies an unparseable value for each of the four
+// read/temp-cache knobs fails Load fast instead of silently keeping the default.
+func TestLoadBadReadEnv(t *testing.T) {
+	cases := map[string]string{
+		"LIBGEN_MCP_READ_MAX_CHARS":     "many",
+		"LIBGEN_MCP_READ_DEFAULT_PAGES": "some",
+		"LIBGEN_MCP_READ_CACHE_BYTES":   "big",
+		"LIBGEN_MCP_READ_CACHE_TTL":     "banana",
+	}
+	for envKey, badVal := range cases {
+		t.Run(envKey, func(t *testing.T) {
+			t.Setenv(envKey, badVal)
+			if _, err := Load(); err == nil {
+				t.Fatalf("Load() with %s=%q should fail", envKey, badVal)
+			}
+		})
+	}
+}
+
 // validConfig returns a configuration that passes Validate(), with DownloadDir
 // escribible bajo t.TempDir().
 func validConfig(t *testing.T) *Config {
@@ -386,6 +456,10 @@ func validConfig(t *testing.T) *Config {
 		ScihubHosts:             []string{"sci-hub.ee", "sci-hub.se"},
 		DownloadStartRetryWaits: defaultStartRetryWaits(),
 		DownloadStallTimeout:    60 * time.Second,
+		ReadMaxChars:            6000,
+		ReadDefaultPages:        5,
+		ReadCacheBytes:          512 << 20,
+		ReadCacheTTL:            10 * time.Minute,
 	}
 }
 
@@ -489,6 +563,14 @@ func TestValidateInvalid(t *testing.T) {
 		{"BadMirrorScheme", func(c *Config) { c.Mirror = "ftp://x" }},
 		{"BadMirrorNoHost", func(c *Config) { c.Mirror = "https://" }},
 		{"MirrorUnparseable", func(c *Config) { c.Mirror = "://nope" }},
+		{"ReadMaxCharsTooLow", func(c *Config) { c.ReadMaxChars = 499 }},
+		{"ReadMaxCharsTooHigh", func(c *Config) { c.ReadMaxChars = 200001 }},
+		{"ReadDefaultPagesTooLow", func(c *Config) { c.ReadDefaultPages = 0 }},
+		{"ReadDefaultPagesTooHigh", func(c *Config) { c.ReadDefaultPages = 201 }},
+		{"ReadCacheBytesTooLow", func(c *Config) { c.ReadCacheBytes = (1 << 20) - 1 }},
+		{"ReadCacheBytesTooHigh", func(c *Config) { c.ReadCacheBytes = maxDownloadBytesLimit + 1 }},
+		{"ReadCacheTTLTooLow", func(c *Config) { c.ReadCacheTTL = 500 * time.Millisecond }},
+		{"ReadCacheTTLTooHigh", func(c *Config) { c.ReadCacheTTL = 25 * time.Hour }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

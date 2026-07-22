@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
@@ -73,14 +74,24 @@ func validateReadInput(in ReadInput, remote bool) error {
 
 // readReq builds the extraction request for a read call. When a cursor is set it
 // resumes from the encoded position (page/char); otherwise it uses the caller's
-// start_page/offset. max_pages and max_chars always come from the input (Extract
-// applies its own defaults for non-positive values). A malformed cursor errors.
-func readReq(in ReadInput) (extract.Req, error) {
+// start_page/offset. A non-positive max_pages/max_chars falls back to the
+// configured default (cfg.ReadDefaultPages/cfg.ReadMaxChars) so the limits stay
+// user-tunable via config rather than extract's own internal fallback. A
+// malformed cursor errors.
+func readReq(in ReadInput, cfg *config.Config) (extract.Req, error) {
+	maxPages := in.MaxPages
+	if maxPages <= 0 {
+		maxPages = cfg.ReadDefaultPages
+	}
+	maxChars := in.MaxChars
+	if maxChars <= 0 {
+		maxChars = cfg.ReadMaxChars
+	}
 	req := extract.Req{
 		StartPage: in.StartPage,
 		Offset:    in.Offset,
-		MaxPages:  in.MaxPages,
-		MaxChars:  in.MaxChars,
+		MaxPages:  maxPages,
+		MaxChars:  maxChars,
 	}
 	if in.Cursor == "" {
 		return req, nil
@@ -171,14 +182,15 @@ func resolveReadPath(ctx context.Context, c *libgen.Client, in ReadInput) (path 
 // readHandler builds the read tool handler. It validates the request, resolves
 // the file (a local path or a server-side fetch), extracts one paginated chunk,
 // and returns it with leading guidance. A not-extractable file is a normal result
-// (extractable=false with a reason), not an error.
-func readHandler(c *libgen.Client, remote bool) mcp.ToolHandlerFor[ReadInput, ReadOutput] {
+// (extractable=false with a reason), not an error. cfg supplies the default
+// max_pages/max_chars applied when the caller omits them.
+func readHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[ReadInput, ReadOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, ReadOutput, error) {
 		var zero ReadOutput
 		if err := validateReadInput(in, remote); err != nil {
 			return nil, zero, err
 		}
-		req, err := readReq(in)
+		req, err := readReq(in, cfg)
 		if err != nil {
 			return nil, zero, err
 		}
