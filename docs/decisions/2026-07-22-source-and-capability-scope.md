@@ -38,9 +38,45 @@ call open. Until then, progress notifications are the correct fit.
 
 ### 2. Anna's Archive as a source — NO-GO (re-confirmed 2026)
 
+> **Superseded in part on 2026-07-24 — see the correction below. Anna's Archive is now
+> integrated as two sources, `scidb` and `annas`. Do not act on the paragraph below
+> without reading the correction.**
+
 Every route is off-ethos: the JSON API and fast downloads require a paid membership key, and the
 web / SciDB / slow-download paths are Cloudflare/CAPTCHA-gated. There is no dependable keyless,
 no-account programmatic path. High corpus overlap with what we already reach. Rejected.
+
+#### Correction — 2026-07-24
+
+The blanket rejection above was too broad. Live testing showed each route resolves
+differently, so the decision is corrected route by route rather than reversed wholesale.
+
+**Wrong — SciDB.** SciDB is reachable anonymously with no API key, no account, no CAPTCHA
+and no JS challenge, and its article pages embed a direct PDF URL that serves real bytes.
+Sampled DOIs from 2011, 2016, 2021 and 2024 all resolved, so it also covers papers
+published after Sci-Hub stopped indexing. Implemented as the `scidb` source, placed after
+`scihub` so it fills that gap rather than replacing it.
+
+**Wrong — general books, keyless.** A keyless path does exist, but it is IPFS rather than
+HTTP: Anna's book pages serve anonymously and publish each item's IPFS CID, and public
+gateways return the file with range support. Implemented as the keyless default of the
+`annas` source. Caveat learned in testing: public gateway availability varies enough that
+this is a genuine fallback, not a fast path — arbitrary items can be very slow or time out.
+
+**Right — general books over HTTP.** The anonymous "slow download" tier sits behind a
+DDoS-Guard JS challenge (HTTP 403, "Checking your browser") that no pure-Go HTTP client can
+satisfy. The original reasoning holds for this route specifically, and it is deliberately
+not implemented.
+
+**Refined — the membership key.** The member fast-download API is usable from a plain Go
+client and returns a direct URL plus the account's remaining daily quota, but it does
+require an *active paid membership*. It therefore ships strictly as an opt-in enhancement
+behind `LIBGEN_MCP_ANNAS_KEY`, never as a requirement: unset, expired or rejected keys fall
+through to the keyless IPFS path, so the project's keyless ethos is preserved.
+
+**Still true — corpus overlap.** Anna's non-IPFS external links point largely back at the
+libgen family this project already reaches, so the value added is download *reliability* —
+an independent rescue route — rather than new corpus.
 
 ### 3. Expand `search` to federate keyless open-access discovery — GO
 
@@ -94,7 +130,9 @@ clients and the no-friction promise must keep working unchanged.
 ## Rejected (recorded so they are not re-litigated)
 
 - MCP Tasks now (unstable primitive, no stable API, no detached workload) — revisit per §1.
-- Anna's Archive as a source (no keyless path).
+- ~~Anna's Archive as a source (no keyless path).~~ **Corrected 2026-07-24 — see §2:** keyless
+  paths do exist (SciDB for articles, IPFS for books) and both are implemented. Only the
+  DDoS-Guard-gated slow-download HTTP route stays rejected.
 - OpenAlex (now key-required), Semantic Scholar keyless dependency, CORE (key required).
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
