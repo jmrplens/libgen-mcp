@@ -87,7 +87,7 @@ func maybeFetchResolved(ctx context.Context, call toolCall) *fetchedFile {
 }
 
 // maxTurns bounds how many model calls one scenario conversation may make.
-const maxTurns = 4
+const maxTurns = 6
 
 // maxToolResultLen caps the size of a tool result fed back to the model.
 const maxToolResultLen = 20_000

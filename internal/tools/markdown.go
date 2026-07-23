@@ -196,24 +196,24 @@ func writeEnrichment(b *strings.Builder, e *libgen.Enrichment) {
 	if e == nil {
 		return
 	}
-	b.WriteString("\n### External metadata\n")
+	b.WriteString("\n### External metadata (open sources)\n")
 	if cr := e.Crossref; cr != nil {
 		if cr.ContainerTitle != "" {
-			fmt.Fprintf(b, "- Crossref container: %s\n", mdCell(cr.ContainerTitle))
+			fmt.Fprintf(b, "- Journal / container: %s (via Crossref)\n", mdCell(cr.ContainerTitle))
 		}
 		if cr.PublishedYear > 0 {
-			fmt.Fprintf(b, "- Crossref year: %d\n", cr.PublishedYear)
+			fmt.Fprintf(b, "- Published year: %d (via Crossref)\n", cr.PublishedYear)
 		}
 		if cr.CitationCount > 0 {
-			fmt.Fprintf(b, "- Crossref citations: %d\n", cr.CitationCount)
+			fmt.Fprintf(b, "- Times cited: %d (via Crossref)\n", cr.CitationCount)
 		}
 	}
 	if ol := e.OpenLibrary; ol != nil {
 		if ol.OpenLibURL != "" {
-			fmt.Fprintf(b, "- OpenLibrary: %s\n", mdCell(ol.OpenLibURL))
+			fmt.Fprintf(b, "- OpenLibrary record: %s\n", mdCell(ol.OpenLibURL))
 		}
 		if ol.Description != "" {
-			fmt.Fprintf(b, "- OpenLibrary description: %s\n", mdCell(ol.Description))
+			fmt.Fprintf(b, "- Description (OpenLibrary): %s\n", mdCell(ol.Description))
 		}
 	}
 }
