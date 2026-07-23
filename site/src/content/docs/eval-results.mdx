@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery and elicitation across 29 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery and elicitation across 31 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -53,7 +53,7 @@ S27–S29 repeat the find/outline/open-access checks against a server running in
 **remote** (`--http`) mode.
 
 | ID  | What it checks                                                                                                                                                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------- |
 | S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                                                                               |
 | S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                                                                             |
 | S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                                                                                 |
@@ -84,6 +84,8 @@ S27–S29 repeat the find/outline/open-access checks against a server running in
 | S27 | **Remote read find** — S23 repeated against a server running in remote (`--http`) mode                                                                                                                                                           |
 | S28 | **Remote read outline** — S24 repeated against a server running in remote (`--http`) mode                                                                                                                                                        |
 | S29 | **Remote open-access discovery** — under-specified like S20, against a server running in remote (`--http`) mode                                                                                                                                  |
+| S30 | remote                                                                                                                                                                                                                                           | ✅ PASS | remote mode: set `enrich=true`; Crossref journal="Cell", 56 374 citations; model answered |
+| S31 | remote                                                                                                                                                                                                                                           | ✅ PASS | remote mode: searched, called `get_details`, surfaced the returned BibTeX citation        |
 
 ## Local and remote blocks
 
@@ -101,7 +103,7 @@ checks over the same `--http` transport.
 
 The table below is a single live run of the full suite against
 `claude-haiku-4-5` (real Anthropic API, real mirrors, real downloads):
-**26 passed, 0 failed, 4 skipped** (of 30 including the `S6b` variant). Every
+**28 passed, 0 failed, 4 skipped** (of 30 including the `S6b` variant). Every
 skip is a live-data condition (a mirror down, an HTTP 403, a scanned PDF with
 no text layer, an unsupported file extension) — never a model or server
 failure. No scenario failed.

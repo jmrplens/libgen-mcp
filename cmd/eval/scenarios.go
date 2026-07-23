@@ -239,6 +239,17 @@ func doiInSearchResults(tr transcript, doi string) bool {
 	return false
 }
 
+// Prompt-eval scope: the four MCP prompts (acquire_book, research_topic,
+// get_paper, download_troubleshoot) are NOT covered by eval scenarios BY DESIGN.
+// This eval drives a model over the TOOLS to check it can discover and use each
+// capability from the tool/field descriptions alone. A model never autonomously
+// issues a prompts/get call: MCP prompts are surfaced by the HOST as
+// slash-commands / quick actions for a human to pick, not something the model
+// invokes mid-conversation. Grading them here would test the harness, not the
+// model. The prompts are instead covered end to end by the e2e suite
+// (test/e2e/capabilities_test.go: ListPrompts advertises all four, plus GetPrompt
+// cases for each).
+
 // scenarios returns the ordered list of live scenarios.
 func scenarios() []scenario {
 	return []scenario{
@@ -485,6 +496,27 @@ func scenarios() []scenario {
 			Prompt: `I'm researching transformer neural networks. Find me some open-access papers on the topic.`,
 			Remote: true,
 			Assert: assertOpenAccessDiscovery,
+		},
+		// S30-S31 are the REMOTE variants of the enrichment (S22) and citations (S21)
+		// scenarios. get_details is read-only and behaves identically in remote mode
+		// (remote mode only changes download, which returns a link instead of writing
+		// to disk), so these confirm the model's enrich=true / get_details behavior is
+		// unchanged under --http. assertEnrichment/assertCitations grade get_details
+		// alone (no download-to-disk), so they apply unchanged in remote mode.
+		{
+			ID: "S30",
+			Prompt: fmt.Sprintf("Find the research article with DOI %s (Hallmarks of Cancer) "+
+				"and tell me which journal it was published in and how many times it's been cited.", scihubDOI),
+			Remote:   true,
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": unpaywallEmail()},
+			Assert:   assertEnrichment,
+		},
+		{
+			ID: "S31",
+			Prompt: `Find the book "Clean Code" by Robert C. Martin and give me a BibTeX ` +
+				`citation for it.`,
+			Remote: true,
+			Assert: assertCitations,
 		},
 	}
 }
