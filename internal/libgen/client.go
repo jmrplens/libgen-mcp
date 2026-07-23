@@ -86,6 +86,11 @@ type Client struct {
 	// means the ad-hoc source uses the documented public API (unpaywallAPIBase); it
 	// is a test seam so the prepended source can target an httptest server.
 	unpaywallBase string
+	// crossrefBase and openLibraryBase override the enrichment API roots. Empty
+	// means the package defaults (crossrefBase/openLibraryBase vars) are used; they
+	// are test seams so Enrich can target httptest servers.
+	crossrefBaseOverride    string
+	openLibraryBaseOverride string
 	// sources is the ordered download-source chain Download tries for each Item,
 	// advancing to the next when one fails to resolve or stream. It is built from
 	// config by buildSourceChain as [unpaywall, scihub, libgen, randombook], then
@@ -175,6 +180,17 @@ func WithSources(sources ...DownloadSource) Option {
 // instead of the live Unpaywall API; production leaves it unset.
 func WithUnpaywallBaseURL(base string) Option {
 	return func(c *Client) { c.unpaywallBase = base }
+}
+
+// WithEnrichBaseURLs overrides the Crossref and OpenLibrary base URLs used by
+// Enrich. It exists so tests (including callers in other packages) can point the
+// keyless enrichment lookups at httptest servers; production leaves them unset and
+// the package defaults apply.
+func WithEnrichBaseURLs(crossref, openLibrary string) Option {
+	return func(c *Client) {
+		c.crossrefBaseOverride = crossref
+		c.openLibraryBaseOverride = openLibrary
+	}
 }
 
 // New builds a Client from the configuration: rate limiter (RateRPS/RateBurst),

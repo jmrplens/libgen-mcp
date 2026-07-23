@@ -29,6 +29,24 @@ var (
 	openLibraryBase = "https://openlibrary.org"
 )
 
+// crossrefURL returns the Crossref API root for this client: the per-client
+// override when set (a test seam), otherwise the package default.
+func (c *Client) crossrefURL() string {
+	if c.crossrefBaseOverride != "" {
+		return c.crossrefBaseOverride
+	}
+	return crossrefBase
+}
+
+// openLibraryURL returns the OpenLibrary API root for this client: the per-client
+// override when set (a test seam), otherwise the package default.
+func (c *Client) openLibraryURL() string {
+	if c.openLibraryBaseOverride != "" {
+		return c.openLibraryBaseOverride
+	}
+	return openLibraryBase
+}
+
 // CrossrefWork is the subset of a Crossref work record surfaced by enrichment:
 // bibliographic container metadata plus reference and citation counts.
 type CrossrefWork struct {
@@ -122,7 +140,7 @@ func (c *Client) fetchCrossref(ctx context.Context, doi string) *CrossrefWork {
 	// Preserve the DOI's slashes: escapeDOIPath escapes each path segment but
 	// keeps "/" literal, since Crossref routes on the raw DOI path (a %2F-encoded
 	// slash can miss the record). Same reason the download DOI sources use it.
-	resp := c.enrichGet(ctx, crossrefBase+"/works/"+escapeDOIPath(doi))
+	resp := c.enrichGet(ctx, c.crossrefURL()+"/works/"+escapeDOIPath(doi))
 	if resp == nil {
 		return nil
 	}
@@ -204,7 +222,7 @@ func (c *Client) fetchOpenLibrary(ctx context.Context, isbn string) *OLBook {
 		book.CoverURL = fmt.Sprintf("https://covers.openlibrary.org/b/id/%d-L.jpg", rec.Covers[0])
 	}
 	if len(rec.Works) > 0 && rec.Works[0].Key != "" {
-		book.OpenLibURL = openLibraryBase + rec.Works[0].Key
+		book.OpenLibURL = c.openLibraryURL() + rec.Works[0].Key
 		c.fetchOLWork(ctx, rec.Works[0].Key, book)
 	}
 	if book.CoverURL == "" && book.OpenLibURL == "" && len(book.Subjects) == 0 && book.Description == "" {
@@ -216,7 +234,7 @@ func (c *Client) fetchOpenLibrary(ctx context.Context, isbn string) *OLBook {
 // fetchOLISBN requests hop 1, the OpenLibrary ISBN record, returning nil on any
 // failure (non-200, transport error, or unparseable body).
 func (c *Client) fetchOLISBN(ctx context.Context, isbn string) *olISBNRecord {
-	resp := c.enrichGet(ctx, openLibraryBase+"/isbn/"+url.PathEscape(isbn)+".json")
+	resp := c.enrichGet(ctx, c.openLibraryURL()+"/isbn/"+url.PathEscape(isbn)+".json")
 	if resp == nil {
 		return nil
 	}
@@ -240,7 +258,7 @@ type olWorkRecord struct {
 // Subjects and Description from it. It is silent on any failure — the ISBN
 // record's cover/link already gathered on hop 1 still stand.
 func (c *Client) fetchOLWork(ctx context.Context, workKey string, book *OLBook) {
-	resp := c.enrichGet(ctx, openLibraryBase+workKey+".json")
+	resp := c.enrichGet(ctx, c.openLibraryURL()+workKey+".json")
 	if resp == nil {
 		return
 	}

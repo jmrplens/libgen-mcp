@@ -1,9 +1,14 @@
 package tools
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
 
@@ -60,5 +65,53 @@ func TestWriteEnrichment_UserFacingLabels(t *testing.T) {
 	}
 	if strings.Contains(out, "Crossref container") {
 		t.Error("enrichment markdown should not use the old 'Crossref container' jargon")
+	}
+}
+
+// TestDetailsEnrich_AppendsNextStep drives detailsEnrich against an httptest
+// Crossref server: with a DOI in the edition record and enrichment enabled, it
+// must populate out.Enrichment and append an enrichment next-step naming the
+// journal and citation count, covering the enrichment wiring end to end.
+func TestDetailsEnrich_AppendsNextStep(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok","message":{` +
+			`"container-title":["Cell"],"published":{"date-parts":[[2011,3,1]]},` +
+			`"is-referenced-by-count":56374,"subject":["Oncology"]}}`))
+	}))
+	defer srv.Close()
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg,
+		libgen.WithEnrichBaseURLs(srv.URL, "http://openlibrary.invalid"))
+
+	out := DetailsOutput{Edition: map[string]any{"doi": "10.1016/j.cell.2011.02.013"}}
+	detailsEnrich(context.Background(), client, &out)
+
+	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
+		t.Fatalf("expected Crossref enrichment, got %+v", out.Enrichment)
+	}
+	if out.Enrichment.Crossref.ContainerTitle != "Cell" {
+		t.Errorf("journal = %q, want Cell", out.Enrichment.Crossref.ContainerTitle)
+	}
+	joined := strings.Join(out.NextSteps, " ")
+	for _, want := range []string{"Cell", "56374"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("next_steps should mention %q; got %q", want, joined)
+		}
+	}
+}
+
+// TestDetailsEnrich_NoDOINoStep verifies detailsEnrich adds nothing when the
+// record carries no DOI/ISBN (Enrich returns nil, so no next-step is appended).
+func TestDetailsEnrich_NoDOINoStep(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+	out := DetailsOutput{Edition: map[string]any{"title": "No identifiers here"}}
+	detailsEnrich(context.Background(), client, &out)
+	if out.Enrichment != nil {
+		t.Errorf("no DOI/ISBN should yield nil enrichment, got %+v", out.Enrichment)
+	}
+	if len(out.NextSteps) != 0 {
+		t.Errorf("no enrichment should append no next-step, got %v", out.NextSteps)
 	}
 }
