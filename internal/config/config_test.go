@@ -395,6 +395,9 @@ func TestLoadBadNumericEnv(t *testing.T) {
 		"LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS": "lots",
 		"LIBGEN_MCP_RETRY_ATTEMPTS":           "some",
 		"LIBGEN_MCP_LOG_LEVEL":                "verbose",
+		"LIBGEN_MCP_REMOTE_DOWNLOADS":         "maybe",
+		"LIBGEN_MCP_ENRICH":                   "sometimes",
+		"LIBGEN_MCP_OPEN_ACCESS":              "perhaps",
 	}
 	for envKey, badVal := range cases {
 		t.Run(envKey, func(t *testing.T) {
