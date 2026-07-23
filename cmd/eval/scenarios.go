@@ -453,6 +453,24 @@ func scenarios() []scenario {
 			// download still completed, rather than only inferring it from a saved file.
 			Assert: assertConfirmedDownload,
 		},
+		{
+			ID:     "S27",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie, then search inside it for the word "pointer" and show me a passage.`,
+			Remote: true,
+			Assert: assertReadFind,
+		},
+		{
+			ID:     "S28",
+			Prompt: `Find a PDF of "Structure and Interpretation of Computer Programs" and show me its table of contents.`,
+			Remote: true,
+			Assert: assertReadOutline,
+		},
+		{
+			ID:     "S29",
+			Prompt: `I'm researching transformer neural networks. Find me some open-access papers on the topic.`,
+			Remote: true,
+			Assert: assertOpenAccessDiscovery,
+		},
 	}
 }
 
