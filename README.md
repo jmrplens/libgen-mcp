@@ -49,8 +49,12 @@ Then just ask your assistant: _"Search Library Genesis for the Rust book."_
   <tr>
     <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=libgen&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D"><img alt="Install in VS Code" src="https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
     <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=libgen&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D&amp;quality=insiders"><img alt="Install in VS Code Insiders" src="https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
+  </tr>
+  <tr>
     <td><a href="https://cursor.com/install-mcp?name=libgen&amp;config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19"><img alt="Install in Cursor" src="https://cursor.com/deeplink/mcp-install-dark.svg" height="28" /></a></td>
     <td><a href="https://lmstudio.ai/install-mcp?name=libgen&amp;config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19"><img alt="Add to LM Studio" src="https://files.lmstudio.ai/deeplink/mcp-install-dark.svg" height="28" /></a></td>
+  </tr>
+  <tr>
     <td><a href="https://kiro.dev/launch/mcp/add?name=libgen&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D"><img alt="Add to Kiro" src="https://kiro.dev/images/add-to-kiro.svg" height="28" /></a></td>
     <td><a href="https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb"><img alt="Download .mcpb extension for Claude Desktop" src="https://img.shields.io/badge/Claude_Desktop-.mcpb-d97757?style=flat-square&amp;logo=claude&amp;logoColor=white" /></a></td>
   </tr>
@@ -317,12 +321,25 @@ Every other setting — download location, mirror pinning, source allow-list, ra
 ## How it works
 
 <details>
+<summary><b>Open-access discovery</b> — arXiv, Crossref and OpenLibrary, folded into <code>search</code></summary>
+
+Beyond the Library Genesis catalog, `search` can also federate **keyless open-access discovery** (opt-in via `include_open_access: true`, or on by default with `LIBGEN_MCP_OPEN_ACCESS=true`). These are **discovery** sources — they surface hits, they are not part of the download chain:
+
+- **[arXiv](https://arxiv.org/)** — open-access preprints, with a direct `pdf_url` you can `read` or fetch.
+- **[Crossref](https://www.crossref.org/)** — scholarly works by DOI; open-access items are flagged.
+- **[OpenLibrary](https://openlibrary.org/)** — resolves fuzzy title/author queries to an ISBN/title you can feed back into a Library Genesis search.
+
+Hits are returned in a separate `open_access` array, deduped against the catalog results and each other, and labeled by `origin`. Each carries one actionable identifier: an arXiv `pdf_url` (read/fetch it directly), a `doi` (pass to `download`/`read` — it flows through the article download chain below), or an OpenLibrary `isbn`/title (refine a catalog search). All three providers are keyless and best-effort — each runs under its own short budget, so a slow or failing provider never fails or slows the core search. Their titles/authors are **untrusted content**.
+
+</details>
+
+<details>
 <summary><b>Multi-source downloads</b> — ordered fallback chain, verified and resumable</summary>
 
 `download` runs an ordered fallback chain and stops at the first source that delivers a valid file:
 
 - **Books (by `md5`):** `libgen` (mirror `ads.php` key + CDN redirect) → `randombook` (fresh-mirror discovery).
-- **Articles (by `doi`):** `unpaywall` (open-access PDF, only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set) → `scihub` (rotating Sci-Hub hosts).
+- **Articles (by `doi`):** `unpaywall` (open-access PDF, only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set) → `scihub` (rotating Sci-Hub hosts). A `doi` surfaced by open-access discovery (above) is fetched by exactly this chain.
 - **Both `md5` and `doi` given:** article sources (`unpaywall`, `scihub`) are tried first, then book sources (`libgen`, `randombook`).
 
 You can restrict or reorder which sources participate with `LIBGEN_MCP_SOURCES`. Additional guarantees:
