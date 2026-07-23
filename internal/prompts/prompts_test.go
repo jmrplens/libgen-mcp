@@ -36,6 +36,310 @@ func newFixtureClient(t *testing.T) *libgen.Client {
 	return libgen.New(staticMirrors{srv.URL}, cfg)
 }
 
+// newSearchClient builds a libgen client backed by an httptest mirror that
+// serves a single search fixture (read from path) for every /index.php request,
+// regardless of the topics[] codes. It is the empty-result / alternate-fixture
+// analog of newFixtureClient and reuses the same client wiring.
+func newSearchClient(t *testing.T, path string) *libgen.Client {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(body) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{srv.URL}, cfg)
+}
+
+// newErrorSearchClient builds a libgen client whose mirror answers every search
+// with HTTP 500, so client.Search returns an error on every call.
+func newErrorSearchClient(t *testing.T) *libgen.Client {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{srv.URL}, cfg)
+}
+
+// TestRegister_WiresAllPrompts drives Register against a real mcp.Server so the
+// four registrar closures, the arg()/titleize() argument builders, and the
+// prompt metadata they assemble all execute without panicking.
+func TestRegister_WiresAllPrompts(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-test", Version: "0.0.0"}, nil)
+	client := newFixtureClient(t)
+	Register(server, client, &config.Config{})
+	// titleize is exercised via arg(); assert its snake_case -> Title Case mapping
+	// directly, including the empty-word branch produced by a leading/doubled
+	// separator, so both paths of the loop are verified.
+	if got := titleize("download_dir"); got != "Download Dir" {
+		t.Errorf("titleize(download_dir) = %q, want %q", got, "Download Dir")
+	}
+	if got := titleize("_a__b"); got != "A B" {
+		t.Errorf("titleize(_a__b) = %q, want %q", got, "A B")
+	}
+}
+
+// TestPrompts_GetPromptRoundTrip drives each registered prompt through a real
+// in-memory MCP client/server round-trip so the four registrar closures (which
+// merely forward to the handlers) execute end to end and return a user-role
+// message. It complements the direct handler tests, which cannot reach the
+// closure bodies AddPrompt stores.
+func TestPrompts_GetPromptRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-test", Version: "0.0.0"}, nil)
+	Register(server, newFixtureClient(t), &config.Config{})
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { _ = serverSession.Wait() })
+
+	clientSession, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = clientSession.Close() })
+
+	cases := []struct {
+		name string
+		args map[string]string
+	}{
+		{"acquire_book", map[string]string{"title": "linux"}},
+		{"research_topic", map[string]string{"topic": "linux", "kind": "both"}},
+		{"get_paper", map[string]string{"doi": "10.1/x"}},
+		{"download_troubleshoot", map[string]string{"md5": "abc"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, gErr := clientSession.GetPrompt(ctx, &mcp.GetPromptParams{Name: tc.name, Arguments: tc.args})
+			if gErr != nil {
+				t.Fatalf("GetPrompt(%s): %v", tc.name, gErr)
+			}
+			if len(res.Messages) != 1 || res.Messages[0].Role != "user" {
+				t.Fatalf("want one user-role message, got %+v", res.Messages)
+			}
+		})
+	}
+}
+
+// TestAcquireBook_NoCandidates proves that when the search returns zero results
+// the handler emits the noCandidatesText recovery guidance (broaden the search)
+// and no candidate table.
+func TestAcquireBook_NoCandidates(t *testing.T) {
+	client := newSearchClient(t, "../libgen/testdata/search_empty.html")
+	res, err := handleAcquireBook(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"title": "no such book", "author": "nobody"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, "No candidate editions were found") {
+		t.Errorf("expected no-candidates recovery text:\n%s", txt)
+	}
+	if !strings.Contains(txt, "author \"nobody\"") {
+		t.Errorf("expected the requested author echoed in the recovery text:\n%s", txt)
+	}
+	if strings.Contains(txt, "Next actions") {
+		t.Errorf("no-candidates message must not carry a Next actions block:\n%s", txt)
+	}
+}
+
+// TestAcquireBook_SearchError proves acquire_book propagates a failing search as
+// a non-nil error rather than emitting a message.
+func TestAcquireBook_SearchError(t *testing.T) {
+	client := newErrorSearchClient(t)
+	if _, err := handleAcquireBook(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"title": "linux"}},
+	}); err == nil {
+		t.Fatal("expected an error when the search fails")
+	}
+}
+
+// TestAcquireBook_FormatLanguageInProse proves that when format and language
+// arguments are supplied they flow through requestedLine into the intro prose of
+// the candidate message (the format/language branches of requestedLine).
+func TestAcquireBook_FormatLanguageInProse(t *testing.T) {
+	client := newFixtureClient(t)
+	res, err := handleAcquireBook(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{
+			"title": "linux", "author": "torvalds", "format": "pdf", "language": "english",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, `format "pdf"`) {
+		t.Errorf("expected requested format echoed in prose:\n%s", txt)
+	}
+	if !strings.Contains(txt, `language "english"`) {
+		t.Errorf("expected requested language echoed in prose:\n%s", txt)
+	}
+}
+
+// TestPickCandidate covers every selection branch of pickCandidate: the
+// no-preference short-circuit, an exact format+language match, a format-only
+// match (empty language), the format-matched-but-language-mismatched fallback to
+// the first format-only hit, and the no-format-match fallback to results[0].
+func TestPickCandidate(t *testing.T) {
+	results := []libgen.Result{
+		{MD5: "aaa", Extension: "pdf", Language: "English"},
+		{MD5: "bbb", Extension: "epub", Language: "Spanish"},
+	}
+	cases := []struct {
+		name             string
+		format, language string
+		wantMD5          string
+	}{
+		{"no preference", "", "", "aaa"},
+		{"format and language match", "epub", "spanish", "bbb"},
+		{"format only, empty language", "epub", "", "bbb"},
+		{"format match, language mismatch falls back to format-only", "pdf", "german", "aaa"},
+		{"no format match falls back to first", "djvu", "", "aaa"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := pickCandidate(results, tc.format, tc.language)
+			if got.MD5 != tc.wantMD5 {
+				t.Errorf("pickCandidate(%q,%q) = %q, want %q", tc.format, tc.language, got.MD5, tc.wantMD5)
+			}
+		})
+	}
+}
+
+// TestResearchLimit covers researchLimit's parsing branches: a valid positive
+// value passes through, the cap clamps an over-large value to the maximum, and
+// missing/non-numeric/non-positive inputs fall back to the default.
+func TestResearchLimit(t *testing.T) {
+	cases := map[string]int{
+		"7":   7,
+		"100": researchTopicMaxLimit,
+		"0":   researchTopicDefaultLimit,
+		"-4":  researchTopicDefaultLimit,
+		"xyz": researchTopicDefaultLimit,
+		"":    researchTopicDefaultLimit,
+	}
+	for raw, want := range cases {
+		if got := researchLimit(raw); got != want {
+			t.Errorf("researchLimit(%q) = %d, want %d", raw, got, want)
+		}
+	}
+}
+
+// TestResearchTopic_NoResults proves that when every topic search fails (so
+// searchTopic swallows the error and returns nil), research_topic renders the
+// empty-results recovery section and no Papers/Books table.
+func TestResearchTopic_NoResults(t *testing.T) {
+	client := newErrorSearchClient(t)
+	res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "kind": "both"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(txt, "No results were found") {
+		t.Errorf("expected empty-results recovery section:\n%s", txt)
+	}
+	if strings.Contains(txt, "## Papers") || strings.Contains(txt, "## Books") {
+		t.Errorf("empty-results message must not carry section tables:\n%s", txt)
+	}
+}
+
+// TestResearchTopic_OneEmptySection proves writeSection's empty-results early
+// return: with the articles search empty and the nonfiction search populated,
+// only the Books section renders and the Papers heading is absent.
+func TestResearchTopic_OneEmptySection(t *testing.T) {
+	client := newCitationClient(t, map[string]string{
+		"a": "../libgen/testdata/search_empty.html",
+		"l": "../libgen/testdata/search_books.html",
+	})
+	res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "kind": "both"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	txt := res.Messages[0].Content.(*mcp.TextContent).Text
+	if strings.Contains(txt, "## Papers") {
+		t.Errorf("Papers section must be omitted when the articles search is empty:\n%s", txt)
+	}
+	if !strings.Contains(txt, "## Books") {
+		t.Errorf("expected the populated Books section:\n%s", txt)
+	}
+}
+
+// TestGetPaper_CitationRetryError proves that when the articles search is empty
+// and the nonfiction retry search errors, handleGetPaperCitation surfaces the
+// retry error rather than swallowing it (the second searchCitation error path).
+func TestGetPaper_CitationRetryError(t *testing.T) {
+	// "a" serves an empty article result; "l" is intentionally unmapped, so the
+	// nonfiction retry hits the mux's HTTP 500 fallback and Search returns an error.
+	client := newCitationClient(t, map[string]string{
+		"a": "../libgen/testdata/search_empty.html",
+	})
+	if _, err := handleGetPaper(context.Background(), client, &mcp.GetPromptRequest{
+		Params: &mcp.GetPromptParams{Arguments: map[string]string{"citation": "hallmarks of cancer"}},
+	}); err == nil {
+		t.Fatal("expected an error when the nonfiction retry search fails")
+	}
+}
+
+// TestDownloadTroubleshoot_DOIPath proves the article branch of the troubleshoot
+// message: with only a doi supplied, kindIntro, staleCheckSection, and
+// troubleshootProviders all render article-specific guidance naming the DOI and
+// the enabled article provider.
+func TestDownloadTroubleshoot_DOIPath(t *testing.T) {
+	client := newRestrictedSourceClient(t, stubSource{name: "scihub", article: true})
+	txt := runTroubleshoot(t, client, map[string]string{"doi": "10.1/x"})
+	if !strings.Contains(txt, "**article**") {
+		t.Errorf("expected the article kind intro:\n%s", txt)
+	}
+	if !strings.Contains(txt, "10.1/x") {
+		t.Errorf("expected the DOI echoed in the message:\n%s", txt)
+	}
+	if !strings.Contains(txt, "scihub") {
+		t.Errorf("expected the enabled article provider named:\n%s", txt)
+	}
+}
+
+// TestDownloadTroubleshoot_UnpaywallNote proves the Unpaywall open-access section
+// is appended exactly when unpaywall is an enabled article provider.
+func TestDownloadTroubleshoot_UnpaywallNote(t *testing.T) {
+	client := newRestrictedSourceClient(t, stubSource{name: "unpaywall", article: true})
+	txt := runTroubleshoot(t, client, map[string]string{"doi": "10.1/x"})
+	if !strings.Contains(txt, "Open-access resolution (Unpaywall)") {
+		t.Errorf("expected the Unpaywall note when unpaywall is enabled:\n%s", txt)
+	}
+	if !strings.Contains(txt, "LIBGEN_MCP_UNPAYWALL_EMAIL") {
+		t.Errorf("expected the Unpaywall email hint:\n%s", txt)
+	}
+}
+
+// TestDownloadTroubleshoot_NoProvidersForIdentifier proves the no-providers
+// branch of pinProvidersSection: an md5 is supplied but only an article provider
+// is enabled, so no book provider can serve it and the message says so.
+func TestDownloadTroubleshoot_NoProvidersForIdentifier(t *testing.T) {
+	client := newRestrictedSourceClient(t, stubSource{name: "scihub", article: true})
+	txt := runTroubleshoot(t, client, map[string]string{"md5": "abc"})
+	if !strings.Contains(txt, "No download providers are enabled for this identifier") {
+		t.Errorf("expected the no-providers guidance:\n%s", txt)
+	}
+	if !strings.Contains(txt, "LIBGEN_MCP_SOURCES") {
+		t.Errorf("expected the LIBGEN_MCP_SOURCES hint:\n%s", txt)
+	}
+}
+
 // TestAcquireBook_RequiresTitle verifies acquire_book errors when the title argument is missing.
 func TestAcquireBook_RequiresTitle(t *testing.T) {
 	client := newFixtureClient(t)

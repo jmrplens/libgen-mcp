@@ -2,8 +2,12 @@ package extract
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 const outlineContainerXML = `<?xml version="1.0"?>
@@ -476,5 +480,294 @@ func TestOutline_ContextCancelled(t *testing.T) {
 	_, err := Outline(ctx, path)
 	if err == nil {
 		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// epub3NavOPF is the OPF package document for an EPUB3 that declares a nav
+// document (properties="nav") plus one chapter; the outline nav edge-case tests
+// vary only the nav markup, not this manifest.
+const epub3NavOPF = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`
+
+// epub3NavFiles builds the file set for an EPUB3 whose OPF declares a nav
+// document, embedding navInner as the body of nav.xhtml so each test varies only
+// the navigation markup. It reuses outlineContainerXML and epub3NavOPF; it is
+// not an EPUB writer (writeEPUB does the archiving).
+func epub3NavFiles(navInner string) map[string]string {
+	return map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf":      epub3NavOPF,
+		"OEBPS/nav.xhtml": `<html xmlns:epub="http://www.idpf.org/2007/ops"><body>` +
+			navInner + `</body></html>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+}
+
+// epub2Files builds an EPUB2 file set from a given OPF and (optional) NCX
+// document, reusing outlineContainerXML. An empty ncx omits toc.ncx so the NCX
+// missing-file branch can be exercised. It is not an EPUB writer.
+func epub2Files(opf, ncx string) map[string]string {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf":      opf,
+		"OEBPS/chapter1.xhtml":   `<html><body><p>one</p></body></html>`,
+	}
+	if ncx != "" {
+		files["OEBPS/toc.ncx"] = ncx
+	}
+	return files
+}
+
+// ncxOPF is an EPUB2 OPF referencing an NCX via the NCX media-type, used by the
+// NCX context-cancellation tests.
+const ncxOPF = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="c1"/>
+  </spine>
+</package>`
+
+// TestEpubOutline_ContextCancelledDirect verifies epubOutline's own entry guard:
+// called directly with an already-canceled context it returns the context error
+// before opening the archive (Outline's guard short-circuits this in practice).
+func TestEpubOutline_ContextCancelledDirect(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := epubOutline(ctx, path); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestOutline_EPUBNotAZip verifies epubOutline's zip.OpenReader failure branch: a
+// .epub whose bytes are not a valid ZIP archive is reported as not extractable
+// with a "not a readable EPUB" reason (distinct from the valid-ZIP structural
+// failure that TestOutline_EPUBMalformed exercises).
+func TestOutline_EPUBNotAZip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notazip.epub")
+	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", res.Reason)
+	}
+}
+
+// TestEpubOutline_CtxCancelledDuringNav verifies the context-cancellation chain
+// through navEntries: a context that survives epubOutline's entry guard but is
+// canceled by navEntries' entry check propagates the error up through
+// readEPUBOutline and epubOutline (covering navEntries' guard, readEPUBOutline's
+// nav-error return, and epubOutline's context-error branch).
+func TestEpubOutline_CtxCancelledDuringNav(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	if _, err := epubOutline(passErr(1), path); err == nil {
+		t.Fatal("expected a context error propagated from navEntries, got nil")
+	}
+}
+
+// TestOutline_EPUBMalformedOPFViaOutline verifies readEPUBOutline's parseOPF
+// error branch on the Outline path: a valid container.xml pointing at a
+// malformed OPF makes Outline report a not-extractable "not a readable EPUB".
+func TestOutline_EPUBMalformedOPFViaOutline(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf":      `<?xml version="1.0"?><package><manifest><item`,
+	}
+	path := writeEPUB(t, t.TempDir(), "bad-opf.epub", files)
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", res.Reason)
+	}
+}
+
+// TestOutline_EPUB3NavNoNavElement verifies navEntries' nil-nav branch: a nav
+// document that contains no <nav> element at all (findTocNav returns nil) yields
+// an extractable EPUB with no entries.
+func TestOutline_EPUB3NavNoNavElement(t *testing.T) {
+	files := epub3NavFiles(`<div><p>No nav element here.</p></div>`)
+	path := writeEPUB(t, t.TempDir(), "nav-no-navel.epub", files)
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 0 {
+		t.Errorf("want no entries when there is no <nav>, got %+v", res.Entries)
+	}
+}
+
+// TestOutline_EPUB3NavOLInWrapper verifies firstOL's recursion branch: when the
+// <ol> is nested inside a wrapper element under <nav> (not a direct child), the
+// depth-first search still finds it and its entry is extracted.
+func TestOutline_EPUB3NavOLInWrapper(t *testing.T) {
+	files := epub3NavFiles(
+		`<nav epub:type="toc"><div><ol><li><a href="chapter1.xhtml">Wrapped Chapter</a></li></ol></div></nav>`)
+	path := writeEPUB(t, t.TempDir(), "nav-ol-wrapper.epub", files)
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Entries) != 1 || res.Entries[0].Title != "Wrapped Chapter" {
+		t.Fatalf("want one wrapped entry, got %+v", res.Entries)
+	}
+}
+
+// TestWalkOL_CtxCancelledEntry verifies the cancellation chain through walkOL: a
+// context canceled at walkOL's entry guard propagates up through navEntries'
+// walk-error return to epubOutline. Uses a nav with a nested <ol> so the walk is
+// actually entered.
+func TestWalkOL_CtxCancelledEntry(t *testing.T) {
+	files := epub3NavFiles(
+		`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a>` +
+			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`)
+	path := writeEPUB(t, t.TempDir(), "nav-walk-cancel.epub", files)
+	if _, err := epubOutline(passErr(2), path); err == nil {
+		t.Fatal("expected a context error from walkOL, got nil")
+	}
+}
+
+// TestAppendLI_CtxCancelledNested verifies the cancellation chain through
+// appendLI: a context that survives the top-level walk but is canceled when
+// appendLI recurses into a nested <ol> propagates the error back through walkOL.
+func TestAppendLI_CtxCancelledNested(t *testing.T) {
+	files := epub3NavFiles(
+		`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a>` +
+			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`)
+	path := writeEPUB(t, t.TempDir(), "nav-appendli-cancel.epub", files)
+	if _, err := epubOutline(passErr(3), path); err == nil {
+		t.Fatal("expected a context error from appendLI's nested walk, got nil")
+	}
+}
+
+// TestNavIsToc_NamespacedAttr verifies navIsToc's namespaced-attribute branch:
+// when the parser records epub:type as a namespaced attribute (Namespace set),
+// the reconstructed "epub:type" key is still recognized as a TOC marker.
+func TestNavIsToc_NamespacedAttr(t *testing.T) {
+	n := &html.Node{
+		Type: html.ElementNode,
+		Data: "nav",
+		Attr: []html.Attribute{{Namespace: "epub", Key: "type", Val: "toc"}},
+	}
+	if !navIsToc(n) {
+		t.Fatal("want navIsToc true for a namespaced epub:type=\"toc\" attribute")
+	}
+}
+
+// TestNcxEntries_CtxCancelledEntry verifies the cancellation chain through
+// ncxEntries: with no nav document, navEntries returns empty without canceling,
+// and the context is canceled at ncxEntries' entry guard, propagating up.
+func TestNcxEntries_CtxCancelledEntry(t *testing.T) {
+	ncx := `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<navMap><navPoint id="np1"><navLabel><text>Chapter</text></navLabel><content src="chapter1.xhtml"/></navPoint></navMap>
+</ncx>`
+	path := writeEPUB(t, t.TempDir(), "ncx-entry-cancel.epub", epub2Files(ncxOPF, ncx))
+	if _, err := epubOutline(passErr(2), path); err == nil {
+		t.Fatal("expected a context error from ncxEntries, got nil")
+	}
+}
+
+// TestNcxEntries_CtxCancelledFlatten verifies the cancellation chain through
+// flattenNCX: the context survives ncxEntries' entry guard but is canceled at
+// flattenNCX's entry guard, propagating up through ncxEntries.
+func TestNcxEntries_CtxCancelledFlatten(t *testing.T) {
+	ncx := `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<navMap><navPoint id="np1"><navLabel><text>Chapter</text></navLabel><content src="chapter1.xhtml"/></navPoint></navMap>
+</ncx>`
+	path := writeEPUB(t, t.TempDir(), "ncx-flatten-cancel.epub", epub2Files(ncxOPF, ncx))
+	if _, err := epubOutline(passErr(3), path); err == nil {
+		t.Fatal("expected a context error from flattenNCX, got nil")
+	}
+}
+
+// TestFlattenNCX_CtxCancelledRecursion verifies flattenNCX's recursion-error
+// branch: with a nested navPoint, the context survives the top-level flatten but
+// is canceled when flattenNCX recurses into the child, propagating up.
+func TestFlattenNCX_CtxCancelledRecursion(t *testing.T) {
+	ncx := `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<navMap>
+  <navPoint id="np1"><navLabel><text>Parent</text></navLabel><content src="chapter1.xhtml"/>
+    <navPoint id="np1-1"><navLabel><text>Child</text></navLabel><content src="chapter1.xhtml#s"/></navPoint>
+  </navPoint>
+</navMap>
+</ncx>`
+	path := writeEPUB(t, t.TempDir(), "ncx-recurse-cancel.epub", epub2Files(ncxOPF, ncx))
+	if _, err := epubOutline(passErr(4), path); err == nil {
+		t.Fatal("expected a context error from flattenNCX recursion, got nil")
+	}
+}
+
+// TestOutline_NCXMissingFile verifies ncxEntries' nil-data branch: an OPF that
+// references an NCX (via the NCX media-type) whose toc.ncx file is absent from
+// the archive, with no nav document, yields an extractable EPUB with no entries.
+func TestOutline_NCXMissingFile(t *testing.T) {
+	path := writeEPUB(t, t.TempDir(), "ncx-missing-file.epub", epub2Files(ncxOPF, ""))
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 0 {
+		t.Errorf("want no entries for a missing NCX file, got %+v", res.Entries)
+	}
+}
+
+// TestOutline_NCXHrefNoMatch verifies ncxHref's final empty-string return: no
+// manifest item carries the NCX media-type and the spine's toc id matches no
+// item, so ncxHref yields "" and the EPUB is extractable with no entries.
+func TestOutline_NCXHrefNoMatch(t *testing.T) {
+	opf := `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="missing">
+    <itemref idref="c1"/>
+  </spine>
+</package>`
+	path := writeEPUB(t, t.TempDir(), "ncx-href-nomatch.epub", epub2Files(opf, ""))
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 0 {
+		t.Errorf("want no entries when the spine toc id matches nothing, got %+v", res.Entries)
 	}
 }
