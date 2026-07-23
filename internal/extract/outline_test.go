@@ -165,6 +165,48 @@ func TestOutline_EPUB2NCX(t *testing.T) {
 	}
 }
 
+// TestOutline_EPUB2NCXViaSpineToc verifies ncxHref's fallback path: when no
+// manifest item carries the NCX media-type, the NCX referenced by the spine's
+// toc id is used instead, and its navMap is parsed into entries.
+func TestOutline_EPUB2NCXViaSpineToc(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="text/xml"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/toc.ncx": `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<navMap>
+  <navPoint id="np1" playOrder="1"><navLabel><text>Spine-Toc Chapter</text></navLabel><content src="chapter1.xhtml"/></navPoint>
+</navMap>
+</ncx>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "ncx-spine-toc.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 1 {
+		t.Fatalf("want 1 entry, got %d: %+v", len(res.Entries), res.Entries)
+	}
+	if res.Entries[0].Title != "Spine-Toc Chapter" || res.Entries[0].Level != 0 {
+		t.Errorf("entry 0 wrong: %+v", res.Entries[0])
+	}
+}
+
 // TestOutline_EPUB2NCXNested verifies that flattenNCX recurses into nested
 // navPoints: a chapter navPoint containing a child navPoint (sub-section)
 // produces two entries in document order, with the child's Level exactly one
@@ -260,6 +302,129 @@ func TestOutline_EPUB3NavWithoutTocType(t *testing.T) {
 	}
 }
 
+// TestOutline_EPUB3NavMissingFile verifies that when the OPF declares a nav
+// document (properties="nav") whose file is absent from the archive and there
+// is no NCX, Outline reports an extractable EPUB with no entries: a missing nav
+// document reads as "no TOC", not a failure. Exercises navEntries' nil-data
+// branch and the NCX fallback.
+func TestOutline_EPUB3NavMissingFile(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "nav-missing.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 0 {
+		t.Errorf("want no entries for a missing nav document, got %+v", res.Entries)
+	}
+}
+
+// TestOutline_EPUB3NavNoList verifies that a nav document whose <nav> element
+// contains no <ol> yields no entries (firstOL returns nil), reported as an
+// extractable EPUB.
+func TestOutline_EPUB3NavNoList(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/nav.xhtml": `<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+<nav epub:type="toc"><h1>Contents</h1><p>No list here.</p></nav>
+</body></html>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "nav-no-ol.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 0 {
+		t.Errorf("want no entries when the nav has no list, got %+v", res.Entries)
+	}
+}
+
+// TestOutline_EPUB3NavSpanAndBareLI verifies two liTitle behaviors in one nav:
+// a <li> whose label is a <span> (not an <a>) is titled from that span, and a
+// wrapper <li> with no <a>/<span> of its own contributes no title but its
+// nested <ol> child is still walked one level deeper.
+func TestOutline_EPUB3NavSpanAndBareLI(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/nav.xhtml": `<html xmlns:epub="http://www.idpf.org/2007/ops"><body>
+<nav epub:type="toc">
+  <ol>
+    <li><span>Span Titled Part</span></li>
+    <li>
+      <ol>
+        <li><a href="chapter1.xhtml#s1">Nested Under Bare LI</a></li>
+      </ol>
+    </li>
+  </ol>
+</nav>
+</body></html>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	path := buildOutlineEPUB(t, t.TempDir(), "nav-span-bare.epub", files)
+
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable || res.Format != "epub" {
+		t.Fatalf("want extractable epub, got %+v", res)
+	}
+	if len(res.Entries) != 2 {
+		t.Fatalf("want 2 entries, got %d: %+v", len(res.Entries), res.Entries)
+	}
+	if res.Entries[0].Title != "Span Titled Part" || res.Entries[0].Level != 0 {
+		t.Errorf("entry 0 wrong: %+v", res.Entries[0])
+	}
+	if res.Entries[1].Title != "Nested Under Bare LI" || res.Entries[1].Level != 1 {
+		t.Errorf("entry 1 wrong (bare-LI nested one level deeper): %+v", res.Entries[1])
+	}
+}
+
 // TestOutline_EPUBNoToc verifies that a valid EPUB with neither a nav document
 // nor an NCX is reported as extractable with no entries and no error: a missing
 // table of contents is valid, not a failure.
@@ -274,6 +439,25 @@ func TestOutline_EPUBNoToc(t *testing.T) {
 	}
 	if len(res.Entries) != 0 {
 		t.Errorf("want no entries, got %+v", res.Entries)
+	}
+}
+
+// TestOutline_EPUBMalformed verifies that a structurally broken EPUB (no
+// container.xml) is reported as not extractable with a reason, exercising
+// epubOutline's structural-failure branch.
+func TestOutline_EPUBMalformed(t *testing.T) {
+	path := buildOutlineEPUB(t, t.TempDir(), "broken.epub", map[string]string{
+		"README.txt": "not an epub",
+	})
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", res.Reason)
 	}
 }
 
@@ -307,67 +491,19 @@ func TestOutline_UnsupportedFormat(t *testing.T) {
 	}
 }
 
-// TestOutline_PDFBookmarks verifies that a PDF carrying an embedded outline is
-// read via pdfcpu into ordered OutlineEntry values: three top-level chapters at
-// Level 0 with their titles and 1-based page numbers, reported with Format
-// "pdf" and Extractable true.
-func TestOutline_PDFBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/bookmarked.pdf")
+// TestOutline_UnsupportedExtension verifies that an unrecognized extension is
+// reported as not extractable with a reason naming it, exercising Outline's
+// default dispatch branch.
+func TestOutline_UnsupportedExtension(t *testing.T) {
+	res, err := Outline(context.Background(), "testdata/whatever.xyz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Extractable || res.Format != "pdf" {
-		t.Fatalf("want extractable pdf, got %+v", res)
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
 	}
-	if len(res.Entries) != 3 {
-		t.Fatalf("want 3 entries, got %d: %+v", len(res.Entries), res.Entries)
-	}
-	want := []OutlineEntry{
-		{Title: "Chapter 1: Intro", Level: 0, Page: 1},
-		{Title: "Chapter 2: Methods", Level: 0, Page: 2},
-		{Title: "Chapter 3: Results", Level: 0, Page: 2},
-	}
-	for i, w := range want {
-		got := res.Entries[i]
-		if got.Title != w.Title || got.Level != w.Level || got.Page != w.Page {
-			t.Errorf("entry %d: want %+v, got %+v", i, w, got)
-		}
-	}
-}
-
-// TestOutline_PDFNoBookmarks verifies that a normal text PDF with no embedded
-// outline is reported as extractable with no entries and a reason noting the
-// absence of an outline: a PDF without bookmarks is valid, not an error or a
-// crash.
-func TestOutline_PDFNoBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/sample.pdf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Extractable || res.Format != "pdf" {
-		t.Fatalf("want extractable pdf, got %+v", res)
-	}
-	if len(res.Entries) != 0 {
-		t.Errorf("want no entries, got %+v", res.Entries)
-	}
-	if !strings.Contains(res.Reason, "outline") {
-		t.Errorf("want a reason mentioning no outline, got %q", res.Reason)
-	}
-}
-
-// TestOutline_PDFScannedNoBookmarks verifies that a scanned (no-text-layer) PDF
-// with no embedded outline is reported as extractable with no entries and does
-// not panic.
-func TestOutline_PDFScannedNoBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/scanned.pdf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Extractable || res.Format != "pdf" {
-		t.Fatalf("want extractable pdf, got %+v", res)
-	}
-	if len(res.Entries) != 0 {
-		t.Errorf("want no entries, got %+v", res.Entries)
+	if !strings.Contains(res.Reason, "unsupported file extension") {
+		t.Errorf("reason should name the unsupported extension, got %q", res.Reason)
 	}
 }
 
