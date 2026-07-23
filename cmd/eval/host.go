@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -51,10 +52,20 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 	// notifications actually reach the client end to end (see progress token in
 	// executeTool).
 	progress = &progressCapture{}
+	// Advertise the elicitation capability so scenarios that hit an on-demand
+	// prompt (Unpaywall email for a DOI download, or the download-save
+	// confirmation) can exercise the real elicitation surface end to end. The
+	// handler answers deterministically, so it never blocks a scenario: it supplies
+	// the contact email for an "email" prompt and accepts any confirmation prompt.
+	// Existing scenarios are unaffected — the server only elicits when it actually
+	// needs one of these (a DOI download with no configured email, or a disk-writing
+	// download), and in both cases the handler's answer lets the flow proceed exactly
+	// as before.
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "libgen-eval-client", Version: "0.0.1"}, &mcp.ClientOptions{
 		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
 			progress.add(r.Params)
 		},
+		ElicitationHandler: evalElicitationHandler,
 	})
 	session, err = mcpClient.Connect(ctx, ct, nil)
 	if err != nil {
@@ -89,4 +100,45 @@ func toolDefs(ctx context.Context, session *mcp.ClientSession) ([]toolDef, error
 		defs = append(defs, toolDef{Name: tool.Name, Description: tool.Description, InputSchema: schema})
 	}
 	return defs, nil
+}
+
+// evalElicitationHandler answers the two elicitation prompts the server can raise
+// during a scenario. It branches on the single top-level field of the requested
+// schema: an "email" field (the on-demand Unpaywall contact email) is answered
+// with unpaywallEmail(); any other prompt is the download-save confirmation, which
+// it accepts (confirm=true) so a real download flow proceeds instead of stalling.
+// It never declines: the eval measures whether the model reaches the capability,
+// not whether a human would approve, so a deterministic accept keeps the flow live.
+func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+	field := evalElicitFieldName(req)
+	if strings.Contains(strings.ToLower(field), "email") {
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: unpaywallEmail()}}, nil
+	}
+	if field == "" {
+		field = "confirm"
+	}
+	return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
+}
+
+// evalElicitFieldName returns the single top-level property name of an
+// elicitation's requested schema — "email" for the Unpaywall-email prompt and
+// "confirm" for the download-save prompt. Client-side the schema arrives as a
+// map[string]any per the SDK's default JSON unmarshaling. It returns "" when the
+// schema is not the expected {"properties": {name: ...}} shape.
+func evalElicitFieldName(req *mcp.ElicitRequest) string {
+	if req == nil || req.Params == nil {
+		return ""
+	}
+	schema, ok := req.Params.RequestedSchema.(map[string]any)
+	if !ok {
+		return ""
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	for name := range props {
+		return name // each server elicitation carries exactly one property.
+	}
+	return ""
 }
