@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -191,5 +192,146 @@ func TestEnrich_NoInputs(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	if e := c.Enrich(context.Background(), "", ""); e != nil {
 		t.Fatalf("Enrich() = %+v, want nil", e)
+	}
+}
+
+// TestEnrichGet_ErrorPaths drives enrichGet's three silent-failure branches
+// directly: a canceled context fails the rate-limiter wait, a URL carrying a
+// control byte fails request construction, and an unreachable address fails the
+// transport Do. Each must yield a nil response so callers degrade to no
+// enrichment.
+func TestEnrichGet_ErrorPaths(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if resp := c.enrichGet(canceled, "http://example.invalid"); resp != nil {
+		_ = resp.Body.Close()
+		t.Error("enrichGet with a canceled context should return nil (limiter wait fails)")
+	}
+	if resp := c.enrichGet(context.Background(), "http://\x7f"); resp != nil {
+		_ = resp.Body.Close()
+		t.Error("enrichGet with an unbuildable URL should return nil")
+	}
+	if resp := c.enrichGet(context.Background(), "http://127.0.0.1:0"); resp != nil {
+		_ = resp.Body.Close()
+		t.Error("enrichGet against an unreachable address should return nil")
+	}
+}
+
+// TestEnrichGet_PoliteMailtoUA verifies that when a contact email is configured
+// enrichGet appends a polite-pool mailto to the User-Agent (Crossref and
+// OpenLibrary prioritize identified traffic).
+func TestEnrichGet_PoliteMailtoUA(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{})
+	c.enrichEmail = "polite@example.com"
+
+	resp := c.enrichGet(context.Background(), srv.URL)
+	if resp == nil {
+		t.Fatal("enrichGet returned nil for a 200 response")
+	}
+	_ = resp.Body.Close()
+	if !strings.Contains(gotUA, "mailto:polite@example.com") {
+		t.Errorf("User-Agent = %q, want a mailto polite-pool suffix", gotUA)
+	}
+}
+
+// TestParseCrossref_MalformedBody verifies parseCrossref returns nil when the body
+// cannot be decoded as a Crossref envelope.
+func TestParseCrossref_MalformedBody(t *testing.T) {
+	if w := parseCrossref(strings.NewReader("not valid json")); w != nil {
+		t.Errorf("parseCrossref(malformed) = %+v, want nil", w)
+	}
+}
+
+// TestFetchOpenLibrary_NothingGathered verifies that an ISBN record carrying
+// neither a cover nor a work key yields nil (nothing worth surfacing), exercising
+// the all-empty guard.
+func TestFetchOpenLibrary_NothingGathered(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"covers": [], "works": []}`))
+	}))
+	defer srv.Close()
+	setEnrichBases(t, "http://crossref.invalid", srv.URL)
+	c := newTestClient(staticMirrors{})
+	if ol := c.fetchOpenLibrary(context.Background(), "9780000000001"); ol != nil {
+		t.Errorf("fetchOpenLibrary with empty covers/works = %+v, want nil", ol)
+	}
+}
+
+// TestFetchOLISBN_MalformedBody verifies that a malformed ISBN record (a 200 whose
+// body is not JSON) makes hop 1 return nil, so fetchOpenLibrary yields nil.
+func TestFetchOLISBN_MalformedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("this is not json"))
+	}))
+	defer srv.Close()
+	setEnrichBases(t, "http://crossref.invalid", srv.URL)
+	c := newTestClient(staticMirrors{})
+	if ol := c.fetchOpenLibrary(context.Background(), "9780000000001"); ol != nil {
+		t.Errorf("fetchOpenLibrary with a malformed ISBN record = %+v, want nil", ol)
+	}
+}
+
+// olTwoHopServer serves the ISBN record (with a cover and a work key) at /isbn/…
+// and delegates the work-record response at /works/… to workHandler, so a test can
+// make hop 2 fail (non-200) or return a malformed body while hop 1 stands.
+func olTwoHopServer(t *testing.T, workHandler http.HandlerFunc) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/isbn/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"covers": [8231856], "works": [{"key": "/works/OL1W"}]}`))
+	})
+	mux.HandleFunc("/works/", workHandler)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// TestFetchOLWork_HopTwoFailureKeepsHopOne verifies that when the work-record fetch
+// fails (non-200) or returns a malformed body, the cover and work URL gathered on
+// hop 1 still stand (Subjects/Description simply stay empty).
+func TestFetchOLWork_HopTwoFailureKeepsHopOne(t *testing.T) {
+	cases := []struct {
+		name string
+		work http.HandlerFunc
+	}{
+		{"non-200", func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "no", http.StatusInternalServerError) }},
+		{"malformed", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not json")) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := olTwoHopServer(t, tc.work)
+			setEnrichBases(t, "http://crossref.invalid", base)
+			c := newTestClient(staticMirrors{})
+			ol := c.fetchOpenLibrary(context.Background(), "9780000000001")
+			if ol == nil {
+				t.Fatal("fetchOpenLibrary = nil, want the hop-1 cover/link preserved")
+			}
+			if ol.CoverURL == "" || ol.OpenLibURL == "" {
+				t.Errorf("hop-1 data lost after a hop-2 failure: %+v", ol)
+			}
+			if len(ol.Subjects) != 0 || ol.Description != "" {
+				t.Errorf("hop-2 failure should leave subjects/description empty: %+v", ol)
+			}
+		})
+	}
+}
+
+// TestParseOLDescription_EmptyAndUndecodable covers parseOLDescription's remaining
+// branches: an empty raw message and a value that is neither a string nor a
+// {"value":…} object both yield "".
+func TestParseOLDescription_EmptyAndUndecodable(t *testing.T) {
+	if got := parseOLDescription(nil); got != "" {
+		t.Errorf("parseOLDescription(nil) = %q, want empty", got)
+	}
+	if got := parseOLDescription(json.RawMessage("12345")); got != "" {
+		t.Errorf("parseOLDescription(number) = %q, want empty", got)
 	}
 }

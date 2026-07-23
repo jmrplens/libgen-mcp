@@ -268,6 +268,29 @@ func TestGetPermFailedSkippedOnRetry(t *testing.T) {
 	}
 }
 
+// TestWithEnrichBaseURLs verifies the WithEnrichBaseURLs option routes Enrich's
+// Crossref and OpenLibrary lookups at the per-client override URLs (a test seam
+// independent of the package-level defaults), exercising both the option and the
+// crossrefURL/openLibraryURL override branches. The Crossref and OpenLibrary
+// fixtures/handlers are shared with enrich_test.go.
+func TestWithEnrichBaseURLs(t *testing.T) {
+	crSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(crossrefFixture))
+	}))
+	defer crSrv.Close()
+	olSrv := httptest.NewServer(olHandler(`"A tale of the override seam."`))
+	defer olSrv.Close()
+
+	c := New(staticMirrors{}, baseChainConfig(), WithEnrichBaseURLs(crSrv.URL, olSrv.URL))
+	e := c.Enrich(context.Background(), "10.1000/x", "9780000000001")
+	if e == nil || e.Crossref == nil || e.OpenLibrary == nil {
+		t.Fatalf("Enrich() = %+v, want both Crossref and OpenLibrary via the override URLs", e)
+	}
+	if !strings.HasPrefix(e.OpenLibrary.OpenLibURL, olSrv.URL) {
+		t.Errorf("OpenLibURL = %q, want it built from the override base %q", e.OpenLibrary.OpenLibURL, olSrv.URL)
+	}
+}
+
 // TestWithSourcesOverridesChain verifies the WithSources option replaces the
 // config-built download-source chain verbatim and in order.
 func TestWithSourcesOverridesChain(t *testing.T) {

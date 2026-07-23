@@ -1872,6 +1872,83 @@ func TestDownloadItem_PerCallEmailPrependsUnpaywall(t *testing.T) {
 	}
 }
 
+// srcNames returns the Name() of every source in a plain slice, for chain-shape
+// assertions on withPerCallUnpaywall's return value.
+func srcNames(ss []DownloadSource) []string {
+	names := make([]string, len(ss))
+	for i, s := range ss {
+		names[i] = s.Name()
+	}
+	return names
+}
+
+// TestWithPerCallUnpaywall covers the guard branches of withPerCallUnpaywall that
+// the end-to-end download test does not reach: when Unpaywall is already present in
+// the chain the slice is returned unchanged (no duplicate ad-hoc prepend), and when
+// the item lacks an email, lacks a DOI, or names a specific source the chain is
+// likewise untouched. A final positive case confirms the prepend still happens.
+func TestWithPerCallUnpaywall(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	withUP := []DownloadSource{stubSource{name: "unpaywall", supports: true}, stubSource{name: "libgen", supports: true}}
+	plain := []DownloadSource{stubSource{name: "libgen", supports: true}}
+	emailDOI := Item{DOI: "10.1/x", Email: "caller@example.com"}
+
+	// Unpaywall already enabled: returned unchanged (its Resolve honors the email).
+	if got := c.withPerCallUnpaywall(emailDOI, withUP); len(got) != 2 || got[0].Name() != "unpaywall" {
+		t.Errorf("chain with unpaywall present should be unchanged, got %v", srcNames(got))
+	}
+
+	// No email, no DOI, or a named source: each leaves the chain untouched.
+	unchanged := []Item{
+		{DOI: "10.1/x"},               // no email
+		{Email: "caller@example.com"}, // no DOI
+		{DOI: "10.1/x", Email: "caller@example.com", Source: "libgen"}, // named source
+	}
+	for _, it := range unchanged {
+		if got := c.withPerCallUnpaywall(it, plain); len(got) != 1 || got[0].Name() != "libgen" {
+			t.Errorf("withPerCallUnpaywall(%+v) altered the chain: %v", it, srcNames(got))
+		}
+	}
+
+	// Positive case: email + DOI + no named source + no unpaywall present → prepend.
+	if got := c.withPerCallUnpaywall(emailDOI, plain); len(got) != 2 || got[0].Name() != "unpaywall" {
+		t.Errorf("email+DOI+no-source should prepend unpaywall, got %v", srcNames(got))
+	}
+}
+
+// TestHeadContentLength_ErrorPaths drives headContentLength's request-build and
+// transport failure branches directly: a URL with a control byte cannot be built
+// into a request, and an unreachable address fails the HEAD Do. Both yield ok=false
+// with no size.
+func TestHeadContentLength_ErrorPaths(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	if _, ok := c.headContentLength(context.Background(), "http://\x7f", nil); ok {
+		t.Error("build error should yield ok=false")
+	}
+	if _, ok := c.headContentLength(context.Background(), "http://127.0.0.1:0/f", nil); ok {
+		t.Error("transport error should yield ok=false")
+	}
+}
+
+// TestHeadContentLength_CopiesRequiredHeaders verifies that source-required headers
+// (e.g. a Sci-Hub Referer) are copied onto the HEAD request: the server only reports
+// a Content-Length when it sees the expected header.
+func TestHeadContentLength_CopiesRequiredHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Referer") == "https://sci-hub/" {
+			w.Header().Set("Content-Length", "2048")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{})
+	hdr := http.Header{"Referer": {"https://sci-hub/"}}
+	n, ok := c.headContentLength(context.Background(), srv.URL, hdr)
+	if !ok || n != 2048 {
+		t.Errorf("headContentLength with required header = (%d, %v), want (2048, true)", n, ok)
+	}
+}
+
 // TestResolveLink verifies the resolve-only path returns the first resolving
 // source's URL, headers and flags without downloading, fails over past a source
 // that errors, and errors when nothing supports the item.
