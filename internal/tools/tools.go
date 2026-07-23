@@ -707,13 +707,13 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
 	name := resolveFilename(item, in.Filename, "")
 	message := confirmMessage(ctx, c, item, name, dir)
-	confirmed, ok := elicitConfirm(ctx, req, message, "confirm",
-		"Confirm downloading and saving this file to the server")
-	if ok && !confirmed {
+	// An explicit decline or cancel aborts the disk write; only an unavailable
+	// elicitation (no capability or a transport error) falls back to proceeding.
+	if elicitConfirmDecision(ctx, req, message, "confirm",
+		"Confirm downloading and saving this file to the server") == confirmDeclined {
 		res, out := declinedDownload(ctx, c, item, in.Filename)
 		return false, res, out
 	}
-	// confirmed, or elicitation did not run (fall back to proceeding).
 	return true, nil, DownloadOutput{}
 }
 

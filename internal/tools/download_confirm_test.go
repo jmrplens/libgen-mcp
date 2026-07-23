@@ -250,3 +250,45 @@ func TestDownloadTool_ResolveOnlyNoConfirm(t *testing.T) {
 		t.Errorf("resolve_only should return a resolved link; got %+v", out)
 	}
 }
+
+// TestDownloadTool_ConfirmCanceled verifies that an explicit cancel of the
+// download confirmation aborts the save (same as a decline): the file body is
+// never fetched, nothing is written, and the result is a non-error with the link.
+func TestDownloadTool_ConfirmCanceled(t *testing.T) {
+	payload := []byte("%PDF-1.4 confirm-canceled book payload")
+	srv, cdnGET, _ := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		return &mcp.ElicitResult{Action: "cancel"}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a canceled download should be a non-error result; got %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Errorf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	if cdnGET.Load() != 0 {
+		t.Errorf("a canceled download fetched the file body %d time(s), want 0", cdnGET.Load())
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path != "" {
+		t.Errorf("a canceled download must not save a file, but Path=%q", out.Path)
+	}
+	if entries, _ := os.ReadDir(cfg.DownloadDir); len(entries) != 0 {
+		t.Errorf("a canceled download wrote %d file(s) to disk, want 0", len(entries))
+	}
+}

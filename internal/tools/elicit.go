@@ -42,6 +42,60 @@ func runFormElicit(ctx context.Context, req *mcp.CallToolRequest, message string
 	return v, true
 }
 
+// confirmDecision is the outcome of a confirmation elicitation, distinguishing an
+// explicit user "no" (which callers should honor by NOT proceeding) from an
+// inability to ask (no capability or a transport error), where callers must fall
+// back to their deterministic default.
+type confirmDecision int
+
+const (
+	// confirmUnavailable means elicitation could not run (capability absent or a
+	// transport error): the caller must fall back to its default behavior.
+	confirmUnavailable confirmDecision = iota
+	// confirmProceed means the user explicitly accepted.
+	confirmProceed
+	// confirmDeclined means the user explicitly declined or canceled: the caller
+	// must NOT proceed with the side-effecting action.
+	confirmDeclined
+)
+
+// elicitConfirmDecision asks the user a yes/no confirmation via form elicitation
+// and returns a tri-state decision. An explicit decline/cancel — or an accept with
+// the boolean set to false — yields confirmDeclined; a genuine accept yields
+// confirmProceed; a missing capability or any transport error yields
+// confirmUnavailable so the caller falls back. It never returns an error.
+func elicitConfirmDecision(ctx context.Context, req *mcp.CallToolRequest, message, fieldName, fieldDescription string) confirmDecision {
+	if !elicitationSupported(req) {
+		return confirmUnavailable
+	}
+	res, err := req.Session.Elicit(ctx, &mcp.ElicitParams{
+		Mode:    "form",
+		Message: message,
+		RequestedSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				fieldName: map[string]any{"type": "boolean", "description": fieldDescription},
+			},
+			"required": []string{fieldName},
+		},
+	})
+	if err != nil || res == nil {
+		return confirmUnavailable
+	}
+	// An explicit decline or cancel is the user saying no: honor it.
+	if res.Action == "decline" || res.Action == "cancel" {
+		return confirmDeclined
+	}
+	if res.Action != "accept" {
+		return confirmUnavailable
+	}
+	// On accept, the boolean value decides; a missing/false value is a "no".
+	if b, ok := res.Content[fieldName].(bool); ok && b {
+		return confirmProceed
+	}
+	return confirmDeclined
+}
+
 // stringSchema builds a 2020-12 JSON-schema object with a single required
 // top-level string property named fieldName.
 func stringSchema(fieldName, fieldDescription string) map[string]any {
