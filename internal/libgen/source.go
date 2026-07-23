@@ -25,6 +25,11 @@ type Item struct {
 	// of config.KnownSources). Empty means try the full configured source chain
 	// in order with transparent failover.
 	Source string
+	// Email is an optional per-call Unpaywall contact email, supplied on demand;
+	// it overrides the configured email for this item only and is never persisted.
+	// When set on a DOI item, it can pull the Unpaywall source into the download
+	// chain even if the server configured no email (see Client.withPerCallUnpaywall).
+	Email string
 	// Meta carries bibliographic fields for naming; may be nil.
 	Meta *FileMeta
 }

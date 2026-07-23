@@ -292,6 +292,29 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 	return sources, nil
 }
 
+// withPerCallUnpaywall augments the selected source chain for a single call so a
+// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
+// a DOI download even when the server configured no email and thus left Unpaywall
+// out of the chain. It returns a NEW slice (never mutating the client's shared
+// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
+// unset), and the chain does not already include an enabled Unpaywall source, it
+// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
+// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
+// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
+// returned as-is, keeping the default (headless) behavior byte-identical to today.
+func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
+	if item.Email == "" || item.DOI == "" || item.Source != "" {
+		return sources
+	}
+	for _, s := range sources {
+		if s.Name() == "unpaywall" {
+			return sources
+		}
+	}
+	adhoc := unpaywallSource{email: item.Email, http: c.http, baseURL: c.unpaywallBase}
+	return append([]DownloadSource{adhoc}, sources...)
+}
+
 // ResolvedDownload is a direct download URL produced by ResolveLink: the bytes
 // are NOT fetched, so the caller (a remote MCP client, or an agent's own fetch
 // tool) can retrieve the file itself, wherever it is running. Header carries any
@@ -317,6 +340,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	if err != nil {
 		return ResolvedDownload{}, err
 	}
+	sources = c.withPerCallUnpaywall(item, sources)
 	var errs []error
 	for _, src := range sources {
 		if !src.Supports(item) {
@@ -365,6 +389,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	if selErr != nil {
 		return nil, selErr
 	}
+	sources = c.withPerCallUnpaywall(item, sources)
 
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
 	// Try each supporting source in order: a source that fails to resolve or whose

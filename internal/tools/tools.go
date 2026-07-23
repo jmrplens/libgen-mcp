@@ -568,6 +568,43 @@ func validateDownloadInput(in DownloadInput) (md5, doi, source string, err error
 	return md5, doi, source, nil
 }
 
+// elicitUnpaywallEmail asks the client for a one-off Unpaywall contact email when a
+// DOI download is requested against a server that has none configured and the client
+// advertised elicitation. It returns the trimmed email to use for THIS request only,
+// or "" to proceed with today's behavior (Unpaywall stays out of the chain, Sci-Hub
+// is tried). It NEVER errors: an absent capability, a decline, an empty answer, or an
+// implausible address all collapse to "" so the caller falls back. The email is used
+// only for the call and is never persisted.
+func elicitUnpaywallEmail(ctx context.Context, req *mcp.CallToolRequest, cfg *config.Config, in DownloadInput) string {
+	if strings.TrimSpace(in.DOI) == "" || strings.TrimSpace(cfg.UnpaywallEmail) != "" || !elicitationSupported(req) {
+		return ""
+	}
+	email, ok := elicitText(ctx, req,
+		"This server has no Unpaywall contact email configured. Enter an email to look up an open-access copy of this article via Unpaywall (used only for this request, not stored):",
+		"email",
+		"A contact email for the Unpaywall API (e.g. you@example.com)")
+	if !ok {
+		return ""
+	}
+	email = strings.TrimSpace(email)
+	if !looksLikeEmail(email) {
+		return ""
+	}
+	return email
+}
+
+// looksLikeEmail applies the same light sanity check as the config's email
+// validation: the value must contain an "@" (not first) and a "." somewhere after
+// it that is not the final character. It deliberately does not over-validate.
+func looksLikeEmail(s string) bool {
+	at := strings.Index(s, "@")
+	if at <= 0 {
+		return false
+	}
+	dot := strings.Index(s[at+1:], ".")
+	return dot > 0 && at+1+dot != len(s)-1
+}
+
 func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
@@ -576,6 +613,14 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 			return nil, zero, err
 		}
 		item := libgen.Item{MD5: md5, DOI: doi, Source: source}
+		// On-demand Unpaywall email: for a DOI download against a server with no
+		// contact email configured, ask the client (when it supports elicitation) for
+		// one to use for THIS request only. A declined/absent/invalid answer leaves
+		// item.Email empty, so the deterministic fallback (unpaywall stays out, scihub
+		// is tried) runs unchanged. Applies to both the resolve_only and download paths.
+		if email := elicitUnpaywallEmail(ctx, req, cfg, in); email != "" {
+			item.Email = email
+		}
 		// For a book with no explicit name, fill bibliographic metadata so the file
 		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details
 		// lookup failure must not fail the request.

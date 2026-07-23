@@ -3,6 +3,7 @@ package libgen
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,16 @@ func (s unpaywallSource) Supports(it Item) bool { return it.DOI != "" }
 // link, or any API/transport error yields an error so the caller tries the next
 // source.
 func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
+	// A per-call email (supplied on demand) overrides the configured one for this
+	// item only. With neither present, fail before touching the API so the chain
+	// falls through gracefully instead of sending Unpaywall an emailless request.
+	email := s.email
+	if it.Email != "" {
+		email = it.Email
+	}
+	if email == "" {
+		return Resolved{}, errors.New("unpaywall: no contact email (set LIBGEN_MCP_UNPAYWALL_EMAIL or supply one)")
+	}
 	base := s.baseURL
 	if base == "" {
 		base = unpaywallAPIBase
@@ -68,7 +79,7 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	endpoint := fmt.Sprintf("%s/%s?email=%s",
 		strings.TrimRight(base, "/"),
 		escapeDOIPath(it.DOI),
-		url.QueryEscape(s.email),
+		url.QueryEscape(email),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)

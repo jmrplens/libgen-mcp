@@ -81,6 +81,11 @@ type Client struct {
 	// is MaxConcurrentDownloads. Download acquires a slot before starting and
 	// releases it on completion.
 	dlSem chan struct{}
+	// unpaywallBase overrides the base URL of the on-demand Unpaywall source built
+	// by withPerCallUnpaywall when an Item carries a per-call contact email. Empty
+	// means the ad-hoc source uses the documented public API (unpaywallAPIBase); it
+	// is a test seam so the prepended source can target an httptest server.
+	unpaywallBase string
 	// sources is the ordered download-source chain Download tries for each Item,
 	// advancing to the next when one fails to resolve or stream. It is built from
 	// config by buildSourceChain as [unpaywall, scihub, libgen, randombook], then
@@ -162,6 +167,14 @@ type Option func(*Client)
 // backed by a local server without reaching the live providers.
 func WithSources(sources ...DownloadSource) Option {
 	return func(c *Client) { c.sources = sources }
+}
+
+// WithUnpaywallBaseURL overrides the base URL of the on-demand Unpaywall source
+// that withPerCallUnpaywall prepends when an Item supplies a per-call contact
+// email. It exists so tests can point that ad-hoc source at an httptest server
+// instead of the live Unpaywall API; production leaves it unset.
+func WithUnpaywallBaseURL(base string) Option {
+	return func(c *Client) { c.unpaywallBase = base }
 }
 
 // New builds a Client from the configuration: rate limiter (RateRPS/RateBurst),
