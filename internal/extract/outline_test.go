@@ -1,50 +1,10 @@
 package extract
 
 import (
-	"archive/zip"
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// buildOutlineEPUB writes a minimal EPUB (mimetype first + the given entries)
-// into dir under name and returns the file path. Callers supply the
-// container.xml, OPF and navigation documents so a single helper can build
-// EPUB3-nav, EPUB2-NCX and no-TOC fixtures.
-func buildOutlineEPUB(t *testing.T, dir, name string, files map[string]string) string {
-	t.Helper()
-	fp := filepath.Join(dir, name)
-	f, err := os.Create(fp)
-	if err != nil {
-		t.Fatalf("create epub: %v", err)
-	}
-	defer func() { _ = f.Close() }()
-
-	zw := zip.NewWriter(f)
-	// mimetype must be first and stored (uncompressed) per the EPUB spec.
-	mw, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
-	if err != nil {
-		t.Fatalf("create mimetype: %v", err)
-	}
-	if _, err = mw.Write([]byte("application/epub+zip")); err != nil {
-		t.Fatalf("write mimetype: %v", err)
-	}
-	for entry, content := range files {
-		w, cerr := zw.Create(entry)
-		if cerr != nil {
-			t.Fatalf("create %s: %v", entry, cerr)
-		}
-		if _, werr := w.Write([]byte(content)); werr != nil {
-			t.Fatalf("write %s: %v", entry, werr)
-		}
-	}
-	if err = zw.Close(); err != nil {
-		t.Fatalf("close zip: %v", err)
-	}
-	return fp
-}
 
 const outlineContainerXML = `<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -92,7 +52,7 @@ func TestOutline_EPUB3Nav(t *testing.T) {
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 		"OEBPS/chapter2.xhtml": `<html><body><p>two</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "nav.epub", files)
+	path := writeEPUB(t, t.TempDir(), "nav.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -145,7 +105,7 @@ func TestOutline_EPUB2NCX(t *testing.T) {
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 		"OEBPS/chapter2.xhtml": `<html><body><p>two</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "ncx.epub", files)
+	path := writeEPUB(t, t.TempDir(), "ncx.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -190,7 +150,7 @@ func TestOutline_EPUB2NCXViaSpineToc(t *testing.T) {
 </ncx>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "ncx-spine-toc.epub", files)
+	path := writeEPUB(t, t.TempDir(), "ncx-spine-toc.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -235,7 +195,7 @@ func TestOutline_EPUB2NCXNested(t *testing.T) {
 </ncx>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "ncx-nested.epub", files)
+	path := writeEPUB(t, t.TempDir(), "ncx-nested.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -285,7 +245,7 @@ func TestOutline_EPUB3NavWithoutTocType(t *testing.T) {
 </body></html>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "nav-no-toctype.epub", files)
+	path := writeEPUB(t, t.TempDir(), "nav-no-toctype.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -323,7 +283,7 @@ func TestOutline_EPUB3NavMissingFile(t *testing.T) {
 </package>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "nav-missing.epub", files)
+	path := writeEPUB(t, t.TempDir(), "nav-missing.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -359,7 +319,7 @@ func TestOutline_EPUB3NavNoList(t *testing.T) {
 </body></html>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "nav-no-ol.epub", files)
+	path := writeEPUB(t, t.TempDir(), "nav-no-ol.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -405,7 +365,7 @@ func TestOutline_EPUB3NavSpanAndBareLI(t *testing.T) {
 </body></html>`,
 		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
 	}
-	path := buildOutlineEPUB(t, t.TempDir(), "nav-span-bare.epub", files)
+	path := writeEPUB(t, t.TempDir(), "nav-span-bare.epub", files)
 
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -446,7 +406,7 @@ func TestOutline_EPUBNoToc(t *testing.T) {
 // container.xml) is reported as not extractable with a reason, exercising
 // epubOutline's structural-failure branch.
 func TestOutline_EPUBMalformed(t *testing.T) {
-	path := buildOutlineEPUB(t, t.TempDir(), "broken.epub", map[string]string{
+	path := writeEPUB(t, t.TempDir(), "broken.epub", map[string]string{
 		"README.txt": "not an epub",
 	})
 	res, err := Outline(context.Background(), path)
