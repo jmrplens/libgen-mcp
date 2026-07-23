@@ -17,6 +17,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 )
 
 const (
@@ -232,10 +233,42 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 // LIBGEN_MCP_SOURCES are left out. Each non-LibGen source uses the client's
 // page HTTP client (with timeout) for its resolution lookups; libgenSource holds
 // c so it can reuse the mirror failover in ResolveGetURL.
+// fixedMirrors is a MirrorLister over a hardcoded list, used as the offline
+// fallback when a mirror Manager cannot be built.
+type fixedMirrors []string
+
+// Mirrors returns the fixed base URLs.
+func (f fixedMirrors) Mirrors(context.Context) []string { return f }
+
+// annasMirrorsFor builds the Anna's Archive mirror lister used by the sources
+// that fetch from that family. It is a package-level variable so tests can
+// substitute a lister that touches neither the network nor the on-disk cache.
+//
+// A Manager can only fail to build when the OS cache dir is unresolvable; in
+// that case the family's hardcoded fallback list keeps the sources usable
+// instead of dropping them from the chain.
+var annasMirrorsFor = func(cfg *config.Config) MirrorLister {
+	m, err := mirrors.NewManagerFor(mirrors.AnnasFamily, cfg)
+	if err != nil {
+		return fixedMirrors(mirrors.AnnasFamily.Fallback)
+	}
+	return m
+}
+
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
+	// Discovered once and shared by every Anna's-backed source, so one discovery
+	// and one cache serve them all.
+	var annas MirrorLister
+	annasLister := func() MirrorLister {
+		if annas == nil {
+			annas = annasMirrorsFor(cfg)
+		}
+		return annas
+	}
 	factories := map[string]func() DownloadSource{
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },
+		"scidb":      func() DownloadSource { return scidbSource{mirrors: annasLister(), http: c.http} },
 		"libgen":     func() DownloadSource { return libgenSource{c: c} },
 		"randombook": func() DownloadSource { return randombookSource{http: c.http} },
 	}

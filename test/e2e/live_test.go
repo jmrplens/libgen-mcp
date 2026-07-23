@@ -433,3 +433,39 @@ func skipRandombookDiagnosedError(t *testing.T, md5 string, err error) {
 		t.Fatalf("randombook download failed with an unclassified error (update this test's classification if this is a legitimate new outcome): %v", err)
 	}
 }
+
+// scidbLiveDOI is a long-established, heavily-mirrored DOI verified served by
+// SciDB on 2026-07-23, which keeps this live check deterministic.
+const scidbLiveDOI = "10.1016/j.cell.2011.02.013"
+
+// TestE2ESciDBClassifiedOutcome exercises the scidb source end to end against the
+// live Anna's Archive mirrors, restricting the download to source=scidb so no
+// other source in the chain can mask its behavior. On error the failure must be
+// one of the known, diagnosed classes; anything else fails the test, so a new
+// unrecognized failure mode surfaces here instead of hiding as flakiness.
+func TestE2ESciDBClassifiedOutcome(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := env.client.DownloadItem(ctx, libgen.Item{DOI: scidbLiveDOI, Source: "scidb"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("scidb reported a download of %d bytes", res.SizeBytes)
+		}
+		t.Logf("scidb served a real download: bytes=%d", res.SizeBytes)
+		return
+	}
+	known := []string{
+		"embedded no PDF",      // mirror reachable, article absent from SciDB
+		"no mirror resolved",   // every mirror down or serving no PDF
+		"no mirrors available", // discovery yielded nothing
+		"context deadline",     // a slow mirror inside the timeout budget
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("scidb unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("scidb failed in an undiagnosed way: %v", err)
+}

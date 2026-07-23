@@ -401,7 +401,7 @@ func baseChainConfig() *config.Config {
 func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	c := New(staticMirrors{}, baseChainConfig())
 
-	if got, want := sourceNames(c), []string{"unpaywall", "scihub", "libgen", "randombook"}; !slices.Equal(got, want) {
+	if got, want := sourceNames(c), []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"}; !slices.Equal(got, want) {
 		t.Fatalf("chain = %v, want %v", got, want)
 	}
 
@@ -417,7 +417,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
 		t.Errorf("book chain = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "scihub"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article chain = %v, want %v", article, want)
 	}
 }
@@ -430,7 +430,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
 		t.Errorf("book = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "scihub"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
 
@@ -440,7 +440,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
 		t.Errorf("book (no email) = %v, want %v", book, want)
 	}
-	if want := []string{"scihub"}; !slices.Equal(article, want) {
+	if want := []string{"scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
 	}
 }

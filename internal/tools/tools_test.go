@@ -183,13 +183,13 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 		{
 			name:       "default without email disables unpaywall",
 			mutate:     func(*config.Config) {},
-			wantEnum:   []string{"scihub", "libgen", "randombook"},
+			wantEnum:   []string{"scihub", "scidb", "libgen", "randombook"},
 			wantAbsent: []string{"unpaywall"},
 		},
 		{
 			name:       "unpaywall enabled once an email is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
-			wantEnum:   []string{"unpaywall", "scihub", "libgen", "randombook"},
+			wantEnum:   []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"},
 			wantAbsent: nil,
 		},
 	}

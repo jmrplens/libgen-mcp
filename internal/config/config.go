@@ -101,7 +101,7 @@ func defaultStartRetryWaits() []time.Duration {
 // KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
-var KnownSources = []string{"unpaywall", "scihub", "libgen", "randombook"}
+var KnownSources = []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"}
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through

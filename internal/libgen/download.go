@@ -144,7 +144,7 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall or scihub)"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall scihub or scidb)"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.

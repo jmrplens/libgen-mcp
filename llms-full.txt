@@ -59,7 +59,7 @@ Download a file to a local directory.
 - `md5` (string): file md5 hash from a book search result; provide md5 or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
 - `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
-- `source` (string): restrict the download to a single enabled source: unpaywall, scihub, libgen, randombook. Omit to try every compatible source in order with failover
+- `source` (string): restrict the download to a single enabled source: unpaywall, scihub, scidb, libgen, randombook. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
 

@@ -715,3 +715,18 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 		t.Fatal("validateDownloadDir() should fail when the write-test cleanup cannot remove the file")
 	}
 }
+
+// TestKnownSourcesIncludesSciDB pins the canonical chain order the download
+// pipeline relies on: scidb follows scihub, so it acts as the article fallback
+// that covers Sci-Hub's indexing gap without changing existing behavior.
+func TestKnownSourcesIncludesSciDB(t *testing.T) {
+	want := []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"}
+	if len(KnownSources) != len(want) {
+		t.Fatalf("KnownSources = %v, want %v", KnownSources, want)
+	}
+	for i, w := range want {
+		if KnownSources[i] != w {
+			t.Fatalf("KnownSources[%d] = %q, want %q (full: %v)", i, KnownSources[i], w, KnownSources)
+		}
+	}
+}
