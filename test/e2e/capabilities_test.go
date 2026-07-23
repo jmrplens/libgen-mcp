@@ -508,6 +508,76 @@ func TestE2EReadNotExtractable(t *testing.T) {
 	t.Logf("not-extractable reason=%q", out.Reason)
 }
 
+// firstResultWithExtension tries each query in turn (searching the fiction
+// collection, where public-domain novels commonly carry EPUB editions) and returns
+// the first live result whose Extension equals ext (case-insensitive) and whose MD5
+// is canonical, so the caller can exercise the format-specific extraction path
+// against real data. A search transport error fails the calling test (a real bug
+// under the live gate); it SKIPS the calling test only when NO query surfaces such a
+// result — a genuine data condition, not a wiring problem. It mirrors firstMD5's
+// style and paces between queries.
+func firstResultWithExtension(t *testing.T, ctx context.Context, c *libgen.Client, ext string, queries ...string) libgen.Result {
+	t.Helper()
+	want := strings.ToLower(strings.TrimSpace(ext))
+	for qi, q := range queries {
+		page, _, err := c.Search(ctx, libgen.SearchParams{Query: q, Topics: []string{"fiction"}})
+		if err != nil {
+			t.Fatalf("Search(%q) error: %v", q, err)
+		}
+		for i := range page.Results {
+			r := page.Results[i]
+			if md5Re.MatchString(r.MD5) && strings.ToLower(strings.TrimSpace(r.Extension)) == want {
+				return r
+			}
+		}
+		if qi < len(queries)-1 {
+			pace()
+		}
+	}
+	t.Skipf("no %q result with a valid md5 across %d queries; cannot exercise the %s read path", want, len(queries), want)
+	return libgen.Result{}
+}
+
+// TestE2EReadEPUB proves the EPUB extraction path end to end against the LIVE site.
+// The other read e2e cases use PDF fixtures; this one hunts across a few
+// public-domain novel queries for a real EPUB edition, reads it (asserting
+// Extractable, format=="epub", non-empty text, and the UNTRUSTED-first invariant),
+// and exercises find over it (matches or a clean no-match, never a crash). It gates
+// on requireLive; a missing EPUB across all queries or any live fetch/extract
+// failure SKIPS (never fails), since EPUB availability and the CDN vary.
+func TestE2EReadEPUB(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+	client, session := newReadSession(t, ctx)
+	target := firstResultWithExtension(t, ctx, client, "epub",
+		"Dracula", "Frankenstein", "Pride and Prejudice")
+	t.Logf("epub target md5=%s size=%q ext=%q title=%q", target.MD5, target.Size, target.Extension, target.Title)
+	pace()
+
+	seq := callRead(t, ctx, session, map[string]any{"md5": target.MD5})
+	assertUntrustedFirst(t, seq)
+	if !seq.Extractable {
+		t.Skipf("epub target %s is not extractable (%s); cannot exercise the epub text path", target.MD5, seq.Reason)
+	}
+	if seq.Format != "epub" {
+		t.Errorf("read format = %q, want epub for an epub target", seq.Format)
+	}
+	if strings.TrimSpace(seq.Text) == "" {
+		t.Error("sequential epub read returned no text for an extractable file")
+	}
+	pace()
+
+	find := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "find": "the", "max_matches": 5})
+	assertUntrustedFirst(t, find)
+	for i := range find.Matches {
+		if strings.TrimSpace(find.Matches[i].Snippet) == "" {
+			t.Errorf("epub find match %d carried an empty snippet", i)
+		}
+	}
+	t.Logf("epub find matches=%d total=%d", len(find.Matches), find.MatchCount)
+}
+
 // validOrigin reports whether an open-access hit's origin label is one of the
 // three keyless discovery providers.
 func validOrigin(origin string) bool {
