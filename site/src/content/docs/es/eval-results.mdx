@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 20 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 21 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -41,11 +41,12 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Veinte escenarios (S1–S19, más una variante S6b) cubren búsqueda, detalles,
+Veintiún escenarios (S1–S20, más una variante S6b) cubren búsqueda, detalles,
 descargas, selección de fuente, recuperación de errores, progreso, resolución de
-enlaces, lectura/resumen de texto extraído y — de forma importante — prompts
-**sin guía** que no dan pistas al modelo, para comprobar si la superficie de
-herramientas es lo bastante auto-descriptiva para que un LLM la use sin ayuda.
+enlaces, lectura/resumen de texto extraído, descubrimiento de acceso abierto y —
+de forma importante — prompts **sin guía** que no dan pistas al modelo, para
+comprobar si la superficie de herramientas es lo bastante auto-descriptiva para
+que un LLM la use sin ayuda.
 
 | ID  | Qué comprueba                                                                                                                                                                                                                                                              |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,6 +70,7 @@ herramientas es lo bastante auto-descriptiva para que un LLM la use sin ayuda.
 | S17 | **Descarga remota (libro)** — la misma petición "descarga _The C Programming Language_", pero el servidor corre en **modo remoto** (`--http`): `download` devuelve un enlace, y el arnés — actuando como la propia herramienta de fetch del agente — lo trae a disco local |
 | S18 | **Descarga remota (artículo)** — lo mismo para un DOI de pago; el modelo simplemente llama a `download`, el servidor remoto devuelve un enlace, y el arnés lo descarga a disco local                                                                                       |
 | S19 | **Buscar → leer → resumir** — el modelo busca un artículo por título, llama a `read` (no a `download`) con el DOI encontrado en los resultados, y escribe su propio resumen de la primera página extraída en vez de volcar el texto NO CONFIABLE tal cual                  |
+| S20 | **Descubrimiento de acceso abierto** — sin guía como S10–S13: el modelo debe descubrir `include_open_access` por sí mismo y referenciar en su respuesta uno de los resultados federados de arXiv/Crossref                                                                  |
 
 ## Bloques local y remoto
 
@@ -87,8 +89,8 @@ local de cualquier manera.
 En las corridas en vivo más recientes (API real + mirrors reales), **todos los
 escenarios de esta corrida pasan**, con `S6b` en SKIP cuando el descubrimiento
 de mirror fresco de randombook no está disponible — una condición de mirror en
-vivo, no un fallo del modelo. `S19` se añadió después de esta corrida y todavía
-no está incluido; ver la nota debajo de la tabla.
+vivo, no un fallo del modelo. `S19` y `S20` se añadieron después de esta
+corrida y todavía no están incluidos; ver la nota debajo de la tabla.
 
 | ID  | Modo   | Resultado | Evidencia                                                                        |
 | --- | ------ | --------- | -------------------------------------------------------------------------------- |
@@ -113,8 +115,9 @@ no está incluido; ver la nota debajo de la tabla.
 | S18 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
 
 <Aside type="note">
-	S19 (buscar → leer → resumir) se añadió después de esta corrida y todavía no
-	aparece en la tabla anterior; ejecuta `make eval` para incluirlo.
+	S19 (buscar → leer → resumir) y S20 (descubrimiento de acceso abierto) se
+	añadieron después de esta corrida y todavía no aparecen en la tabla anterior;
+	ejecuta `make eval` para incluirlos.
 </Aside>
 
 ## Cómo ejecutarlo

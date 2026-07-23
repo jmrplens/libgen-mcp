@@ -80,6 +80,11 @@ type Config struct {
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
+	// OpenAccessEnabled is the deployment default for the search tool's open-access
+	// discovery (arXiv/Crossref/OpenLibrary). LIBGEN_MCP_OPEN_ACCESS, default false:
+	// OA discovery is off unless a caller opts in per call; a deployment sets it true
+	// to make OA on by default while each call can still override it.
+	OpenAccessEnabled bool
 }
 
 // defaultStartRetryWaits returns the built-in start-retry schedule: three waits
@@ -127,6 +132,7 @@ func Load() (*Config, error) {
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
+		OpenAccessEnabled:       false,
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
@@ -218,6 +224,9 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
+		return err
+	}
+	if err := envBool("LIBGEN_MCP_OPEN_ACCESS", &cfg.OpenAccessEnabled); err != nil {
 		return err
 	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {

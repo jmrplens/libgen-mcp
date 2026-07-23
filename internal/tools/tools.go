@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 )
@@ -34,28 +35,30 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
-	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
-	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
-	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
-	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
-	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
-	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
+	Query             string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Topics            []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
+	SearchIn          []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
+	ResultsPerPage    int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
+	Page              int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
+	Order             string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
+	OrderMode         string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
+	IncludeOpenAccess *bool    `json:"include_open_access,omitempty" jsonschema:"also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin; overrides the server default"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
 // leads so the model sees what to do with the results before reading them.
 type SearchOutput struct {
-	NextSteps      []string        `json:"next_steps,omitempty" jsonschema:"suggested follow-up tool calls given these results (e.g. get_details or download with a result's md5/doi)"`
-	Results        []libgen.Result `json:"results" jsonschema:"the file records on this page; each carries the md5/doi/id you pass to get_details or download"`
-	Page           int             `json:"page" jsonschema:"the page number returned"`
-	ResultsPerPage int             `json:"results_per_page" jsonschema:"the page size in effect"`
-	TotalFiles     string          `json:"total_files,omitempty" jsonschema:"total matches the mirror reports (may be a capped indicator such as 1000+)"`
-	Reachable      int             `json:"reachable" jsonschema:"how many results are actually reachable across all pages"`
-	Truncated      bool            `json:"truncated" jsonschema:"true when total_files exceeds reachable, i.e. some matches cannot be paged to"`
-	Hint           string          `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
-	HasMore        bool            `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
-	Mirror         string          `json:"mirror" jsonschema:"the mirror base URL that served this search"`
+	NextSteps      []string                    `json:"next_steps,omitempty" jsonschema:"suggested follow-up tool calls given these results (e.g. get_details or download with a result's md5/doi)"`
+	Results        []libgen.Result             `json:"results" jsonschema:"the file records on this page; each carries the md5/doi/id you pass to get_details or download"`
+	Page           int                         `json:"page" jsonschema:"the page number returned"`
+	ResultsPerPage int                         `json:"results_per_page" jsonschema:"the page size in effect"`
+	TotalFiles     string                      `json:"total_files,omitempty" jsonschema:"total matches the mirror reports (may be a capped indicator such as 1000+)"`
+	Reachable      int                         `json:"reachable" jsonschema:"how many results are actually reachable across all pages"`
+	Truncated      bool                        `json:"truncated" jsonschema:"true when total_files exceeds reachable, i.e. some matches cannot be paged to"`
+	Hint           string                      `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
+	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
+	Mirror         string                      `json:"mirror" jsonschema:"the mirror base URL that served this search"`
+	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"open-access hits merged from arXiv/Crossref/OpenLibrary, labeled by origin; fetch a paper with read/download using its doi, or an arXiv pdf_url; use an openlibrary isbn/title to refine a libgen search"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
@@ -137,7 +140,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("search", searchHandler(client)))
+	}, withRecovery("search", searchHandler(client, cfg)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
@@ -342,7 +345,7 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 	}
 }
 
-func searchHandler(c *libgen.Client) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
+func searchHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 		var zero SearchOutput
 		params := libgen.SearchParams{
@@ -385,8 +388,81 @@ func searchHandler(c *libgen.Client) mcp.ToolHandlerFor[SearchInput, SearchOutpu
 			out.Results = []libgen.Result{}
 		}
 		out.NextSteps = searchNextSteps(out)
+		appendOpenAccess(ctx, cfg, in, &out)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
+}
+
+// openAccessLimit bounds how many hits each open-access provider is asked for when
+// discovery is folded into a search, keeping the merged payload small.
+const openAccessLimit = 10
+
+// openAccessEnabled resolves the effective open-access flag for a call: an explicit
+// per-call include_open_access wins (either direction), otherwise the deployment
+// default cfg.OpenAccessEnabled applies.
+func openAccessEnabled(in SearchInput, cfg *config.Config) bool {
+	if in.IncludeOpenAccess != nil {
+		return *in.IncludeOpenAccess
+	}
+	return cfg.OpenAccessEnabled
+}
+
+// appendOpenAccess federates the keyless open-access providers for the query and
+// attaches the deduped hits to out. It is best-effort and a no-op when the effective
+// flag is off or the query is blank, so core libgen search is never affected. Hits
+// already present among the libgen results (by DOI or title+year) are dropped, and a
+// follow-up next-step explaining how to fetch them is appended when any survive.
+func appendOpenAccess(ctx context.Context, cfg *config.Config, in SearchInput, out *SearchOutput) {
+	if !openAccessEnabled(in, cfg) || strings.TrimSpace(in.Query) == "" {
+		return
+	}
+	hits := discovery.Federate(ctx, in.Query, openAccessLimit, discovery.DefaultProviders(cfg.UnpaywallEmail)...)
+	hits = dedupOpenAccessVsLibgen(hits, out.Results)
+	if len(hits) == 0 {
+		return
+	}
+	out.OpenAccess = hits
+	out.NextSteps = append(out.NextSteps, openAccessNextStep)
+}
+
+// openAccessNextStep tells the model how to act on the open-access hits: fetch a
+// paper by its doi or arXiv pdf_url via read/download, or use an openlibrary
+// isbn/title to refine a libgen search. Their titles/authors are untrusted external
+// text.
+const openAccessNextStep = "The open_access results are open-access hits (untrusted external metadata): fetch a paper with download/read by its doi, read an arXiv pdf_url directly, or use an openlibrary isbn/title to refine a libgen search."
+
+// dedupOpenAccessVsLibgen drops any open-access hit whose normalized DOI, or whose
+// title+year key, already appears among the libgen results, so the same work is
+// never shown in both lists.
+func dedupOpenAccessVsLibgen(hits []discovery.DiscoveryResult, results []libgen.Result) []discovery.DiscoveryResult {
+	seenDOI, seenTitle := libgenDedupKeys(results)
+	kept := make([]discovery.DiscoveryResult, 0, len(hits))
+	for _, h := range hits {
+		if doi := discovery.NormalizeDOI(h.DOI); doi != "" && seenDOI[doi] {
+			continue
+		}
+		if key := discovery.TitleYearKey(h.Title, h.Year); key != "" && seenTitle[key] {
+			continue
+		}
+		kept = append(kept, h)
+	}
+	return kept
+}
+
+// libgenDedupKeys builds the sets of normalized DOIs and title+year keys present in
+// the libgen results, used to suppress duplicate open-access hits.
+func libgenDedupKeys(results []libgen.Result) (doi, titleYear map[string]bool) {
+	doi = map[string]bool{}
+	titleYear = map[string]bool{}
+	for _, r := range results {
+		if d := discovery.NormalizeDOI(r.DOI); d != "" {
+			doi[d] = true
+		}
+		if key := discovery.TitleYearKey(r.Title, r.Year); key != "" {
+			titleYear[key] = true
+		}
+	}
+	return doi, titleYear
 }
 
 // markdownResult wraps a human-readable Markdown rendering in a CallToolResult.

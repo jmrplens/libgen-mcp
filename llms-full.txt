@@ -20,6 +20,7 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 **Parameters:**
 
+- `include_open_access` (boolean): also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin; overrides the server default
 - `order` (string): a single value (not an array) to sort by: id time_added title author year or size
 - `order_mode` (string): a single value (not an array): asc or desc
 - `page` (integer): result page number starting at 1 (default 1)
