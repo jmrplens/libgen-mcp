@@ -75,3 +75,59 @@ func TestBuildCitations_SanitizesNewlines(t *testing.T) {
 		t.Errorf("RIS author CR not collapsed to a space:\n%s", c.RIS)
 	}
 }
+
+// TestPageRange covers all three arms of pageRange: an explicit start+end range
+// (rendered "start--end"), a bare pages string passed through verbatim, and the
+// empty default when neither is set.
+func TestPageRange(t *testing.T) {
+	if got := pageRange(citeFields{startPg: "1", endPg: "9"}); got != "1--9" {
+		t.Errorf("start+end pageRange = %q, want %q", got, "1--9")
+	}
+	if got := pageRange(citeFields{pages: "5-7"}); got != "5-7" {
+		t.Errorf("pages-only pageRange = %q, want %q", got, "5-7")
+	}
+	if got := pageRange(citeFields{}); got != "" {
+		t.Errorf("empty pageRange = %q, want empty", got)
+	}
+}
+
+// TestSplitAuthors covers splitAuthors' three arms: a blank string yields nil, an
+// " and "-joined string splits on that separator, and a ";"-separated string
+// splits on semicolons — each result trimmed of surrounding whitespace.
+func TestSplitAuthors(t *testing.T) {
+	if got := splitAuthors("   "); got != nil {
+		t.Errorf("blank splitAuthors = %v, want nil", got)
+	}
+	if got := splitAuthors("Ada Lovelace and Alan Turing"); len(got) != 2 || got[0] != "Ada Lovelace" || got[1] != "Alan Turing" {
+		t.Errorf("\" and \" splitAuthors = %v, want [Ada Lovelace Alan Turing]", got)
+	}
+	if got := splitAuthors("Hanahan ; Weinberg ;"); len(got) != 2 || got[0] != "Hanahan" || got[1] != "Weinberg" {
+		t.Errorf("\";\" splitAuthors = %v, want [Hanahan Weinberg]", got)
+	}
+}
+
+// TestCiteKey covers citeKey's three fallbacks: a first-author surname plus year,
+// then (no author) the first title word plus year, then (no author or title) the
+// "libgen"+md5[:8] fallback.
+func TestCiteKey(t *testing.T) {
+	if got := citeKey(citeFields{author: "Robert C. Martin", year: "2008"}); got != "Martin2008" {
+		t.Errorf("author citeKey = %q, want %q", got, "Martin2008")
+	}
+	if got := citeKey(citeFields{title: "Hello World", year: "2020"}); got != "Hello2020" {
+		t.Errorf("title-fallback citeKey = %q, want %q", got, "Hello2020")
+	}
+	if got := citeKey(citeFields{md5: "d48739b6ac9e01d70dda1de46805d797"}); got != "libgend48739b6" {
+		t.Errorf("md5-fallback citeKey = %q, want %q", got, "libgend48739b6")
+	}
+}
+
+// TestFirstN covers firstN's two arms: a slice shorter than n is returned whole,
+// while a longer one is truncated to its first n characters.
+func TestFirstN(t *testing.T) {
+	if got := firstN("abc", 8); got != "abc" {
+		t.Errorf("firstN(short) = %q, want %q", got, "abc")
+	}
+	if got := firstN("abcdefghij", 8); got != "abcdefgh" {
+		t.Errorf("firstN(long) = %q, want %q", got, "abcdefgh")
+	}
+}

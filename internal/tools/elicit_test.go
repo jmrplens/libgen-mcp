@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,6 +23,7 @@ type elicitProbeOutput struct {
 	OK        bool   `json:"ok"`
 	Confirmed bool   `json:"confirmed"`
 	Supported bool   `json:"supported"`
+	Decision  int    `json:"decision"`
 }
 
 // newElicitSession wires an in-memory MCP server exposing a single "probe" tool
@@ -42,6 +44,8 @@ func newElicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitReq
 				out.Confirmed, out.OK = elicitConfirm(ctx, req, "proceed?", "proceed", "confirm the action")
 			case "choice":
 				out.Value, out.OK = elicitChoice(ctx, req, "pick one", "edition", "the chosen edition", in.Options)
+			case "confirmdecision":
+				out.Decision = int(elicitConfirmDecision(ctx, req, "proceed?", "confirm", "confirm the action"))
 			}
 			return nil, out, nil
 		})
@@ -192,5 +196,87 @@ func TestElicitChoice_NotAnOption(t *testing.T) {
 	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"a", "b", "c"}})
 	if out.OK || out.Value != "" {
 		t.Fatalf("out-of-set value should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicitationSupported_NilCases exercises the guard arm of elicitationSupported
+// directly (no session round-trip): both a nil request and a request with a nil
+// Session must report the capability as absent, so callers take the fallback path.
+func TestElicitationSupported_NilCases(t *testing.T) {
+	if elicitationSupported(nil) {
+		t.Error("elicitationSupported(nil) should be false")
+	}
+	if elicitationSupported(&mcp.CallToolRequest{}) {
+		t.Error("elicitationSupported with a nil Session should be false")
+	}
+}
+
+// TestElicitText_FieldMissing verifies runFormElicit's missing-field arm: when the
+// client accepts but its Content map omits the requested field, elicitText falls
+// back to ("", false) rather than reading a zero value.
+func TestElicitText_FieldMissing(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"other": "x"}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "text"})
+	if out.OK || out.Value != "" {
+		t.Fatalf("a missing field should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicitConfirm_AcceptNonBool verifies elicitConfirm's type-guard arm: an
+// accept whose field carries a non-boolean value (a string here) is not a usable
+// answer, so it reports (false, false) and the caller falls back.
+func TestElicitConfirm_AcceptNonBool(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"proceed": "yes"}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirm"})
+	if out.OK || out.Confirmed {
+		t.Fatalf("a non-boolean accept should yield (false, false); got (%v, %v)", out.Confirmed, out.OK)
+	}
+}
+
+// TestElicitChoice_AcceptNonString verifies elicitChoice's type-guard arm: an
+// accept whose field carries a non-string value (a number here) is not a usable
+// choice, so it falls back to ("", false).
+func TestElicitChoice_AcceptNonString(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"edition": 5}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"a", "b"}})
+	if out.OK || out.Value != "" {
+		t.Fatalf("a non-string accept should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicitConfirmDecision_UnavailableNilReq exercises elicitConfirmDecision's
+// no-capability arm directly: with a nil request there is no session, so it returns
+// confirmUnavailable and the caller falls back to its default behavior.
+func TestElicitConfirmDecision_UnavailableNilReq(t *testing.T) {
+	if got := elicitConfirmDecision(context.Background(), nil, "proceed?", "confirm", "d"); got != confirmUnavailable {
+		t.Errorf("nil-request decision = %v, want confirmUnavailable", got)
+	}
+}
+
+// TestElicitConfirmDecision_Declined verifies that an explicit client decline is
+// honored as a user "no": elicitConfirmDecision returns confirmDeclined so the
+// caller must not proceed with the side-effecting action.
+func TestElicitConfirmDecision_Declined(t *testing.T) {
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "decline"}, nil
+	}
+	session := newElicitSession(t, handler)
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirmdecision"})
+	if out.Decision != int(confirmDeclined) {
+		t.Errorf("declined decision = %d, want %d (confirmDeclined)", out.Decision, int(confirmDeclined))
+	}
+}
+
+// TestElicitConfirmDecision_HandlerError verifies the transport-error arm: when the
+// elicitation round-trip fails, elicitConfirmDecision cannot ask, so it returns
+// confirmUnavailable (fall back), never confirmDeclined (which would wrongly abort).
+func TestElicitConfirmDecision_HandlerError(t *testing.T) {
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return nil, errors.New("boom")
+	}
+	session := newElicitSession(t, handler)
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirmdecision"})
+	if out.Decision != int(confirmUnavailable) {
+		t.Errorf("handler-error decision = %d, want %d (confirmUnavailable)", out.Decision, int(confirmUnavailable))
 	}
 }

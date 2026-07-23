@@ -2068,3 +2068,198 @@ func mustReadFile(t *testing.T, path string) []byte {
 	}
 	return b
 }
+
+// TestHumanBytes covers every arm of humanBytes: sub-KiB counts render as "N B",
+// and larger counts step through the K/M/G prefixes with one decimal (base-1024).
+func TestHumanBytes(t *testing.T) {
+	cases := []struct {
+		n    int64
+		want string
+	}{
+		{500, "500 B"},
+		{1023, "1023 B"},
+		{1536, "1.5 KB"},
+		{5 * 1024 * 1024, "5.0 MB"},
+		{2 * 1024 * 1024 * 1024, "2.0 GB"},
+	}
+	for _, tc := range cases {
+		if got := humanBytes(tc.n); got != tc.want {
+			t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}
+
+// TestDedupOpenAccessVsLibgen_DedupAndKeep covers dedupOpenAccessVsLibgen's two
+// suppression arms plus the keep path: a hit whose DOI matches a libgen result is
+// dropped, a hit whose title+year key matches is dropped, and an unrelated hit
+// survives.
+func TestDedupOpenAccessVsLibgen_DedupAndKeep(t *testing.T) {
+	results := []libgen.Result{{DOI: "10.1/x", Title: "Deep Learning", Year: "2016"}}
+	hits := []discovery.DiscoveryResult{
+		{DOI: "10.1/x", Title: "Some DOI Dup"},                 // dropped: DOI already in libgen
+		{Title: "Deep Learning", Year: "2016"},                 // dropped: title+year already in libgen
+		{Title: "Unique Work", Year: "1999", DOI: "10.2/keep"}, // kept
+	}
+	kept := dedupOpenAccessVsLibgen(hits, results)
+	if len(kept) != 1 {
+		t.Fatalf("kept %d hits, want 1: %+v", len(kept), kept)
+	}
+	if kept[0].Title != "Unique Work" {
+		t.Errorf("kept[0].Title = %q, want %q", kept[0].Title, "Unique Work")
+	}
+}
+
+// TestAppendOpenAccess_NoSurvivingHits covers appendOpenAccess' empty-hits arm:
+// with open access enabled and a non-blank query but a canceled context, Federate
+// yields nothing, so the function attaches no OpenAccess block and adds no
+// next-step — core search output is left untouched.
+func TestAppendOpenAccess_NoSurvivingHits(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // no provider can return anything under a canceled context
+	cfg := &config.Config{OpenAccessEnabled: true}
+	out := SearchOutput{}
+	appendOpenAccess(ctx, cfg, SearchInput{Query: "anything"}, &out)
+	if out.OpenAccess != nil {
+		t.Errorf("no hits should leave OpenAccess nil, got %+v", out.OpenAccess)
+	}
+	if len(out.NextSteps) != 0 {
+		t.Errorf("no hits should add no next-step, got %v", out.NextSteps)
+	}
+}
+
+// TestDeclinedDownload_ResolveError covers declinedDownload's resolve-failure arm:
+// when the direct link cannot be resolved, it still returns the decline guidance
+// (no Resolved link, a single next-step) rather than failing the request.
+func TestDeclinedDownload_ResolveError(t *testing.T) {
+	res, out := declinedDownload(context.Background(), failingReadClient(t),
+		libgen.Item{MD5: "0123456789abcdef0123456789abcdef"}, "")
+	if res == nil {
+		t.Fatal("declinedDownload should always return a result")
+	}
+	if out.Resolved != nil {
+		t.Errorf("a resolve failure should leave Resolved nil, got %+v", out.Resolved)
+	}
+	if len(out.NextSteps) != 1 {
+		t.Errorf("resolve-failure decline should carry exactly the guidance step, got %v", out.NextSteps)
+	}
+}
+
+// TestDetailsHandler_EnrichEnabled covers detailsHandler's enrichment arm: with
+// Enrich requested and enabled, the handler invokes the enrichment path. The
+// served record carries no doi/isbn, so enrichment resolves to nil without any
+// network call, yet the enrich branch is still exercised and the record is
+// returned normally.
+func TestDetailsHandler_EnrichEnabled(t *testing.T) {
+	const md5 = "0123456789abcdef0123456789abcdef"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		// A single file record with a title but no editions and no doi/isbn.
+		fmt.Fprintf(w, `{"777":{"md5":%q,"title":"Enrich Me"}}`, md5)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1, EnrichEnabled: true}
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	h := detailsHandler(client, cfg)
+
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, DetailsInput{MD5: md5, Enrich: true})
+	if err != nil {
+		t.Fatalf("detailsHandler(enrich) error = %v", err)
+	}
+	if res == nil || res.IsError {
+		t.Fatalf("enrich details must not be a tool error, got %+v", res)
+	}
+	if out.File == nil || stringField(out.File, "title") != "Enrich Me" {
+		t.Errorf("handler should return the file record, got %+v", out.File)
+	}
+	if out.Enrichment != nil {
+		t.Errorf("a record with no doi/isbn should yield no enrichment, got %+v", out.Enrichment)
+	}
+}
+
+// newUnpaywallProbeSession wires an in-memory MCP server exposing a "uprobe" tool
+// that calls elicitUnpaywallEmail with a config/input built from the request, so
+// tests can exercise its capability-gated branches through a real round-trip. A
+// nil handler means the client advertises no elicitation capability.
+func newUnpaywallProbeSession(t *testing.T, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	mcp.AddTool(server, &mcp.Tool{Name: "uprobe", Description: "exercises elicitUnpaywallEmail for tests"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in unpaywallProbeInput) (*mcp.CallToolResult, unpaywallProbeOutput, error) {
+			cfg := &config.Config{UnpaywallEmail: in.ConfiguredEmail}
+			email := elicitUnpaywallEmail(ctx, req, cfg, DownloadInput{DOI: in.DOI, Source: in.Source})
+			return nil, unpaywallProbeOutput{Email: email}, nil
+		})
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"},
+		&mcp.ClientOptions{ElicitationHandler: handler})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+type unpaywallProbeInput struct {
+	DOI             string `json:"doi,omitempty"`
+	Source          string `json:"source,omitempty"`
+	ConfiguredEmail string `json:"configured_email,omitempty"`
+}
+
+type unpaywallProbeOutput struct {
+	Email string `json:"email"`
+}
+
+// callUprobe drives the uprobe tool once and returns the email elicitUnpaywallEmail
+// produced.
+func callUprobe(t *testing.T, session *mcp.ClientSession, in unpaywallProbeInput) string {
+	t.Helper()
+	args, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshaling uprobe input: %v", err)
+	}
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "uprobe", Arguments: json.RawMessage(args)})
+	if err != nil {
+		t.Fatalf("CallTool(uprobe) failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("uprobe returned a tool error: %+v", res.Content)
+	}
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshaling uprobe output: %v", err)
+	}
+	var out unpaywallProbeOutput
+	if uerr := json.Unmarshal(raw, &out); uerr != nil {
+		t.Fatalf("decoding uprobe output: %v", uerr)
+	}
+	return out.Email
+}
+
+// TestElicitUnpaywallEmail_NamedSource covers the named-source short-circuit: when
+// a specific source is requested, the per-call Unpaywall prepend can never take
+// effect, so elicitUnpaywallEmail returns "" without ever prompting (the handler,
+// which would accept a valid email, must not be reached).
+func TestElicitUnpaywallEmail_NamedSource(t *testing.T) {
+	session := newUnpaywallProbeSession(t, acceptHandler(map[string]any{"email": "valid@example.com"}))
+	if got := callUprobe(t, session, unpaywallProbeInput{DOI: "10.1/x", Source: "scihub"}); got != "" {
+		t.Errorf("a named source should skip the prompt and return \"\", got %q", got)
+	}
+}
+
+// TestElicitUnpaywallEmail_InvalidEmail covers the implausible-address arm: an
+// accepted but malformed email fails the light sanity check, so the function
+// collapses to "" and the caller falls back.
+func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
+	session := newUnpaywallProbeSession(t, acceptHandler(map[string]any{"email": "not-an-email"}))
+	if got := callUprobe(t, session, unpaywallProbeInput{DOI: "10.1/x"}); got != "" {
+		t.Errorf("an implausible email should yield \"\", got %q", got)
+	}
+}

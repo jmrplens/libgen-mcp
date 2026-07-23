@@ -4,8 +4,56 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
+
+// TestOpenAccessLocator covers every arm of openAccessLocator: a DOI wins first,
+// then an arXiv pdf_url, then an OpenLibrary isbn, and finally the empty default
+// when a hit carries none of them. Each present arm is labeled with its key.
+func TestOpenAccessLocator(t *testing.T) {
+	cases := []struct {
+		name string
+		hit  discovery.DiscoveryResult
+		want string
+	}{
+		{"doi wins", discovery.DiscoveryResult{DOI: "10.1/x", PDFURL: "http://p", ISBN: "978"}, "doi:10.1/x"},
+		{"pdf_url", discovery.DiscoveryResult{PDFURL: "http://p/f.pdf", ISBN: "978"}, "pdf_url:http://p/f.pdf"},
+		{"isbn", discovery.DiscoveryResult{ISBN: "9780131103627"}, "isbn:9780131103627"},
+		{"none", discovery.DiscoveryResult{Title: "T"}, ""},
+	}
+	for _, tc := range cases {
+		if got := openAccessLocator(tc.hit); got != tc.want {
+			t.Errorf("%s: openAccessLocator = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestRenderOutline_NoPageEntry covers the level-only arm of renderOutline: an
+// entry with no known page (Page == 0) renders as an indented bullet without a
+// "(p.N)" suffix, and its untrusted title still passes through mdCell.
+func TestRenderOutline_NoPageEntry(t *testing.T) {
+	var b strings.Builder
+	renderOutline(&b, ReadOutput{
+		Format:           "epub",
+		OutlineRequested: true,
+		Outline: []extract.OutlineEntry{
+			{Title: "Preface", Level: 0, Page: 0},
+			{Title: "Chapter 1", Level: 1, Page: 12},
+		},
+	})
+	md := b.String()
+	if !strings.Contains(md, "- Preface\n") {
+		t.Errorf("page-less entry should render without a page suffix, got:\n%s", md)
+	}
+	if strings.Contains(md, "Preface (p.") {
+		t.Errorf("page-less entry must not carry a (p.N) suffix, got:\n%s", md)
+	}
+	if !strings.Contains(md, "Chapter 1 (p.12)") {
+		t.Errorf("paged entry should carry its page, got:\n%s", md)
+	}
+}
 
 // TestResultIdentifier covers the doi and empty arms of resultIdentifier that the
 // md5-keyed search fixtures never reach.
