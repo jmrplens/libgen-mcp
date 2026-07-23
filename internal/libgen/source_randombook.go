@@ -137,7 +137,7 @@ func (s randombookSource) Resolve(ctx context.Context, it Item) (Resolved, error
 
 	var lastErr error
 	for _, mirror := range mirrors {
-		fileURL, rerr := s.resolveViaMirror(ctx, mirror, it.MD5)
+		fileURL, rerr := s.resolveMirror(ctx, mirror, id, it.MD5)
 		if rerr != nil {
 			lastErr = rerr
 			continue
@@ -190,6 +190,68 @@ func (s randombookSource) lookupMirrors(ctx context.Context, id string) ([]strin
 		return nil, fmt.Errorf("randombook: no mirror hostnames for id %q", id)
 	}
 	return rec.Result.List, nil
+}
+
+// randombookDownloadPath is the mirror route the site's own UI opens to serve a
+// file. It takes the numeric randombook id — not the md5, and not the opaque
+// "?l=" landing-page token — and answers with the file bytes through a 302 to the
+// family's file host.
+//
+// Verified live on 2026-07-24: the "?l=" token route returns HTTP 400 even when
+// called from inside a real browser session with genuine cookies and same-origin,
+// so it is deliberately not used; the id route needs no token, cookie or session
+// at all, and the bytes it serves hash to the item's md5.
+const randombookDownloadPath = "/api/download?id="
+
+// resolveMirror resolves a single discovered mirror to a streamable URL. It
+// prefers the site's own download API and falls back to the classic ads.php link
+// chain, which older libgen hosts may still serve. When both fail the ads.php
+// error is returned (wrapping the API error for context) so existing diagnoses
+// like ErrMirrorClientRendered stay detectable with errors.Is.
+func (s randombookSource) resolveMirror(ctx context.Context, mirror, id, md5 string) (string, error) {
+	fileURL, apiErr := s.resolveViaDownloadAPI(ctx, mirror, id)
+	if apiErr == nil {
+		return fileURL, nil
+	}
+	fileURL, adsErr := s.resolveViaMirror(ctx, mirror, md5)
+	if adsErr == nil {
+		return fileURL, nil
+	}
+	return "", fmt.Errorf("%w (download API: %w)", adsErr, apiErr)
+}
+
+// resolveViaDownloadAPI returns a mirror's direct download URL for a numeric
+// randombook id, after a cheap HEAD probe confirming the mirror is reachable and
+// implements the route.
+//
+// The endpoint is GET-only, so a HEAD following the mirror's redirect comes back
+// 405 (Allow: GET); that still proves the host is alive and serving the route,
+// which is all this probe decides. A 404 means the mirror does not implement the
+// route at all (an older, classic libgen host), so the caller falls back to the
+// ads.php chain. HEAD does not validate the id — an unknown id fails only on the
+// GET — but id validity does not vary between mirrors, so it is not worth a
+// full-body request here: the endpoint ignores Range and would stream the whole
+// file.
+func (s randombookSource) resolveViaDownloadAPI(ctx context.Context, mirror, id string) (string, error) {
+	base := normalizeMirrorBase(mirror)
+	endpoint := base + randombookDownloadPath + url.QueryEscape(id)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("randombook: building download probe for %q: %w", base, err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := s.client().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("randombook: probing %q: %w", base, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode >= http.StatusInternalServerError {
+		return "", fmt.Errorf("randombook: mirror %q serves no download API (HTTP %d)", base, resp.StatusCode)
+	}
+	return endpoint, nil
 }
 
 // resolveViaMirror runs the LibGen link chain against a single freshly discovered

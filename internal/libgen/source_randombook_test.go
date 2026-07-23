@@ -408,7 +408,13 @@ func TestRandombookClientRenderedMirror(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading SPA shell fixture: %v", err)
 	}
-	spaMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// The mirror serves no download API, so Resolve falls back to the ads.php
+	// chain — the path whose diagnosis this test pins.
+	spaMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/download" {
+			http.NotFound(w, r)
+			return
+		}
 		_, _ = w.Write(shell)
 	}))
 	t.Cleanup(spaMirror.Close)
@@ -430,7 +436,13 @@ func TestRandombookClientRenderedMirror(t *testing.T) {
 // ExtractGetLink failure, not ErrMirrorClientRendered — the two diagnoses must
 // not be conflated.
 func TestRandombookOrdinaryMissingLink(t *testing.T) {
-	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// The mirror serves no download API, so Resolve falls back to the ads.php
+	// chain — the path whose diagnosis this test pins.
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/download" {
+			http.NotFound(w, r)
+			return
+		}
 		_, _ = w.Write([]byte("<html><body>no download link here</body></html>"))
 	}))
 	t.Cleanup(plain.Close)
@@ -475,5 +487,127 @@ func TestRandombookRealCapturedCandidates(t *testing.T) {
 		if got[i] != w {
 			t.Errorf("filtered mirrors[%d] = %q, want %q", i, got[i], w)
 		}
+	}
+}
+
+// TestRandombookDownloadAPISkipsDeadMirror verifies the real-world candidate mix
+// observed on 2026-07-24, where randombook offers three libgen.<tld> hosts and
+// only some are reachable: an unreachable mirror must be skipped in favor of the
+// next one rather than failing the whole source.
+func TestRandombookDownloadAPISkipsDeadMirror(t *testing.T) {
+	payload := []byte("%PDF-1.5 second-mirror payload")
+	want := md5Hex(payload)
+
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/download" || r.URL.Query().Get("id") != "123" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer live.Close()
+
+	// A closed listener's address stands in for a mirror that is down: dialing it
+	// fails at the transport level, exactly as libgen.me did when observed.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadAddr := dead.Listener.Addr().String()
+	dead.Close()
+
+	const deadHost, liveHost = "libgen.dead", "libgen.live"
+	httpClient := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			switch addr {
+			case deadHost + ":80":
+				addr = deadAddr
+			case liveHost + ":80":
+				addr = live.Listener.Addr().String()
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}}
+
+	links := fmt.Sprintf(`{"result":{"list":["http://%s","http://%s"]},"isError":false}`, deadHost, liveHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	res, err := s.Resolve(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if wantURL := "http://" + liveHost + "/api/download?id=123"; res.FileURL != wantURL {
+		t.Fatalf("FileURL = %q, want the live mirror %q", res.FileURL, wantURL)
+	}
+}
+
+// TestRandombookResolvesViaDownloadAPI verifies the source resolves an item
+// through the mirror's own /api/download?id=<numeric id> endpoint — the
+// mechanism the site itself uses (verified live 2026-07-24) — instead of
+// scraping ads.php, which the current libgen.<tld> candidates no longer serve.
+// A HEAD probe selects a live mirror, and the resolved URL is streamed end to
+// end to prove it serves the file and passes md5 verification.
+func TestRandombookResolvesViaDownloadAPI(t *testing.T) {
+	payload := []byte("%PDF-1.5 randombook download-api payload")
+	want := md5Hex(payload)
+
+	var headSeen atomic.Bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("id") != "123" {
+			http.NotFound(w, r)
+			return
+		}
+		// The live endpoint is GET-only; a HEAD reaches it through the mirror's
+		// 302 and comes back 405, which still proves the mirror is alive.
+		if r.Method == http.MethodHead {
+			headSeen.Store(true)
+			w.Header().Set("Allow", "GET")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		_, _ = w.Write(payload)
+	})
+	mirror := httptest.NewServer(mux)
+	defer mirror.Close()
+
+	const fakeHost = "libgen.test"
+	fakeMirror := "http://" + fakeHost
+	httpClient := clientToHost(fakeHost+":80", mirror.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, fakeMirror)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	res, err := s.Resolve(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	wantURL := fakeMirror + "/api/download?id=123"
+	if res.FileURL != wantURL {
+		t.Fatalf("FileURL = %q, want %q", res.FileURL, wantURL)
+	}
+	if !res.VerifyMD5 {
+		t.Error("VerifyMD5 = false, want true (md5-keyed)")
+	}
+	if !headSeen.Load() {
+		t.Error("no HEAD probe was issued to select a live mirror")
+	}
+
+	// The file-streaming path uses c.dl (not c.http), so both need the redirect.
+	c := newTestClient(staticMirrors{})
+	c.http = httpClient
+	c.dl = httpClient
+	c.sources = []DownloadSource{s}
+	dl, err := c.Download(context.Background(), want, t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatalf("Download() via randombook error = %v", err)
+	}
+	if !dl.Verified {
+		t.Error("Verified = false, want true")
 	}
 }
