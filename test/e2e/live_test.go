@@ -299,24 +299,6 @@ func hasDownloadLink(results []libgen.Result) bool {
 // than to any code defect.
 var randombookProbeQueries = []string{"python", "history", "science", "chemistry", "physics"}
 
-// TestE2ERandombookClassifiedOutcome exercises the randombook download source
-// end to end against the live randombook.org API and whatever mirrors it
-// currently discovers, restricting the download to source=randombook so no
-// other source in the chain can mask its behavior.
-//
-// This is the test that would have caught the bug found in this package on
-// 2026-07-23: randombook.org was observed returning mirror hostnames
-// resolveViaMirror cannot use (three libgen.<tld> hosts migrated to a
-// client-rendered SPA frontend, plus an unrelated annas-archive.gl host using
-// a different URL scheme entirely) — and the code surfaced that as a bare,
-// unclassified "HTTP 404" indistinguishable from ordinary live flakiness.
-// Nothing in the e2e suite caught it; it was found only by chance while
-// reading an unrelated LLM-eval transcript.
-//
-// The test therefore does not merely tolerate a download failure: on error, it
-// requires the failure to be one of the KNOWN, diagnosed classes below. An
-// error outside that set fails the test, so a new, unrecognized failure mode
-// is caught here instead of discovered by chance later.
 // syntheticMD5NeverIndexed is a well-formed but unallocated md5 (all zeros) that
 // no real book can carry, guaranteeing a deterministic "not indexed" miss from
 // the live randombook.org API — unlike the mirror-resolution outcome, which
@@ -344,6 +326,24 @@ func TestE2ERandombookNotIndexedIsClean(t *testing.T) {
 	}
 }
 
+// TestE2ERandombookClassifiedOutcome exercises the randombook download source
+// end to end against the live randombook.org API and whatever mirrors it
+// currently discovers, restricting the download to source=randombook so no
+// other source in the chain can mask its behavior.
+//
+// This is the test that would have caught the bug found in this package on
+// 2026-07-23: randombook.org was observed returning mirror hostnames
+// resolveViaMirror cannot use (three libgen.<tld> hosts migrated to a
+// client-rendered SPA frontend, plus an unrelated annas-archive.gl host using
+// a different URL scheme entirely) — and the code surfaced that as a bare,
+// unclassified "HTTP 404" indistinguishable from ordinary live flakiness.
+// Nothing in the e2e suite caught it; it was found only by chance while
+// reading an unrelated LLM-eval transcript.
+//
+// The test therefore does not merely tolerate a download failure: on error, it
+// requires the failure to be one of the KNOWN, diagnosed classes below. An
+// error outside that set fails the test, so a new, unrecognized failure mode
+// is caught here instead of discovered by chance later.
 func TestE2ERandombookClassifiedOutcome(t *testing.T) {
 	env := requireLive(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
