@@ -45,6 +45,7 @@ type Config struct {
 	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
+	AnnasKey               string        // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
 	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
@@ -101,7 +102,7 @@ func defaultStartRetryWaits() []time.Duration {
 // KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
-var KnownSources = []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"}
+var KnownSources = []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"}
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
@@ -136,6 +137,9 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
+	}
+	if v := os.Getenv("LIBGEN_MCP_ANNAS_KEY"); v != "" {
+		cfg.AnnasKey = v
 	}
 	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
 		cfg.ScihubHosts = splitHosts(v)

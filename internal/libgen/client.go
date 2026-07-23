@@ -271,6 +271,9 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"scidb":      func() DownloadSource { return scidbSource{mirrors: annasLister(), http: c.http} },
 		"libgen":     func() DownloadSource { return libgenSource{c: c} },
 		"randombook": func() DownloadSource { return randombookSource{http: c.http} },
+		"annas": func() DownloadSource {
+			return annasSource{mirrors: annasLister(), http: c.http, key: cfg.AnnasKey}
+		},
 	}
 	chain := make([]DownloadSource, 0, len(config.KnownSources))
 	for _, name := range config.KnownSources {

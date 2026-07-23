@@ -469,3 +469,37 @@ func TestE2ESciDBClassifiedOutcome(t *testing.T) {
 	}
 	t.Fatalf("scidb failed in an undiagnosed way: %v", err)
 }
+
+// TestE2EAnnasClassifiedOutcome exercises the annas book source end to end,
+// restricted to source=annas. It probes the keyless IPFS path unless
+// LIBGEN_MCP_ANNAS_KEY is set in the environment, in which case the member
+// fast-download API is attempted first with IPFS still the fallback.
+func TestE2EAnnasClassifiedOutcome(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	md5 := firstRandombookProbeMD5(t, ctx, env)
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: md5, Source: "annas"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("annas reported a download of %d bytes", res.SizeBytes)
+		}
+		t.Logf("annas served a real download: md5=%s bytes=%d verified=%v", md5, res.SizeBytes, res.Verified)
+		return
+	}
+	known := []string{
+		"embedded no IPFS CID",   // item not pinned to IPFS
+		"no IPFS gateway served", // every gateway down or lacking the block
+		"no mirror resolved",     // every Anna's mirror down
+		"no mirrors available",   // discovery yielded nothing
+		"member API rejected",    // key absent or expired AND IPFS also failed
+		"context deadline",       // IPFS retrieval is legitimately slow
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("annas unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("annas failed in an undiagnosed way: %v", err)
+}

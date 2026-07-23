@@ -718,9 +718,10 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 
 // TestKnownSourcesIncludesSciDB pins the canonical chain order the download
 // pipeline relies on: scidb follows scihub, so it acts as the article fallback
-// that covers Sci-Hub's indexing gap without changing existing behavior.
+// that covers Sci-Hub's indexing gap, and annas sits last so it is the final
+// book rescue after libgen and randombook.
 func TestKnownSourcesIncludesSciDB(t *testing.T) {
-	want := []string{"unpaywall", "scihub", "scidb", "libgen", "randombook"}
+	want := []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"}
 	if len(KnownSources) != len(want) {
 		t.Fatalf("KnownSources = %v, want %v", KnownSources, want)
 	}
@@ -728,5 +729,27 @@ func TestKnownSourcesIncludesSciDB(t *testing.T) {
 		if KnownSources[i] != w {
 			t.Fatalf("KnownSources[%d] = %q, want %q (full: %v)", i, KnownSources[i], w, KnownSources)
 		}
+	}
+}
+
+// TestLoadAnnasKey verifies LIBGEN_MCP_ANNAS_KEY populates AnnasKey, and that an
+// unset variable leaves it empty so the annas source stays keyless by default.
+func TestLoadAnnasKey(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_ANNAS_KEY", "test-secret")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnnasKey != "test-secret" {
+		t.Fatalf("AnnasKey = %q, want test-secret", cfg.AnnasKey)
+	}
+
+	t.Setenv("LIBGEN_MCP_ANNAS_KEY", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AnnasKey != "" {
+		t.Fatalf("AnnasKey = %q, want empty (keyless default)", cfg.AnnasKey)
 	}
 }

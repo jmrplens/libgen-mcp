@@ -1,0 +1,23 @@
+{
+  "///download_url": [
+    "This API is intended as a stable JSON API for getting fast download files as a member.",
+    "A successful request will return status code 200 or 204, a `download_url` field and `account_fast_download_info`.",
+    "Bad responses use different status codes, a `download_url` set to `null`, and `error` field with string description.",
+    "Accepted query parameters:",
+    "- `md5` (required): the md5 string of the requested file.",
+    "- `key` (required): the secret key for your account (which must have membership).",
+    "- `path_index` (optional): Integer, 0 or larger, indicating the collection (if the file is present in more than one).",
+    "- `domain_index` (optional): Integer, 0 or larger, indicating the download server, e.g. 0='Fast Partner Server #1'.",
+    "These parameters correspond to the fast download page like this: /fast_download/{md5}/{path_index}/{domain_index}",
+    "Example: /dyn/api/fast_download.json?md5=d6e1dc51a50726f00ec438af21952a45&key=YOUR_SECRET_KEY"
+  ],
+  "download_url": "https://asuycdg6.org/d3/x/1784852872/50000/g4/libgenrs_nonfiction/libgenrs_nonfiction/1570000/d64efd386ed7227592499460aca2044b~/NA8Dlej9TgxUBHHIC0QTMQ/Data%20Science%20Essentials%20in%20Python%3A%20Collect%20-%20Organize%20-%20--%20Dmitry%20Zinoviev%20--%20Aug%2020%2C%202016%20--%20Pragmatic%20Bookshelf%20--%20isbn13%209781680501841%20--%20d64efd386ed7227592499460aca2044b%20--%20Anna%E2%80%99s%20Archive.pdf",
+  "account_fast_download_info": {
+    "downloads_left": 49,
+    "downloads_per_day": 50,
+    "recently_downloaded_md5s": [
+      "d64efd386ed7227592499460aca2044b"
+    ],
+    "downloads_done_today": 1
+  }
+}
