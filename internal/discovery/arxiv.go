@@ -20,7 +20,6 @@ var arxivBase = "https://export.arxiv.org"
 // results, defaulting to arxivDefaultLimit when the caller passes a non-positive
 // value.
 const (
-	arxivMinLimit     = 1
 	arxivMaxLimit     = 50
 	arxivDefaultLimit = 10
 )
@@ -87,8 +86,6 @@ func clampArxivLimit(limit int) int {
 	switch {
 	case limit <= 0:
 		return arxivDefaultLimit
-	case limit < arxivMinLimit:
-		return arxivMinLimit
 	case limit > arxivMaxLimit:
 		return arxivMaxLimit
 	default:

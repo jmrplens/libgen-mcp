@@ -20,7 +20,6 @@ var openLibraryBase = "https://openlibrary.org"
 // most this many docs, defaulting to openLibraryDefaultLimit when the caller passes
 // a non-positive value.
 const (
-	openLibraryMinLimit     = 1
 	openLibraryMaxLimit     = 50
 	openLibraryDefaultLimit = 10
 )
@@ -97,8 +96,6 @@ func clampOpenLibraryLimit(limit int) int {
 	switch {
 	case limit <= 0:
 		return openLibraryDefaultLimit
-	case limit < openLibraryMinLimit:
-		return openLibraryMinLimit
 	case limit > openLibraryMaxLimit:
 		return openLibraryMaxLimit
 	default:

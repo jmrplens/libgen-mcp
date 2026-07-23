@@ -21,7 +21,6 @@ var crossrefBase = "https://api.crossref.org"
 // rows, defaulting to crossrefDefaultLimit when the caller passes a non-positive
 // value.
 const (
-	crossrefMinLimit     = 1
 	crossrefMaxLimit     = 50
 	crossrefDefaultLimit = 10
 )
@@ -103,8 +102,6 @@ func clampCrossrefLimit(limit int) int {
 	switch {
 	case limit <= 0:
 		return crossrefDefaultLimit
-	case limit < crossrefMinLimit:
-		return crossrefMinLimit
 	case limit > crossrefMaxLimit:
 		return crossrefMaxLimit
 	default:
