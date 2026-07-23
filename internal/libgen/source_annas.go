@@ -168,6 +168,14 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 	if rec.DownloadURL == "" {
 		return "", nil, fmt.Errorf("annas: member API returned no URL (HTTP %d)", resp.StatusCode)
 	}
+	// Anna's hands out rotating file hosts, and some are unreachable from a given
+	// network (observed resolving to 0.0.0.0). Probe before committing to the URL so
+	// an unusable one falls through to IPFS instead of failing the whole download.
+	// The allowance was already spent by the call above, whether or not this URL is
+	// used, so the fallback costs no extra quota.
+	if !s.probe(ctx, httpClient, rec.DownloadURL) {
+		return "", nil, fmt.Errorf("annas: member URL from %q is unreachable", base)
+	}
 	var account *AccountInfo
 	if a := rec.AccountInfo; a != nil {
 		account = &AccountInfo{

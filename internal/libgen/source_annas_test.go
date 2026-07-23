@@ -131,7 +131,11 @@ func TestAnnasResolveNoMirrors(t *testing.T) {
 // key both reach the endpoint.
 func TestAnnasMemberAPIPreferredWhenKeySet(t *testing.T) {
 	const md5 = "d64efd386ed7227592499460aca2044b"
-	const memberURL = "https://fast.example.net/dl/book.pdf"
+
+	// The member URL must be reachable: the source probes it before committing.
+	fileSrv := gatewayServing(http.StatusPartialContent)
+	defer fileSrv.Close()
+	memberURL := fileSrv.URL + "/dl/book.pdf"
 
 	var gotKey, gotMD5 string
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -259,13 +263,16 @@ func TestExtractIPFSCIDNone(t *testing.T) {
 // call consumes a download, so it is captured from a real resolve rather than
 // fetched separately.
 func TestAnnasMemberAPIReportsAccountQuota(t *testing.T) {
+	fileSrv := gatewayServing(http.StatusPartialContent)
+	defer fileSrv.Close()
+
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/dyn/api/fast_download.json" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"download_url":"https://fast.example.net/b.pdf",
+		_, _ = w.Write([]byte(`{"download_url":"` + fileSrv.URL + `/b.pdf",
 			"account_fast_download_info":{"downloads_left":49,"downloads_per_day":50,"downloads_done_today":1}}`))
 	}))
 	defer site.Close()
@@ -350,5 +357,47 @@ func TestPerCallAnnasKeyIgnoredWhenNotApplicable(t *testing.T) {
 	got := c.withPerCallAnnas(Item{MD5: "abc", AnnasKey: "runtime"}, withAnnas)
 	if len(got) != len(withAnnas) {
 		t.Errorf("chain grew to %d, want unchanged when annas is already configured", len(got))
+	}
+}
+
+// TestAnnasUnreachableMemberURLFallsBackToIPFS verifies that a member URL the
+// client cannot actually reach falls back to the keyless IPFS path. This is a real
+// live failure mode: Anna's hands out rotating file hosts, and some resolve to
+// 0.0.0.0 on networks that null-route them. The allowance is spent when the API is
+// called, whether or not its URL is used, so falling back costs no extra quota and
+// still delivers the file.
+func TestAnnasUnreachableMemberURLFallsBackToIPFS(t *testing.T) {
+	const cidV1 = "bafyunreachablecidzz234567"
+	const md5 = "d64efd386ed7227592499460aca2044b"
+
+	// A closed listener's address stands in for a host that cannot be dialed.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	gw := gatewayServing(http.StatusPartialContent)
+	defer gw.Close()
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/dyn/api/fast_download.json" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"download_url":"` + deadURL + `/f.pdf","account_fast_download_info":{"downloads_left":49}}`))
+			return
+		}
+		_, _ = w.Write([]byte(annasBookPage("QmV0", cidV1)))
+	}))
+	defer site.Close()
+
+	s := annasSource{
+		mirrors:  staticMirrors{site.URL},
+		http:     site.Client(),
+		key:      "k",
+		gateways: []string{gw.URL + "/ipfs/"},
+	}
+	got, err := s.Resolve(context.Background(), Item{MD5: md5})
+	if err != nil {
+		t.Fatalf("Resolve() must fall back to IPFS, got: %v", err)
+	}
+	if want := gw.URL + "/ipfs/" + cidV1; got.FileURL != want {
+		t.Fatalf("FileURL = %q, want the IPFS fallback %q", got.FileURL, want)
 	}
 }
