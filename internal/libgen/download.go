@@ -368,6 +368,58 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	return ResolvedDownload{}, errors.Join(errs...)
 }
 
+// headProbeTimeout bounds the best-effort size probe (HeadSize): a resolved URL
+// that does not answer a HEAD within this window is treated as "size unknown" so
+// the probe never materially delays a download.
+const headProbeTimeout = 5 * time.Second
+
+// HeadSize best-effort probes the byte size of item's file WITHOUT downloading it:
+// it resolves the direct URL (through the same source chain as ResolveLink) and
+// issues a lightweight HEAD, reading Content-Length. It is used to show an expected
+// size in a download-confirmation prompt. It NEVER errors: a resolve failure, a
+// connection error/timeout, a non-2xx status, or a missing/invalid Content-Length
+// all yield ok=false so the caller proceeds without a known size. The probe uses a
+// short timeout (headProbeTimeout) and never fetches the file body.
+func (c *Client) HeadSize(ctx context.Context, item Item) (size int64, ok bool) {
+	resolved, err := c.ResolveLink(ctx, item)
+	if err != nil {
+		return 0, false
+	}
+	return c.headContentLength(ctx, resolved.URL, resolved.Header)
+}
+
+// headContentLength issues a HEAD to fileURL (with any source-required headers)
+// under a short timeout and returns the response's Content-Length when the server
+// reports a positive one. Any error, a non-2xx status, or a non-positive length
+// yields ok=false. It follows redirects (the default client policy) so a resolver
+// URL that 30x-redirects to a CDN is probed at its final location.
+func (c *Client) headContentLength(ctx context.Context, fileURL string, header http.Header) (int64, bool) {
+	hctx, cancel := context.WithTimeout(ctx, headProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(hctx, http.MethodHead, fileURL, http.NoBody)
+	if err != nil {
+		return 0, false
+	}
+	req.Header.Set("User-Agent", userAgent)
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	resp, err := c.dl.Do(req)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return 0, false
+	}
+	if resp.ContentLength > 0 {
+		return resp.ContentLength, true
+	}
+	return 0, false
+}
+
 // DownloadItem downloads the file identified by item (an md5, a DOI, or both)
 // into dir, trying each supporting source in the configured chain until one
 // succeeds. The output name is chosen as documented on Download. An optional
