@@ -198,11 +198,13 @@ func TestFetchToTemp_TempDirCreateError(t *testing.T) {
 
 	c := newFetchTempClient(staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
-	// Assert it is specifically the mkdir failure, so a future download/cache error
-	// occurring before the MkdirTemp call cannot masquerade as this coverage.
+	// Assert it is specifically the temp-dir creation failure (os.MkdirTemp fails to
+	// stat the missing TMPDIR base), so a future download/cache error occurring
+	// before the MkdirTemp call cannot masquerade as this coverage. The path in the
+	// error is the unwritable TMPDIR base we set above.
 	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) || pathErr.Op != "mkdir" {
-		t.Fatalf("want an *os.PathError with Op=mkdir (temp-dir creation), got %v", err)
+	if !errors.As(err, &pathErr) || !strings.Contains(pathErr.Path, "no/such/dir") {
+		t.Fatalf("want an *os.PathError from MkdirTemp under the missing TMPDIR, got %v", err)
 	}
 	if path != "" {
 		t.Errorf("path = %q, want empty on error", path)
