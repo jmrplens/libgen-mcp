@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -197,8 +198,11 @@ func TestFetchToTemp_TempDirCreateError(t *testing.T) {
 
 	c := newFetchTempClient(staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
-	if err == nil {
-		t.Fatal("FetchToTemp should fail when the temp directory cannot be created")
+	// Assert it is specifically the mkdir failure, so a future download/cache error
+	// occurring before the MkdirTemp call cannot masquerade as this coverage.
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || pathErr.Op != "mkdir" {
+		t.Fatalf("want an *os.PathError with Op=mkdir (temp-dir creation), got %v", err)
 	}
 	if path != "" {
 		t.Errorf("path = %q, want empty on error", path)
