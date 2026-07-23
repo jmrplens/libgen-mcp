@@ -1,12 +1,48 @@
 package extract
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// buildPDF assembles a minimal but structurally valid PDF from the given object
+// bodies (object N is objs[N-1]), writing a correct cross-reference table and
+// trailer so pdf.Open succeeds. It is shared with the search tests to build
+// fixtures that open cleanly yet exercise page-level edge cases without shipping
+// binary files.
+func buildPDF(objs []string) []byte {
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offsets[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xrefStart := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n", len(objs)+1)
+	b.WriteString("0000000000 65535 f \n")
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \n", offsets[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF", len(objs)+1, xrefStart)
+	return b.Bytes()
+}
+
+// nullPagePDF returns the bytes of a PDF whose Pages tree declares Count 1 but
+// whose single Kid reference points at a missing object, so pdf.NumPage reports
+// one page while pdf.Page(1) resolves to a null page. It drives the
+// "skip a null page" branch of the scanners.
+func nullPagePDF() []byte {
+	return buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R>>",
+		"<</Type/Pages/Kids[99 0 R]/Count 1>>",
+	})
+}
 
 // TestExtract_PDF verifies that a text-layer PDF extracts its first page,
 // reports the correct format and total page count, and signals HasMore when
@@ -121,6 +157,50 @@ func TestExtract_PDFMaxCharsStop(t *testing.T) {
 	}
 	if c.NextCursor.Page < 2 {
 		t.Errorf("want next-page cursor >= 2, got %d", c.NextCursor.Page)
+	}
+}
+
+// TestExtractPDF_ContextCancelledDirect verifies extractPDF's own entry guard:
+// called directly with an already-canceled context it returns the context error
+// before reading, a checkpoint Extract's top-level guard normally short-circuits.
+func TestExtractPDF_ContextCancelledDirect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := extractPDF(ctx, "testdata/sample.pdf", Req{}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestReadPDFPages_ContextCancelled verifies that a context canceled by the time
+// the page scan runs is propagated out of readPDFPages: the per-page guard in
+// scanPDFPages fires on the first page and readPDFPages returns the context
+// error rather than a chunk.
+func TestReadPDFPages_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := readPDFPages(ctx, "testdata/sample.pdf", 1, 5, defaultMaxChars); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestExtractPDF_NullPage verifies the null-page skip branch: a PDF whose page
+// tree advertises one page but whose only Kid is a dangling reference yields a
+// null page, which the scanner skips, leaving no text and the scanned/no-text-
+// layer reason rather than crashing.
+func TestExtractPDF_NullPage(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nullpage.pdf")
+	if err := os.WriteFile(path, nullPagePDF(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "text layer") {
+		t.Errorf("reason should note the missing text layer, got %q", c.Reason)
 	}
 }
 

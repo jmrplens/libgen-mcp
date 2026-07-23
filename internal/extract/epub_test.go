@@ -3,6 +3,7 @@ package extract
 import (
 	"archive/zip"
 	"context"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,6 +151,196 @@ func TestExtract_MalformedEPUB(t *testing.T) {
 	}
 	if c.Reason == "" {
 		t.Fatal("expected a non-empty reason")
+	}
+}
+
+// writeRawZip writes a ZIP archive under name in dir containing a single entry
+// created with CreateRaw, so the test controls the stored CRC and compression
+// method. It underpins the readZipEntry error-branch tests, which need an entry
+// that opens as a ZIP file but fails when its bytes are read or decompressed.
+func writeRawZip(t *testing.T, dir, name, entry string, hdr *zip.FileHeader, content []byte) string {
+	t.Helper()
+	fp := filepath.Join(dir, name)
+	f, err := os.Create(fp)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	zw := zip.NewWriter(f)
+	hdr.Name = entry
+	hdr.UncompressedSize64 = uint64(len(content))
+	hdr.CompressedSize64 = uint64(len(content))
+	w, err := zw.CreateRaw(hdr)
+	if err != nil {
+		t.Fatalf("create raw entry: %v", err)
+	}
+	if _, err = w.Write(content); err != nil {
+		t.Fatalf("write raw entry: %v", err)
+	}
+	if err = zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return fp
+}
+
+// TestExtractEPUB_ContextCancelledDirect verifies extractEPUB's own entry guard:
+// called directly with an already-canceled context it returns the context error
+// before opening the archive, a checkpoint Extract normally short-circuits.
+func TestExtractEPUB_ContextCancelledDirect(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := extractEPUB(ctx, path, Req{}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestExtractEPUB_NotAZip verifies that a .epub whose bytes are not a valid ZIP
+// archive is reported as not extractable with a reason noting the archive could
+// not be opened, exercising extractEPUB's zip.OpenReader failure branch (which
+// TestExtract_MalformedEPUB, using a valid ZIP, does not reach).
+func TestExtractEPUB_NotAZip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notazip.epub")
+	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "cannot open EPUB archive") {
+		t.Errorf("reason should note the archive open failure, got %q", c.Reason)
+	}
+}
+
+// TestExtractEPUB_ContextCancelledMidSpine verifies that a context which is live
+// at extractEPUB's entry but canceled by the time the spine loop runs is
+// propagated as the context error: the per-chapter guard in readEPUBText fires
+// and extractEPUB returns it rather than a chunk.
+func TestExtractEPUB_ContextCancelledMidSpine(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	if _, err := extractEPUB(passErr(1), path, Req{}); err == nil {
+		t.Fatal("expected a context error propagated from the spine walk, got nil")
+	}
+}
+
+// TestExtractEPUB_MissingChapterFile verifies readEPUBText's read-error skip: a
+// spine itemref whose manifest href points at a file absent from the archive is
+// skipped (readZipEntry errors), and with no other chapter the EPUB reports no
+// extractable text rather than failing.
+func TestExtractEPUB_MissingChapterFile(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		// chapter1.xhtml is deliberately absent from the archive.
+	}
+	path := writeEPUB(t, t.TempDir(), "missing-chapter.epub", files)
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "no extractable text") {
+		t.Errorf("reason should note the empty spine, got %q", c.Reason)
+	}
+}
+
+// TestExtractEPUB_MalformedContainerXML verifies opfPath's XML-parse failure
+// branch: a container.xml that is not well-formed XML makes the EPUB not
+// extractable with a "not a readable EPUB" reason.
+func TestExtractEPUB_MalformedContainerXML(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0"?><container><rootfiles><rootfile`,
+	}
+	path := writeEPUB(t, t.TempDir(), "bad-container.epub", files)
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", c.Reason)
+	}
+}
+
+// TestExtractEPUB_MissingOPFFile verifies parseOPF's read-error branch: a
+// container.xml pointing at an OPF path that is absent from the archive makes
+// the EPUB not extractable with a "not a readable EPUB" reason.
+func TestExtractEPUB_MissingOPFFile(t *testing.T) {
+	files := map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+		// OEBPS/content.opf is deliberately absent.
+	}
+	path := writeEPUB(t, t.TempDir(), "missing-opf.epub", files)
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", c.Reason)
+	}
+}
+
+// TestReadZipEntry_ChecksumError verifies readZipEntry's read-failure branch: an
+// entry stored with a deliberately wrong CRC opens but fails its integrity check
+// on read, so readZipEntry returns a non-nil error.
+func TestReadZipEntry_ChecksumError(t *testing.T) {
+	content := []byte("some chapter bytes")
+	path := writeRawZip(t, t.TempDir(), "badcrc.epub", "OEBPS/c1.xhtml",
+		&zip.FileHeader{Method: zip.Store, CRC32: 0xDEADBEEF}, content)
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	defer func() { _ = zr.Close() }()
+	if _, _, err = readZipEntry(zr, "OEBPS/c1.xhtml"); err == nil {
+		t.Fatal("expected a checksum error, got nil")
+	}
+}
+
+// TestReadZipEntry_OpenError verifies readZipEntry's open-failure branch: an
+// entry stored with an unregistered compression method fails when the archive
+// tries to open its decompressor, so readZipEntry returns a non-nil error.
+func TestReadZipEntry_OpenError(t *testing.T) {
+	content := []byte("hello")
+	path := writeRawZip(t, t.TempDir(), "badmethod.epub", "OEBPS/c1.xhtml",
+		&zip.FileHeader{Method: 99, CRC32: crc32.ChecksumIEEE(content)}, content)
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	defer func() { _ = zr.Close() }()
+	if _, _, err = readZipEntry(zr, "OEBPS/c1.xhtml"); err == nil {
+		t.Fatal("expected an open/decompress error, got nil")
 	}
 }
 

@@ -2,6 +2,8 @@ package extract
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -167,6 +169,199 @@ func TestSearch_UnsupportedFormat(t *testing.T) {
 	}
 	if res.Extractable || res.Reason == "" {
 		t.Fatalf("djvu must be not-extractable with a reason, got %+v", res)
+	}
+}
+
+// TestSearch_UnsupportedExtension verifies Search's default dispatch branch: an
+// unrecognized extension (neither supported nor a known container) is reported
+// as not extractable with a reason naming the extension.
+func TestSearch_UnsupportedExtension(t *testing.T) {
+	res, err := Search(context.Background(), "testdata/whatever.xyz", "q", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "unsupported file extension") {
+		t.Errorf("reason should name the unsupported extension, got %q", res.Reason)
+	}
+}
+
+// TestSearch_NegativeStartMatch verifies that a negative StartMatch is
+// normalized to zero, so the first window of matches is returned rather than
+// an out-of-range slice.
+func TestSearch_NegativeStartMatch(t *testing.T) {
+	res, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{StartMatch: -5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable {
+		t.Fatalf("expected extractable, got %+v", res)
+	}
+	if res.TotalMatches > 0 && len(res.Matches) == 0 {
+		t.Errorf("negative StartMatch should return the first window, got %+v", res)
+	}
+}
+
+// TestSearchPDF_MalformedOpen verifies scanPDFMatches' pdf.Open failure branch: a
+// .pdf whose bytes are not a valid PDF is reported as not extractable with a
+// "not a valid PDF" reason rather than crashing.
+func TestSearchPDF_MalformedOpen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broken.pdf")
+	if err := os.WriteFile(path, []byte("%PDF-1.7 not really a pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Search(context.Background(), path, "anything", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a valid PDF") {
+		t.Errorf("reason should note the invalid PDF, got %q", res.Reason)
+	}
+}
+
+// TestScanPDFMatches_ContextCancelled verifies that a context canceled by the
+// time the page loop runs is propagated out of scanPDFMatches: the per-page
+// guard fires on the first page and the function returns the context error.
+func TestScanPDFMatches_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := scanPDFMatches(ctx, "testdata/sample.pdf", "the", SearchOpts{SnippetChars: 160}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestSearchPDF_NullPage verifies the null-page skip branch in the PDF search
+// scanner: a PDF advertising one page whose only Kid is a dangling reference
+// yields a null page, which is skipped, leaving no text and the scanned/no-text-
+// layer reason rather than a crash.
+func TestSearchPDF_NullPage(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nullpage.pdf")
+	if err := os.WriteFile(path, nullPagePDF(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Search(context.Background(), path, "anything", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "text layer") {
+		t.Errorf("reason should note the missing text layer, got %q", res.Reason)
+	}
+}
+
+// TestSearchTXT_ContextCancelledDirect verifies searchTXT's own entry guard:
+// called directly with an already-canceled context it returns the context error
+// before opening the file.
+func TestSearchTXT_ContextCancelledDirect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := searchTXT(ctx, "testdata/sample.txt", "the", SearchOpts{SnippetChars: 160}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestSearchTXT_MissingFile verifies searchTXT's os.Open failure branch: a
+// non-existent .txt path is reported as not extractable with a reason noting the
+// file could not be opened.
+func TestSearchTXT_MissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.txt")
+	res, err := Search(context.Background(), path, "the", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "cannot open text file") {
+		t.Errorf("reason should note the open failure, got %q", res.Reason)
+	}
+}
+
+// TestSearchTXT_ReadError verifies searchTXT's read-failure branch: a path that
+// opens but cannot be read to completion (a directory) is reported as not
+// extractable with a reason noting the read failure.
+func TestSearchTXT_ReadError(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "adir.txt")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Search(context.Background(), dir, "the", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "cannot read text file") {
+		t.Errorf("reason should note the read failure, got %q", res.Reason)
+	}
+}
+
+// TestSearchEPUB_ContextCancelledDirect verifies searchEPUB's own entry guard:
+// called directly with an already-canceled context it returns the context error
+// before opening the archive.
+func TestSearchEPUB_ContextCancelledDirect(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := searchEPUB(ctx, path, "beta", SearchOpts{SnippetChars: 160}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestSearchEPUB_NotAZip verifies searchEPUB's zip.OpenReader failure branch: a
+// .epub whose bytes are not a valid ZIP archive is reported as not extractable
+// with a reason noting the archive could not be opened.
+func TestSearchEPUB_NotAZip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notazip.epub")
+	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Search(context.Background(), path, "beta", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "cannot open EPUB archive") {
+		t.Errorf("reason should note the archive open failure, got %q", res.Reason)
+	}
+}
+
+// TestSearchEPUB_StructuralError verifies searchEPUB's non-context error branch:
+// a valid ZIP that is not a structurally valid EPUB (no container.xml) makes the
+// search report not extractable with a "not a readable EPUB" reason.
+func TestSearchEPUB_StructuralError(t *testing.T) {
+	path := writeEPUB(t, t.TempDir(), "no-container.epub", map[string]string{
+		"README.txt": "not an epub",
+	})
+	res, err := Search(context.Background(), path, "beta", SearchOpts{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a readable EPUB") {
+		t.Errorf("reason should note the unreadable EPUB, got %q", res.Reason)
+	}
+}
+
+// TestSearchEPUB_ContextCancelledMidSpine verifies that a context live at
+// searchEPUB's entry but canceled by the time the spine walk runs is propagated
+// as the context error rather than a result.
+func TestSearchEPUB_ContextCancelledMidSpine(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	if _, err := searchEPUB(passErr(1), path, "beta", SearchOpts{SnippetChars: 160}); err == nil {
+		t.Fatal("expected a context error propagated from the spine walk, got nil")
 	}
 }
 

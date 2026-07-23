@@ -89,6 +89,40 @@ func TestExtract_TXTOffsetPastEnd(t *testing.T) {
 	}
 }
 
+// TestExtractTXT_ContextCancelledDirect verifies extractTXT's own entry guard:
+// called directly with an already-canceled context it returns the context
+// error before opening the file. Extract's top-level guard normally short-
+// circuits first, so this checkpoint is only reachable via a direct call.
+func TestExtractTXT_ContextCancelledDirect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := extractTXT(ctx, "testdata/sample.txt", Req{}); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestExtractTXT_ReadError verifies extractTXT's read-failure branch: a path
+// that opens successfully but cannot be read to completion (a directory) is
+// reported as not extractable with a reason noting the read failure, rather
+// than propagating a hard error.
+func TestExtractTXT_ReadError(t *testing.T) {
+	// A directory opens fine but io.ReadAll on it fails ("is a directory").
+	dir := filepath.Join(t.TempDir(), "adir.txt")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Extract(context.Background(), dir, Req{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "cannot read text file") {
+		t.Errorf("reason should note the read failure, got %q", c.Reason)
+	}
+}
+
 // TestExtract_TXTMissingFile verifies that a non-existent .txt path is reported
 // as not extractable with a reason (via the os.Open failure path) and a nil
 // error, rather than propagating a hard error to the caller.

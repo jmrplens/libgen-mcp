@@ -8,6 +8,34 @@ import (
 	"testing"
 )
 
+// TestPdfOutline_ContextCancelledDirect verifies pdfOutline's own entry guard:
+// called directly with an already-canceled context it returns the context
+// error before opening the file, a checkpoint Outline normally short-circuits.
+func TestPdfOutline_ContextCancelledDirect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := pdfOutline(ctx, "testdata/bookmarked.pdf"); err == nil {
+		t.Fatal("expected a context error, got nil")
+	}
+}
+
+// TestOutline_PDFMissingFile verifies pdfOutline's os.Open failure branch: a
+// non-existent .pdf path is reported as not extractable with a reason noting the
+// unreadable file, rather than propagating a hard error.
+func TestOutline_PDFMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.pdf")
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	if !strings.Contains(res.Reason, "not a readable PDF") {
+		t.Errorf("reason should note the unreadable PDF, got %q", res.Reason)
+	}
+}
+
 // TestOutline_PDFBookmarks verifies that a PDF carrying an embedded outline is
 // read via pdfcpu into ordered OutlineEntry values: three top-level chapters at
 // Level 0 with their titles and 1-based page numbers, reported with Format
