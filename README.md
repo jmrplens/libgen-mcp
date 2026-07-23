@@ -167,6 +167,8 @@ Download a file to a local directory. Provide `md5` for a book **or** `doi` for 
 
 > **Where the file goes — local vs. remote.** By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download dir (great for autonomous local agents). A **remote/hosted** server runs elsewhere and cannot write to your disk, so there `download` **always returns a link** instead — a `resource_link` + a `resolved` object with any required `headers` — and you don't need to set `resolve_only`; it's implied. A server is in remote mode when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set (for a hosted **stdio** deployment — e.g. behind `mcp-proxy` on a catalog like Glama — whose disk is ephemeral/unreachable). You (or your agent's fetch tool) retrieve that URL, so the file ends up where the fetch runs. On a local server you can still pass `resolve_only: true` to opt into the same link behavior per call.
 
+<!-- -->
+
 > **Interactive prompts (elicitation).** When the connected client supports MCP elicitation, `download` may ask for a one-off Unpaywall contact email (article `doi` downloads with no `LIBGEN_MCP_UNPAYWALL_EMAIL` configured) or ask you to confirm before saving a file to disk — both purely opt-in, with a headless-safe fallback that leaves today's behavior unchanged on a client without the capability. See [Tools](docs/tools.md#interactive-prompts-elicitation).
 
 If both `md5` and `doi` are given, article sources are tried first, then book sources.
