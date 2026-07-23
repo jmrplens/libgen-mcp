@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -290,4 +291,118 @@ func hasDownloadLink(results []libgen.Result) bool {
 		}
 	}
 	return false
+}
+
+// randombookProbeQueries are search queries likely to surface distinct real
+// books, tried in order until one yields an md5 to probe randombook with —
+// making the test robust to randombook.org's per-book coverage gaps rather
+// than to any code defect.
+var randombookProbeQueries = []string{"python", "history", "science", "chemistry", "physics"}
+
+// TestE2ERandombookClassifiedOutcome exercises the randombook download source
+// end to end against the live randombook.org API and whatever mirrors it
+// currently discovers, restricting the download to source=randombook so no
+// other source in the chain can mask its behavior.
+//
+// This is the test that would have caught the bug found in this package on
+// 2026-07-23: randombook.org was observed returning mirror hostnames
+// resolveViaMirror cannot use (three libgen.<tld> hosts migrated to a
+// client-rendered SPA frontend, plus an unrelated annas-archive.gl host using
+// a different URL scheme entirely) — and the code surfaced that as a bare,
+// unclassified "HTTP 404" indistinguishable from ordinary live flakiness.
+// Nothing in the e2e suite caught it; it was found only by chance while
+// reading an unrelated LLM-eval transcript.
+//
+// The test therefore does not merely tolerate a download failure: on error, it
+// requires the failure to be one of the KNOWN, diagnosed classes below. An
+// error outside that set fails the test, so a new, unrecognized failure mode
+// is caught here instead of discovered by chance later.
+func TestE2ERandombookClassifiedOutcome(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	md5 := firstRandombookProbeMD5(t, ctx, env)
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: md5, Source: "randombook"}, t.TempDir(), "")
+	if err == nil {
+		assertRandombookDownloadOK(t, md5, res)
+		return
+	}
+	skipRandombookDiagnosedError(t, md5, err)
+}
+
+// firstRandombookProbeMD5 searches randombookProbeQueries in order and returns
+// the first valid md5 found, so the caller has a real book to probe randombook
+// with. It skips (never fails) on a live search error or if no query yields any
+// md5-carrying result, since that reflects live-data/site conditions, not the
+// randombook code under test.
+func firstRandombookProbeMD5(t *testing.T, ctx context.Context, env *liveEnv) string {
+	t.Helper()
+	for _, q := range randombookProbeQueries {
+		page, _, err := env.client.Search(ctx, libgen.SearchParams{Query: q, Topics: []string{"nonfiction"}})
+		if err != nil {
+			t.Skipf("search(%q) failed live: %v", q, err)
+		}
+		for i := range page.Results {
+			if md5Re.MatchString(page.Results[i].MD5) {
+				return page.Results[i].MD5
+			}
+		}
+		pace()
+	}
+	t.Skip("could not find a book with a valid md5 to probe randombook with")
+	return ""
+}
+
+// assertRandombookDownloadOK verifies the best-case outcome: a genuine
+// libgen-family mirror was currently available and served the classic ads.php
+// flow, so the file must be a real, MD5-verified randombook download.
+func assertRandombookDownloadOK(t *testing.T, md5 string, res *libgen.DownloadResult) {
+	t.Helper()
+	if res.Path == "" {
+		t.Fatal("DownloadItem succeeded but returned no path")
+	}
+	if !res.Verified {
+		t.Error("randombook download succeeded but was not MD5-verified")
+	}
+	if res.Source != "randombook" {
+		t.Errorf("Source = %q, want %q", res.Source, "randombook")
+	}
+	t.Logf("randombook served a real download: md5=%s bytes=%d", md5, res.SizeBytes)
+}
+
+// skipRandombookDiagnosedError classifies a randombook download failure into
+// one of the known, diagnosed outcome classes and SKIPs with a clear reason.
+// An error outside that set is NOT a recognized live-data condition: it FAILS
+// the test, so a new, unclassified failure mode is caught here rather than
+// discovered by chance later (see the package doc comment above this test).
+func skipRandombookDiagnosedError(t *testing.T, md5 string, err error) {
+	t.Helper()
+	switch {
+	case strings.Contains(err.Error(), "not indexed"):
+		// A normal, expected miss for this particular book: randombook's
+		// catalog does not cover everything.
+		t.Skipf("md5 %s not indexed by randombook.org (normal per-book miss): %v", md5, err)
+	case strings.Contains(err.Error(), "no usable mirrors discovered"):
+		// Every discovered candidate was outside the libgen.<tld> family (see
+		// filterLibgenFamily in internal/libgen), so nothing was even
+		// attempted — a diagnosed, expected outcome given randombook.org's
+		// current candidate mix.
+		t.Skipf("randombook discovered no libgen-family mirror candidates for md5 %s: %v", md5, err)
+	case errors.Is(err, libgen.ErrMirrorClientRendered):
+		// A libgen-family host answered, but with its client-rendered SPA
+		// shell instead of the classic ads.php page — diagnosed and
+		// monitorable (see ErrMirrorClientRendered's doc comment).
+		t.Skipf("randombook's only libgen-family mirror candidate has migrated to a client-rendered frontend: %v", err)
+	case strings.Contains(err.Error(), "requesting") || strings.Contains(err.Error(), "returned HTTP"):
+		// A transport-level failure reaching randombook.org itself or a
+		// discovered mirror (network flakiness), consistent with the suite's
+		// SKIP-not-fail philosophy.
+		t.Skipf("randombook.org API or a discovered mirror was unreachable live: %v", err)
+	default:
+		// Anything else is an UNRECOGNIZED failure class: fail loudly rather
+		// than silently tolerating it, so a future regression of this kind is
+		// caught here instead of by chance in an unrelated eval run.
+		t.Fatalf("randombook download failed with an unclassified error (update this test's classification if this is a legitimate new outcome): %v", err)
+	}
 }

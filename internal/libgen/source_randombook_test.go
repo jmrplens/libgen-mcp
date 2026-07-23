@@ -400,7 +400,7 @@ func TestRandombookSkipsNonFamilyHosts(t *testing.T) {
 // answers ads.php with a client-rendered application shell (captured live from a
 // real migrated mirror, testdata/randombook_spa_shell.html) instead of the
 // classic server-rendered ads.php page, resolveViaMirror reports the distinct
-// errMirrorClientRendered diagnosis rather than the generic ExtractGetLink
+// ErrMirrorClientRendered diagnosis rather than the generic ExtractGetLink
 // failure — so a site-wide frontend migration is distinguishable in logs/errors
 // from an ordinary missing-link parse failure.
 func TestRandombookClientRenderedMirror(t *testing.T) {
@@ -420,14 +420,14 @@ func TestRandombookClientRenderedMirror(t *testing.T) {
 
 	s := randombookSource{apiBase: apiBase, http: httpClient}
 	_, err = s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
-	if !errors.Is(err, errMirrorClientRendered) {
-		t.Fatalf("err = %v, want wrapping errMirrorClientRendered (client-rendered SPA shell)", err)
+	if !errors.Is(err, ErrMirrorClientRendered) {
+		t.Fatalf("err = %v, want wrapping ErrMirrorClientRendered (client-rendered SPA shell)", err)
 	}
 }
 
 // TestRandombookOrdinaryMissingLink verifies that a libgen-family mirror serving
 // an ordinary (non-SPA) page with no get.php link still reports the generic
-// ExtractGetLink failure, not errMirrorClientRendered — the two diagnoses must
+// ExtractGetLink failure, not ErrMirrorClientRendered — the two diagnoses must
 // not be conflated.
 func TestRandombookOrdinaryMissingLink(t *testing.T) {
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -442,7 +442,7 @@ func TestRandombookOrdinaryMissingLink(t *testing.T) {
 
 	s := randombookSource{apiBase: apiBase, http: httpClient}
 	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
-	if errors.Is(err, errMirrorClientRendered) {
+	if errors.Is(err, ErrMirrorClientRendered) {
 		t.Fatal("an ordinary missing-link page must not be misdiagnosed as a client-rendered shell")
 	}
 	if err == nil {

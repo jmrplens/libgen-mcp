@@ -65,12 +65,12 @@ var _ DownloadSource = randombookSource{}
 // scraped, since the technique does not apply to it.
 var randombookHostRe = regexp.MustCompile(`^https?://libgen\.[a-z]{2,6}/?$`)
 
-// errMirrorClientRendered reports that a libgen-family host answered with a
+// ErrMirrorClientRendered reports that a libgen-family host answered with a
 // client-rendered application shell (no server-rendered ads.php content) rather
 // than the classic ads.php page resolveViaMirror scrapes. It is distinct from a
 // generic ExtractGetLink failure so a site-wide frontend migration is
 // diagnosable from logs/errors rather than looking like a one-off missing link.
-var errMirrorClientRendered = errors.New("randombook: mirror serves a client-rendered page, not the classic ads.php content")
+var ErrMirrorClientRendered = errors.New("randombook: mirror serves a client-rendered page, not the classic ads.php content")
 
 // nuxtShellMarker is a substring reliably present in a Nuxt single-page-app's
 // server-sent HTML shell (the mount point the client-side JS hydrates into) but
@@ -231,7 +231,7 @@ func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 stri
 	link, err := ExtractGetLink(body)
 	if err != nil {
 		if bytes.Contains(body, []byte(nuxtShellMarker)) {
-			return "", fmt.Errorf("randombook: mirror %q: %w", base, errMirrorClientRendered)
+			return "", fmt.Errorf("randombook: mirror %q: %w", base, ErrMirrorClientRendered)
 		}
 		return "", fmt.Errorf("randombook: mirror %q: %w", base, err)
 	}
