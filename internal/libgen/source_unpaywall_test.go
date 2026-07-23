@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -175,5 +176,47 @@ func TestUnpaywallSupports(t *testing.T) {
 	}
 	if s.Name() != "unpaywall" {
 		t.Errorf("Name() = %q, want %q", s.Name(), "unpaywall")
+	}
+}
+
+// TestUnpaywallResolve_UsesItemEmail verifies the two per-call-email behaviors of
+// unpaywallSource.Resolve: (1) an Item's Email overrides an empty configured email
+// and is sent as the email query parameter; (2) with neither the configured nor the
+// per-call email set, Resolve returns the "no contact email" error WITHOUT issuing
+// any request, so the download chain falls through instead of hitting the API blank.
+func TestUnpaywallResolve_UsesItemEmail(t *testing.T) {
+	var hits atomic.Int32
+	var lastURI string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		lastURI = r.RequestURI
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"is_oa":true,"best_oa_location":{"url_for_pdf":"https://cdn.example/x.pdf"}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	// s.email is empty; the per-call Item.Email must be used instead.
+	s := unpaywallSource{email: "", http: srv.Client(), baseURL: srv.URL}
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1/x", Email: "caller@example.com"})
+	if err != nil {
+		t.Fatalf("Resolve() with a per-call email error = %v", err)
+	}
+	if res.FileURL != "https://cdn.example/x.pdf" {
+		t.Errorf("FileURL = %q, want the stubbed PDF URL", res.FileURL)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("server hits = %d, want 1", hits.Load())
+	}
+	if !strings.Contains(lastURI, "email=caller%40example.com") {
+		t.Errorf("request URI %q does not carry the per-call email", lastURI)
+	}
+
+	// Neither configured nor per-call email: Resolve must error before any request.
+	hits.Store(0)
+	if _, blankErr := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); blankErr == nil {
+		t.Fatal("Resolve() with no email anywhere should return an error")
+	}
+	if hits.Load() != 0 {
+		t.Errorf("server hits = %d with no email, want 0 (must not hit the API blank)", hits.Load())
 	}
 }
