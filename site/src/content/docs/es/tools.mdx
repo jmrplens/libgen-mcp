@@ -228,6 +228,20 @@ Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servid
 
 Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio. Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
 
+### Peticiones interactivas (elicitation)
+
+Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario a mitad de una llamada), `download` puede detenerse a preguntar dos cosas — ambas puramente opt-in, y ambas no-ops en un cliente que no anuncia la capacidad:
+
+- **Email de Unpaywall bajo demanda.** Si descargas un artículo por `doi` y el servidor no tiene configurado `LIBGEN_MCP_UNPAYWALL_EMAIL`, a un cliente compatible con elicitation se le pide un email de contacto para buscar una copia de acceso abierto vía Unpaywall solo para _esa petición_ — nunca se almacena, y la pregunta se omite siempre que se haya fijado explícitamente `source`. Rechazar, dejar la respuesta vacía o dar una dirección inverosímil deja la petición sin cambios: `unpaywall` queda fuera de la cadena y se prueba `scihub` en su lugar, exactamente como hoy.
+- **Confirmación de descarga.** Antes de que `download` escriba un archivo en el disco del servidor (es decir, sin `resolve_only` y sin un servidor remoto/HTTP), a un cliente compatible con elicitation se le pide confirmar, mostrando el nombre del archivo de destino y, de mejor esfuerzo, su tamaño. Rechazar no escribe nada y devuelve en su lugar el enlace directo resuelto, para que puedas obtenerlo tú mismo.
+
+<Aside type="note">
+	Ninguna de las dos peticiones es nunca obligatoria: elicitation es totalmente
+	opt-in y depende de la capacidad del cliente. Un cliente sin capacidad de
+	elicitation (p. ej. un cliente headless o de CI) ve exactamente el
+	comportamiento actual — sin petición, y sin sondeo de tamaño.
+</Aside>
+
 ## read
 
 Extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo sin descargar el archivo entero. Identifica el archivo por `md5` (un libro) o `doi` (un artículo) de una búsqueda previa, o por una ruta `path` absoluta a un archivo ya descargado (solo servidor local). La extracción es Go puro — PDF (solo capa de texto), EPUB y TXT — sin OCR.

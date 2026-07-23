@@ -225,6 +225,19 @@ By default `download` fetches the file to the machine **running the server**. Wi
 
 A server flips into **remote download mode** when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set. The `--http` case is a server that runs elsewhere and cannot write to your disk. `LIBGEN_MCP_REMOTE_DOWNLOADS` covers the stdio equivalent: a **hosted stdio deployment** — for example the server running as stdio behind `mcp-proxy` on a catalog like Glama — whose process lives on a remote or ephemeral machine whose disk the client cannot reach, even though the transport itself is stdio. Either trigger has the same effect: every `download` call automatically returns a link — the direct URL as a `resource_link` plus a `resolved` object (with any required `headers`) — without saving a file. You don't need to set `resolve_only` there; it is implied, and the tool description says so. You — or your agent's own fetch/HTTP tool — retrieve that URL, so the file ends up wherever that fetch runs. On a **local** server you can still request the same behavior per call with `resolve_only: true`. MCP has no way for a tool to push bytes to the client, so a link is the only way a remote-mode server can deliver a multi-megabyte file.
 
+### Interactive prompts (elicitation)
+
+When the connected MCP client supports **elicitation** (asking you for input mid-call), `download` may pause to ask two things — both purely opt-in, and both no-ops on a client that doesn't advertise the capability:
+
+- **Unpaywall email on demand.** If you download an article by `doi` and the server has no `LIBGEN_MCP_UNPAYWALL_EMAIL` configured, an elicitation-capable client is asked for a contact email to look up an open-access copy via Unpaywall for _that request only_ — it is never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out of the chain and `scihub` is tried instead, exactly as today.
+- **Download confirmation.** Before `download` writes a file to the server's disk (i.e. not `resolve_only` and not a remote/HTTP server), an elicitation-capable client is asked to confirm, showing the destination file name and, best-effort, its size. Declining writes nothing and returns the resolved direct link instead, so you can fetch it yourself.
+
+<Aside type="note">
+	Neither prompt is ever required: elicitation is entirely opt-in and
+	capability-gated. A client with no elicitation capability (e.g. a headless or
+	CI client) sees exactly today's behavior — no prompt, and no size probe.
+</Aside>
+
 ## read
 
 Extract and paginate the text of a book or paper so a model can read it without downloading the whole file. Identify the file by `md5` (a book) or `doi` (an article) from a prior search, or by an absolute `path` to an already-downloaded local file (local server only). Extraction is pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.

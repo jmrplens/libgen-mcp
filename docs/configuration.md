@@ -58,6 +58,13 @@ tool's `source` schema). Set your own contact address to enable it. A non-empty 
 sanity-checked (must contain `@` and a dotted domain) but not verified for deliverability; an
 empty value is allowed and simply leaves the source disabled.
 
+When it is unset and a `download` call requests an article by `doi` (with no `source` pinned),
+a client that advertises the MCP **elicitation** capability may be asked on demand for a
+contact email to use for that single request — it is used only for that call and is never
+stored or written back to this variable. A client without elicitation, or a decline/empty/
+invalid answer, leaves this behavior unchanged: `unpaywall` stays disabled and `scihub` is
+tried. See [Tools](tools.md#interactive-prompts-elicitation).
+
 ### `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` and `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`
 
 These two variables make downloads resilient without ever cutting a healthy but slow

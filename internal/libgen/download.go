@@ -292,6 +292,29 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 	return sources, nil
 }
 
+// withPerCallUnpaywall augments the selected source chain for a single call so a
+// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
+// a DOI download even when the server configured no email and thus left Unpaywall
+// out of the chain. It returns a NEW slice (never mutating the client's shared
+// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
+// unset), and the chain does not already include an enabled Unpaywall source, it
+// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
+// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
+// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
+// returned as-is, keeping the default (headless) behavior byte-identical to today.
+func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
+	if item.Email == "" || item.DOI == "" || item.Source != "" {
+		return sources
+	}
+	for _, s := range sources {
+		if s.Name() == "unpaywall" {
+			return sources
+		}
+	}
+	adhoc := unpaywallSource{email: item.Email, http: c.http, baseURL: c.unpaywallBase}
+	return append([]DownloadSource{adhoc}, sources...)
+}
+
 // ResolvedDownload is a direct download URL produced by ResolveLink: the bytes
 // are NOT fetched, so the caller (a remote MCP client, or an agent's own fetch
 // tool) can retrieve the file itself, wherever it is running. Header carries any
@@ -317,6 +340,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	if err != nil {
 		return ResolvedDownload{}, err
 	}
+	sources = c.withPerCallUnpaywall(item, sources)
 	var errs []error
 	for _, src := range sources {
 		if !src.Supports(item) {
@@ -344,6 +368,58 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	return ResolvedDownload{}, errors.Join(errs...)
 }
 
+// headProbeTimeout bounds the best-effort size probe (HeadSize): a resolved URL
+// that does not answer a HEAD within this window is treated as "size unknown" so
+// the probe never materially delays a download.
+const headProbeTimeout = 5 * time.Second
+
+// HeadSize best-effort probes the byte size of item's file WITHOUT downloading it:
+// it resolves the direct URL (through the same source chain as ResolveLink) and
+// issues a lightweight HEAD, reading Content-Length. It is used to show an expected
+// size in a download-confirmation prompt. It NEVER errors: a resolve failure, a
+// connection error/timeout, a non-2xx status, or a missing/invalid Content-Length
+// all yield ok=false so the caller proceeds without a known size. The probe uses a
+// short timeout (headProbeTimeout) and never fetches the file body.
+func (c *Client) HeadSize(ctx context.Context, item Item) (size int64, ok bool) {
+	resolved, err := c.ResolveLink(ctx, item)
+	if err != nil {
+		return 0, false
+	}
+	return c.headContentLength(ctx, resolved.URL, resolved.Header)
+}
+
+// headContentLength issues a HEAD to fileURL (with any source-required headers)
+// under a short timeout and returns the response's Content-Length when the server
+// reports a positive one. Any error, a non-2xx status, or a non-positive length
+// yields ok=false. It follows redirects (the default client policy) so a resolver
+// URL that 30x-redirects to a CDN is probed at its final location.
+func (c *Client) headContentLength(ctx context.Context, fileURL string, header http.Header) (int64, bool) {
+	hctx, cancel := context.WithTimeout(ctx, headProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(hctx, http.MethodHead, fileURL, http.NoBody)
+	if err != nil {
+		return 0, false
+	}
+	req.Header.Set("User-Agent", userAgent)
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	resp, err := c.dl.Do(req)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return 0, false
+	}
+	if resp.ContentLength > 0 {
+		return resp.ContentLength, true
+	}
+	return 0, false
+}
+
 // DownloadItem downloads the file identified by item (an md5, a DOI, or both)
 // into dir, trying each supporting source in the configured chain until one
 // succeeds. The output name is chosen as documented on Download. An optional
@@ -365,6 +441,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	if selErr != nil {
 		return nil, selErr
 	}
+	sources = c.withPerCallUnpaywall(item, sources)
 
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
 	// Try each supporting source in order: a source that fails to resolve or whose

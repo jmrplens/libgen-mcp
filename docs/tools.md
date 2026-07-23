@@ -248,6 +248,27 @@ call with `resolve_only: true`. MCP has no way for a tool to push bytes to the c
 link is the only way a remote server can deliver a multi-megabyte file. See
 [Configuration](configuration.md) for `LIBGEN_MCP_REMOTE_DOWNLOADS`.
 
+### Interactive prompts (elicitation)
+
+When the connected MCP client supports **elicitation** (asking you for input mid-call),
+`download` may pause to ask two things — both purely opt-in, and both no-ops on a client
+that doesn't advertise the capability:
+
+- **Unpaywall email on demand.** If you download an article by `doi` and the server has no
+  `LIBGEN_MCP_UNPAYWALL_EMAIL` configured, an elicitation-capable client is asked for a
+  contact email to look up an open-access copy via Unpaywall for *that request only* — it is
+  never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an
+  empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out
+  of the chain and `scihub` is tried instead, exactly as today.
+- **Download confirmation.** Before `download` writes a file to the server's disk (i.e. not
+  `resolve_only` and not a remote/HTTP server), an elicitation-capable client is asked to
+  confirm, showing the destination file name and, best-effort, its size. Declining writes
+  nothing and returns the resolved direct link instead, so you can fetch it yourself.
+
+Neither prompt is ever required: elicitation is entirely opt-in and capability-gated. A
+client with no elicitation capability (e.g. a headless or CI client) sees exactly today's
+behavior — no prompt, and no size probe.
+
 ### Behavior and errors
 
 - **Clean filenames.** With no explicit `filename`, book downloads look up bibliographic

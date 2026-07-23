@@ -568,6 +568,49 @@ func validateDownloadInput(in DownloadInput) (md5, doi, source string, err error
 	return md5, doi, source, nil
 }
 
+// elicitUnpaywallEmail asks the client for a one-off Unpaywall contact email when a
+// DOI download is requested against a server that has none configured and the client
+// advertised elicitation. It returns the trimmed email to use for THIS request only,
+// or "" to proceed with today's behavior (Unpaywall stays out of the chain, Sci-Hub
+// is tried). It NEVER errors: an absent capability, a decline, an empty answer, or an
+// implausible address all collapse to "" so the caller falls back. The email is used
+// only for the call and is never persisted.
+func elicitUnpaywallEmail(ctx context.Context, req *mcp.CallToolRequest, cfg *config.Config, in DownloadInput) string {
+	if strings.TrimSpace(in.DOI) == "" || strings.TrimSpace(cfg.UnpaywallEmail) != "" || !elicitationSupported(req) {
+		return ""
+	}
+	// The per-call Unpaywall prepend only fires for an unnamed source, so an
+	// elicited email can never take effect when a specific source was requested.
+	// Skip the prompt in that case rather than ask a dead-end question.
+	if strings.TrimSpace(in.Source) != "" {
+		return ""
+	}
+	email, ok := elicitText(ctx, req,
+		"This server has no Unpaywall contact email configured. Enter an email to look up an open-access copy of this article via Unpaywall (used only for this request, not stored):",
+		"email",
+		"A contact email for the Unpaywall API (e.g. you@example.com)")
+	if !ok {
+		return ""
+	}
+	email = strings.TrimSpace(email)
+	if !looksLikeEmail(email) {
+		return ""
+	}
+	return email
+}
+
+// looksLikeEmail applies the same light sanity check as the config's email
+// validation: the value must contain an "@" (not first) and a "." somewhere after
+// it that is not the final character. It deliberately does not over-validate.
+func looksLikeEmail(s string) bool {
+	at := strings.Index(s, "@")
+	if at <= 0 {
+		return false
+	}
+	dot := strings.Index(s[at+1:], ".")
+	return dot > 0 && at+1+dot != len(s)-1
+}
+
 func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
@@ -576,6 +619,14 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 			return nil, zero, err
 		}
 		item := libgen.Item{MD5: md5, DOI: doi, Source: source}
+		// On-demand Unpaywall email: for a DOI download against a server with no
+		// contact email configured, ask the client (when it supports elicitation) for
+		// one to use for THIS request only. A declined/absent/invalid answer leaves
+		// item.Email empty, so the deterministic fallback (unpaywall stays out, scihub
+		// is tried) runs unchanged. Applies to both the resolve_only and download paths.
+		if email := elicitUnpaywallEmail(ctx, req, cfg, in); email != "" {
+			item.Email = email
+		}
 		// For a book with no explicit name, fill bibliographic metadata so the file
 		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details
 		// lookup failure must not fail the request.
@@ -588,18 +639,34 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 		if remote || in.ResolveOnly {
 			return resolveDownload(ctx, c, item, in.Filename)
 		}
-
-		dir := in.Path
-		if dir == "" {
-			dir = cfg.DownloadDir
-		}
-		res, err := c.DownloadItem(ctx, item, dir, in.Filename, progressNotifier(ctx, req))
-		if err != nil {
-			return nil, zero, err
-		}
-		out := DownloadOutput{NextSteps: downloadNextSteps(*res), DownloadResult: *res}
-		return markdownResult(renderDownloadMarkdown(out)), out, nil
+		return localDownload(ctx, req, c, cfg, item, in)
 	}
+}
+
+// localDownload runs the disk-writing download path: it resolves the destination
+// directory, applies the opt-in confirmation (only when the client advertised
+// elicitation), and on approval downloads and saves the file. When the client has
+// no elicitation capability the confirmation block is skipped entirely — no prompt
+// AND no size probe — so the default/headless path is byte-identical to today. A
+// decline returns a non-error result carrying the resolved link, and writes nothing.
+func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
+	var zero DownloadOutput
+	dir := in.Path
+	if dir == "" {
+		dir = cfg.DownloadDir
+	}
+	if elicitationSupported(req) {
+		proceed, declinedRes, declinedOut := confirmDownload(ctx, req, c, item, dir, in)
+		if !proceed {
+			return declinedRes, declinedOut, nil
+		}
+	}
+	res, err := c.DownloadItem(ctx, item, dir, in.Filename, progressNotifier(ctx, req))
+	if err != nil {
+		return nil, zero, err
+	}
+	out := DownloadOutput{NextSteps: downloadNextSteps(*res), DownloadResult: *res}
+	return markdownResult(renderDownloadMarkdown(out)), out, nil
 }
 
 // resolveDownload handles the resolve_only path: it resolves the direct URL
@@ -626,6 +693,85 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 		&mcp.TextContent{Text: renderResolvedMarkdown(link)},
 	}}
 	return res, out, nil
+}
+
+// confirmDownload runs the opt-in, capability-gated download confirmation. It is
+// only called when the client advertised elicitation and the disk-writing path is
+// about to run. It builds a human prompt naming the file (and, best-effort, its
+// size) and asks the user to confirm. It returns proceed=true to go ahead with the
+// download in two cases: the user confirmed, OR elicitation did not actually run
+// (ok=false: canceled/errored) — the latter falls back to today's behavior. It
+// returns proceed=false ONLY when the user explicitly declined, alongside a
+// non-error result (declinedRes/declinedOut) that carries the resolved link so the
+// caller can fetch it themselves; no file is written in that case.
+func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
+	name := resolveFilename(item, in.Filename, "")
+	message := confirmMessage(ctx, c, item, name, dir)
+	// An explicit decline or cancel aborts the disk write; only an unavailable
+	// elicitation (no capability or a transport error) falls back to proceeding.
+	if elicitConfirmDecision(ctx, req, message, "confirm",
+		"Confirm downloading and saving this file to the server") == confirmDeclined {
+		res, out := declinedDownload(ctx, c, item, in.Filename)
+		return false, res, out
+	}
+	return true, nil, DownloadOutput{}
+}
+
+// confirmMessage builds the confirmation prompt: `Save "<name>"<size> to <dir>?`,
+// where the size clause is present only when a best-effort HEAD probe reported a
+// Content-Length. The probe never fails the flow: an unknown size just drops the
+// clause.
+func confirmMessage(ctx context.Context, c *libgen.Client, item libgen.Item, name, dir string) string {
+	sizeClause := ""
+	if n, ok := c.HeadSize(ctx, item); ok {
+		sizeClause = " (" + humanBytes(n) + ")"
+	}
+	return fmt.Sprintf("Save %q%s to %s?", name, sizeClause, dir)
+}
+
+// declinedDownload builds the non-error result returned when the user declines the
+// download: nothing is written to disk, and the response carries guidance plus the
+// resolved direct link (best-effort) so the user can fetch the file themselves or
+// call download again to confirm. A resolve failure is not fatal — the guidance is
+// still returned, just without a link.
+func declinedDownload(ctx context.Context, c *libgen.Client, item libgen.Item, filename string) (*mcp.CallToolResult, DownloadOutput) {
+	const declined = "Download declined — no file was saved. Call download again and confirm to save it, or set resolve_only=true to get the direct link and fetch it yourself."
+	r, err := c.ResolveLink(ctx, item)
+	if err != nil {
+		out := DownloadOutput{NextSteps: []string{declined}}
+		return markdownResult(declined + "\n"), out
+	}
+	link := ResolvedLink{
+		URL:       r.URL,
+		Source:    r.Source,
+		Filename:  resolveFilename(item, filename, r.Ext),
+		MIMEType:  mimeForExt(r.Ext, item),
+		Headers:   headerMap(r.Header),
+		VerifyMD5: r.VerifyMD5,
+	}
+	steps := append([]string{declined}, resolveNextSteps(link)...)
+	out := DownloadOutput{NextSteps: steps, Resolved: &link}
+	res := &mcp.CallToolResult{Content: []mcp.Content{
+		&mcp.ResourceLink{URI: link.URL, Name: link.Filename, MIMEType: link.MIMEType, Title: link.Filename},
+		&mcp.TextContent{Text: declined + "\n" + renderResolvedMarkdown(link)},
+	}}
+	return res, out
+}
+
+// humanBytes renders a byte count as a short human-readable size (base-1024):
+// bytes under 1 KiB as "N B", larger values as "12.3 MB" using K/M/G/T/P/E
+// prefixes. It is used only for the confirmation prompt's size clause.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // resolveFilename picks a filename for a resolved link: an explicit filename, a
