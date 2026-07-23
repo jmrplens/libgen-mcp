@@ -236,11 +236,10 @@ func (s randombookSource) resolveViaDownloadAPI(ctx context.Context, mirror, id 
 	base := normalizeMirrorBase(mirror)
 	endpoint := base + randombookDownloadPath + url.QueryEscape(id)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, http.NoBody)
+	req, err := s.newRequest(ctx, http.MethodHead, endpoint)
 	if err != nil {
 		return "", fmt.Errorf("randombook: building download probe for %q: %w", base, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := s.client().Do(req)
 	if err != nil {
@@ -271,11 +270,10 @@ func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 stri
 	base := normalizeMirrorBase(mirror)
 	endpoint := base + "/ads.php?md5=" + url.QueryEscape(md5)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	req, err := s.newRequest(ctx, http.MethodGet, endpoint)
 	if err != nil {
 		return "", fmt.Errorf("randombook: building ads request for %q: %w", base, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := s.client().Do(req)
 	if err != nil {
@@ -304,11 +302,10 @@ func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 stri
 // or non-200 status is returned as-is; a decode failure is wrapped in
 // ErrLayoutChanged since the private API could have changed shape.
 func (s randombookSource) getJSON(ctx context.Context, endpoint string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	req, err := s.newRequest(ctx, http.MethodGet, endpoint)
 	if err != nil {
 		return fmt.Errorf("randombook: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := s.client().Do(req)
 	if err != nil {
@@ -323,6 +320,18 @@ func (s randombookSource) getJSON(ctx context.Context, endpoint string, out any)
 		return fmt.Errorf("%w: randombook: decoding %q: %w", ErrLayoutChanged, endpoint, decErr)
 	}
 	return nil
+}
+
+// newRequest builds a request carrying the package's shared User-Agent. Callers
+// wrap the returned error with their own context, so the message stays specific
+// to the endpoint being built.
+func (s randombookSource) newRequest(ctx context.Context, method, endpoint string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	return req, nil
 }
 
 // base returns the configured API base URL (trailing slash trimmed) or the
