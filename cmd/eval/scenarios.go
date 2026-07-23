@@ -23,6 +23,21 @@ import (
 // flaky live mirror), not a pass or a fail.
 const skipPrefix = "SKIP:"
 
+// Shared detail-string fragments, so an assertion's phrasing stays consistent and
+// is defined once (SonarCloud go:S1192).
+const (
+	// functionalPrefix marks a detail as a functional/correctness failure (as
+	// opposed to a SURFACE GAP), so a reader can tell "our bug" from "the model
+	// didn't discover the capability".
+	functionalPrefix = "FUNCTIONAL: "
+	// notExtractableDetail is the skip reason when a fetched file has no
+	// extractable text (scanned/unsupported); the concrete reason is appended.
+	notExtractableDetail = " file was not extractable ("
+	// badDownloadMD5Detail is the failure detail when a download call's md5 is not
+	// a 32-char hex string.
+	badDownloadMD5Detail = "download md5 is not 32-hex"
+)
+
 // noDownloadCall is the failure detail when a download scenario produced no
 // download tool call.
 const noDownloadCall = "no download call"
@@ -875,7 +890,7 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + " file was not extractable (" + out.Reason + ")"
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
 	}
 	if strings.TrimSpace(out.Text) == "" {
 		return false, "extractable read returned no text"
@@ -959,7 +974,7 @@ func assertCitations(tr transcript) (pass bool, detail string) {
 	// get_details is legitimately keyed by md5 OR an edition/file id; grade both,
 	// matching assertEnrichment, so an id-keyed lookup is not a spurious failure.
 	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
-		return false, "FUNCTIONAL: " + why
+		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " get_details failed against the live mirror"
@@ -1019,7 +1034,7 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 	// Provenance: the get_details identifier must trace to a prior search result, so
 	// a hallucinated md5/id that then hits a live error cannot pass as a benign skip.
 	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
-		return false, "FUNCTIONAL: " + why
+		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " get_details(enrich) failed against the live mirror/Crossref"
@@ -1060,7 +1075,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 	// Provenance: the read identifier must trace to a prior search result, so a
 	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
 	if keyed, why := readIdentifierOK(tr, call); !keyed {
-		return false, "FUNCTIONAL: " + why
+		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read(find) failed against the live mirror/source chain"
@@ -1070,7 +1085,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + " file was not extractable (" + out.Reason + ")"
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
 	}
 	if out.MatchCount == 0 {
 		return true, skipPrefix + " read(find) ran but found no matches for the term in this copy"
@@ -1098,7 +1113,7 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 	// Provenance: the read identifier must trace to a prior search result, so a
 	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
 	if keyed, why := readIdentifierOK(tr, call); !keyed {
-		return false, "FUNCTIONAL: " + why
+		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read(outline) failed against the live mirror/source chain"
@@ -1108,7 +1123,7 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + " file was not extractable (" + out.Reason + ")"
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
 	}
 	if len(out.Outline) == 0 {
 		return true, skipPrefix + " read(outline) ran cleanly but this PDF has no embedded table of contents"
@@ -1165,7 +1180,7 @@ func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	}
 	md5 := stringField(call.Input, "md5")
 	if !isMD5(md5) {
-		return false, "download md5 is not 32-hex"
+		return false, badDownloadMD5Detail
 	}
 	if !md5InSearchResults(tr, md5) {
 		return false, "FUNCTIONAL: download md5 did not come from a prior search result (model may have hallucinated it)"
@@ -1181,7 +1196,7 @@ func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	}
 	fileOK, msg := checkDownloadedFile(call, "")
 	if !fileOK {
-		return false, "FUNCTIONAL: " + msg
+		return false, functionalPrefix + msg
 	}
 	return true, fmt.Sprintf("save-confirmation elicitation fired %dx and the host accepted it; %s — confirmation did not block the flow",
 		tr.ConfirmElicits, msg)
@@ -1194,7 +1209,7 @@ func assertS5(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if !isMD5(stringField(call.Input, "md5")) {
-		return false, "download md5 is not 32-hex"
+		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " valid md5 download but the live fetch failed (mirror/network)"
@@ -1229,7 +1244,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, notAValidDOI
 	}
 	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
-		return false, "download md5 is not 32-hex"
+		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " model set source=" + want + " correctly but the live download failed (mirror/network)"
