@@ -35,27 +35,74 @@ var DefaultFallback = []string{
 
 var mirrorHostRe = regexp.MustCompile(`^https?://(libgen\.[a-z]{2,6})/?$`)
 
-// Parse extracts the libgen mirror base URLs from the shadowlibraries page.
-func Parse(r io.Reader) ([]string, error) {
+// Family describes one mirror family discoverable from the shadowlibraries
+// catalog. Discovery, caching, ordering and fallback semantics are identical
+// across families, so a family is data rather than duplicated code.
+type Family struct {
+	// Name identifies the family in error messages.
+	Name string
+	// SourceURL is the catalog page listing the family's mirrors.
+	SourceURL string
+	// Preferred is the mirror ordered first when present.
+	Preferred string
+	// CacheFile is the basename of the family's on-disk cache, kept distinct per
+	// family so two managers never overwrite each other's list.
+	CacheFile string
+	// HostRe matches a catalog anchor href, capturing the bare host.
+	HostRe *regexp.Regexp
+	// Fallback is used when there is no network and no usable cache.
+	Fallback []string
+}
+
+// LibgenFamily is the Library Genesis mirror family, the historical default.
+var LibgenFamily = Family{
+	Name:      "libgen",
+	SourceURL: DefaultSourceURL,
+	Preferred: DefaultPreferred,
+	CacheFile: "mirrors.json",
+	HostRe:    mirrorHostRe,
+	Fallback:  DefaultFallback,
+}
+
+// AnnasFamily is the Anna's Archive mirror family, discovered from the same
+// catalog site as the libgen family (verified 2026-07-23: .gl, .pk, .gd).
+var AnnasFamily = Family{
+	Name:      "annas",
+	SourceURL: "https://shadowlibraries.github.io/DirectDownloads/AnnasArchive/",
+	Preferred: "https://annas-archive.gl",
+	CacheFile: "annas-mirrors.json",
+	HostRe:    regexp.MustCompile(`^https?://(annas-archive\.[a-z]{2,6})/?$`),
+	Fallback: []string{
+		"https://annas-archive.gl", "https://annas-archive.pk", "https://annas-archive.gd",
+	},
+}
+
+// Parse extracts the libgen mirror base URLs from the shadowlibraries page. It
+// is retained for callers that only need the default family and delegates to
+// ParseFamily.
+func Parse(r io.Reader) ([]string, error) { return ParseFamily(r, LibgenFamily) }
+
+// ParseFamily extracts f's mirror base URLs from a shadowlibraries catalog page.
+func ParseFamily(r io.Reader, f Family) ([]string, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("parsing mirrors page: %w", err)
 	}
-	out := collectMirrors(doc)
+	out := collectMirrors(doc, f)
 	if len(out) == 0 {
-		return nil, errors.New("no libgen mirrors found in page (layout change?)")
+		return nil, fmt.Errorf("no %s mirrors found in page (layout change?)", f.Name)
 	}
 	return out, nil
 }
 
 // collectMirrors walks the parsed document and returns the deduplicated mirror
-// base URLs in document order.
-func collectMirrors(doc *html.Node) []string {
+// base URLs for f in document order.
+func collectMirrors(doc *html.Node, f Family) []string {
 	var out []string
 	seen := map[string]bool{}
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
-		appendMirrorsFromNode(n, seen, &out)
+		appendMirrorsFromNode(n, f, seen, &out)
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
@@ -64,9 +111,9 @@ func collectMirrors(doc *html.Node) []string {
 	return out
 }
 
-// appendMirrorsFromNode appends any new mirror base URLs found in n's anchor
-// href attributes to out, tracking already-seen URLs in seen.
-func appendMirrorsFromNode(n *html.Node, seen map[string]bool, out *[]string) {
+// appendMirrorsFromNode appends any new mirror base URLs for f found in n's
+// anchor href attributes to out, tracking already-seen URLs in seen.
+func appendMirrorsFromNode(n *html.Node, f Family, seen map[string]bool, out *[]string) {
 	if n.Type != html.ElementNode || n.Data != "a" {
 		return
 	}
@@ -74,7 +121,7 @@ func appendMirrorsFromNode(n *html.Node, seen map[string]bool, out *[]string) {
 		if a.Key != "href" {
 			continue
 		}
-		m := mirrorHostRe.FindStringSubmatch(strings.TrimSpace(a.Val))
+		m := f.HostRe.FindStringSubmatch(strings.TrimSpace(a.Val))
 		if m == nil {
 			continue
 		}
@@ -99,28 +146,52 @@ type Manager struct {
 	Preferred string
 	HTTP      *http.Client
 
+	// family selects which mirror family this manager discovers. A zero value
+	// means the libgen family (see resolveFamily), so a Manager built by setting
+	// fields directly keeps the historical behavior.
+	family Family
+
 	mu                 sync.Mutex
 	cached             []string
 	cachedAt           time.Time
 	cachedFromFallback bool
 }
 
-// NewManager builds a Manager from the configuration, using the configured mirror
-// as preferred (or DefaultPreferred when unset) and the OS cache dir for the cache.
+// resolveFamily returns the manager's family, falling back to the libgen family
+// for a zero-value Manager built by a caller (or test) that set fields directly.
+func (m *Manager) resolveFamily() Family {
+	if m.family.HostRe == nil || m.family.Fallback == nil {
+		return LibgenFamily
+	}
+	return m.family
+}
+
+// NewManager builds a Manager for the libgen family from the configuration,
+// using the configured mirror as preferred (or DefaultPreferred when unset) and
+// the OS cache dir for the cache.
 func NewManager(cfg *config.Config) (*Manager, error) {
+	return NewManagerFor(LibgenFamily, cfg)
+}
+
+// NewManagerFor builds a Manager for the given family. cfg.Mirror (LIBGEN_MIRROR)
+// is a libgen-family setting, so it overrides the preferred mirror only for that
+// family; other families keep their own default. Each family caches to its own
+// file under the OS cache dir.
+func NewManagerFor(f Family, cfg *config.Config) (*Manager, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolving cache dir: %w", err)
 	}
-	preferred := cfg.Mirror
-	if preferred == "" {
-		preferred = DefaultPreferred
+	preferred := f.Preferred
+	if f.Name == LibgenFamily.Name && cfg.Mirror != "" {
+		preferred = cfg.Mirror
 	}
 	return &Manager{
-		SourceURL: DefaultSourceURL,
-		CachePath: filepath.Join(cacheDir, "libgen-mcp", "mirrors.json"),
+		SourceURL: f.SourceURL,
+		CachePath: filepath.Join(cacheDir, "libgen-mcp", f.CacheFile),
 		Preferred: preferred,
 		HTTP:      &http.Client{Timeout: cfg.Timeout},
+		family:    f,
 	}, nil
 }
 
@@ -157,7 +228,7 @@ func (m *Manager) load(ctx context.Context) (list []string, fromFallback bool) {
 	if c, err := m.readCache(); err == nil { // a stale cache is better than nothing
 		return c.Mirrors, false
 	}
-	return slices.Clone(DefaultFallback), true
+	return slices.Clone(m.resolveFamily().Fallback), true
 }
 
 func (m *Manager) fetch(ctx context.Context) ([]string, error) {
@@ -173,7 +244,7 @@ func (m *Manager) fetch(ctx context.Context) ([]string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("mirrors source: status %d", resp.StatusCode)
 	}
-	return Parse(resp.Body)
+	return ParseFamily(resp.Body, m.resolveFamily())
 }
 
 func (m *Manager) readCache() (*cacheFile, error) {
