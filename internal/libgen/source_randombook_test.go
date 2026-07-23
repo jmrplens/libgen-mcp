@@ -4,11 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 )
+
+// clientToHost returns an http.Client whose transport redirects any dial to
+// fakeHost to the given real address, so a test can present a libgen.<tld>-shaped
+// mirror hostname (as randombookHostRe requires) while actually talking to a local
+// httptest server, which only ever listens on a 127.0.0.1:port address.
+func clientToHost(fakeHost, realAddr string) *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == fakeHost {
+				addr = realAddr
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}}
+}
 
 // randombookByIDFixture loads the captured randombook by-id JSON response.
 func randombookByIDFixture(t *testing.T) string {
@@ -69,15 +86,21 @@ func TestRandombookResolvesViaMirror(t *testing.T) {
 	})
 	defer mirror.Close()
 
-	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, mirror.URL)
+	// Present a libgen.<tld>-shaped hostname (as randombookHostRe now requires of
+	// any candidate Resolve attempts) and redirect it to the httptest server.
+	const fakeHost = "libgen.test"
+	fakeMirror := "http://" + fakeHost
+	httpClient := clientToHost(fakeHost+":80", mirror.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, fakeMirror)
 	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
 
-	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	s := randombookSource{apiBase: apiBase, http: httpClient}
 	res, err := s.Resolve(context.Background(), Item{MD5: want})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	wantURL := mirror.URL + "/get.php?md5=" + want + "&key=TESTKEY123"
+	wantURL := fakeMirror + "/get.php?md5=" + want + "&key=TESTKEY123"
 	if res.FileURL != wantURL {
 		t.Errorf("FileURL = %q, want %q", res.FileURL, wantURL)
 	}
@@ -86,7 +109,10 @@ func TestRandombookResolvesViaMirror(t *testing.T) {
 	}
 
 	// Prove the resolved URL is actually downloadable and verifies end to end.
+	// The file-streaming path uses c.dl (not c.http), so both need the redirect.
 	c := newTestClient(staticMirrors{})
+	c.http = httpClient
+	c.dl = httpClient
 	c.sources = []DownloadSource{s}
 	dl, err := c.Download(context.Background(), want, t.TempDir(), "", nil)
 	if err != nil {
@@ -107,25 +133,6 @@ func TestRandombookNotIndexed(t *testing.T) {
 	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
 	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
 		t.Fatal("Resolve() for a non-indexed md5 should return an error")
-	}
-}
-
-// TestRandombookNoWorkingMirror verifies that when mirrors are discovered but none
-// serves a usable get.php key, Resolve returns an error (fall-through) rather than
-// a bogus URL.
-func TestRandombookNoWorkingMirror(t *testing.T) {
-	// A mirror whose ads.php carries no get.php link: ExtractGetLink fails on it.
-	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("<html><body>no download link here</body></html>"))
-	}))
-	defer dead.Close()
-
-	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, dead.URL)
-	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
-
-	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
-	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
-		t.Fatal("Resolve() with no working mirror should return an error")
 	}
 }
 
@@ -319,5 +326,154 @@ func TestRandombookParsesLinksFixture(t *testing.T) {
 	}
 	if len(mirrors) == 0 || mirrors[0] != "https://libgen.net" {
 		t.Errorf("mirrors = %v, want first == %q", mirrors, "https://libgen.net")
+	}
+}
+
+// TestFilterLibgenFamily verifies filterLibgenFamily keeps only bare
+// libgen.<tld> hostnames (the shape resolveViaMirror's ads.php scraping
+// targets) and drops any candidate outside that shape — in particular the
+// annas-archive.* hosts randombook.org has been observed to mix into its
+// candidate list, which use an unrelated URL scheme entirely.
+func TestFilterLibgenFamily(t *testing.T) {
+	in := []string{
+		"https://libgen.net",
+		"https://libgen.me",
+		"https://libgen.xyz",
+		"https://annas-archive.gl",
+		"not a url",
+		"https://evil.example.com",
+	}
+	got := filterLibgenFamily(in)
+	want := []string{"https://libgen.net", "https://libgen.me", "https://libgen.xyz"}
+	if len(got) != len(want) {
+		t.Fatalf("filterLibgenFamily(%v) = %v, want %v", in, got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("filterLibgenFamily()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestFilterLibgenFamily_AllFiltered verifies an all-non-family candidate list
+// filters down to empty, rather than falling back to trying any of them.
+func TestFilterLibgenFamily_AllFiltered(t *testing.T) {
+	got := filterLibgenFamily([]string{"https://annas-archive.gl", "https://annas-archive.pk"})
+	if len(got) != 0 {
+		t.Errorf("filterLibgenFamily() = %v, want empty", got)
+	}
+}
+
+// TestRandombookSkipsNonFamilyHosts verifies Resolve never attempts a
+// non-libgen-family candidate (e.g. annas-archive.gl) at all: with only such
+// candidates discovered, it fails fast with the same "no usable mirrors"
+// message used for a structurally empty list, and never issues a single request
+// to the non-family host — proving the host is filtered out before any network
+// call, not merely tried-and-failed.
+func TestRandombookSkipsNonFamilyHosts(t *testing.T) {
+	var hit atomic.Bool
+	nonFamily := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(nonFamily.Close)
+
+	// Present it as a fake annas-archive.gl-shaped candidate via the DialContext
+	// redirect trick, so the ONLY way resolveViaMirror could reach it is if the
+	// family filter failed to exclude it.
+	const fakeHost = "annas-archive.gl"
+	httpClient := clientToHost(fakeHost+":80", nonFamily.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() with only a non-family candidate should fail")
+	}
+	if hit.Load() {
+		t.Error("resolveViaMirror issued a request to a non-family host; it should have been filtered out before any request")
+	}
+}
+
+// TestRandombookClientRenderedMirror verifies that when a libgen-family mirror
+// answers ads.php with a client-rendered application shell (captured live from a
+// real migrated mirror, testdata/randombook_spa_shell.html) instead of the
+// classic server-rendered ads.php page, resolveViaMirror reports the distinct
+// errMirrorClientRendered diagnosis rather than the generic ExtractGetLink
+// failure — so a site-wide frontend migration is distinguishable in logs/errors
+// from an ordinary missing-link parse failure.
+func TestRandombookClientRenderedMirror(t *testing.T) {
+	shell, err := os.ReadFile("testdata/randombook_spa_shell.html")
+	if err != nil {
+		t.Fatalf("reading SPA shell fixture: %v", err)
+	}
+	spaMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(shell)
+	}))
+	t.Cleanup(spaMirror.Close)
+
+	const fakeHost = "libgen.test"
+	httpClient := clientToHost(fakeHost+":80", spaMirror.Listener.Addr().String())
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	_, err = s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if !errors.Is(err, errMirrorClientRendered) {
+		t.Fatalf("err = %v, want wrapping errMirrorClientRendered (client-rendered SPA shell)", err)
+	}
+}
+
+// TestRandombookOrdinaryMissingLink verifies that a libgen-family mirror serving
+// an ordinary (non-SPA) page with no get.php link still reports the generic
+// ExtractGetLink failure, not errMirrorClientRendered — the two diagnoses must
+// not be conflated.
+func TestRandombookOrdinaryMissingLink(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html><body>no download link here</body></html>"))
+	}))
+	t.Cleanup(plain.Close)
+
+	const fakeHost = "libgen.test"
+	httpClient := clientToHost(fakeHost+":80", plain.Listener.Addr().String())
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if errors.Is(err, errMirrorClientRendered) {
+		t.Fatal("an ordinary missing-link page must not be misdiagnosed as a client-rendered shell")
+	}
+	if err == nil {
+		t.Fatal("Resolve() with no get.php link should fail")
+	}
+}
+
+// TestRandombookRealCapturedCandidates guards against a regression in the
+// real-world candidate mix: the captured links-by-id fixture carries the exact
+// hosts randombook.org has been observed returning (three libgen.* SPA-migrated
+// hosts plus one annas-archive.gl entry). filterLibgenFamily must keep exactly
+// the three libgen.* hosts, so Resolve knows which are even worth attempting.
+func TestRandombookRealCapturedCandidates(t *testing.T) {
+	body, err := os.ReadFile("testdata/randombook_links.json")
+	if err != nil {
+		t.Fatalf("reading links fixture: %v", err)
+	}
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), string(body))
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	mirrors, err := s.lookupMirrors(context.Background(), "123")
+	if err != nil {
+		t.Fatalf("lookupMirrors() error = %v", err)
+	}
+	got := filterLibgenFamily(mirrors)
+	want := []string{"https://libgen.net", "https://libgen.me", "https://libgen.xyz"}
+	if len(got) != len(want) {
+		t.Fatalf("filterLibgenFamily(lookupMirrors()) = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("filtered mirrors[%d] = %q, want %q", i, got[i], w)
+		}
 	}
 }

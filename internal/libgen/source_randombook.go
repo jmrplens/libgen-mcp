@@ -1,12 +1,15 @@
 package libgen
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -32,6 +35,17 @@ const randombookMaxBody = 1 << 20 // 1 MiB
 // Note on the API shape: links-by-id returns both a "list" of mirror hostnames
 // and a "links" array. The "links" entries are opaque per-request tokens to
 // landing pages, not direct files, so only "list" (the mirror hostnames) is used.
+//
+// Note on candidate hosts (verified 2026-07-23): the API's "list" is not
+// guaranteed to contain genuine libgen.li-family hosts — it has been observed
+// consistently returning a fixed set of non-family hosts (e.g. libgen.net,
+// libgen.me, libgen.xyz — client-rendered SPAs with no server-side ads.php route
+// — and annas-archive.gl, which uses an unrelated /md5/<hash> scheme and is
+// out of scope per the project's Anna's Archive decision). Resolve therefore
+// only attempts hosts matching the libgen.<tld> shape (randombookHostRe); other
+// hosts are skipped without a request, and a libgen.<tld> host that answers with
+// a client-rendered shell instead of the classic ads.php page is reported with a
+// distinct, diagnosable error (see resolveViaMirror).
 type randombookSource struct {
 	// apiBase overrides the randombook API endpoint (defaults to
 	// randombookAPIBase); tests set it to a local httptest server.
@@ -43,6 +57,38 @@ type randombookSource struct {
 
 // Compile-time assertion that randombookSource satisfies the DownloadSource contract.
 var _ DownloadSource = randombookSource{}
+
+// randombookHostRe matches a bare libgen.<tld> hostname (no path/query), the only
+// shape resolveViaMirror's ads.php/get.php scraping is designed for. It mirrors
+// the convention in internal/mirrors.mirrorHostRe. A discovered candidate that
+// does not match — e.g. an unrelated aggregator domain — is skipped rather than
+// scraped, since the technique does not apply to it.
+var randombookHostRe = regexp.MustCompile(`^https?://libgen\.[a-z]{2,6}/?$`)
+
+// errMirrorClientRendered reports that a libgen-family host answered with a
+// client-rendered application shell (no server-rendered ads.php content) rather
+// than the classic ads.php page resolveViaMirror scrapes. It is distinct from a
+// generic ExtractGetLink failure so a site-wide frontend migration is
+// diagnosable from logs/errors rather than looking like a one-off missing link.
+var errMirrorClientRendered = errors.New("randombook: mirror serves a client-rendered page, not the classic ads.php content")
+
+// nuxtShellMarker is a substring reliably present in a Nuxt single-page-app's
+// server-sent HTML shell (the mount point the client-side JS hydrates into) but
+// never in a classic server-rendered ads.php page.
+const nuxtShellMarker = `id="__nuxt"`
+
+// filterLibgenFamily returns the subset of mirrors matching randombookHostRe, in
+// order. Candidates outside the libgen.<tld> shape are dropped before any request
+// is made, since resolveViaMirror's scraping technique does not apply to them.
+func filterLibgenFamily(mirrors []string) []string {
+	out := make([]string, 0, len(mirrors))
+	for _, m := range mirrors {
+		if randombookHostRe.MatchString(strings.TrimSpace(m)) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
 
 // randombookByIDResponse is the subset of the by-id API record consulted here. A
 // nil Result means the md5 is not indexed by randombook.
@@ -83,6 +129,10 @@ func (s randombookSource) Resolve(ctx context.Context, it Item) (Resolved, error
 	mirrors, err := s.lookupMirrors(ctx, id)
 	if err != nil {
 		return Resolved{}, err
+	}
+	mirrors = filterLibgenFamily(mirrors)
+	if len(mirrors) == 0 {
+		return Resolved{}, fmt.Errorf("randombook: no usable mirrors discovered for md5 %q", it.MD5)
 	}
 
 	var lastErr error
@@ -180,6 +230,9 @@ func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 stri
 	}
 	link, err := ExtractGetLink(body)
 	if err != nil {
+		if bytes.Contains(body, []byte(nuxtShellMarker)) {
+			return "", fmt.Errorf("randombook: mirror %q: %w", base, errMirrorClientRendered)
+		}
 		return "", fmt.Errorf("randombook: mirror %q: %w", base, err)
 	}
 	return base + "/" + link, nil
