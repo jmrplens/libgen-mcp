@@ -54,6 +54,7 @@ Download a file to a local directory.
 
 **Parameters:**
 
+- `annas_member` (boolean): opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly
 - `doi` (string): DOI from an article search result; articles are fetched by DOI; provide md5 or doi
 - `filename` (string): destination filename (default: a clean name from the record metadata or the name the mirror announces)
 - `md5` (string): file md5 hash from a book search result; provide md5 or doi

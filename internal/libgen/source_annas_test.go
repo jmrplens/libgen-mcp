@@ -252,3 +252,103 @@ func TestExtractIPFSCIDNone(t *testing.T) {
 		t.Fatalf("extractIPFSCID() = %q, true; want a miss", got)
 	}
 }
+
+// TestAnnasMemberAPIReportsAccountQuota verifies the member response's account
+// block is surfaced on the Resolved, so a caller can see how much of the metered
+// daily allowance remains. The API is the only place this data exists and each
+// call consumes a download, so it is captured from a real resolve rather than
+// fetched separately.
+func TestAnnasMemberAPIReportsAccountQuota(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/dyn/api/fast_download.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"download_url":"https://fast.example.net/b.pdf",
+			"account_fast_download_info":{"downloads_left":49,"downloads_per_day":50,"downloads_done_today":1}}`))
+	}))
+	defer site.Close()
+
+	s := annasSource{mirrors: staticMirrors{site.URL}, http: site.Client(), key: "k"}
+	got, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Account == nil {
+		t.Fatal("Account = nil, want the member quota")
+	}
+	if got.Account.DownloadsLeft != 49 || got.Account.DownloadsPerDay != 50 || got.Account.DownloadsDoneToday != 1 {
+		t.Fatalf("Account = %+v, want 49/50 with 1 done today", *got.Account)
+	}
+	if got.Account.Source != "annas" {
+		t.Errorf("Account.Source = %q, want annas", got.Account.Source)
+	}
+}
+
+// TestAnnasKeylessPathReportsNoQuota verifies the keyless IPFS path leaves the
+// account block nil, since no account is involved.
+func TestAnnasKeylessPathReportsNoQuota(t *testing.T) {
+	const cidV1 = "bafyquotanonecidzzz234567"
+	gw := gatewayServing(http.StatusPartialContent)
+	defer gw.Close()
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(annasBookPage("QmV0", cidV1)))
+	}))
+	defer site.Close()
+
+	s := annasSource{mirrors: staticMirrors{site.URL}, http: site.Client(), gateways: []string{gw.URL + "/ipfs/"}}
+	got, err := s.Resolve(context.Background(), Item{MD5: "abc"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Account != nil {
+		t.Fatalf("Account = %+v, want nil on the keyless path", *got.Account)
+	}
+}
+
+// TestPerCallAnnasKeyPullsSourceIn verifies a per-call Anna's key pulls an annas
+// source using that key into the chain even when the server configured none, and
+// that it is prepended so it is tried first — mirroring the per-call Unpaywall
+// email behavior.
+func TestPerCallAnnasKeyPullsSourceIn(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{libgenSource{c: c}}
+
+	got := c.withPerCallAnnas(Item{MD5: "d64efd386ed7227592499460aca2044b", AnnasKey: "runtime-key"}, c.sources)
+	if len(got) != 2 || got[0].Name() != "annas" {
+		names := make([]string, len(got))
+		for i, s := range got {
+			names[i] = s.Name()
+		}
+		t.Fatalf("chain = %v, want annas prepended", names)
+	}
+	if s, ok := got[0].(annasSource); !ok || s.key != "runtime-key" {
+		t.Fatalf("prepended source = %+v, want an annasSource carrying the per-call key", got[0])
+	}
+}
+
+// TestPerCallAnnasKeyIgnoredWhenNotApplicable verifies the per-call key is a no-op
+// without a key, without an md5, when a specific source was requested, or when an
+// annas source is already in the chain (the configured key wins).
+func TestPerCallAnnasKeyIgnoredWhenNotApplicable(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	base := []DownloadSource{libgenSource{c: c}}
+
+	cases := map[string]Item{
+		"no key":          {MD5: "abc"},
+		"no md5":          {DOI: "10.1/x", AnnasKey: "k"},
+		"explicit source": {MD5: "abc", AnnasKey: "k", Source: "libgen"},
+	}
+	for name, it := range cases {
+		if got := c.withPerCallAnnas(it, base); len(got) != len(base) {
+			t.Errorf("%s: chain grew to %d, want unchanged", name, len(got))
+		}
+	}
+
+	withAnnas := []DownloadSource{libgenSource{c: c}, annasSource{key: "configured"}}
+	got := c.withPerCallAnnas(Item{MD5: "abc", AnnasKey: "runtime"}, withAnnas)
+	if len(got) != len(withAnnas) {
+		t.Errorf("chain grew to %d, want unchanged when annas is already configured", len(got))
+	}
+}

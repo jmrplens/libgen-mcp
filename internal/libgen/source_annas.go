@@ -79,6 +79,13 @@ type annasFastDownload struct {
 	DownloadURL string `json:"download_url"`
 	// Error carries the API's rejection reason when the call fails.
 	Error string `json:"error"`
+	// AccountInfo reports the account's metered daily allowance. Present only on a
+	// successful call, since the allowance is what the call just spent.
+	AccountInfo *struct {
+		DownloadsLeft      int `json:"downloads_left"`
+		DownloadsPerDay    int `json:"downloads_per_day"`
+		DownloadsDoneToday int `json:"downloads_done_today"`
+	} `json:"account_fast_download_info"`
 }
 
 // Name identifies the Anna's Archive source.
@@ -100,12 +107,12 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	var lastErr error
 	for _, mirror := range s.mirrors.Mirrors(ctx) {
 		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
-		fileURL, err := s.resolveMirror(ctx, httpClient, base, it.MD5)
+		fileURL, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		return Resolved{FileURL: fileURL, VerifyMD5: true}, nil
+		return Resolved{FileURL: fileURL, VerifyMD5: true, Account: account}, nil
 	}
 	if lastErr != nil {
 		return Resolved{}, fmt.Errorf("annas: no mirror resolved %q: %w", it.MD5, lastErr)
@@ -117,35 +124,35 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 // when a key is configured and falling back to the keyless IPFS path. When both
 // fail the IPFS error is returned, wrapping the member error so a rejected key
 // stays visible in diagnostics instead of being silently replaced.
-func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string) (string, error) {
+func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string) (string, *AccountInfo, error) {
 	var memberErr error
 	if s.key != "" {
-		fileURL, err := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
+		fileURL, account, err := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
 		if err == nil {
-			return fileURL, nil
+			return fileURL, account, nil
 		}
 		memberErr = err
 	}
 	fileURL, ipfsErr := s.resolveViaIPFS(ctx, httpClient, base, md5)
 	if ipfsErr == nil {
-		return fileURL, nil
+		return fileURL, nil, nil
 	}
 	if memberErr != nil {
-		return "", fmt.Errorf("%w (member API: %w)", ipfsErr, memberErr)
+		return "", nil, fmt.Errorf("%w (member API: %w)", ipfsErr, memberErr)
 	}
-	return "", ipfsErr
+	return "", nil, ipfsErr
 }
 
 // resolveViaMemberAPI asks a mirror's member fast-download API for a direct URL.
 // It returns an error whenever the key is rejected or the response carries no
 // URL, so the caller falls back to the keyless IPFS path.
-func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.Client, base, md5 string) (string, error) {
+func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.Client, base, md5 string) (string, *AccountInfo, error) {
 	endpoint := fmt.Sprintf("%s/dyn/api/fast_download.json?md5=%s&key=%s",
 		base, url.QueryEscape(md5), url.QueryEscape(s.key))
 
 	resp, err := s.get(ctx, httpClient, endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("annas: member request to %q: %w", base, err)
+		return "", nil, fmt.Errorf("annas: member request to %q: %w", base, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -153,15 +160,24 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 	// reason (e.g. "Not a member") in the JSON alongside a 403.
 	var rec annasFastDownload
 	if decErr := json.NewDecoder(io.LimitReader(resp.Body, annasFastDownloadMaxBody)).Decode(&rec); decErr != nil {
-		return "", fmt.Errorf("annas: decoding member response from %q: %w", base, decErr)
+		return "", nil, fmt.Errorf("annas: decoding member response from %q: %w", base, decErr)
 	}
 	if rec.Error != "" {
-		return "", fmt.Errorf("annas: member API rejected the key: %s", rec.Error)
+		return "", nil, fmt.Errorf("annas: member API rejected the key: %s", rec.Error)
 	}
 	if rec.DownloadURL == "" {
-		return "", fmt.Errorf("annas: member API returned no URL (HTTP %d)", resp.StatusCode)
+		return "", nil, fmt.Errorf("annas: member API returned no URL (HTTP %d)", resp.StatusCode)
 	}
-	return rec.DownloadURL, nil
+	var account *AccountInfo
+	if a := rec.AccountInfo; a != nil {
+		account = &AccountInfo{
+			Source:             "annas",
+			DownloadsLeft:      a.DownloadsLeft,
+			DownloadsPerDay:    a.DownloadsPerDay,
+			DownloadsDoneToday: a.DownloadsDoneToday,
+		}
+	}
+	return rec.DownloadURL, account, nil
 }
 
 // resolveViaIPFS reads one mirror's book page for an IPFS CID and returns the

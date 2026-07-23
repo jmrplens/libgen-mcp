@@ -133,6 +133,16 @@ clients and the no-friction promise must keep working unchanged.
 - ~~Anna's Archive as a source (no keyless path).~~ **Corrected 2026-07-24 — see §2:** keyless
   paths do exist (SciDB for articles, IPFS for books) and both are implemented. Only the
   DDoS-Guard-gated slow-download HTTP route stays rejected.
+- randombook.org's own search (`/api/search/by-params`) as a discovery or download source —
+  **measured and rejected 2026-07-24.** randombook.org is a Library Genesis frontend (it
+  brands itself `libgen.pw`), so it adds nothing we do not already reach:
+  its download links resolve to the same hosts we already use (`libgen.net/.me/.xyz`,
+  `annas-archive.gl`, plus `sci-hub.ru` for articles — all already covered by the
+  `randombook`, `annas` and `scihub` sources); its `collection=fiction` returns results
+  identical to `collection=libgen`, so that parameter does not filter; and its three
+  collections are a strict subset of the seven this project's own `search` already
+  indexes (`nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`,
+  `fiction_rus`). No new servers, no new corpus, fewer collections.
 - OpenAlex (now key-required), Semantic Scholar keyless dependency, CORE (key required).
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).

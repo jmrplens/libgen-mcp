@@ -110,6 +110,7 @@ type DownloadInput struct {
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
 	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover"`
+	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 }
 
@@ -639,6 +640,37 @@ func looksLikeEmail(s string) bool {
 	return dot > 0 && at+1+dot != len(s)-1
 }
 
+// elicitAnnasKey asks the client for a one-off Anna's Archive account secret when
+// a book download explicitly opts in via annas_member, the server has no key
+// configured, and the client advertised elicitation. The opt-in matters: the
+// keyless IPFS path already works, so prompting on every book download would nag
+// for a paid credential nobody needs. Routing it through elicitation rather than a
+// tool input also keeps the secret in the client's UI instead of the model's
+// context. It returns the trimmed key to use for THIS
+// request only, or "" to proceed with today's behavior (the annas source stays
+// keyless, resolving over IPFS). It NEVER errors: an absent capability, a decline
+// or an empty answer all collapse to "" so the caller falls back. The key is used
+// only for the call and is never persisted.
+func elicitAnnasKey(ctx context.Context, req *mcp.CallToolRequest, cfg *config.Config, in DownloadInput) string {
+	if !in.AnnasMember || strings.TrimSpace(in.MD5) == "" || strings.TrimSpace(cfg.AnnasKey) != "" || !elicitationSupported(req) {
+		return ""
+	}
+	// The per-call prepend only fires for an unnamed source, so an elicited key
+	// could never take effect when a specific source was requested. Skip the
+	// prompt rather than ask a dead-end question.
+	if strings.TrimSpace(in.Source) != "" {
+		return ""
+	}
+	key, ok := elicitText(ctx, req,
+		"This server has no Anna's Archive account key configured. Enter one to use the faster member download tier for this book (used only for this request, not stored). Leave empty to download over IPFS instead:",
+		"key",
+		"An Anna's Archive account secret key (requires an active paid membership)")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(key)
+}
+
 func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
@@ -654,6 +686,12 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 		// is tried) runs unchanged. Applies to both the resolve_only and download paths.
 		if email := elicitUnpaywallEmail(ctx, req, cfg, in); email != "" {
 			item.Email = email
+		}
+		// On-demand Anna's key: same shape as the Unpaywall email above, for a book
+		// download against a server with no account key configured. A declined or
+		// empty answer leaves item.AnnasKey empty, so the annas source stays keyless.
+		if key := elicitAnnasKey(ctx, req, cfg, in); key != "" {
+			item.AnnasKey = key
 		}
 		// For a book with no explicit name, fill bibliographic metadata so the file
 		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details

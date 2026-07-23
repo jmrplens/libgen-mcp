@@ -92,6 +92,9 @@ type Client struct {
 	// are test seams so Enrich can target httptest servers.
 	crossrefBaseOverride    string
 	openLibraryBaseOverride string
+	// annasMirrors is the Anna's Archive mirror lister shared by the sources that
+	// fetch from that family, including any ad-hoc source built for a per-call key.
+	annasMirrors MirrorLister
 	// sources is the ordered download-source chain Download tries for each Item,
 	// advancing to the next when one fails to resolve or stream. It is built from
 	// config by buildSourceChain as [unpaywall, scihub, libgen, randombook], then
@@ -258,12 +261,11 @@ var annasMirrorsFor = func(cfg *config.Config) MirrorLister {
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	// Discovered once and shared by every Anna's-backed source, so one discovery
 	// and one cache serve them all.
-	var annas MirrorLister
 	annasLister := func() MirrorLister {
-		if annas == nil {
-			annas = annasMirrorsFor(cfg)
+		if c.annasMirrors == nil {
+			c.annasMirrors = annasMirrorsFor(cfg)
 		}
-		return annas
+		return c.annasMirrors
 	}
 	factories := map[string]func() DownloadSource{
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
