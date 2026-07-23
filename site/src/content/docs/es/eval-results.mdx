@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos, progreso, citas, enriquecimiento, lectura en documento (find/outline), descubrimiento de acceso abierto y elicitación en 29 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos, progreso, citas, enriquecimiento, lectura en documento (find/outline), descubrimiento de acceso abierto y elicitación en 31 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -60,7 +60,7 @@ determinista. S27–S29 repiten las comprobaciones de find/outline/acceso
 abierto contra un servidor en modo **remoto** (`--http`).
 
 | ID  | Qué comprueba                                                                                                                                                                                                                                                              |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
 | S1  | Búsqueda de libro: topic nonfiction, columnas título/autor, primer resultado con md5 de 32-hex                                                                                                                                                                             |
 | S2  | Búsqueda de artículo: topic articles, al menos un resultado con DOI válido                                                                                                                                                                                                 |
 | S3  | Búsqueda de estándares (SKIP si el mirror devuelve 0)                                                                                                                                                                                                                      |
@@ -91,6 +91,8 @@ abierto contra un servidor en modo **remoto** (`--http`).
 | S27 | **read find remoto** — S23 repetido contra un servidor en modo remoto (`--http`)                                                                                                                                                                                           |
 | S28 | **read outline remoto** — S24 repetido contra un servidor en modo remoto (`--http`)                                                                                                                                                                                        |
 | S29 | **Descubrimiento de acceso abierto remoto** — sin guía como S20, contra un servidor en modo remoto (`--http`)                                                                                                                                                              |
+| S30 | remote                                                                                                                                                                                                                                                                     | ✅ PASS | modo remoto: fijó `enrich=true`; Crossref journal="Cell", 56 374 citas; el modelo respondió |
+| S31 | remote                                                                                                                                                                                                                                                                     | ✅ PASS | modo remoto: buscó, llamó a `get_details`, surfaceó la cita BibTeX devuelta                 |
 
 ## Bloques local y remoto
 
@@ -110,7 +112,7 @@ mismo transporte `--http`.
 
 La tabla siguiente es una única ejecución en vivo de la suite completa contra
 `claude-haiku-4-5` (API real de Anthropic, mirrors reales, descargas reales):
-**26 pasaron, 0 fallaron, 4 en SKIP** (de 30 incluida la variante `S6b`). Cada
+**28 pasaron, 0 fallaron, 4 en SKIP** (de 30 incluida la variante `S6b`). Cada
 SKIP es una condición de datos en vivo (un mirror caído, un HTTP 403, un PDF
 escaneado sin capa de texto, una extensión no soportada) — nunca un fallo del
 modelo ni del servidor. Ningún escenario falló.
