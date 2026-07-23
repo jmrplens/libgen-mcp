@@ -280,3 +280,58 @@ func TestElicitConfirmDecision_HandlerError(t *testing.T) {
 		t.Errorf("handler-error decision = %d, want %d (confirmUnavailable)", out.Decision, int(confirmUnavailable))
 	}
 }
+
+// TestElicitConfirm_NonBoolContent verifies elicitConfirm reports ok=false when
+// the accepted content carries a non-boolean value for the confirm field (the
+// type-assertion guard), rather than treating it as confirmed.
+func TestElicitConfirm_NonBoolContent(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"proceed": "yes"}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirm"})
+	if out.OK || out.Confirmed {
+		t.Fatalf("non-boolean confirm content should yield (confirmed=false, ok=false); got (%v, %v)", out.Confirmed, out.OK)
+	}
+}
+
+// TestElicitChoice_NotInOptions verifies elicitChoice reports ok=false when the
+// accepted value is not one of the offered options.
+func TestElicitChoice_NotInOptions(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"edition": "third"}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"first", "second"}})
+	if out.OK || out.Value != "" {
+		t.Fatalf("a value outside options should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicitChoice_NonStringContent verifies elicitChoice reports ok=false when
+// the accepted content for the enum field is not a string.
+func TestElicitChoice_NonStringContent(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{"edition": 42}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"first", "second"}})
+	if out.OK || out.Value != "" {
+		t.Fatalf("non-string choice content should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicit_AcceptMissingField verifies runFormElicit reports ok=false when the
+// user accepts but the content map lacks the requested field.
+func TestElicit_AcceptMissingField(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "text"})
+	if out.OK || out.Value != "" {
+		t.Fatalf("accept with a missing field should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestElicitConfirmDecision_UnexpectedAction verifies elicitConfirmDecision maps
+// an action that is neither accept, decline nor cancel to confirmUnavailable, so
+// the caller falls back to its default rather than treating it as a decision.
+func TestElicitConfirmDecision_UnexpectedAction(t *testing.T) {
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "deferred"}, nil
+	}
+	session := newElicitSession(t, handler)
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirmdecision"})
+	if out.Decision != int(confirmUnavailable) {
+		t.Fatalf("an unexpected action should map to confirmUnavailable (%d); got %d", confirmUnavailable, out.Decision)
+	}
+}
