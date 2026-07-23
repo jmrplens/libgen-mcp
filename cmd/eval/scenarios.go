@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -442,11 +443,14 @@ func scenarios() []scenario {
 		},
 		{
 			ID:     "S26",
-			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie and download it.`,
+			Prompt: `Find "The Pragmatic Programmer" by Andrew Hunt and David Thomas and download it.`,
 			// Elicitation (download confirmation): with the host advertising elicitation,
-			// a disk-writing download now raises a save-confirmation prompt. The host
-			// accepts it, so this proves the confirmation does not block a real model's
-			// download flow.
+			// a disk-writing download now raises a save-confirmation prompt. Uses a book
+			// DISTINCT from S5/S14 so it is not a verbatim duplicate of the progress
+			// scenario. The host's elicitation handler bumps a per-scenario counter each
+			// time it answers a confirmation, which the transcript exposes — so this
+			// scenario HARD-asserts the confirmation elicitation actually fired AND the
+			// download still completed, rather than only inferring it from a saved file.
 			Assert: assertConfirmedDownload,
 		},
 	}
@@ -752,8 +756,10 @@ func assertS4(tr transcript) (pass bool, detail string) {
 // download" intent by requiring a read call and asserting NO download call
 // occurred in the transcript. A not-extractable file or a live fetch failure is
 // a SKIP, since the model's tool-use was still correct.
-// readIdentifierOK verifies the read call was keyed by an identifier from a prior
-// search result: a valid DOI traced back to search, or a 32-hex md5.
+// readIdentifierOK verifies the read call was keyed by an identifier that came
+// from a prior search result: a valid DOI traced back to search, or a 32-hex md5
+// traced back to search. Both are provenance-checked so a model that hallucinates
+// an identifier and then hits a live error cannot pass as a benign skip.
 func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
 	doi := stringField(call.Input, "doi")
 	md5 := stringField(call.Input, "md5")
@@ -763,16 +769,67 @@ func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
 			return false, "read doi is not a valid DOI"
 		}
 		if !doiInSearchResults(tr, doi) {
-			return false, "read doi did not come from a prior search result"
+			return false, "read doi did not come from a prior search result (model may have hallucinated it)"
 		}
 	case md5 != "":
 		if !isMD5(md5) {
 			return false, "read md5 is not 32-hex"
 		}
+		if !md5InSearchResults(tr, md5) {
+			return false, "read md5 did not come from a prior search result (model may have hallucinated it)"
+		}
 	default:
 		return false, "read call set neither doi nor md5"
 	}
 	return true, ""
+}
+
+// idInSearchResults reports whether id matches an edition_id or file_id in any
+// prior search result of the transcript.
+func idInSearchResults(tr transcript, id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		var out tools.SearchOutput
+		if decodeStructured(c.Structured, &out) != nil {
+			continue
+		}
+		for _, r := range out.Results {
+			if r.EditionID == id || r.FileID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// detailsIdentifierGrounded verifies a get_details call was keyed by an identifier
+// from a prior search result: a 32-hex md5 traced to search, or an edition/file id
+// traced to search. It guards enrichment/citation provenance (S22) so a model that
+// hallucinates an identifier and then hits a live error cannot pass as a benign
+// skip.
+func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why string) {
+	if md5 := stringField(call.Input, "md5"); md5 != "" {
+		if !isMD5(md5) {
+			return false, "get_details md5 is not 32-hex"
+		}
+		if !md5InSearchResults(tr, md5) {
+			return false, "get_details md5 did not come from a prior search result (model may have hallucinated it)"
+		}
+		return true, ""
+	}
+	if id := stringField(call.Input, "id"); id != "" {
+		if !idInSearchResults(tr, id) {
+			return false, "get_details id did not come from a prior search result (model may have hallucinated it)"
+		}
+		return true, ""
+	}
+	return false, "get_details call set neither md5 nor id"
 }
 
 func assertReadSummary(tr transcript) (pass bool, detail string) {
@@ -904,16 +961,30 @@ func assertCitations(tr transcript) (pass bool, detail string) {
 	return true, "model searched, called get_details, and surfaced the returned BibTeX citation"
 }
 
+// citationWords are the citation-specific tokens that count as the model engaging
+// with the "how many times has it been cited" ask. Bare "cit" is deliberately
+// excluded — it also matches "explicit", "solicit", "exciting", etc., which would
+// make the check spuriously pass on unrelated prose.
+var citationWords = []string{"citation", "cited", "citing", "cites"}
+
 // answerMentionsEnrichment reports whether the model's final prose engaged with the
-// journal/citation ask: it names the enriched journal, or otherwise references a
-// journal or citation. It is a soft signal — evidence the model used the enrichment
-// rather than an exact-string requirement that a paraphrase would fail.
-func answerMentionsEnrichment(text, journal string) bool {
-	lower := strings.ToLower(text)
-	if journal != "" && strings.Contains(lower, strings.ToLower(journal)) {
-		return true
+// journal/citation ask using the enriched Crossref record: it names the journal
+// (Crossref ContainerTitle, when distinctive), states the citation count, or uses a
+// citation-specific word. It is a soft signal — evidence the model used the
+// enrichment rather than an exact-string requirement a paraphrase would fail. It is
+// trustworthy: it fails only when the answer carries none of these signals, so a
+// FAIL means the model genuinely omitted the enrichment it was shown.
+func answerMentionsEnrichment(answer string, cr *libgen.CrossrefWork) bool {
+	lower := strings.ToLower(answer)
+	if cr != nil {
+		if journal := strings.ToLower(strings.TrimSpace(cr.ContainerTitle)); len(journal) > 2 && strings.Contains(lower, journal) {
+			return true
+		}
+		if cr.CitationCount > 0 && strings.Contains(lower, strconv.Itoa(cr.CitationCount)) {
+			return true
+		}
 	}
-	return strings.Contains(lower, "journal") || strings.Contains(lower, "cit")
+	return containsAny(lower, citationWords...)
 }
 
 // assertEnrichment checks the opt-in enrichment flow (S22): the model must set
@@ -929,6 +1000,11 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 	if enrich, _ := call.Input["enrich"].(bool); !enrich {
 		return false, "SURFACE GAP: model called get_details but did not set enrich=true — the enrich field's description may not convey it fetches journal/citation metadata"
 	}
+	// Provenance: the get_details identifier must trace to a prior search result, so
+	// a hallucinated md5/id that then hits a live error cannot pass as a benign skip.
+	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
+		return false, "FUNCTIONAL: " + why
+	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " get_details(enrich) failed against the live mirror/Crossref"
 	}
@@ -939,8 +1015,8 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
 		return true, skipPrefix + " enrich=true but Crossref returned no metadata (best-effort external API)"
 	}
-	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref.ContainerTitle) {
-		return false, "FUNCTIONAL: Crossref data was present but the model's answer referenced neither the journal nor the citation count"
+	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref) {
+		return false, "FUNCTIONAL: Crossref data was present but the model's answer referenced neither the journal name, the citation count, nor any citation-specific term"
 	}
 	return true, fmt.Sprintf("model set enrich=true; Crossref journal=%q citations=%d; model answered the ask",
 		out.Enrichment.Crossref.ContainerTitle, out.Enrichment.Crossref.CitationCount)
@@ -961,6 +1037,11 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 	}
 	if stringField(call.Input, "find") == "" {
 		return false, "SURFACE GAP: model called read sequentially with no find argument — read's find field description may not convey in-document search"
+	}
+	// Provenance: the read identifier must trace to a prior search result, so a
+	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
+	if keyed, why := readIdentifierOK(tr, call); !keyed {
+		return false, "FUNCTIONAL: " + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read(find) failed against the live mirror/source chain"
@@ -994,6 +1075,11 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 	}
 	if outline, _ := call.Input["outline"].(bool); !outline {
 		return false, "SURFACE GAP: model called read without outline=true — read's outline field description may not convey table-of-contents mode"
+	}
+	// Provenance: the read identifier must trace to a prior search result, so a
+	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
+	if keyed, why := readIdentifierOK(tr, call); !keyed {
+		return false, "FUNCTIONAL: " + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read(outline) failed against the live mirror/source chain"
@@ -1046,26 +1132,40 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 }
 
 // assertConfirmedDownload checks the download-confirmation elicitation (S26): with
-// the host advertising elicitation, a disk-writing download now raises a save
-// confirmation, which the host accepts. This proves the confirmation does not block
-// a real model's download flow. The model downloads a book by an md5; a live fetch
-// failure is a SKIP.
+// the host advertising elicitation, a disk-writing download raises a save
+// confirmation, which the host accepts. The host's elicitation handler bumps a
+// per-scenario counter (tr.ConfirmElicits) each time it answers one, so this
+// scenario HARD-asserts the confirmation elicitation actually fired AND the download
+// completed — not merely that a file appeared. The model downloads a book by an md5
+// from a prior search result; a live fetch failure (after a confirmation fired) is a
+// SKIP.
 func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isMD5(stringField(call.Input, "md5")) {
+	md5 := stringField(call.Input, "md5")
+	if !isMD5(md5) {
 		return false, "download md5 is not 32-hex"
 	}
+	if !md5InSearchResults(tr, md5) {
+		return false, "FUNCTIONAL: download md5 did not come from a prior search result (model may have hallucinated it)"
+	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " host confirmed the download but the live fetch failed (mirror/network)"
+		if tr.ConfirmElicits == 0 {
+			return true, skipPrefix + " live fetch failed before any save-confirmation elicitation fired (mirror/network)"
+		}
+		return true, skipPrefix + " confirmation elicitation fired but the live fetch failed (mirror/network)"
+	}
+	if tr.ConfirmElicits == 0 {
+		return false, "FUNCTIONAL: download completed but no save-confirmation elicitation fired — the confirmation surface did not run"
 	}
 	fileOK, msg := checkDownloadedFile(call, "")
 	if !fileOK {
 		return false, "FUNCTIONAL: " + msg
 	}
-	return true, "download-confirmation elicitation fired and the host accepted it; " + msg + " — confirmation did not block the flow"
+	return true, fmt.Sprintf("save-confirmation elicitation fired %dx and the host accepted it; %s — confirmation did not block the flow",
+		tr.ConfirmElicits, msg)
 }
 
 // assertS5 checks a book download by md5 produces a saved, non-empty file.

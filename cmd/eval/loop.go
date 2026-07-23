@@ -140,6 +140,10 @@ type transcript struct {
 	// Fetched records files the harness pulled from resolve-only download links
 	// (remote block), acting as the agent's own fetch tool.
 	Fetched []fetchedFile
+	// ConfirmElicits is how many download-save confirmation prompts the host's
+	// elicitation handler answered during this scenario (see confirmElicitations);
+	// the confirmation scenario hard-asserts it fired.
+	ConfirmElicits int
 }
 
 // runScenario drives one scenario to completion: it applies any per-scenario
@@ -167,9 +171,13 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 		toolChoice = "auto"
 	}
 
-	// Snapshot the progress notifications at every exit (named return tr), including
-	// the early return when the model answers without a tool call.
-	defer func() { tr.Progress = progress.snapshot() }()
+	// Snapshot the progress notifications and the download-confirmation count at
+	// every exit (named return tr), including the early return when the model
+	// answers without a tool call.
+	defer func() {
+		tr.Progress = progress.snapshot()
+		tr.ConfirmElicits = confirmElicitationCount()
+	}()
 	messages := []message{{Role: "user", Content: []contentBlock{{Type: "text", Text: sc.Prompt}}}}
 	for range maxTurns {
 		resp, callErr := ac.call(ctx, anthropicRequest{

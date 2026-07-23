@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -52,6 +53,10 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 	// notifications actually reach the client end to end (see progress token in
 	// executeTool).
 	progress = &progressCapture{}
+	// Reset the per-scenario download-confirmation counter: newHostSession is
+	// called once per scenario before the model runs, so a fresh session starts at
+	// zero and the count the assertion reads reflects only this scenario's run.
+	confirmElicitations.Store(0)
 	// Advertise the elicitation capability so scenarios that hit an on-demand
 	// prompt (Unpaywall email for a DOI download, or the download-save
 	// confirmation) can exercise the real elicitation surface end to end. The
@@ -102,6 +107,17 @@ func toolDefs(ctx context.Context, session *mcp.ClientSession) ([]toolDef, error
 	return defs, nil
 }
 
+// confirmElicitations counts the download-save confirmation prompts the eval's
+// elicitation handler answered during the current scenario. newHostSession resets
+// it to zero at the start of each scenario and runScenario snapshots it into the
+// transcript, so an assertion (S26) can HARD-assert the confirmation elicitation
+// actually fired rather than merely inferring it from a completed download.
+var confirmElicitations atomic.Int64
+
+// confirmElicitationCount returns how many download-save confirmation prompts the
+// handler has answered since the last newHostSession reset.
+func confirmElicitationCount() int { return int(confirmElicitations.Load()) }
+
 // evalElicitationHandler answers the two elicitation prompts the server can raise
 // during a scenario. It branches on the single top-level field of the requested
 // schema: an "email" field (the on-demand Unpaywall contact email) is answered
@@ -117,6 +133,9 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	if field == "" {
 		field = "confirm"
 	}
+	// Record that a download-save confirmation prompt fired and was accepted, so the
+	// confirmation scenario can hard-assert the elicitation surface actually ran.
+	confirmElicitations.Add(1)
 	return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
 }
 
