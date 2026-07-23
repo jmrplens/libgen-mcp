@@ -515,6 +515,34 @@ func detailsEnrich(ctx context.Context, c *libgen.Client, out *DetailsOutput) {
 		isbn = stringField(out.Edition, "identifier")
 	}
 	out.Enrichment = c.Enrich(ctx, doi, isbn)
+	if step := enrichmentNextStep(out.Enrichment); step != "" {
+		out.NextSteps = append(out.NextSteps, step)
+	}
+}
+
+// enrichmentNextStep summarizes the key Crossref facts (journal, publication year,
+// citation count) as a next-step string so the model surfaces them in its answer
+// rather than leaving the metadata buried at the end of the record. It returns ""
+// when there is no enrichment to report.
+func enrichmentNextStep(e *libgen.Enrichment) string {
+	if e == nil || e.Crossref == nil {
+		return ""
+	}
+	cr := e.Crossref
+	var parts []string
+	if cr.ContainerTitle != "" {
+		parts = append(parts, "the journal is "+mdCell(cr.ContainerTitle))
+	}
+	if cr.PublishedYear > 0 {
+		parts = append(parts, fmt.Sprintf("published %d", cr.PublishedYear))
+	}
+	if cr.CitationCount > 0 {
+		parts = append(parts, fmt.Sprintf("cited %d times", cr.CitationCount))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "When you answer, include the external metadata found (via Crossref): " + strings.Join(parts, ", ") + "."
 }
 
 // detailsByMD5 validates the md5 and returns the file plus its related edition.

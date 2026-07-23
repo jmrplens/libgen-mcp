@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos y progreso en 21 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos, progreso, citas, enriquecimiento, lectura en documento (find/outline), descubrimiento de acceso abierto y elicitación en 29 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -20,7 +20,7 @@ Para cada escenario, el arnés:
 1. Aplica el entorno propio del escenario y construye un servidor libgen-mcp
    fresco en proceso con las cuatro herramientas registradas.
 2. Envía el prompt en lenguaje natural del escenario más las definiciones de las
-   herramientas al modelo (hasta cuatro turnos).
+   herramientas al modelo (hasta seis turnos).
 3. Ejecuta cada llamada de herramienta del modelo **contra el servidor real**
    (mirrors reales, descargas reales) y le devuelve los resultados.
 4. Evalúa la transcripción: el nombre de la herramienta, la forma de los
@@ -41,12 +41,23 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Veintiún escenarios (S1–S20, más una variante S6b) cubren búsqueda, detalles,
-descargas, selección de fuente, recuperación de errores, progreso, resolución de
-enlaces, lectura/resumen de texto extraído, descubrimiento de acceso abierto y —
-de forma importante — prompts **sin guía** que no dan pistas al modelo, para
-comprobar si la superficie de herramientas es lo bastante auto-descriptiva para
-que un LLM la use sin ayuda.
+Veintinueve escenarios (S1–S20 más una variante S6b, y S21–S29) cubren
+búsqueda, detalles, descargas, selección de fuente, recuperación de errores,
+progreso, resolución de enlaces, lectura/resumen de texto extraído,
+descubrimiento de acceso abierto y — de forma importante — prompts **sin
+guía** que no dan pistas al modelo, para comprobar si la superficie de
+herramientas es lo bastante auto-descriptiva para que un LLM la use sin
+ayuda.
+
+S21–S29 se añadieron para cubrir todas las capacidades incorporadas desde
+v1.2.0: **citas** BibTeX/RIS, **enriquecimiento** opcional (metadatos de
+journal/número de citas vía Crossref), los modos **find** (búsqueda dentro del
+documento) y **outline** (tabla de contenidos) de la herramienta `read`,
+**descubrimiento de acceso abierto** sin clave federado en `search`, y
+**elicitación** condicionada a la capacidad del cliente (un email de
+Unpaywall bajo demanda, y una confirmación de descarga) con su fallback
+determinista. S27–S29 repiten las comprobaciones de find/outline/acceso
+abierto contra un servidor en modo **remoto** (`--http`).
 
 | ID  | Qué comprueba                                                                                                                                                                                                                                                              |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -71,6 +82,15 @@ que un LLM la use sin ayuda.
 | S18 | **Descarga remota (artículo)** — lo mismo para un DOI de pago; el modelo simplemente llama a `download`, el servidor remoto devuelve un enlace, y el arnés lo descarga a disco local                                                                                       |
 | S19 | **Buscar → leer → resumir** — el modelo busca un artículo por título, llama a `read` (no a `download`) con el DOI encontrado en los resultados, y escribe su propio resumen de la primera página extraída en vez de volcar el texto NO CONFIABLE tal cual                  |
 | S20 | **Descubrimiento de acceso abierto** — sin guía como S10–S13: el modelo debe descubrir `include_open_access` por sí mismo y referenciar en su respuesta uno de los resultados federados de arXiv/Crossref                                                                  |
+| S21 | **Citas** — el modelo debe llamar a `get_details` y mostrar la cita BibTeX de un libro encontrado por búsqueda, en vez de fabricar una                                                                                                                                     |
+| S22 | **Enriquecimiento** — el usuario pregunta en qué journal apareció un artículo y cuántas veces se ha citado; el modelo debe poner `enrich=true` en `get_details` para traer los metadatos de journal/citas de Crossref y mostrarlos en su respuesta                         |
+| S23 | **Modo find de read** — el modelo debe llamar a `read` con un argumento `find` (búsqueda dentro del documento) para localizar un término y mostrar un pasaje, en vez de descargar el archivo completo o leer secuencialmente                                               |
+| S24 | **Modo outline de read** — el modelo debe llamar a `read` con `outline=true` para devolver una tabla de contenidos / lista de capítulos en vez de leer texto                                                                                                               |
+| S25 | **Elicitación — email bajo demanda** — una descarga de DOI de acceso abierto sin email de Unpaywall configurado; el modelo debe continuar y dejar que el handler de elicitación del host provea el email por llamada                                                       |
+| S26 | **Elicitación — confirmación de descarga** — una descarga que escribe en disco dispara una confirmación de guardado; el arnés verifica de forma estricta que la confirmación realmente se disparó Y que la descarga se completó igualmente                                 |
+| S27 | **read find remoto** — S23 repetido contra un servidor en modo remoto (`--http`)                                                                                                                                                                                           |
+| S28 | **read outline remoto** — S24 repetido contra un servidor en modo remoto (`--http`)                                                                                                                                                                                        |
+| S29 | **Descubrimiento de acceso abierto remoto** — sin guía como S20, contra un servidor en modo remoto (`--http`)                                                                                                                                                              |
 
 ## Bloques local y remoto
 
@@ -82,43 +102,56 @@ entonces descarga ese enlace al sandbox — haciendo las veces de la propia
 herramienta de fetch de un agente — de modo que el archivo termina en local en
 ambos casos. Juntos, los dos bloques verifican que el modelo se comporta igual
 aunque el servidor se comporte de forma distinta, y que el archivo acaba en
-local de cualquier manera.
+local de cualquier manera. S27–S29 forman un segundo bloque remoto, repitiendo
+las nuevas comprobaciones de read-find/read-outline/acceso abierto sobre el
+mismo transporte `--http`.
 
 ## Últimos resultados
 
-En las corridas en vivo más recientes (API real + mirrors reales), **todos los
-escenarios de esta corrida pasan**, con `S6b` en SKIP cuando el descubrimiento
-de mirror fresco de randombook no está disponible — una condición de mirror en
-vivo, no un fallo del modelo. `S19` y `S20` se añadieron después de esta
-corrida y todavía no están incluidos; ver la nota debajo de la tabla.
+La tabla siguiente es una única ejecución en vivo de la suite completa contra
+`claude-haiku-4-5` (API real de Anthropic, mirrors reales, descargas reales):
+**26 pasaron, 0 fallaron, 4 en SKIP** (de 30 incluida la variante `S6b`). Cada
+SKIP es una condición de datos en vivo (un mirror caído, un HTTP 403, un PDF
+escaneado sin capa de texto, una extensión no soportada) — nunca un fallo del
+modelo ni del servidor. Ningún escenario falló.
 
-| ID  | Modo   | Resultado | Evidencia                                                                        |
-| --- | ------ | --------- | -------------------------------------------------------------------------------- |
-| S1  | local  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                            |
-| S2  | local  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                      |
-| S3  | local  | ✅ PASS   | búsqueda standards, 25 resultados                                                |
-| S4  | local  | ✅ PASS   | `get_details` devolvió un registro File/Edition                                  |
-| S5  | local  | ✅ PASS   | descargó un libro vía `libgen` (MD5-verificado)                                  |
-| S6  | local  | ✅ PASS   | el modelo puso `source:"scihub"`; descargó ~6,4 MB                               |
-| S6b | local  | ⏭️ SKIP   | el modelo puso `source:"randombook"` correctamente; el mirror devolvió 404       |
-| S7  | local  | ✅ PASS   | descargó un DOI vía `unpaywall`                                                  |
-| S8  | local  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar                                    |
-| S9  | local  | ✅ PASS   | reintentos agotados; error accionable; sin éxito fabricado                       |
-| S10 | local  | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                              |
-| S11 | local  | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                               |
-| S12 | local  | ✅ PASS   | buscó y descargó por md5 vía `libgen`                                            |
-| S13 | local  | ✅ PASS   | buscó → encontró el DOI → descargó vía `scihub`                                  |
-| S14 | local  | ✅ PASS   | recibió 18 notificaciones de progreso, final `982888/982888`                     |
-| S15 | local  | ✅ PASS   | página ordenada de 50; el modelo incluyó los enlaces en su respuesta             |
-| S16 | local  | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                     |
-| S17 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~1,0 MB a disco local |
-| S18 | remoto | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés descargó ~6,5 MB a disco local |
+| ID  | Modo   | Resultado | Evidencia                                                                                                                 |
+| --- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------- |
+| S1  | local  | ✅ PASS   | búsqueda nonfiction, 25 resultados, primer md5 válido                                                                     |
+| S2  | local  | ✅ PASS   | búsqueda articles, resultado con DOI válido                                                                               |
+| S3  | local  | ✅ PASS   | búsqueda standards, 25 resultados                                                                                         |
+| S4  | local  | ✅ PASS   | `get_details` devolvió un registro File/Edition                                                                           |
+| S5  | local  | ✅ PASS   | descargó un libro (~983 KB) vía `libgen` (MD5 verificado)                                                                 |
+| S6  | local  | ✅ PASS   | el modelo fijó `source:"scihub"`; descargó ~6,5 MB                                                                        |
+| S6b | local  | ⏭️ SKIP   | el modelo fijó `source:"randombook"` correctamente; la descarga en vivo falló (mirror/red)                                |
+| S7  | local  | ✅ PASS   | descargó un DOI vía `unpaywall`                                                                                           |
+| S8  | local  | ✅ PASS   | el modelo pidió aclaración en vez de adivinar (sin llamada a herramienta)                                                 |
+| S9  | local  | ✅ PASS   | reintentos agotados; error accionable surfaceado; sin éxito fabricado                                                     |
+| S10 | local  | ✅ PASS   | eligió `topics:[fiction]` sin ayuda                                                                                       |
+| S11 | local  | ✅ PASS   | eligió `topics:[comics]` sin ayuda                                                                                        |
+| S12 | local  | ✅ PASS   | buscó y luego descargó por md5 (~2,4 MB) vía `libgen`                                                                     |
+| S13 | local  | ✅ PASS   | buscó → encontró DOI → descargó vía `scihub`                                                                              |
+| S14 | local  | ✅ PASS   | recibió 17 notificaciones de progreso, final `982888/982888`                                                              |
+| S15 | local  | ✅ PASS   | página ordenada de 100; el modelo surfaceó los enlaces en su respuesta                                                    |
+| S16 | local  | ✅ PASS   | resolvió una URL vía `libgen` sin descargar (`resolve_only`)                                                              |
+| S17 | remote | ✅ PASS   | modo remoto: el modelo obtuvo un enlace; el arnés bajó ~983 KB a disco local                                              |
+| S18 | remote | ⏭️ SKIP   | modo remoto: resolvió un enlace pero la descarga en vivo devolvió HTTP 403                                                |
+| S19 | local  | ⏭️ SKIP   | el PDF encontrado no tenía capa de texto extraíble (escaneado; sin OCR)                                                   |
+| S20 | local  | ✅ PASS   | descubrimiento de acceso abierto surfaceó 17 resultados; el modelo referenció uno                                         |
+| S21 | local  | ✅ PASS   | buscó, llamó a `get_details` y surfaceó la cita BibTeX devuelta                                                           |
+| S22 | local  | ✅ PASS   | fijó `enrich=true`; Crossref journal="Cell", 56 374 citas; el modelo respondió a lo pedido                                |
+| S23 | local  | ✅ PASS   | usó `read` con `find="pointer"`; 503 coincidencias; surfaceó un pasaje                                                    |
+| S24 | local  | ✅ PASS   | usó `read` con `outline=true`; 221 entradas de índice                                                                     |
+| S25 | local  | ✅ PASS   | descarga de DOI OA con el email por-llamada del host; ~256 KB                                                             |
+| S26 | local  | ✅ PASS   | la confirmación de guardado se disparó una vez, el host aceptó; ~4,4 MB descargados — la confirmación no bloqueó el flujo |
+| S27 | remote | ✅ PASS   | modo remoto: usó `read` `find="pointer"`; 503 coincidencias; surfaceó un pasaje                                           |
+| S28 | remote | ⏭️ SKIP   | modo remoto: el fichero encontrado no era extraíble (extensión no soportada)                                              |
+| S29 | remote | ✅ PASS   | modo remoto: descubrimiento OA surfaceó 20 resultados; el modelo referenció uno                                           |
 
-<Aside type="note">
-	S19 (buscar → leer → resumir) y S20 (descubrimiento de acceso abierto) se
-	añadieron después de esta corrida y todavía no aparecen en la tabla anterior;
-	ejecuta `make eval` para incluirlos.
-</Aside>
+Los SKIP son esperados y sanos: el arnés trata una condición de mirror/datos en
+vivo (un 403, un 404, un PDF solo-escaneado, un contenedor no soportado) como
+SKIP, para que un problema transitorio aguas arriba nunca se disfrace de bug del
+modelo o del servidor.
 
 ## Cómo ejecutarlo
 

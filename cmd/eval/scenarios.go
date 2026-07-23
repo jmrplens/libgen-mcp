@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,6 +22,21 @@ import (
 // skipPrefix marks an assertion message as a SKIP (an unmet precondition or a
 // flaky live mirror), not a pass or a fail.
 const skipPrefix = "SKIP:"
+
+// Shared detail-string fragments, so an assertion's phrasing stays consistent and
+// is defined once (SonarCloud go:S1192).
+const (
+	// functionalPrefix marks a detail as a functional/correctness failure (as
+	// opposed to a SURFACE GAP), so a reader can tell "our bug" from "the model
+	// didn't discover the capability".
+	functionalPrefix = "FUNCTIONAL: "
+	// notExtractableDetail is the skip reason when a fetched file has no
+	// extractable text (scanned/unsupported); the concrete reason is appended.
+	notExtractableDetail = " file was not extractable ("
+	// badDownloadMD5Detail is the failure detail when a download call's md5 is not
+	// a 32-char hex string.
+	badDownloadMD5Detail = "download md5 is not 32-hex"
+)
 
 // noDownloadCall is the failure detail when a download scenario produced no
 // download tool call.
@@ -41,8 +58,27 @@ const openAccessDOI = "10.1371/journal.pone.0000308"
 const scihubDOI = "10.1016/j.cell.2011.02.013"
 
 // evalUnpaywallEmail is the contact email the article scenario sets so the
-// unpaywall source (disabled by default without an email) is exercised.
+// unpaywall source (disabled by default without an email) is exercised. It is a
+// safe fallback: live runs prefer LIBGEN_MCP_UNPAYWALL_EMAIL (see unpaywallEmail).
 const evalUnpaywallEmail = "mail@jmrp.io"
+
+// elicitOADOI is a reliably open-access article DOI (Ioannidis 2005, PLOS
+// Medicine) used by the on-demand Unpaywall-email elicitation scenario: with no
+// email configured, only the elicited contact email can bring Unpaywall into the
+// download chain for this DOI.
+const elicitOADOI = "10.1371/journal.pmed.0020124"
+
+// unpaywallEmail returns the Unpaywall contact email the eval injects: the
+// LIBGEN_MCP_UNPAYWALL_EMAIL environment value when set (the Makefile eval target
+// loads it from .env, so live runs use the real address), otherwise the committed
+// evalUnpaywallEmail fallback so an env-less run still exercises the open-access
+// path.
+func unpaywallEmail() string {
+	if v := strings.TrimSpace(os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL")); v != "" {
+		return v
+	}
+	return evalUnpaywallEmail
+}
 
 // scenario is one live end-to-end check: a natural-language prompt, an optional
 // per-scenario environment, and an assertion over the resulting transcript.
@@ -246,7 +282,7 @@ func scenarios() []scenario {
 			Prompt: fmt.Sprintf("Download the open-access article with DOI %s.", openAccessDOI),
 			// Unpaywall is disabled unless a contact email is configured; set one so
 			// this scenario exercises the open-access (unpaywall) path functionally.
-			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": evalUnpaywallEmail},
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": unpaywallEmail()},
 			Assert:   assertS7,
 		},
 		{
@@ -367,6 +403,87 @@ func scenarios() []scenario {
 			// search field itself and then surface one of the federated open-access hits
 			// (arxiv/crossref) in its answer. A live provider outage is a SKIP, not a
 			// failure, since the flag/plumbing already did its job.
+			Assert: assertOpenAccessDiscovery,
+		},
+		// S21-S26 cover the capabilities added since v1.2.0, one per capability.
+		// Each is deliberately phrased like a real user request that never names the
+		// tool argument under test, so a pass means the model discovered the
+		// capability from the tool/field descriptions alone. Each assertion's detail
+		// string is explicit about whether a FAIL is a SURFACE GAP (the MCP surface
+		// under-exposed the capability to the model) or FUNCTIONAL (our own bug).
+		{
+			ID: "S21",
+			Prompt: `Find the book "Clean Code" by Robert C. Martin and give me a BibTeX ` +
+				`citation for it.`,
+			// Citations: the model must search then get_details (which builds the
+			// BibTeX) and surface the citation, rather than fabricate one. A citation in
+			// the answer with no get_details call is the surface gap under test.
+			Assert: assertCitations,
+		},
+		{
+			ID: "S22",
+			Prompt: fmt.Sprintf("Find the research article with DOI %s (Hallmarks of Cancer) "+
+				"and tell me which journal it was published in and how many times it's been cited.", scihubDOI),
+			// Enrichment: the model must set enrich=true on get_details to pull the
+			// Crossref journal/citation metadata. The email lets OpenLibrary/Crossref
+			// use the polite pool; enrichment itself is keyless.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": unpaywallEmail()},
+			Assert:   assertEnrichment,
+		},
+		{
+			ID: "S23",
+			Prompt: `Find the book "The C Programming Language" by Kernighan and Ritchie, then ` +
+				`search inside it for the word "pointer" and show me a passage.`,
+			// read find mode: the model must call read with a find argument (in-document
+			// search) rather than downloading the whole file or reading sequentially.
+			Assert: assertReadFind,
+		},
+		{
+			ID: "S24",
+			Prompt: `Find a PDF of "The C Programming Language" by Kernighan and Ritchie and ` +
+				`show me its table of contents / chapter list.`,
+			// read outline mode: the model must call read with outline=true to get the
+			// document's table of contents instead of reading its text.
+			Assert: assertReadOutline,
+		},
+		{
+			ID:     "S25",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s.", elicitOADOI),
+			// Elicitation (on-demand Unpaywall email): the email is forced empty for this
+			// scenario, so the only way Unpaywall can serve this DOI is the per-call email
+			// the host's elicitation handler supplies. Setting it empty here overrides any
+			// email the Makefile loaded from .env, guaranteeing the on-demand path fires.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
+			Assert:   assertElicitedEmailDownload,
+		},
+		{
+			ID:     "S26",
+			Prompt: `Find "The Pragmatic Programmer" by Andrew Hunt and David Thomas and download it.`,
+			// Elicitation (download confirmation): with the host advertising elicitation,
+			// a disk-writing download now raises a save-confirmation prompt. Uses a book
+			// DISTINCT from S5/S14 so it is not a verbatim duplicate of the progress
+			// scenario. The host's elicitation handler bumps a per-scenario counter each
+			// time it answers a confirmation, which the transcript exposes — so this
+			// scenario HARD-asserts the confirmation elicitation actually fired AND the
+			// download still completed, rather than only inferring it from a saved file.
+			Assert: assertConfirmedDownload,
+		},
+		{
+			ID:     "S27",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie, then search inside it for the word "pointer" and show me a passage.`,
+			Remote: true,
+			Assert: assertReadFind,
+		},
+		{
+			ID:     "S28",
+			Prompt: `Find a PDF of "Structure and Interpretation of Computer Programs" and show me its table of contents.`,
+			Remote: true,
+			Assert: assertReadOutline,
+		},
+		{
+			ID:     "S29",
+			Prompt: `I'm researching transformer neural networks. Find me some open-access papers on the topic.`,
+			Remote: true,
 			Assert: assertOpenAccessDiscovery,
 		},
 	}
@@ -672,8 +789,10 @@ func assertS4(tr transcript) (pass bool, detail string) {
 // download" intent by requiring a read call and asserting NO download call
 // occurred in the transcript. A not-extractable file or a live fetch failure is
 // a SKIP, since the model's tool-use was still correct.
-// readIdentifierOK verifies the read call was keyed by an identifier from a prior
-// search result: a valid DOI traced back to search, or a 32-hex md5.
+// readIdentifierOK verifies the read call was keyed by an identifier that came
+// from a prior search result: a valid DOI traced back to search, or a 32-hex md5
+// traced back to search. Both are provenance-checked so a model that hallucinates
+// an identifier and then hits a live error cannot pass as a benign skip.
 func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
 	doi := stringField(call.Input, "doi")
 	md5 := stringField(call.Input, "md5")
@@ -683,16 +802,67 @@ func readIdentifierOK(tr transcript, call toolCall) (ok bool, detail string) {
 			return false, "read doi is not a valid DOI"
 		}
 		if !doiInSearchResults(tr, doi) {
-			return false, "read doi did not come from a prior search result"
+			return false, "read doi did not come from a prior search result (model may have hallucinated it)"
 		}
 	case md5 != "":
 		if !isMD5(md5) {
 			return false, "read md5 is not 32-hex"
 		}
+		if !md5InSearchResults(tr, md5) {
+			return false, "read md5 did not come from a prior search result (model may have hallucinated it)"
+		}
 	default:
 		return false, "read call set neither doi nor md5"
 	}
 	return true, ""
+}
+
+// idInSearchResults reports whether id matches an edition_id or file_id in any
+// prior search result of the transcript.
+func idInSearchResults(tr transcript, id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		var out tools.SearchOutput
+		if decodeStructured(c.Structured, &out) != nil {
+			continue
+		}
+		for _, r := range out.Results {
+			if r.EditionID == id || r.FileID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// detailsIdentifierGrounded verifies a get_details call was keyed by an identifier
+// from a prior search result: a 32-hex md5 traced to search, or an edition/file id
+// traced to search. It guards enrichment/citation provenance (S22) so a model that
+// hallucinates an identifier and then hits a live error cannot pass as a benign
+// skip.
+func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why string) {
+	if md5 := stringField(call.Input, "md5"); md5 != "" {
+		if !isMD5(md5) {
+			return false, "get_details md5 is not 32-hex"
+		}
+		if !md5InSearchResults(tr, md5) {
+			return false, "get_details md5 did not come from a prior search result (model may have hallucinated it)"
+		}
+		return true, ""
+	}
+	if id := stringField(call.Input, "id"); id != "" {
+		if !idInSearchResults(tr, id) {
+			return false, "get_details id did not come from a prior search result (model may have hallucinated it)"
+		}
+		return true, ""
+	}
+	return false, "get_details call set neither md5 nor id"
 }
 
 func assertReadSummary(tr transcript) (pass bool, detail string) {
@@ -705,12 +875,12 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 	}
 	// The intended flow reads the first page instead of fetching the whole file;
 	// a download call means the model took the wrong path.
-	if _, ok := findCall(tr, "download"); ok {
+	if _, downloaded := findCall(tr, "download"); downloaded {
 		return false, "model downloaded the file instead of reading it"
 	}
 	// read must be keyed by an identifier from a prior search result.
-	if ok, detail := readIdentifierOK(tr, call); !ok {
-		return false, detail
+	if keyed, why := readIdentifierOK(tr, call); !keyed {
+		return false, why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " read failed against the live mirror/source chain"
@@ -720,7 +890,7 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + " file was not extractable (" + out.Reason + ")"
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
 	}
 	if strings.TrimSpace(out.Text) == "" {
 		return false, "extractable read returned no text"
@@ -777,6 +947,261 @@ func finalTextMentionsOpenAccess(text string, hits []discovery.DiscoveryResult) 
 	return false
 }
 
+// finalTextHasCitation reports whether the model's final prose contains a formal
+// citation, by looking for BibTeX/RIS markers a real citation carries. Used to
+// distinguish a model that surfaced get_details's citation from one that answered
+// without one — or, when no get_details call was made, that fabricated one.
+func finalTextHasCitation(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "@book") || strings.Contains(lower, "@article") ||
+		strings.Contains(lower, "author =") || strings.Contains(lower, "author=")
+}
+
+// assertCitations checks the citations flow (S21): the model must search then call
+// get_details — the tool that actually builds BibTeX — and surface the citation it
+// returns. A citation in the answer with NO get_details call is a SURFACE GAP (the
+// model fabricated it because get_details's description did not convey it provides
+// citations). Sparse metadata that yields no BibTeX, or a live details failure, is
+// a SKIP.
+func assertCitations(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "get_details")
+	if !ok {
+		if finalTextHasCitation(tr.FinalText) {
+			return false, "SURFACE GAP: model returned a citation without calling get_details — get_details's description may not convey that it provides BibTeX/RIS"
+		}
+		return false, "SURFACE GAP: model produced no citation and never called get_details, where citations live"
+	}
+	// get_details is legitimately keyed by md5 OR an edition/file id; grade both,
+	// matching assertEnrichment, so an id-keyed lookup is not a spurious failure.
+	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
+		return false, functionalPrefix + why
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " get_details failed against the live mirror"
+	}
+	var out tools.DetailsOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if out.Citations == nil || !strings.HasPrefix(strings.TrimSpace(out.Citations.BibTeX), "@") {
+		return true, skipPrefix + " get_details returned no BibTeX (record metadata too sparse to build one)"
+	}
+	if !finalTextHasCitation(tr.FinalText) {
+		return false, "FUNCTIONAL: get_details returned BibTeX but the model did not surface a citation in its answer"
+	}
+	return true, "model searched, called get_details, and surfaced the returned BibTeX citation"
+}
+
+// citationWords are the citation-specific tokens that count as the model engaging
+// with the "how many times has it been cited" ask. Bare "cit" is deliberately
+// excluded — it also matches "explicit", "solicit", "exciting", etc., which would
+// make the check spuriously pass on unrelated prose.
+var citationWords = []string{"citation", "cited", "citing", "cites"}
+
+// answerMentionsEnrichment reports whether the model's final prose engaged with the
+// journal/citation ask using the enriched Crossref record: it names the journal
+// (Crossref ContainerTitle, when distinctive), states the citation count, or uses a
+// citation-specific word. It is a soft signal — evidence the model used the
+// enrichment rather than an exact-string requirement a paraphrase would fail. It is
+// trustworthy: it fails only when the answer carries none of these signals, so a
+// FAIL means the model genuinely omitted the enrichment it was shown.
+func answerMentionsEnrichment(answer string, cr *libgen.CrossrefWork) bool {
+	lower := strings.ToLower(answer)
+	if cr != nil {
+		if journal := strings.ToLower(strings.TrimSpace(cr.ContainerTitle)); len(journal) > 2 && strings.Contains(lower, journal) {
+			return true
+		}
+		if cr.CitationCount > 0 && strings.Contains(lower, strconv.Itoa(cr.CitationCount)) {
+			return true
+		}
+	}
+	return containsAny(lower, citationWords...)
+}
+
+// assertEnrichment checks the opt-in enrichment flow (S22): the model must set
+// enrich=true on get_details to pull Crossref journal/citation metadata, then
+// answer the journal/citation question. A get_details call WITHOUT enrich=true is a
+// SURFACE GAP (the enrich flag's description did not convey it fetches external
+// metadata). Crossref returning nothing, or a live details failure, is a SKIP.
+func assertEnrichment(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "get_details")
+	if !ok {
+		return false, "SURFACE GAP: model never called get_details — the enrich/external-metadata capability lives there and was not discovered"
+	}
+	if enrich, _ := call.Input["enrich"].(bool); !enrich {
+		return false, "SURFACE GAP: model called get_details but did not set enrich=true — the enrich field's description may not convey it fetches journal/citation metadata"
+	}
+	// Provenance: the get_details identifier must trace to a prior search result, so
+	// a hallucinated md5/id that then hits a live error cannot pass as a benign skip.
+	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
+		return false, functionalPrefix + why
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " get_details(enrich) failed against the live mirror/Crossref"
+	}
+	var out tools.DetailsOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
+		return true, skipPrefix + " enrich=true but Crossref returned no metadata (best-effort external API)"
+	}
+	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref) {
+		if strings.TrimSpace(tr.FinalText) == "" {
+			return true, skipPrefix + " model exhausted its turn budget before answering (enrich data was fetched correctly)"
+		}
+		return false, "FUNCTIONAL: Crossref data was present but the model's answer referenced neither the journal name, the citation count, nor any citation-specific term"
+	}
+	return true, fmt.Sprintf("model set enrich=true; Crossref journal=%q citations=%d; model answered the ask",
+		out.Enrichment.Crossref.ContainerTitle, out.Enrichment.Crossref.CitationCount)
+}
+
+// assertReadFind checks the read find mode (S23): the model must call read with a
+// non-empty find argument (in-document search), not download the whole file or read
+// sequentially. Downloading, or reading with no find argument, is a SURFACE GAP (the
+// read tool/find field description did not convey in-document search). A
+// not-extractable file, no matches, or a live fetch failure is a SKIP.
+func assertReadFind(tr transcript) (pass bool, detail string) {
+	if _, ok := findCall(tr, "download"); ok {
+		return false, "SURFACE GAP: model downloaded the file instead of using read's find mode — the read tool description may not convey in-document search"
+	}
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "SURFACE GAP: model never called read — the find capability lives on read and was not discovered"
+	}
+	if stringField(call.Input, "find") == "" {
+		return false, "SURFACE GAP: model called read sequentially with no find argument — read's find field description may not convey in-document search"
+	}
+	// Provenance: the read identifier must trace to a prior search result, so a
+	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
+	if keyed, why := readIdentifierOK(tr, call); !keyed {
+		return false, functionalPrefix + why
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " read(find) failed against the live mirror/source chain"
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if !out.Extractable {
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+	}
+	if out.MatchCount == 0 {
+		return true, skipPrefix + " read(find) ran but found no matches for the term in this copy"
+	}
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return false, "FUNCTIONAL: read(find) returned matches but the model showed no passage"
+	}
+	return true, fmt.Sprintf("model used read find=%q; %d match(es); model surfaced a passage",
+		stringField(call.Input, "find"), out.MatchCount)
+}
+
+// assertReadOutline checks the read outline mode (S24): the model must call read
+// with outline=true to get the table of contents instead of the text. A read call
+// without outline=true is a SURFACE GAP (read's outline field description did not
+// convey table-of-contents mode). A PDF with no embedded outline, or a live fetch
+// failure, is a SKIP — the mode still ran correctly.
+func assertReadOutline(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "SURFACE GAP: model never called read — the outline capability lives on read and was not discovered"
+	}
+	if outline, _ := call.Input["outline"].(bool); !outline {
+		return false, "SURFACE GAP: model called read without outline=true — read's outline field description may not convey table-of-contents mode"
+	}
+	// Provenance: the read identifier must trace to a prior search result, so a
+	// hallucinated md5/doi that then hits a live error cannot pass as a benign skip.
+	if keyed, why := readIdentifierOK(tr, call); !keyed {
+		return false, functionalPrefix + why
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " read(outline) failed against the live mirror/source chain"
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if !out.Extractable {
+		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+	}
+	if len(out.Outline) == 0 {
+		return true, skipPrefix + " read(outline) ran cleanly but this PDF has no embedded table of contents"
+	}
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return false, "FUNCTIONAL: outline returned entries but the model produced no answer"
+	}
+	return true, fmt.Sprintf("model used read outline=true; %d table-of-contents entr(ies) returned", len(out.Outline))
+}
+
+// assertElicitedEmailDownload checks the on-demand Unpaywall-email elicitation
+// (S25): the scenario configures NO email, so the only way Unpaywall can serve the
+// open-access DOI is the per-call email the host's elicitation handler supplies. The
+// model just has to download by the DOI; the host answers the email prompt behind
+// the scenes. A source of "unpaywall" is proof the elicited email threaded through
+// (the config had none). A live OA-chain failure is a SKIP — the model's tool use
+// was still correct, and the elicitation surface still fired.
+func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, notAValidDOI
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " model downloaded by DOI (host answered the email elicitation) but the live OA chain failed"
+	}
+	var res libgen.DownloadResult
+	if err := decodeStructured(call.Structured, &res); err != nil {
+		return false, err.Error()
+	}
+	if res.Path == "" || res.SizeBytes <= 0 {
+		return false, "FUNCTIONAL: download result had an empty path or zero size"
+	}
+	if res.Source == "unpaywall" {
+		return true, fmt.Sprintf("elicitation fired: no email was configured yet Unpaywall served %d bytes — the elicited per-call email threaded through", res.SizeBytes)
+	}
+	return true, fmt.Sprintf("DOI download succeeded via %s (%d bytes); the host answered any email elicitation the server raised", res.Source, res.SizeBytes)
+}
+
+// assertConfirmedDownload checks the download-confirmation elicitation (S26): with
+// the host advertising elicitation, a disk-writing download raises a save
+// confirmation, which the host accepts. The host's elicitation handler bumps a
+// per-scenario counter (tr.ConfirmElicits) each time it answers one, so this
+// scenario HARD-asserts the confirmation elicitation actually fired AND the download
+// completed — not merely that a file appeared. The model downloads a book by an md5
+// from a prior search result; a live fetch failure (after a confirmation fired) is a
+// SKIP.
+func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	md5 := stringField(call.Input, "md5")
+	if !isMD5(md5) {
+		return false, badDownloadMD5Detail
+	}
+	if !md5InSearchResults(tr, md5) {
+		return false, "FUNCTIONAL: download md5 did not come from a prior search result (model may have hallucinated it)"
+	}
+	if downloadFailed(call) {
+		if tr.ConfirmElicits == 0 {
+			return true, skipPrefix + " live fetch failed before any save-confirmation elicitation fired (mirror/network)"
+		}
+		return true, skipPrefix + " confirmation elicitation fired but the live fetch failed (mirror/network)"
+	}
+	if tr.ConfirmElicits == 0 {
+		return false, "FUNCTIONAL: download completed but no save-confirmation elicitation fired — the confirmation surface did not run"
+	}
+	fileOK, msg := checkDownloadedFile(call, "")
+	if !fileOK {
+		return false, functionalPrefix + msg
+	}
+	return true, fmt.Sprintf("save-confirmation elicitation fired %dx and the host accepted it; %s — confirmation did not block the flow",
+		tr.ConfirmElicits, msg)
+}
+
 // assertS5 checks a book download by md5 produces a saved, non-empty file.
 func assertS5(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
@@ -784,7 +1209,7 @@ func assertS5(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if !isMD5(stringField(call.Input, "md5")) {
-		return false, "download md5 is not 32-hex"
+		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " valid md5 download but the live fetch failed (mirror/network)"
@@ -819,7 +1244,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, notAValidDOI
 	}
 	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
-		return false, "download md5 is not 32-hex"
+		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
 		return true, skipPrefix + " model set source=" + want + " correctly but the live download failed (mirror/network)"
