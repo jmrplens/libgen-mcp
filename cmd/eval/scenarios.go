@@ -956,12 +956,10 @@ func assertCitations(tr transcript) (pass bool, detail string) {
 		}
 		return false, "SURFACE GAP: model produced no citation and never called get_details, where citations live"
 	}
-	md5 := stringField(call.Input, "md5")
-	if !isMD5(md5) {
-		return false, "FUNCTIONAL: get_details md5 is not 32-hex"
-	}
-	if !md5InSearchResults(tr, md5) {
-		return false, "get_details md5 did not come from a prior search result"
+	// get_details is legitimately keyed by md5 OR an edition/file id; grade both,
+	// matching assertEnrichment, so an id-keyed lookup is not a spurious failure.
+	if grounded, why := detailsIdentifierGrounded(tr, call); !grounded {
+		return false, "FUNCTIONAL: " + why
 	}
 	if call.Result == nil || call.Result.IsError {
 		return true, skipPrefix + " get_details failed against the live mirror"
