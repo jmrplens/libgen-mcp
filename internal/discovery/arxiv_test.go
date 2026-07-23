@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // arxivFeedFixture is a realistic two-entry arXiv Atom feed: the first entry
@@ -181,5 +182,102 @@ func TestArxiv_LimitClamped(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "max_results=50") {
 		t.Errorf("limit=9999 query = %q, want clamped max_results=50", gotQuery)
+	}
+}
+
+// TestArxivProvider_Name verifies the arXiv provider stamps the "arxiv" origin.
+func TestArxivProvider_Name(t *testing.T) {
+	if got := NewArxiv().Name(); got != "arxiv" {
+		t.Errorf("Name() = %q, want %q", got, "arxiv")
+	}
+}
+
+// TestArxiv_TransportErrorReturnsEmpty verifies that a transport failure with a
+// live (non-canceled) context degrades to an empty result with no error. Pointing
+// the base at an address whose server has been closed makes boundedGet return a
+// connection error while ctx.Err() stays nil, exercising the non-context error
+// branch of Search that softens to (nil, nil).
+func TestArxiv_TransportErrorReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base := srv.URL
+	srv.Close() // close so the address refuses connections
+	setArxivBase(t, base)
+
+	got, err := NewArxiv().Search(context.Background(), "neural networks", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil on a transport error", err)
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a transport error", got)
+	}
+}
+
+// TestArxiv_ContextDeadlineDuringRequest verifies the context-error branch reached
+// AFTER the request is in flight: the limiter admits the call (ctx still live), then
+// the server blocks until the client's short deadline expires, so boundedGet fails
+// with ctx.Err() != nil and Search propagates that context error rather than
+// softening it to empty. This exercises the "return nil, ctx.Err()" inside Search's
+// transport-error handling, distinct from the already-canceled limiter path.
+func TestArxiv_ContextDeadlineDuringRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // block until the client's context expires
+	}))
+	defer srv.Close()
+	setArxivBase(t, srv.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	got, err := NewArxiv().Search(ctx, "neural networks", 5)
+	if err == nil {
+		t.Fatal("Search() error = nil, want a context deadline error")
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a deadline error", got)
+	}
+}
+
+// TestParseArxivFeed_MalformedReturnsNil verifies that a body that cannot be
+// decoded as an Atom feed yields nil rather than panicking, honoring the
+// best-effort contract that a malformed feed is treated as no results.
+func TestParseArxivFeed_MalformedReturnsNil(t *testing.T) {
+	if got := parseArxivFeed([]byte("<<<not xml>>>")); got != nil {
+		t.Errorf("parseArxivFeed(malformed) = %v, want nil", got)
+	}
+}
+
+// TestArxivAbsID verifies the abstract-id extraction: an id containing "/abs/"
+// yields the trimmed part after the marker (version suffix preserved), while an id
+// without the marker yields "".
+func TestArxivAbsID(t *testing.T) {
+	cases := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{name: "abs marker with version", id: "http://arxiv.org/abs/2101.00001v1", want: "2101.00001v1"},
+		{name: "abs marker no version", id: "http://arxiv.org/abs/2101.00001", want: "2101.00001"},
+		{name: "no abs marker", id: "http://arxiv.org/other/2101.00001", want: ""},
+		{name: "empty id", id: "", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := arxivAbsID(tc.id); got != tc.want {
+				t.Errorf("arxivAbsID(%q) = %q, want %q", tc.id, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestArxivPDFURL_NoLinkNoAbsID verifies the final fallback of arxivPDFURL: with no
+// explicit pdf link and an <id> lacking the "/abs/" marker (so no id can be
+// reconstructed), the PDF URL resolves to "".
+func TestArxivPDFURL_NoLinkNoAbsID(t *testing.T) {
+	e := atomEntry{
+		ID:    "http://arxiv.org/other/2101.00001",
+		Links: []atomLink{{Title: "alternate", Href: "http://arxiv.org/other/2101.00001", Type: "text/html"}},
+	}
+	if got := arxivPDFURL(e); got != "" {
+		t.Errorf("arxivPDFURL(no pdf link, no abs id) = %q, want empty", got)
 	}
 }

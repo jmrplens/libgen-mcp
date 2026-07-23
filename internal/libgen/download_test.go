@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 )
@@ -1069,5 +1072,957 @@ func TestDownloadNoCrossSourceResumeContamination(t *testing.T) {
 	aPart := filepath.Join(dir, ".libgen-mcp-srca-"+partialKey(item, Resolved{})+".part")
 	if _, statErr := os.Stat(aPart); statErr != nil {
 		t.Errorf("A's distinct .part missing at %s: %v", aPart, statErr)
+	}
+}
+
+// errReader is an io.Reader that always fails, used to drive the read-error
+// branches of body-consuming helpers.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errors.New("simulated read error") }
+
+// failWriter is an io.Writer that always fails, used to drive the write-error
+// branch of the resume re-hash in openPartForStream.
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("simulated write error") }
+
+// TestParseContentRangeStart covers every branch of the Content-Range parser: a
+// well-formed header, a wrong prefix, a missing dash, an unparseable offset and
+// an empty header.
+func TestParseContentRangeStart(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int64
+		ok   bool
+	}{
+		{"bytes 100-199/200", 100, true},
+		{"bytes 0-0/1", 0, true},
+		{"items 0-1/2", 0, false},    // wrong unit prefix
+		{"bytes 100", 0, false},      // no dash
+		{"bytes abc-9/10", 0, false}, // unparseable start
+		{"", 0, false},
+	}
+	for _, tc := range cases {
+		got, ok := parseContentRangeStart(tc.in)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("parseContentRangeStart(%q) = (%d, %v), want (%d, %v)", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// TestFilenameFromDisposition covers the empty header, a valid attachment
+// filename, a malformed media type (ParseMediaType error) and a header with no
+// filename parameter.
+func TestFilenameFromDisposition(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{`attachment; filename="book.pdf"`, "book.pdf"},
+		{"attachment; badparam", ""}, // parameter without '=' is malformed
+		{"attachment", ""},           // no filename parameter
+	}
+	for _, tc := range cases {
+		if got := filenameFromDisposition(tc.in); got != tc.want {
+			t.Errorf("filenameFromDisposition(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestChooseFileName covers the name-selection precedence and, in particular, the
+// fallback-extension branch (appending the source's extension when the chosen
+// name carries none) and its skip when a name already has an extension.
+func TestChooseFileName(t *testing.T) {
+	meta := &FileMeta{Author: "A", Title: "T", Year: "2020", Ext: "epub"}
+	cases := []struct {
+		name        string
+		filename    string
+		disposition string
+		meta        *FileMeta
+		md5         string
+		ext         string
+		want        string
+	}{
+		{"explicit filename wins", "explicit.pdf", "disp.pdf", meta, "md5", "pdf", "explicit.pdf"},
+		{"disposition when no filename", "", "disp.pdf", meta, "md5", "pdf", "disp.pdf"},
+		{"meta when no filename or disposition", "", "", meta, "md5", "pdf", "A - T (2020).epub"},
+		{"md5 with fallback extension", "", "", nil, "abcdef", "pdf", "abcdef.pdf"},
+		{"fallback extension skipped when name has one", "have.mobi", "", nil, "md5", "pdf", "have.mobi"},
+		{"no extension and no fallback", "", "", nil, "deadbeef", "", "deadbeef"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := chooseFileName(tc.filename, tc.disposition, tc.meta, tc.md5, tc.ext)
+			if got != tc.want {
+				t.Errorf("chooseFileName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestShouldEmit covers the elapsed-interval branch, the byte-advance branch, and
+// the throttled (no emit) case of the progress writer.
+func TestShouldEmit(t *testing.T) {
+	if pw := (&progressWriter{lastAt: time.Now().Add(-time.Hour)}); !pw.shouldEmit() {
+		t.Error("shouldEmit() = false after the progress interval elapsed, want true")
+	}
+	if pw := (&progressWriter{lastAt: time.Now(), total: 100, done: 10, lastDone: 0}); !pw.shouldEmit() {
+		t.Error("shouldEmit() = false after advancing a full fraction, want true")
+	}
+	if pw := (&progressWriter{lastAt: time.Now(), total: 100, done: 1, lastDone: 0}); pw.shouldEmit() {
+		t.Error("shouldEmit() = true while recent and barely advanced, want false")
+	}
+}
+
+// expectFetchFileError fails the test if fetchFile unexpectedly succeeded, closing
+// the body if one came back so the check is body-leak clean.
+func expectFetchFileError(t *testing.T, resp *http.Response, err error, msg string) {
+	t.Helper()
+	if err == nil {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		t.Error(msg)
+	}
+}
+
+// TestFetchFileLimiterError covers fetchFile's rate-limiter guard: a limiter with
+// a zero burst can never grant a token, so Wait fails before any request is built.
+func TestFetchFileLimiterError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	c.limiter = rate.NewLimiter(rate.Every(time.Hour), 0)
+	resp, err := c.fetchFile(context.Background(), "http://127.0.0.1:0/x", 0, nil)
+	expectFetchFileError(t, resp, err, "fetchFile should fail when the limiter cannot grant a token")
+}
+
+// TestFetchFileRequestErrors covers fetchFile's request-construction failure (an
+// invalid URL) and its transport failure (a dead address).
+func TestFetchFileRequestErrors(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	resp, err := c.fetchFile(context.Background(), "http://\x7f/x", 0, nil)
+	expectFetchFileError(t, resp, err, "fetchFile with an invalid URL should fail at request construction")
+	resp, err = c.fetchFile(context.Background(), "http://127.0.0.1:0/x", 0, nil)
+	expectFetchFileError(t, resp, err, "fetchFile against a dead address should fail at transport")
+}
+
+// TestFetchFileAppliesHeadersAndRange covers the source-header loop and the resume
+// Range header: fetchFile must forward a supplied header and, when resuming, add a
+// bytes= Range for the CDN.
+func TestFetchFileAppliesHeadersAndRange(t *testing.T) {
+	var gotReferer, gotRange string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotReferer = r.Header.Get("Referer")
+		gotRange = r.Header.Get("Range")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{})
+	resp, err := c.fetchFile(context.Background(), srv.URL, 5, http.Header{"Referer": {"http://example.test/"}})
+	if err != nil {
+		t.Fatalf("fetchFile() error = %v", err)
+	}
+	_ = resp.Body.Close()
+	if gotReferer != "http://example.test/" {
+		t.Errorf("Referer = %q, want %q", gotReferer, "http://example.test/")
+	}
+	if gotRange != "bytes=5-" {
+		t.Errorf("Range = %q, want %q", gotRange, "bytes=5-")
+	}
+}
+
+// TestValidateFileResponsePeekError covers validateFileResponse's peek-error
+// branch: a body that fails on read (not EOF) surfaces as an error.
+func TestValidateFileResponsePeekError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	resp := &http.Response{Header: http.Header{}, Body: io.NopCloser(errReader{})}
+	if _, _, err := c.validateFileResponse(resp, -1); err == nil {
+		t.Error("validateFileResponse should surface a body read error")
+	}
+}
+
+// TestValidateFileResponseNoBytes covers validateFileResponse's no-first-byte
+// branch: a 2xx whose body yields no bytes at all is a "did not begin" failure
+// (tagged for the start-retry schedule) rather than a valid empty file.
+func TestValidateFileResponseNoBytes(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	resp := &http.Response{Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}
+	_, _, err := c.validateFileResponse(resp, -1)
+	if err == nil {
+		t.Fatal("validateFileResponse should fail when the response yields no bytes")
+	}
+	if !errors.Is(err, errStartFailed) {
+		t.Errorf("err = %v, want it tagged as a start failure", err)
+	}
+}
+
+// TestStreamToPartOpenError covers openPartForStream's OpenFile failure (and its
+// propagation through streamToPartAndVerify): a partial path that is an existing
+// directory cannot be opened for writing.
+func TestStreamToPartOpenError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	dir := t.TempDir()
+	_, err := c.streamToPartAndVerify(dir, filepath.Join(dir, "dest"), "", strings.NewReader("x"), streamOpts{})
+	if err == nil {
+		t.Error("streamToPartAndVerify should fail when the partial path is a directory")
+	}
+}
+
+// TestOpenPartForStreamRehashError covers the resume re-hash failure: when copying
+// the existing bytes into the digest fails, the partial is closed and the error is
+// wrapped for a later resume.
+func TestOpenPartForStreamRehashError(t *testing.T) {
+	dir := t.TempDir()
+	part := filepath.Join(dir, "p.part")
+	if err := os.WriteFile(part, []byte("existing bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := openPartForStream(part, streamOpts{resume: true, existingSize: 14}, failWriter{}); err == nil {
+		t.Error("openPartForStream should fail when re-hashing the partial errors")
+	}
+}
+
+// TestStreamToPartTruncated covers the short-read branch: when contentLength is
+// known but the body delivers fewer bytes, the transfer is a truncated download
+// and the partial is kept so a later call can resume.
+func TestStreamToPartTruncated(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	dir := t.TempDir()
+	part := filepath.Join(dir, "p.part")
+	_, err := c.streamToPartAndVerify(part, filepath.Join(dir, "dest"), "", strings.NewReader("short"), streamOpts{contentLength: 999})
+	if err == nil {
+		t.Fatal("streamToPartAndVerify should fail on a truncated transfer")
+	}
+	if _, statErr := os.Stat(part); os.IsNotExist(statErr) {
+		t.Error("a truncated transfer should keep the .part for a later resume")
+	}
+}
+
+// TestSanitizeFilenameLong covers the length-cap branch: an over-long name is
+// truncated to 200 runes.
+func TestSanitizeFilenameLong(t *testing.T) {
+	got := sanitizeFilename(strings.Repeat("a", 250))
+	if n := len([]rune(got)); n != 200 {
+		t.Errorf("sanitizeFilename(len 250) has %d runes, want 200", n)
+	}
+}
+
+// TestResolveGetURLNoLink covers ResolveGetURL's extraction-failure branch: an
+// ads.php page without a get.php link yields an error.
+func TestResolveGetURLNoLink(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "<html><body>no download link here</body></html>")
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.ResolveGetURL(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee"); err == nil {
+		t.Error("ResolveGetURL should fail when ads.php carries no get.php link")
+	}
+}
+
+// TestDownloadItemNoSupportingSource covers the "no source supports the item"
+// branch: an item with neither an md5 nor a DOI is claimed by no configured
+// source, so DownloadItem fails before any resolution is attempted.
+func TestDownloadItemNoSupportingSource(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	_, err := c.DownloadItem(context.Background(), Item{}, t.TempDir(), "")
+	if err == nil {
+		t.Fatal("DownloadItem with no supporting source should fail")
+	}
+	if !strings.Contains(err.Error(), "no download source supports") {
+		t.Errorf("err = %v, want a 'no download source supports' message", err)
+	}
+}
+
+// TestStreamResolvedFetchError covers streamResolved's fetch-failure branch: when
+// the resolved file URL is unreachable, the download fails.
+func TestStreamResolvedFetchError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{stubSource{name: "dead", supports: true, resolved: Resolved{FileURL: "http://127.0.0.1:0/f"}}}
+	if _, err := c.DownloadItem(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, t.TempDir(), ""); err == nil {
+		t.Error("download should fail when the resolved file URL is unreachable")
+	}
+}
+
+// TestStreamResolvedMkdirError covers streamResolved's MkdirAll-failure branch:
+// when the destination directory cannot be created (a regular file blocks the
+// path), the download fails after a valid transfer is fetched and validated.
+func TestStreamResolvedMkdirError(t *testing.T) {
+	payload := []byte("%PDF-1.4 mkdir clash payload")
+	cdn := fileCDN(t, payload, "")
+	defer cdn.Close()
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{stubSource{name: "cdn", supports: true, resolved: Resolved{FileURL: cdn.URL + "/file"}}}
+
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	badDir := filepath.Join(blocker, "sub") // a file, not a directory, sits in the path
+	if _, err := c.DownloadItem(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, badDir, ""); err == nil {
+		t.Error("download should fail when the destination directory cannot be created")
+	}
+}
+
+// cancelingSource is a DownloadSource that cancels the download context while
+// resolving, then fails, letting a test drive DownloadItem's cancellation-aware
+// break out of the source loop.
+type cancelingSource struct{ cancel context.CancelFunc }
+
+func (cancelingSource) Name() string       { return "canceling" }
+func (cancelingSource) Supports(Item) bool { return true }
+func (s cancelingSource) Resolve(context.Context, Item) (Resolved, error) {
+	s.cancel()
+	return Resolved{}, errors.New("boom")
+}
+
+// trackingSource records whether it was resolved, so a test can assert a later
+// source in the chain was never reached.
+type trackingSource struct{ ran *bool }
+
+func (trackingSource) Name() string       { return "tracking" }
+func (trackingSource) Supports(Item) bool { return true }
+func (s trackingSource) Resolve(context.Context, Item) (Resolved, error) {
+	*s.ran = true
+	return Resolved{}, errors.New("nope")
+}
+
+// TestDownloadItemContextCanceledBreak covers the loop's cancellation guard: once
+// the context is canceled, DownloadItem stops trying further sources rather than
+// pressing on. The second source must never run.
+func TestDownloadItemContextCanceledBreak(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	ctx, cancel := context.WithCancel(context.Background())
+	var secondRan bool
+	c.sources = []DownloadSource{
+		cancelingSource{cancel: cancel},
+		trackingSource{ran: &secondRan},
+	}
+	if _, err := c.DownloadItem(ctx, Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, t.TempDir(), ""); err == nil {
+		t.Fatal("DownloadItem should fail after the context is canceled")
+	}
+	if secondRan {
+		t.Error("the second source should not have been reached after cancellation")
+	}
+}
+
+// tinyWaits is a fast start-retry schedule (microsecond-scale) so retry tests
+// never wait the production seconds.
+func tinyWaits(n int) []time.Duration {
+	waits := make([]time.Duration, n)
+	for i := range waits {
+		waits[i] = time.Millisecond
+	}
+	return waits
+}
+
+// flakyStartCDN serves /cdn/file: the first failN requests answer 503 (a non-2xx
+// that fails to start), and every later request serves payload as the file. It
+// records how many times the CDN was hit so tests can assert the attempt count.
+func flakyStartCDN(t *testing.T, wantMD5 string, payload []byte, failN int32, hits *atomic.Int32) *httptest.Server {
+	t.Helper()
+	return md5CDNServer(t, wantMD5, func(w http.ResponseWriter, _ *http.Request) {
+		if hits.Add(1) <= failN {
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		_, _ = w.Write(payload)
+	})
+}
+
+// TestDownloadStartRetrySucceedsAfterFailures covers case (a): a source that
+// fails to start twice (503) then serves the file on the third attempt completes
+// successfully once the start-retry schedule carries it past the transient
+// failures.
+func TestDownloadStartRetrySucceedsAfterFailures(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("start-retry recovery ", 40))
+	want := md5Hex(payload)
+	var hits atomic.Int32
+	srv := flakyStartCDN(t, want, payload, 2, &hits)
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(5)
+	c.stallTimeout = 2 * time.Second
+	dir := t.TempDir()
+
+	res, err := c.Download(context.Background(), want, dir, "", nil)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if !res.Verified {
+		t.Error("Verified = false, want true")
+	}
+	if got := hits.Load(); got != 3 {
+		t.Errorf("CDN hits = %d, want 3 (two 503s then success)", got)
+	}
+	data, rerr := os.ReadFile(res.Path)
+	if rerr != nil || string(data) != string(payload) {
+		t.Errorf("content mismatch after start-retry, err = %v", rerr)
+	}
+}
+
+// TestDownloadStartRetryExhaustsActionableError covers case (b): a source that
+// never starts (always 503) exhausts the schedule and surfaces the actionable
+// errDownloadCouldNotStart, having made exactly len(waits)+1 attempts.
+func TestDownloadStartRetryExhaustsActionableError(t *testing.T) {
+	var hits atomic.Int32
+	srv := md5CDNServer(t, testMD5, func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	})
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(2) // 3 attempts total
+	dir := t.TempDir()
+
+	_, err := c.Download(context.Background(), testMD5, dir, "", nil)
+	if err == nil {
+		t.Fatal("a source that never starts should fail")
+	}
+	if !errors.Is(err, errDownloadCouldNotStart) {
+		t.Errorf("err = %v, want errDownloadCouldNotStart", err)
+	}
+	if !strings.Contains(err.Error(), "retry now") || !strings.Contains(err.Error(), "ask the user") {
+		t.Errorf("error is not actionable: %v", err)
+	}
+	if got := hits.Load(); got != 3 {
+		t.Errorf("CDN hits = %d, want 3 (1 initial + 2 retries)", got)
+	}
+}
+
+// pacedServer serves payload as an octet-stream, writing it in chunk-sized pieces
+// with gap between pieces and flushing each. When hang is true it writes one
+// initial chunk, flushes, then blocks until the request context is canceled
+// (simulating a stalled transfer). It bails out early if the client disconnects.
+func pacedServer(t *testing.T, payload []byte, chunk int, gap time.Duration, hang bool) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("ResponseWriter is not a Flusher")
+			return
+		}
+		if hang {
+			_, _ = w.Write(payload[:min(chunk, len(payload))])
+			flusher.Flush()
+			<-r.Context().Done() // stall: never send the rest
+			return
+		}
+		for i := 0; i < len(payload); i += chunk {
+			end := min(i+chunk, len(payload))
+			if _, err := w.Write(payload[i:end]); err != nil {
+				return
+			}
+			flusher.Flush()
+			select {
+			case <-time.After(gap):
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}))
+}
+
+// TestDownloadStallAborts covers case (c): once bytes are flowing, a server that
+// stops sending is aborted after the stall window, the error is a clear stall,
+// and the partial is kept so a later call can resume.
+func TestDownloadStallAborts(t *testing.T) {
+	// >512 bytes so the first-byte peek succeeds and streaming begins before the
+	// server hangs.
+	payload := []byte("%PDF-1.4 " + strings.Repeat("z", 600))
+	srv := pacedServer(t, payload, 600, 0, true)
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{stubSource{name: "stall", supports: true, resolved: Resolved{FileURL: srv.URL, VerifyMD5: false}}}
+	c.startRetryWaits = nil // streaming begins, so start-retries never apply
+	c.stallTimeout = 50 * time.Millisecond
+	dir := t.TempDir()
+
+	start := time.Now()
+	_, err := c.DownloadItem(context.Background(), Item{MD5: testMD5}, dir, "out.pdf")
+	if err == nil {
+		t.Fatal("a stalled download should fail")
+	}
+	if !errors.Is(err, errStalled) {
+		t.Errorf("err = %v, want errStalled", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("stall abort took %v, want well under the 2s guard", elapsed)
+	}
+	// The partial is kept so a later call can resume from the stalled offset.
+	part := filepath.Join(dir, ".libgen-mcp-stall-"+testMD5+".part")
+	if _, statErr := os.Stat(part); statErr != nil {
+		t.Errorf("stalled download should keep its .part at %s: %v", part, statErr)
+	}
+}
+
+// TestDownloadSlowButProgressingCompletes covers case (d): a genuinely slow
+// transfer (each inter-byte gap under the stall window, total duration well over
+// it) is NOT aborted and completes with the full content — a wall-clock timeout
+// must never kill a download that is still making progress.
+func TestDownloadSlowButProgressingCompletes(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("progress ", 250)) // ~2.2 KB
+	// Stream after the initial 512-byte peek spans many gaps: total >> stall window,
+	// every individual gap << stall window.
+	srv := pacedServer(t, payload, 100, 15*time.Millisecond, false)
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{stubSource{name: "slow", supports: true, resolved: Resolved{FileURL: srv.URL, VerifyMD5: false}}}
+	c.stallTimeout = 100 * time.Millisecond
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{MD5: testMD5}, dir, "out.pdf")
+	if err != nil {
+		t.Fatalf("a slow-but-progressing download should complete, error = %v", err)
+	}
+	if res.SizeBytes != int64(len(payload)) {
+		t.Errorf("SizeBytes = %d, want %d", res.SizeBytes, len(payload))
+	}
+	data, rerr := os.ReadFile(res.Path)
+	if rerr != nil || string(data) != string(payload) {
+		t.Errorf("content mismatch after slow transfer, err = %v", rerr)
+	}
+}
+
+// TestDownloadStartRetryContextCancelDuringWait covers case (e): a context
+// canceled while the schedule is sleeping between attempts aborts the download
+// immediately, well before the (long) wait elapses, and no further attempt runs.
+func TestDownloadStartRetryContextCancelDuringWait(t *testing.T) {
+	var hits atomic.Int32
+	srv := md5CDNServer(t, testMD5, func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+	})
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = []time.Duration{10 * time.Second} // a long wait we cancel through
+	dir := t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.Download(ctx, testMD5, dir, "", nil)
+		errc <- err
+	}()
+
+	// Wait for the first attempt to fail and the schedule to enter its wait.
+	deadline := time.Now().Add(2 * time.Second)
+	for hits.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("first start attempt never ran")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	start := time.Now()
+	cancel()
+
+	select {
+	case err := <-errc:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v, want context.Canceled", err)
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Errorf("cancel during wait took %v to abort, want immediate", elapsed)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancel during wait did not abort the download")
+	}
+	if got := hits.Load(); got != 1 {
+		t.Errorf("CDN hits = %d, want 1 (the canceled wait prevented a second attempt)", got)
+	}
+}
+
+// serveStaticBytes returns an httptest server that serves content at any path.
+func serveStaticBytes(t *testing.T, content []byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestDownloadItemRestrictToSource verifies that Item.Source restricts the
+// download to a single named source instead of walking the whole chain, and
+// that an unknown/disabled source name is a clear error.
+func TestDownloadItemRestrictToSource(t *testing.T) {
+	srvA := serveStaticBytes(t, []byte("%PDF-1.4 AAAA "+strings.Repeat("a", 600)))
+	srvB := serveStaticBytes(t, []byte("%PDF-1.7 BBBB "+strings.Repeat("b", 600)))
+
+	newClient := func() *Client {
+		c := newTestClient(staticMirrors{})
+		c.sources = []DownloadSource{
+			stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srvA.URL + "/f", VerifyMD5: false}},
+			stubSource{name: "srcb", supports: true, resolved: Resolved{FileURL: srvB.URL + "/f", VerifyMD5: false}},
+		}
+		return c
+	}
+
+	// Restrict to srcb even though srca is first and would serve on its own.
+	res, err := newClient().DownloadItem(context.Background(), Item{DOI: "10.1/x", Source: "srcb"}, t.TempDir(), "o.pdf")
+	if err != nil {
+		t.Fatalf("restrict to srcb: %v", err)
+	}
+	if res.Source != "srcb" {
+		t.Errorf("Source = %q, want srcb", res.Source)
+	}
+
+	// Restrict to srca.
+	res, err = newClient().DownloadItem(context.Background(), Item{DOI: "10.1/x", Source: "srca"}, t.TempDir(), "o.pdf")
+	if err != nil {
+		t.Fatalf("restrict to srca: %v", err)
+	}
+	if res.Source != "srca" {
+		t.Errorf("Source = %q, want srca", res.Source)
+	}
+
+	// An unknown / disabled source name is a clear error, not a silent fallback.
+	_, uerr := newClient().DownloadItem(context.Background(), Item{DOI: "10.1/x", Source: "nope"}, t.TempDir(), "o.pdf")
+	if uerr == nil || !strings.Contains(uerr.Error(), "not enabled") {
+		t.Errorf("unknown source error = %v, want it to mention 'not enabled'", uerr)
+	}
+}
+
+// TestDownloadItemRestrictIncompatibleSource verifies that restricting to a
+// source that does not support the item type returns a targeted error rather
+// than the generic "no source supports" message.
+func TestDownloadItemRestrictIncompatibleSource(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{stubSource{name: "onlydoi", supports: false}}
+	_, err := c.DownloadItem(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee", Source: "onlydoi"}, t.TempDir(), "")
+	if err == nil || !strings.Contains(err.Error(), "cannot serve") {
+		t.Errorf("incompatible source error = %v, want it to mention 'cannot serve'", err)
+	}
+}
+
+// throttling that would slow the probe, a single retry, and a short timeout.
+func headSizeConfig() *config.Config {
+	return &config.Config{
+		Timeout:                5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
+	}
+}
+
+// headServer serves a HEAD-answering endpoint at /file: it records the request
+// method it saw and replies with the given Content-Length (a negative length
+// omits the header). It never writes a body, matching a real HEAD probe.
+func headServer(t *testing.T, contentLength int64, status int) (base string, sawMethod *string) {
+	t.Helper()
+	var method string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/file", func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		if contentLength >= 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+		}
+		w.WriteHeader(status)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL, &method
+}
+
+// TestHeadSize_ReportsContentLength verifies the happy path: a resolved URL whose
+// HEAD returns a positive Content-Length yields that size with ok=true, and the
+// probe used the HEAD method (never a body-fetching GET).
+func TestHeadSize_ReportsContentLength(t *testing.T) {
+	base, sawMethod := headServer(t, 4096, http.StatusOK)
+	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file", VerifyMD5: true}}
+	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
+
+	n, ok := c.HeadSize(context.Background(), Item{MD5: "abc"})
+	if !ok {
+		t.Fatal("HeadSize ok = false, want true for a positive Content-Length")
+	}
+	if n != 4096 {
+		t.Errorf("HeadSize = %d, want 4096", n)
+	}
+	if *sawMethod != http.MethodHead {
+		t.Errorf("probe used %s, want HEAD", *sawMethod)
+	}
+}
+
+// TestHeadSize_MissingContentLength verifies a resolved URL whose HEAD omits the
+// Content-Length header yields ok=false (unknown size), never an error.
+func TestHeadSize_MissingContentLength(t *testing.T) {
+	base, _ := headServer(t, -1, http.StatusOK) // negative → no Content-Length header
+	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
+	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
+
+	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
+		t.Error("HeadSize ok = true, want false when Content-Length is absent")
+	}
+}
+
+// TestHeadSize_Non2xxStatus verifies a resolved URL whose HEAD returns a non-2xx
+// status yields ok=false, never an error.
+func TestHeadSize_Non2xxStatus(t *testing.T) {
+	base, _ := headServer(t, 4096, http.StatusForbidden)
+	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
+	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
+
+	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
+		t.Error("HeadSize ok = true, want false for a 403 response")
+	}
+}
+
+// TestHeadSize_ResolveFailureIsBestEffort verifies that when no source can resolve
+// the item, HeadSize returns ok=false without an error rather than propagating the
+// resolve failure — the confirmation flow proceeds with an unknown size.
+func TestHeadSize_ResolveFailureIsBestEffort(t *testing.T) {
+	src := stubSource{name: "libgen", supports: false} // supports nothing → no resolution
+	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
+
+	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
+		t.Error("HeadSize ok = true, want false when the item cannot be resolved")
+	}
+}
+
+// unpaywallDownloadServer serves the on-demand Unpaywall flow for a DOI download: a
+// lookup path returns OA JSON pointing at its own /pdf endpoint, which serves the
+// given PDF bytes. It records how many lookups (not /pdf fetches) it received so a
+// test can assert Unpaywall was — or was not — consulted.
+func unpaywallDownloadServer(t *testing.T, pdf []byte) (base string, lookups *atomic.Int32) {
+	t.Helper()
+	var hits atomic.Int32
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/pdf", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		_, _ = w.Write(pdf)
+	})
+	// The DOI lookup is served at any other path (the source builds /v2/<doi>).
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"is_oa":true,"best_oa_location":{"url_for_pdf":%q}}`, srv.URL+"/pdf")
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv.URL, &hits
+}
+
+// newPerCallEmailClient builds a client that has NO configured Unpaywall email and
+// whose only configured source is "unpaywall" (disabled without an email, so the
+// chain starts empty). The on-demand Unpaywall base URL is pointed at the test
+// server so the ad-hoc prepended source resolves against it rather than the live API.
+func newPerCallEmailClient(t *testing.T, unpaywallBase string) *Client {
+	t.Helper()
+	cfg := &config.Config{
+		Timeout:                5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
+		UnpaywallEmail:         "", // no configured email → unpaywall not in the default chain
+		Sources:                []string{"unpaywall"},
+	}
+	c := New(staticMirrors{}, cfg, WithUnpaywallBaseURL(unpaywallBase))
+	c.backoffBase = time.Millisecond
+	return c
+}
+
+// TestDownloadItem_PerCallEmailPrependsUnpaywall verifies that a per-call email
+// pulls the Unpaywall source into a DOI download even when the server configured no
+// email (Unpaywall is absent from the default chain): with Item.Email set the
+// download succeeds via the ad-hoc Unpaywall source; with Item.Email empty the same
+// DOI download does NOT consult Unpaywall (0 lookups) and fails with no usable source,
+// proving the default behavior is unchanged.
+func TestDownloadItem_PerCallEmailPrependsUnpaywall(t *testing.T) {
+	pdf := []byte("%PDF-1.4 open-access article via unpaywall")
+	base, lookups := unpaywallDownloadServer(t, pdf)
+	c := newPerCallEmailClient(t, base)
+
+	// With a per-call email, the ad-hoc Unpaywall source is prepended and serves it.
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1/x", Email: "caller@example.com"}, t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("DownloadItem with a per-call email error = %v", err)
+	}
+	if res.Source != "unpaywall" {
+		t.Errorf("Source = %q, want %q", res.Source, "unpaywall")
+	}
+	if res.SizeBytes != int64(len(pdf)) {
+		t.Errorf("SizeBytes = %d, want %d", res.SizeBytes, len(pdf))
+	}
+	if lookups.Load() != 1 {
+		t.Errorf("Unpaywall lookups = %d, want 1", lookups.Load())
+	}
+
+	// With no per-call email the chain is empty (unpaywall disabled): no lookup, error.
+	lookups.Store(0)
+	if _, noEmailErr := c.DownloadItem(context.Background(), Item{DOI: "10.1/x"}, t.TempDir(), ""); noEmailErr == nil {
+		t.Fatal("DownloadItem for a DOI with no email should fail (no usable source)")
+	}
+	if lookups.Load() != 0 {
+		t.Errorf("Unpaywall lookups = %d without a per-call email, want 0", lookups.Load())
+	}
+}
+
+// srcNames returns the Name() of every source in a plain slice, for chain-shape
+// assertions on withPerCallUnpaywall's return value.
+func srcNames(ss []DownloadSource) []string {
+	names := make([]string, len(ss))
+	for i, s := range ss {
+		names[i] = s.Name()
+	}
+	return names
+}
+
+// TestWithPerCallUnpaywall covers the guard branches of withPerCallUnpaywall that
+// the end-to-end download test does not reach: when Unpaywall is already present in
+// the chain the slice is returned unchanged (no duplicate ad-hoc prepend), and when
+// the item lacks an email, lacks a DOI, or names a specific source the chain is
+// likewise untouched. A final positive case confirms the prepend still happens.
+func TestWithPerCallUnpaywall(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	withUP := []DownloadSource{stubSource{name: "unpaywall", supports: true}, stubSource{name: "libgen", supports: true}}
+	plain := []DownloadSource{stubSource{name: "libgen", supports: true}}
+	emailDOI := Item{DOI: "10.1/x", Email: "caller@example.com"}
+
+	// Unpaywall already enabled: returned unchanged (its Resolve honors the email).
+	if got := c.withPerCallUnpaywall(emailDOI, withUP); len(got) != 2 || got[0].Name() != "unpaywall" {
+		t.Errorf("chain with unpaywall present should be unchanged, got %v", srcNames(got))
+	}
+
+	// No email, no DOI, or a named source: each leaves the chain untouched.
+	unchanged := []Item{
+		{DOI: "10.1/x"},               // no email
+		{Email: "caller@example.com"}, // no DOI
+		{DOI: "10.1/x", Email: "caller@example.com", Source: "libgen"}, // named source
+	}
+	for _, it := range unchanged {
+		if got := c.withPerCallUnpaywall(it, plain); len(got) != 1 || got[0].Name() != "libgen" {
+			t.Errorf("withPerCallUnpaywall(%+v) altered the chain: %v", it, srcNames(got))
+		}
+	}
+
+	// Positive case: email + DOI + no named source + no unpaywall present → prepend.
+	if got := c.withPerCallUnpaywall(emailDOI, plain); len(got) != 2 || got[0].Name() != "unpaywall" {
+		t.Errorf("email+DOI+no-source should prepend unpaywall, got %v", srcNames(got))
+	}
+}
+
+// TestHeadContentLength_ErrorPaths drives headContentLength's request-build and
+// transport failure branches directly: a URL with a control byte cannot be built
+// into a request, and an unreachable address fails the HEAD Do. Both yield ok=false
+// with no size.
+func TestHeadContentLength_ErrorPaths(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	if _, ok := c.headContentLength(context.Background(), "http://\x7f", nil); ok {
+		t.Error("build error should yield ok=false")
+	}
+	if _, ok := c.headContentLength(context.Background(), "http://127.0.0.1:0/f", nil); ok {
+		t.Error("transport error should yield ok=false")
+	}
+}
+
+// TestHeadContentLength_CopiesRequiredHeaders verifies that source-required headers
+// (e.g. a Sci-Hub Referer) are copied onto the HEAD request: the server only reports
+// a Content-Length when it sees the expected header.
+func TestHeadContentLength_CopiesRequiredHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Referer") == "https://sci-hub/" {
+			w.Header().Set("Content-Length", "2048")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{})
+	hdr := http.Header{"Referer": {"https://sci-hub/"}}
+	n, ok := c.headContentLength(context.Background(), srv.URL, hdr)
+	if !ok || n != 2048 {
+		t.Errorf("headContentLength with required header = (%d, %v), want (2048, true)", n, ok)
+	}
+}
+
+// TestResolveLink verifies the resolve-only path returns the first resolving
+// source's URL, headers and flags without downloading, fails over past a source
+// that errors, and errors when nothing supports the item.
+func TestResolveLink(t *testing.T) {
+	cfg := baseChainConfig()
+	good := stubSource{
+		name: "libgen", supports: true,
+		resolved: Resolved{FileURL: "https://cdn/x.pdf", VerifyMD5: true, Ext: "pdf", Header: http.Header{"Referer": {"https://h/"}}},
+	}
+
+	c := New(staticMirrors{}, cfg, WithSources(good))
+	r, err := c.ResolveLink(context.Background(), Item{MD5: "abc"})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if r.URL != "https://cdn/x.pdf" || r.Source != "libgen" || !r.VerifyMD5 || r.Ext != "pdf" {
+		t.Errorf("resolved = %+v", r)
+	}
+	if r.Header.Get("Referer") != "https://h/" {
+		t.Error("required header not carried through")
+	}
+
+	bad := stubSource{name: "bad", supports: true, resolveErr: errors.New("boom")}
+	c2 := New(staticMirrors{}, cfg, WithSources(bad, good))
+	if r2, err2 := c2.ResolveLink(context.Background(), Item{MD5: "abc"}); err2 != nil || r2.Source != "libgen" {
+		t.Errorf("failover: got %+v err=%v", r2, err2)
+	}
+
+	c3 := New(staticMirrors{}, cfg, WithSources(stubSource{name: "x", supports: false}))
+	if _, err3 := c3.ResolveLink(context.Background(), Item{MD5: "abc"}); err3 == nil {
+		t.Error("want error when no source supports the item")
+	}
+
+	// A named source that is not in the chain surfaces the selectSources error
+	// straight out of ResolveLink (before any resolution is attempted).
+	if _, err4 := c.ResolveLink(context.Background(), Item{MD5: "abc", Source: "nope"}); err4 == nil {
+		t.Error("want error when the named source is not enabled")
+	}
+
+	// When every supporting source errors, the per-source errors are joined and
+	// returned.
+	c5 := New(staticMirrors{}, cfg, WithSources(bad))
+	if _, err5 := c5.ResolveLink(context.Background(), Item{MD5: "abc"}); err5 == nil {
+		t.Error("want joined error when all sources fail to resolve")
+	}
+
+	// A canceled context stops the failover loop after the first erroring source
+	// rather than trying the rest.
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	c6 := New(staticMirrors{}, cfg, WithSources(bad, good))
+	r6, err6 := c6.ResolveLink(canceled, Item{MD5: "abc"})
+	if err6 == nil {
+		t.Error("want error when the context is canceled mid-chain")
+	}
+	if r6.Source == "libgen" {
+		t.Error("a canceled context should stop before the second source resolves")
+	}
+}
+
+// TestSelectSourcesUnpaywallHint verifies that asking for the unpaywall source when
+// it is not enabled yields the actionable error naming its email gate.
+func TestSelectSourcesUnpaywallHint(t *testing.T) {
+	c := New(staticMirrors{}, baseChainConfig(), WithSources(stubSource{name: "libgen", supports: true}))
+
+	if _, err := c.selectSources("scihub"); err == nil {
+		t.Error("want error when a non-unpaywall source is not enabled")
+	}
+
+	_, err := c.selectSources("unpaywall")
+	if err == nil {
+		t.Fatal("want error when unpaywall is not enabled")
+	}
+	if !strings.Contains(err.Error(), "LIBGEN_MCP_UNPAYWALL_EMAIL") {
+		t.Errorf("unpaywall error %q should point at the email gate", err)
 	}
 }

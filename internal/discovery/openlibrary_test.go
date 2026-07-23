@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 // openLibraryDocsFixture is a realistic two-doc OpenLibrary search response. Doc A
@@ -158,5 +159,69 @@ func TestOpenLibrary_ContextCancelled(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("Search() = %v, want nil results on canceled ctx", got)
+	}
+}
+
+// TestOpenLibraryProvider_Name verifies the provider stamps the "openlibrary"
+// origin.
+func TestOpenLibraryProvider_Name(t *testing.T) {
+	if got := NewOpenLibrary().Name(); got != "openlibrary" {
+		t.Errorf("Name() = %q, want %q", got, "openlibrary")
+	}
+}
+
+// TestOpenLibrary_TransportErrorReturnsEmpty verifies that a transport failure with
+// a live (non-canceled) context degrades to an empty result with no error. Pointing
+// the base at an address whose server has been closed makes boundedGet return a
+// connection error while ctx.Err() stays nil, exercising the non-context error
+// branch of Search that softens to (nil, nil).
+func TestOpenLibrary_TransportErrorReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base := srv.URL
+	srv.Close() // close so the address refuses connections
+	setOpenLibraryBase(t, base)
+
+	got, err := NewOpenLibrary().Search(context.Background(), "go programming", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil on a transport error", err)
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a transport error", got)
+	}
+}
+
+// TestOpenLibrary_ContextDeadlineDuringRequest verifies the context-error branch
+// reached AFTER the request is in flight: the limiter admits the call (ctx still
+// live), then the server blocks until the client's short deadline expires, so
+// boundedGet fails with ctx.Err() != nil and Search propagates that context error
+// rather than softening it to empty. This exercises the "return nil, ctx.Err()"
+// inside Search's transport-error handling, distinct from the already-canceled
+// limiter path.
+func TestOpenLibrary_ContextDeadlineDuringRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // block until the client's context expires
+	}))
+	defer srv.Close()
+	setOpenLibraryBase(t, srv.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	got, err := NewOpenLibrary().Search(ctx, "go programming", 5)
+	if err == nil {
+		t.Fatal("Search() error = nil, want a context deadline error")
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a deadline error", got)
+	}
+}
+
+// TestParseOpenLibraryDocs_MalformedReturnsNil verifies that a body that cannot be
+// decoded as an OpenLibrary search envelope yields nil rather than panicking,
+// honoring the best-effort contract that a malformed response is treated as no
+// results.
+func TestParseOpenLibraryDocs_MalformedReturnsNil(t *testing.T) {
+	if got := parseOpenLibraryDocs([]byte("{not json")); got != nil {
+		t.Errorf("parseOpenLibraryDocs(malformed) = %v, want nil", got)
 	}
 }

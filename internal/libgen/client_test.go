@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -267,6 +268,29 @@ func TestGetPermFailedSkippedOnRetry(t *testing.T) {
 	}
 }
 
+// TestWithEnrichBaseURLs verifies the WithEnrichBaseURLs option routes Enrich's
+// Crossref and OpenLibrary lookups at the per-client override URLs (a test seam
+// independent of the package-level defaults), exercising both the option and the
+// crossrefURL/openLibraryURL override branches. The Crossref and OpenLibrary
+// fixtures/handlers are shared with enrich_test.go.
+func TestWithEnrichBaseURLs(t *testing.T) {
+	crSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(crossrefFixture))
+	}))
+	defer crSrv.Close()
+	olSrv := httptest.NewServer(olHandler(`"A tale of the override seam."`))
+	defer olSrv.Close()
+
+	c := New(staticMirrors{}, baseChainConfig(), WithEnrichBaseURLs(crSrv.URL, olSrv.URL))
+	e := c.Enrich(context.Background(), "10.1000/x", "9780000000001")
+	if e == nil || e.Crossref == nil || e.OpenLibrary == nil {
+		t.Fatalf("Enrich() = %+v, want both Crossref and OpenLibrary via the override URLs", e)
+	}
+	if !strings.HasPrefix(e.OpenLibrary.OpenLibURL, olSrv.URL) {
+		t.Errorf("OpenLibURL = %q, want it built from the override base %q", e.OpenLibrary.OpenLibURL, olSrv.URL)
+	}
+}
+
 // TestWithSourcesOverridesChain verifies the WithSources option replaces the
 // config-built download-source chain verbatim and in order.
 func TestWithSourcesOverridesChain(t *testing.T) {
@@ -345,5 +369,90 @@ func TestDoRequestBodyReadError(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	if _, _, err := c.get(context.Background(), "/index.php", nil); err == nil {
 		t.Error("get should fail when a 200 body cannot be fully read")
+	}
+}
+
+// sourceNames returns the Name() of every source in the client's chain, in order.
+func sourceNames(c *Client) []string {
+	names := make([]string, 0, len(c.sources))
+	for _, s := range c.sources {
+		names = append(names, s.Name())
+	}
+	return names
+}
+
+// baseChainConfig is a minimal config for exercising New's source wiring.
+func baseChainConfig() *config.Config {
+	return &config.Config{
+		Timeout:                5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
+		UnpaywallEmail:         "mail@jmrp.io",
+		ScihubHosts:            []string{"sci-hub.se"},
+	}
+}
+
+// TestNewWiresSourceChainFromConfig verifies New assembles the full ordered chain
+// [unpaywall, scihub, libgen, randombook] and that Supports filters it into the
+// right per-item order: articles get [unpaywall, scihub], books get
+// [libgen, randombook].
+func TestNewWiresSourceChainFromConfig(t *testing.T) {
+	c := New(staticMirrors{}, baseChainConfig())
+
+	if got, want := sourceNames(c), []string{"unpaywall", "scihub", "libgen", "randombook"}; !slices.Equal(got, want) {
+		t.Fatalf("chain = %v, want %v", got, want)
+	}
+
+	var book, article []string
+	for _, s := range c.sources {
+		if s.Supports(Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}) {
+			book = append(book, s.Name())
+		}
+		if s.Supports(Item{DOI: "10.1/x"}) {
+			article = append(article, s.Name())
+		}
+	}
+	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
+		t.Errorf("book chain = %v, want %v", book, want)
+	}
+	if want := []string{"unpaywall", "scihub"}; !slices.Equal(article, want) {
+		t.Errorf("article chain = %v, want %v", article, want)
+	}
+}
+
+// TestEnabledSourceNames verifies EnabledSourceNames splits the enabled chain
+// into book (md5) and article (doi) sources, and that an empty unpaywall email
+// drops unpaywall from the article list.
+func TestEnabledSourceNames(t *testing.T) {
+	book, article := New(staticMirrors{}, baseChainConfig()).EnabledSourceNames()
+	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
+		t.Errorf("book = %v, want %v", book, want)
+	}
+	if want := []string{"unpaywall", "scihub"}; !slices.Equal(article, want) {
+		t.Errorf("article = %v, want %v", article, want)
+	}
+
+	noEmail := baseChainConfig()
+	noEmail.UnpaywallEmail = ""
+	book, article = New(staticMirrors{}, noEmail).EnabledSourceNames()
+	if want := []string{"libgen", "randombook"}; !slices.Equal(book, want) {
+		t.Errorf("book (no email) = %v, want %v", book, want)
+	}
+	if want := []string{"scihub"}; !slices.Equal(article, want) {
+		t.Errorf("article (no email) = %v, want %v", article, want)
+	}
+}
+
+// TestNewSourcesFilter verifies LIBGEN_MCP_SOURCES disables sources by name while
+// preserving the relative order of the remaining ones.
+func TestNewSourcesFilter(t *testing.T) {
+	cfg := baseChainConfig()
+	cfg.Sources = []string{"libgen", "unpaywall"}
+	c := New(staticMirrors{}, cfg)
+
+	if got, want := sourceNames(c), []string{"unpaywall", "libgen"}; !slices.Equal(got, want) {
+		t.Errorf("filtered chain = %v, want %v", got, want)
 	}
 }

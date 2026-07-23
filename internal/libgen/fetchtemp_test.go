@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -113,4 +114,72 @@ func TestFetchToTemp_NoIdentifier(t *testing.T) {
 		t.Fatal("release must be non-nil (safe to call) even on error")
 	}
 	release() // must not panic
+}
+
+// TestFetchToTemp_DownloadError verifies FetchToTemp's download-failure path: an
+// item whose identifier no enabled source can serve (a DOI against a libgen-only
+// chain) surfaces the download error with an empty path and a safe no-op release,
+// and leaves no per-fetch temp dir behind.
+func TestFetchToTemp_DownloadError(t *testing.T) {
+	c := newFetchTempClient(staticMirrors{}) // libgen source only; does not support DOIs
+	path, release, err := c.FetchToTemp(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil {
+		t.Fatal("FetchToTemp for an unservable identifier should error")
+	}
+	if path != "" {
+		t.Errorf("path = %q, want empty on error", path)
+	}
+	if release == nil {
+		t.Fatal("release must be non-nil even on error")
+	}
+	release() // no-op, must not panic
+}
+
+// TestFetchToTemp_ConcurrentLoserDiscardsDownload exercises the double-fetch race:
+// two goroutines fetch the SAME md5 at once with a download concurrency of 2, so
+// both miss the cache and both download before either stores. getOrPut lets one win
+// and the other discard its duplicate temp dir; both callers still receive the same
+// cached path and a working file.
+func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
+	payload := []byte("%PDF-1.4 concurrent fetch-to-temp payload " + strings.Repeat("x", 64))
+	want := md5Hex(payload)
+	b := newBlockingCDN(t, payload)
+	defer b.srv.Close()
+	c := newFetchTempClient(staticMirrors{b.srv.URL})
+
+	type out struct {
+		path    string
+		release func()
+		err     error
+	}
+	results := make(chan out, 2)
+	for range 2 {
+		go func() {
+			p, r, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+			results <- out{p, r, err}
+		}()
+	}
+	// Both downloads reach the CDN (both missed the cache before either stored);
+	// release them together so both proceed to getOrPut.
+	<-b.entered
+	<-b.entered
+	b.release <- struct{}{}
+	b.release <- struct{}{}
+
+	paths := make([]string, 0, 2)
+	for range 2 {
+		o := <-results
+		if o.err != nil {
+			t.Fatalf("FetchToTemp error = %v", o.err)
+		}
+		defer o.release()
+		paths = append(paths, o.path)
+	}
+	if paths[0] != paths[1] {
+		t.Errorf("concurrent fetches returned different paths %q and %q, want the same cached file", paths[0], paths[1])
+	}
+	data, err := os.ReadFile(paths[0])
+	if err != nil || string(data) != string(payload) {
+		t.Errorf("cached file content mismatch (err=%v)", err)
+	}
 }

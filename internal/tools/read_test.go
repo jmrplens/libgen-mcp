@@ -13,7 +13,116 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
+
+// failingReadClient returns a libgen client whose only mirror is unroutable, so
+// any server-side fetch (FetchToTemp/ResolveLink) fails fast — used to drive the
+// resolve-error arms of the read branches without touching the network.
+func failingReadClient(t *testing.T) *libgen.Client {
+	t.Helper()
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+}
+
+// TestValidateReadInput_BadMD5 covers the md5-syntax arm of validateReadInput: a
+// set but non-32-hex md5 is rejected before any fetch is attempted.
+func TestValidateReadInput_BadMD5(t *testing.T) {
+	if err := validateReadInput(ReadInput{MD5: "not-hex"}, false); err == nil {
+		t.Error("a malformed md5 should be rejected by validateReadInput")
+	}
+}
+
+// TestDecodeEncodeCursor covers decodeCursor's two error arms plus the
+// encode/decode round-trip: a non-base64 string and a base64 string whose bytes
+// are not valid JSON both error, while a real cursor survives a round-trip.
+func TestDecodeEncodeCursor(t *testing.T) {
+	if _, err := decodeCursor("!!!not base64!!!"); err == nil {
+		t.Error("a non-base64 cursor should error")
+	}
+	// base64 of the literal bytes "notjson" — decodes fine, but is not JSON.
+	if _, err := decodeCursor("bm90anNvbg=="); err == nil {
+		t.Error("a base64 cursor whose bytes are not JSON should error")
+	}
+	want := readCursor{Page: 7, Char: 42, Match: 3}
+	got, err := decodeCursor(encodeCursor(want))
+	if err != nil {
+		t.Fatalf("round-trip decode error: %v", err)
+	}
+	if got != want {
+		t.Errorf("round-trip cursor = %+v, want %+v", got, want)
+	}
+}
+
+// TestReadReq_InvalidCursor covers readReq's malformed-cursor arm: an undecodable
+// cursor collapses to a generic "invalid cursor" error rather than leaking the
+// decode failure.
+func TestReadReq_InvalidCursor(t *testing.T) {
+	if _, err := readReq(ReadInput{Cursor: "!!!"}, readTestCfg()); err == nil {
+		t.Error("an invalid cursor should make readReq error")
+	}
+}
+
+// TestReadBranches_InvalidCursor covers the cursor-decode error arms of the two
+// read branches that accept a cursor (find and sequential): each returns an error
+// before any file is resolved, so a nil client is safe.
+func TestReadBranches_InvalidCursor(t *testing.T) {
+	ctx := context.Background()
+	if _, err := readFind(ctx, nil, ReadInput{Find: "x", Cursor: "!!!"}); err == nil {
+		t.Error("readFind with an invalid cursor should error")
+	}
+	if _, err := readSequential(ctx, nil, readTestCfg(), ReadInput{Path: "x", Cursor: "!!!"}); err == nil {
+		t.Error("readSequential with an invalid cursor should error")
+	}
+}
+
+// TestReadBranches_ResolveError covers the fetch-failure arm of all three read
+// branches: with an md5 (server-side fetch) and an unroutable mirror, resolving
+// the file fails, so each branch propagates the error.
+func TestReadBranches_ResolveError(t *testing.T) {
+	ctx := context.Background()
+	c := failingReadClient(t)
+	const md5 = "0123456789abcdef0123456789abcdef"
+	if _, err := readFind(ctx, c, ReadInput{MD5: md5, Find: "x"}); err == nil {
+		t.Error("readFind should propagate a fetch failure")
+	}
+	if _, err := readOutline(ctx, c, ReadInput{MD5: md5}); err == nil {
+		t.Error("readOutline should propagate a fetch failure")
+	}
+	if _, err := readSequential(ctx, c, readTestCfg(), ReadInput{MD5: md5}); err == nil {
+		t.Error("readSequential should propagate a fetch failure")
+	}
+}
+
+// TestReadBranches_ExtractError covers the extractor-error arm of all three read
+// branches: a canceled context makes extract.Search/Outline/Extract error at their
+// ctx guard, which each branch surfaces as an error (a local Path resolves with a
+// no-op release, so the failure is the extractor's, not the fetch's).
+func TestReadBranches_ExtractError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	const p = "../extract/testdata/sample.pdf"
+	if _, err := readFind(ctx, nil, ReadInput{Path: p, Find: "x"}); err == nil {
+		t.Error("readFind should surface a canceled-context extractor error")
+	}
+	if _, err := readOutline(ctx, nil, ReadInput{Path: p}); err == nil {
+		t.Error("readOutline should surface a canceled-context extractor error")
+	}
+	if _, err := readSequential(ctx, nil, readTestCfg(), ReadInput{Path: p}); err == nil {
+		t.Error("readSequential should surface a canceled-context extractor error")
+	}
+}
+
+// TestReadHandler_PropagatesBranchError covers readHandler's error arm: when the
+// selected branch errors (here an invalid cursor into the sequential branch), the
+// handler returns that error as a tool error rather than a result.
+func TestReadHandler_PropagatesBranchError(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+	res, _, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: "x", Cursor: "!!!"})
+	if err == nil && (res == nil || !res.IsError) {
+		t.Fatal("readHandler should surface a branch error as a tool error")
+	}
+}
 
 // samplePDFBytesAndMD5 reads the shared PDF fixture and returns its bytes plus
 // their md5, so a mirror can advertise (and verify) the same digest the read tool

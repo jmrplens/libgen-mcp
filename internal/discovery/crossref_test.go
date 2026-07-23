@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // crossrefItemsFixture is a realistic two-item Crossref works response. The first
@@ -194,5 +195,92 @@ func TestCrossref_LimitClamped(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "rows=50") {
 		t.Errorf("limit=9999 query = %q, want clamped rows=50", gotQuery)
+	}
+}
+
+// TestCrossrefProvider_Name verifies the Crossref provider stamps the "crossref"
+// origin.
+func TestCrossrefProvider_Name(t *testing.T) {
+	if got := NewCrossref("").Name(); got != "crossref" {
+		t.Errorf("Name() = %q, want %q", got, "crossref")
+	}
+}
+
+// TestCrossref_TransportErrorReturnsEmpty verifies that a transport failure with a
+// live (non-canceled) context degrades to an empty result with no error. Pointing
+// the base at an address whose server has been closed makes boundedGet return a
+// connection error while ctx.Err() stays nil, exercising the non-context error
+// branch of Search that softens to (nil, nil).
+func TestCrossref_TransportErrorReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base := srv.URL
+	srv.Close() // close so the address refuses connections
+	setCrossrefBase(t, base)
+
+	got, err := NewCrossref("").Search(context.Background(), "neural networks", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil on a transport error", err)
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a transport error", got)
+	}
+}
+
+// TestCrossref_ContextDeadlineDuringRequest verifies the context-error branch
+// reached AFTER the request is in flight: the limiter admits the call (ctx still
+// live), then the server blocks until the client's short deadline expires, so
+// boundedGet fails with ctx.Err() != nil and Search propagates that context error
+// rather than softening it to empty. This exercises the "return nil, ctx.Err()"
+// inside Search's transport-error handling, distinct from the already-canceled
+// limiter path.
+func TestCrossref_ContextDeadlineDuringRequest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // block until the client's context expires
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	got, err := NewCrossref("").Search(ctx, "neural networks", 5)
+	if err == nil {
+		t.Fatal("Search() error = nil, want a context deadline error")
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a deadline error", got)
+	}
+}
+
+// TestParseCrossrefWorks_MalformedReturnsNil verifies that a body that cannot be
+// decoded as a Crossref works envelope yields nil rather than panicking, honoring
+// the best-effort contract that a malformed response is treated as no results.
+func TestParseCrossrefWorks_MalformedReturnsNil(t *testing.T) {
+	if got := parseCrossrefWorks([]byte("{not json")); got != nil {
+		t.Errorf("parseCrossrefWorks(malformed) = %v, want nil", got)
+	}
+}
+
+// TestCrossrefYear documents crossrefYear's extraction of the publication year
+// from the issued date-parts: a positive leading year is rendered as a string,
+// while missing date-parts, an empty inner slice, or a non-positive year all yield
+// "".
+func TestCrossrefYear(t *testing.T) {
+	cases := []struct {
+		name   string
+		issued crossrefIssued
+		want   string
+	}{
+		{name: "no date-parts", issued: crossrefIssued{}, want: ""},
+		{name: "empty inner slice", issued: crossrefIssued{DateParts: [][]int{{}}}, want: ""},
+		{name: "non-positive year", issued: crossrefIssued{DateParts: [][]int{{0}}}, want: ""},
+		{name: "valid year", issued: crossrefIssued{DateParts: [][]int{{2021, 5}}}, want: "2021"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := crossrefYear(tc.issued); got != tc.want {
+				t.Errorf("crossrefYear(%+v) = %q, want %q", tc.issued, got, tc.want)
+			}
+		})
 	}
 }
