@@ -83,6 +83,18 @@ func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status
 	return resp.StatusCode, body, nil
 }
 
+// SetBasesForTest overrides the provider base URLs (arXiv, Crossref, OpenLibrary)
+// and returns a restore func that reinstates the originals. It is a test-only seam
+// used by callers in other packages to point discovery at httptest servers;
+// production code never calls it.
+func SetBasesForTest(arxiv, crossref, openLibrary string) (restore func()) {
+	oldArxiv, oldCrossref, oldOpenLibrary := arxivBase, crossrefBase, openLibraryBase
+	arxivBase, crossrefBase, openLibraryBase = arxiv, crossref, openLibrary
+	return func() {
+		arxivBase, crossrefBase, openLibraryBase = oldArxiv, oldCrossref, oldOpenLibrary
+	}
+}
+
 // firstNonEmpty returns the first trimmed non-empty string in the slice, or "".
 func firstNonEmpty(values []string) string {
 	for _, v := range values {
