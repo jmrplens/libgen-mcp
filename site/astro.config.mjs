@@ -20,7 +20,7 @@ const websiteId = `${fullUrl}/#website`;
 const softwareId = `${repositoryUrl}#software`;
 const sourceCodeId = `${repositoryUrl}#source-code`;
 const socialImageAlt =
-	"libgen-mcp — search and download from Library Genesis over MCP";
+	"libgen-mcp — search, read and download books and papers from Library Genesis, plus open-access discovery, over MCP";
 
 // Product version — single-sourced from the repo-root VERSION file when present.
 const softwareVersion = (() => {
