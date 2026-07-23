@@ -4,11 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 )
+
+// clientToHost returns an http.Client whose transport redirects any dial to
+// fakeHost to the given real address, so a test can present a libgen.<tld>-shaped
+// mirror hostname (as randombookHostRe requires) while actually talking to a local
+// httptest server, which only ever listens on a 127.0.0.1:port address.
+func clientToHost(fakeHost, realAddr string) *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == fakeHost {
+				addr = realAddr
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}}
+}
 
 // randombookByIDFixture loads the captured randombook by-id JSON response.
 func randombookByIDFixture(t *testing.T) string {
@@ -69,15 +86,21 @@ func TestRandombookResolvesViaMirror(t *testing.T) {
 	})
 	defer mirror.Close()
 
-	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, mirror.URL)
+	// Present a libgen.<tld>-shaped hostname (as randombookHostRe now requires of
+	// any candidate Resolve attempts) and redirect it to the httptest server.
+	const fakeHost = "libgen.test"
+	fakeMirror := "http://" + fakeHost
+	httpClient := clientToHost(fakeHost+":80", mirror.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, fakeMirror)
 	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
 
-	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	s := randombookSource{apiBase: apiBase, http: httpClient}
 	res, err := s.Resolve(context.Background(), Item{MD5: want})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	wantURL := mirror.URL + "/get.php?md5=" + want + "&key=TESTKEY123"
+	wantURL := fakeMirror + "/get.php?md5=" + want + "&key=TESTKEY123"
 	if res.FileURL != wantURL {
 		t.Errorf("FileURL = %q, want %q", res.FileURL, wantURL)
 	}
@@ -86,7 +109,10 @@ func TestRandombookResolvesViaMirror(t *testing.T) {
 	}
 
 	// Prove the resolved URL is actually downloadable and verifies end to end.
+	// The file-streaming path uses c.dl (not c.http), so both need the redirect.
 	c := newTestClient(staticMirrors{})
+	c.http = httpClient
+	c.dl = httpClient
 	c.sources = []DownloadSource{s}
 	dl, err := c.Download(context.Background(), want, t.TempDir(), "", nil)
 	if err != nil {
@@ -107,25 +133,6 @@ func TestRandombookNotIndexed(t *testing.T) {
 	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
 	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
 		t.Fatal("Resolve() for a non-indexed md5 should return an error")
-	}
-}
-
-// TestRandombookNoWorkingMirror verifies that when mirrors are discovered but none
-// serves a usable get.php key, Resolve returns an error (fall-through) rather than
-// a bogus URL.
-func TestRandombookNoWorkingMirror(t *testing.T) {
-	// A mirror whose ads.php carries no get.php link: ExtractGetLink fails on it.
-	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("<html><body>no download link here</body></html>"))
-	}))
-	defer dead.Close()
-
-	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, dead.URL)
-	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
-
-	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
-	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
-		t.Fatal("Resolve() with no working mirror should return an error")
 	}
 }
 
@@ -319,5 +326,288 @@ func TestRandombookParsesLinksFixture(t *testing.T) {
 	}
 	if len(mirrors) == 0 || mirrors[0] != "https://libgen.net" {
 		t.Errorf("mirrors = %v, want first == %q", mirrors, "https://libgen.net")
+	}
+}
+
+// TestFilterLibgenFamily verifies filterLibgenFamily keeps only bare
+// libgen.<tld> hostnames (the shape resolveViaMirror's ads.php scraping
+// targets) and drops any candidate outside that shape — in particular the
+// annas-archive.* hosts randombook.org has been observed to mix into its
+// candidate list, which use an unrelated URL scheme entirely.
+func TestFilterLibgenFamily(t *testing.T) {
+	in := []string{
+		"https://libgen.net",
+		"https://libgen.me",
+		"https://libgen.xyz",
+		"https://annas-archive.gl",
+		"not a url",
+		"https://evil.example.com",
+	}
+	got := filterLibgenFamily(in)
+	want := []string{"https://libgen.net", "https://libgen.me", "https://libgen.xyz"}
+	if len(got) != len(want) {
+		t.Fatalf("filterLibgenFamily(%v) = %v, want %v", in, got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("filterLibgenFamily()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestFilterLibgenFamily_AllFiltered verifies an all-non-family candidate list
+// filters down to empty, rather than falling back to trying any of them.
+func TestFilterLibgenFamily_AllFiltered(t *testing.T) {
+	got := filterLibgenFamily([]string{"https://annas-archive.gl", "https://annas-archive.pk"})
+	if len(got) != 0 {
+		t.Errorf("filterLibgenFamily() = %v, want empty", got)
+	}
+}
+
+// TestRandombookSkipsNonFamilyHosts verifies Resolve never attempts a
+// non-libgen-family candidate (e.g. annas-archive.gl) at all: with only such
+// candidates discovered, it fails fast with the same "no usable mirrors"
+// message used for a structurally empty list, and never issues a single request
+// to the non-family host — proving the host is filtered out before any network
+// call, not merely tried-and-failed.
+func TestRandombookSkipsNonFamilyHosts(t *testing.T) {
+	var hit atomic.Bool
+	nonFamily := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(nonFamily.Close)
+
+	// Present it as a fake annas-archive.gl-shaped candidate via the DialContext
+	// redirect trick, so the ONLY way resolveViaMirror could reach it is if the
+	// family filter failed to exclude it.
+	const fakeHost = "annas-archive.gl"
+	httpClient := clientToHost(fakeHost+":80", nonFamily.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	if _, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}); err == nil {
+		t.Fatal("Resolve() with only a non-family candidate should fail")
+	}
+	if hit.Load() {
+		t.Error("resolveViaMirror issued a request to a non-family host; it should have been filtered out before any request")
+	}
+}
+
+// TestRandombookClientRenderedMirror verifies that when a libgen-family mirror
+// answers ads.php with a client-rendered application shell (captured live from a
+// real migrated mirror, testdata/randombook_spa_shell.html) instead of the
+// classic server-rendered ads.php page, resolveViaMirror reports the distinct
+// ErrMirrorClientRendered diagnosis rather than the generic ExtractGetLink
+// failure — so a site-wide frontend migration is distinguishable in logs/errors
+// from an ordinary missing-link parse failure.
+func TestRandombookClientRenderedMirror(t *testing.T) {
+	shell, err := os.ReadFile("testdata/randombook_spa_shell.html")
+	if err != nil {
+		t.Fatalf("reading SPA shell fixture: %v", err)
+	}
+	// The mirror serves no download API, so Resolve falls back to the ads.php
+	// chain — the path whose diagnosis this test pins.
+	spaMirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/download" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(shell)
+	}))
+	t.Cleanup(spaMirror.Close)
+
+	const fakeHost = "libgen.test"
+	httpClient := clientToHost(fakeHost+":80", spaMirror.Listener.Addr().String())
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	_, err = s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if !errors.Is(err, ErrMirrorClientRendered) {
+		t.Fatalf("err = %v, want wrapping ErrMirrorClientRendered (client-rendered SPA shell)", err)
+	}
+}
+
+// TestRandombookOrdinaryMissingLink verifies that a libgen-family mirror serving
+// an ordinary (non-SPA) page with no get.php link still reports the generic
+// ExtractGetLink failure, not ErrMirrorClientRendered — the two diagnoses must
+// not be conflated.
+func TestRandombookOrdinaryMissingLink(t *testing.T) {
+	// The mirror serves no download API, so Resolve falls back to the ads.php
+	// chain — the path whose diagnosis this test pins.
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/download" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("<html><body>no download link here</body></html>"))
+	}))
+	t.Cleanup(plain.Close)
+
+	const fakeHost = "libgen.test"
+	httpClient := clientToHost(fakeHost+":80", plain.Listener.Addr().String())
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, "http://"+fakeHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	_, err := s.Resolve(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if errors.Is(err, ErrMirrorClientRendered) {
+		t.Fatal("an ordinary missing-link page must not be misdiagnosed as a client-rendered shell")
+	}
+	if err == nil {
+		t.Fatal("Resolve() with no get.php link should fail")
+	}
+}
+
+// TestRandombookRealCapturedCandidates guards against a regression in the
+// real-world candidate mix: the captured links-by-id fixture carries the exact
+// hosts randombook.org has been observed returning (three libgen.* SPA-migrated
+// hosts plus one annas-archive.gl entry). filterLibgenFamily must keep exactly
+// the three libgen.* hosts, so Resolve knows which are even worth attempting.
+func TestRandombookRealCapturedCandidates(t *testing.T) {
+	body, err := os.ReadFile("testdata/randombook_links.json")
+	if err != nil {
+		t.Fatalf("reading links fixture: %v", err)
+	}
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), string(body))
+	s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+	mirrors, err := s.lookupMirrors(context.Background(), "123")
+	if err != nil {
+		t.Fatalf("lookupMirrors() error = %v", err)
+	}
+	got := filterLibgenFamily(mirrors)
+	want := []string{"https://libgen.net", "https://libgen.me", "https://libgen.xyz"}
+	if len(got) != len(want) {
+		t.Fatalf("filterLibgenFamily(lookupMirrors()) = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("filtered mirrors[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestRandombookDownloadAPISkipsDeadMirror verifies the real-world candidate mix
+// observed on 2026-07-24, where randombook offers three libgen.<tld> hosts and
+// only some are reachable: an unreachable mirror must be skipped in favor of the
+// next one rather than failing the whole source.
+func TestRandombookDownloadAPISkipsDeadMirror(t *testing.T) {
+	payload := []byte("%PDF-1.5 second-mirror payload")
+	want := md5Hex(payload)
+
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/download" || r.URL.Query().Get("id") != "123" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer live.Close()
+
+	// A closed listener's address stands in for a mirror that is down: dialing it
+	// fails at the transport level, exactly as libgen.me did when observed.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadAddr := dead.Listener.Addr().String()
+	dead.Close()
+
+	const deadHost, liveHost = "libgen.dead", "libgen.live"
+	httpClient := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			switch addr {
+			case deadHost + ":80":
+				addr = deadAddr
+			case liveHost + ":80":
+				addr = live.Listener.Addr().String()
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, addr)
+		},
+	}}
+
+	links := fmt.Sprintf(`{"result":{"list":["http://%s","http://%s"]},"isError":false}`, deadHost, liveHost)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	res, err := s.Resolve(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if wantURL := "http://" + liveHost + "/api/download?id=123"; res.FileURL != wantURL {
+		t.Fatalf("FileURL = %q, want the live mirror %q", res.FileURL, wantURL)
+	}
+}
+
+// TestRandombookResolvesViaDownloadAPI verifies the source resolves an item
+// through the mirror's own /api/download?id=<numeric id> endpoint — the
+// mechanism the site itself uses (verified live 2026-07-24) — instead of
+// scraping ads.php, which the current libgen.<tld> candidates no longer serve.
+// A HEAD probe selects a live mirror, and the resolved URL is streamed end to
+// end to prove it serves the file and passes md5 verification.
+func TestRandombookResolvesViaDownloadAPI(t *testing.T) {
+	payload := []byte("%PDF-1.5 randombook download-api payload")
+	want := md5Hex(payload)
+
+	var headSeen atomic.Bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/download", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("id") != "123" {
+			http.NotFound(w, r)
+			return
+		}
+		// The live endpoint is GET-only; a HEAD reaches it through the mirror's
+		// 302 and comes back 405, which still proves the mirror is alive.
+		if r.Method == http.MethodHead {
+			headSeen.Store(true)
+			w.Header().Set("Allow", "GET")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		_, _ = w.Write(payload)
+	})
+	mirror := httptest.NewServer(mux)
+	defer mirror.Close()
+
+	const fakeHost = "libgen.test"
+	fakeMirror := "http://" + fakeHost
+	httpClient := clientToHost(fakeHost+":80", mirror.Listener.Addr().String())
+
+	links := fmt.Sprintf(`{"result":{"list":[%q]},"isError":false}`, fakeMirror)
+	apiBase := randombookAPIServer(t, randombookByIDFixture(t), links)
+
+	s := randombookSource{apiBase: apiBase, http: httpClient}
+	res, err := s.Resolve(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	wantURL := fakeMirror + "/api/download?id=123"
+	if res.FileURL != wantURL {
+		t.Fatalf("FileURL = %q, want %q", res.FileURL, wantURL)
+	}
+	if !res.VerifyMD5 {
+		t.Error("VerifyMD5 = false, want true (md5-keyed)")
+	}
+	if !headSeen.Load() {
+		t.Error("no HEAD probe was issued to select a live mirror")
+	}
+
+	// The file-streaming path uses c.dl (not c.http), so both need the redirect.
+	c := newTestClient(staticMirrors{})
+	c.http = httpClient
+	c.dl = httpClient
+	c.sources = []DownloadSource{s}
+	dl, err := c.Download(context.Background(), want, t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatalf("Download() via randombook error = %v", err)
+	}
+	if !dl.Verified {
+		t.Error("Verified = false, want true")
 	}
 }
