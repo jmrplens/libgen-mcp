@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -182,4 +183,28 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 	if err != nil || string(data) != string(payload) {
 		t.Errorf("cached file content mismatch (err=%v)", err)
 	}
+}
+
+// TestFetchToTemp_TempDirCreateError verifies that when the per-fetch temp
+// directory cannot be created (an unwritable TMPDIR), FetchToTemp surfaces the
+// os.MkdirTemp error and returns a non-nil no-op release, rather than panicking
+// or proceeding without a directory. The identifier is a cache miss so the fast
+// path does not short-circuit before the MkdirTemp call.
+func TestFetchToTemp_TempDirCreateError(t *testing.T) {
+	// Point TMPDIR at a path that does not exist and cannot be created under, so
+	// os.MkdirTemp("", …) fails deterministically.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no", "such", "dir"))
+
+	c := newFetchTempClient(staticMirrors{})
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
+	if err == nil {
+		t.Fatal("FetchToTemp should fail when the temp directory cannot be created")
+	}
+	if path != "" {
+		t.Errorf("path = %q, want empty on error", path)
+	}
+	if release == nil {
+		t.Fatal("release must be non-nil even on error")
+	}
+	release() // must be safe to call
 }
