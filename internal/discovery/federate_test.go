@@ -130,3 +130,26 @@ func TestNormalizeHelpers(t *testing.T) {
 		t.Errorf("TitleYearKey with empty title should be empty")
 	}
 }
+
+// panicProvider is a Provider whose Search panics, used to prove Federate
+// isolates a misbehaving provider instead of crashing the process.
+type panicProvider struct{}
+
+// Name reports the panicking stub's origin label.
+func (panicProvider) Name() string { return "panic" }
+
+// Search panics to simulate a provider that violates the best-effort contract.
+func (panicProvider) Search(_ context.Context, _ string, _ int) ([]DiscoveryResult, error) {
+	panic("provider blew up")
+}
+
+// TestFederate_RecoversProviderPanic verifies a provider that panics in its own
+// goroutine is contained: it contributes nothing and the healthy provider's
+// results are still returned.
+func TestFederate_RecoversProviderPanic(t *testing.T) {
+	good := &stubProvider{name: "arxiv", results: []DiscoveryResult{{Origin: "arxiv", Title: "Survivor", DOI: "10.1/ok"}}}
+	got := Federate(context.Background(), "q", 10, panicProvider{}, good)
+	if len(got) != 1 || got[0].Title != "Survivor" {
+		t.Fatalf("expected the healthy provider's single result to survive the panic, got %+v", got)
+	}
+}

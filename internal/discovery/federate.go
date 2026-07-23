@@ -22,6 +22,11 @@ func Federate(ctx context.Context, query string, limit int, providers ...Provide
 		wg.Add(1)
 		go func(idx int, prov Provider) {
 			defer wg.Done()
+			// Best-effort must be airtight: a provider that panics in its own
+			// goroutine would otherwise crash the process (the handler's recover
+			// runs in a different goroutine and cannot catch it). Recover here so a
+			// misbehaving provider simply contributes nothing.
+			defer func() { _ = recover() }()
 			res, err := prov.Search(ctx, query, limit)
 			if err != nil {
 				return // best-effort: a failing provider contributes nothing.
