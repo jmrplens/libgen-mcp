@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -173,6 +174,51 @@ func TestBoundedGet_BadURLErrors(t *testing.T) {
 	}
 	if status != 0 || body != nil {
 		t.Errorf("status,body = %d,%q, want 0,nil for a malformed URL", status, body)
+	}
+}
+
+// TestBoundedGet_BodyReadErrorSurfaces verifies the read-error branch: when the
+// server promises more bytes via Content-Length than it actually sends and then
+// closes the connection, io.ReadAll fails with an unexpected EOF, and boundedGet
+// surfaces that error along with the response status and a nil body. The handler
+// hijacks the connection to write a deliberately truncated response.
+func TestBoundedGet_BodyReadErrorSurfaces(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Errorf("ResponseWriter does not support hijacking")
+			return
+		}
+		conn, buf, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("Hijack() error = %v", err)
+			return
+		}
+		// Promise 1024 bytes but send only a handful, then close: the client's
+		// io.ReadAll hits an unexpected EOF while the body is still incomplete.
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1024\r\n\r\n")
+		_, _ = buf.WriteString("short")
+		_ = buf.Flush()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	status, body, err := boundedGet(context.Background(), newDiscoveryClient(), srv.URL)
+	if err == nil {
+		t.Fatal("boundedGet() error = nil, want a body read error")
+	}
+	// The status came back before the read failed, so it is reported; the body is
+	// dropped on a read error.
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want %d (read failed after headers)", status, http.StatusOK)
+	}
+	if body != nil {
+		t.Errorf("body = %q, want nil on a read error", body)
+	}
+	// Sanity: the failure is a network read error, not a context error.
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		t.Errorf("boundedGet() error = %v, want a read error, not a timeout", err)
 	}
 }
 
