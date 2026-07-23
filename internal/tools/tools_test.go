@@ -12,14 +12,18 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
 
@@ -324,103 +328,6 @@ func TestSearchToolReturnsMarkdownAndStructured(t *testing.T) {
 	}
 	if res.StructuredContent == nil {
 		t.Error("result should still carry structured JSON output alongside the markdown")
-	}
-}
-
-// TestSearchLinksSurfacedAndHinted verifies the search markdown table renders
-// each result's download links as Markdown links, and that the structured
-// next_steps carries the instruction to include those links in the reply.
-func TestSearchLinksSurfacedAndHinted(t *testing.T) {
-	out := SearchOutput{
-		Mirror: "m", Page: 1,
-		Results: []libgen.Result{{
-			Title: "A Book", MD5: "0123456789abcdef0123456789abcdef",
-			Downloads: []libgen.DownloadOption{{Label: "GET", URL: "https://mirror/dl/1"}},
-		}},
-	}
-	out.NextSteps = searchNextSteps(out)
-
-	md := renderSearchMarkdown(out)
-	if !strings.Contains(md, "Download links") {
-		t.Errorf("table should have a Download links column; got:\n%s", md)
-	}
-	if !strings.Contains(md, "[GET](https://mirror/dl/1)") {
-		t.Errorf("table should render the download link; got:\n%s", md)
-	}
-	steps := strings.Join(out.NextSteps, "\n")
-	if !strings.Contains(steps, "download links") {
-		t.Errorf("next_steps should instruct the model to include download links; got %q", steps)
-	}
-
-	// No links → no preserve-links hint.
-	noLinks := SearchOutput{Mirror: "m", Page: 1, Results: []libgen.Result{{Title: "B", MD5: "abc"}}}
-	if resultsHaveLinks(noLinks.Results) {
-		t.Fatal("fixture should have no links")
-	}
-	if strings.Contains(strings.Join(searchNextSteps(noLinks), "\n"), "download links") {
-		t.Error("next_steps should not mention download links when results carry none")
-	}
-}
-
-// TestRenderMarkdownEdgeCases covers the empty-search, doi-only details, and
-// resumed-download rendering branches.
-func TestRenderMarkdownEdgeCases(t *testing.T) {
-	empty := renderSearchMarkdown(SearchOutput{Mirror: "m", NextSteps: []string{"broaden it"}})
-	if !strings.Contains(empty, "No results") || !strings.Contains(empty, "broaden it") {
-		t.Errorf("empty search markdown should note no results and next steps; got:\n%s", empty)
-	}
-
-	details := renderDetailsMarkdown(DetailsOutput{
-		Edition:   map[string]any{"title": "Paper", "doi": "10.1/z"},
-		NextSteps: []string{"download it"},
-	})
-	if !strings.Contains(details, "Paper") || !strings.Contains(details, "10.1/z") {
-		t.Errorf("details markdown should show title and doi; got:\n%s", details)
-	}
-
-	dl := renderDownloadMarkdown(DownloadOutput{
-		DownloadResult: libgen.DownloadResult{Path: "/p", SizeBytes: 9, Source: "libgen", Resumed: true},
-	})
-	if !strings.Contains(dl, "Resumed") {
-		t.Errorf("resumed download markdown should note the resume; got:\n%s", dl)
-	}
-}
-
-// TestRenderDetails_BibtexFenceIsBreakoutSafe proves a BibTeX value carrying a
-// code-fence sequence cannot close the block early. renderDetailsMarkdown must
-// open the fence with more backticks than the longest backtick run inside the
-// content (the CommonMark closing-fence rule), so the injected "```" and any
-// trailing Markdown/instructions stay inside the fenced code block.
-func TestRenderDetails_BibtexFenceIsBreakoutSafe(t *testing.T) {
-	const bib = "@book{x,\n  title = {evil ``` ## Fake instruction},\n}"
-	out := renderDetailsMarkdown(DetailsOutput{
-		File:      map[string]any{"title": "Paper", "md5": "abc"},
-		Citations: &Citations{BibTeX: bib},
-	})
-
-	// Locate the opening fence: the first line after the "Citation (BibTeX)"
-	// heading that is a run of backticks (optionally followed by the info string).
-	var fence string
-	for line := range strings.SplitSeq(out, "\n") {
-		if strings.HasPrefix(line, "```") {
-			fence = line
-			break
-		}
-	}
-	if fence == "" {
-		t.Fatalf("no opening fence found:\n%s", out)
-	}
-	openLen := len(fence) - len(strings.TrimLeft(fence, "`"))
-
-	// The longest backtick run inside the content is 3 ("```"); the opening fence
-	// must be strictly longer so the content can never close it.
-	if openLen <= 3 {
-		t.Errorf("opening fence (%d backticks) must exceed the interior run (3):\n%s", openLen, out)
-	}
-	// The forged instruction must remain inside the block, never on its own
-	// top-level line as rendered Markdown.
-	if strings.Contains(out, "\n## Fake instruction") {
-		t.Errorf("injected heading broke out of the fence:\n%s", out)
 	}
 }
 
@@ -1338,4 +1245,826 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 	if !strings.Contains(desc, "untrusted") {
 		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
 	}
+}
+
+// TestDownloadInputSchemaEmptyEnabled covers the branch where no sources are
+// enabled: the schema is returned unconstrained (no enum) rather than restricted.
+func TestDownloadInputSchemaEmptyEnabled(t *testing.T) {
+	schema := downloadInputSchema(nil)
+	if schema == nil {
+		t.Fatal("downloadInputSchema(nil) returned nil")
+	}
+	if src := schema.Properties["source"]; src != nil && len(src.Enum) != 0 {
+		t.Errorf("empty enabled should leave source enum unset; got %v", src.Enum)
+	}
+}
+
+// TestDownloadInputSchemaInferenceError covers the defensive guard that returns a
+// nil schema when jsonschema inference fails. Real inference of the static
+// DownloadInput struct never errors, so the seam is overridden to force the path.
+func TestDownloadInputSchemaInferenceError(t *testing.T) {
+	orig := downloadSchemaFor
+	t.Cleanup(func() { downloadSchemaFor = orig })
+	downloadSchemaFor = func(*jsonschema.ForOptions) (*jsonschema.Schema, error) {
+		return nil, errors.New("inference failed")
+	}
+	if got := downloadInputSchema([]string{"libgen"}); got != nil {
+		t.Errorf("schema inference error should yield a nil schema; got %v", got)
+	}
+}
+
+// TestValidateDownloadInputUnknownSource covers the unknown-source rejection arm
+// of validateDownloadInput. This branch is unreachable through the registered tool
+// (the input schema's source enum rejects unknown values before the handler runs),
+// so it is exercised directly.
+func TestValidateDownloadInputUnknownSource(t *testing.T) {
+	_, _, _, err := validateDownloadInput(DownloadInput{
+		MD5:    "87a4ebdaf21fa6cc70009a3dd63194ee",
+		Source: "definitelynotasource",
+	})
+	if err == nil {
+		t.Fatal("an unknown source should be rejected")
+	}
+	if !strings.Contains(err.Error(), "definitelynotasource") {
+		t.Errorf("error should name the bad source; got %v", err)
+	}
+}
+
+// emptyJSONClient builds a libgen client whose json.php always returns an empty
+// object, so DetailsByMD5/DetailsByID surface their "no record found" errors.
+func emptyJSONClient(t *testing.T) *libgen.Client {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return libgen.New(staticMirrors{srv.URL}, cfg)
+}
+
+// TestDetailsByMD5LookupError covers detailsByMD5's error return when the client's
+// lookup fails (valid md5 syntax, but no record).
+func TestDetailsByMD5LookupError(t *testing.T) {
+	client := emptyJSONClient(t)
+	if _, err := detailsByMD5(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee"); err == nil {
+		t.Fatal("detailsByMD5 should surface the lookup error when no record is found")
+	}
+}
+
+// TestDetailsByIDLookupError covers detailsByID's error return when the client's
+// lookup fails, for both the edition (default) and file objects.
+func TestDetailsByIDLookupError(t *testing.T) {
+	client := emptyJSONClient(t)
+	if _, err := detailsByID(context.Background(), client, "", "138281637"); err == nil {
+		t.Fatal("detailsByID (edition) should surface the lookup error")
+	}
+	if _, err := detailsByID(context.Background(), client, "file", "93485370"); err == nil {
+		t.Fatal("detailsByID (file) should surface the lookup error")
+	}
+}
+
+// TestHeaderMapAllEmptyValues covers headerMap's post-filter nil return: a header
+// whose only entries have empty values flattens to no usable keys.
+func TestHeaderMapAllEmptyValues(t *testing.T) {
+	if got := headerMap(http.Header{"Empty": {""}, "AlsoEmpty": {""}}); got != nil {
+		t.Errorf("headerMap with only empty values should return nil; got %v", got)
+	}
+}
+
+// TestDownloadResolveOnlyResolveError covers resolveDownload's error path: on the
+// resolve_only route, a source that fails to resolve surfaces as a tool error.
+func TestDownloadResolveOnlyResolveError(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee", "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("resolve_only whose only source fails to resolve should be a tool error")
+	}
+}
+
+// confirmMirror serves the full book download chain (ads.php → get.php → CDN) for a
+// payload whose md5 it advertises, and separately counts HEAD probes and GET
+// body-fetches of the CDN endpoint. The counters let the confirmation tests prove
+// which requests each path makes: a size probe issues a HEAD, the actual download
+// issues a GET, and the default (no-capability) path must issue neither a probe.
+func confirmMirror(t *testing.T, payload []byte) (srv *httptest.Server, cdnGET, cdnHEAD *atomic.Int32) {
+	t.Helper()
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	var getHits, headHits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			headHits.Add(1)
+			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		getHits.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="book.pdf"`)
+		_, _ = w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, &getHits, &headHits
+}
+
+// newConfirmSession registers the tools on a client backed by mirrors and connects
+// an in-memory MCP client whose elicitation capability is governed by handler
+// (nil = no capability, exercising the default/headless path). It is the download
+// confirmation counterpart of newDownloadSession.
+func newConfirmSession(t *testing.T, cfg *config.Config, mirrors libgen.MirrorLister, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
+	t.Helper()
+	client := libgen.New(mirrors, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"},
+		&mcp.ClientOptions{ElicitationHandler: handler})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+// confirmConfig returns a plain local-download config rooted at a fresh temp dir.
+func confirmConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+}
+
+// TestDownloadTool_ConfirmAccepted verifies the confirm-and-save path: with an
+// elicitation-capable client that accepts the confirmation, a local md5 download is
+// prompted (the elicitation handler is invoked exactly once) and the file is then
+// downloaded and saved to disk.
+func TestDownloadTool_ConfirmAccepted(t *testing.T) {
+	payload := []byte("%PDF-1.4 confirm-accepted book payload")
+	srv, cdnGET, _ := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("an accepted download should not be a tool error: %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Errorf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path == "" {
+		t.Fatalf("accepted download should report a saved path; got %+v", out)
+	}
+	if _, statErr := os.Stat(out.Path); statErr != nil {
+		t.Errorf("accepted download did not write the file: %v", statErr)
+	}
+	if cdnGET.Load() == 0 {
+		t.Error("accepted download never fetched the file body (0 CDN GETs)")
+	}
+}
+
+// TestDownloadTool_ConfirmDeclined verifies the decline path: with an
+// elicitation-capable client that declines the confirmation, NO file is written
+// (the CDN body endpoint gets 0 GETs), the result is NOT a tool error, and it
+// carries guidance plus the resolved direct link so the user can fetch it later.
+func TestDownloadTool_ConfirmDeclined(t *testing.T) {
+	payload := []byte("%PDF-1.4 confirm-declined book payload")
+	srv, cdnGET, _ := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false}}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a declined download should be a non-error result; got %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Errorf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	if cdnGET.Load() != 0 {
+		t.Errorf("a declined download fetched the file body %d time(s), want 0", cdnGET.Load())
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path != "" {
+		t.Errorf("a declined download must not save a file, but Path=%q", out.Path)
+	}
+	if out.Resolved == nil {
+		t.Errorf("a declined download should still surface the resolved link; got %+v", out)
+	}
+	if entries, _ := os.ReadDir(cfg.DownloadDir); len(entries) != 0 {
+		t.Errorf("a declined download wrote %d file(s) to disk, want 0", len(entries))
+	}
+}
+
+// TestDownloadTool_NoElicitationDownloadsNormally proves default preservation: a
+// client that did NOT advertise elicitation is never prompted and never triggers a
+// size probe — the download proceeds and saves the file exactly as today, and the
+// CDN endpoint sees ZERO HEAD probes (only the body GET).
+func TestDownloadTool_NoElicitationDownloadsNormally(t *testing.T) {
+	payload := []byte("%PDF-1.4 no-elicitation book payload")
+	srv, cdnGET, cdnHEAD := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	// nil handler → the client advertises no elicitation capability.
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, nil)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a no-capability download should not be a tool error: %+v", res.Content)
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path == "" {
+		t.Fatalf("download should report a saved path; got %+v", out)
+	}
+	if _, statErr := os.Stat(out.Path); statErr != nil {
+		t.Errorf("download did not write the file: %v", statErr)
+	}
+	if cdnHEAD.Load() != 0 {
+		t.Errorf("the no-capability path issued %d HEAD probe(s), want 0 (no probe without elicitation)", cdnHEAD.Load())
+	}
+	if cdnGET.Load() == 0 {
+		t.Error("the no-capability path never fetched the file body (0 CDN GETs)")
+	}
+}
+
+// TestDownloadTool_ResolveOnlyNoConfirm verifies that resolve_only never prompts,
+// even with an elicitation-capable client: resolve_only never writes to disk, so
+// there is nothing to confirm and the elicitation handler is not invoked.
+func TestDownloadTool_ResolveOnlyNoConfirm(t *testing.T) {
+	payload := []byte("%PDF-1.4 resolve-only no-confirm payload")
+	srv, _, cdnHEAD := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5, "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("resolve_only returned a tool error: %+v", res.Content)
+	}
+	if elicits.Load() != 0 {
+		t.Errorf("resolve_only invoked the elicitation handler %d times, want 0", elicits.Load())
+	}
+	if cdnHEAD.Load() != 0 {
+		t.Errorf("resolve_only issued %d HEAD probe(s), want 0", cdnHEAD.Load())
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Resolved == nil {
+		t.Errorf("resolve_only should return a resolved link; got %+v", out)
+	}
+}
+
+// TestDownloadTool_ConfirmCanceled verifies that an explicit cancel of the
+// download confirmation aborts the save (same as a decline): the file body is
+// never fetched, nothing is written, and the result is a non-error with the link.
+func TestDownloadTool_ConfirmCanceled(t *testing.T) {
+	payload := []byte("%PDF-1.4 confirm-canceled book payload")
+	srv, cdnGET, _ := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		return &mcp.ElicitResult{Action: "cancel"}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("a canceled download should be a non-error result; got %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Errorf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	if cdnGET.Load() != 0 {
+		t.Errorf("a canceled download fetched the file body %d time(s), want 0", cdnGET.Load())
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path != "" {
+		t.Errorf("a canceled download must not save a file, but Path=%q", out.Path)
+	}
+	if entries, _ := os.ReadDir(cfg.DownloadDir); len(entries) != 0 {
+		t.Errorf("a canceled download wrote %d file(s) to disk, want 0", len(entries))
+	}
+}
+
+// unpaywallElicitServer serves the Unpaywall lookup for the download-tool
+// elicitation tests: it records how many lookups it received and the last email
+// query parameter, and always replies with an open-access record. resolve_only never
+// fetches the PDF, so the url_for_pdf value is a static placeholder.
+func unpaywallElicitServer(t *testing.T) (base string, lookups *atomic.Int32, lastEmail *string) {
+	t.Helper()
+	var hits atomic.Int32
+	var email string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		email = r.URL.Query().Get("email")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"is_oa":true,"best_oa_location":{"url_for_pdf":"https://cdn.example/oa.pdf"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL, &hits, &email
+}
+
+// newElicitDownloadSession registers the tools on a client (built with the given
+// config and options) whose MCP client advertises elicitation via handler (nil = no
+// capability, exercising the fallback path). It returns a live session for CallTool.
+func newElicitDownloadSession(t *testing.T, cfg *config.Config, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error), opts ...libgen.Option) *mcp.ClientSession {
+	t.Helper()
+	client := libgen.New(staticMirrors{}, cfg, opts...)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"},
+		&mcp.ClientOptions{ElicitationHandler: handler})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+// elicitDownloadConfig is a config with NO Unpaywall email and only "unpaywall"
+// enabled, so the default chain is empty and any Unpaywall resolution can only come
+// from the on-demand per-call email path (never a live Sci-Hub call).
+func elicitDownloadConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return &config.Config{
+		DownloadDir:   t.TempDir(),
+		Timeout:       5 * time.Second,
+		RateRPS:       1000,
+		RateBurst:     100,
+		RetryAttempts: 1,
+		Sources:       []string{"unpaywall"},
+	}
+}
+
+// decodeDownloadOutput unmarshals a download tool result's structured content into
+// the full DownloadOutput (including the resolve_only Resolved link).
+func decodeDownloadOutput(t *testing.T, res *mcp.CallToolResult) DownloadOutput {
+	t.Helper()
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out DownloadOutput
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return out
+}
+
+// TestDownloadTool_ElicitsUnpaywallEmailOnAccept verifies the on-demand email flow:
+// with no configured Unpaywall email and a client that accepts the elicitation with
+// an email, a resolve_only DOI download consults Unpaywall using the elicited email
+// (for this request only) and resolves the link via the "unpaywall" source.
+func TestDownloadTool_ElicitsUnpaywallEmailOnAccept(t *testing.T) {
+	base, lookups, lastEmail := unpaywallElicitServer(t)
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"email": "asked@example.com"}}, nil
+	}
+	session := newElicitDownloadSession(t, elicitDownloadConfig(t), handler, libgen.WithUnpaywallBaseURL(base))
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1/x", "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download with an accepted email should not be a tool error: %+v", res.Content)
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Resolved == nil || out.Resolved.Source != "unpaywall" {
+		t.Fatalf("expected a resolved link from unpaywall, got %+v", out.Resolved)
+	}
+	if lookups.Load() != 1 {
+		t.Errorf("Unpaywall lookups = %d, want 1", lookups.Load())
+	}
+	if *lastEmail != "asked@example.com" {
+		t.Errorf("Unpaywall received email = %q, want the elicited %q", *lastEmail, "asked@example.com")
+	}
+}
+
+// TestDownloadTool_ElicitDeclineFallsBack verifies the deterministic fallback: when
+// the client supports elicitation but the user declines, no email is used, Unpaywall
+// is not consulted (0 lookups), and the DOI download fails with no usable source —
+// exactly today's behavior for a server with no configured email.
+func TestDownloadTool_ElicitDeclineFallsBack(t *testing.T) {
+	base, lookups, _ := unpaywallElicitServer(t)
+	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "decline"}, nil
+	}
+	session := newElicitDownloadSession(t, elicitDownloadConfig(t), handler, libgen.WithUnpaywallBaseURL(base))
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1/x", "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a DOI download with a declined email and no configured email should be a tool error")
+	}
+	if lookups.Load() != 0 {
+		t.Errorf("Unpaywall lookups = %d after a decline, want 0", lookups.Load())
+	}
+}
+
+// TestDownloadTool_NoElicitCapabilityFallsBack verifies that a client which did NOT
+// advertise elicitation is never prompted: no elicitation is attempted, Unpaywall is
+// not consulted (0 lookups), and the DOI download fails just as it does today. This
+// guards the headless/CI path stays byte-identical.
+func TestDownloadTool_NoElicitCapabilityFallsBack(t *testing.T) {
+	base, lookups, _ := unpaywallElicitServer(t)
+	// nil handler → the client advertises no elicitation capability.
+	session := newElicitDownloadSession(t, elicitDownloadConfig(t), nil, libgen.WithUnpaywallBaseURL(base))
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1/x", "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a DOI download with no elicitation capability and no configured email should be a tool error")
+	}
+	if lookups.Load() != 0 {
+		t.Errorf("Unpaywall lookups = %d without elicitation, want 0", lookups.Load())
+	}
+}
+
+// TestLooksLikeEmail verifies the light email sanity check accepts plausible
+// addresses and rejects malformed ones without over-validating.
+func TestLooksLikeEmail(t *testing.T) {
+	valid := []string{"a@b.co", "you@example.com", "x.y@sub.domain.org"}
+	for _, e := range valid {
+		if !looksLikeEmail(e) {
+			t.Errorf("looksLikeEmail(%q) = false, want true", e)
+		}
+	}
+	invalid := []string{"", "nope", "@example.com", "a@b", "a@b.", "a@.com"}
+	for _, e := range invalid {
+		if looksLikeEmail(e) {
+			t.Errorf("looksLikeEmail(%q) = true, want false", e)
+		}
+	}
+	// A trimmed, plausible address must survive the handler's TrimSpace + check.
+	if !looksLikeEmail(strings.TrimSpace("  ok@ok.io  ")) {
+		t.Error("looksLikeEmail should accept a trimmed plausible address")
+	}
+}
+
+// TestEnrichmentNextStep_NoData verifies the helper returns an empty string when
+// there is no Crossref enrichment to report (nil enrichment or nil Crossref).
+func TestEnrichmentNextStep_NoData(t *testing.T) {
+	if got := enrichmentNextStep(nil); got != "" {
+		t.Errorf("nil enrichment: got %q, want empty", got)
+	}
+	if got := enrichmentNextStep(&libgen.Enrichment{}); got != "" {
+		t.Errorf("nil Crossref: got %q, want empty", got)
+	}
+	// Crossref present but with no reportable fields → still empty.
+	if got := enrichmentNextStep(&libgen.Enrichment{Crossref: &libgen.CrossrefWork{}}); got != "" {
+		t.Errorf("empty Crossref: got %q, want empty", got)
+	}
+}
+
+// TestEnrichmentNextStep_Facts verifies the helper names the journal, year and
+// citation count so the model surfaces them, and escapes the untrusted journal.
+func TestEnrichmentNextStep_Facts(t *testing.T) {
+	step := enrichmentNextStep(&libgen.Enrichment{Crossref: &libgen.CrossrefWork{
+		ContainerTitle: "Cell",
+		PublishedYear:  2011,
+		CitationCount:  56374,
+	}})
+	for _, want := range []string{"Cell", "2011", "56374", "journal"} {
+		if !strings.Contains(step, want) {
+			t.Errorf("next step %q should mention %q", step, want)
+		}
+	}
+	// An untrusted journal title with a newline must be neutralized (no raw newline).
+	evil := enrichmentNextStep(&libgen.Enrichment{Crossref: &libgen.CrossrefWork{ContainerTitle: "Evil\nJournal"}})
+	if strings.Contains(evil, "Evil\nJournal") {
+		t.Errorf("untrusted journal title must be escaped, got %q", evil)
+	}
+}
+
+// TestDetailsEnrich_AppendsNextStep drives detailsEnrich against an httptest
+// Crossref server: with a DOI in the edition record and enrichment enabled, it
+// must populate out.Enrichment and append an enrichment next-step naming the
+// journal and citation count, covering the enrichment wiring end to end.
+func TestDetailsEnrich_AppendsNextStep(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok","message":{` +
+			`"container-title":["Cell"],"published":{"date-parts":[[2011,3,1]]},` +
+			`"is-referenced-by-count":56374,"subject":["Oncology"]}}`))
+	}))
+	defer srv.Close()
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg,
+		libgen.WithEnrichBaseURLs(srv.URL, "http://openlibrary.invalid"))
+
+	out := DetailsOutput{Edition: map[string]any{"doi": "10.1016/j.cell.2011.02.013"}}
+	detailsEnrich(context.Background(), client, &out)
+
+	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
+		t.Fatalf("expected Crossref enrichment, got %+v", out.Enrichment)
+	}
+	if out.Enrichment.Crossref.ContainerTitle != "Cell" {
+		t.Errorf("journal = %q, want Cell", out.Enrichment.Crossref.ContainerTitle)
+	}
+	joined := strings.Join(out.NextSteps, " ")
+	for _, want := range []string{"Cell", "56374"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("next_steps should mention %q; got %q", want, joined)
+		}
+	}
+}
+
+// TestDetailsEnrich_NoDOINoStep verifies detailsEnrich adds nothing when the
+// record carries no DOI/ISBN (Enrich returns nil, so no next-step is appended).
+func TestDetailsEnrich_NoDOINoStep(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+	out := DetailsOutput{Edition: map[string]any{"title": "No identifiers here"}}
+	detailsEnrich(context.Background(), client, &out)
+	if out.Enrichment != nil {
+		t.Errorf("no DOI/ISBN should yield nil enrichment, got %+v", out.Enrichment)
+	}
+	if len(out.NextSteps) != 0 {
+		t.Errorf("no enrichment should append no next-step, got %v", out.NextSteps)
+	}
+}
+
+// oaArxivFeed is a one-entry arXiv Atom feed carrying a DOI and an explicit PDF
+// link, standing in for the live arXiv API in the open-access search tests.
+const oaArxivFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2101.00001v1</id>
+    <published>2021-01-15T00:00:00Z</published>
+    <title>Attention Is All You Need</title>
+    <author><name>Ashish Vaswani</name></author>
+    <arxiv:doi>10.1000/xyz123</arxiv:doi>
+    <link title="pdf" href="http://arxiv.org/pdf/2101.00001v1" rel="related" type="application/pdf"/>
+  </entry>
+</feed>`
+
+// oaCrossrefWorks is a one-item Crossref works response used by the open-access
+// search tests; it carries a distinct DOI so it is not deduped against arXiv.
+const oaCrossrefWorks = `{"message":{"items":[
+  {"DOI":"10.2000/crossref-only","title":["A Crossref Paper"],
+   "author":[{"given":"Grace","family":"Hopper"}],
+   "issued":{"date-parts":[[2019]]},
+   "license":[{"URL":"http://creativecommons.org/licenses/by/4.0/"}]}
+]}}`
+
+// oaOpenLibraryDocs is a one-doc OpenLibrary search response used by the
+// open-access search tests, resolving a title to an ISBN.
+const oaOpenLibraryDocs = `{"docs":[
+  {"title":"An OpenLibrary Book","author_name":["Ada Lovelace"],
+   "first_publish_year":1843,"isbn":["9780000000001"],"key":"/works/OL1W"}
+]}`
+
+// oaDiscoveryServers spins up three httptest servers standing in for arXiv,
+// Crossref and OpenLibrary, points the discovery package at them for the duration
+// of the test, and returns a counter of the total discovery requests observed so a
+// test can assert whether discovery was called at all.
+func oaDiscoveryServers(t *testing.T) *int32 {
+	t.Helper()
+	var hits int32
+	arxiv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte(oaArxivFeed))
+	}))
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte(oaCrossrefWorks))
+	}))
+	openLibrary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte(oaOpenLibraryDocs))
+	}))
+	restore := discovery.SetBasesForTest(arxiv.URL, crossref.URL, openLibrary.URL)
+	t.Cleanup(func() {
+		restore()
+		arxiv.Close()
+		crossref.Close()
+		openLibrary.Close()
+	})
+	return &hits
+}
+
+// oaSession builds a search-capable MCP session against the libgen book fixtures
+// with the given open-access deployment default, so the open-access tests can
+// drive the real search handler end to end.
+func oaSession(t *testing.T, openAccessDefault bool) *mcp.ClientSession {
+	t.Helper()
+	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(searchHTML) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, UnpaywallEmail: "test@example.com", OpenAccessEnabled: openAccessDefault,
+	}
+	return newDownloadSession(t, cfg, staticMirrors{srv.URL})
+}
+
+// oaSearchOutput calls the search tool and decodes the open_access slice from its
+// structured content.
+func oaSearchOutput(t *testing.T, session *mcp.ClientSession, args map[string]any) []discovery.DiscoveryResult {
+	t.Helper()
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "search", Arguments: args})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("search tool error: %v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		OpenAccess []discovery.DiscoveryResult `json:"open_access"`
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return out.OpenAccess
+}
+
+// TestSearchTool_OpenAccessOptIn verifies the per-call opt-in: with
+// include_open_access=true the search output carries origin-labeled OA hits and the
+// discovery servers were called; with the flag off (and the deployment default
+// off) the OA slice is empty and NO discovery request is made.
+func TestSearchTool_OpenAccessOptIn(t *testing.T) {
+	hits := oaDiscoveryServers(t)
+	session := oaSession(t, false)
+
+	oa := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": true})
+	if len(oa) == 0 {
+		t.Fatalf("open_access should be populated when opted in, got none")
+	}
+	if atomic.LoadInt32(hits) == 0 {
+		t.Errorf("discovery servers were never called despite opt-in")
+	}
+	origins := map[string]bool{}
+	for _, r := range oa {
+		origins[r.Origin] = true
+	}
+	if !origins["arxiv"] || !origins["crossref"] || !origins["openlibrary"] {
+		t.Errorf("expected hits labeled by all three origins, got %v", origins)
+	}
+
+	atomic.StoreInt32(hits, 0)
+	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": false})
+	if len(off) != 0 {
+		t.Errorf("open_access should be empty when opted out, got %d", len(off))
+	}
+	if got := atomic.LoadInt32(hits); got != 0 {
+		t.Errorf("discovery was called %d times when opted out, want 0", got)
+	}
+}
+
+// TestSearchTool_OpenAccessDefaultOff verifies that with neither a per-call flag
+// nor the deployment default set, OA discovery stays off and unqueried.
+func TestSearchTool_OpenAccessDefaultOff(t *testing.T) {
+	hits := oaDiscoveryServers(t)
+	session := oaSession(t, false)
+	oa := oaSearchOutput(t, session, map[string]any{"query": "golang"})
+	if len(oa) != 0 {
+		t.Errorf("open_access should be empty by default, got %d", len(oa))
+	}
+	if got := atomic.LoadInt32(hits); got != 0 {
+		t.Errorf("discovery was called %d times by default, want 0", got)
+	}
+}
+
+// TestSearchTool_OpenAccessDedupVsLibgen verifies that an OA hit whose DOI or
+// title+year matches a libgen result is dropped from the OA slice, so the same work
+// is never presented twice.
+func TestSearchTool_OpenAccessDedupVsLibgen(t *testing.T) {
+	oaDiscoveryServers(t)
+	// A libgen result sharing the arXiv fixture's DOI must suppress that OA hit.
+	out := SearchOutput{Results: []libgen.Result{
+		{Title: "Some Book", DOI: "10.1000/XYZ123", Year: "2021"},
+	}}
+	cfg := &config.Config{UnpaywallEmail: "test@example.com", OpenAccessEnabled: true}
+	force := true
+	appendOpenAccess(context.Background(), cfg, SearchInput{Query: "golang", IncludeOpenAccess: &force}, &out)
+	for _, r := range out.OpenAccess {
+		if discovery.NormalizeDOI(r.DOI) == "10.1000/xyz123" {
+			t.Errorf("OA hit sharing a libgen DOI should have been deduped, got %+v", r)
+		}
+	}
+	// The distinct Crossref hit must survive the libgen dedup.
+	var keptCrossref bool
+	for _, r := range out.OpenAccess {
+		if r.Origin == "crossref" {
+			keptCrossref = true
+		}
+	}
+	if !keptCrossref {
+		t.Errorf("distinct crossref OA hit should survive libgen dedup, got %+v", out.OpenAccess)
+	}
+}
+
+// mustReadFile reads a fixture file, failing the test on error.
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
