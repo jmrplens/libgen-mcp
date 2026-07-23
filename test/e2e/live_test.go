@@ -317,6 +317,33 @@ var randombookProbeQueries = []string{"python", "history", "science", "chemistry
 // requires the failure to be one of the KNOWN, diagnosed classes below. An
 // error outside that set fails the test, so a new, unrecognized failure mode
 // is caught here instead of discovered by chance later.
+// syntheticMD5NeverIndexed is a well-formed but unallocated md5 (all zeros) that
+// no real book can carry, guaranteeing a deterministic "not indexed" miss from
+// the live randombook.org API — unlike the mirror-resolution outcome, which
+// depends on the live mirror ecosystem's current state and cannot be forced on
+// demand, the not-indexed miss is reliably reproducible against the real API on
+// every run.
+const syntheticMD5NeverIndexed = "00000000000000000000000000000000"
+
+// TestE2ERandombookNotIndexedIsClean verifies, against the live randombook.org
+// API, that an md5 it cannot possibly have indexed yields a clean "not indexed"
+// error — not a transport error, not ErrLayoutChanged, and not a hang — so the
+// by-id lookup's normal-miss path is deterministically exercised on every run,
+// independent of the live mirror ecosystem's current state.
+func TestE2ERandombookNotIndexedIsClean(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	_, err := env.client.DownloadItem(ctx, libgen.Item{MD5: syntheticMD5NeverIndexed, Source: "randombook"}, t.TempDir(), "")
+	if err == nil {
+		t.Fatal("DownloadItem for a synthetic, never-allocated md5 unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "not indexed") {
+		t.Fatalf("want a clean \"not indexed\" miss for an unallocated md5, got: %v", err)
+	}
+}
+
 func TestE2ERandombookClassifiedOutcome(t *testing.T) {
 	env := requireLive(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
