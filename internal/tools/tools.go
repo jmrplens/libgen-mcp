@@ -579,6 +579,12 @@ func elicitUnpaywallEmail(ctx context.Context, req *mcp.CallToolRequest, cfg *co
 	if strings.TrimSpace(in.DOI) == "" || strings.TrimSpace(cfg.UnpaywallEmail) != "" || !elicitationSupported(req) {
 		return ""
 	}
+	// The per-call Unpaywall prepend only fires for an unnamed source, so an
+	// elicited email can never take effect when a specific source was requested.
+	// Skip the prompt in that case rather than ask a dead-end question.
+	if strings.TrimSpace(in.Source) != "" {
+		return ""
+	}
 	email, ok := elicitText(ctx, req,
 		"This server has no Unpaywall contact email configured. Enter an email to look up an open-access copy of this article via Unpaywall (used only for this request, not stored):",
 		"email",
