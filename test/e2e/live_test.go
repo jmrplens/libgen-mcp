@@ -138,6 +138,13 @@ func TestE2EArticleByDOI(t *testing.T) {
 	cfg.MaxDownloadBytes = maxE2EDownloadBytes
 	client := buildClient(t, cfg)
 
+	// This test covers the CONFIGURED-email Unpaywall path: loadLiveConfig always
+	// supplies a contact email, so Unpaywall is in the chain for the DOI below.
+	if strings.TrimSpace(cfg.UnpaywallEmail) == "" {
+		t.Fatal("expected a configured Unpaywall email; loadLiveConfig should always supply one")
+	}
+	t.Logf("configured-email Unpaywall path in effect (email set: %v)", cfg.UnpaywallEmail != "")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 

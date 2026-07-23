@@ -97,10 +97,12 @@ test-short: ## Run tests without the coverage profile
 test-race: ## Run all tests under the race detector
 	go test -count=1 -race $(PKGS)
 
-test-e2e: ## Run the gated live e2e suite against the real site (needs network)
+test-e2e: ## Run the gated live e2e suite against the real site (needs network; loads .env if present)
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	LIBGEN_E2E=1 go test -tags e2e -timeout 600s -count=1 ./test/e2e/
 
-eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads)
+eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads; loads .env if present)
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval
 
 coverage: test ## Generate an HTML coverage report (coverage.html)

@@ -287,12 +287,21 @@ func TestE2EGetDetailsCitations(t *testing.T) {
 	t.Logf("citations md5=%s bibtex=%d bytes ris=%d bytes", md5, len(out.Citations.BibTeX), len(out.Citations.RIS))
 }
 
-// firstArticleWithDOI runs a live articles search and returns the md5 of the
-// first result that carries both a canonical md5 and a DOI (so its details record
-// can drive DOI-based enrichment). It SKIPS the calling test when none qualifies.
-func firstArticleWithDOI(t *testing.T, ctx context.Context, c *libgen.Client, query string) string {
+// enrichmentQueries are several unrelated article topics tried in turn when
+// hunting for a live record that carries a DOI. Any single query's first page can
+// happen to omit an article with a populated DOI, so trying a spread of topics
+// makes the enrichment test robust against that data flakiness.
+var enrichmentQueries = []string{"cancer", "machine learning", "climate", "crispr", "graphene"}
+
+// articleMD5WithDOI runs one live articles search (a large page) and returns the
+// md5 of the first result carrying both a canonical md5 and a DOI, or "" when the
+// page holds none. A search transport error fails the calling test (a real bug
+// under the live gate); an empty return just means "try the next query".
+func articleMD5WithDOI(t *testing.T, ctx context.Context, c *libgen.Client, query string) string {
 	t.Helper()
-	page, _, err := c.Search(ctx, libgen.SearchParams{Query: query, Topics: []string{"articles"}})
+	page, _, err := c.Search(ctx, libgen.SearchParams{
+		Query: query, Topics: []string{"articles"}, ResultsPerPage: 100,
+	})
 	if err != nil {
 		t.Fatalf("Search(%q) error: %v", query, err)
 	}
@@ -302,15 +311,34 @@ func firstArticleWithDOI(t *testing.T, ctx context.Context, c *libgen.Client, qu
 			return r.MD5
 		}
 	}
-	t.Skipf("no article with both an md5 and a DOI for query %q; cannot exercise enrichment", query)
+	return ""
+}
+
+// firstArticleWithDOI tries several unrelated queries in turn and returns the md5
+// of the first live article that carries both a canonical md5 and a DOI (so its
+// details record can drive DOI-based enrichment). It SKIPS the calling test only
+// when EVERY query fails to surface one — genuine live data flakiness, not an
+// email or wiring problem.
+func firstArticleWithDOI(t *testing.T, ctx context.Context, c *libgen.Client) string {
+	t.Helper()
+	for _, q := range enrichmentQueries {
+		if md5 := articleMD5WithDOI(t, ctx, c, q); md5 != "" {
+			return md5
+		}
+		pace()
+	}
+	t.Skipf("no article with both an md5 and a DOI across %d queries; cannot exercise enrichment", len(enrichmentQueries))
 	return ""
 }
 
 // TestE2EGetDetailsEnrichment drives get_details with enrich=true against the LIVE
-// site for an article record that carries a DOI. Enrichment is best-effort: the
-// call must NOT error, and when Crossref responds the Enrichment field is present.
-// It gates on requireLive and on a configured contact email (loadLiveConfig always
-// supplies one), and never fails on a best-effort miss.
+// site for an article record that carries a DOI, then asserts the Crossref lookup
+// (keyed by the record's DOI, using the configured contact email as the polite-pool
+// mailto) populated at least one field. To stay robust against live data flakiness
+// it hunts across several queries for an article carrying a DOI. Enrichment itself
+// is best-effort: only a genuinely nil Enrichment (Crossref transiently down or the
+// DOI unindexed) SKIPS at the very end. It gates on requireLive and on a configured
+// contact email (loadLiveConfig always supplies one).
 func TestE2EGetDetailsEnrichment(t *testing.T) {
 	env := requireLive(t)
 	if strings.TrimSpace(env.cfg.UnpaywallEmail) == "" {
@@ -319,10 +347,10 @@ func TestE2EGetDetailsEnrichment(t *testing.T) {
 	if !env.cfg.EnrichEnabled {
 		t.Skip("enrichment disabled on this deployment; skipping")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	md5 := firstArticleWithDOI(t, ctx, env.client, "cancer")
+	md5 := firstArticleWithDOI(t, ctx, env.client)
 	pace()
 	session := newToolSession(t, ctx, env.client, env.cfg, nil)
 
@@ -338,11 +366,19 @@ func TestE2EGetDetailsEnrichment(t *testing.T) {
 	}
 	var out tools.DetailsOutput
 	decodeStructured(t, res, &out)
-	// Enrichment is best-effort: a nil result is a legitimate miss, not a failure.
-	if out.Enrichment == nil {
-		t.Skipf("enrichment found nothing for md5=%s (Crossref unreachable or DOI unindexed)", md5)
+	// Enrichment is best-effort: a nil result (or a nil Crossref sub-record) is a
+	// legitimate transient miss, not a failure, so it SKIPS rather than fails.
+	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
+		t.Skipf("Crossref enrichment found nothing for md5=%s (Crossref unreachable or DOI unindexed)", md5)
 	}
-	t.Logf("enrichment md5=%s crossref=%v openlibrary=%v", md5, out.Enrichment.Crossref != nil, out.Enrichment.OpenLibrary != nil)
+	cr := out.Enrichment.Crossref
+	// When Crossref answers it must carry at least one substantive field, proving
+	// the DOI-keyed lookup (with the configured mailto) actually ran and parsed.
+	if strings.TrimSpace(cr.ContainerTitle) == "" && len(cr.ISSN) == 0 && cr.PublishedYear == 0 {
+		t.Errorf("Crossref record for md5=%s carried no container title, ISSN, or year: %+v", md5, cr)
+	}
+	t.Logf("enrichment md5=%s crossref container=%q issn=%v year=%d openlibrary=%v",
+		md5, cr.ContainerTitle, cr.ISSN, cr.PublishedYear, out.Enrichment.OpenLibrary != nil)
 }
 
 // newReadSession builds a size-capped live client (so a parsing mistake can never
@@ -661,6 +697,102 @@ func TestE2EElicitEmailOnDemand(t *testing.T) {
 	if *lastEmail != "asked@example.com" {
 		t.Errorf("Unpaywall received email = %q, want the elicited %q", *lastEmail, "asked@example.com")
 	}
+}
+
+// elicitFieldName returns the single top-level property name of an elicitation's
+// requested schema, which the server sets to "email" for the Unpaywall-email prompt
+// and "confirm" for the download-save prompt. A test handler branches on it to
+// answer each prompt correctly. It returns "" when the schema is not the expected
+// {"properties": {name: ...}} shape (client-side the schema arrives as a
+// map[string]any per the SDK's default JSON unmarshaling).
+func elicitFieldName(req *mcp.ElicitRequest) string {
+	if req == nil || req.Params == nil {
+		return ""
+	}
+	schema, ok := req.Params.RequestedSchema.(map[string]any)
+	if !ok {
+		return ""
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	for name := range props {
+		return name // each server elicitation carries exactly one property.
+	}
+	return ""
+}
+
+// TestE2EElicitUnpaywallEmailLiveDownload proves end-to-end and LIVE that a
+// Unpaywall contact email supplied via ELICITATION (never configured) actually
+// fetches a real open-access PDF. The server config carries NO Unpaywall email, so
+// the only way Unpaywall can enter the download chain is the on-demand per-call
+// email path: the client's elicitation handler answers the email prompt with a real
+// contact address (LIBGEN_MCP_UNPAYWALL_EMAIL, falling back to the committed default
+// e2eUnpaywallEmail) and ACCEPTS the download-confirmation prompt so the save
+// proceeds. It downloads the reliably open-access Ioannidis 2005 article (PLOS
+// Medicine) by DOI in local mode.
+//
+// The KEY assertion, when it does not skip: the email elicitation ran AND a real PDF
+// was saved — proving the elicited email threaded through to a live Unpaywall lookup
+// and fetched the OA PDF (the config had none). Because OA availability and the CDN
+// vary, a transient chain failure SKIPS (never fails). It gates on requireLive.
+func TestE2EElicitUnpaywallEmailLiveDownload(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// A live config with the Unpaywall email forced empty: Unpaywall can only enter
+	// the chain through the elicited per-call email. A polite download cap guards
+	// against a size-parsing mistake pulling a large file.
+	cfg := loadLiveConfig(t)
+	cfg.UnpaywallEmail = ""
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	email := strings.TrimSpace(os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"))
+	if email == "" {
+		email = e2eUnpaywallEmail
+	}
+	var emailAsks atomic.Int32
+	handler := func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		field := elicitFieldName(req)
+		if strings.Contains(strings.ToLower(field), "email") {
+			emailAsks.Add(1)
+			return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: email}}, nil
+		}
+		// Any other prompt is the download confirmation: accept it (confirm=true) so
+		// the save proceeds. Default the field name when the schema is unexpected.
+		if field == "" {
+			field = "confirm"
+		}
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
+	}
+	session := newToolSession(t, ctx, client, cfg, handler)
+
+	const oaDOI = "10.1371/journal.pmed.0020124"
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": oaDOI},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error: %v", err)
+	}
+	// The email elicitation MUST have fired: with no configured email the server can
+	// only reach Unpaywall through it. This holds whether or not the fetch skips.
+	if emailAsks.Load() == 0 {
+		t.Fatal("the Unpaywall email elicitation never fired; the on-demand email path did not run")
+	}
+	if res.IsError {
+		t.Skipf("live unpaywall/scihub chain unavailable for %s: %+v", oaDOI, res.Content)
+	}
+	var out tools.DownloadOutput
+	decodeStructured(t, res, &out)
+	if strings.TrimSpace(out.Path) == "" {
+		t.Skipf("no file saved for %s (OA chain transiently unavailable); resolved=%+v", oaDOI, out.Resolved)
+	}
+	assertPDF(t, out.Path)
+	t.Logf("elicited-email OA download doi=%s source=%s bytes=%d path=%s", oaDOI, out.Source, out.SizeBytes, out.Path)
 }
 
 // TestE2EElicitDownloadConfirmAccept proves the download-confirmation accept
