@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -355,6 +356,18 @@ func scenarios() []scenario {
 			// the first page's text, then write its own summary of the UNTRUSTED
 			// extracted text rather than dumping it verbatim.
 			Assert: assertReadSummary,
+		},
+		{
+			ID: "S20",
+			Prompt: `Search for the paper "Attention Is All You Need" and also check the open-access ` +
+				`literature (arXiv, Crossref) for a freely available copy; tell me what you found, ` +
+				`including its DOI or arXiv link.`,
+			// Open-access discovery: like S10-S13, this is deliberately under-specified —
+			// the prompt never names include_open_access, so the model must discover the
+			// search field itself and then surface one of the federated open-access hits
+			// (arxiv/crossref) in its answer. A live provider outage is a SKIP, not a
+			// failure, since the flag/plumbing already did its job.
+			Assert: assertOpenAccessDiscovery,
 		},
 	}
 }
@@ -719,6 +732,49 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		return false, "model dumped the extracted text verbatim instead of summarizing it"
 	}
 	return true, fmt.Sprintf("read %s (%d chars); model summarized it in %d chars", out.Format, len(out.Text), len(tr.FinalText))
+}
+
+// assertOpenAccessDiscovery checks the S20 open-access discovery flow: the model
+// must set include_open_access itself (the prompt only asks it to "also check the
+// open-access literature", it never names the field) and then surface one of the
+// federated arXiv/Crossref/OpenLibrary hits in its final answer. An empty
+// open_access list is a SKIP — the keyless providers are best-effort third-party
+// APIs, so a live outage there is not a model failure.
+func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	include, _ := call.Input["include_open_access"].(bool)
+	if !include {
+		return false, "model did not set include_open_access on the search call"
+	}
+	if len(out.OpenAccess) == 0 {
+		return true, skipPrefix + " include_open_access was set but no provider returned a hit (live network)"
+	}
+	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
+		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"
+	}
+	return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); model referenced one in its answer", len(out.OpenAccess))
+}
+
+// finalTextMentionsOpenAccess reports whether the model's final prose references
+// one of the federated open-access hits, by DOI, arXiv PDF URL, or origin label —
+// evidence it actually used the open_access results rather than ignoring them.
+func finalTextMentionsOpenAccess(text string, hits []discovery.DiscoveryResult) bool {
+	lower := strings.ToLower(text)
+	for _, h := range hits {
+		if h.DOI != "" && strings.Contains(lower, strings.ToLower(h.DOI)) {
+			return true
+		}
+		if h.PDFURL != "" && strings.Contains(text, h.PDFURL) {
+			return true
+		}
+		if h.Origin != "" && strings.Contains(lower, h.Origin) {
+			return true
+		}
+	}
+	return false
 }
 
 // assertS5 checks a book download by md5 produces a saved, non-empty file.
