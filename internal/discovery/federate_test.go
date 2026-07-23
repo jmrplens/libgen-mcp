@@ -153,3 +153,18 @@ func TestFederate_RecoversProviderPanic(t *testing.T) {
 		t.Fatalf("expected the healthy provider's single result to survive the panic, got %+v", got)
 	}
 }
+
+// TestDefaultProviders verifies DefaultProviders returns the three standard
+// keyless providers in the documented order: arxiv, crossref, openlibrary.
+func TestDefaultProviders(t *testing.T) {
+	providers := DefaultProviders("")
+	if len(providers) != 3 {
+		t.Fatalf("DefaultProviders() returned %d providers, want 3", len(providers))
+	}
+	want := []string{"arxiv", "crossref", "openlibrary"}
+	for i, name := range want {
+		if got := providers[i].Name(); got != name {
+			t.Errorf("provider[%d].Name() = %q, want %q", i, got, name)
+		}
+	}
+}

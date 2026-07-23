@@ -160,3 +160,11 @@ func TestOpenLibrary_ContextCancelled(t *testing.T) {
 		t.Errorf("Search() = %v, want nil results on canceled ctx", got)
 	}
 }
+
+// TestOpenLibraryProvider_Name verifies the provider stamps the "openlibrary"
+// origin.
+func TestOpenLibraryProvider_Name(t *testing.T) {
+	if got := NewOpenLibrary().Name(); got != "openlibrary" {
+		t.Errorf("Name() = %q, want %q", got, "openlibrary")
+	}
+}

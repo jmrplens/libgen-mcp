@@ -183,3 +183,10 @@ func TestArxiv_LimitClamped(t *testing.T) {
 		t.Errorf("limit=9999 query = %q, want clamped max_results=50", gotQuery)
 	}
 }
+
+// TestArxivProvider_Name verifies the arXiv provider stamps the "arxiv" origin.
+func TestArxivProvider_Name(t *testing.T) {
+	if got := NewArxiv().Name(); got != "arxiv" {
+		t.Errorf("Name() = %q, want %q", got, "arxiv")
+	}
+}

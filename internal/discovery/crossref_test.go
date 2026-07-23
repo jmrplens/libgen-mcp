@@ -196,3 +196,35 @@ func TestCrossref_LimitClamped(t *testing.T) {
 		t.Errorf("limit=9999 query = %q, want clamped rows=50", gotQuery)
 	}
 }
+
+// TestCrossrefProvider_Name verifies the Crossref provider stamps the "crossref"
+// origin.
+func TestCrossrefProvider_Name(t *testing.T) {
+	if got := NewCrossref("").Name(); got != "crossref" {
+		t.Errorf("Name() = %q, want %q", got, "crossref")
+	}
+}
+
+// TestCrossrefYear documents crossrefYear's extraction of the publication year
+// from the issued date-parts: a positive leading year is rendered as a string,
+// while missing date-parts, an empty inner slice, or a non-positive year all yield
+// "".
+func TestCrossrefYear(t *testing.T) {
+	cases := []struct {
+		name   string
+		issued crossrefIssued
+		want   string
+	}{
+		{name: "no date-parts", issued: crossrefIssued{}, want: ""},
+		{name: "empty inner slice", issued: crossrefIssued{DateParts: [][]int{{}}}, want: ""},
+		{name: "non-positive year", issued: crossrefIssued{DateParts: [][]int{{0}}}, want: ""},
+		{name: "valid year", issued: crossrefIssued{DateParts: [][]int{{2021, 5}}}, want: "2021"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := crossrefYear(tc.issued); got != tc.want {
+				t.Errorf("crossrefYear(%+v) = %q, want %q", tc.issued, got, tc.want)
+			}
+		})
+	}
+}
