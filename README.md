@@ -206,43 +206,47 @@ Alongside the four tools, the server registers four MCP **prompts** — reusable
 
 ## Configuration
 
-**It works out of the box — zero configuration, no account.** Every variable below is optional. Common setups (add these as `env` entries in your MCP client config, or `-e NAME=value` with Docker):
+**It works out of the box — zero configuration, no account.** Every variable is optional. Only three settings change what the server _does_ — everything else is a tuning knob that already works by default. Add these as `env` entries in your MCP client config, or as `-e NAME=value` with Docker:
 
 - **Enable open-access articles (Unpaywall):** `LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com` — disabled by default; the Unpaywall API needs a contact email. Without it, DOIs still resolve via Sci-Hub.
-- **Choose where files land:** `LIBGEN_MCP_DOWNLOAD_DIR=/path/to/downloads` (default `~/Downloads`; the `download` tool's `path` argument overrides per call).
-- **Pin one mirror** (skip auto-discovery): `LIBGEN_MIRROR=https://libgen.li`.
-- **Restrict sources** (e.g. books only, no article sources): `LIBGEN_MCP_SOURCES=libgen,randombook`.
-- **Cap download size / concurrency:** `LIBGEN_MCP_MAX_DOWNLOAD_BYTES=1073741824` (1 GiB), `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS=1`.
+- **Discover open access by default:** `LIBGEN_MCP_OPEN_ACCESS=true` — makes `search`'s open-access discovery (arXiv/Crossref/OpenLibrary) on for every call; otherwise a call opts in per request with `include_open_access: true`.
+- **Always return a link instead of saving:** `LIBGEN_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 
-Full reference and tuning knobs (rate limits, retry/stall schedules, Sci-Hub hosts) are in the **[configuration guide](https://jmrplens.github.io/libgen-mcp/configuration/)**.
+Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
-### Environment variables
+## Run with Docker
 
-Every variable is optional; an empty or unset value uses the default. A present-but-invalid numeric value is an error rather than a silent fallback.
+The published image runs on **stdio by default** — the correct mode for MCP clients. The `-e` flags above combine freely; see the [configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/) for the full list.
 
-| Variable                                | Default                                                  | Description                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LIBGEN_MIRROR`                         | _(auto-discovery)_                                       | Force a specific mirror, e.g. `https://libgen.li`. Skips auto-discovery. Must be an `http(s)` URL.                                                                                                                                                                                                                                                      |
-| `LIBGEN_MCP_DOWNLOAD_DIR`               | `~/Downloads`                                            | Default destination directory for `download` (created if missing, checked for writability).                                                                                                                                                                                                                                                             |
-| `LIBGEN_MCP_TIMEOUT`                    | `30s`                                                    | Per-request HTTP timeout (Go duration, e.g. `45s`, `1m`). Range `(0, 10m]`.                                                                                                                                                                                                                                                                             |
-| `LIBGEN_MCP_LOG_LEVEL`                  | `info`                                                   | Log level: `debug`, `info`, `warn`, or `error`.                                                                                                                                                                                                                                                                                                         |
-| `LIBGEN_MCP_RATE_RPS`                   | `1`                                                      | Allowed outbound requests per second. Range `(0, 20]`.                                                                                                                                                                                                                                                                                                  |
-| `LIBGEN_MCP_RATE_BURST`                 | `1`                                                      | Maximum rate-limiter burst. Range `[1, 100]`.                                                                                                                                                                                                                                                                                                           |
-| `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`         | `0` _(no limit)_                                         | Maximum download size in bytes. Range `[0, 50 GiB]`; `0` disables the ceiling.                                                                                                                                                                                                                                                                          |
-| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`   | `2`                                                      | Simultaneous downloads allowed. Range `[1, 16]`.                                                                                                                                                                                                                                                                                                        |
-| `LIBGEN_MCP_RETRY_ATTEMPTS`             | `3`                                                      | Passes over the mirror list for page requests (search / details / link resolution), with backoff; does not govern file downloads. Range `[1, 10]`.                                                                                                                                                                                                      |
-| `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` | `5s,5s,5s,10s,10s,10s,15s`                               | Staged waits between attempts to get a download to _begin_ (resolve / connect / first byte). `N` waits = `N+1` attempts (~60 s by default). Comma-separated Go durations; each in `(0, 10m]`; at most 20.                                                                                                                                               |
-| `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`     | `60s`                                                    | Progress-resetting stall window while streaming: a download is cut only if _no_ bytes arrive for this long, so a slow-but-progressing transfer is never killed. Range `(0, 1h]`.                                                                                                                                                                        |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL`            | _(unset — unpaywall disabled)_                           | Contact email for the Unpaywall API (DOI lookups). The API rejects requests without one, so an unset value disables the `unpaywall` source entirely (and hides it from the download tool's `source` schema). Set your own address to enable it.                                                                                                         |
-| `LIBGEN_MCP_SCIHUB_HOSTS`               | `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf` | Ordered, comma-separated Sci-Hub mirror hosts (bare host, no scheme). Tried in order until one serves.                                                                                                                                                                                                                                                  |
-| `LIBGEN_MCP_SOURCES`                    | _(all enabled)_                                          | Comma-separated allow-list of download sources: `unpaywall`, `scihub`, `libgen`, `randombook`.                                                                                                                                                                                                                                                          |
-| `LIBGEN_MCP_REMOTE_DOWNLOADS`           | `false`                                                  | Force `download` to always return a link (a `resource_link` + `resolved` object) instead of saving a file — the same behavior `--http` uses. Set it for a **hosted stdio** deployment (e.g. behind `mcp-proxy` on a catalog) whose disk the client can't reach. `--http` implies it; this covers the stdio-hosted case. Accepts `1`/`true`/`0`/`false`. |
-| `LIBGEN_MCP_READ_MAX_CHARS`             | `6000`                                                   | Max characters `read` returns per call when a call omits `max_chars`. Range `[500, 200000]`.                                                                                                                                                                                                                                                            |
-| `LIBGEN_MCP_READ_DEFAULT_PAGES`         | `5`                                                      | Default max PDF pages per `read` call when a call omits `max_pages`. Range `[1, 200]`.                                                                                                                                                                                                                                                                  |
-| `LIBGEN_MCP_READ_CACHE_BYTES`           | `536870912` (512 MiB)                                    | Total-size cap of the `read` tool's server-side temp-file cache; least-recently-used files are evicted past it. Range `[1 MiB, 50 GiB]`.                                                                                                                                                                                                                |
-| `LIBGEN_MCP_READ_CACHE_TTL`             | `10m`                                                    | How long an unreferenced `read` temp file lingers before eviction. Go duration, range `[1s, 24h]`.                                                                                                                                                                                                                                                      |
-| `LIBGEN_MCP_ENRICH`                     | `true`                                                   | Deployment kill-switch for `get_details`' opt-in `enrich` metadata (Crossref/OpenLibrary). Set `false` to forbid enrichment entirely, regardless of the per-call `enrich` flag. Accepts `1`/`true`/`0`/`false`.                                                                                                                                         |
-| `LIBGEN_MCP_OPEN_ACCESS`                | `false`                                                  | Deployment default for `search`'s opt-in open-access discovery (arXiv/Crossref/OpenLibrary). Default `false` means a call only federates OA when it passes `include_open_access: true`; set `true` to make OA on by default while each call can still opt out with `include_open_access: false`. Accepts `1`/`true`/`0`/`false`.                        |
+Plain (stdio, zero config):
+
+```bash
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Enable open-access articles via Unpaywall:
+
+```bash
+docker run -i --rm -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Turn on open-access discovery by default:
+
+```bash
+docker run -i --rm -e LIBGEN_MCP_OPEN_ACCESS=true ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Save downloads to a host folder (mount a volume, point the download dir at it):
+
+```bash
+docker run -i --rm -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads -v "$HOME/Downloads:/downloads" ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Serve streamable HTTP instead of stdio:
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/jmrplens/libgen-mcp:latest --http :8080
+```
 
 ## Multi-source downloads
 

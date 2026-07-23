@@ -87,6 +87,15 @@ The recommended install is the **prebuilt binary**: a single static executable w
     	  ghcr.io/jmrplens/libgen-mcp:latest
     	```
 
+    	Pass behavior-changing flags the same way — they combine freely. Enable open-access articles via Unpaywall, or turn on open-access discovery by default (see the [configuration reference](/libgen-mcp/configuration/) for the full list):
+
+    	```bash
+    	docker run -i --rm \
+    	  -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com \
+    	  -e LIBGEN_MCP_OPEN_ACCESS=true \
+    	  ghcr.io/jmrplens/libgen-mcp:latest
+    	```
+
     	For the streamable HTTP transport instead, pass `--http 0.0.0.0:8080` and publish the port; HTTP mode also exposes a `GET /health` readiness endpoint:
 
     	```bash

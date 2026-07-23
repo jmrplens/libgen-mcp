@@ -78,7 +78,25 @@ La instalación recomendada es el **binario precompilado**: un único ejecutable
     	docker pull ghcr.io/jmrplens/libgen-mcp:latest
     	```
 
-    	La imagen se ejecuta en stdio por defecto; para el transporte HTTP en streaming pasa `--http 0.0.0.0:8080` (y publica el puerto). En modo HTTP se expone además un endpoint `GET /health`:
+    	La imagen se ejecuta en **stdio por defecto** — el modo correcto para clientes MCP, así que `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (como lo usan los botones de un clic y `claude mcp add`) funciona sin configuración. Monta un volumen con permisos de escritura para las descargas y apunta `LIBGEN_MCP_DOWNLOAD_DIR` a él; el contenedor se ejecuta como usuario sin privilegios, por lo que el directorio del host debe ser escribible por el UID `10001`:
+
+    	```bash
+    	docker run -i --rm \
+    	  -v "$HOME/Downloads:/downloads" \
+    	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+    	  ghcr.io/jmrplens/libgen-mcp:latest
+    	```
+
+    	Pasa las variables que cambian el comportamiento de la misma forma — se combinan libremente. Activa los artículos de acceso abierto mediante Unpaywall, o habilita el descubrimiento de acceso abierto por defecto (consulta la [referencia de configuración](/libgen-mcp/es/configuration/) para la lista completa):
+
+    	```bash
+    	docker run -i --rm \
+    	  -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com \
+    	  -e LIBGEN_MCP_OPEN_ACCESS=true \
+    	  ghcr.io/jmrplens/libgen-mcp:latest
+    	```
+
+    	Para el transporte HTTP en streaming pasa `--http 0.0.0.0:8080` y publica el puerto; en modo HTTP se expone además un endpoint `GET /health`:
 
     	```bash
     	docker run --rm -p 8080:8080 \
@@ -86,8 +104,6 @@ La instalación recomendada es el **binario precompilado**: un único ejecutable
     	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
     	  ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
     	```
-
-    	Monta un volumen con permisos de escritura para las descargas y apunta `LIBGEN_MCP_DOWNLOAD_DIR` a él; el contenedor se ejecuta como usuario sin privilegios, por lo que el directorio del host debe ser escribible por el UID `10001`.
     </TabItem>
     <TabItem label="go install">
     	Si ya tienes Go 1.26 o posterior y prefieres compilar desde el código fuente:
