@@ -1,0 +1,6 @@
+{
+  "query": "tutorial python bahasa indonesia",
+  "md5": "26c0ea3c65163aeb2e87ba8d14b50b96",
+  "title": "BUKU PRAKTIS BAHASA INDONESIA JILID 2",
+  "note": "Present in Anna's Archive, absent from the Library Genesis catalog as of 2026-07-24. Verified: Anna's md5 page publishes an IPFS CID (QmPRM1yzRJsZ9xYduvq8Y16abE8bpYmdLQyN43VYTUxSoE), and the item does not surface in libgen.li search. The libgen.li json.php API was returning HTTP 500 on this date, so absence was confirmed via the search page rather than the JSON endpoint. Re-pin with the commands in plan/2026-07-24-extra-search-sources.md if the catalog later absorbs it."
+}
