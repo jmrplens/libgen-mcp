@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -649,6 +651,92 @@ func TestE2ESearchNeverMode(t *testing.T) {
 	for _, r := range out.Results {
 		if r.Origin != "" && r.Origin != "libgen" {
 			t.Fatalf("extra_sources=never still returned a %q result", r.Origin)
+		}
+	}
+}
+
+// TestE2ENeverIsALockNotADefault verifies a deployment configured to never cannot
+// be talked out of it. The setting exists so an operator can guarantee the server
+// contacts no extra provider; a caller able to ask for them anyway would make that
+// guarantee worthless. A live evaluator run caught exactly that — a model retried
+// with always after an empty catalog search and reached Anna's.
+func TestE2ENeverIsALockNotADefault(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	locked := *env.cfg
+	locked.ExtraSources = config.ExtraSourcesNever
+	lockedEnv := &liveEnv{cfg: &locked, client: env.client}
+
+	// The query is a known catalog miss and the call explicitly asks for the extras,
+	// so anything other than an empty, catalog-only page means the lock leaked.
+	out := callSearch(t, ctx, lockedEnv, map[string]any{"query": item.Query, "extra_sources": "always"})
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("a never deployment returned a %q result despite the lock", r.Origin)
+		}
+	}
+	if len(out.OpenAccess) > 0 {
+		t.Fatalf("a never deployment returned %d open-access hits despite the lock", len(out.OpenAccess))
+	}
+}
+
+// TestE2EEscalatedDownloadKeepsItsFileType verifies an escalated download lands as
+// a usable file. Anna's serves bytes over IPFS, which addresses content and
+// announces no name, so the type has to come from the record: without it the file
+// saves extensionless and every reader downstream is blind to what it is.
+func TestE2EEscalatedDownloadKeepsItsFileType(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: item.MD5, Source: "annas"}, t.TempDir(), "")
+	if err != nil {
+		skipIfAnnasUnavailable(t, err)
+		t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+	}
+	if ext := strings.ToLower(filepath.Ext(res.Path)); ext == "" {
+		t.Fatalf("saved %q with no extension; read cannot choose an extractor for it", res.Path)
+	}
+	t.Logf("escalated item saved as %s (%d bytes)", filepath.Base(res.Path), res.SizeBytes)
+}
+
+// TestE2EReadEscalatedItem verifies the whole escalated chain ends somewhere
+// useful: an item the catalog does not carry is found, fetched from Anna's and
+// read. It is the strictest of these tests — a pass means search, the Anna's
+// download path, the file type and text extraction all held together.
+func TestE2EReadEscalatedItem(t *testing.T) {
+	requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+
+	_, session := newReadSession(t, ctx)
+	out := callRead(t, ctx, session, map[string]any{"md5": item.MD5})
+	if !out.Extractable {
+		t.Fatalf("escalated item was not extractable: %s", out.Reason)
+	}
+	if strings.TrimSpace(out.Text) == "" {
+		t.Fatal("escalated item reported extractable but yielded no text")
+	}
+	t.Logf("read %d characters from an item the catalog does not carry", len(out.Text))
+}
+
+// skipIfAnnasUnavailable skips on the known ways Anna's and the public IPFS
+// gateways fail live, and returns otherwise so the caller can fail on anything
+// undiagnosed rather than tolerating a new failure mode silently.
+func skipIfAnnasUnavailable(t *testing.T, err error) {
+	t.Helper()
+	known := []string{
+		"embedded no IPFS CID", "no IPFS gateway served", "no mirror resolved",
+		"no mirrors available", "member API rejected", "context deadline",
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("annas unavailable in a known way: %v", err)
 		}
 	}
 }
