@@ -60,7 +60,9 @@ open-access providers first, then the shadow-library fallbacks:
 
 1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled
    DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain
-   advances. (Only in the chain when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set; otherwise skipped.)
+   advances. (In the chain when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set; otherwise an
+   elicitation-capable client is asked for a one-off contact email, and declining just
+   moves on to the next provider.)
 2. **`europepmc`** — serves the PDF when Europe PMC holds the article's open-access full text;
    reports whether the DOI is simply not indexed or indexed without an OA full text.
 3. **`biorxiv`** — only for `10.1101` preprint DOIs; returns the latest version's full-text PDF

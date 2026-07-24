@@ -84,7 +84,7 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 
 **Significado.** Los artículos se obtienen por DOI a través de varias fuentes por orden — primero los proveedores legales de acceso abierto, luego los fallbacks de bibliotecas en la sombra:
 
-1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Solo forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, se omite.)
+1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, a un cliente con capacidad de elicitación se le pide un correo de contacto puntual, y rechazarlo simplemente pasa al siguiente proveedor.)
 2. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
 3. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
 4. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando Scholar tiene una.
