@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 **libgen-mcp** is a local Model Context Protocol (MCP) server. It runs entirely
 on your machine and acts as a bridge between your MCP client (Claude Desktop,
@@ -26,24 +26,41 @@ AI assistant) make. There are no background connections. The destinations are:
   pinned via `LIBGEN_MIRROR`. Book `download` requests (by `md5`) fetch the file
   from the serving mirror and its download CDNs. If the primary mirror path
   fails, the `randombook` source (`randombook.org`) is tried as a fallback.
-- **Unpaywall API (only when you request an article by DOI).** Resolving an
-  article `download` by `doi` queries the [Unpaywall](https://unpaywall.org) API
-  (`api.unpaywall.org`) to locate an open-access copy. Unpaywall's API requires
-  a contact email, sent as a query parameter. It defaults to the maintainer's
-  address; set `LIBGEN_MCP_UNPAYWALL_EMAIL` to your own so requests are
-  attributed to you. No other personal data is sent.
-- **Sci-Hub mirrors (only when you request an article by DOI).** If Unpaywall
-  finds no open-access copy, the article `download` chain falls through to the
-  configured Sci-Hub hosts (`LIBGEN_MCP_SCIHUB_HOSTS`, e.g. `sci-hub.ee`),
-  requesting `https://<host>/<doi>` until one serves the paper.
+- **Unpaywall API (only when you request an article by DOI, and only if you
+  enable it).** `LIBGEN_MCP_UNPAYWALL_EMAIL` is **empty by default**, which
+  disables the `unpaywall` source entirely — no request is made and **no email
+  address is ever sent**, not the maintainer's and not anyone else's. If you set
+  it to your own contact address, resolving an article `download` by `doi`
+  queries the [Unpaywall](https://unpaywall.org) API (`api.unpaywall.org`) with
+  that address as a query parameter, which is what its API requires. A client
+  that supports MCP elicitation may instead offer to ask you for a one-off
+  address per call; that value is used for that single request and never stored.
+  No other personal data is sent.
+- **Keyless open-access providers (only when you request an article by DOI).**
+  Before any shadow-library fallback, the article `download` chain asks the open
+  repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
+  (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
+  (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts),
+  and Internet Archive Scholar / fatcat (`api.fatcat.wiki`, then `archive.org`
+  or `web.archive.org` for the file). Each request carries only the DOI.
+- **CORE (only when you request an article by DOI and configure a key).**
+  `LIBGEN_MCP_CORE_KEY` is empty by default, which leaves the `core` source out
+  of the chain. When you set it, the DOI is sent to `api.core.ac.uk` with the key
+  as a bearer token; the key is never attached to the file URL CORE returns.
+- **Sci-Hub mirrors (only when you request an article by DOI).** If none of the
+  open-access providers above yields a copy, the article `download` chain falls
+  through to the configured Sci-Hub hosts (`LIBGEN_MCP_SCIHUB_HOSTS`, e.g.
+  `sci-hub.ee`), requesting `https://<host>/<doi>` until one serves the paper.
 - **The extra searchers (when a search reaches beyond the catalog).** A `search`
   may send **your query text** to Anna's Archive (`annas-archive.gl` and its
   mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org) and
   [OpenLibrary](https://openlibrary.org). When this happens is under your
   control, via the `extra_sources` argument or `LIBGEN_MCP_EXTRA_SOURCES`: by
   default (`auto`) only when the Library Genesis catalog returns nothing or
-  fails, with `always` on every search, and with `never` not at all. The Crossref
-  request carries the same contact email as Unpaywall. `get_details` also queries
+  fails, with `always` on every search, and with `never` not at all. When — and
+  only when — you have configured `LIBGEN_MCP_UNPAYWALL_EMAIL`, the Crossref
+  request carries that same address as its polite-pool contact. `get_details`
+  also queries
   Anna's Archive, sending **only the md5**, when the catalog has no record for it.
 - **Anna's Archive and IPFS gateways (only when you download through them).**
   The `scidb` source resolves an article `download` by `doi` through Anna's
@@ -64,11 +81,19 @@ update checks, no phone-home.
 ## Credentials
 
 None are required. Library Genesis, its mirrors, and the keyless article and
-search sources used here need no account or token. The one optional credential
-is an Anna's Archive membership key (`LIBGEN_MCP_ANNAS_KEY`, or supplied for a
-single call through your client's elicitation prompt), which unlocks that site's
-faster member download tier. It is sent only to Anna's Archive, only on a
-download you asked for, and is never persisted by the server.
+search sources used here need no account or token. Two credentials are optional:
+
+- An **Anna's Archive membership key** (`LIBGEN_MCP_ANNAS_KEY`, or supplied for a
+  single call through your client's elicitation prompt), which unlocks that
+  site's faster member download tier. It is sent only to Anna's Archive, only on
+  a download you asked for, and is never persisted by the server.
+- A **CORE API key** (`LIBGEN_MCP_CORE_KEY`, free registration at core.ac.uk),
+  which enables the `core` open-access article source. It is sent only to
+  `api.core.ac.uk`, and never with the file URL that CORE resolves to.
+
+The Unpaywall contact email (`LIBGEN_MCP_UNPAYWALL_EMAIL`) is not a credential —
+it is an attribution address the Unpaywall API requires — but it is likewise
+optional, and unset by default.
 
 ## Local storage and downloads
 
@@ -76,15 +101,30 @@ download you asked for, and is never persisted by the server.
   (`LIBGEN_MCP_DOWNLOAD_DIR`, default `~/Downloads`, or the per-call `path`
   argument). Files stay on your machine; nothing is uploaded anywhere.
 - **Logs** go to standard error only (collected, if at all, by your MCP client).
-  The server does not create databases or telemetry files. A small in-memory
-  cache of discovered mirrors lives only for the life of the process.
+  The server creates no database and no telemetry file.
+- **Mirror cache.** The lists of discovered Library Genesis and Anna's Archive
+  mirrors are cached on disk for 24 hours, as `mirrors.json` and
+  `annas-mirrors.json` under the OS cache directory
+  (`~/.cache/libgen-mcp/` on Linux, `~/Library/Caches/libgen-mcp/` on macOS).
+  They hold public mirror URLs only — no queries, no identifiers, and nothing
+  about you. Deleting them just forces a fresh discovery on the next call.
+- **Temporary files.** `read` fetches the file it extracts text from into a
+  temporary directory on the machine running the server, so successive pages of
+  one document reuse a single fetch; those files are evicted on a size cap and a
+  TTL (`LIBGEN_MCP_READ_CACHE_BYTES` / `LIBGEN_MCP_READ_CACHE_TTL`). An
+  interrupted `download` likewise leaves a `.part` file in the destination
+  directory so a later call can resume it.
 
 ## Data retention and sharing
 
-The server retains nothing after it exits and shares data with no third parties
-beyond the destinations listed under [Data flows](#data-flows) — the Library
-Genesis mirrors, the extra searchers a `search` may reach, and the article and
-book download sources you invoke.
+The only things the server leaves behind after it exits are the files described
+under [Local storage and downloads](#local-storage-and-downloads): what you asked
+it to download, the 24-hour mirror cache, and any temporary `read` files not yet
+evicted. None of them records a query or an identifier of yours except the names
+of the files you chose to fetch. It shares data with no third parties beyond the
+destinations listed under [Data flows](#data-flows) — the Library Genesis
+mirrors, the extra searchers a `search` may reach, and the article and book
+download sources you invoke.
 
 ## Responsible use
 

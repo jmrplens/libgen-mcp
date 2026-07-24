@@ -36,7 +36,7 @@ head:
             "name": "Do I need an account, API key, or token to use libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source (Sci-Hub still serves DOIs without it); set your own address to enable Unpaywall."
+              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is LIBGEN_MCP_CORE_KEY, a free CORE API key that enables the core open-access source."
             }
           },
           {
@@ -69,7 +69,7 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 **LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
-Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched by DOI from open-access (Unpaywall), Sci-Hub, and SciDB sources. `search` can additionally, opt-in, consult keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged, deduped, and labeled by origin alongside the usual Library Genesis results.
+Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched by DOI, through the open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
 
 <CardGrid>
 	<Card title="Four tools" icon="puzzle">
@@ -82,12 +82,14 @@ Mirrors are discovered automatically and cached, with transparent failover, so t
 		limiter.
 	</Card>
 	<Card title="Books and articles" icon="open-book">
-		Books by MD5 from LibGen; articles by DOI from Unpaywall, Sci-Hub, and
-		SciDB.
+		Books by MD5 from LibGen; articles by DOI from the open-access providers
+		first (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar,
+		CORE), then Sci-Hub and SciDB.
 	</Card>
 	<Card title="Extra-source discovery" icon="magnifier">
-		`search` can opt in to keyless discovery from extra sources — Anna's
-		Archive, arXiv, Crossref, and OpenLibrary — no account or API key needed.
+		`search` reaches beyond the catalog to Anna's Archive, arXiv, Crossref, and
+		OpenLibrary — on by default when the catalog finds nothing, and no account
+		or API key needed.
 	</Card>
 	<Card title="Configured by env" icon="setting">
 		Every option is an environment variable with a documented default and
@@ -129,11 +131,11 @@ libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go,
 
 ### What can libgen-mcp do?
 
-It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall), Sci-Hub, and SciDB sources. The `search` tool can additionally, opt-in, consult keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged and deduped alongside the Library Genesis results. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, and CORE — then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 
-No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source (Sci-Hub still serves DOIs without it); set your own address to enable Unpaywall.
+No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is `LIBGEN_MCP_CORE_KEY`, a free CORE API key that enables the `core` open-access source.
 
 ### Is libgen-mcp free and open source?
 

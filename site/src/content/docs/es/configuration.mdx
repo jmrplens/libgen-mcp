@@ -34,7 +34,7 @@ head:
             "name": "¿Cómo descargo artículos por DOI?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Pasa el doi de un artículo a la herramienta download. Los artículos se obtienen por DOI a través de tres fuentes por orden: primero unpaywall, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego scihub, que prueba cada host de LIBGEN_MCP_SCIHUB_HOSTS hasta que uno sirve el artículo, y por último scidb (el visor SciDB de Anna's Archive). La fuente unpaywall solo participa cuando fijas tu propia dirección en LIBGEN_MCP_UNPAYWALL_EMAIL, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email unpaywall está desactivada y se prueban scihub y scidb. Ten en cuenta que las descargas por DOI no se verifican por MD5."
+              "text": "Pasa el doi de un artículo a la herramienta download. Los artículos se obtienen por DOI a través de siete fuentes en un orden fijo, primero las de acceso abierto: unpaywall, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego europepmc, luego biorxiv para los preprints 10.1101, luego fatcat (Internet Archive Scholar), luego core, y solo entonces los fallbacks de bibliotecas en la sombra scihub, que prueba cada host de LIBGEN_MCP_SCIHUB_HOSTS hasta que uno sirve el artículo, y scidb (el visor SciDB de Anna's Archive). Dos de ellas dependen de un ajuste: unpaywall solo participa cuando fijas tu propia dirección en LIBGEN_MCP_UNPAYWALL_EMAIL, que la API de Unpaywall exige en cada consulta, y core solo cuando LIBGEN_MCP_CORE_KEY contiene una clave de API de CORE (gratuita). Las otras cinco no necesitan configuración. Ten en cuenta que las descargas por DOI no se verifican por MD5."
             }
           },
           {
@@ -105,6 +105,17 @@ Al arrancar, el directorio se crea (con modo `0750`) si no existe y se escribe y
 
 Solo la usa la fuente `unpaywall` (DOIs de artículos). Está **sin definir por defecto**, lo que **desactiva la fuente `unpaywall`**: la API de Unpaywall exige un email de contacto en cada consulta y rechaza las peticiones sin él. Fija tu propia dirección de contacto para activarla. Un valor vacío es válido (desactivado); un valor no vacío se comprueba superficialmente (debe contener `@` y un dominio con punto) pero no se verifica su entregabilidad.
 
+<Aside type="tip">
+	Cuando está sin definir y una llamada a `download` pide un artículo por `doi`
+	(sin fijar `source`), a un cliente que anuncia la capacidad **elicitation** de
+	MCP se le puede pedir bajo demanda un email de contacto para esa única
+	petición — se usa solo para esa llamada y nunca se almacena ni se escribe de
+	vuelta en esta variable. Un cliente sin elicitation, o una respuesta
+	rechazada/vacía/inválida, deja el comportamiento intacto: `unpaywall` sigue
+	desactivada y se prueban las demás fuentes de la cadena. Consulta
+	[Herramientas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+</Aside>
+
 ### `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS` y `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`
 
 Estas dos variables hacen que las descargas sean resilientes sin cortar nunca una transferencia sana pero lenta:
@@ -165,7 +176,7 @@ Fija `LIBGEN_MCP_DOWNLOAD_DIR` con la ruta del directorio de destino; por defect
 
 ### ¿Cómo descargo artículos por DOI?
 
-Pasa el `doi` de un artículo a la herramienta `download`. Los artículos se obtienen por DOI a través de tres fuentes por orden: primero `unpaywall`, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego `scihub`, que prueba cada host de `LIBGEN_MCP_SCIHUB_HOSTS` hasta que uno sirve el artículo, y por último `scidb` (el visor SciDB de Anna's Archive). La fuente `unpaywall` solo participa cuando fijas tu propia dirección en `LIBGEN_MCP_UNPAYWALL_EMAIL`, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email `unpaywall` está desactivada y se prueban `scihub` y `scidb`. Ten en cuenta que las descargas por DOI no se verifican por MD5.
+Pasa el `doi` de un artículo a la herramienta `download`. Los artículos se obtienen por DOI a través de siete fuentes en un orden fijo, primero las de acceso abierto: `unpaywall`, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego `europepmc`, luego `biorxiv` para los preprints `10.1101`, luego `fatcat` (Internet Archive Scholar), luego `core`, y solo entonces los fallbacks de bibliotecas en la sombra `scihub`, que prueba cada host de `LIBGEN_MCP_SCIHUB_HOSTS` hasta que uno sirve el artículo, y `scidb` (el visor SciDB de Anna's Archive). Dos de ellas dependen de un ajuste: `unpaywall` solo participa cuando fijas tu propia dirección en `LIBGEN_MCP_UNPAYWALL_EMAIL`, que la API de Unpaywall exige en cada consulta, y `core` solo cuando `LIBGEN_MCP_CORE_KEY` contiene una clave de API de CORE (gratuita). Las otras cinco no necesitan configuración. Ten en cuenta que las descargas por DOI no se verifican por MD5.
 
 ### ¿Cómo limito la tasa de peticiones?
 

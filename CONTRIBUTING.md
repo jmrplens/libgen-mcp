@@ -45,16 +45,23 @@ development build running is just:
 
 ```text
 cmd/
-├── server/            # The MCP server entry point (the libgen-mcp binary)
-├── probe/             # Live diagnostic CLI that hits a real mirror
-├── godoc_tool/        # Go doc-comment auditor (backs make godoc-check)
-├── format_md_tables/  # Markdown pipe-table formatter (backs make check-md-tables)
-└── gen_llms/          # Generates llms.txt / llms-full.txt (backs make check-llms)
+├── server/                 # The MCP server entry point (the libgen-mcp binary)
+├── probe/                  # Live diagnostic CLI that hits a real mirror
+├── godoc_tool/             # Go doc-comment auditor (backs make godoc-check)
+├── format_md_tables/       # Markdown pipe-table formatter (backs make check-md-tables)
+├── gen_llms/               # Generates llms.txt / llms-full.txt (backs make check-llms)
+├── gen_eval_pages/         # Regenerates the evaluator results docs (backs make check-eval-pages)
+├── audit_tokens/           # Reports the token footprint of the tool definitions
+├── audit_surface_quality/  # Fails if the tool surface breaks a quality convention
+└── eval/                   # Live LLM-driven eval harness (build tag: eval, gated)
 internal/
 ├── config/            # Environment-variable parsing and validation
+├── discovery/         # Open-access and Anna's search providers; Federate()
+├── extract/           # PDF/EPUB/TXT text extraction, in-doc search, outline
 ├── libgen/            # Search, details, and the multi-source download chain
 ├── mirrors/           # Mirror discovery, caching, and failover
 ├── logging/           # Structured logging to stderr
+├── prompts/           # MCP prompt definitions (acquire_book, research_topic, …)
 └── tools/             # MCP tool registration (search, get_details, download, read)
 test/e2e/              # Opt-in live end-to-end suite (build tag: e2e)
 docs/                  # Markdown guides (getting started, configuration, …)
@@ -137,8 +144,14 @@ make vet      # go vet
 
 - User-facing guides live in [`docs/`](docs/) as plain Markdown. Update them when
   you change configuration, tools, or behavior — in particular
-  `docs/configuration.md` when you add or change an environment variable, and the
-  environment-variable table in `README.md`.
+  `docs/configuration.md` when you add or change an environment variable. The
+  `README.md` deliberately carries no environment-variable table, only a short
+  list of the few settings that change what the server *does*; touch it only when
+  your change belongs on that list.
+- A new `LIBGEN_MCP_*` variable also has to be added to the generated
+  configuration table in `cmd/gen_llms` (`configEnvVars`) — a test fails if
+  `internal/config/config.go` names one that is not documented there — and to the
+  Spanish page under `site/src/content/docs/es/`.
 - The published site lives in [`site/`](site/) (Astro Starlight, bilingual
   EN/ES). To work on it, run `corepack pnpm install` and `corepack pnpm dev`
   inside `site/`.
@@ -183,8 +196,8 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 | `style`    | Code formatting (no logic change)                       |
 
 Use the package name as scope when it helps, e.g. `feat(libgen): add randombook
-fallback`, `fix(config): reject out-of-range rate limits`, `docs(readme): update
-env var table`.
+fallback`, `fix(config): reject out-of-range rate limits`, `docs(config): document
+the CORE API key`.
 
 ## Pull Requests
 
@@ -197,6 +210,8 @@ env var table`.
 - [ ] Formatting is applied: `make fmt` and `make format-md-tables`
 - [ ] LLM-discovery files are current: `make check-llms`
 - [ ] Doc comments pass: `make godoc-check`
+- [ ] Local doc links resolve: `make check-doc-links`
+- [ ] The tool surface holds its conventions: `make audit-surface-quality`
 - [ ] Docs updated if behavior or configuration changed
 - [ ] Commit messages follow Conventional Commits
 

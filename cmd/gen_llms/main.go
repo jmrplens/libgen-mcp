@@ -239,7 +239,10 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source\n")
 	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
 	b.WriteString("- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)\n")
-	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, scidb, libgen, randombook, annas (empty = all)\n")
+	b.WriteString("- LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access article source; unset leaves core out of the chain\n")
+	// Derived from config.KnownSources so this line cannot drift from the chain
+	// itself, or from the identical list written into llms-full.txt.
+	fmt.Fprintf(&b, "- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — %s (empty = all; the chain order is fixed, so this only removes sources)\n", knownSourcesList())
 	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n")
 	b.WriteString("- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)\n\n")
 
@@ -426,28 +429,50 @@ type envVarDoc struct {
 	meaning  string
 }
 
+// knownSourcesList renders config.KnownSources as a human-readable, comma-space
+// separated list. Every place that names the recognized download sources derives
+// them from it, so the generated reference cannot drift when a source is added or
+// the chain is reordered.
+func knownSourcesList() string {
+	return strings.Join(config.KnownSources, ", ")
+}
+
+// boolEnvRange is the accepted-values column shared by every boolean setting,
+// naming the four literals config.envBool recognizes.
+const boolEnvRange = "1/true/0/false"
+
 // configEnvVars is the authoritative Configuration reference. Keep it in sync
 // with internal/config/config.go: default values come from config.Load and the
 // valid ranges come from config.Config.Validate. All variables are optional and
-// no credentials are required.
-var configEnvVars = []envVarDoc{
-	{"LIBGEN_MIRROR", "auto-discovered", "http/https URL with a host", "Force a specific mirror base URL, e.g. https://libgen.li. Empty means the mirror is auto-discovered."},
-	{"LIBGEN_MCP_DOWNLOAD_DIR", "~/Downloads", "writable directory path", "Download destination directory. Created if missing; must be writable."},
-	{"LIBGEN_MCP_TIMEOUT", "30s", "(0, 10m]", "Timeout per HTTP request, as a Go duration string (e.g. 30s, 2m)."},
-	{"LIBGEN_MCP_LOG_LEVEL", "info", "debug, info, warn or error", "Logging verbosity."},
-	{"LIBGEN_MCP_RATE_RPS", "1", "(0, 20]", "Allowed outbound requests per second."},
-	{"LIBGEN_MCP_RATE_BURST", "1", "[1, 100]", "Maximum rate-limiter burst."},
-	{"LIBGEN_MCP_MAX_DOWNLOAD_BYTES", "0", "[0, 53687091200] (0 = no limit, ceiling 50 GiB)", "Maximum download size in bytes."},
-	{"LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS", "2", "[1, 16]", "Number of simultaneous downloads."},
-	{"LIBGEN_MCP_RETRY_ATTEMPTS", "3", "[1, 10]", "Retries per request."},
-	{"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "5s,5s,5s,10s,10s,10s,15s", "comma-separated Go durations; each in (0, 10m]; at most 20", "Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default)."},
-	{"LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "60s", "(0, 1h]", "Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed."},
-	{"LIBGEN_MCP_UNPAYWALL_EMAIL", "empty (unpaywall disabled)", "empty, or an email with @ and a dotted domain", "Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it."},
-	{"LIBGEN_MCP_SCIHUB_HOSTS", "sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf", "comma-separated bare hosts (no scheme, no path)", "Ordered Sci-Hub mirror hosts, tried in order until one serves an article."},
-	{"LIBGEN_MCP_ANNAS_KEY", "empty (keyless IPFS)", "Anna's Archive account secret string", "Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path."},
-	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, scidb, libgen, randombook, annas", "Enabled/ordered download sources. Empty enables all."},
-	{"LIBGEN_MCP_REMOTE_DOWNLOADS", "false", "1/true/0/false", "Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it."},
-	{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
+// no credentials are required. TestConfigEnvVarsCoversConfigGo fails if
+// config.go grows a LIBGEN_MCP_* variable that is missing here.
+func configEnvVars() []envVarDoc {
+	return []envVarDoc{
+		{"LIBGEN_MIRROR", "auto-discovered", "http/https URL with a host", "Force a specific mirror base URL, e.g. https://libgen.li. Empty means the mirror is auto-discovered."},
+		{"LIBGEN_MCP_DOWNLOAD_DIR", "~/Downloads", "writable directory path", "Download destination directory. Created if missing; must be writable."},
+		{"LIBGEN_MCP_TIMEOUT", "30s", "(0, 10m]", "Timeout per HTTP request, as a Go duration string (e.g. 30s, 2m)."},
+		{"LIBGEN_MCP_LOG_LEVEL", "info", "debug, info, warn or error", "Logging verbosity."},
+		{"LIBGEN_MCP_RATE_RPS", "1", "(0, 20]", "Allowed outbound requests per second."},
+		{"LIBGEN_MCP_RATE_BURST", "1", "[1, 100]", "Maximum rate-limiter burst."},
+		{"LIBGEN_MCP_MAX_DOWNLOAD_BYTES", "0", "[0, 53687091200] (0 = no limit, ceiling 50 GiB)", "Maximum download size in bytes."},
+		{"LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS", "2", "[1, 16]", "Number of simultaneous downloads."},
+		{"LIBGEN_MCP_RETRY_ATTEMPTS", "3", "[1, 10]", "Retries per request."},
+		{"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS", "5s,5s,5s,10s,10s,10s,15s", "comma-separated Go durations; each in (0, 10m]; at most 20", "Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default)."},
+		{"LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "60s", "(0, 1h]", "Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed."},
+		{"LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", "false", boolEnvRange, "Give every download source the full start-retry schedule. By default the schedule is spent only on the last source that can serve the item, so a source that is down does not hold up one that is not."},
+		{"LIBGEN_MCP_UNPAYWALL_EMAIL", "empty (unpaywall disabled)", "empty, or an email with @ and a dotted domain", "Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it."},
+		{"LIBGEN_MCP_SCIHUB_HOSTS", "sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf", "comma-separated bare hosts (no scheme, no path)", "Ordered Sci-Hub mirror hosts, tried in order until one serves an article."},
+		{"LIBGEN_MCP_ANNAS_KEY", "empty (keyless IPFS)", "Anna's Archive account secret string", "Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path."},
+		{"LIBGEN_MCP_CORE_KEY", "empty (core disabled)", "empty, or a CORE (core.ac.uk) API key", "Optional API key (free registration) enabling the core open-access article source. Empty leaves core out of the chain, mirroring how an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables unpaywall. The key is sent only to api.core.ac.uk, never with the resolved file URL."},
+		{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: " + knownSourcesList(), "Which download sources take part. Empty enables all. The chain order is fixed (the order above); this only removes sources from it."},
+		{"LIBGEN_MCP_REMOTE_DOWNLOADS", "false", boolEnvRange, "Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it."},
+		{"LIBGEN_MCP_READ_MAX_CHARS", "6000", "[500, 200000]", "Characters the read tool returns per call when a call omits max_chars."},
+		{"LIBGEN_MCP_READ_DEFAULT_PAGES", "5", "[1, 200]", "PDF pages the read tool returns per call when a call omits max_pages."},
+		{"LIBGEN_MCP_READ_CACHE_BYTES", "536870912 (512 MiB)", "[1048576, 53687091200]", "Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted."},
+		{"LIBGEN_MCP_READ_CACHE_TTL", "10m", "[1s, 24h]", "How long an unreferenced read temp file lingers before eviction."},
+		{"LIBGEN_MCP_ENRICH", "true", boolEnvRange, "Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely."},
+		{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
+	}
 }
 
 // writeLLMSFullConfiguration writes the environment-variable reference table.
@@ -456,7 +481,7 @@ func writeLLMSFullConfiguration(b *strings.Builder) {
 	b.WriteString("All configuration is via environment variables. Every variable is optional and no credentials are required; an unset variable uses its default. Values below mirror `internal/config/config.go` (`Load` defaults and `Validate` ranges).\n\n")
 	b.WriteString("| Variable | Default | Valid range / values | Meaning |\n")
 	b.WriteString("| --- | --- | --- | --- |\n")
-	for _, v := range configEnvVars {
+	for _, v := range configEnvVars() {
 		fmt.Fprintf(b, "| `%s` | %s | %s | %s |\n", v.name, v.def, v.rangeStr, v.meaning)
 	}
 	b.WriteString("\n")
@@ -471,7 +496,7 @@ func writeLLMSFullDownloadSources(b *strings.Builder) {
 	b.WriteString("- **Both `md5` and `doi` given:** article sources are tried first, then the book sources.\n\n")
 	// The recognized names come from config.KnownSources rather than a literal, so
 	// this reference cannot drift when a source is added or the chain is reordered.
-	fmt.Fprintf(b, "`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `%s`. An empty value enables all.\n\n", strings.Join(config.KnownSources, ","))
+	fmt.Fprintf(b, "`LIBGEN_MCP_SOURCES` selects which sources take part; it never reorders them. The recognized names, in the fixed chain order, are `%s`. An empty value enables all.\n\n", strings.Join(config.KnownSources, ","))
 	b.WriteString("**Verification:** book (`md5`) downloads are MD5-verified against the requested hash (`verified:true`). DOI/article downloads are not hash-verified (`verified:false`).\n\n")
 }
 

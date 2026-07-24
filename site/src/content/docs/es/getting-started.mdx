@@ -18,7 +18,7 @@ head:
             "name": "¿Cómo instalo libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Descarga un binario precompilado para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
+              "text": "La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp:latest o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
             }
           },
           {
@@ -26,7 +26,7 @@ head:
             "name": "¿Qué método de instalación debería usar?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "El binario precompilado es la vía recomendada: es un único ejecutable estático sin nada más que instalar — sin toolchain de Go, sin Docker, sin runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque, y go install si ya tienes el toolchain de Go y prefieres compilar desde el código fuente."
+              "text": "Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige go install solo si ya tienes Go 1.26 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión .mcpb de un clic del último release es la opción más sencilla."
             }
           },
           {
@@ -34,7 +34,7 @@ head:
             "name": "¿Cómo conecto libgen-mcp a Claude o VS Code?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Apunta tu cliente MCP al binario libgen-mcp por stdio, sin argumentos adicionales. En Claude Code añade el servidor a .mcp.json (o ejecuta claude mcp add); en Claude Desktop usa la extensión .mcpb de un clic o añade un bloque mcpServers a claude_desktop_config.json con la ruta absoluta del binario; en VS Code añade un bloque servers a mcp.json con type stdio. Para ejecutarlo de forma centralizada, inícialo con libgen-mcp --http :8080 y conecta hacia él clientes con capacidad HTTP."
+              "text": "Apunta tu cliente MCP al binario libgen-mcp; por stdio no hacen falta argumentos adicionales. En Claude Code, añade un servidor libgen con command libgen-mcp al .mcp.json de tu proyecto (o ejecuta claude mcp add). En Claude Desktop, abre la extensión .mcpb de un clic, o añade el mismo bloque mcpServers a claude_desktop_config.json usando una ruta absoluta en command. En VS Code, añade una entrada libgen a mcp.json con command libgen-mcp y type stdio."
             }
           },
           {
@@ -42,7 +42,7 @@ head:
             "name": "¿libgen-mcp necesita un token o cuenta?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. libgen-mcp no necesita ningún token, cuenta ni clave de API para funcionar: apuntas tu cliente al binario y ya está. Todas las variables de entorno son opcionales y tienen un valor por defecto documentado."
+              "text": "No. libgen-mcp no necesita ningún token, clave de API ni cuenta de Library Genesis para funcionar. Por stdio solo le das al cliente el comando que lanza el binario. Todas las opciones de configuración son variables de entorno opcionales con un valor por defecto seguro, así que el servidor funciona nada más instalarlo."
             }
           }
         ]

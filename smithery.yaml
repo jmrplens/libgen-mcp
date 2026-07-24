@@ -9,7 +9,17 @@ startCommand:
     properties:
       unpaywallEmail:
         type: string
-        description: Contact email for the Unpaywall API, used to resolve open-access articles by DOI. The Unpaywall source is disabled unless this is set (Sci-Hub still serves DOIs without it).
+        description: Contact email for the Unpaywall API, used to resolve open-access articles by DOI. The Unpaywall source is disabled unless this is set; the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it.
+      coreKey:
+        type: string
+        description: API key from core.ac.uk (free registration) enabling the CORE open-access article source. The core source stays out of the download chain unless this is set.
+      annasKey:
+        type: string
+        description: Anna's Archive membership key enabling the member fast-download tier for books. Optional — without it the annas source still resolves books keylessly over IPFS.
+      extraSources:
+        type: string
+        enum: [auto, always, never]
+        description: When search reaches beyond the Library Genesis catalog to Anna's Archive, arXiv, Crossref and OpenLibrary. auto (the default) consults them when the catalog returns nothing or fails, always on every search, never not at all.
       downloadDir:
         type: string
         description: Optional directory where downloaded files are saved (defaults to ~/Downloads).
@@ -20,6 +30,9 @@ startCommand:
       env: Object.assign(
         {},
         config.unpaywallEmail ? { LIBGEN_MCP_UNPAYWALL_EMAIL: config.unpaywallEmail } : {},
+        config.coreKey ? { LIBGEN_MCP_CORE_KEY: config.coreKey } : {},
+        config.annasKey ? { LIBGEN_MCP_ANNAS_KEY: config.annasKey } : {},
+        config.extraSources ? { LIBGEN_MCP_EXTRA_SOURCES: config.extraSources } : {},
         config.downloadDir ? { LIBGEN_MCP_DOWNLOAD_DIR: config.downloadDir } : {}
       )
     })
