@@ -109,3 +109,34 @@ func TestAnnasProviderAllMirrorsDown(t *testing.T) {
 		t.Fatalf("got %d results from a dead mirror", len(got))
 	}
 }
+
+// TestAnnasSearchCarriesFormatAndSize verifies a result says what it is. Anna's
+// own cards read "English [en] · EPUB · 12.0MB · 2021"; keeping only the title
+// leaves an escalated result incomparable with a catalog one on the two attributes
+// people sort by — and it is why an evaluator scenario had to stop asking for a
+// file's format and size, the question being unanswerable from a search alone.
+func TestAnnasSearchCarriesFormatAndSize(t *testing.T) {
+	got := parseAnnasSearch(mustReadFixture(t, "annas_search.html"), 20)
+	if len(got) == 0 {
+		t.Fatal("the fixture parsed to no results")
+	}
+	var withBoth int
+	for _, r := range got {
+		if r.Extension != "" && r.Size != "" {
+			withBoth++
+		}
+	}
+	if withBoth == 0 {
+		t.Fatalf("no result carried a format and size; first = %+v", got[0])
+	}
+	// The cards are uniform enough that nearly all of them should parse; a handful
+	// missing one is fine, a majority missing means the descriptor moved.
+	if withBoth*2 < len(got) {
+		t.Errorf("only %d of %d results carried both; the card layout may have changed", withBoth, len(got))
+	}
+	for _, r := range got {
+		if r.Extension != "" && strings.ToLower(r.Extension) != r.Extension {
+			t.Errorf("extension %q should be normalized to lowercase", r.Extension)
+		}
+	}
+}

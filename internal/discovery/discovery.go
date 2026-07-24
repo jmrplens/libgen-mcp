@@ -41,7 +41,13 @@ type DiscoveryResult struct {
 	ISBN    string `json:"isbn,omitempty"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
-	MD5        string `json:"md5,omitempty"`
+	MD5 string `json:"md5,omitempty"`
+	// Extension and Size describe the file behind an md5-keyed result, so it can be
+	// compared with a catalog result on the two attributes people sort by. Both are
+	// as the provider states them — the size is a human string like "12.0MB", not a
+	// byte count — and both are empty when it states neither.
+	Extension  string `json:"extension,omitempty"`
+	Size       string `json:"size,omitempty"`
 	PDFURL     string `json:"pdf_url,omitempty"` // a directly-fetchable OA PDF when known
 	OpenAccess bool   `json:"open_access"`
 }

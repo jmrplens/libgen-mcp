@@ -584,11 +584,13 @@ func mergeExtraHits(out *SearchOutput, hits []discovery.DiscoveryResult) {
 		}
 		seen[md5] = true
 		out.Results = append(out.Results, libgen.Result{
-			Origin:  h.Origin,
-			MD5:     h.MD5,
-			Title:   h.Title,
-			Authors: h.Authors,
-			Year:    h.Year,
+			Origin:    h.Origin,
+			MD5:       h.MD5,
+			Title:     h.Title,
+			Authors:   h.Authors,
+			Year:      h.Year,
+			Extension: h.Extension,
+			Size:      h.Size,
 		})
 	}
 }

@@ -2585,3 +2585,22 @@ func TestFieldErrorsNameTheField(t *testing.T) {
 		t.Errorf("error %q points the caller at an environment variable it never set", err)
 	}
 }
+
+// TestMergeCarriesFormatAndSizeFromAnnas verifies an escalated result keeps what
+// Anna's said about the file. The merge builds a catalog-shaped result from a
+// discovery hit, and dropping the format and size there would undo the parsing
+// entirely — the caller would still be unable to compare an escalated result with
+// a catalog one.
+func TestMergeCarriesFormatAndSizeFromAnnas(t *testing.T) {
+	out := SearchOutput{Results: []libgen.Result{}}
+	mergeExtraHits(&out, []discovery.DiscoveryResult{{
+		Origin: "annas", MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23",
+		Title: "Some Book", Extension: "pdf", Size: "1.3MB",
+	}})
+	if len(out.Results) != 1 {
+		t.Fatalf("expected the hit to merge into results, got %d", len(out.Results))
+	}
+	if got := out.Results[0]; got.Extension != "pdf" || got.Size != "1.3MB" {
+		t.Errorf("merged result lost the file description: ext=%q size=%q", got.Extension, got.Size)
+	}
+}

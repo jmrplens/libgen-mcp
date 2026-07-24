@@ -138,8 +138,59 @@ func resultFromAnchor(n *xhtml.Node, seen map[string]bool) (DiscoveryResult, boo
 	if title == "" || seen[m[1]] {
 		return DiscoveryResult{}, false
 	}
-	return DiscoveryResult{Origin: "annas", MD5: m[1], Title: title}, true
+	ext, size := describeCard(n)
+	return DiscoveryResult{Origin: "annas", MD5: m[1], Title: title, Extension: ext, Size: size}, true
 }
+
+// cardAncestorDepth bounds how far up from a result link the card's descriptor is
+// looked for. The descriptor is a sibling div a few levels above the anchor;
+// climbing without a bound would eventually reach the page body and describe some
+// other result.
+const cardAncestorDepth = 6
+
+// annasDescriptor matches the line each result card carries under its title —
+// "English [en] · EPUB · 12.0MB · 2021 · 📘 Book (non-fiction) · 🚀/zlib". The
+// fields are not positional: a card with no year simply omits it, so the tokens
+// are classified rather than indexed.
+var annasDescriptor = regexp.MustCompile(`(?m)^[^
+]*·[^
+]*\d+(?:\.\d+)?\s*[KMG]B[^
+]*$`)
+
+// describeCard reads the file's format and size from the card containing a result
+// link, or returns empty strings when the card states neither.
+func describeCard(anchor *xhtml.Node) (ext, size string) {
+	for n, up := anchor.Parent, 0; n != nil && up < cardAncestorDepth; n, up = n.Parent, up+1 {
+		line := annasDescriptor.FindString(textOfAnchor(n))
+		if line == "" {
+			continue
+		}
+		return classifyDescriptor(line)
+	}
+	return "", ""
+}
+
+// classifyDescriptor picks the format and size out of a descriptor line by shape,
+// since the fields are optional and therefore not positional.
+func classifyDescriptor(line string) (ext, size string) {
+	for raw := range strings.SplitSeq(line, "·") {
+		token := strings.TrimSpace(raw)
+		switch {
+		case ext == "" && annasFormatToken.MatchString(token):
+			ext = strings.ToLower(token)
+		case size == "" && annasSizeToken.MatchString(token):
+			size = token
+		}
+	}
+	return ext, size
+}
+
+// annasFormatToken matches a file format as the cards write it (PDF, EPUB, DJVU,
+// CBZ, AZW3), and annasSizeToken a human-readable size (12.0MB, 600KB).
+var (
+	annasFormatToken = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,4}$`)
+	annasSizeToken   = regexp.MustCompile(`^\d+(?:\.\d+)?\s*[KMG]B$`)
+)
 
 // textOfAnchor returns the visible text inside an anchor element, joining
 // descendant text nodes. It matches how a browser would render the anchor's

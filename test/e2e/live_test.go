@@ -584,6 +584,19 @@ func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	if !foundPinned {
 		t.Fatalf("pinned md5 %s absent from %d Anna's results for its own title; re-pin the fixture", item.MD5, fromAnnas)
 	}
+	// The format and size are parsed out of the card's descriptor line, which only a
+	// live check can prove still exists: the pinned fixture would keep passing for as
+	// long as it sat there, however far the real page had moved on.
+	var described int
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.Extension != "" && r.Size != "" {
+			described++
+		}
+	}
+	if described == 0 {
+		t.Errorf("none of the %d Anna's results carried a format and size; the card layout may have changed", fromAnnas)
+	}
+	t.Logf("escalated: %d Anna's results, %d describing their file", fromAnnas, described)
 }
 
 // TestE2ESearchDoesNotEscalateOnCatalogHit verifies the common path stays cheap: a
