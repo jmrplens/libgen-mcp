@@ -58,6 +58,49 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition ma
 	return file, edition, nil
 }
 
+// DetailsByDOI returns the edition record the catalog holds for a DOI, plus the
+// first file that edition points at, so a caller has an md5 to download without a
+// second round trip.
+//
+// It uses json.php's own doi key, which is an exact lookup. Searching for the DOI
+// as free text is not a substitute: the catalog's text search matches it loosely
+// and returns unrelated articles, including ones that merely carry a different DOI
+// in their title.
+func (c *Client) DetailsByDOI(ctx context.Context, doi string) (edition, file map[string]any, err error) {
+	body, _, err := c.get(ctx, "/json.php", url.Values{"object": {"e"}, "doi": {doi}, "addkeys": {"*"}})
+	if err != nil {
+		return nil, nil, err
+	}
+	objs, err := decodeObjects(body)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(objs) == 0 {
+		return nil, nil, fmt.Errorf("the Library Genesis catalog has no record for DOI %s", doi)
+	}
+	for id, e := range objs {
+		e["edition_id"] = id
+		edition = e
+		break
+	}
+	return edition, firstEditionFile(edition), nil
+}
+
+// firstEditionFile returns the first file an edition record points at, or nil when
+// it points at none. The file is what carries the md5 a download needs.
+func firstEditionFile(edition map[string]any) map[string]any {
+	files, ok := edition["files"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, f := range files {
+		if fm, isMap := f.(map[string]any); isMap {
+			return fm
+		}
+	}
+	return nil
+}
+
 // DetailsByID returns a record by id. object: "e" (edition) or "f" (file).
 func (c *Client) DetailsByID(ctx context.Context, object, id string) (map[string]any, error) {
 	if object != "e" && object != "f" {

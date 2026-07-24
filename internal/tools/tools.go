@@ -43,7 +43,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -64,8 +64,9 @@ type SearchOutput struct {
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field"`
-	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field"`
+	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use exactly one of md5, id or doi). Get it from a prior search result's md5 field"`
+	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use exactly one of md5, id or doi). Get it from a result's edition_id or file_id field"`
+	DOI    string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013 (use exactly one of md5, id or doi). Looked up exactly, and the returned record carries the md5 to pass to download"`
 	Object string `json:"object,omitempty" jsonschema:"with id: a single value edition (default) or file"`
 	Enrich bool   `json:"enrich,omitempty" jsonschema:"when true, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN); best-effort and off by default"`
 }
@@ -150,7 +151,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
-		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).",
+		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition), by edition/file id, or by an article's doi (exact lookup returning the edition plus the file md5 to download). The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
@@ -507,7 +508,14 @@ func resolveExtraMode(in SearchInput, cfg *config.Config) (config.ExtraSourcesMo
 	if strings.TrimSpace(in.ExtraSources) == "" {
 		return cfg.ExtraSources, nil
 	}
-	return config.ParseExtraSourcesMode(in.ExtraSources)
+	mode, err := config.ParseExtraSourcesMode(in.ExtraSources)
+	if err != nil {
+		// Name the argument, so a caller that mistyped it knows where to look — a
+		// live evaluator run caught a model passing ["always"], an array, and being
+		// told about an environment variable it had never set.
+		return "", fmt.Errorf("extra_sources: %w", err)
+	}
+	return mode, nil
 }
 
 // shouldEscalate reports whether to consult the extra searchers for this call.
@@ -584,8 +592,8 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 			err error
 		)
 		switch {
-		case in.MD5 != "" && in.ID != "":
-			return nil, zero, errors.New("provide md5 or id, not both")
+		case countKeys(in.MD5, in.ID, in.DOI) > 1:
+			return nil, zero, errors.New("provide exactly one of md5, id or doi")
 		case in.MD5 != "":
 			out, err = detailsByMD5(ctx, c, in.MD5)
 			if err != nil {
@@ -593,8 +601,10 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 			}
 		case in.ID != "":
 			out, err = detailsByID(ctx, c, in.Object, in.ID)
+		case in.DOI != "":
+			out, err = detailsByDOI(ctx, c, in.DOI)
 		default:
-			return nil, zero, errors.New("provide md5 or id")
+			return nil, zero, errors.New("provide exactly one of md5, id or doi")
 		}
 		if err != nil {
 			return nil, zero, err
@@ -606,6 +616,30 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 		}
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// countKeys reports how many of the given identifiers are set, so the handler can
+// reject an ambiguous call naming more than one.
+func countKeys(keys ...string) int {
+	n := 0
+	for _, k := range keys {
+		if strings.TrimSpace(k) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// detailsByDOI looks a DOI up in the catalog. The record it returns is the
+// edition, and the file beside it carries the md5 download needs — so a caller
+// holding only a DOI reaches a downloadable identifier in one call instead of
+// guessing at a text search.
+func detailsByDOI(ctx context.Context, c *libgen.Client, doi string) (DetailsOutput, error) {
+	edition, file, err := c.DetailsByDOI(ctx, doi)
+	if err != nil {
+		return DetailsOutput{}, err
+	}
+	return DetailsOutput{Edition: edition, File: file}, nil
 }
 
 // detailsFromAnnas looks an md5 up in Anna's Archive after the Library Genesis

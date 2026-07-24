@@ -725,6 +725,32 @@ func TestE2EReadEscalatedItem(t *testing.T) {
 	t.Logf("read %d characters from an item the catalog does not carry", len(out.Text))
 }
 
+// TestE2EGetDetailsByDOI verifies a DOI resolves exactly, and to something
+// downloadable. A live evaluator run showed a model reaching for get_details with
+// a DOI, being rejected, and spending three more turns searching its way to the
+// md5 the catalog could have handed it straight away.
+func TestE2EGetDetailsByDOI(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	const doi = "10.1016/j.cell.2011.02.013" // Hallmarks of Cancer: The Next Generation
+	edition, file, err := env.client.DetailsByDOI(ctx, doi)
+	if err != nil {
+		t.Fatalf("DetailsByDOI(%s) error: %v", doi, err)
+	}
+	if got, _ := edition["doi"].(string); !strings.EqualFold(got, doi) {
+		t.Errorf("edition.doi = %q, want %q — the lookup must be exact, not a text match", got, doi)
+	}
+	if file == nil {
+		t.Fatal("no file beside the edition; a DOI lookup must yield an md5 to download")
+	}
+	if md5, _ := file["md5"].(string); !md5Re.MatchString(md5) {
+		t.Errorf("file.md5 = %q, want a 32-hex digest", md5)
+	}
+	t.Logf("doi=%s edition=%v md5=%v", doi, edition["title"], file["md5"])
+}
+
 // TestE2EExtensionlessFileStillReads verifies content decides when the name does
 // not. A file fetched by content address, or from a CDN that announces no
 // filename, lands with no extension; dispatching on the name alone reported real

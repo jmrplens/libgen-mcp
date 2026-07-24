@@ -114,12 +114,13 @@ Metadatos completos de un registro vía la API JSON de LibGen — descripción, 
 
 ### entrada de get_details
 
-| Parámetro | Tipo   | Requerido | Descripción                                                                                                                                                            |
-| --------- | ------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`     | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda. Devuelve el registro de archivo más su primera edición relacionada. Debe ser una cadena hexadecimal de 32 caracteres. |
-| `id`      | string | uno de    | Id de edición o de archivo.                                                                                                                                            |
-| `object`  | string | no        | Se usa con `id`: `edition` (por defecto) o `file`.                                                                                                                     |
-| `enrich`  | bool   | no        | Cuando es `true`, aumenta el registro con metadatos sin clave de Crossref (por DOI) y OpenLibrary (por ISBN). Best-effort y desactivado por defecto.                   |
+| Parámetro | Tipo   | Requerido | Descripción                                                                                                                                                                     |
+| --------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`     | string | uno de    | Hash MD5 de archivo de un resultado de búsqueda. Devuelve el registro de archivo más su primera edición relacionada. Debe ser una cadena hexadecimal de 32 caracteres.          |
+| `id`      | string | uno de    | Id de edición o de archivo.                                                                                                                                                     |
+| `doi`     | string | uno de    | DOI del artículo, p. ej. `10.1016/j.cell.2011.02.013`. Se busca de forma exacta en el catálogo; la respuesta lleva la edición más el `md5` del fichero para pasar a `download`. |
+| `object`  | string | no        | Se usa con `id`: `edition` (por defecto) o `file`.                                                                                                                              |
+| `enrich`  | bool   | no        | Cuando es `true`, aumenta el registro con metadatos sin clave de Crossref (por DOI) y OpenLibrary (por ISBN). Best-effort y desactivado por defecto.                            |
 
 <Aside>
 	Proporciona exactamente uno de `md5` o `id`. Aportar ambos, ninguno, un `md5`

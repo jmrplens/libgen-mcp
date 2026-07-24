@@ -170,12 +170,25 @@ func stringField(input map[string]any, key string) string {
 
 // findCall returns the first tool call with the given name.
 func findCall(tr transcript, name string) (toolCall, bool) {
+	// The first call that did not error, not simply the first call. A model that
+	// gets an argument wrong, is told so, and retries has made one effective
+	// choice — the one that worked — and grading the abandoned attempt instead
+	// reports a success as a failure. A run where every attempt errored still
+	// returns the first, so a genuine failure is still surfaced.
+	var first toolCall
+	var found bool
 	for _, c := range tr.Calls {
-		if c.Name == name {
+		if c.Name != name {
+			continue
+		}
+		if !found {
+			first, found = c, true
+		}
+		if c.Result == nil || !c.Result.IsError {
 			return c, true
 		}
 	}
-	return toolCall{}, false
+	return first, found
 }
 
 // decodeStructured re-marshals a JSON-decoded structured content value into a

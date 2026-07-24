@@ -209,3 +209,51 @@ func TestDetailsByIDDecodeError(t *testing.T) {
 		t.Error("DetailsByID should fail on a malformed json.php body")
 	}
 }
+
+// TestDetailsByDOI verifies a DOI resolves to its edition record and the file the
+// edition points at. The catalog answers this exactly, through json.php's own doi
+// key — searching for the DOI as free text does not: a live evaluator run showed
+// that returning four unrelated records, one of which merely had a different DOI
+// in its title.
+func TestDetailsByDOI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("object") != "e" || r.URL.Query().Get("doi") == "" {
+			http.Error(w, "unexpected query", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(`{"17847129":{"title":"Hallmarks of Cancer: The Next Generation",
+			"doi":"10.1016/j.cell.2011.02.013",
+			"files":{"16719175":{"f_id":"18008475","md5":"657fb812ef2787002f5f6396fbbb1d5b"}}}}`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+
+	edition, file, err := c.DetailsByDOI(context.Background(), "10.1016/j.cell.2011.02.013")
+	if err != nil {
+		t.Fatalf("DetailsByDOI() error = %v", err)
+	}
+	if edition["title"] != "Hallmarks of Cancer: The Next Generation" {
+		t.Errorf("edition.title = %v", edition["title"])
+	}
+	if file == nil {
+		t.Fatal("file = nil, wanted the edition's related file so download has an md5")
+	}
+	if file["md5"] != "657fb812ef2787002f5f6396fbbb1d5b" {
+		t.Errorf("file.md5 = %v", file["md5"])
+	}
+}
+
+// TestDetailsByDOINotFound verifies an unknown DOI is an error naming the catalog,
+// not an empty record.
+func TestDetailsByDOINotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	if _, _, err := c.DetailsByDOI(context.Background(), "10.0000/nope"); err == nil {
+		t.Error("DetailsByDOI() for an unknown DOI should fail")
+	} else if !strings.Contains(err.Error(), "catalog") {
+		t.Errorf("error %q should name the catalog", err)
+	}
+}

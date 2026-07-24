@@ -116,7 +116,10 @@ func ParseExtraSourcesMode(v string) (ExtraSourcesMode, error) {
 	case ExtraSourcesNever:
 		return ExtraSourcesNever, nil
 	default:
-		return "", fmt.Errorf("LIBGEN_MCP_EXTRA_SOURCES: unknown mode %q (allowed: auto, always, never)", v)
+		// The caller names the surface: the same parse serves the environment
+		// variable and the per-call argument, and telling a model its search
+		// argument was an environment variable sends it looking in the wrong place.
+		return "", fmt.Errorf("unknown extra-sources mode %q (allowed: auto, always, never)", v)
 	}
 }
 
@@ -271,7 +274,9 @@ func loadNumeric(cfg *Config) error {
 	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {
 		mode, err := ParseExtraSourcesMode(v)
 		if err != nil {
-			return err
+			// Startup names the variable; the parser cannot, because the same parse
+			// also serves the per-call search argument.
+			return fmt.Errorf("LIBGEN_MCP_EXTRA_SOURCES: %w", err)
 		}
 		cfg.ExtraSources = mode
 	}

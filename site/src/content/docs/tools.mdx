@@ -113,12 +113,13 @@ Full metadata for a record via the LibGen JSON API — description, identifiers,
 
 ### get_details input
 
-| Parameter | Type   | Required | Description                                                                                                                             |
-| --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.          |
-| `id`      | string | one of   | Edition or file id.                                                                                                                     |
-| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                          |
-| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default. |
+| Parameter | Type   | Required | Description                                                                                                                                                        |
+| --------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.                                     |
+| `id`      | string | one of   | Edition or file id.                                                                                                                                                |
+| `doi`     | string | one of   | Article DOI, e.g. `10.1016/j.cell.2011.02.013`. Looked up exactly against the catalog; the response carries the edition plus the file `md5` to pass to `download`. |
+| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                                                     |
+| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                            |
 
 <Aside type="note">
 	Provide exactly one of `md5` or `id` — never both. Supplying both, neither, an

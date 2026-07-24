@@ -236,12 +236,13 @@ Extra discovery is **on by default** (`auto`): the extra searchers run automatic
 
 Full metadata for a record (description, identifiers, DOI, cover, related edition) via the libgen JSON API. Look up by `md5` **or** by `id`, not both.
 
-| Parameter | Type   | Required | Description                                                                           |
-| --------- | ------ | -------- | ------------------------------------------------------------------------------------- |
-| `md5`     | string | one of   | File MD5 hash from a search result (returns file + related edition).                  |
-| `id`      | string | one of   | Edition or file id.                                                                   |
-| `object`  | string | no       | With `id`: `edition` (default) or `file`.                                             |
-| `enrich`  | bool   | no       | Add best-effort Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default. |
+| Parameter | Type   | Required | Description                                                                             |
+| --------- | ------ | -------- | --------------------------------------------------------------------------------------- |
+| `md5`     | string | one of   | File MD5 hash from a search result (returns file + related edition).                    |
+| `id`      | string | one of   | Edition or file id.                                                                     |
+| `doi`     | string | one of   | Article DOI. Exact catalog lookup; returns the edition plus the file `md5` to download. |
+| `object`  | string | no       | With `id`: `edition` (default) or `file`.                                               |
+| `enrich`  | bool   | no       | Add best-effort Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default.   |
 
 An md5 the Library Genesis catalog does not carry — which is what a search that consulted the extra sources returns — falls back to Anna's Archive, whose record is returned labeled `origin: "annas"`. That record is thinner than a catalog one and its fields vary by source collection; note that most Anna's records publish no IPFS address, so the keyless download route is unavailable for them.
 

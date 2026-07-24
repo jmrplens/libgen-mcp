@@ -133,15 +133,21 @@ and related edition. Look up by `md5` **or** by `id`, never both.
 
 ### get_details input
 
-| Parameter | Type   | Required | Description                                                                                                                             |
-| --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.          |
-| `id`      | string | one of   | Edition or file id.                                                                                                                     |
-| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                          |
-| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default. |
+| Parameter | Type   | Required | Description                                                                                                                                                        |
+| --------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.                                     |
+| `id`      | string | one of   | Edition or file id.                                                                                                                                                |
+| `doi`     | string | one of   | Article DOI, e.g. `10.1016/j.cell.2011.02.013`. Looked up exactly against the catalog; the response carries the edition plus the file `md5` to pass to `download`. |
+| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                                                     |
+| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                            |
 
-Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is not
-32 hex chars, or an `object` other than `edition`/`file` returns an input error.
+Provide exactly one of `md5`, `id` or `doi`. Supplying more than one, none, an `md5`
+that is not 32 hex chars, or an `object` other than `edition`/`file` returns an input
+error.
+
+A `doi` lookup uses the catalog's own DOI key, which matches exactly. Searching for a
+DOI as free text is not a substitute: the catalog matches it loosely and returns
+unrelated articles, including ones that merely carry a different DOI in their title.
 
 ### get_details output
 
