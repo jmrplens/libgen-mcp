@@ -9,6 +9,9 @@ config:
 globs:
   - "**/*.md"
 ignores:
+  # A run report written by the evaluator, versioned so the results pages can be
+  # regenerated and checked. It is a machine artifact, not prose.
+  - cmd/eval/testdata/latest-run.md
   - "**/node_modules/**"
   - "**/dist/**"
   - "**/.astro/**"

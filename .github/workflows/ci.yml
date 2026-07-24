@@ -135,6 +135,9 @@ jobs:
       - name: Check generated llms files are current
         run: go run ./cmd/gen_llms/ --check
 
+      - name: Evaluator results pages are generated, not hand-edited
+        run: go run ./cmd/gen_eval_pages/ --check
+
   golangci-lint:
     name: golangci-lint
     runs-on: ubuntu-latest

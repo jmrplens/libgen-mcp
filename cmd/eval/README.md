@@ -205,6 +205,22 @@ reading a credential from the environment instead of from the transcript. An
 assertion that consults anything outside the transcript is not re-gradable, and
 the mismatch is how you find out.
 
+## The published results pages
+
+The site's results pages are generated, not written: `make eval-pages` rewrites
+the tables on both language versions from `cmd/eval/README.md` (the scenarios) and
+`cmd/eval/testdata/latest-run.md` (the run they publish). `make eval` refreshes
+that run file and regenerates the pages in the same step, and CI fails on a page
+that no longer matches — which is what stops a hand edit from drifting.
+
+Both were maintained by hand before, and both drifted: a stale scenario count,
+malformed rows, an evidence string quoting a message the code no longer emitted,
+and a live download key published in a results row.
+
+A scenario added without a Spanish description fails the generator rather than
+appearing on the Spanish page in English; add it to `scenariosES` in
+`cmd/gen_eval_pages/translations.go`.
+
 ## Cost, rate, and network caveats
 
 - **It costs money**: every scenario spends Anthropic API tokens (small model,

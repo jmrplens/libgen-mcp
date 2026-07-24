@@ -8,7 +8,7 @@
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables \
         godoc-audit godoc-check \
-        gen-llms check-llms audit-tokens \
+        gen-llms check-llms eval-pages check-eval-pages audit-tokens \
         install-tools release-check check-server-json check-mcpb-manifest check-lhm-manifest \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -103,7 +103,10 @@ test-e2e: ## Run the gated live e2e suite against the real site (needs network; 
 
 eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads; loads .env if present)
 	set -a; [ -f .env ] && . ./.env; set +a; \
-	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --record eval-record.jsonl
+	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --record eval-record.jsonl \
+	  --results-doc cmd/eval/testdata/latest-run.md
+	@echo "Regenerating the results pages from that run..."
+	go run ./cmd/gen_eval_pages/
 
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
@@ -161,6 +164,12 @@ gen-llms: ## Generate llms.txt and llms-full.txt from the registered tools
 
 check-llms: ## Fail if llms.txt/llms-full.txt are stale or structurally invalid (CI mode)
 	go run ./cmd/gen_llms/ --check
+
+eval-pages: ## Regenerate the evaluator results pages (pass DOC=path to also refresh the run table)
+	go run ./cmd/gen_eval_pages/ $(if $(DOC),--results-doc $(DOC))
+
+check-eval-pages: ## Fail if the evaluator results pages are stale (CI mode)
+	go run ./cmd/gen_eval_pages/ --check
 
 audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool definitions
 	go run ./cmd/audit_tokens/
