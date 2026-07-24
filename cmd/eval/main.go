@@ -40,7 +40,9 @@ func main() {
 	resultsDoc := flag.String("results-doc", "", "write a markdown results table to this path")
 	record := flag.String("record", "", "write a full JSONL record of every scenario to this path (prompt, turns, tool calls, server logs, responses, final answer)")
 	regradeFrom := flag.String("regrade", "", "re-run the assertions against a previously recorded run instead of calling anything live; valid for assertion changes only")
+	budget := flag.Duration("scenario-timeout", scenarioBudget, "wall-time budget per scenario; past it the scenario is reported as stuck instead of blocking the run")
 	flag.Parse()
+	scenarioBudget = *budget
 
 	// Re-grading makes no network calls and spends nothing, so it is not gated.
 	if *regradeFrom != "" {

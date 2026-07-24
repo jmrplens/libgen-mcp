@@ -2434,3 +2434,28 @@ func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
 		t.Errorf("empty-search guidance must name the thing not to invent; got %q", joined)
 	}
 }
+
+// TestSearchNextStepsPinsTheSourceForEscalatedResults verifies an Anna's-origin
+// result is told to download with source="annas". Without it the chain starts at
+// libgen and burns its whole start-retry schedule on an md5 the catalog does not
+// have: a live run measured 235 seconds for a download that takes seconds once the
+// source is pinned.
+func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
+	const annasMD5 = "00dd2b0b58e81e3c6e7cb9e7b72dee23"
+	escalated := strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
+		Page:    1,
+	}), "\n")
+	if !strings.Contains(escalated, `"source":"annas"`) {
+		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
+	}
+
+	// A catalog result must not be pinned: the chain's ordinary order is right for it.
+	catalog := strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
+		Page:    1,
+	}), "\n")
+	if strings.Contains(catalog, `"source"`) {
+		t.Errorf("a catalog result should not pin a source; got %q", catalog)
+	}
+}

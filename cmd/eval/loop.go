@@ -90,6 +90,17 @@ func maybeFetchResolved(ctx context.Context, call toolCall) *fetchedFile {
 // maxTurns bounds how many model calls one scenario conversation may make.
 const maxTurns = 6
 
+// scenarioBudget bounds the wall time of one scenario. Turns are bounded, but a
+// single tool call was not: a download or read that sits on an established but
+// silent connection blocks the scenario, and with it the whole run, forever —
+// three full runs stalled on the last scenario before this existed, each with
+// established IPFS gateway sockets and no bytes moving.
+//
+// It is generous on purpose. The slowest honest scenarios take a little over two
+// minutes, so anything past this is not slow, it is stuck, and reporting it as
+// stuck is more useful than waiting.
+var scenarioBudget = 6 * time.Minute
+
 // maxToolResultLen caps the size of a tool result fed back to the model.
 const maxToolResultLen = 20_000
 
@@ -169,6 +180,9 @@ type transcript struct {
 // MCP session; feed tool_result blocks back) until the model answers without a
 // tool call or the turn budget is exhausted.
 func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr transcript, err error) {
+	ctx, cancel := context.WithTimeout(ctx, scenarioBudget)
+	defer cancel()
+
 	restore := applyEnv(sc.SetupEnv)
 	defer restore()
 
@@ -214,6 +228,12 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 			Messages:    messages,
 		})
 		if callErr != nil {
+			// A blown budget shows up here, on whichever call happened to be next.
+			// Say so plainly: the time went to the scenario, not to this request, and
+			// the record's per-call durations show where.
+			if ctx.Err() != nil {
+				callErr = fmt.Errorf("scenario exceeded its %s budget (see the record's per-call durations for where the time went)", scenarioBudget)
+			}
 			tr.Turns = append(tr.Turns, turnRecord{N: turn, LatencyMS: time.Since(started).Milliseconds(), Error: callErr.Error()})
 			return tr, callErr
 		}

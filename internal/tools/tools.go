@@ -283,7 +283,7 @@ func searchNextSteps(out SearchOutput) []string {
 	if first.MD5 != "" {
 		steps = append(steps,
 			fmt.Sprintf("For full metadata on a result, call get_details with its md5, e.g. {\"md5\":%q}.", first.MD5),
-			fmt.Sprintf("To fetch a book, call download with its md5, e.g. {\"md5\":%q}.", first.MD5))
+			downloadStep(first))
 	}
 	if first.DOI != "" {
 		steps = append(steps,
@@ -298,6 +298,22 @@ func searchNextSteps(out SearchOutput) []string {
 		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
 	}
 	return steps
+}
+
+// downloadStep phrases the download follow-up for a result, pinning the source
+// when the result did not come from the catalog.
+//
+// The chain starts at libgen, which is right for a catalog result and wasteful for
+// one the catalog does not have: it spends its whole start-retry schedule failing
+// before reaching the source that found the item. A live run measured 235 seconds
+// for a download that takes seconds once pinned. The origin is already known, so
+// there is no reason to make the caller discover this the slow way.
+func downloadStep(r libgen.Result) string {
+	if r.Origin != "" && r.Origin != "libgen" {
+		return fmt.Sprintf("To fetch this book, call download with its md5 AND its source — it did not come from the catalog, "+
+			"so pinning the source skips a failing chain: {\"md5\":%q,\"source\":%q}.", r.MD5, r.Origin)
+	}
+	return fmt.Sprintf("To fetch a book, call download with its md5, e.g. {\"md5\":%q}.", r.MD5)
 }
 
 // detailsNextSteps suggests the download follow-up for a details record, using
