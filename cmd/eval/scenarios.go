@@ -1193,6 +1193,49 @@ func idInSearchResults(tr transcript, id string) bool {
 	return false
 }
 
+// readTextGrounded reports whether any read call actually returned text or
+// matches, so an answer describing contents has a source in the transcript rather
+// than being invented. It is what separates a model that compiled an answer from
+// what it read from one that made it up.
+func readTextGrounded(tr transcript) bool {
+	for _, c := range tr.Calls {
+		if c.Name != "read" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var out tools.ReadOutput
+		if err := decodeStructured(c.Structured, &out); err != nil {
+			continue
+		}
+		if strings.TrimSpace(out.Text) != "" || len(out.Matches) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// findOutlineCall returns the read call to grade an outline scenario against: the
+// one that actually produced a table of contents, if any, else the first read.
+//
+// A model handed a copy with no embedded outline may legitimately try another
+// copy, and grading its first attempt would call a correct recovery a fabrication
+// — which is exactly what a live run reported before this existed.
+func findOutlineCall(tr transcript) (toolCall, bool) {
+	first, found := findCall(tr, "read")
+	for _, c := range tr.Calls {
+		if c.Name != "read" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var out tools.ReadOutput
+		if err := decodeStructured(c.Structured, &out); err != nil {
+			continue
+		}
+		if len(out.Outline) > 0 {
+			return c, true
+		}
+	}
+	return first, found
+}
+
 // detailsIdentifierGrounded verifies a get_details call was keyed by an identifier
 // from a prior search result: a 32-hex md5 traced to search, or an edition/file id
 // traced to search. It guards enrichment/citation provenance (S22) so a model that
@@ -1214,7 +1257,12 @@ func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why strin
 		}
 		return true, ""
 	}
-	return false, "get_details call set neither md5 nor id"
+	// A DOI needs no grounding in a search result: it is an identifier the user
+	// supplies directly, and looking it up is the whole point of accepting it.
+	if doi := stringField(call.Input, "doi"); doi != "" {
+		return true, ""
+	}
+	return false, "get_details call set none of md5, id or doi"
 }
 
 func assertReadSummary(tr transcript) (pass bool, detail string) {
@@ -1459,7 +1507,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 // convey table-of-contents mode). A PDF with no embedded outline, or a live fetch
 // failure, is a SKIP — the mode still ran correctly.
 func assertReadOutline(tr transcript) (pass bool, detail string) {
-	call, ok := findCall(tr, "read")
+	call, ok := findOutlineCall(tr)
 	if !ok {
 		return false, "SURFACE GAP: model never called read — the outline capability lives on read and was not discovered"
 	}
@@ -1481,9 +1529,14 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 	if !out.Extractable {
 		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
 	}
-	// A PDF with no embedded table of contents is common and legitimate; a model
-	// that fabricates one from thin air is not.
+	// A PDF with no embedded table of contents is common and legitimate, and a model
+	// that then reads the book's own contents page and compiles one from it has done
+	// nothing wrong — the text is right there in the transcript. Only an answer with
+	// no source behind it is a fabrication.
 	if len(out.Outline) == 0 {
+		if readTextGrounded(tr) {
+			return true, "no embedded table of contents; the model read the document and compiled one from its text"
+		}
 		return gradeDegraded(tr, "read(outline) ran cleanly but this file has no embedded table of contents")
 	}
 	if strings.TrimSpace(tr.FinalText) == "" {
