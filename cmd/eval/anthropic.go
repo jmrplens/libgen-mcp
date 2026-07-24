@@ -92,7 +92,15 @@ func (b contentBlock) MarshalJSON() ([]byte, error) {
 type anthropicResponse struct {
 	Content    []contentBlock  `json:"content"`
 	StopReason string          `json:"stop_reason"`
+	Usage      *anthropicUsage `json:"usage,omitempty"`
 	Error      *anthropicError `json:"error,omitempty"`
+}
+
+// anthropicUsage is the per-reply token accounting, recorded so a run's cost and
+// a prompt's growth over turns can be inspected after the fact.
+type anthropicUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 // anthropicError is the API-level error object.

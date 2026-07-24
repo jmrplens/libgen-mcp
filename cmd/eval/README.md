@@ -136,6 +136,44 @@ go run -tags eval ./cmd/eval --only S1,S6 --keep-downloads --results-doc dist/ev
 Flags: `--only S1,S6` (comma-separated IDs), `--keep-downloads` (don't delete
 the temp dir), `--results-doc <path>` (write a markdown results table).
 
+## The run record
+
+`--record <path>` writes a JSONL file with one object per scenario holding
+everything the run produced, not only what the assertions looked at. An assertion
+can check only what someone thought to check; the record is what makes the
+unthought-of visible afterwards, without paying for another live run. `make eval`
+writes `eval-record.jsonl` (gitignored) by default.
+
+Each object carries:
+
+| Field | What it holds |
+| --- | --- |
+| `prompt`, `setup_env` | exactly what was asked, and under which configuration |
+| `tools_offered` | the tool surface the model was shown — names, descriptions, input schemas. Recorded per scenario because it genuinely differs: remote mode describes `download` differently, and a description is all a model has to work from when discovering an argument |
+| `turns[]` | every model reply: the prose it wrote (including intermediate narration, often where a wrong turn is first visible), the tools it asked for with their arguments, the stop reason, token counts and latency |
+| `calls[]` | every executed call: arguments in; and out, both channels the model reads — the Markdown `text` and the `structured` output — plus `duration_ms` |
+| `calls[].server_logs` | what the MCP server logged internally while serving that call, at DEBUG: mirror attempts, failover, retries, source-chain decisions. Calls run sequentially, so each call's own lines are attributed to it |
+| `elicitations[]` | every prompt the server raised back at the host, its text, and how the host answered |
+| `progress[]`, `fetched[]` | the notification stream, and what the harness pulled from resolve-only links |
+| `final_answer` | what the model finally told the user |
+| `status`, `detail` | how the assertion graded it |
+
+Useful starting points:
+
+```bash
+# Every scenario that failed, with the reason
+jq -r 'select(.status=="FAIL") | "\(.id): \(.detail)"' eval-record.jsonl
+
+# What the model was told about extra_sources
+jq -r '.tools_offered[] | select(.name=="search") | .input_schema.properties.extra_sources.description' eval-record.jsonl | head -1
+
+# Where the time went
+jq -r '"\(.id) \(.duration_ms)ms"' eval-record.jsonl | sort -k2 -n -r | head
+
+# What the server did internally on a slow call
+jq -r 'select(.id=="S40") | .calls[] | select(.duration_ms>10000) | .server_logs[]' eval-record.jsonl
+```
+
 ## Cost, rate, and network caveats
 
 - **It costs money**: every scenario spends Anthropic API tokens (small model,

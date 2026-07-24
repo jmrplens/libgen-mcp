@@ -103,7 +103,7 @@ test-e2e: ## Run the gated live e2e suite against the real site (needs network; 
 
 eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads; loads .env if present)
 	set -a; [ -f .env ] && . ./.env; set +a; \
-	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval
+	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --record eval-record.jsonl
 
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
