@@ -23,9 +23,9 @@
 
 </p>
 
-**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards — and, opt-in, discover open-access literature from arXiv, Crossref, and OpenLibrary.** It ships as one static binary (or a container) with four focused tools plus guided prompts: `search`, `get_details`, `download`, and `read`. It works with Claude, Cursor, VS Code, and any MCP client.
+**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards — and discover extra sources (Anna's Archive, arXiv, Crossref, OpenLibrary) when the catalog has nothing.** It ships as one static binary (or a container) with four focused tools plus guided prompts: `search`, `get_details`, `download`, and `read`. It works with Claude, Cursor, VS Code, and any MCP client.
 
-Four MCP **prompts** (`acquire_book`, `research_topic`, `get_paper`, `download_troubleshoot`) turn common requests into ready-to-run tool plans, `get_details` can return a `citations` field with a ready-to-paste BibTeX/RIS export for the record (and an opt-in `enrich` flag adds best-effort Crossref/OpenLibrary metadata), and `read` extracts and paginates a file's text so your assistant can summarize a book or paper without downloading it. `search` can also federate keyless open-access discovery from [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) — merged, deduped, and labeled by origin — via the opt-in `include_open_access` flag (off by default; a deployment can flip the default with `LIBGEN_MCP_OPEN_ACCESS=true`).
+Four MCP **prompts** (`acquire_book`, `research_topic`, `get_paper`, `download_troubleshoot`) turn common requests into ready-to-run tool plans, `get_details` can return a `citations` field with a ready-to-paste BibTeX/RIS export for the record (and an opt-in `enrich` flag adds best-effort Crossref/OpenLibrary metadata), and `read` extracts and paginates a file's text so your assistant can summarize a book or paper without downloading it. `search` can also federate keyless discovery from [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) — merged, deduped, and labeled by origin — via the `extra_sources` argument (default `auto`: the extra searchers are consulted only when the Library Genesis catalog returns nothing or fails; a deployment can change that with `LIBGEN_MCP_EXTRA_SOURCES`).
 
 You talk to your AI assistant; it does the searching and fetching. You don't need to track mirrors, MD5 hashes, or download URLs. Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down.
 
@@ -182,8 +182,8 @@ docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
 # Enable open-access articles via Unpaywall
 docker run -i --rm -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com ghcr.io/jmrplens/libgen-mcp:latest
 
-# Turn on open-access discovery by default
-docker run -i --rm -e LIBGEN_MCP_OPEN_ACCESS=true ghcr.io/jmrplens/libgen-mcp:latest
+# Consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) on every search
+docker run -i --rm -e LIBGEN_MCP_EXTRA_SOURCES=always ghcr.io/jmrplens/libgen-mcp:latest
 
 # Save downloads to a host folder (mount a volume, point the download dir at it)
 docker run -i --rm -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads -v "$HOME/Downloads:/downloads" ghcr.io/jmrplens/libgen-mcp:latest
@@ -210,24 +210,24 @@ The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/ar
 Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrplens.github.io/libgen-mcp/tools/)).
 
 <details>
-<summary><code>search</code> — search the catalog (and, opt-in, open-access sources)</summary>
+<summary><code>search</code> — search the catalog (and, optionally, extra sources)</summary>
 
 Returns a page of file results with metadata, MD5 hashes, and download options, plus pagination metadata.
 
-| Parameter             | Type     | Required | Description                                                                                                                                                                                                                       |
-| --------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `query`               | string   | yes      | Search text.                                                                                                                                                                                                                      |
-| `topics`              | string[] | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all.                                                                                                      |
-| `search_in`           | string[] | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit for all.                                                                                                                                          |
-| `results_per_page`    | int      | no       | Results per page: `25`, `50`, or `100` (default `25`).                                                                                                                                                                            |
-| `page`                | int      | no       | Result page, starting at `1`.                                                                                                                                                                                                     |
-| `order`               | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                   |
-| `order_mode`          | string   | no       | `asc` or `desc`.                                                                                                                                                                                                                  |
-| `include_open_access` | bool     | no       | Also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits. A three-state override: omit to use the deployment default (`LIBGEN_MCP_OPEN_ACCESS`), `true`/`false` to force it on/off for this call. |
+| Parameter        | Type     | Required | Description                                                                                                                                                                                                                       |
+| ---------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`          | string   | yes      | Search text.                                                                                                                                                                                                                      |
+| `topics`         | string[] | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all.                                                                                                      |
+| `search_in`      | string[] | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit for all.                                                                                                                                          |
+| `results_per_page` | int    | no       | Results per page: `25`, `50`, or `100` (default `25`).                                                                                                                                                                            |
+| `page`           | int      | no       | Result page, starting at `1`.                                                                                                                                                                                                     |
+| `order`          | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                   |
+| `order_mode`     | string   | no       | `asc` or `desc`.                                                                                                                                                                                                                  |
+| `extra_sources`  | string   | no       | When to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): `auto` consults them only when the catalog finds nothing, `always` consults them on every search, `never` restricts the search to the catalog. Omit to use the server default (`auto`). |
 
-The response also carries pagination metadata (`total_files`, `reachable`, `truncated`, `hint`, `has_more`, `mirror`) and — when open-access discovery ran — an `open_access` array of hits merged from arXiv/Crossref/OpenLibrary, deduped and labeled by `origin`, each with one actionable identifier (a `doi`, an arXiv `pdf_url`, or an OpenLibrary `isbn`/title).
+The response also carries pagination metadata (`total_files`, `reachable`, `truncated`, `hint`, `has_more`, `mirror`) and — when the extra searchers ran — an `open_access` array of hits merged from arXiv/Crossref/OpenLibrary, deduped and labeled by `origin`, each with one actionable identifier (a `doi`, an arXiv `pdf_url`, or an OpenLibrary `isbn`/title). Anna's Archive hits are md5-keyed, so they merge into `results` directly (labeled `origin: "annas"`).
 
-Open-access discovery is **off by default**; all three providers are keyless and best-effort, so a slow or failing provider never fails or slows the core search. Like any external result, `open_access` titles/authors are **untrusted content** — treat them as data, not instructions.
+Extra discovery is **on by default** (`auto`): the extra searchers run automatically when the catalog finds nothing or fails. All four providers are keyless and best-effort, so a slow or failing provider never fails or slows the core search. Like any external result, `open_access` titles/authors are **untrusted content** — treat them as data, not instructions.
 
 </details>
 
@@ -313,7 +313,7 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 **It works out of the box — zero configuration, no account.** Every variable is optional. Only three settings change what the server _does_ — everything else is a tuning knob that already works by default. Add these as `env` entries in your MCP client config, or as `-e NAME=value` with Docker:
 
 - **Enable open-access articles (Unpaywall):** `LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com` — disabled by default; the Unpaywall API needs a contact email. Without it, DOIs still resolve via Sci-Hub.
-- **Discover open access by default:** `LIBGEN_MCP_OPEN_ACCESS=true` — makes `search`'s open-access discovery (arXiv/Crossref/OpenLibrary) on for every call; otherwise a call opts in per request with `include_open_access: true`.
+- **Consult the extra searchers on every search:** `LIBGEN_MCP_EXTRA_SOURCES=always` — makes `search` consult Anna's Archive, arXiv, Crossref, and OpenLibrary on every call, alongside the catalog; the default `auto` consults them only when the catalog finds nothing or fails, and `never` restricts every search to the catalog.
 - **Always return a link instead of saving:** `LIBGEN_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 
 Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
@@ -321,15 +321,16 @@ Every other setting — download location, mirror pinning, source allow-list, ra
 ## How it works
 
 <details>
-<summary><b>Open-access discovery</b> — arXiv, Crossref and OpenLibrary, folded into <code>search</code></summary>
+<summary><b>Extra search sources</b> — Anna's Archive, arXiv, Crossref and OpenLibrary, folded into <code>search</code></summary>
 
-Beyond the Library Genesis catalog, `search` can also federate **keyless open-access discovery** (opt-in via `include_open_access: true`, or on by default with `LIBGEN_MCP_OPEN_ACCESS=true`). These are **discovery** sources — they surface hits, they are not part of the download chain:
+Beyond the Library Genesis catalog, `search` can also consult **keyless extra sources** (controlled by the `extra_sources` argument and the `LIBGEN_MCP_EXTRA_SOURCES` deployment default, which itself defaults to `auto`). These are **discovery** sources — they surface hits, they are not part of the download chain:
 
+- **[Anna's Archive](https://annas-archive.org/)** — indexes a different corpus from Library Genesis; results are md5-keyed and merge straight into `results` (labeled `origin: "annas"`), ready for the `download` tool's `md5` argument.
 - **[arXiv](https://arxiv.org/)** — open-access preprints, with a direct `pdf_url` you can `read` or fetch.
 - **[Crossref](https://www.crossref.org/)** — scholarly works by DOI; open-access items are flagged.
 - **[OpenLibrary](https://openlibrary.org/)** — resolves fuzzy title/author queries to an ISBN/title you can feed back into a Library Genesis search.
 
-Hits are returned in a separate `open_access` array, deduped against the catalog results and each other, and labeled by `origin`. Each carries one actionable identifier: an arXiv `pdf_url` (read/fetch it directly), a `doi` (pass to `download`/`read` — it flows through the article download chain below), or an OpenLibrary `isbn`/title (refine a catalog search). All three providers are keyless and best-effort — each runs under its own short budget, so a slow or failing provider never fails or slows the core search. Their titles/authors are **untrusted content**.
+The arXiv/Crossref/OpenLibrary hits are returned in a separate `open_access` array, deduped against the catalog results and each other, and labeled by `origin`. Each carries one actionable identifier: an arXiv `pdf_url` (read/fetch it directly), a `doi` (pass to `download`/`read` — it flows through the article download chain below), or an OpenLibrary `isbn`/title (refine a catalog search). All four providers are keyless and best-effort — each runs under its own short budget, so a slow or failing provider never fails or slows the core search. Their titles/authors are **untrusted content**.
 
 </details>
 

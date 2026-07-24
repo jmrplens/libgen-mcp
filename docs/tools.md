@@ -28,7 +28,7 @@ hashes, and per-result download options, plus pagination metadata.
 | `page`                | int      | no       | Result page, starting at `1`. Default `1`.                                                                                                                                                                                                           |
 | `order`               | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                                      |
 | `order_mode`          | string   | no       | Sort direction: `asc` or `desc`.                                                                                                                                                                                                                     |
-| `include_open_access` | bool     | no       | Also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin. A three-state override: omit to use the deployment default (`LIBGEN_MCP_OPEN_ACCESS`), `true`/`false` to force it on/off for this call. |
+| `extra_sources`     | string   | no       | When to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): `auto` consults them only when the catalog finds nothing, `always` consults them on every search, `never` restricts the search to the catalog. Omit to use the server default (`auto`). |
 
 ### search output
 
@@ -66,19 +66,22 @@ than `asc`/`desc`. Connectivity and mirror problems surface as described in
 
 ### Open-access discovery
 
-Set `include_open_access: true` to also federate the keyless open-access literature —
-[arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and
-[OpenLibrary](https://openlibrary.org/) — and merge the hits into an `open_access` field
-alongside the usual Library Genesis `results`. It is **off by default**: an omitted
-`include_open_access` follows the deployment's `LIBGEN_MCP_OPEN_ACCESS` default (itself
-`false` — see [Configuration](configuration.md)); the argument is a three-state override, so
-a call can force it on (`true`) or off (`false`) regardless of that default.
+Beyond the Library Genesis catalog, `search` can also consult **extra sources** —
+[Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/),
+[Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) —
+controlled by the `extra_sources` argument (`auto`/`always`/`never`) and its deployment
+default `LIBGEN_MCP_EXTRA_SOURCES` (itself `auto` — see [Configuration](configuration.md)).
+The default `auto` consults them only when the catalog returns nothing or fails; `always`
+consults them on every search, concurrently with the catalog; `never` restricts the search
+to the catalog, even on a miss. Anna's md5-keyed hits merge into `results` (labeled
+`origin: "annas"`); arXiv, Crossref, and OpenLibrary hits appear in a separate `open_access`
+field alongside `results`.
 
 ```json
 {
   "query": "attention is all you need",
   "topics": ["articles"],
-  "include_open_access": true
+  "extra_sources": "always"
 }
 ```
 
@@ -116,7 +119,7 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
   Use its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`.
 
 Hits are deduped against each other (by normalized DOI, then by title+year) and against the
-`results` on the same page, so nothing appears twice. All three providers are keyless — no
+`results` on the same page, so nothing appears twice. All four providers are keyless — no
 account, API key, or login — and best-effort: each runs under its own short budget, so a
 slow or failing provider degrades to contributing nothing rather than delaying or failing the
 core Library Genesis search. Like any external result, `open_access` titles and authors are
