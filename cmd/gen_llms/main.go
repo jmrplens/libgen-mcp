@@ -254,7 +254,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	writeLLMSLink(&b, "Tools", docsSiteURL+"tools/", "Per-tool reference for "+toolNames(toolList))
 	writeLLMSLink(&b, "Architecture", docsSiteURL+"architecture/", "Internal architecture, mirror discovery and download sources")
 	writeLLMSLink(&b, "Troubleshooting", docsSiteURL+"troubleshooting/", "Common setup and runtime issues")
-	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to Library Genesis mirrors and article sources")
+	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes")
 	writeLLMSLink(&b, "Headless install", repoBlobURL+"llms-install.md", "Machine-readable install guide for AI assistants")
 
 	b.WriteString("\n## Optional\n\n")

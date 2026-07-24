@@ -572,7 +572,9 @@ func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	out := callSearch(t, ctx, env, map[string]any{"query": item.Query})
+	// auto is passed explicitly: the deployment default is configurable, so an
+	// omitted argument could silently exercise always or never instead.
+	out := callSearch(t, ctx, env, map[string]any{"query": item.Query, "extra_sources": "auto"})
 
 	var fromAnnas int
 	var foundPinned bool
@@ -587,8 +589,10 @@ func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	if fromAnnas == 0 {
 		t.Fatalf("no Anna's-origin results for a query the catalog misses; escalation did not happen (results=%d)", len(out.Results))
 	}
+	// The query is the item's own title, so Anna's ranking it off the page means
+	// the fixture no longer describes reality and must be re-pinned.
 	if !foundPinned {
-		t.Logf("pinned md5 %s not on this page; escalation still fired with %d Anna's results", item.MD5, fromAnnas)
+		t.Fatalf("pinned md5 %s absent from %d Anna's results for its own title; re-pin the fixture", item.MD5, fromAnnas)
 	}
 }
 
@@ -600,7 +604,7 @@ func TestE2ESearchDoesNotEscalateOnCatalogHit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	out := callSearch(t, ctx, env, map[string]any{"query": "python"})
+	out := callSearch(t, ctx, env, map[string]any{"query": "python", "extra_sources": "auto"})
 	if len(out.Results) == 0 {
 		t.Skip("the catalog returned nothing for a broad query today; cannot assert the no-escalation path")
 	}

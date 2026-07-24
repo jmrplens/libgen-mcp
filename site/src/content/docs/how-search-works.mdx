@@ -16,12 +16,12 @@ This is the path almost every search takes. It stays fast, it stays predictable,
 Sometimes the catalog genuinely does not have what you are looking for — the item lives in a collection the catalog never indexed, or a mirror outage made the catalog unreachable for that call. Rather than hand back an empty result, the search can escalate and consult a set of **extra sources**:
 
 - [Anna's Archive](https://annas-archive.org/) — a shadow-library search engine that indexes collections the catalog reaches nowhere else (Z-Library, Nexus/STC, DuXiu, Internet Archive, and more). Its hits are keyed by file digest (an md5), so they behave just like catalog results.
-- [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are keyed by DOI (or ISBN for OpenLibrary), so they land in their own list.
+- [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are not md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI from Crossref, a direct `pdf_url` from arXiv, and an `isbn`/title from OpenLibrary.
 
 When this escalation happens is controlled by a single three-valued setting — the `extra_sources` argument on the call, falling back to the deployment's `LIBGEN_MCP_EXTRA_SOURCES` default:
 
 - **`auto` (the default).** Consult the extra sources only when the catalog returns nothing or fails outright. An ordinary search never pays for them; a miss triggers a rescue.
-- **`always`.** Consult the extra sources on every search. Because this decision does not depend on what the catalog answers, the extra sources are queried *at the same time* as the catalog rather than after it, so a forced search costs one round of latency instead of two. Useful when you specifically want the widest net, at the cost of extra traffic on every call.
+- **`always`.** Consult the extra sources on every search. Because this decision does not depend on what the catalog answers, the extra sources are queried _at the same time_ as the catalog rather than after it, so a forced search costs one round of latency instead of two. Useful when you specifically want the widest net, at the cost of extra traffic on every call.
 - **`never`.** Restrict every search to the catalog, even on a miss. Exists for deployments that, for policy reasons, must not contact the extra providers at all.
 
 The whole decision is small enough to draw:
@@ -47,15 +47,19 @@ When the extras are consulted, every source is queried and the answers are merge
 
 Every result is labeled with an **`origin`** that says which searcher produced it. That label is not decoration — it tells you which identifier the result carries, and therefore which argument to hand to `download`:
 
-- **`libgen`** and **`annas`** — the result is keyed by an md5. Download it with `download`'s `md5` argument.
-- **`arxiv`**, **`crossref`**, and **`openlibrary`** — the result is keyed by a DOI. Download it with `download`'s `doi` argument.
+- **`libgen`** and **`annas`** — the result carries an md5. Download it with `download`'s `md5` argument.
+- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
+- **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no arXiv identifier.
+- **`openlibrary`** — the result carries an `isbn` and a title, and no file at all. OpenLibrary is a catalog, not a repository: use those to run a better-targeted `search`.
 
 ```mermaid
 flowchart LR
     R[a search result] --> O{origin}
     O -->|libgen| M[has an md5<br/>→ download by md5]
     O -->|annas| M
-    O -->|arxiv / crossref<br/>/ openlibrary| P[has a DOI<br/>→ download by doi]
+    O -->|crossref| P[has a DOI<br/>→ download by doi]
+    O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
+    O -->|openlibrary| S[has an isbn/title<br/>→ refine the search]
 ```
 
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool falls back to Anna's own metadata and labels the record `origin: "annas"`. That record is thinner than a catalog one, and most Anna's items publish no IPFS address — so a keyless download may still not be possible even when the metadata is.

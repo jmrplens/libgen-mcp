@@ -107,8 +107,8 @@ A search always queries the Library Genesis catalog through the same failover cl
 
 | Mode     | When the extras run                            | Scheduling                                                              |
 | -------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
-| `auto`   | Only when the catalog returns nothing or fails | After the catalog, since the decision depends on the catalog's answer    |
-| `always` | Every search                                   | Concurrently with the catalog, since the decision does not depend on it  |
+| `auto`   | Only when the catalog returns nothing or fails | After the catalog, since the decision depends on the catalog's answer   |
+| `always` | Every search                                   | Concurrently with the catalog, since the decision does not depend on it |
 | `never`  | Never                                          | —                                                                       |
 
 Each extra searcher implements `discovery.Provider` (`Name`, `Search`), and `Federate` runs the set concurrently with per-provider panic recovery, so one failing provider cannot fail the search. The merge is keyed by identifier space: Anna's hits carry an md5 and join `results` labeled `origin: "annas"`, while the open-access hits carry a DOI and stay in `open_access`. Duplicates are dropped by md5, and a file present in both the catalog and Anna's keeps the catalog record, which carries the richer metadata.

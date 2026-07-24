@@ -105,11 +105,11 @@ La cadena de descarga anterior es una de las dos federaciones del servidor. La o
 
 Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary) — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
 
-| Modo     | Cuándo se ejecutan los adicionales                    | Planificación                                                             |
-| -------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| `auto`   | Solo cuando el catálogo no devuelve nada o falla      | Después del catálogo, porque la decisión depende de su respuesta          |
-| `always` | En cada búsqueda                                      | A la vez que el catálogo, porque la decisión no depende de él             |
-| `never`  | Nunca                                                 | —                                                                         |
+| Modo     | Cuándo se ejecutan los adicionales               | Planificación                                                    |
+| -------- | ------------------------------------------------ | ---------------------------------------------------------------- |
+| `auto`   | Solo cuando el catálogo no devuelve nada o falla | Después del catálogo, porque la decisión depende de su respuesta |
+| `always` | En cada búsqueda                                 | A la vez que el catálogo, porque la decisión no depende de él    |
+| `never`  | Nunca                                            | —                                                                |
 
 Cada buscador adicional implementa `discovery.Provider` (`Name`, `Search`), y `Federate` ejecuta el conjunto en paralelo con recuperación de pánico por proveedor, así que un proveedor que falle no puede tumbar la búsqueda. La fusión se hace por espacio de identificadores: los resultados de Anna's llevan md5 y se unen a `results` etiquetados con `origin: "annas"`, mientras que los de acceso abierto llevan DOI y se quedan en `open_access`. Los duplicados se eliminan por md5, y un archivo presente tanto en el catálogo como en Anna's conserva el registro del catálogo, que lleva metadatos más ricos.
 

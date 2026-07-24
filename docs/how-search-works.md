@@ -30,8 +30,9 @@ call. Rather than hand back an empty result, the search can escalate and consult
   Archive, and more). Its hits are keyed by file digest (an md5), so they behave just like
   catalog results.
 - [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and
-  [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are keyed by
-  DOI (or ISBN for OpenLibrary), so they land in their own list.
+  [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are not
+  md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI
+  from Crossref, a direct `pdf_url` from arXiv, and an `isbn`/title from OpenLibrary.
 
 When this escalation happens is controlled by a single three-valued setting — the
 `extra_sources` argument on the call, falling back to the deployment's
@@ -76,17 +77,22 @@ Every result is labeled with an **`origin`** that says which searcher produced i
 is not decoration — it tells you which identifier the result carries, and therefore which
 argument to hand to `download`:
 
-- **`libgen`** and **`annas`** — the result is keyed by an md5. Download it with `download`'s
+- **`libgen`** and **`annas`** — the result carries an md5. Download it with `download`'s
   `md5` argument.
-- **`arxiv`**, **`crossref`**, and **`openlibrary`** — the result is keyed by a DOI. Download
-  it with `download`'s `doi` argument.
+- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
+- **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no
+  arXiv identifier.
+- **`openlibrary`** — the result carries an `isbn` and a title, and no file at all.
+  OpenLibrary is a catalog, not a repository: use those to run a better-targeted `search`.
 
 ```mermaid
 flowchart LR
     R[a search result] --> O{origin}
     O -->|libgen| M[has an md5<br/>→ download by md5]
     O -->|annas| M
-    O -->|arxiv / crossref<br/>/ openlibrary| P[has a DOI<br/>→ download by doi]
+    O -->|crossref| P[has a DOI<br/>→ download by doi]
+    O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
+    O -->|openlibrary| S[has an isbn/title<br/>→ refine the search]
 ```
 
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool

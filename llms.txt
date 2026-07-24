@@ -65,7 +65,7 @@ Tools:
 - [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
 - [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
-- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources
+- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
 ## Optional

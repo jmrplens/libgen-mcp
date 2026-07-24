@@ -56,7 +56,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S20 | **Open-access discovery** — under-specified like S10–S13: the prompt asks the model to "also check the open-access literature" without naming `extra_sources`; the model must set it to `always` itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live) |
 | S21 | **Citations** — asks for a BibTeX citation; the model must reach `get_details` (which builds it) rather than fabricate one |
 | S22 | **Enrichment** — asks for a paywalled DOI's journal and citation count, so the model must set `enrich=true` on `get_details` to pull the Crossref metadata |
-| S23 | **In-document search** — asks to search *inside* a book, so the model must call `read` with a `find` argument instead of downloading the whole file |
+| S23 | **In-document search** — asks to search _inside_ a book, so the model must call `read` with a `find` argument instead of downloading the whole file |
 | S24 | **Outline** — asks for a book's table of contents, so the model must call `read` with `outline=true` |
 | S25 | **Elicited Unpaywall email** — the deployment email is forced empty, so the download can only succeed via the per-call email the host's elicitation handler supplies |
 | S26 | **Elicited save confirmation** — a disk-writing download must raise the save-confirmation prompt; the host counts the confirmations it answers, so the assertion is hard, not inferred |

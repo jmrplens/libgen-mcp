@@ -73,6 +73,14 @@ const elicitOADOI = "10.1371/journal.pmed.0020124"
 // loads it from .env, so live runs use the real address), otherwise the committed
 // evalUnpaywallEmail fallback so an env-less run still exercises the open-access
 // path.
+// annasKeyFromEnv is the Anna's Archive membership key as configured when the
+// harness started. It is captured at package initialization because a scenario
+// clears LIBGEN_MCP_ANNAS_KEY from the environment to force the elicitation path:
+// reading it later would find the cleared value. Empty when no key is configured,
+// which turns the membership scenario into a skip rather than a failure — the key
+// is a paid credential and is never checked into the repository.
+var annasKeyFromEnv = strings.TrimSpace(os.Getenv("LIBGEN_MCP_ANNAS_KEY"))
+
 func unpaywallEmail() string {
 	if v := strings.TrimSpace(os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL")); v != "" {
 		return v
@@ -524,12 +532,12 @@ func scenarios() []scenario {
 		// (test/e2e/testdata/escalation_item.json) defines the query and md5.
 		{
 			ID:     "S32",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me its file format and size.`,
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
 			Assert: assertSearchEscalation,
 		},
 		{
 			ID:     "S33",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me its file format and size.`,
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
 			Remote: true,
 			Assert: assertSearchEscalation,
 		},
@@ -561,7 +569,158 @@ func scenarios() []scenario {
 			Remote: true,
 			Assert: assertEscalatedDetails,
 		},
+		// S38-S39 grade the two deployment defaults the per-call argument falls back
+		// to. Neither prompt mentions extra sources, so what is under test is the
+		// server honoring its own configuration — and, for never, the model staying
+		// honest about a miss instead of inventing a result.
+		{
+			ID:       "S38",
+			Prompt:   `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_EXTRA_SOURCES": "never"},
+			Assert:   assertNoEscalationAndHonest,
+		},
+		{
+			ID:       "S39",
+			Prompt:   `Find books about the Go programming language.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_EXTRA_SOURCES": "always"},
+			Assert:   assertForcedExtras,
+		},
+		// S40 completes the trio on an escalated item: search finds it, get_details
+		// (S36) describes it, and read must be able to open it — which exercises the
+		// whole keyless Anna's path end to end, download included.
+		{
+			ID: "S40",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`show me a passage of its text.`,
+			Assert: assertReadEscalated,
+		},
+		// S41 covers the Anna's membership opt-in: the prompt says the user has an
+		// account but never names the argument, so the model must discover
+		// annas_member itself. The key is supplied through elicitation, never stored.
+		{
+			ID: "S41",
+			Prompt: `Download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC". ` +
+				`I have an Anna's Archive membership, so use the faster member download if you can.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_ANNAS_KEY": ""},
+			Assert:   assertAnnasMemberDownload,
+		},
 	}
+}
+
+// assertNoEscalationAndHonest verifies the never mode is honored and the model does
+// not paper over the resulting miss. A catalog-only search for a title the catalog
+// lacks must return no extra-origin hits at all, and the model must say so rather
+// than describe a file it never saw.
+func assertNoEscalationAndHonest(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			return false, functionalPrefix + "never mode still returned Anna's-origin results"
+		}
+	}
+	if len(out.OpenAccess) > 0 {
+		return false, functionalPrefix + "never mode still returned open-access hits"
+	}
+	lower := strings.ToLower(tr.FinalText)
+	for _, admission := range []string{"not found", "no results", "couldn't find", "could not find", "unable to find", "no matches", "wasn't able"} {
+		if strings.Contains(lower, admission) {
+			return true, "never mode honored and the model reported the miss honestly"
+		}
+	}
+	return false, "model did not report the catalog miss; check the answer for a fabricated result"
+}
+
+// assertForcedExtras verifies the always mode consults the extra searchers even when
+// the catalog answers. The query is an ordinary one the catalog has plenty of, so
+// extra-origin hits can only be there because the mode forced them.
+func assertForcedExtras(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if len(out.Results) == 0 {
+		return true, skipPrefix + " the catalog returned nothing for an ordinary query (live mirror)"
+	}
+	var fromAnnas int
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+	}
+	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
+		return true, skipPrefix + " always mode ran but no extra searcher returned a hit (live network)"
+	}
+	return true, fmt.Sprintf("always mode consulted the extras alongside a %d-result catalog page (annas=%d, open access=%d)",
+		len(out.Results), fromAnnas, len(out.OpenAccess))
+}
+
+// assertReadEscalated verifies read works on an md5 only Anna's indexes. It is the
+// strictest of the escalation scenarios: reading requires the file itself, so a
+// pass means search, the Anna's download path and text extraction all worked.
+func assertReadEscalated(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	annasMD5 := map[string]bool{}
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.MD5 != "" {
+			annasMD5[strings.ToLower(r.MD5)] = true
+		}
+	}
+	if len(annasMD5) == 0 {
+		return true, skipPrefix + " search returned no Anna's-origin results today (live network)"
+	}
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "SURFACE GAP: model never called read on the escalated result"
+	}
+	if !annasMD5[strings.ToLower(stringField(call.Input, "md5"))] {
+		return false, functionalPrefix + "read was called with an md5 that did not come from the escalated results"
+	}
+	if call.Result == nil || call.Result.IsError {
+		return true, skipPrefix + " read of the escalated item failed live (Anna's/IPFS unavailable)"
+	}
+	var read tools.ReadOutput
+	if derr := decodeStructured(call.Structured, &read); derr != nil {
+		return false, derr.Error()
+	}
+	if !read.Extractable {
+		return true, skipPrefix + notExtractableDetail + read.Reason + ")"
+	}
+	return true, fmt.Sprintf("read opened an Anna's-only item (%d chars extracted)", len(read.Text))
+}
+
+// assertAnnasMemberDownload verifies the membership opt-in is discoverable: the
+// prompt says the user has an account without naming annas_member, so the model
+// must set it. The key itself arrives through elicitation, so this also proves that
+// prompt is answerable end to end.
+func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
+	if annasKeyFromEnv == "" {
+		return true, skipPrefix + " no LIBGEN_MCP_ANNAS_KEY configured, so the member tier cannot be exercised"
+	}
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if member, _ := call.Input["annas_member"].(bool); !member {
+		return false, "SURFACE GAP: model never set annas_member despite the user offering a membership"
+	}
+	if downloadFailed(call) {
+		return true, skipPrefix + " member download failed live (quota, mirror or gateway)"
+	}
+	var out tools.DownloadOutput
+	if derr := decodeStructured(call.Structured, &out); derr != nil {
+		return false, derr.Error()
+	}
+	if out.Account == nil {
+		return true, skipPrefix + " download succeeded over the keyless path, so no account allowance was reported"
+	}
+	return true, fmt.Sprintf("member download reported the account allowance (%d of %d left)",
+		out.Account.DownloadsLeft, out.Account.DownloadsPerDay)
 }
 
 // assertEscalatedDetails verifies get_details answered for an md5 only Anna's
@@ -1548,9 +1707,10 @@ func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string)
 	if dlMD5 == "" {
 		return false, "download call has no md5"
 	}
-	found := slices.Contains(annasMD5s, dlMD5)
-	if !found {
-		return true, skipPrefix + " model downloaded an md5 not from an Anna's-origin result"
+	// Not a live-network skip: the escalation did surface Anna's results, so
+	// downloading something else is the model failing the flow under test.
+	if !slices.Contains(annasMD5s, dlMD5) {
+		return false, "model downloaded an md5 not from an Anna's-origin result"
 	}
 	if dlCall.Result != nil && dlCall.Result.IsError {
 		return true, skipPrefix + " download call returned a tool error (live network)"

@@ -111,26 +111,9 @@ func parseAnnasSearch(body []byte, limit int) []DiscoveryResult {
 		if len(out) >= limit {
 			return
 		}
-		if n.Type == xhtml.ElementNode && n.Data == "a" {
-			href := ""
-			for _, a := range n.Attr {
-				if a.Key == "href" {
-					href = a.Val
-					break
-				}
-			}
-			if m := annasMD5Href.FindStringSubmatch(href); m != nil {
-				md5 := m[1]
-				title := strings.TrimSpace(textOfAnchor(n))
-				if title != "" && !seen[md5] {
-					seen[md5] = true
-					out = append(out, DiscoveryResult{
-						Origin: "annas",
-						MD5:    md5,
-						Title:  title,
-					})
-				}
-			}
+		if r, ok := resultFromAnchor(n, seen); ok {
+			seen[r.MD5] = true
+			out = append(out, r)
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
@@ -138,6 +121,24 @@ func parseAnnasSearch(body []byte, limit int) []DiscoveryResult {
 	}
 	walk(doc)
 	return out
+}
+
+// resultFromAnchor reads one node as a result card link, reporting false when the
+// node is not an anchor to an md5, carries no rendered title, or repeats an md5
+// already collected.
+func resultFromAnchor(n *xhtml.Node, seen map[string]bool) (DiscoveryResult, bool) {
+	if n.Type != xhtml.ElementNode || n.Data != "a" {
+		return DiscoveryResult{}, false
+	}
+	m := annasMD5Href.FindStringSubmatch(attrValue(n, "href"))
+	if m == nil {
+		return DiscoveryResult{}, false
+	}
+	title := strings.TrimSpace(textOfAnchor(n))
+	if title == "" || seen[m[1]] {
+		return DiscoveryResult{}, false
+	}
+	return DiscoveryResult{Origin: "annas", MD5: m[1], Title: title}, true
 }
 
 // textOfAnchor returns the visible text inside an anchor element, joining

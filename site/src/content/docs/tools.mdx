@@ -95,8 +95,10 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
 - **`isbn`/`title` (openlibrary)** — OpenLibrary is a keyless _query resolver_, not a download source: it never carries a `pdf_url` and is never marked `open_access: true`. Use its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`.
 
 <Aside type="caution">
-	Hits are deduped against each other (by normalized DOI, then by title+year)
-	and against the `results` on the same page, so nothing appears twice. All four
+	Hits are deduped against each other (by normalized DOI, then by title+year),
+	so one paper found by two providers appears once. They are not compared
+	against `results`, which is keyed by md5 rather than by DOI — only Anna's
+	md5-keyed hits are suppressed when the catalog already listed them. All four
 	providers are keyless — no account, API key, or login — and best-effort: each
 	runs under its own short budget, so a slow or failing provider degrades to
 	contributing nothing rather than delaying or failing the core Library Genesis

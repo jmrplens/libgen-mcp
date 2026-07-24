@@ -137,18 +137,22 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		opt(&o)
 	}
 	truthy, falsy := true, false
+	// One lister for both tools, so a single discovery and a single cache serve
+	// the search escalation and the get_details fallback instead of each building
+	// its own manager.
+	annasMirrors := libgen.AnnasMirrorLister(cfg)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search",
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("search", searchHandler(client, cfg, libgen.AnnasMirrorLister(cfg))))
+	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
 		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("get_details", detailsHandler(client, cfg, libgen.AnnasMirrorLister(cfg))))
+	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	desc := downloadToolDescription(book, article)
 	if o.remoteDownloads {
@@ -376,6 +380,14 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 		)
 		if forced {
 			extraWG.Go(func() {
+				// The handler's own recovery cannot catch a panic raised on another
+				// goroutine — it would take the whole server down — so this one
+				// guards itself and degrades to no extra hits.
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("forced extra search panicked", "panic", r, "stack", debug.Stack())
+					}
+				}()
 				extraHits = discovery.Federate(ctx, in.Query, extraLimit,
 					discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
 			})

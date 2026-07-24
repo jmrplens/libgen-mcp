@@ -118,10 +118,11 @@ var confirmElicitations atomic.Int64
 // handler has answered since the last newHostSession reset.
 func confirmElicitationCount() int { return int(confirmElicitations.Load()) }
 
-// evalElicitationHandler answers the two elicitation prompts the server can raise
+// evalElicitationHandler answers the elicitation prompts the server can raise
 // during a scenario. It branches on the single top-level field of the requested
 // schema: an "email" field (the on-demand Unpaywall contact email) is answered
-// with unpaywallEmail(); any other prompt is the download-save confirmation, which
+// with unpaywallEmail(), a "key" field (the Anna's membership key) from the
+// captured environment; any other prompt is the download-save confirmation, which
 // it accepts (confirm=true) so a real download flow proceeds instead of stalling.
 // It never declines: the eval measures whether the model reaches the capability,
 // not whether a human would approve, so a deterministic accept keeps the flow live.
@@ -129,6 +130,16 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	field := evalElicitFieldName(req)
 	if strings.Contains(strings.ToLower(field), "email") {
 		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: unpaywallEmail()}}, nil
+	}
+	// The Anna's Archive membership key. It is answered from the environment
+	// captured before any scenario cleared it, and declined when there is none, so
+	// the server falls back to the keyless route rather than being handed an empty
+	// key it would have to reject.
+	if strings.Contains(strings.ToLower(field), "key") {
+		if annasKeyFromEnv == "" {
+			return &mcp.ElicitResult{Action: "decline"}, nil
+		}
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: annasKeyFromEnv}}, nil
 	}
 	if field == "" {
 		field = "confirm"
