@@ -2420,3 +2420,17 @@ func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
 		t.Errorf("an implausible email should yield \"\", got %q", got)
 	}
 }
+
+// TestSearchNextStepsForbidsInventingResults verifies an empty search tells the
+// model not to fill the gap. The recovery advice alone leaves the door open: a
+// model that has been asked to find something and told only "try broadening" can
+// still answer as if it had found it.
+func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}), "\n"))
+	if !strings.Contains(joined, "do not") {
+		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
+	}
+	if !strings.Contains(joined, "were not returned") && !strings.Contains(joined, "did not receive") {
+		t.Errorf("empty-search guidance must name the thing not to invent; got %q", joined)
+	}
+}

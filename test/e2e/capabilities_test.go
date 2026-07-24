@@ -440,6 +440,43 @@ func assertUntrustedFirst(t *testing.T, out tools.ReadOutput) {
 	}
 }
 
+// TestE2EReadRefusesToInviteInvention verifies every dead end the read tool can
+// reach carries an explicit instruction not to describe content that was never
+// returned. A live evaluator run found a model handed an unreadable file
+// answering "I've extracted the complete table of contents" and inventing one —
+// the guidance offered an alternative but never closed that door.
+func TestE2EReadRefusesToInviteInvention(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	defer cancel()
+	client, session := newReadSession(t, ctx)
+	target := smallestTargetIn(t, ctx, client, "nonfiction", "python")
+	pace()
+
+	// A term almost certainly absent, so the empty-result branch is the live one.
+	out := callRead(t, ctx, session, map[string]any{
+		"md5": target.MD5, "find": "zzqxjvwk", "max_matches": 5,
+	})
+	if !out.Extractable {
+		// The not-extractable branch is the other dead end; either is fine to grade.
+		assertForbidsInvention(t, out.NextSteps, "not extractable")
+		return
+	}
+	if out.MatchCount != 0 {
+		t.Skipf("the improbable term matched %d times; nothing to assert here", out.MatchCount)
+	}
+	assertForbidsInvention(t, out.NextSteps, "no matches")
+}
+
+// assertForbidsInvention checks a next_steps list closes the door on fabrication.
+func assertForbidsInvention(t *testing.T, steps []string, branch string) {
+	t.Helper()
+	joined := strings.ToLower(strings.Join(steps, "\n"))
+	if !strings.Contains(joined, "do not") {
+		t.Errorf("%s: next_steps must state plainly what not to do; got %q", branch, joined)
+	}
+}
+
 // TestE2EReadModes drives the read tool's three modes against a real small file
 // from the LIVE site: sequential text (with a cursor when more remains), find (a
 // plausible common word), and outline (entries or a clean no-outline result). Each

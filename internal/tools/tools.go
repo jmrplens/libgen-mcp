@@ -274,6 +274,7 @@ func searchNextSteps(out SearchOutput) []string {
 		return []string{
 			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
 				strings.Join(libgen.TopicNames(), ", ") + ".",
+			"Tell the user nothing was found; do not present titles, authors or download links that were not returned.",
 		}
 	}
 	first := out.Results[0]

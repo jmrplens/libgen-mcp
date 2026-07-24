@@ -19,8 +19,15 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
-// skipPrefix marks an assertion message as a SKIP (an unmet precondition or a
-// flaky live mirror), not a pass or a fail.
+// skipPrefix marks an assertion message as a SKIP, not a pass or a fail. It is
+// reserved for the two cases where there is genuinely nothing to grade: an unmet
+// precondition (a capability the deployment has not configured) and a model that
+// ran out of turns before answering.
+//
+// A live mirror or source that fails is NOT one of them. The model's behavior is
+// still fully observable there, and the only wrong move left to it is claiming a
+// result it never received — so those are graded by gradeDegraded rather than
+// skipped. A scenario that skips routinely is not testing anything.
 const skipPrefix = "SKIP:"
 
 // Shared detail-string fragments, so an assertion's phrasing stays consistent and
@@ -632,18 +639,26 @@ func assertNoEscalationAndHonest(tr transcript) (pass bool, detail string) {
 	return false, "model did not report the catalog miss; it answered: " + firstChars(tr.FinalText, 200)
 }
 
-// missAdmissions are the ways a model says it found nothing. The list is broad on
-// purpose: a false failure here would accuse a model of fabricating when it was
-// merely being polite about it.
+// missAdmissions are the ways a model says it found nothing, or could not read
+// what it found. The list is broad on purpose: a false failure here would accuse a
+// model of fabricating when it was merely being polite about it.
 var missAdmissions = []string{
 	"not found", "no results", "no result", "couldn't find", "could not find",
 	"unable to find", "not able to find", "no matches", "no match", "wasn't able",
 	"was not able", "didn't find", "did not find", "doesn't appear", "does not appear",
 	"nothing", "no books", "no record", "not available", "isn't available",
 	"is not available", "no luck", "came up empty",
+	// Reading a file that turned out to be unreadable.
+	"not extractable", "no text", "couldn't extract", "could not extract",
+	"unable to extract", "couldn't read", "could not read", "unable to read",
+	"scanned", "image-only", "image only", "no table of contents", "no outline",
+	"failed", "error", "unsuccessful", "not possible", "can't", "cannot",
 }
 
-// admitsMiss reports whether an answer acknowledges finding nothing.
+// admitsMiss reports whether an answer acknowledges coming up empty — no result,
+// or a result it could not read. It is how a degraded live run is still graded:
+// the model cannot control whether a PDF is a scan, but it can control whether it
+// says so instead of inventing the contents.
 func admitsMiss(answer string) bool {
 	lower := strings.ToLower(answer)
 	for _, admission := range missAdmissions {
@@ -652,6 +667,24 @@ func admitsMiss(answer string) bool {
 		}
 	}
 	return false
+}
+
+// gradeDegraded grades a scenario whose live payload did not arrive. The model's
+// behavior is still fully observable, and the only wrong move left is to claim a
+// result it never received — so this asserts honesty rather than skipping.
+//
+// It exists because a scenario that routinely skips is not testing anything: the
+// live world varies, but what the model does about it should not.
+func gradeDegraded(tr transcript, what string) (pass bool, detail string) {
+	// No answer at all is the one case with nothing to judge: a model that ran out
+	// of turns has not fabricated anything, so this stays a skip.
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return true, skipPrefix + " " + what + "; the model produced no final answer (turn budget)"
+	}
+	if admitsMiss(tr.FinalText) {
+		return true, what + "; the model reported that plainly instead of inventing a result"
+	}
+	return false, what + "; the model did not say so, it answered: " + firstChars(tr.FinalText, 160)
 }
 
 // firstChars returns up to n characters of s with newlines flattened, for
@@ -673,7 +706,7 @@ func assertForcedExtras(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if len(out.Results) == 0 {
-		return true, skipPrefix + " the catalog returned nothing for an ordinary query (live mirror)"
+		return gradeDegraded(tr, "the catalog returned nothing for an ordinary query (live mirror)")
 	}
 	var fromAnnas int
 	for _, r := range out.Results {
@@ -682,7 +715,7 @@ func assertForcedExtras(tr transcript) (pass bool, detail string) {
 		}
 	}
 	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
-		return true, skipPrefix + " always mode ran but no extra searcher returned a hit (live network)"
+		return gradeDegraded(tr, "always mode ran but no extra searcher returned a hit (live network)")
 	}
 	return true, fmt.Sprintf("always mode consulted the extras alongside a %d-result catalog page (annas=%d, open access=%d)",
 		len(out.Results), fromAnnas, len(out.OpenAccess))
@@ -703,7 +736,7 @@ func assertReadEscalated(tr transcript) (pass bool, detail string) {
 		}
 	}
 	if len(annasMD5) == 0 {
-		return true, skipPrefix + " search returned no Anna's-origin results today (live network)"
+		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
 	}
 	call, ok := findCall(tr, "read")
 	if !ok {
@@ -713,14 +746,14 @@ func assertReadEscalated(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + "read was called with an md5 that did not come from the escalated results"
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read of the escalated item failed live (Anna's/IPFS unavailable)"
+		return gradeDegraded(tr, "read of the escalated item failed live (Anna's/IPFS unavailable)")
 	}
 	var read tools.ReadOutput
 	if derr := decodeStructured(call.Structured, &read); derr != nil {
 		return false, derr.Error()
 	}
 	if !read.Extractable {
-		return true, skipPrefix + notExtractableDetail + read.Reason + ")"
+		return gradeDegraded(tr, "the escalated item was not extractable ("+read.Reason+")")
 	}
 	return true, fmt.Sprintf("read opened an Anna's-only item (%d chars extracted)", len(read.Text))
 }
@@ -740,15 +773,18 @@ func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
 	if member, _ := call.Input["annas_member"].(bool); !member {
 		return false, "SURFACE GAP: model never set annas_member despite the user offering a membership"
 	}
+	// The scenario is about discovering the argument, which the check above already
+	// settled. A spent allowance or an unreachable file host is the account's
+	// business, not the tool surface's — so it is graded on honesty, not skipped.
 	if downloadFailed(call) {
-		return true, skipPrefix + " member download failed live (quota, mirror or gateway)"
+		return gradeDegraded(tr, "member download failed live (quota, mirror or gateway)")
 	}
 	var out tools.DownloadOutput
 	if derr := decodeStructured(call.Structured, &out); derr != nil {
 		return false, derr.Error()
 	}
 	if out.Account == nil {
-		return true, skipPrefix + " download succeeded over the keyless path, so no account allowance was reported"
+		return true, "model set annas_member; the download went over the keyless path, so no allowance was reported"
 	}
 	return true, fmt.Sprintf("member download reported the account allowance (%d of %d left)",
 		out.Account.DownloadsLeft, out.Account.DownloadsPerDay)
@@ -771,7 +807,7 @@ func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
 		}
 	}
 	if !annas {
-		return true, skipPrefix + " search returned no Anna's-origin results today (live network)"
+		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
 	}
 	call, ok := findCall(tr, "get_details")
 	if !ok {
@@ -797,8 +833,12 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
+	// What is under test is the remote contract: the model calls download and the
+	// server hands back a link instead of a file. Whether the publisher then serves
+	// the harness is the publisher's decision, not this project's behavior, so it is
+	// evidence rather than the gate.
 	if downloadFailed(call) {
-		return true, skipPrefix + " remote resolve failed live (mirror/network)"
+		return gradeDegraded(tr, "remote resolve failed live (mirror/network)")
 	}
 	for _, f := range tr.Fetched {
 		if f.Err == "" && f.Size > 0 {
@@ -807,7 +847,7 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	}
 	for _, f := range tr.Fetched {
 		if f.Err != "" {
-			return true, skipPrefix + " resolved a link but the live fetch failed: " + f.Err
+			return true, "remote: model got a link and the server returned it; the harness's own fetch was refused upstream (" + f.Err + ")"
 		}
 	}
 	return false, "remote download returned no fetchable link that landed locally"
@@ -828,7 +868,7 @@ func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 		return false, "resolve call carried neither a valid md5 nor doi"
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model set resolve_only correctly but the live resolve failed (mirror/network)"
+		return gradeDegraded(tr, "model set resolve_only correctly but the live resolve failed (mirror/network)")
 	}
 	var out struct {
 		Resolved *struct {
@@ -862,10 +902,10 @@ func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
 		return false, "model did not set an order for a sorted list"
 	}
 	if len(out.Results) < 25 {
-		return true, fmt.Sprintf("%s ordered search returned only %d results from the mirror", skipPrefix, len(out.Results))
+		return gradeDegraded(tr, fmt.Sprintf("ordered search returned only %d results from the mirror", len(out.Results)))
 	}
 	if !resultsCarryLinks(out.Results) {
-		return true, skipPrefix + " results carried no download links from the mirror"
+		return gradeDegraded(tr, "results carried no download links from the mirror")
 	}
 	if !finalTextHasLink(tr.FinalText) {
 		return false, "model did not include any download link in its answer despite the results carrying links"
@@ -901,7 +941,7 @@ func assertDownloadProgress(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " download did not complete live, so no progress could be emitted (mirror/network)"
+		return gradeDegraded(tr, "download did not complete live, so no progress could be emitted (mirror/network)")
 	}
 	var last *mcp.ProgressNotificationParams
 	n := 0
@@ -939,7 +979,7 @@ func assertNaturalSearch(titleToken string) func(transcript) (bool, string) {
 			return false, fmt.Sprintf("query %q does not mention %q", query, titleToken)
 		}
 		if len(out.Results) == 0 {
-			return true, skipPrefix + " search well-formed but the mirror returned 0 results"
+			return gradeDegraded(tr, "search well-formed but the mirror returned 0 results")
 		}
 		topics := stringSlice(call.Input, "topics")
 		return true, fmt.Sprintf("unguided search; %d results; topics=%v", len(out.Results), topics)
@@ -962,7 +1002,7 @@ func assertNaturalBookDownload(tr transcript) (pass bool, detail string) {
 		return false, "download md5 did not come from a prior search result"
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model discovered the md5 download flow but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "model discovered the md5 download flow but the live fetch failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, "")
 }
@@ -990,7 +1030,7 @@ func assertNaturalArticleDownload(tr transcript) (pass bool, detail string) {
 		via = "search"
 	}
 	if downloadFailed(call) {
-		return true, fmt.Sprintf("%s model chose a valid doi (%s) but the live fetch failed (mirror/network)", skipPrefix, via)
+		return gradeDegraded(tr, fmt.Sprintf("model chose a valid doi (%s) but the live fetch failed (mirror/network)", via))
 	}
 	ok2, msg := checkDownloadedFile(call, "")
 	if !ok2 {
@@ -1050,7 +1090,7 @@ func assertS3(tr transcript) (pass bool, detail string) {
 		return false, "topics missing standards"
 	}
 	if len(out.Results) == 0 {
-		return true, skipPrefix + " standards search returned 0 results from the mirror"
+		return gradeDegraded(tr, "standards search returned 0 results from the mirror")
 	}
 	return true, fmt.Sprintf("standards search; %d results", len(out.Results))
 }
@@ -1069,7 +1109,7 @@ func assertS4(tr transcript) (pass bool, detail string) {
 		return false, "get_details md5 did not come from a prior search result"
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " details lookup failed against the live mirror"
+		return gradeDegraded(tr, "details lookup failed against the live mirror")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
@@ -1182,14 +1222,16 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		return false, why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
+	// Whether today's copy is a scan is live luck; whether the model then invents a
+	// summary of text it never saw is exactly what this scenario should catch.
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
 	}
 	if strings.TrimSpace(out.Text) == "" {
 		return false, "extractable read returned no text"
@@ -1219,7 +1261,7 @@ func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 		return false, "model did not set extra_sources to \"always\" on the search call"
 	}
 	if len(out.OpenAccess) == 0 {
-		return true, skipPrefix + " extra_sources was set but no provider returned a hit (live network)"
+		return gradeDegraded(tr, "extra_sources was set but no provider returned a hit (live network)")
 	}
 	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
 		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"
@@ -1276,14 +1318,14 @@ func assertCitations(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " get_details failed against the live mirror"
+		return gradeDegraded(tr, "get_details failed against the live mirror")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if out.Citations == nil || !strings.HasPrefix(strings.TrimSpace(out.Citations.BibTeX), "@") {
-		return true, skipPrefix + " get_details returned no BibTeX (record metadata too sparse to build one)"
+		return gradeDegraded(tr, "get_details returned no BibTeX (record metadata too sparse to build one)")
 	}
 	if !finalTextHasCitation(tr.FinalText) {
 		return false, "FUNCTIONAL: get_details returned BibTeX but the model did not surface a citation in its answer"
@@ -1336,14 +1378,14 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " get_details(enrich) failed against the live mirror/Crossref"
+		return gradeDegraded(tr, "get_details(enrich) failed against the live mirror/Crossref")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
-		return true, skipPrefix + " enrich=true but Crossref returned no metadata (best-effort external API)"
+		return gradeDegraded(tr, "enrich=true but Crossref returned no metadata (best-effort external API)")
 	}
 	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref) {
 		if strings.TrimSpace(tr.FinalText) == "" {
@@ -1377,17 +1419,19 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read(find) failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read(find) failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
 	}
+	// Whether this particular copy contains the term is live luck; claiming a
+	// passage that the search did not return is not.
 	if out.MatchCount == 0 {
-		return true, skipPrefix + " read(find) ran but found no matches for the term in this copy"
+		return gradeDegraded(tr, "read(find) ran but found no matches for the term in this copy")
 	}
 	if strings.TrimSpace(tr.FinalText) == "" {
 		return false, "FUNCTIONAL: read(find) returned matches but the model showed no passage"
@@ -1415,17 +1459,19 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read(outline) failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read(outline) failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
 	}
+	// A PDF with no embedded table of contents is common and legitimate; a model
+	// that fabricates one from thin air is not.
 	if len(out.Outline) == 0 {
-		return true, skipPrefix + " read(outline) ran cleanly but this PDF has no embedded table of contents"
+		return gradeDegraded(tr, "read(outline) ran cleanly but this file has no embedded table of contents")
 	}
 	if strings.TrimSpace(tr.FinalText) == "" {
 		return false, "FUNCTIONAL: outline returned entries but the model produced no answer"
@@ -1449,7 +1495,7 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model downloaded by DOI (host answered the email elicitation) but the live OA chain failed"
+		return gradeDegraded(tr, "model downloaded by DOI (host answered the email elicitation) but the live OA chain failed")
 	}
 	var res libgen.DownloadResult
 	if err := decodeStructured(call.Structured, &res); err != nil {
@@ -1486,9 +1532,9 @@ func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	}
 	if downloadFailed(call) {
 		if tr.ConfirmElicits == 0 {
-			return true, skipPrefix + " live fetch failed before any save-confirmation elicitation fired (mirror/network)"
+			return gradeDegraded(tr, "live fetch failed before any save-confirmation elicitation fired (mirror/network)")
 		}
-		return true, skipPrefix + " confirmation elicitation fired but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "confirmation elicitation fired but the live fetch failed (mirror/network)")
 	}
 	if tr.ConfirmElicits == 0 {
 		return false, "FUNCTIONAL: download completed but no save-confirmation elicitation fired — the confirmation surface did not run"
@@ -1511,7 +1557,7 @@ func assertS5(tr transcript) (pass bool, detail string) {
 		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " valid md5 download but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "valid md5 download but the live fetch failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, "")
 }
@@ -1546,7 +1592,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model set source=" + want + " correctly but the live download failed (mirror/network)"
+		return gradeDegraded(tr, "model set source="+want+" correctly but the live download failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, want)
 }
@@ -1561,7 +1607,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " valid DOI download but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "valid DOI download but the live fetch failed (mirror/network)")
 	}
 	fileOK, msg := checkDownloadedFile(call, "")
 	if !fileOK {
@@ -1701,10 +1747,10 @@ func assertSearchEscalation(tr transcript) (pass bool, detail string) {
 		}
 	}
 	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
-		return true, skipPrefix + " escalation produced no extra-origin results (live network)"
+		return gradeDegraded(tr, "escalation produced no extra-origin results (live network)")
 	}
 	if fromAnnas == 0 {
-		return true, skipPrefix + " only open-access hits, no Anna's-origin results today"
+		return gradeDegraded(tr, "only open-access hits, no Anna's-origin results today")
 	}
 	lower := strings.ToLower(tr.FinalText)
 	if strings.Contains(lower, "not found") || strings.Contains(lower, "no results") || strings.Contains(lower, "couldn't find") {
@@ -1727,7 +1773,7 @@ func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string)
 		}
 	}
 	if len(annasMD5s) == 0 {
-		return true, skipPrefix + " no Anna's-origin result to download (live network)"
+		return gradeDegraded(tr, "no Anna's-origin result to download (live network)")
 	}
 	dlCall, ok := findCall(tr, "download")
 	if !ok {
@@ -1744,7 +1790,7 @@ func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string)
 		return false, "model downloaded an md5 not from an Anna's-origin result"
 	}
 	if dlCall.Result != nil && dlCall.Result.IsError {
-		return true, skipPrefix + " download call returned a tool error (live network)"
+		return gradeDegraded(tr, "download call returned a tool error (live network)")
 	}
 	return true, fmt.Sprintf("model searched, found an Anna's-origin item, and downloaded it (md5=%s)", dlMD5)
 }

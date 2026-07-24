@@ -83,17 +83,20 @@ S6 / S6b are the reason this harness exists alongside the older checks: the
 assert the model actually sets it (and that `DownloadResult.Source` matches when
 the live fetch succeeds).
 
-**Source availability and SKIPs.** A download scenario grades the model's tool
-call; if the model picks the right source but the live fetch fails, it SKIPs
-rather than fails, because the external sources are not equally reliable:
+**Source availability and degraded runs.** The external sources are not equally
+reliable — **libgen** (S5) and **unpaywall** (S7) are dependable, **sci-hub** (S6)
+mirrors are volatile and carry only _paywalled_ papers, and **randombook** (S6b)
+rediscovers fresh mirrors each run — so a download that the model set up correctly
+can still fail to produce bytes.
 
-- **libgen** (S5) and **unpaywall** (S7) are the dependable download paths.
-- **sci-hub** (S6) mirrors are volatile and only host _paywalled_ papers — S6 uses
-  a heavily-cited paywalled DOI (not an arXiv one, which Sci-Hub does not carry),
-  so it can actually complete when a mirror is up, and SKIPs when none are.
-- **randombook** (S6b) rediscovers fresh mirrors each run, so whether a given md5
-  resolves varies; a live miss is a SKIP, the source-selection behavior still
-  graded.
+That does **not** make the scenario unevaluable, and it is not a SKIP. When the
+live payload does not arrive, the model still has one move left, and it is the
+move worth watching: claiming a result it never received. Those runs are graded on
+whether the answer says plainly that nothing came back. A scenario that skips
+routinely is not testing anything, so a SKIP is reserved for the two cases where
+there is genuinely nothing to grade — a capability the deployment has not
+configured (S41 without a membership key), and a model that ran out of turns
+before answering.
 
 **Unpaywall needs a contact email.** The unpaywall source is disabled unless
 `LIBGEN_MCP_UNPAYWALL_EMAIL` is set (its API rejects requests without one), so it

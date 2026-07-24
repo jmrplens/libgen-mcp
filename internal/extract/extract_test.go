@@ -2,6 +2,8 @@ package extract
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -85,5 +87,96 @@ func TestAppendNote(t *testing.T) {
 	}
 	if got := appendNote("reason", "note"); got != "reason; note" {
 		t.Errorf("both notes: want %q, got %q", "reason; note", got)
+	}
+}
+
+// TestExtract_SniffsAnExtensionlessFile verifies content decides when the name
+// does not. A file fetched by content address — from IPFS, or from a CDN that
+// announces no filename — arrives with no extension, and dispatching on the name
+// alone made a perfectly readable PDF unreadable. A live evaluator run caught the
+// consequence: the model was handed "unsupported file extension" for a real book
+// and answered with a table of contents it had invented.
+func TestExtract_SniffsAnExtensionlessFile(t *testing.T) {
+	src, err := os.ReadFile("testdata/sample.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nameless := writeTemp(t, "d41d8cd98f00b204e9800998ecf8427e", src)
+	c, err := Extract(context.Background(), nameless, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Extractable {
+		t.Fatalf("an extensionless PDF should still extract, got %+v", c)
+	}
+	if c.Format != "pdf" {
+		t.Errorf("Format = %q, want pdf", c.Format)
+	}
+	if strings.TrimSpace(c.Text) == "" {
+		t.Error("extractable but no text came back")
+	}
+}
+
+// TestExtract_SniffingDoesNotRescueUnknownContent verifies a file that is neither
+// named nor shaped like something extractable is still reported as such, so the
+// caller is told plainly rather than handed empty text.
+func TestExtract_SniffingDoesNotRescueUnknownContent(t *testing.T) {
+	nameless := writeTemp(t, "abcdef", []byte("not a document at all"))
+	c, err := Extract(context.Background(), nameless, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Extractable {
+		t.Fatalf("unknown content should not be extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, "unrecognized") {
+		t.Errorf("reason should say the content was unrecognized, got %q", c.Reason)
+	}
+}
+
+// writeTemp writes body to a file named name inside the test's own temp dir and
+// returns its path. The name is a literal from the caller, never external input.
+func writeTemp(t *testing.T, name string, body []byte) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, filepath.Base(name))
+	if !strings.HasPrefix(path, dir+string(os.PathSeparator)) {
+		t.Fatalf("refusing to write outside the temp dir: %s", path)
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil { //nolint:gosec // path is confined to the test's temp dir, checked above.
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestOutlineAndSearchSniffToo verifies the other two entry points identify a file
+// by content as well. They each dispatch on the extension independently, so fixing
+// only Extract left outline and find still reporting a real book as unsupported —
+// which is the exact path a live evaluator run caught a model inventing a table of
+// contents for.
+func TestOutlineAndSearchSniffToo(t *testing.T) {
+	src, err := os.ReadFile("testdata/bookmarked.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nameless := writeTemp(t, "0123456789abcdef0123456789abcdef", src)
+
+	out, err := Outline(context.Background(), nameless)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Extractable {
+		t.Errorf("Outline() on an extensionless PDF: %s", out.Reason)
+	}
+	if len(out.Entries) == 0 {
+		t.Error("Outline() returned no entries for a bookmarked PDF")
+	}
+
+	res, err := Search(context.Background(), nameless, "the", SearchOpts{MaxMatches: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Extractable {
+		t.Errorf("Search() on an extensionless PDF: %s", res.Reason)
 	}
 }

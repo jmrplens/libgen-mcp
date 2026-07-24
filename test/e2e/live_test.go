@@ -725,6 +725,28 @@ func TestE2EReadEscalatedItem(t *testing.T) {
 	t.Logf("read %d characters from an item the catalog does not carry", len(out.Text))
 }
 
+// TestE2EExtensionlessFileStillReads verifies content decides when the name does
+// not. A file fetched by content address, or from a CDN that announces no
+// filename, lands with no extension; dispatching on the name alone reported real
+// books as unsupported, and a model handed that answered with an invented table
+// of contents. The pinned escalation item comes over IPFS, which is exactly that
+// case.
+func TestE2EExtensionlessFileStillReads(t *testing.T) {
+	requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+
+	_, session := newReadSession(t, ctx)
+	out := callRead(t, ctx, session, map[string]any{"md5": item.MD5})
+	if !out.Extractable {
+		t.Fatalf("an IPFS-fetched PDF must still be recognized by content: %s", out.Reason)
+	}
+	if out.Format != "pdf" {
+		t.Errorf("Format = %q, want pdf — the format was not recovered from the bytes", out.Format)
+	}
+}
+
 // skipIfAnnasUnavailable skips on the known ways Anna's and the public IPFS
 // gateways fail live, and returns otherwise so the caller can fail on anything
 // undiagnosed rather than tolerating a new failure mode silently.

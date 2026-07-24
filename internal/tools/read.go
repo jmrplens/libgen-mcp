@@ -213,17 +213,23 @@ func readNextSteps(out ReadOutput) []string {
 	findMode := out.Query != ""
 	switch {
 	case !out.Extractable:
-		steps = append(steps, "This file's text can't be extracted ("+mdCell(out.Reason)+"). Use the download tool to fetch the raw file instead.")
+		steps = append(steps,
+			"This file's text can't be extracted ("+mdCell(out.Reason)+"). Use the download tool to fetch the raw file instead.",
+			"No text was returned. Tell the user the file could not be read; do not describe, summarize or list contents you did not receive.")
 	case out.OutlineRequested && len(out.Outline) > 0:
 		steps = append(steps, "Jump to a section by calling read again with start_page set to an entry's page (PDF) — or read sequentially.")
 	case out.OutlineRequested:
-		steps = append(steps, "This document has no embedded table of contents; read it sequentially or use find.")
+		steps = append(steps,
+			"This document has no embedded table of contents; read it sequentially or use find.",
+			"The outline is empty. Say so; do not present chapter titles that were not returned.")
 	case out.HasMore && findMode:
 		steps = append(steps, "Call read again with the same find and cursor=\""+out.Cursor+"\" for more matches.")
 	case out.HasMore:
 		steps = append(steps, "Call read again with the same md5/doi/path and cursor=\""+out.Cursor+"\" to get the next chunk.")
 	case findMode && out.MatchCount == 0:
-		steps = append(steps, "No matches — try a different phrase, or read sequentially (omit find).")
+		steps = append(steps,
+			"No matches — try a different phrase, or read sequentially (omit find).",
+			"Report that the term was not found; do not quote passages that were not returned.")
 	}
 	return steps
 }
