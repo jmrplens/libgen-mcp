@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // stubSource is a test DownloadSource whose behavior (support decision, resolve
@@ -224,6 +227,71 @@ func TestDownloadSourceChainFallback(t *testing.T) {
 	}
 	if !res.Verified {
 		t.Error("Verified = false, want true")
+	}
+}
+
+// slowSource is a test DownloadSource whose Resolve blocks for delay unless the
+// context is canceled first, in which case it reports the context error the way a
+// well-behaved source does. It exists to prove a source cannot hold the chain for
+// longer than its resolve budget.
+type slowSource struct {
+	name     string
+	delay    time.Duration
+	resolved Resolved
+}
+
+func (s slowSource) Name() string       { return s.name }
+func (s slowSource) Supports(Item) bool { return true }
+func (s slowSource) Resolve(ctx context.Context, _ Item) (Resolved, error) {
+	timer := time.NewTimer(s.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return Resolved{}, ctx.Err()
+	case <-timer.C:
+		return s.resolved, nil
+	}
+}
+
+// TestResolveBudgetBoundsEachSource verifies that a source which cannot resolve
+// promptly is abandoned at its budget rather than being allowed to spend the whole
+// request timeout (or, for a multi-hop source, several of them) while the sources
+// behind it wait.
+//
+// The article chain grew to seven sources, most of which resolve over the same
+// bounded-per-request client; without a per-source budget their worst cases add up
+// serially in front of the last-resort source, which is the one most likely to
+// actually serve the file. The chain must still advance and complete.
+func TestResolveBudgetBoundsEachSource(t *testing.T) {
+	payload := []byte("%PDF-1.4 budget payload")
+	cdn := fileCDN(t, payload, `attachment; filename="b.pdf"`)
+	defer cdn.Close()
+
+	const budget = 150 * time.Millisecond
+	cfg := &config.Config{
+		Timeout:                budget,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 1,
+	}
+	slow := slowSource{name: "slow", delay: 10 * time.Second}
+	good := stubSource{name: "good", supports: true, resolved: Resolved{FileURL: cdn.URL + "/file"}}
+	c := New(staticMirrors{}, cfg, WithSources(slow, good))
+
+	started := time.Now()
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/budget"}, t.TempDir(), "")
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v, want the chain to advance past the slow source", err)
+	}
+	if res.Source != "good" {
+		t.Errorf("Source = %q, want %q", res.Source, "good")
+	}
+	// Generous headroom over the budget so the assertion is about the bound, not
+	// about scheduling jitter; the unbounded behavior takes the source's full 10s.
+	if limit := 5 * time.Second; elapsed >= limit {
+		t.Errorf("chain took %v, want under %v: the slow source was not bounded by its resolve budget", elapsed, limit)
 	}
 }
 

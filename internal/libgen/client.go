@@ -89,6 +89,15 @@ type Client struct {
 	// are made before a source is deemed unable to start; an empty schedule means a
 	// single attempt with no start-retries. Injectable so tests use tiny waits.
 	startRetryWaits []time.Duration
+	// resolveBudget bounds how long ONE source may spend in Resolve before the
+	// chain moves on. Resolution is serial and every source in front of the one
+	// that can actually serve an item spends its own failure time first, so without
+	// a per-source bound a DOI chain of seven sources — several of which make more
+	// than one sequential request — can burn minutes before the last-resort source
+	// is even tried. It is derived from cfg.Timeout, i.e. each source gets one
+	// request's worth of time to resolve however many hops it needs; a
+	// non-positive value disables the bound (a Client built directly by a test).
+	resolveBudget time.Duration
 	// stallTimeout is the progress-resetting stall window while streaming: a
 	// transfer is aborted only when no bytes arrive within it, never for being
 	// merely slow. A non-positive value disables the stall guard. Injectable so
@@ -240,6 +249,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,
 		startRetryWaits:  cfg.DownloadStartRetryWaits,
+		resolveBudget:    cfg.Timeout,
 		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),

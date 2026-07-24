@@ -380,6 +380,26 @@ func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []Dow
 	return append([]DownloadSource{adhoc}, sources...)
 }
 
+// resolveWithin resolves item against one source under the per-source resolve
+// budget (Client.resolveBudget), so a source that cannot answer promptly is
+// abandoned and the chain advances instead of the whole chain waiting on it.
+//
+// The budget is a bound, not a deadline for the transfer: it covers only the
+// lookup hops a source makes to produce a URL, and is released as soon as Resolve
+// returns — the returned Resolved is a plain URL with no live body attached, so
+// the streaming that follows runs under the caller's context as before. Expiry
+// cancels only the derived context, leaving the caller's untouched, which is what
+// lets the chain move on. A non-positive budget resolves under the caller's
+// context unchanged.
+func (c *Client) resolveWithin(ctx context.Context, src DownloadSource, item Item) (Resolved, error) {
+	if c.resolveBudget <= 0 {
+		return src.Resolve(ctx, item)
+	}
+	rctx, cancel := context.WithTimeout(ctx, c.resolveBudget)
+	defer cancel()
+	return src.Resolve(rctx, item)
+}
+
 // ResolvedDownload is a direct download URL produced by ResolveLink: the bytes
 // are NOT fetched, so the caller (a remote MCP client, or an agent's own fetch
 // tool) can retrieve the file itself, wherever it is running. Header carries any
@@ -412,7 +432,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 		if !src.Supports(item) {
 			continue
 		}
-		resolved, rerr := src.Resolve(ctx, item)
+		resolved, rerr := c.resolveWithin(ctx, src, item)
 		if rerr != nil {
 			errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), rerr))
 			if ctx.Err() != nil {
@@ -628,7 +648,7 @@ func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downl
 // the per-partial lock, and streams. Start-phase failures are wrapped with
 // errStartFailed so downloadFrom retries them on the schedule.
 func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
-	resolved, err := src.Resolve(ctx, req.item)
+	resolved, err := c.resolveWithin(ctx, src, req.item)
 	if err != nil {
 		return nil, startErr(err)
 	}
