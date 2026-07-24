@@ -161,6 +161,8 @@ jobs:
       - run: go mod download
       - name: Audit godoc coverage (exported symbols, packages and tests)
         run: go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
+      - name: Audit MCP tool surface quality
+        run: make audit-surface-quality
 
   govulncheck:
     name: govulncheck
@@ -183,6 +185,8 @@ jobs:
         with:
           node-version: "22"
       - run: npx --yes markdownlint-cli2 "**/*.md"
+      - name: Check local documentation links
+        run: make check-doc-links
 
   hadolint:
     name: hadolint

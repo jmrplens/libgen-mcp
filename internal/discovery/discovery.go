@@ -33,33 +33,33 @@ const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libge
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin"` // "arxiv" | "crossref" | "openlibrary"
-	Title   string `json:"title,omitempty"`
-	Authors string `json:"authors,omitempty"`
-	Year    string `json:"year,omitempty"`
-	DOI     string `json:"doi,omitempty"`
-	ISBN    string `json:"isbn,omitempty"`
+	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary or annas"`
+	Title   string `json:"title,omitempty" jsonschema:"record title"`
+	Authors string `json:"authors,omitempty" jsonschema:"authors"`
+	Year    string `json:"year,omitempty" jsonschema:"publication year"`
+	DOI     string `json:"doi,omitempty" jsonschema:"article DOI; pass to read or download to fetch this paper"`
+	ISBN    string `json:"isbn,omitempty" jsonschema:"ISBN; use it to refine a libgen search"`
 	// Venue is the publication venue when the source states one — currently arXiv's
 	// journal_ref (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the bibliographic
 	// citation for a preprint that later appeared in a journal. It is a short
 	// citation string, never an abstract, so it stays cheap to carry.
-	Venue string `json:"venue,omitempty"`
+	Venue string `json:"venue,omitempty" jsonschema:"publication venue as the provider states it (arXiv journal_ref): a short citation string, never an abstract"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
-	MD5 string `json:"md5,omitempty"`
+	MD5 string `json:"md5,omitempty" jsonschema:"file md5 for an md5-keyed result (Anna's Archive); pass to get_details or download"`
 	// Extension and Size describe the file behind an md5-keyed result, so it can be
 	// compared with a catalog result on the two attributes people sort by. Both are
 	// as the provider states them — the size is a human string like "12.0MB", not a
 	// byte count — and both are empty when it states neither.
-	Extension string `json:"extension,omitempty"`
-	Size      string `json:"size,omitempty"`
-	PDFURL    string `json:"pdf_url,omitempty"` // a directly-fetchable OA PDF when known
+	Extension string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
+	Size      string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
+	PDFURL    string `json:"pdf_url,omitempty" jsonschema:"a directly-fetchable open-access PDF URL when known"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"
 	// signal in the locator column.
-	ArchiveURL string `json:"archive_url,omitempty"`
-	OpenAccess bool   `json:"open_access"`
+	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org details page for a publicly readable book"`
+	OpenAccess bool   `json:"open_access" jsonschema:"true when the record is open access"`
 }
 
 // Provider is a keyless open-access discovery source.

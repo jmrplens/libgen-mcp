@@ -17,10 +17,10 @@ import (
 // entry and increases by one per nesting depth. Page is the 1-based PDF page (0
 // for EPUB); CharOffset is reserved for EPUB precise jumps (0 for now).
 type OutlineEntry struct {
-	Title      string `json:"title"`
-	Level      int    `json:"level"`
-	Page       int    `json:"page,omitempty"`
-	CharOffset int    `json:"char_offset,omitempty"`
+	Title      string `json:"title" jsonschema:"the table-of-contents entry title"`
+	Level      int    `json:"level" jsonschema:"nesting depth: 0 for a top-level entry, increasing by one per level"`
+	Page       int    `json:"page,omitempty" jsonschema:"1-based PDF page the entry points to (0 for EPUB)"`
+	CharOffset int    `json:"char_offset,omitempty" jsonschema:"rune offset for EPUB precise jumps (0 when not applicable)"`
 }
 
 // OutlineResult is the outcome of an Outline call. When Extractable is false,
