@@ -105,6 +105,11 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 | S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway |
 | S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds |
 | S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory |
+| S45 | **Europe PMC** — asks for an open-access DOI "from Europe PMC" with Unpaywall forced off, so the model must map the provider's prose name onto `source:"europepmc"` and that source must serve the bytes |
+| S46 | **bioRxiv** — a real `10.1101` preprint with no source named and Unpaywall off: Europe PMC indexes the DOI without an open-access full text, so bioRxiv claiming the preprint prefix is the only route the file can arrive by, and the serving source proves the prefix gate routes instead of falling through |
+| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the Internet Archive Scholar API is unreachable from some networks, so an upstream that does not answer is graded on the model saying so |
+| S48 | **An unkeyed source stays off the surface** — the CORE API key is forced empty, so `core` must be absent from `download`'s `source` enum and the model must not ask for it. Grades the tool surface itself, so it touches no third party and downloads nothing |
+| S49 | **Chain ordering** — an open-access DOI with no source named and Unpaywall off: one of the open-access providers must serve it and a shadow library must not, which is the promise the chain order makes and nothing else tested |
 
 {/* end generated */}
 

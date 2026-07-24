@@ -65,6 +65,31 @@ const openAccessDOI = "10.1371/journal.pone.0000308"
 // skipping.
 const scihubDOI = "10.1016/j.cell.2011.02.013"
 
+// biorxivDOI is a real bioRxiv preprint (Sever et al., "bioRxiv: the preprint
+// server for biology") used to exercise the bioRxiv source. Preprints carry the
+// 10.1101 registrant prefix, which is the gate that source claims on, and this one
+// is deliberately picked so the gate is the only thing that can route it: Europe
+// PMC indexes the DOI but holds no open-access full text for it, so a chain run
+// with Unpaywall disabled reaches bioRxiv or nothing.
+const biorxivDOI = "10.1101/833400"
+
+// openAccessSources are the article sources that serve a freely licensed copy, in
+// chain order. They lead the DOI chain (see config.KnownSources) so a legal copy is
+// always preferred when one exists.
+//
+// The list is named once because more than one assertion grades that promise. It
+// was previously spelled out inline in a single assertion, which is how it went
+// stale the moment the chain grew: a scenario whose DOI a new provider could serve
+// reported a green path as a product bug.
+var openAccessSources = []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core"}
+
+// shadowLibrarySources are the article sources of last resort, tried only once
+// every open-access provider has declined. A DOI known to be open access that one
+// of these served means the chain reached past a legal copy it should have
+// preferred — which is a real ordering failure, not a source the eval merely did
+// not expect.
+var shadowLibrarySources = []string{"scihub", "scidb"}
+
 // evalUnpaywallEmail is the contact email the article scenario sets so the
 // unpaywall source (disabled by default without an email) is exercised. It is a
 // safe fallback: live runs prefer LIBGEN_MCP_UNPAYWALL_EMAIL (see unpaywallEmail).
@@ -193,6 +218,24 @@ func findCall(tr transcript, name string) (toolCall, bool) {
 	return first, found
 }
 
+// succeededCall reports whether the transcript holds a call with the given name
+// that came back without a tool error.
+//
+// findCall deliberately hands back an errored call when every attempt errored, so
+// a genuine failure is still surfaced — which makes it the wrong question for "did
+// the model take this route at all?". A model that tried a download, was told the
+// call failed, and then correctly used read(find=…) took the route the scenario
+// wanted; grading the abandoned attempt as a surface gap reports that recovery as a
+// failure.
+func succeededCall(tr transcript, name string) bool {
+	for _, c := range tr.Calls {
+		if c.Name == name && c.Result != nil && !c.Result.IsError {
+			return true
+		}
+	}
+	return false
+}
+
 // decodeStructured re-marshals a JSON-decoded structured content value into a
 // typed target.
 func decodeStructured(v, target any) error {
@@ -223,8 +266,10 @@ func searchOutput(tr transcript) (toolCall, tools.SearchOutput, error) {
 }
 
 // downloadFailed reports whether a download tool call did not produce a file
-// (protocol error or an IsError result), which for a live mirror is treated as
-// a SKIP rather than a model failure.
+// (protocol error or an IsError result). A live mirror that does not deliver is
+// routed through gradeDegraded rather than being called a model failure — and
+// rather than being skipped, since the model can still fabricate a result it
+// never received.
 func downloadFailed(call toolCall) bool {
 	return call.Result == nil || call.Result.IsError
 }
@@ -401,7 +446,7 @@ func scenarios() []scenario {
 				`give me the direct download URL — do NOT download the file, I just want the link.`,
 			// resolve_only path: the model must discover it can set resolve_only=true to
 			// get a link back instead of downloading, and the tool must return a
-			// resolved URL. A live resolve failure is a SKIP.
+			// resolved URL. A live resolve failure is graded on honesty, not skipped.
 			Assert: assertResolveOnlyLink,
 		},
 		// S17–S18 are the REMOTE block: the same "download this" requests, but the
@@ -442,8 +487,8 @@ func scenarios() []scenario {
 			// Open-access discovery: like S10-S13, this is deliberately under-specified —
 			// the prompt never names extra_sources, so the model must discover the
 			// search field itself and then surface one of the federated open-access hits
-			// (arxiv/crossref) in its answer. A live provider outage is a SKIP, not a
-			// failure, since the flag/plumbing already did its job.
+			// (arxiv/crossref) in its answer. A live provider outage is graded on honesty,
+			// not a failure, since the flag/plumbing already did its job.
 			Assert: assertOpenAccessDiscovery,
 		},
 		// S21-S26 cover the capabilities added since v1.2.0, one per capability.
@@ -655,7 +700,219 @@ func scenarios() []scenario {
 			// argument rather than re-running the same search or inventing more rows.
 			Assert: assertPagination,
 		},
+		// S45-S49 cover the four DOI-keyed sources the article chain gained ahead of
+		// the shadow libraries — europepmc, biorxiv, fatcat, core — and the ordering
+		// promise the chain as a whole makes. None of the four had any coverage, and
+		// the promise had none either: an assertion that named the sources it expected
+		// was the only thing standing in for it, and it went stale the moment the
+		// chain grew.
+		{
+			ID:     "S45",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s from Europe PMC.", openAccessDOI),
+			// Unpaywall is forced off so it cannot pre-empt the source under test. The
+			// prompt names the provider in prose, not as the enum value, so what is
+			// graded is the model mapping "Europe PMC" onto source=europepmc.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
+			Assert:   assertS45EuropePMC,
+		},
+		{
+			ID: "S46",
+			Prompt: fmt.Sprintf("Download the preprint with DOI %s. Don't restrict it to a particular "+
+				"source — let the server pick.", biorxivDOI),
+			// The DOI-prefix gate does the routing here, which is why no source is
+			// named. Unpaywall is forced off because it would otherwise serve this
+			// preprint first, and Europe PMC indexes the DOI without holding an
+			// open-access full text for it — so bioRxiv claiming the 10.1101 prefix is
+			// the only way the file arrives, and the serving source is the evidence
+			// that the gate routed rather than fell through.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
+			Assert:   assertS46Biorxiv,
+		},
+		{
+			ID: "S47",
+			Prompt: fmt.Sprintf("Download the article with DOI %s from fatcat, the Internet Archive "+
+				"Scholar source.", openAccessDOI),
+			// The fatcat API has been unreachable from some networks for a while, so
+			// what this grades is the model reaching the source — and, when the upstream
+			// does not answer, that it says so instead of claiming a file. The source
+			// selection is the model behavior under test either way.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
+			Assert:   assertS47Fatcat,
+		},
+		{
+			ID: "S48",
+			Prompt: `Which download sources can you use to fetch an article by DOI? ` +
+				`Just list them — do not download anything.`,
+			// The key is forced empty rather than assumed absent. An operator's .env may
+			// well hold one — the maintainer's does — and a scenario that only tests
+			// what it claims on the machines that happen to lack a credential is not
+			// testing it. Setting it here makes "this deployment holds no CORE key" a
+			// fact of the scenario instead of a property of the environment.
+			SetupEnv: map[string]string{"LIBGEN_MCP_CORE_KEY": ""},
+			// The one scenario here that touches no third party at all: it grades the
+			// tool surface the model was shown. CORE is gated on that key, so it must
+			// not appear in the download tool's source enum — the enum being the only
+			// thing that stops a model asking for a source that cannot run.
+			Assert: assertUnkeyedSourceHidden,
+		},
+		{
+			ID: "S49",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s. Don't restrict it to a "+
+				"particular source — let the server choose the best one.", openAccessDOI),
+			// The chain-ordering promise, with Unpaywall forced off so the providers
+			// behind it have to carry the DOI on their own. A shadow library serving a
+			// known open-access article means the chain reached past a legal copy.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
+			Assert:   assertOpenAccessChainOrder,
+		},
 	}
+}
+
+// assertS45EuropePMC checks the Europe PMC source: the model must map the provider
+// named in prose onto source=europepmc, and when the live fetch lands Europe PMC
+// must be what served the bytes.
+func assertS45EuropePMC(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "europepmc", "doi")
+}
+
+// assertS46Biorxiv checks the bioRxiv source and, with it, the DOI-prefix gate: no
+// source is named, so bioRxiv can only serve the preprint by claiming the 10.1101
+// prefix as the chain walks past the providers that decline it.
+func assertS46Biorxiv(tr transcript) (pass bool, detail string) {
+	return assertChainServedBy(tr, "biorxiv")
+}
+
+// assertS47Fatcat checks the fatcat source. The Internet Archive Scholar API is not
+// reachable from every network, so an upstream that does not answer degrades to the
+// honesty check rather than failing: assertSourcedDownload routes a failed live
+// fetch through gradeDegraded, and what it grades there — the model reporting the
+// failure instead of claiming a file — is the part that is ours.
+func assertS47Fatcat(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "fatcat", "doi")
+}
+
+// assertChainServedBy grades a DOI download the prompt left unpinned: the model
+// only has to download by the DOI, and which source serves it is the CHAIN's
+// decision. That is what makes it a routing check — pinning the source would prove
+// only that the enum accepts the name, never that the chain reaches it.
+func assertChainServedBy(tr transcript, want string) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, notAValidDOI
+	}
+	if src := stringField(call.Input, "source"); src != "" {
+		return false, "model pinned source=" + src + " although the prompt asked it not to, so the chain never got to route"
+	}
+	if downloadFailed(call) {
+		return gradeDegraded(tr, "the source was left to the chain but the live fetch failed (upstream unavailable)")
+	}
+	return checkDownloadedFile(call, want)
+}
+
+// assertOpenAccessChainOrder grades the promise the article chain makes and nothing
+// else tests: for a DOI known to be open access, with the source left to the
+// server, one of the open-access providers must serve it and a shadow library must
+// not. Unpaywall is off for this scenario, so a pass also shows the providers
+// behind it are reachable in order rather than dead weight in front of Sci-Hub.
+func assertOpenAccessChainOrder(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, notAValidDOI
+	}
+	if src := stringField(call.Input, "source"); src != "" {
+		return false, "model pinned source=" + src + " although the prompt asked it not to, so the chain never got to route"
+	}
+	if downloadFailed(call) {
+		return gradeDegraded(tr, "the source was left to the chain but the live fetch failed (upstream unavailable)")
+	}
+	if fileOK, msg := checkDownloadedFile(call, ""); !fileOK {
+		return fileOK, msg
+	}
+	var res libgen.DownloadResult
+	if err := decodeStructured(call.Structured, &res); err != nil {
+		return false, err.Error()
+	}
+	return gradeArticleSource(res.Source)
+}
+
+// keylessArticleSources are the article sources that need no credential, so a
+// deployment that configures nothing still advertises every one of them. They are
+// checked before the CORE assertion so an empty or truncated enum cannot satisfy
+// "core is absent" by advertising nothing at all.
+var keylessArticleSources = []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb"}
+
+// downloadSourceEnum returns the values of the download tool's source enum exactly
+// as the model was shown them, and whether the tool advertised one.
+//
+// The schema is read through a JSON round-trip rather than a type assertion: it is
+// an untyped any that arrives as a map over the wire and as decoded JSON from a
+// record, and a round-trip is the one reading that gives both the same answer.
+func downloadSourceEnum(tr transcript) (values []string, found bool) {
+	for _, def := range tr.Tools {
+		if def.Name != "download" {
+			continue
+		}
+		var schema struct {
+			Properties struct {
+				Source struct {
+					Enum []string `json:"enum"`
+				} `json:"source"`
+			} `json:"properties"`
+		}
+		if decodeStructured(def.InputSchema, &schema) != nil {
+			return nil, false
+		}
+		return schema.Properties.Source.Enum, len(schema.Properties.Source.Enum) > 0
+	}
+	return nil, false
+}
+
+// downloadAskedForSource reports whether any download call asked for the named
+// source, successful or not: asking at all is what the check is about.
+func downloadAskedForSource(tr transcript, name string) bool {
+	for _, c := range tr.Calls {
+		if c.Name == "download" && strings.EqualFold(stringField(c.Input, "source"), name) {
+			return true
+		}
+	}
+	return false
+}
+
+// assertUnkeyedSourceHidden verifies a credential-gated source stays off the tool
+// surface when the deployment holds no credential. The scenario forces
+// LIBGEN_MCP_CORE_KEY empty, so CORE is not in the chain, and the download tool's
+// source enum is the only thing standing between the model and asking for a source
+// that cannot run.
+//
+// It grades the surface the model was shown rather than a live fetch, which is what
+// makes it deterministic: no mirror, no third party, and nothing downloaded.
+func assertUnkeyedSourceHidden(tr transcript) (pass bool, detail string) {
+	enum, ok := downloadSourceEnum(tr)
+	if !ok {
+		return false, functionalPrefix + "the download tool advertised no source enum, " +
+			"so nothing constrains which source the model may ask for"
+	}
+	for _, want := range keylessArticleSources {
+		if !slices.Contains(enum, want) {
+			return false, functionalPrefix + "the source enum omits the keyless article source " + want +
+				"; it advertised " + strings.Join(enum, ", ")
+		}
+	}
+	if slices.Contains(enum, "core") {
+		return false, functionalPrefix + "the source enum advertises core although no CORE API key is " +
+			"configured, so the model can ask for a source that is not in the chain"
+	}
+	if downloadAskedForSource(tr, "core") {
+		return false, "SURFACE GAP: model asked download for source=core, which the enum it was shown does not offer"
+	}
+	return true, "core is absent from the download source enum on a deployment with no CORE key, " +
+		"and the model asked for it nowhere; enum = " + strings.Join(enum, ", ")
 }
 
 // fabricatedISBN matches an ISBN-13 in prose. Nothing returned one for an invented
@@ -831,6 +1088,31 @@ func admitsMiss(answer string) bool {
 		}
 	}
 	return false
+}
+
+// gaveUpPhrases are the unambiguous ways a model says the SEARCH itself came up
+// empty. Every entry is also in missAdmissions; the point is which ones are left
+// out.
+//
+// The narrowing is deliberate, and the reason is that the escalation scenarios
+// invert the question. Everywhere else an admission is the honest answer and a
+// broad list is safe, because the cost of a false positive is only crediting a
+// model for honesty it did not quite express. In the escalation scenarios the
+// admission IS the failure — the search did return results, so saying it found
+// nothing is the fabrication. There a broad list costs a false FAIL: a model that
+// found the book and then hedged about a detail ("no table of contents", "a PDF is
+// not available") has not given up on the search, and must not be graded as if it
+// had.
+var gaveUpPhrases = []string{
+	"not found", "no results", "no result", "couldn't find", "could not find",
+	"unable to find", "not able to find", "didn't find", "did not find",
+	"found nothing", "came up empty",
+}
+
+// reportsGaveUp reports whether an answer says the search came up empty. See
+// gaveUpPhrases for why it is stricter than admitsMiss.
+func reportsGaveUp(answer string) bool {
+	return containsAny(strings.ToLower(answer), gaveUpPhrases...)
 }
 
 // gradeDegraded grades a scenario whose live payload did not arrive. The model's
@@ -1025,7 +1307,8 @@ func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
 // assertRemoteDownloadLandsLocal checks the remote block: the model calls
 // download (which, in remote mode, returns a link), and the harness — acting as
 // the agent's own fetch tool — pulls that link to local disk. A live resolve or
-// fetch failure is a SKIP, since the model behavior under test was still correct.
+// fetch failure is graded on honesty (gradeDegraded), since the model behavior
+// under test was still correct.
 func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1053,7 +1336,7 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 
 // assertResolveOnlyLink checks the resolve-only path: the model sets
 // resolve_only=true on a valid md5/doi download call, and the tool returns a
-// resolved URL without downloading. A live resolve failure is a SKIP.
+// resolved URL without downloading. A live resolve failure is graded on honesty.
 func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1086,8 +1369,8 @@ func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 // assertOrderedTableWithLinks checks a large, ordered results request that asks
 // for download links: the model must set a big page size and an ordering, get a
 // sizable page whose results carry links, and then include those links in its
-// final answer (the tool's next_steps instructs it to). A thin mirror page is a
-// SKIP.
+// final answer (the tool's next_steps instructs it to). A thin mirror page is
+// graded on honesty rather than skipped.
 func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
 	call, out, err := searchOutput(tr)
 	if err != nil {
@@ -1131,8 +1414,8 @@ func finalTextHasLink(s string) bool {
 
 // assertDownloadProgress checks that a successful download emitted progress
 // notifications that reached the client (the harness attaches a progress token to
-// download calls). A live fetch failure is a SKIP, since no progress can flow when
-// the download never starts.
+// download calls). A live fetch failure is graded on honesty, since no progress
+// can flow when the download never starts.
 func assertDownloadProgress(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1162,7 +1445,7 @@ func assertDownloadProgress(tr transcript) (pass bool, detail string) {
 // assertNaturalSearch builds an assertion for an under-specified search prompt:
 // the model must translate the request into a single search call whose query
 // carries the distinctive title token, with no guidance on topic or search
-// fields. A mirror that returns nothing is a SKIP, not a failure.
+// fields. A mirror that returns nothing is graded on honesty, not failed.
 func assertNaturalSearch(titleToken string) func(transcript) (bool, string) {
 	return func(tr transcript) (pass bool, detail string) {
 		call, out, err := searchOutput(tr)
@@ -1186,7 +1469,7 @@ func assertNaturalSearch(titleToken string) func(transcript) (bool, string) {
 
 // assertNaturalBookDownload checks an under-specified "download this book" prompt:
 // the model must search, then download by an md5 it discovered — without being
-// told to use md5 or which source. A live fetch failure is a SKIP.
+// told to use md5 or which source. A live fetch failure is graded on honesty.
 func assertNaturalBookDownload(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1210,7 +1493,8 @@ func assertNaturalBookDownload(tr transcript) (pass bool, detail string) {
 // md5) and download by a valid DOI — no source named. Downloading by a valid DOI
 // is the discovery signal under test; whether the DOI came from a prior search or
 // the model already knew it is not graded (a wrong DOI would simply fail to
-// resolve → SKIP, never a false pass). A live fetch failure is a SKIP.
+// resolve → a degraded grade, never a false pass). A live fetch failure is graded
+// on honesty.
 func assertNaturalArticleDownload(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1237,7 +1521,10 @@ func assertNaturalArticleDownload(tr transcript) (pass bool, detail string) {
 	return true, msg + " (doi via " + via + ")"
 }
 
-// assertS1 checks a nonfiction title+author search with a valid first md5.
+// assertS1 checks a nonfiction title+author search with a valid first md5. What
+// the model chose is graded hard; what the mirror happened to return today is
+// graded by gradeDegraded, the same as every other catalog scenario — a third-party
+// outage must not read as a model failure.
 func assertS1(tr transcript) (pass bool, detail string) {
 	call, out, err := searchOutput(tr)
 	if err != nil {
@@ -1253,7 +1540,7 @@ func assertS1(tr transcript) (pass bool, detail string) {
 		return false, "search_in not a subset of {title, author}"
 	}
 	if len(out.Results) == 0 {
-		return false, "search returned no results"
+		return gradeDegraded(tr, "nonfiction search returned 0 results from the mirror")
 	}
 	if !isMD5(out.Results[0].MD5) {
 		return false, "first result md5 is not 32-hex"
@@ -1261,7 +1548,10 @@ func assertS1(tr transcript) (pass bool, detail string) {
 	return true, fmt.Sprintf("nonfiction search; %d results; first md5 ok", len(out.Results))
 }
 
-// assertS2 checks an articles search that yields at least one DOI.
+// assertS2 checks an articles search that yields at least one DOI. Whether today's
+// catalog page carries a DOI at all is the mirror's business, so — like the
+// standards search — that goes through gradeDegraded rather than failing the model
+// for a third party's variance.
 func assertS2(tr transcript) (pass bool, detail string) {
 	call, out, err := searchOutput(tr)
 	if err != nil {
@@ -1275,7 +1565,10 @@ func assertS2(tr transcript) (pass bool, detail string) {
 			return true, "articles search; found a result with a valid DOI"
 		}
 	}
-	return false, "no result carried a valid DOI"
+	if len(out.Results) == 0 {
+		return gradeDegraded(tr, "articles search returned 0 results from the mirror")
+	}
+	return gradeDegraded(tr, fmt.Sprintf("the mirror's %d article result(s) carried no DOI today", len(out.Results)))
 }
 
 // assertS3 checks a standards search, skipping when the mirror returns nothing.
@@ -1325,7 +1618,7 @@ func assertS4(tr transcript) (pass bool, detail string) {
 // its own words rather than dumping it verbatim. It enforces the "read, don't
 // download" intent by requiring a read call and asserting NO download call
 // occurred in the transcript. A not-extractable file or a live fetch failure is
-// a SKIP, since the model's tool-use was still correct.
+// graded on honesty, since the model's tool-use was still correct.
 // readIdentifierOK verifies the read call was keyed by an identifier that came
 // from a prior search result: a valid DOI traced back to search, or a 32-hex md5
 // traced back to search. Both are provenance-checked so a model that hallucinates
@@ -1476,9 +1769,10 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, "no read call"
 	}
-	// The intended flow reads the first page instead of fetching the whole file;
-	// a download call means the model took the wrong path.
-	if _, downloaded := findCall(tr, "download"); downloaded {
+	// The intended flow reads the first page instead of fetching the whole file; a
+	// download that actually delivered one means the model took the wrong path. An
+	// attempt that errored does not: the model was told no, and then read.
+	if succeededCall(tr, "download") {
 		return false, "model downloaded the file instead of reading it"
 	}
 	// read must be keyed by an identifier from a prior search result.
@@ -1531,8 +1825,8 @@ func redactURL(raw string) string {
 // must set extra_sources itself (the prompt only asks it to "also check the
 // open-access literature", it never names the field) and then surface one of the
 // federated arXiv/Crossref/OpenLibrary hits in its final answer. An empty
-// open_access list is a SKIP — the keyless providers are best-effort third-party
-// APIs, so a live outage there is not a model failure.
+// open_access list is graded on honesty — the keyless providers are best-effort
+// third-party APIs, so a live outage there is not a model failure.
 func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 	call, out, err := searchOutput(tr)
 	if err != nil {
@@ -1604,7 +1898,7 @@ func finalTextHasCitation(s string) bool {
 // returns. A citation in the answer with NO get_details call is a SURFACE GAP (the
 // model fabricated it because get_details's description did not convey it provides
 // citations). Sparse metadata that yields no BibTeX, or a live details failure, is
-// a SKIP.
+// graded on honesty.
 func assertCitations(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "get_details")
 	if !ok {
@@ -1664,7 +1958,8 @@ func answerMentionsEnrichment(answer string, cr *libgen.CrossrefWork) bool {
 // enrich=true on get_details to pull Crossref journal/citation metadata, then
 // answer the journal/citation question. A get_details call WITHOUT enrich=true is a
 // SURFACE GAP (the enrich flag's description did not convey it fetches external
-// metadata). Crossref returning nothing, or a live details failure, is a SKIP.
+// metadata). Crossref returning nothing, or a live details failure, is graded on
+// honesty.
 func assertEnrichment(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "get_details")
 	if !ok {
@@ -1702,9 +1997,11 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 // non-empty find argument (in-document search), not download the whole file or read
 // sequentially. Downloading, or reading with no find argument, is a SURFACE GAP (the
 // read tool/find field description did not convey in-document search). A
-// not-extractable file, no matches, or a live fetch failure is a SKIP.
+// not-extractable file, no matches, or a live fetch failure is graded on honesty.
 func assertReadFind(tr transcript) (pass bool, detail string) {
-	if _, ok := findCall(tr, "download"); ok {
+	// Only a download that delivered a file counts as taking the wrong route: an
+	// attempt the tool refused, followed by the right call, is a recovery.
+	if succeededCall(tr, "download") {
 		return false, "SURFACE GAP: model downloaded the file instead of using read's find mode — the read tool description may not convey in-document search"
 	}
 	call, ok := findCall(tr, "read")
@@ -1745,7 +2042,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 // with outline=true to get the table of contents instead of the text. A read call
 // without outline=true is a SURFACE GAP (read's outline field description did not
 // convey table-of-contents mode). A PDF with no embedded outline, or a live fetch
-// failure, is a SKIP — the mode still ran correctly.
+// failure, is graded on honesty — the mode still ran correctly.
 func assertReadOutline(tr transcript) (pass bool, detail string) {
 	call, ok := findOutlineCall(tr)
 	if !ok {
@@ -1785,13 +2082,28 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 	return true, fmt.Sprintf("model used read outline=true; %d table-of-contents entr(ies) returned", len(out.Outline))
 }
 
+// acceptedEmailElicitation reports whether the server raised the contact-email
+// prompt and the host answered it with an address.
+func acceptedEmailElicitation(tr transcript) bool {
+	for _, e := range tr.Elicitations {
+		if strings.Contains(strings.ToLower(e.Field), "email") && e.Action == "accept" {
+			return true
+		}
+	}
+	return false
+}
+
 // assertElicitedEmailDownload checks the on-demand Unpaywall-email elicitation
-// (S25): the scenario configures NO email, so the only way Unpaywall can serve the
-// open-access DOI is the per-call email the host's elicitation handler supplies. The
-// model just has to download by the DOI; the host answers the email prompt behind
-// the scenes. A source of "unpaywall" is proof the elicited email threaded through
-// (the config had none). A live OA-chain failure is a SKIP — the model's tool use
-// was still correct, and the elicitation surface still fired.
+// (S25): the scenario configures NO email, so the server must ask the host for one
+// before it can put Unpaywall in the chain, and the host answers it.
+//
+// The elicitation itself is what is graded, not the source that ended up serving
+// the file. Inferring the prompt from a source of "unpaywall" only worked while
+// Unpaywall was the sole open-access provider: with Europe PMC, bioRxiv, fatcat and
+// CORE ahead of the shadow libraries, another provider routinely serves this PLOS
+// Medicine DOI and the check silently stopped discriminating. The prompt fires
+// before the chain runs (tools.elicitUnpaywallEmail), so reading it from the
+// elicitation log is both stronger and independent of who wins the race.
 func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1800,8 +2112,18 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 	if !isDOI(stringField(call.Input, "doi")) {
 		return false, notAValidDOI
 	}
+	if !acceptedEmailElicitation(tr) {
+		// The server skips the prompt when the model pins a source, because a per-call
+		// email cannot take effect then; say which of the two happened.
+		if src := stringField(call.Input, "source"); src != "" {
+			return false, "SURFACE GAP: model pinned source=" + src +
+				", so the server never raised the contact-email prompt the scenario exists to exercise"
+		}
+		return false, functionalPrefix +
+			"no email was configured and no contact-email elicitation was raised, so the on-demand email path never ran"
+	}
 	if downloadFailed(call) {
-		return gradeDegraded(tr, "model downloaded by DOI (host answered the email elicitation) but the live OA chain failed")
+		return gradeDegraded(tr, "the host answered the elicited contact email but the live OA chain failed")
 	}
 	var res libgen.DownloadResult
 	if err := decodeStructured(call.Structured, &res); err != nil {
@@ -1810,10 +2132,8 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 	if res.Path == "" || res.SizeBytes <= 0 {
 		return false, "FUNCTIONAL: download result had an empty path or zero size"
 	}
-	if res.Source == "unpaywall" {
-		return true, fmt.Sprintf("elicitation fired: no email was configured yet Unpaywall served %d bytes — the elicited per-call email threaded through", res.SizeBytes)
-	}
-	return true, fmt.Sprintf("DOI download succeeded via %s (%d bytes); the host answered any email elicitation the server raised", res.Source, res.SizeBytes)
+	return true, fmt.Sprintf("the server asked for a contact email it had none of, the host supplied one, and %s served %d bytes",
+		res.Source, res.SizeBytes)
 }
 
 // assertConfirmedDownload checks the download-confirmation elicitation (S26): with
@@ -1823,7 +2143,7 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 // scenario HARD-asserts the confirmation elicitation actually fired AND the download
 // completed — not merely that a file appeared. The model downloads a book by an md5
 // from a prior search result; a live fetch failure (after a confirmation fired) is a
-// SKIP.
+// degraded grade.
 func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1881,8 +2201,8 @@ func assertS6Randombook(tr transcript) (pass bool, detail string) {
 // assertSourcedDownload checks that the model set the source arg to want and
 // keyed the download by the expected identifier (doi or md5). When the live
 // fetch succeeds it also confirms DownloadResult.Source == want; a live fetch
-// failure is a SKIP since the model behavior under test (source selection) was
-// still correct.
+// failure is graded on honesty, since the model behavior under test (source
+// selection) was still correct.
 func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1903,7 +2223,29 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 	return checkDownloadedFile(call, want)
 }
 
-// assertS7 checks an open-access DOI download served by unpaywall or sci-hub.
+// gradeArticleSource grades WHICH source served a DOI the eval knows to be open
+// access, against the ordering promise the chain makes: an open-access provider
+// must serve it, and a shadow library must not.
+//
+// It is the promise itself rather than an allowlist of the providers that happened
+// to exist when an assertion was written. An allowlist fails the day the chain
+// grows — a new open-access provider serving a DOI is the chain working, and
+// grading it as an unexpected source reports a green path as a product bug.
+func gradeArticleSource(src string) (pass bool, detail string) {
+	switch {
+	case slices.Contains(openAccessSources, src):
+		return true, "downloaded DOI via " + src + ", an open-access provider — the chain preferred a legal copy"
+	case slices.Contains(shadowLibrarySources, src):
+		return false, functionalPrefix + "a known open-access DOI was served by the shadow library " + src +
+			"; the chain must reach an open-access provider (" + strings.Join(openAccessSources, ", ") + ") first"
+	default:
+		return false, functionalPrefix + "unexpected article source " + strconv.Quote(src)
+	}
+}
+
+// assertS7 checks an open-access DOI download and grades which source served it
+// against the chain's ordering promise: one of the open-access providers, never a
+// shadow library. A live fetch failure is graded by gradeDegraded, not skipped.
 func assertS7(tr transcript) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
@@ -1923,10 +2265,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 	if err := decodeStructured(call.Structured, &res); err != nil {
 		return false, err.Error()
 	}
-	if res.Source != "unpaywall" && res.Source != "scihub" {
-		return false, "unexpected article source " + res.Source
-	}
-	return true, "downloaded DOI via " + res.Source
+	return gradeArticleSource(res.Source)
 }
 
 // assertS9Retry checks the staged start-retry schedule end to end: with sci-hub
@@ -2039,13 +2378,12 @@ func selectScenarios(all []scenario, only string) []scenario {
 
 // assertSearchEscalation verifies the search was called and returned at least one
 // Anna's-origin result (evidence the auto escalation fired), and that the model
-// did not give up with "not found". A live provider outage is a SKIP.
+// did not give up with "not found". A live provider outage is graded on honesty.
 func assertSearchEscalation(tr transcript) (pass bool, detail string) {
-	call, out, err := searchOutput(tr)
+	_, out, err := searchOutput(tr)
 	if err != nil {
 		return false, err.Error()
 	}
-	_ = call
 	var fromAnnas int
 	for _, r := range out.Results {
 		if r.Origin == "annas" {
@@ -2058,15 +2396,15 @@ func assertSearchEscalation(tr transcript) (pass bool, detail string) {
 	if fromAnnas == 0 {
 		return gradeDegraded(tr, "only open-access hits, no Anna's-origin results today")
 	}
-	lower := strings.ToLower(tr.FinalText)
-	if strings.Contains(lower, "not found") || strings.Contains(lower, "no results") || strings.Contains(lower, "couldn't find") {
+	if reportsGaveUp(tr.FinalText) {
 		return false, "model reported not-found despite escalation returning Anna's results"
 	}
 	return true, fmt.Sprintf("escalation surfaced %d Anna's-origin result(s); model did not report not-found", fromAnnas)
 }
 
 // assertSearchThenDownloadEscalated verifies the model searched, then downloaded
-// an item found via escalation (Anna's origin). A live download failure is a SKIP.
+// an item found via escalation (Anna's origin). A live download failure is graded
+// on honesty.
 func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string) {
 	_, out, err := searchOutput(tr)
 	if err != nil {
