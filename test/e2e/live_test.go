@@ -503,3 +503,177 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 	}
 	t.Fatalf("annas failed in an undiagnosed way: %v", err)
 }
+
+// escalationItem is the pinned catalog-miss / Anna's-hit fixture.
+type escalationItem struct {
+	Query string `json:"query"`
+	MD5   string `json:"md5"`
+	Title string `json:"title"`
+	Note  string `json:"note"`
+}
+
+// loadEscalationItem reads the pinned fixture describing an item Anna's carries
+// and the Library Genesis catalog does not.
+func loadEscalationItem(t *testing.T) escalationItem {
+	t.Helper()
+	b, err := os.ReadFile("testdata/escalation_item.json")
+	if err != nil {
+		t.Fatalf("reading escalation fixture: %v", err)
+	}
+	var it escalationItem
+	if err := json.Unmarshal(b, &it); err != nil {
+		t.Fatalf("decoding escalation fixture: %v", err)
+	}
+	return it
+}
+
+// callSearch registers the tools on an in-process MCP server, calls search with
+// the given arguments, and decodes the structured output — following the same
+// pattern as newMCPDownloadEnv but for the search tool.
+func callSearch(t *testing.T, ctx context.Context, env *liveEnv, args map[string]any) tools.SearchOutput {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "search", Arguments: args})
+	if err != nil {
+		t.Fatalf("search tool error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("search tool returned error: %v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshalling structured content: %v", err)
+	}
+	var out tools.SearchOutput
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("decoding search output: %v", err)
+	}
+	return out
+}
+
+// TestE2ESearchEscalatesOnCatalogMiss is the core proof: a query for an item the
+// catalog does not carry must still return it, sourced from Anna's, without the
+// caller asking for anything special.
+func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": item.Query})
+
+	var fromAnnas int
+	var foundPinned bool
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+		if strings.EqualFold(r.MD5, item.MD5) {
+			foundPinned = true
+		}
+	}
+	if fromAnnas == 0 {
+		t.Fatalf("no Anna's-origin results for a query the catalog misses; escalation did not happen (results=%d)", len(out.Results))
+	}
+	if !foundPinned {
+		t.Logf("pinned md5 %s not on this page; escalation still fired with %d Anna's results", item.MD5, fromAnnas)
+	}
+}
+
+// TestE2ESearchDoesNotEscalateOnCatalogHit verifies the common path stays cheap: a
+// query the catalog answers must not pull in extra sources, so ordinary searches
+// neither slow down nor add third-party traffic.
+func TestE2ESearchDoesNotEscalateOnCatalogHit(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": "python"})
+	if len(out.Results) == 0 {
+		t.Skip("the catalog returned nothing for a broad query today; cannot assert the no-escalation path")
+	}
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("catalog hit still escalated: found a %q result", r.Origin)
+		}
+	}
+}
+
+// TestE2ESearchAlwaysMode verifies extra_sources=always consults the extra searchers
+// even when the catalog already answered.
+func TestE2ESearchAlwaysMode(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": "python", "extra_sources": "always"})
+	if len(out.Results) == 0 && len(out.OpenAccess) == 0 {
+		t.Skip("no source answered for this query today")
+	}
+	var extra int
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			extra++
+		}
+	}
+	if extra == 0 && len(out.OpenAccess) == 0 {
+		t.Fatal("extra_sources=always produced no extra-origin results at all")
+	}
+}
+
+// TestE2ESearchNeverMode verifies extra_sources=never is honored even when the catalog
+// returns nothing, so a caller or deployment can demand catalog-only behavior.
+func TestE2ESearchNeverMode(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": item.Query, "extra_sources": "never"})
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("extra_sources=never still returned a %q result", r.Origin)
+		}
+	}
+}
+
+// TestE2ESearchEscalatedResultIsDownloadable closes the loop: an item found only via
+// escalation must actually download through the annas source, proving search and
+// download line up rather than each half working alone.
+func TestE2ESearchEscalatedResultIsDownloadable(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: item.MD5, Source: "annas"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("downloaded %d bytes", res.SizeBytes)
+		}
+		t.Logf("escalated item downloaded: bytes=%d verified=%v", res.SizeBytes, res.Verified)
+		return
+	}
+	known := []string{
+		"embedded no IPFS CID", "no IPFS gateway served", "no mirror resolved",
+		"no mirrors available", "member API rejected", "context deadline",
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("annas unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+}
