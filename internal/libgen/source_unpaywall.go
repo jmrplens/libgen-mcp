@@ -35,12 +35,61 @@ type unpaywallSource struct {
 	baseURL string
 }
 
-// unpaywallResponse is the subset of the Unpaywall v2 record consulted here.
+// unpaywallResponse is the subset of the Unpaywall v2 record consulted here: the OA
+// flag, Unpaywall's own best location, and the full list of OA locations scanned
+// when the best one carries no direct PDF link.
 type unpaywallResponse struct {
-	IsOA           bool `json:"is_oa"`
-	BestOALocation *struct {
-		URLForPDF string `json:"url_for_pdf"`
-	} `json:"best_oa_location"`
+	IsOA           bool                `json:"is_oa"`
+	BestOALocation *unpaywallLocation  `json:"best_oa_location"`
+	OALocations    []unpaywallLocation `json:"oa_locations"`
+}
+
+// unpaywallLocation is the subset of one Unpaywall OA location read here: a direct
+// PDF link, a landing URL, and the host_type/version used to prefer a
+// published/publisher copy over a repository preprint.
+type unpaywallLocation struct {
+	URLForPDF string `json:"url_for_pdf"`
+	URL       string `json:"url"`
+	HostType  string `json:"host_type"`
+	Version   string `json:"version"`
+}
+
+// isPublished reports whether this location is the published/publisher copy, the
+// version preferred when several OA locations expose a PDF.
+func (loc unpaywallLocation) isPublished() bool {
+	return loc.Version == "publishedVersion" || loc.HostType == "publisher"
+}
+
+// bestPDFURL picks a directly-downloadable PDF from the record: Unpaywall's own best
+// location first, then a published/publisher OA location, then any OA location that
+// exposes a url_for_pdf. It returns "" when no location offers a PDF link.
+func (rec unpaywallResponse) bestPDFURL() string {
+	if rec.BestOALocation != nil && rec.BestOALocation.URLForPDF != "" {
+		return rec.BestOALocation.URLForPDF
+	}
+	var fallback string
+	for i := range rec.OALocations {
+		loc := rec.OALocations[i]
+		if loc.URLForPDF == "" {
+			continue
+		}
+		if loc.isPublished() {
+			return loc.URLForPDF
+		}
+		if fallback == "" {
+			fallback = loc.URLForPDF
+		}
+	}
+	return fallback
+}
+
+// landingURL is the last-resort URL when no location exposes a PDF: the best OA
+// location's landing page, which commonly redirects to the article file.
+func (rec unpaywallResponse) landingURL() string {
+	if rec.BestOALocation != nil {
+		return rec.BestOALocation.URL
+	}
+	return ""
 }
 
 // Name identifies the Unpaywall source.
@@ -107,11 +156,22 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 		return Resolved{}, fmt.Errorf("unpaywall: decoding response for %q: %w", it.DOI, decErr)
 	}
 
-	if !rec.IsOA || rec.BestOALocation == nil || rec.BestOALocation.URLForPDF == "" {
+	// Two distinct diagnoses: a paywalled DOI ("not open access") is a different
+	// outcome from an OA DOI Unpaywall simply exposes no fetchable location for
+	// ("no open-access PDF"). Keeping them separate lets the chain and any log tell
+	// the two apart.
+	if !rec.IsOA {
+		return Resolved{}, fmt.Errorf("unpaywall: %q is not open access", it.DOI)
+	}
+	fileURL := rec.bestPDFURL()
+	if fileURL == "" {
+		fileURL = rec.landingURL()
+	}
+	if fileURL == "" {
 		return Resolved{}, fmt.Errorf("unpaywall: no open-access PDF for %q", it.DOI)
 	}
 	return Resolved{
-		FileURL:   rec.BestOALocation.URLForPDF,
+		FileURL:   fileURL,
 		VerifyMD5: false,
 		Ext:       "pdf",
 	}, nil

@@ -114,9 +114,12 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
 - **`pdf_url` (arxiv always; crossref when a direct PDF link is published)** — a
   directly-fetchable open-access PDF; fetch it yourself (it is not a Library Genesis
   download, so `download`/`read` do not resolve it).
-- **`isbn`/`title` (openlibrary)** — OpenLibrary is a keyless *query resolver*, not a
-  download source: it never carries a `pdf_url` and is never marked `open_access: true`.
-  Use its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`.
+- **`isbn`/`title` (openlibrary)** — OpenLibrary is mainly a keyless *query resolver*: use
+  its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`. The one
+  exception is a publicly readable book — one OpenLibrary reports as freely readable in full
+  on the Internet Archive — which additionally carries an `archive_url` (a
+  `https://archive.org/details/<id>` page you can read directly) and is marked
+  `open_access: true`.
 
 Hits are deduped against each other (by normalized DOI, then by title+year) and against the
 `results` on the same page, so nothing appears twice. All four providers are keyless — no
@@ -219,6 +222,7 @@ at least one is required. Returns the saved path, size, and the source that serv
 | `path`         | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                                                                                                                                                                          |
 | `filename`     | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                                                                                                                                                                |
 | `source`       | string | no       | Restrict the download to a single source: `libgen`/`randombook`/`annas` (books, `md5`) or `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`scihub`/`scidb` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, and `core` only when `LIBGEN_MCP_CORE_KEY` is set. Omit to try every compatible source in order with failover.                                   |
+| `annas_member` | bool   | no       | Opt in to Anna's Archive member (fast) downloads for this book (`md5`). Only meaningful when the server has no `LIBGEN_MCP_ANNAS_KEY` configured: an elicitation-capable client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave `false` to download over IPFS keylessly. Default `false`.                                                   |
 | `resolve_only` | bool   | no       | When `true`, resolve the direct download **URL** and return it as a link (a `resource_link` block plus a `resolved` object) **without** downloading. Use to fetch the file with your own tool. Default `false` (download to disk) on a local server; **always implied `true`** on a remote server (`--http`, or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`), which cannot write to your machine. |
 
 At least one of `md5` or `doi` is required. A malformed `md5` (not 32 hex chars) is
@@ -229,10 +233,14 @@ rejected before any work.
 The download runs through a fixed source chain, filtered by what each item supports:
 
 - **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror
-  discovery), then `annas` (Anna's Archive).
-- **Article** (`doi` only) → the legal open-access providers first — `unpaywall`, `europepmc`,
-  `biorxiv`, `fatcat`, `core` — then the shadow-library fallbacks `scihub` and `scidb`.
-- **Both `md5` and `doi`** → article sources first, then book sources.
+  discovery), then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY`
+  is set).
+- **Article** (`doi` only) → the legal open-access providers first — `unpaywall` (only when
+  `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, otherwise skipped), then `europepmc`, `biorxiv`
+  (`10.1101` preprints), `fatcat`, and `core` (only when `LIBGEN_MCP_CORE_KEY` is set) — then
+  the shadow-library fallbacks `scihub` and `scidb` (Anna's Archive SciDB viewer).
+- **Both `md5` and `doi`** → article sources first, then book sources (`libgen`, `randombook`,
+  `annas`).
 
 The first source that resolves and streams a valid file wins; the `source` field in the
 result names it. See [Architecture](architecture.md) for the full chain.
@@ -282,7 +290,7 @@ link is the only way a remote server can deliver a multi-megabyte file. See
 ### Interactive prompts (elicitation)
 
 When the connected MCP client supports **elicitation** (asking you for input mid-call),
-`download` may pause to ask two things — both purely opt-in, and both no-ops on a client
+`download` may pause to ask up to three things — all purely opt-in, and all no-ops on a client
 that doesn't advertise the capability:
 
 - **Unpaywall email on demand.** If you download an article by `doi` and the server has no
@@ -291,12 +299,18 @@ that doesn't advertise the capability:
   never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an
   empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out
   of the chain and `scihub` is tried instead, exactly as today.
+- **Anna's Archive member key on demand.** If you download a book by `md5` with
+  `annas_member: true` and the server has no `LIBGEN_MCP_ANNAS_KEY` configured, an
+  elicitation-capable client is asked for an account key to use the faster member download
+  tier for *that request only* — it is never stored, and the prompt is skipped when a `source`
+  other than `annas` was pinned. Declining or an empty answer leaves the request unchanged:
+  the `annas` source stays keyless and resolves over IPFS.
 - **Download confirmation.** Before `download` writes a file to the server's disk (i.e. not
   `resolve_only` and not a remote/HTTP server), an elicitation-capable client is asked to
   confirm, showing the destination file name and, best-effort, its size. Declining writes
   nothing and returns the resolved direct link instead, so you can fetch it yourself.
 
-Neither prompt is ever required: elicitation is entirely opt-in and capability-gated. A
+None of these prompts is ever required: elicitation is entirely opt-in and capability-gated. A
 client with no elicitation capability (e.g. a headless or CI client) sees exactly today's
 behavior — no prompt, and no size probe.
 

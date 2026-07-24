@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // openLibraryDocsFixture is a realistic two-doc OpenLibrary search response. Doc A
@@ -52,7 +55,7 @@ func TestOpenLibrary_ResolvesDocs(t *testing.T) {
 	defer srv.Close()
 	setOpenLibraryBase(t, srv.URL)
 
-	got, err := NewOpenLibrary().Search(context.Background(), "go programming", 5)
+	got, err := NewOpenLibrary("").Search(context.Background(), "go programming", 5)
 	if err != nil {
 		t.Fatalf("Search() error = %v, want nil", err)
 	}
@@ -91,6 +94,126 @@ func TestOpenLibrary_ResolvesDocs(t *testing.T) {
 	}
 }
 
+// openLibraryPublicFixture is a two-doc response exercising the availability
+// fields: doc A is a publicly readable book (ebook_access "public", has_fulltext,
+// an ia id), so it must gain a free-to-read archive.org URL and OpenAccess=true;
+// doc B is only borrowable, so it must stay a plain resolver hit (no ArchiveURL,
+// OpenAccess=false).
+const openLibraryPublicFixture = `{
+  "docs": [
+    {
+      "title": "A Public Domain Classic",
+      "author_name": ["Some Author"],
+      "first_publish_year": 1890,
+      "ebook_access": "public",
+      "has_fulltext": true,
+      "ia": ["apublicdomainclassic00auth", "apublicdomainclassic00auth_djvu"],
+      "cover_i": 12345,
+      "key": "/works/OL1W"
+    },
+    {
+      "title": "A Borrowable Book",
+      "author_name": ["Other Author"],
+      "first_publish_year": 2010,
+      "ebook_access": "borrowable",
+      "has_fulltext": true,
+      "ia": ["aborrowablebook00auth"],
+      "key": "/works/OL2W"
+    }
+  ]
+}`
+
+// TestOpenLibrary_PublicBookArchiveURL verifies that a publicly readable book gains
+// a free-to-read archive.org URL and is marked open-access, while a merely
+// borrowable book stays a plain resolver hit.
+func TestOpenLibrary_PublicBookArchiveURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(openLibraryPublicFixture))
+	}))
+	defer srv.Close()
+	setOpenLibraryBase(t, srv.URL)
+
+	got, err := NewOpenLibrary("").Search(context.Background(), "public domain", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("Search() returned %d results, want 2", len(got))
+	}
+	if got[0].ArchiveURL != "https://archive.org/details/apublicdomainclassic00auth" {
+		t.Errorf("public book ArchiveURL = %q, want the archive.org details URL", got[0].ArchiveURL)
+	}
+	if !got[0].OpenAccess {
+		t.Error("public book OpenAccess = false, want true (freely readable)")
+	}
+	if got[1].ArchiveURL != "" {
+		t.Errorf("borrowable book ArchiveURL = %q, want empty (not public)", got[1].ArchiveURL)
+	}
+	if got[1].OpenAccess {
+		t.Error("borrowable book OpenAccess = true, want false")
+	}
+}
+
+// TestOpenLibrary_AvailabilityFieldsRequested verifies the search request asks for
+// the availability projection (ebook_access, has_fulltext, ia, cover_i) so a
+// readable book can be recognized.
+func TestOpenLibrary_AvailabilityFieldsRequested(t *testing.T) {
+	var gotFields string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotFields = r.URL.Query().Get("fields")
+		_, _ = w.Write([]byte(openLibraryDocsFixture))
+	}))
+	defer srv.Close()
+	setOpenLibraryBase(t, srv.URL)
+
+	if _, err := NewOpenLibrary("").Search(context.Background(), "q", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	for _, field := range []string{"ebook_access", "has_fulltext", "ia", "cover_i"} {
+		if !strings.Contains(gotFields, field) {
+			t.Errorf("fields projection %q missing %q", gotFields, field)
+		}
+	}
+}
+
+// TestOpenLibrary_UserAgentEtiquette verifies OpenLibrary etiquette: a configured
+// contact email is advertised in the User-Agent (unlocking the identified rate),
+// while an anonymous provider sends the bare discovery agent with no mailto.
+func TestOpenLibrary_UserAgentEtiquette(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.UserAgent()
+		_, _ = w.Write([]byte(openLibraryDocsFixture))
+	}))
+	defer srv.Close()
+	setOpenLibraryBase(t, srv.URL)
+
+	if _, err := NewOpenLibrary("dev@example.com").Search(context.Background(), "q", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if !strings.Contains(gotUA, "mailto:dev@example.com") {
+		t.Errorf("User-Agent = %q, want it to carry the contact email", gotUA)
+	}
+
+	if _, err := NewOpenLibrary("").Search(context.Background(), "q", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if strings.Contains(gotUA, "mailto:") {
+		t.Errorf("anonymous User-Agent = %q, want no mailto", gotUA)
+	}
+}
+
+// TestOpenLibrary_RateFromEmail verifies the limiter rate follows the etiquette: an
+// identified provider is paced to the 2 rps interval and an anonymous one to 1 rps.
+func TestOpenLibrary_RateFromEmail(t *testing.T) {
+	if got := NewOpenLibrary("dev@example.com").limiter.Limit(); got != rate.Every(openLibraryEmailRate) {
+		t.Errorf("identified limit = %v, want %v (2 rps)", got, rate.Every(openLibraryEmailRate))
+	}
+	if got := NewOpenLibrary("").limiter.Limit(); got != rate.Every(openLibraryAnonRate) {
+		t.Errorf("anonymous limit = %v, want %v (1 rps)", got, rate.Every(openLibraryAnonRate))
+	}
+}
+
 // TestOpenLibrary_FieldsAndLimit verifies that the request carries a fields
 // projection and that the limit is clamped before being sent: a non-positive limit
 // falls back to the default "10" and an over-large limit is clamped to "50", both
@@ -104,7 +227,7 @@ func TestOpenLibrary_FieldsAndLimit(t *testing.T) {
 	defer srv.Close()
 	setOpenLibraryBase(t, srv.URL)
 
-	if _, err := NewOpenLibrary().Search(context.Background(), "q", 0); err != nil {
+	if _, err := NewOpenLibrary("").Search(context.Background(), "q", 0); err != nil {
 		t.Fatalf("Search(limit=0) error = %v", err)
 	}
 	if gotQuery.Get("fields") == "" {
@@ -114,7 +237,7 @@ func TestOpenLibrary_FieldsAndLimit(t *testing.T) {
 		t.Errorf("limit=0 sent limit=%q, want default 10", got)
 	}
 
-	if _, err := NewOpenLibrary().Search(context.Background(), "q", 9999); err != nil {
+	if _, err := NewOpenLibrary("").Search(context.Background(), "q", 9999); err != nil {
 		t.Fatalf("Search(limit=9999) error = %v", err)
 	}
 	if got := gotQuery.Get("limit"); got != "50" {
@@ -132,7 +255,7 @@ func TestOpenLibrary_Non200ReturnsEmpty(t *testing.T) {
 	defer srv.Close()
 	setOpenLibraryBase(t, srv.URL)
 
-	got, err := NewOpenLibrary().Search(context.Background(), "anything", 5)
+	got, err := NewOpenLibrary("").Search(context.Background(), "anything", 5)
 	if err != nil {
 		t.Fatalf("Search() error = %v, want nil on non-200", err)
 	}
@@ -153,7 +276,7 @@ func TestOpenLibrary_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	got, err := NewOpenLibrary().Search(ctx, "go programming", 5)
+	got, err := NewOpenLibrary("").Search(ctx, "go programming", 5)
 	if err == nil {
 		t.Fatalf("Search() error = nil, want a context error")
 	}
@@ -165,7 +288,7 @@ func TestOpenLibrary_ContextCancelled(t *testing.T) {
 // TestOpenLibraryProvider_Name verifies the provider stamps the "openlibrary"
 // origin.
 func TestOpenLibraryProvider_Name(t *testing.T) {
-	if got := NewOpenLibrary().Name(); got != "openlibrary" {
+	if got := NewOpenLibrary("").Name(); got != "openlibrary" {
 		t.Errorf("Name() = %q, want %q", got, "openlibrary")
 	}
 }
@@ -181,7 +304,7 @@ func TestOpenLibrary_TransportErrorReturnsEmpty(t *testing.T) {
 	srv.Close() // close so the address refuses connections
 	setOpenLibraryBase(t, base)
 
-	got, err := NewOpenLibrary().Search(context.Background(), "go programming", 5)
+	got, err := NewOpenLibrary("").Search(context.Background(), "go programming", 5)
 	if err != nil {
 		t.Fatalf("Search() error = %v, want nil on a transport error", err)
 	}
@@ -207,7 +330,7 @@ func TestOpenLibrary_ContextDeadlineDuringRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	got, err := NewOpenLibrary().Search(ctx, "go programming", 5)
+	got, err := NewOpenLibrary("").Search(ctx, "go programming", 5)
 	if err == nil {
 		t.Fatal("Search() error = nil, want a context deadline error")
 	}

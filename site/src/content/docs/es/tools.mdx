@@ -92,7 +92,7 @@ Cada resultado lleva al menos un identificador accionable, según su `origin`:
 
 - **`doi` (crossref)** — pásalo a `download` o `read` igual que un DOI de un resultado de Library Genesis.
 - **`pdf_url` (siempre en arxiv; en crossref cuando hay un enlace directo a PDF publicado)** — un PDF de acceso abierto directamente descargable; obtenlo tú mismo (no es una descarga de Library Genesis, así que `download`/`read` no lo resuelven).
-- **`isbn`/`title` (openlibrary)** — OpenLibrary es un _resolutor de consultas_ sin clave, no una fuente de descarga: nunca lleva `pdf_url` y nunca se marca `open_access: true`. Usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior.
+- **`isbn`/`title` (openlibrary)** — OpenLibrary es principalmente un _resolutor de consultas_ sin clave: usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior. La única excepción es un libro de lectura pública — uno que OpenLibrary indica como libremente legible por completo en Internet Archive — que además lleva un `archive_url` (una página `https://archive.org/details/<id>` que puedes leer directamente) y se marca `open_access: true`.
 
 <Aside type="caution">
 	Los resultados se dedupan entre sí (por DOI normalizado, luego por
@@ -188,6 +188,7 @@ Descarga un archivo a un directorio local. Proporciona `md5` para un libro **o**
 | `path`         | string | no        | Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o `~/Downloads`).                                                                                                                                                                                                                                                                                                                                |
 | `filename`     | string | no        | Nombre de archivo de destino. Por defecto un nombre limpio de los metadatos del registro, si no el que anuncia el mirror, si no el MD5.                                                                                                                                                                                                                                                                        |
 | `source`       | string | no        | Restringe la descarga a una única fuente: `libgen`/`randombook`/`annas` (libros, `md5`) o `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`scihub`/`scidb` (artículos, `doi`). `unpaywall` solo es seleccionable cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está configurado, y `core` solo cuando `LIBGEN_MCP_CORE_KEY` está configurado. Omítelo para probar todas las fuentes compatibles en orden con failover. |
+| `annas_member` | bool   | no        | Activa las descargas de miembro (rápidas) de Anna's Archive para este libro (`md5`). Solo tiene efecto cuando el servidor no tiene `LIBGEN_MCP_ANNAS_KEY` configurado: entonces se pide una a un cliente compatible con elicitation, usada solo para esta petición y nunca almacenada. Requiere una membresía de pago activa; déjalo en `false` para descargar por IPFS sin clave. Por defecto `false`. |
 | `resolve_only` | bool   | no        | Cuando es `true`, resuelve la **URL** de descarga directa y la devuelve como enlace (un bloque `resource_link` más un objeto `resolved`) **sin** descargar. Úsala para obtener el archivo con tu propia herramienta. Por defecto `false` (descarga a disco) en un servidor local; **siempre implícito `true`** en un servidor remoto (`--http`), que no puede escribir en tu máquina.                          |
 
 Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caracteres hex) se rechaza antes de cualquier trabajo.
@@ -241,13 +242,14 @@ Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, *
 
 ### Peticiones interactivas (elicitation)
 
-Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario a mitad de una llamada), `download` puede detenerse a preguntar dos cosas — ambas puramente opt-in, y ambas no-ops en un cliente que no anuncia la capacidad:
+Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario a mitad de una llamada), `download` puede detenerse a preguntar hasta tres cosas — todas puramente opt-in, y todas no-ops en un cliente que no anuncia la capacidad:
 
 - **Email de Unpaywall bajo demanda.** Si descargas un artículo por `doi` y el servidor no tiene configurado `LIBGEN_MCP_UNPAYWALL_EMAIL`, a un cliente compatible con elicitation se le pide un email de contacto para buscar una copia de acceso abierto vía Unpaywall solo para _esa petición_ — nunca se almacena, y la pregunta se omite siempre que se haya fijado explícitamente `source`. Rechazar, dejar la respuesta vacía o dar una dirección inverosímil deja la petición sin cambios: `unpaywall` queda fuera de la cadena y se prueba `scihub` en su lugar, exactamente como hoy.
+- **Clave de miembro de Anna's Archive bajo demanda.** Si descargas un libro por `md5` con `annas_member: true` y el servidor no tiene configurado `LIBGEN_MCP_ANNAS_KEY`, a un cliente compatible con elicitation se le pide una clave de cuenta para usar el nivel de descarga rápida de miembros solo para _esa petición_ — nunca se almacena, y la pregunta se omite cuando se ha fijado un `source` distinto de `annas`. Rechazar o dejar la respuesta vacía deja la petición sin cambios: la fuente `annas` sigue sin clave y resuelve por IPFS.
 - **Confirmación de descarga.** Antes de que `download` escriba un archivo en el disco del servidor (es decir, sin `resolve_only` y sin un servidor remoto/HTTP), a un cliente compatible con elicitation se le pide confirmar, mostrando el nombre del archivo de destino y, de mejor esfuerzo, su tamaño. Rechazar no escribe nada y devuelve en su lugar el enlace directo resuelto, para que puedas obtenerlo tú mismo.
 
 <Aside type="note">
-	Ninguna de las dos peticiones es nunca obligatoria: elicitation es totalmente
+	Ninguna de estas peticiones es nunca obligatoria: elicitation es totalmente
 	opt-in y depende de la capacidad del cliente. Un cliente sin capacidad de
 	elicitation (p. ej. un cliente headless o de CI) ve exactamente el
 	comportamiento actual — sin petición, y sin sondeo de tamaño.

@@ -63,6 +63,11 @@ type Client struct {
 	// tolerate a higher rate, so enrichment must never be starved by (or starve) the
 	// mirror budget.
 	enrichLimiter *rate.Limiter
+	// olLimiter governs the OpenLibrary enrichment hops specifically. OpenLibrary
+	// asks callers to stay within 1 req/s unidentified or up to ~3 req/s with a
+	// contact email (https://openlibrary.org/developers/api), a tighter budget than
+	// Crossref's, so it gets its own limiter rather than sharing enrichLimiter.
+	olLimiter *rate.Limiter
 	// enrichEmail is the contact address advertised to Crossref's polite pool via
 	// the User-Agent mailto. It reuses cfg.UnpaywallEmail and may be empty.
 	enrichEmail string
@@ -217,12 +222,19 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	// non-positive value so the channel never becomes an unbuffered (deadlocking)
 	// zero-capacity semaphore.
 	maxConcurrent := max(cfg.MaxConcurrentDownloads, 1)
+	// OpenLibrary's etiquette grants a higher rate to identified callers; pick the
+	// enrichment OL rate from whether a contact email is configured.
+	olRPS := openLibraryEnrichAnonRPS
+	if strings.TrimSpace(cfg.UnpaywallEmail) != "" {
+		olRPS = openLibraryEnrichRPS
+	}
 	c := &Client{
 		mirrors:          m,
 		http:             &http.Client{Timeout: cfg.Timeout},
 		dl:               &http.Client{},
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		enrichLimiter:    rate.NewLimiter(5, 5),
+		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), openLibraryEnrichBurst),
 		enrichEmail:      cfg.UnpaywallEmail,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
