@@ -1,12 +1,14 @@
 package libgen
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2075,5 +2077,44 @@ func TestPerCallEmailStillEnablesUnpaywallWhenAllowed(t *testing.T) {
 	}
 	if !found {
 		t.Error("a per-call email should enable unpaywall when the deployment allows the source")
+	}
+}
+
+// namedFailingSource fails to resolve and says which source it is, so a test can
+// assert the chain reported the attempt under the right name.
+type namedFailingSource struct{ name string }
+
+func (s namedFailingSource) Name() string     { return s.name }
+func (namedFailingSource) Supports(Item) bool { return true }
+func (s namedFailingSource) Resolve(context.Context, Item) (Resolved, error) {
+	return Resolved{}, errors.New("nothing here")
+}
+
+// TestDownloadLogsEachSourceAttempt verifies the chain says what it tried. Without
+// it a slow or failed download is a black box: the record shows the total duration
+// and nothing about which source spent it, which is the first question anyone asks
+// when a download misbehaves.
+func TestDownloadLogsEachSourceAttempt(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		namedFailingSource{name: "first"},
+		namedFailingSource{name: "second"},
+	}
+	_, _ = c.DownloadItem(context.Background(),
+		Item{MD5: "d64efd386ed7227592499460aca2044b"}, t.TempDir(), "")
+
+	log := buf.String()
+	for _, want := range []string{`"source":"first"`, `"source":"second"`} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the chain never logged an attempt for %s; log=%s", want, log)
+		}
+	}
+	if !strings.Contains(log, "source failed, advancing") {
+		t.Errorf("the chain never logged why it moved on; log=%s", log)
 	}
 }

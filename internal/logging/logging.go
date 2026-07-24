@@ -38,6 +38,22 @@ func Setup(level slog.Level) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 }
 
+// SourceAttempt records one download source's outcome inside the chain.
+//
+// It is Info rather than Debug because it answers the question asked whenever a
+// download misbehaves — which source was tried, why it failed, which one served
+// the file — and that question was previously unanswerable: the log held the
+// mirror requests and the tool call's total duration, and nothing about the
+// decision between them. It is one line per source tried.
+func SourceAttempt(source string, start time.Time, err error) {
+	duration := time.Since(start)
+	if err != nil {
+		slog.Info("source failed, advancing", "source", source, "duration", duration, "error", err)
+		return
+	}
+	slog.Info("source resolved", "source", source, "duration", duration)
+}
+
 // ToolCall records the outcome of an MCP tool execution.
 //
 // It emits an Info-level log when err is nil and an Error-level log otherwise,

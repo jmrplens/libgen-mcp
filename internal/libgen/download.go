@@ -21,6 +21,8 @@ import (
 	"time"
 
 	xhtml "golang.org/x/net/html"
+
+	"github.com/jmrplens/libgen-mcp/internal/logging"
 )
 
 // ProgressFunc reports live download progress: done is the number of bytes
@@ -517,7 +519,9 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		if !src.Supports(item) {
 			continue
 		}
+		started := time.Now()
 		res, err := c.downloadFrom(ctx, src, req)
+		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
 			return res, nil
 		}
