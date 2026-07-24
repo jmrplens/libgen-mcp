@@ -1545,10 +1545,29 @@ func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 	if len(out.OpenAccess) == 0 {
 		return gradeDegraded(tr, "extra_sources was set but no provider returned a hit (live network)")
 	}
-	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
-		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"
+	if finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
+		return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); model referenced one in its answer", len(out.OpenAccess))
 	}
-	return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); model referenced one in its answer", len(out.OpenAccess))
+	// Not citing one is only wrong when the hits were relevant, which nothing here
+	// can decide: a search for a named paper returns open-access hits that are other
+	// papers, and citing those instead of the one that was asked for would be the
+	// worse answer. What is decidable, and what this scenario exists to catch, is
+	// the model calling something open access that never came from the open-access
+	// list — an earlier run put Sci-Hub links under an "Open-Access Papers" heading.
+	if claimsOpenAccess(tr.FinalText) {
+		return false, "model presented results as open access without citing any open_access hit: " +
+			firstChars(tr.FinalText, 160)
+	}
+	return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); the model answered from the catalog "+
+		"without calling it open access", len(out.OpenAccess))
+}
+
+// claimsOpenAccess reports whether an answer describes what it found as open
+// access. It is how a model that substituted catalog results for the open-access
+// ones is told apart from one that simply answered the question it was asked.
+func claimsOpenAccess(answer string) bool {
+	lower := strings.ToLower(answer)
+	return strings.Contains(lower, "open access") || strings.Contains(lower, "open-access")
 }
 
 // finalTextMentionsOpenAccess reports whether the model's final prose references

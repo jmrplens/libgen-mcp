@@ -169,13 +169,13 @@ aguanta.
 | S11 | local | ✅ PASS | unguided search; 25 results; topics=[comics] |
 | S12 | local | ✅ PASS | downloaded 2404614 bytes via libgen |
 | S13 | local | ✅ PASS | downloaded 6460651 bytes via scihub (doi via search) |
-| S14 | local | ✅ PASS | received 16 progress notification(s); final progress=982888 total=982888 |
-| S15 | local | ✅ PASS | ordered page of 100 with links; model surfaced links in its answer |
-| S16 | local | ✅ PASS | resolved a URL via libgen without downloading: https://libgen.li/get.php?(query redacted) |
+| S14 | local | ✅ PASS | received 17 progress notification(s); final progress=982888 total=982888 |
+| S15 | local | ✅ PASS | ordered page of 110 with links; model surfaced links in its answer |
+| S16 | local | ✅ PASS | resolved a URL via libgen without downloading: https://libgen.vg/get.php?(query redacted) |
 | S17 | remote | ✅ PASS | remote: model got a link, harness fetched 982888 bytes to local disk |
 | S18 | remote | ✅ PASS | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (HTTP 403) |
 | S19 | local | ✅ PASS | the file was not extractable (no extractable text layer (likely a scanned or image-only PDF); OCR is not supported); the model reported that plainly instead of inventing a result |
-| S20 | local | ✅ PASS | open-access discovery surfaced 17 hit(s); model referenced one in its answer |
+| S20 | local | ✅ PASS | open-access discovery surfaced 17 hit(s); the model answered from the catalog without calling it open access |
 | S21 | local | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation |
 | S22 | local | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56388; model answered the ask |
 | S23 | local | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage |
@@ -194,9 +194,9 @@ aguanta.
 | S36 | local | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
 | S37 | remote | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
 | S38 | local | ✅ PASS | never mode honored and the model reported the miss honestly |
-| S39 | local | ✅ PASS | always mode consulted the extras alongside a 29-result catalog page (annas=4, open access=28) |
+| S39 | local | ✅ PASS | always mode consulted the extras alongside a 29-result catalog page (annas=4, open access=10) |
 | S40 | local | ✅ PASS | read opened an Anna's-only item (1536 chars extracted) |
-| S41 | local | ✅ PASS | member download reported the account allowance (45 of 50 left) |
+| S41 | local | ✅ PASS | member download reported the account allowance (47 of 50 left) |
 | S42 | local | ✅ PASS | nothing exists by that name and the model said so, inventing no metadata |
 | S43 | local | ✅ PASS | restriction held; the model routed through the permitted source instead of the refused one |
 | S44 | local | ✅ PASS | model set page=2 and received page 2 with 25 results |
