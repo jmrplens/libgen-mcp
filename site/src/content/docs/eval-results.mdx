@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 41 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 42 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -37,7 +37,7 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Forty-one scenarios cover search, details, downloads, source selection, error
+Forty-two scenarios (S1–S41 plus the S6b variant) cover search, details, downloads, source selection, error
 recovery, progress, link resolution, reading and summarizing extracted text,
 open-access discovery, the escalation beyond the Library Genesis catalog, and —
 importantly — **unguided** prompts that give the model no hints, testing whether
@@ -115,70 +115,71 @@ transport, ten scenarios in all.
 
 ## Latest results
 
-The table below is a single live run of the full suite against
-`claude-haiku-4-5` (real Anthropic API, real mirrors, real downloads):
-**37 passed, 1 failed, 3 skipped** (of 41 including the `S6b` variant).
+The table below is a single live run of the full suite against `claude-haiku-4-5`
+(real Anthropic API, real mirrors, real downloads): **42 passed, 0 failed, 0
+skipped** — every scenario, including the 10 that run against a server in remote
+(`--http`) mode.
 
-The three skips are live-data conditions (an HTTP 403, a scanned PDF with no text
-layer, a file whose container the extractor does not support) — never a model or
-server failure. The one failure, S29, is a genuine model-behavior finding rather
-than a server bug: the model did set `extra_sources` and did receive open-access
-hits, but its answer named no identifier from them. It is left red on purpose; a
-harness that measures how well a model uses the tools should not be tuned until
-it agrees with itself.
+A clean sweep is worth reading carefully rather than celebrating. It is the first
+one this suite has produced, and it took removing the two things that were hiding
+trouble: scenarios that skipped on a live-data condition, and assertions that
+graded one arbitrary attempt instead of what the model achieved. A skip that
+recurs is not a passing test, it is an unasked question — and the first one this
+suite stopped skipping turned out to be a model inventing a table of contents for
+a file it could not read.
 
-S41 (the Anna's membership tier) is absent from this table: the harness process
-ended during it, so it has no result to report. An earlier run reached it and
-skipped, the member download having failed live.
+| ID  | Mode   | Result  | Evidence                                                                                                                                                                           |
+| --- | ------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | local  | ✅ PASS | nonfiction search; 25 results; first md5 ok                                                                                                                                        |
+| S2  | local  | ✅ PASS | articles search; found a result with a valid DOI                                                                                                                                   |
+| S3  | local  | ✅ PASS | standards search; 25 results                                                                                                                                                       |
+| S4  | local  | ✅ PASS | get_details returned a File or Edition record                                                                                                                                      |
+| S5  | local  | ✅ PASS | downloaded 982888 bytes via libgen                                                                                                                                                 |
+| S6  | local  | ✅ PASS | downloaded 6460651 bytes via scihub                                                                                                                                                |
+| S6b | local  | ✅ PASS | downloaded 982888 bytes via randombook                                                                                                                                             |
+| S7  | local  | ✅ PASS | downloaded DOI via unpaywall                                                                                                                                                       |
+| S8  | local  | ✅ PASS | model asked to clarify instead of guessing (no tool call)                                                                                                                          |
+| S9  | local  | ✅ PASS | start-retries exhausted; actionable error surfaced and the model did not fabricate success                                                                                         |
+| S10 | local  | ✅ PASS | unguided search; 25 results; topics=[fiction]                                                                                                                                      |
+| S11 | local  | ✅ PASS | unguided search; 25 results; topics=[comics]                                                                                                                                       |
+| S12 | local  | ✅ PASS | downloaded 2404614 bytes via randombook                                                                                                                                            |
+| S13 | local  | ✅ PASS | downloaded 6460651 bytes via scihub (doi via search)                                                                                                                               |
+| S14 | local  | ✅ PASS | received 16 progress notification(s); final progress=982888 total=982888                                                                                                           |
+| S15 | local  | ✅ PASS | ordered page of 100 with links; model surfaced links in its answer                                                                                                                 |
+| S16 | local  | ✅ PASS | resolved a URL via libgen without downloading: https://libgen.vg/get.php?md5=d48739b6ac9e01d70dda1de46805d797&key=SRGLGQVEO04AFVEQ                                                 |
+| S17 | remote | ✅ PASS | remote: model got a link, harness fetched 982888 bytes to local disk                                                                                                               |
+| S18 | remote | ✅ PASS | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (HTTP 403)                                                                       |
+| S19 | local  | ✅ PASS | the file was not extractable (no extractable text layer (likely a scanned or image-only PDF); OCR is not supported); the model reported that plainly instead of inventing a result |
+| S20 | local  | ✅ PASS | open-access discovery surfaced 27 hit(s); model referenced one in its answer                                                                                                       |
+| S21 | local  | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                                                                      |
+| S22 | local  | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56388; model answered the ask                                                                                             |
+| S23 | local  | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                                                            |
+| S24 | local  | ✅ PASS | model used read outline=true; 221 table-of-contents entr(ies) returned                                                                                                             |
+| S25 | local  | ✅ PASS | DOI download succeeded via scihub (255629 bytes); the host answered any email elicitation the server raised                                                                        |
+| S26 | local  | ✅ PASS | save-confirmation elicitation fired 1x and the host accepted it; downloaded 4366258 bytes via libgen — confirmation did not block the flow                                         |
+| S27 | remote | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                                                            |
+| S28 | remote | ✅ PASS | no embedded table of contents; the model read the document and compiled one from its text                                                                                          |
+| S29 | remote | ✅ PASS | open-access discovery surfaced 30 hit(s); model referenced one in its answer                                                                                                       |
+| S30 | remote | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56388; model answered the ask                                                                                             |
+| S31 | remote | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                                                                      |
+| S32 | local  | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                                                                     |
+| S33 | remote | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                                                                     |
+| S34 | local  | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                                                              |
+| S35 | remote | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                                                              |
+| S36 | local  | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                                                            |
+| S37 | remote | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                                                            |
+| S38 | local  | ✅ PASS | never mode honored and the model reported the miss honestly                                                                                                                        |
+| S39 | local  | ✅ PASS | always mode consulted the extras alongside a 29-result catalog page (annas=4, open access=28)                                                                                      |
+| S40 | local  | ✅ PASS | read opened an Anna's-only item (1536 chars extracted)                                                                                                                             |
+| S41 | local  | ✅ PASS | member download reported the account allowance (45 of 50 left)                                                                                                                     |
 
-| ID  | Mode   | Result  | Evidence                                                                                                                                   |
-| --- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| S1  | local  | ✅ PASS | nonfiction search; 25 results; first md5 ok                                                                                                |
-| S2  | local  | ✅ PASS | articles search; found a result with a valid DOI                                                                                           |
-| S3  | local  | ✅ PASS | standards search; 25 results                                                                                                               |
-| S4  | local  | ✅ PASS | get_details returned a File or Edition record                                                                                              |
-| S5  | local  | ✅ PASS | downloaded 982888 bytes via libgen                                                                                                         |
-| S6  | local  | ✅ PASS | downloaded 6460651 bytes via scihub                                                                                                        |
-| S6b | local  | ✅ PASS | downloaded 982888 bytes via randombook                                                                                                     |
-| S7  | local  | ✅ PASS | downloaded DOI via unpaywall                                                                                                               |
-| S8  | local  | ✅ PASS | model asked to clarify instead of guessing (no tool call)                                                                                  |
-| S9  | local  | ✅ PASS | start-retries exhausted; actionable error surfaced and the model did not fabricate success                                                 |
-| S10 | local  | ✅ PASS | unguided search; 25 results; topics=[fiction]                                                                                              |
-| S11 | local  | ✅ PASS | unguided search; 25 results; topics=[comics]                                                                                               |
-| S12 | local  | ✅ PASS | downloaded 2404614 bytes via libgen                                                                                                        |
-| S13 | local  | ✅ PASS | downloaded 6460651 bytes via scihub (doi via search)                                                                                       |
-| S14 | local  | ✅ PASS | received 17 progress notification(s); final progress=982888 total=982888                                                                   |
-| S15 | local  | ✅ PASS | ordered page of 100 with links; model surfaced links in its answer                                                                         |
-| S16 | local  | ✅ PASS | resolved a URL via libgen without downloading: https://libgen.li/get.php?md5=d48739b6ac9e01d70dda1de46805d797&key=31DC7693OX1RHBWO         |
-| S17 | remote | ✅ PASS | remote: model got a link, harness fetched 982888 bytes to local disk                                                                       |
-| S18 | remote | ⏭️ SKIP | resolved a link but the live fetch failed: HTTP 403                                                                                        |
-| S19 | local  | ⏭️ SKIP | file was not extractable (no extractable text layer (likely a scanned or image-only PDF); OCR is not supported)                            |
-| S20 | local  | ✅ PASS | open-access discovery surfaced 27 hit(s); model referenced one in its answer                                                               |
-| S21 | local  | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                              |
-| S22 | local  | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56384; model answered the ask                                                     |
-| S23 | local  | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                    |
-| S24 | local  | ✅ PASS | model used read outline=true; 221 table-of-contents entr(ies) returned                                                                     |
-| S25 | local  | ✅ PASS | DOI download succeeded via scihub (255629 bytes); the host answered any email elicitation the server raised                                |
-| S26 | local  | ✅ PASS | save-confirmation elicitation fired 1x and the host accepted it; downloaded 4366258 bytes via libgen — confirmation did not block the flow |
-| S27 | remote | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                    |
-| S28 | remote | ⏭️ SKIP | file was not extractable (unsupported file extension )                                                                                     |
-| S29 | remote | ❌ FAIL | model did not reference any open-access hit (origin, doi, or pdf_url) in its answer                                                        |
-| S30 | remote | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56384; model answered the ask                                                     |
-| S31 | remote | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                              |
-| S32 | local  | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                             |
-| S33 | remote | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                             |
-| S34 | local  | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                      |
-| S35 | remote | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                      |
-| S36 | local  | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                    |
-| S37 | remote | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                    |
-| S38 | local  | ✅ PASS | never mode honored and the model reported the miss honestly                                                                                |
-| S39 | local  | ✅ PASS | always mode consulted the extras alongside a 29-result catalog page (annas=4, open access=28)                                              |
-| S40 | local  | ✅ PASS | read opened an Anna's-only item (1536 chars extracted)                                                                                     |
-
-Skips are expected and healthy: the harness treats a live-mirror or live-data
-condition (a 403, a 404, a scanned-only PDF, an unsupported container) as a
-SKIP, so a transient upstream problem never masquerades as a model or server
-bug.
+A live-data condition — a 403, a scanned-only PDF, a mirror that will not serve
+the harness — no longer skips a scenario. The model's behavior is still fully
+observable when the payload does not arrive, and the only wrong move left to it is
+claiming a result it never received, so those runs are graded on whether the answer
+says plainly that nothing came back. SKIP is reserved for the two cases with
+genuinely nothing to grade: a capability the deployment has not configured, and a
+model that ran out of turns before answering.
 
 ## Running it yourself
 
