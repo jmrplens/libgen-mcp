@@ -92,12 +92,20 @@ func regradeOne(sc scenario, rec scenarioRecord) outcome {
 // transcriptFromRecord rebuilds the transcript an assertion grades. The tool
 // results are reconstructed rather than replayed: an assertion reads a call's
 // error flag, its text and its structured output, and the record holds all three.
+//
+// Every field a live transcript carries is restored, including the ones no
+// assertion reads yet. A field left nil here does not fail loudly — it regrades as
+// an empty slice, so the first assertion to read it would silently agree with
+// whatever an empty surface implies. The tool surface (Tools) is the one that
+// matters most: it is what a scenario grading the download tool's source enum
+// reads, and an empty slice would make that scenario pass for the wrong reason.
 func transcriptFromRecord(rec scenarioRecord) transcript {
 	tr := transcript{
 		FinalText:    rec.FinalAnswer,
 		Fetched:      rec.Fetched,
 		Turns:        rec.Turns,
 		Elicitations: rec.Elicitations,
+		Tools:        rec.ToolsOffered,
 	}
 	for _, c := range rec.Calls {
 		tr.Calls = append(tr.Calls, toolCall{
@@ -107,6 +115,11 @@ func transcriptFromRecord(rec scenarioRecord) transcript {
 			Result: &mcp.CallToolResult{
 				IsError: c.IsError,
 				Content: []mcp.Content{&mcp.TextContent{Text: c.Text}},
+				// resultText prefers the structured payload over the text content, so
+				// leaving this nil made a re-graded result read differently from the live
+				// one it was recorded from — the exact divergence --regrade exists to rule
+				// out.
+				StructuredContent: c.Structured,
 			},
 			ServerLogs: c.ServerLogs,
 		})

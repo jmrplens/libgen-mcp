@@ -22,9 +22,10 @@ search pages, real details lookups, real downloads.
 
 The Anthropic side is a raw `net/http` Messages API client (no SDK): model
 `claude-haiku-4-5-20251001`, temperature 0, `tool_choice: auto`. The tool-use
-loop runs up to 4 turns per scenario: send the prompt + tool defs, execute each
-`tool_use` block, feed `tool_result` blocks back, and stop when the model
-answers (or asks to clarify) without a tool call.
+loop runs up to 6 turns per scenario (`maxTurns` in `loop.go`) under a per-scenario
+wall-clock budget (`--scenario-timeout`, 6 minutes by default): send the prompt +
+tool defs, execute each `tool_use` block, feed `tool_result` blocks back, and stop
+when the model answers (or asks to clarify) without a tool call.
 
 Assertions check the **tool name, the argument JSON shape, and that the real MCP
 response is non-empty / well-formed** — never exact catalog content, which drifts.
@@ -78,6 +79,11 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway |
 | S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds |
 | S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory |
+| S45 | **Europe PMC** — asks for an open-access DOI "from Europe PMC" with Unpaywall forced off, so the model must map the provider's prose name onto `source:"europepmc"` and that source must serve the bytes |
+| S46 | **bioRxiv** — a real `10.1101` preprint with no source named and Unpaywall off: Europe PMC indexes the DOI without an open-access full text, so bioRxiv claiming the preprint prefix is the only route the file can arrive by, and the serving source proves the prefix gate routes instead of falling through |
+| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the Internet Archive Scholar API is unreachable from some networks, so an upstream that does not answer is graded on the model saying so |
+| S48 | **An unkeyed source stays off the surface** — the CORE API key is forced empty, so `core` must be absent from `download`'s `source` enum and the model must not ask for it. Grades the tool surface itself, so it touches no third party and downloads nothing |
+| S49 | **Chain ordering** — an open-access DOI with no source named and Unpaywall off: one of the open-access providers must serve it and a shadow library must not, which is the promise the chain order makes and nothing else tested |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -105,6 +111,22 @@ before answering.
 `LIBGEN_MCP_UNPAYWALL_EMAIL` is set (its API rejects requests without one), so it
 is also hidden from the download tool's `source` schema when unset. S7 sets the
 email via its per-scenario environment to exercise the open-access path.
+
+**The article chain is ordered, and S45–S49 test the order.** Articles resolve
+through `unpaywall → europepmc → biorxiv → fatcat → core → scihub → scidb`
+(`config.KnownSources`): the legal open-access providers lead, the shadow libraries
+are the fallback. S45–S47 each pin one of the new providers by name; S46 and S49
+pin nothing and grade which source the chain reached, which is the only way the
+ordering itself gets tested. All four force `LIBGEN_MCP_UNPAYWALL_EMAIL` empty so
+Unpaywall cannot answer first and hide the source under test.
+
+Two of the sources are gated on a credential and behave differently for it:
+`unpaywall` on the contact email above, and `core` on `LIBGEN_MCP_CORE_KEY`. S48
+forces the CORE key empty for its own run — an operator's `.env` may well hold one,
+and a check that only holds on machines lacking the credential is not a check — and
+then asserts `core` is absent from the download tool's `source` enum, since the enum
+is the only thing that stops a model asking for a source that cannot run. S48 reads
+the tool surface out of the transcript and calls nothing live.
 
 S9 exercises the download **start-retry** path deterministically without needing
 a flaky live failure: it enables only `scihub`, points `LIBGEN_MCP_SCIHUB_HOSTS`
@@ -225,13 +247,18 @@ appearing on the Spanish page in English; add it to `scenariosES` in
 
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
-- **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall, and
-  Sci-Hub. These are flaky and rate-limited; results vary run to run. Download
-  scenarios that correctly select the tool/source but fail on a dead mirror are
-  reported as **SKIP**, not FAIL.
-- **S32–S35 depend on a pinned fixture** (`test/e2e/testdata/escalation_item.json`):
-  an item Anna's carries and the Library Genesis catalog does not. If the catalog
-  later absorbs it, re-pin with the commands in `plan/2026-07-24-extra-search-sources.md`.
+- **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall,
+  Europe PMC, bioRxiv, fatcat, and Sci-Hub. These are flaky and rate-limited; results
+  vary run to run. A download scenario that selected the tool and source correctly
+  but fell on a dead mirror is **not** a SKIP: it is graded by `gradeDegraded` on
+  whether the answer owns the miss, and passes or fails on that. See the
+  degraded-runs section above for why.
+- **S32–S38, S40 and S41 depend on a pinned fixture**
+  (`test/e2e/testdata/escalation_item.json`): an item Anna's carries and the Library
+  Genesis catalog does not. If the catalog later absorbs it, every one of them
+  changes meaning — the escalation ones stop proving escalation and S38 stops being a
+  catalog miss — so re-pin with the commands in
+  `plan/2026-07-24-extra-search-sources.md`.
 - **It downloads files**: into an `os.MkdirTemp` directory (removed on exit
   unless `--keep-downloads`). Downloads are capped at 25 MiB
   (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`) and confined to that temp dir
