@@ -518,6 +518,32 @@ func scenarios() []scenario {
 			Remote: true,
 			Assert: assertCitations,
 		},
+		// S32-S35 cover the extra-sources escalation: the model searches for a title
+		// the Library Genesis catalog does not carry, and must still find it because
+		// the search escalates to Anna's Archive automatically. The pinned fixture
+		// (test/e2e/testdata/escalation_item.json) defines the query and md5.
+		{
+			ID:     "S32",
+			Prompt: `Find the book "Buku Praktis Bahasa Indonesia Jilid 2" and tell me its file format and size.`,
+			Assert: assertSearchEscalation,
+		},
+		{
+			ID:     "S33",
+			Prompt: `Find the book "Buku Praktis Bahasa Indonesia Jilid 2" and tell me its file format and size.`,
+			Remote: true,
+			Assert: assertSearchEscalation,
+		},
+		{
+			ID:     "S34",
+			Prompt: `Find and download the book "Buku Praktis Bahasa Indonesia Jilid 2".`,
+			Assert: assertSearchThenDownloadEscalated,
+		},
+		{
+			ID:     "S35",
+			Prompt: `Find and download the book "Buku Praktis Bahasa Indonesia Jilid 2".`,
+			Remote: true,
+			Assert: assertSearchThenDownloadEscalated,
+		},
 	}
 }
 
@@ -1416,4 +1442,67 @@ func selectScenarios(all []scenario, only string) []scenario {
 		}
 	}
 	return out
+}
+
+// assertSearchEscalation verifies the search was called and returned at least one
+// Anna's-origin result (evidence the auto escalation fired), and that the model
+// did not give up with "not found". A live provider outage is a SKIP.
+func assertSearchEscalation(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	_ = call
+	var fromAnnas int
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+	}
+	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
+		return true, skipPrefix + " escalation produced no extra-origin results (live network)"
+	}
+	if fromAnnas == 0 {
+		return true, skipPrefix + " only open-access hits, no Anna's-origin results today"
+	}
+	lower := strings.ToLower(tr.FinalText)
+	if strings.Contains(lower, "not found") || strings.Contains(lower, "no results") || strings.Contains(lower, "couldn't find") {
+		return false, "model reported not-found despite escalation returning Anna's results"
+	}
+	return true, fmt.Sprintf("escalation surfaced %d Anna's-origin result(s); model did not report not-found", fromAnnas)
+}
+
+// assertSearchThenDownloadEscalated verifies the model searched, then downloaded
+// an item found via escalation (Anna's origin). A live download failure is a SKIP.
+func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	var annasMD5s []string
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.MD5 != "" {
+			annasMD5s = append(annasMD5s, strings.ToLower(r.MD5))
+		}
+	}
+	if len(annasMD5s) == 0 {
+		return true, skipPrefix + " no Anna's-origin result to download (live network)"
+	}
+	dlCall, ok := findCall(tr, "download")
+	if !ok {
+		return false, "model searched but did not call download"
+	}
+	dlMD5, _ := dlCall.Input["md5"].(string)
+	dlMD5 = strings.ToLower(strings.TrimSpace(dlMD5))
+	if dlMD5 == "" {
+		return false, "download call has no md5"
+	}
+	found := slices.Contains(annasMD5s, dlMD5)
+	if !found {
+		return true, skipPrefix + " model downloaded an md5 not from an Anna's-origin result"
+	}
+	if dlCall.Result != nil && dlCall.Result.IsError {
+		return true, skipPrefix + " download call returned a tool error (live network)"
+	}
+	return true, fmt.Sprintf("model searched, found an Anna's-origin item, and downloaded it (md5=%s)", dlMD5)
 }

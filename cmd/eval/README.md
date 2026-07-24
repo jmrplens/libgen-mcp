@@ -116,10 +116,13 @@ the temp dir), `--results-doc <path>` (write a markdown results table).
 
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
-- **It hits third parties**: real Library Genesis mirrors, Unpaywall, and
+- **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall, and
   Sci-Hub. These are flaky and rate-limited; results vary run to run. Download
   scenarios that correctly select the tool/source but fail on a dead mirror are
   reported as **SKIP**, not FAIL.
+- **S32–S35 depend on a pinned fixture** (`test/e2e/testdata/escalation_item.json`):
+  an item Anna's carries and the Library Genesis catalog does not. If the catalog
+  later absorbs it, re-pin with the commands in `plan/2026-07-24-extra-search-sources.md`.
 - **It downloads files**: into an `os.MkdirTemp` directory (removed on exit
   unless `--keep-downloads`). Downloads are capped at 25 MiB
   (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`) and confined to that temp dir
