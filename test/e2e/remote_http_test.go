@@ -209,8 +209,10 @@ func TestE2EHTTPRemoteSearchEscalates(t *testing.T) {
 
 	_, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "search",
-		Arguments: map[string]any{"query": item.Query},
+		Name: "search",
+		// auto is explicit: the deployment default is configurable, so an omitted
+		// argument could quietly exercise always or never instead.
+		Arguments: map[string]any{"query": item.Query, "extra_sources": "auto"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool(search) over HTTP error: %v", err)

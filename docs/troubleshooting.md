@@ -108,7 +108,8 @@ keylessly, and this is expected rather than a fault.
 - Search again with different terms; another edition of the same work may be in the catalog,
   which downloads through the ordinary sources.
 - Call `get_details` on the md5 anyway. It falls back to Anna's record, so you still get the
-  title, author, year, language and ISBNs even when the bytes are out of reach — enough to
+  title, author, year and language even when the bytes are out of reach — plus ISBNs when
+  that record carries them, which a minority do — enough to
   find the item elsewhere.
 
 A gateway that is merely slow reports a timeout instead; retrying later often succeeds, since

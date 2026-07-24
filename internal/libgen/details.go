@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 )
 
 // decodeObjects interprets the json.php response (map of id → object).
@@ -81,11 +83,12 @@ func (c *Client) DetailsByDOI(ctx context.Context, doi string) (edition, file ma
 	if len(objs) == 0 {
 		return nil, nil, fmt.Errorf("the Library Genesis catalog has no record for DOI %s", doi)
 	}
-	for id, e := range objs {
-		e["edition_id"] = id
-		edition = e
-		break
-	}
+	// Go randomizes map iteration, so picking "the first" entry would vary between
+	// identical calls. Order by id so a DOI that resolves to more than one edition
+	// answers the same way every time.
+	ids := slices.Sorted(maps.Keys(objs))
+	edition = objs[ids[0]]
+	edition["edition_id"] = ids[0]
 	return edition, firstEditionFile(edition), nil
 }
 
@@ -96,8 +99,10 @@ func firstEditionFile(edition map[string]any) map[string]any {
 	if !ok {
 		return nil
 	}
-	for _, f := range files {
-		if fm, isMap := f.(map[string]any); isMap {
+	// Ordered for the same reason as the edition: an edition with several files must
+	// hand back the same md5 on every call.
+	for _, id := range slices.Sorted(maps.Keys(files)) {
+		if fm, isMap := files[id].(map[string]any); isMap {
 			return fm
 		}
 	}

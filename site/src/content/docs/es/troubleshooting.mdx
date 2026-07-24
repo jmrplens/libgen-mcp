@@ -119,7 +119,7 @@ Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los c
 
 - Poner en `LIBGEN_MCP_ANNAS_KEY` una clave de membresía de Anna's Archive. La API de descarga rápida de socio sirve ítems sin dirección IPFS, y la ruta IPFS sin clave se mantiene como respaldo. Ver [Configuración](/libgen-mcp/es/configuration/).
 - Buscar de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, y esa sí se descarga por las fuentes ordinarias.
-- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año, idioma e ISBN aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
+- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año e idioma — más el ISBN cuando ese registro lo lleva, que es una minoría — aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
 
 Una pasarela que solo va lenta devuelve un timeout en su lugar; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían mucho en lo que tardan en localizar un ítem.
 

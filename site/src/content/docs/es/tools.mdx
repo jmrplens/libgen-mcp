@@ -123,9 +123,9 @@ Metadatos completos de un registro vía la API JSON de LibGen — descripción, 
 | `enrich`  | bool   | no        | Cuando es `true`, aumenta el registro con metadatos sin clave de Crossref (por DOI) y OpenLibrary (por ISBN). Best-effort y desactivado por defecto.                            |
 
 <Aside>
-	Proporciona exactamente uno de `md5` o `id`. Aportar ambos, ninguno, un `md5`
-	que no sea de 32 caracteres hex, o un `object` distinto de `edition`/`file`
-	devuelve un error de entrada.
+	Proporciona exactamente uno de `md5`, `id` o `doi`. Aportar varios, ninguno,
+	un `md5` que no sea de 32 caracteres hex, o un `object` distinto de
+	`edition`/`file` devuelve un error de entrada.
 </Aside>
 
 ### salida de get_details

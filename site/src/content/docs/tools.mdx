@@ -122,9 +122,9 @@ Full metadata for a record via the LibGen JSON API — description, identifiers,
 | `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                            |
 
 <Aside type="note">
-	Provide exactly one of `md5` or `id` — never both. Supplying both, neither, an
-	`md5` that is not 32 hex chars, or an `object` other than `edition`/`file`
-	returns an input error.
+	Provide exactly one of `md5`, `id` or `doi` — never more than one. Supplying
+	several, none, an `md5` that is not 32 hex chars, or an `object` other than
+	`edition`/`file` returns an input error.
 </Aside>
 
 ### get_details output

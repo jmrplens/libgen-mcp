@@ -490,19 +490,7 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 		t.Logf("annas served a real download: md5=%s bytes=%d verified=%v", md5, res.SizeBytes, res.Verified)
 		return
 	}
-	known := []string{
-		"embedded no IPFS CID",   // item not pinned to IPFS
-		"no IPFS gateway served", // every gateway down or lacking the block
-		"no mirror resolved",     // every Anna's mirror down
-		"no mirrors available",   // discovery yielded nothing
-		"member API rejected",    // key absent or expired AND IPFS also failed
-		"context deadline",       // IPFS retrieval is legitimately slow
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("annas unavailable in a known way: %v", err)
-		}
-	}
+	skipIfAnnasUnavailable(t, err)
 	t.Fatalf("annas failed in an undiagnosed way: %v", err)
 }
 
@@ -779,8 +767,12 @@ func TestE2EExtensionlessFileStillReads(t *testing.T) {
 func skipIfAnnasUnavailable(t *testing.T, err error) {
 	t.Helper()
 	known := []string{
-		"embedded no IPFS CID", "no IPFS gateway served", "no mirror resolved",
-		"no mirrors available", "member API rejected", "context deadline",
+		"embedded no IPFS CID",   // item not pinned to IPFS
+		"no IPFS gateway served", // every gateway down or lacking the block
+		"no mirror resolved",     // every Anna's mirror down
+		"no mirrors available",   // discovery yielded nothing
+		"member API rejected",    // key absent or expired AND IPFS also failed
+		"context deadline",       // IPFS retrieval is legitimately slow
 	}
 	for _, k := range known {
 		if strings.Contains(err.Error(), k) {
@@ -856,14 +848,6 @@ func TestE2ESearchEscalatedResultIsDownloadable(t *testing.T) {
 		t.Logf("escalated item downloaded: bytes=%d verified=%v", res.SizeBytes, res.Verified)
 		return
 	}
-	known := []string{
-		"embedded no IPFS CID", "no IPFS gateway served", "no mirror resolved",
-		"no mirrors available", "member API rejected", "context deadline",
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("annas unavailable in a known way: %v", err)
-		}
-	}
+	skipIfAnnasUnavailable(t, err)
 	t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
 }
