@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -584,6 +585,19 @@ func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	if !foundPinned {
 		t.Fatalf("pinned md5 %s absent from %d Anna's results for its own title; re-pin the fixture", item.MD5, fromAnnas)
 	}
+	// The format and size are parsed out of the card's descriptor line, which only a
+	// live check can prove still exists: the pinned fixture would keep passing for as
+	// long as it sat there, however far the real page had moved on.
+	var described int
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.Extension != "" && r.Size != "" {
+			described++
+		}
+	}
+	if described == 0 {
+		t.Errorf("none of the %d Anna's results carried a format and size; the card layout may have changed", fromAnnas)
+	}
+	t.Logf("escalated: %d Anna's results, %d describing their file", fromAnnas, described)
 }
 
 // TestE2ESearchDoesNotEscalateOnCatalogHit verifies the common path stays cheap: a
@@ -711,6 +725,89 @@ func TestE2EReadEscalatedItem(t *testing.T) {
 		t.Fatal("escalated item reported extractable but yielded no text")
 	}
 	t.Logf("read %d characters from an item the catalog does not carry", len(out.Text))
+}
+
+// TestE2EAnnasFallbackEnrichesByISBN verifies the fallback record reaches the same
+// keyless metadata a catalog record would. The pinned item carries an ISBN, which
+// a minority of Anna's records do, so this is the case worth proving live: the
+// enrichment path looked for an ISBN only on an edition, and a fallback returns a
+// file with no edition at all.
+func TestE2EAnnasFallbackEnrichesByISBN(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "get_details", Arguments: map[string]any{"md5": item.MD5, "enrich": true},
+	})
+	if err != nil || res.IsError {
+		t.Fatalf("get_details on the escalated md5 failed: err=%v content=%v", err, res)
+	}
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatalf("marshaling structured content: %v", merr)
+	}
+	var out tools.DetailsOutput
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatalf("decoding details output: %v", uerr)
+	}
+	if got, _ := out.File["origin"].(string); got != "annas" {
+		t.Fatalf("file.origin = %q, want annas", got)
+	}
+	isbn, _ := out.File["isbn"].(string)
+	if isbn == "" {
+		t.Fatal("the pinned record no longer publishes an ISBN; re-pin it or drop this check")
+	}
+	if out.Enrichment != nil && out.Enrichment.OpenLibrary != nil {
+		t.Logf("enriched the fallback record by its ISBN %s", isbn)
+		return
+	}
+	// Empty enrichment is only acceptable because OpenLibrary has nothing for this
+	// ISBN, which the test verifies itself rather than assuming. Skipping here would
+	// let a real regression — the ISBN never reaching the lookup — pass unnoticed for
+	// as long as the upstream happened to be missing the book.
+	if openLibraryKnows(t, ctx, isbn) {
+		t.Errorf("OpenLibrary has a record for ISBN %s, but no enrichment came back: %+v", isbn, out.Enrichment)
+	}
+	t.Logf("OpenLibrary has no record for ISBN %s, so there was nothing to enrich by", isbn)
+}
+
+// openLibraryKnows reports whether OpenLibrary holds a record for an ISBN, so a
+// missing enrichment can be attributed to the upstream rather than assumed.
+func openLibraryKnows(t *testing.T, ctx context.Context, isbn string) bool {
+	t.Helper()
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, isbn)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://openlibrary.org/isbn/"+digits+".json", http.NoBody)
+	if err != nil {
+		t.Fatalf("building the OpenLibrary probe: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Logf("could not reach OpenLibrary to check: %v", err)
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode == http.StatusOK
 }
 
 // TestE2EGetDetailsByDOI verifies a DOI resolves exactly, and to something

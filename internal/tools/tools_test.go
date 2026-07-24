@@ -217,7 +217,7 @@ func TestSearchNextSteps(t *testing.T) {
 	withResults := searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", DOI: "10.1/x"}},
 		Page:    1,
-	})
+	}, false)
 	joined := strings.Join(withResults, "\n")
 	if !strings.Contains(joined, "get_details") || !strings.Contains(joined, "download") {
 		t.Errorf("next_steps should mention get_details and download; got %q", joined)
@@ -229,7 +229,7 @@ func TestSearchNextSteps(t *testing.T) {
 		t.Errorf("next_steps should embed the first result's doi; got %q", joined)
 	}
 
-	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}})
+	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false)
 	if len(empty) == 0 || !strings.Contains(empty[0], "No matches") {
 		t.Errorf("empty search should suggest recovery; got %q", empty)
 	}
@@ -2426,7 +2426,7 @@ func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
 // model that has been asked to find something and told only "try broadening" can
 // still answer as if it had found it.
 func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
-	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}), "\n"))
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false), "\n"))
 	if !strings.Contains(joined, "do not") {
 		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
 	}
@@ -2445,7 +2445,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	escalated := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
 		Page:    1,
-	}), "\n")
+	}, false), "\n")
 	if !strings.Contains(escalated, `"source":"annas"`) {
 		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
 	}
@@ -2454,7 +2454,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	catalog := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
 		Page:    1,
-	}), "\n")
+	}, false), "\n")
 	if strings.Contains(catalog, `"source"`) {
 		t.Errorf("a catalog result should not pin a source; got %q", catalog)
 	}
@@ -2583,5 +2583,95 @@ func TestFieldErrorsNameTheField(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "LIBGEN_MCP_") {
 		t.Errorf("error %q points the caller at an environment variable it never set", err)
+	}
+}
+
+// TestMergeCarriesFormatAndSizeFromAnnas verifies an escalated result keeps what
+// Anna's said about the file. The merge builds a catalog-shaped result from a
+// discovery hit, and dropping the format and size there would undo the parsing
+// entirely — the caller would still be unable to compare an escalated result with
+// a catalog one.
+func TestMergeCarriesFormatAndSizeFromAnnas(t *testing.T) {
+	out := SearchOutput{Results: []libgen.Result{}}
+	mergeExtraHits(&out, []discovery.DiscoveryResult{{
+		Origin: "annas", MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23",
+		Title: "Some Book", Extension: "pdf", Size: "1.3MB",
+	}})
+	if len(out.Results) != 1 {
+		t.Fatalf("expected the hit to merge into results, got %d", len(out.Results))
+	}
+	if got := out.Results[0]; got.Extension != "pdf" || got.Size != "1.3MB" {
+		t.Errorf("merged result lost the file description: ext=%q size=%q", got.Extension, got.Size)
+	}
+}
+
+// TestAnnasFallbackEnrichesByISBN verifies an Anna's record with an ISBN reaches
+// the same keyless metadata a catalog record would. The fallback already returns
+// what Anna's knows about the file; stopping there leaves a lookup on the table
+// that costs nothing and that the caller explicitly asked for.
+func TestAnnasFallbackEnrichesByISBN(t *testing.T) {
+	openLibrary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"title":"Sejarah Indonesia","subjects":["History"],
+			"description":"A survey.","covers":[12345]}`))
+	}))
+	t.Cleanup(openLibrary.Close)
+	// The tools layer enriches through the libgen client, whose API roots are its
+	// own; pointing discovery's at the stub would leave this hitting the live site.
+	t.Cleanup(libgen.SetEnrichBasesForTest("", openLibrary.URL))
+
+	page := mustReadFile(t, "../discovery/testdata/annas_md5_zlib.html")
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/md5/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(page)
+	}))
+	t.Cleanup(annas.Close)
+
+	// The catalog knows nothing, so the Anna's fallback is the only route.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: true, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, staticMirrors{annas.URL})
+	_, out, err := handler(context.Background(), nil, DetailsInput{
+		MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", Enrich: true,
+	})
+	if err != nil {
+		t.Fatalf("the Anna's fallback should have answered: %v", err)
+	}
+	if got := stringField(out.File, "origin"); got != "annas" {
+		t.Fatalf("file.origin = %q, want annas", got)
+	}
+	if out.Enrichment == nil || out.Enrichment.OpenLibrary == nil {
+		t.Fatalf("the record carries an ISBN but no OpenLibrary metadata came back: %+v", out.Enrichment)
+	}
+}
+
+// TestSearchNextStepsSeparatesOpenAccessFromTheCatalog verifies the guidance says
+// which results are open access and which are not. Asked for open-access papers, a
+// model that received only OpenLibrary hits — a book catalog, carrying no DOI and
+// no PDF — answered with articles from the catalog results instead, listing
+// Sci-Hub links under an "Open-Access Papers" heading. Nothing in the response had
+// told it those are different things.
+func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
+		OpenAccess: []discovery.DiscoveryResult{
+			{Origin: "openlibrary", Title: "A Book", ISBN: "9780000000001"},
+		},
+		Page: 1,
+	}, true), "\n"))
+	if !strings.Contains(joined, "open_access") {
+		t.Errorf("guidance never names the open_access list; got %q", joined)
+	}
+	if !strings.Contains(joined, "not open access") {
+		t.Errorf("guidance never says the catalog results are not open access; got %q", joined)
 	}
 }

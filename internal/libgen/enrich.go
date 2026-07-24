@@ -77,6 +77,16 @@ type Enrichment struct {
 	OpenLibrary *OLBook       `json:"open_library,omitempty"`
 }
 
+// SetEnrichBasesForTest overrides the enrichment API roots (Crossref,
+// OpenLibrary) and returns a restore func that reinstates the originals. It is a
+// test-only seam for callers in other packages, mirroring
+// discovery.SetBasesForTest; production code never calls it.
+func SetEnrichBasesForTest(crossref, openLibrary string) (restore func()) {
+	oldCR, oldOL := crossrefBase, openLibraryBase
+	crossrefBase, openLibraryBase = crossref, openLibrary
+	return func() { crossrefBase, openLibraryBase = oldCR, oldOL }
+}
+
 // Enrich fetches best-effort metadata for a DOI (Crossref) and/or ISBN
 // (OpenLibrary), running both concurrently under a hard timeout. It returns nil
 // when neither yields anything (or on any error). It NEVER returns an error —

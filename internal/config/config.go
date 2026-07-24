@@ -81,6 +81,16 @@ type Config struct {
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
+	// RetryEverySource gives every download source the full start-retry schedule
+	// instead of only the last one that can serve an item.
+	// LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE, a bool, default false.
+	//
+	// The default is the restrained one: a source with another behind it gets a
+	// single attempt, so a source that is down does not hold up one that is not.
+	// It is phrased as an opt-in to the old behavior rather than an opt-out of the
+	// new one, so that a Config built by hand — a test, or an embedder — gets the
+	// better behavior from its zero value instead of the worse one.
+	RetryEverySource bool
 	// ExtraSources is the deployment default for when the extra searchers (Anna's
 	// Archive plus the open-access providers) are consulted. LIBGEN_MCP_EXTRA_SOURCES,
 	// default auto.
@@ -269,6 +279,9 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
+		return err
+	}
+	if err := envBool("LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource); err != nil {
 		return err
 	}
 	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {

@@ -885,6 +885,33 @@ func assertForcedExtras(tr transcript) (pass bool, detail string) {
 		len(out.Results), fromAnnas, len(out.OpenAccess))
 }
 
+// readTracesToEscalation reports whether a read call is reading the escalated item,
+// by either route the model may take: keyed directly by the md5, or by the path of
+// a file it downloaded with that md5 first.
+//
+// Requiring the md5 alone would fail a model that did the arguably better thing —
+// download the escalated item, then read the local file — which is what the search
+// guidance now steers it toward by naming the source to pin.
+func readTracesToEscalation(tr transcript, call toolCall, annasMD5 map[string]bool) bool {
+	if annasMD5[strings.ToLower(stringField(call.Input, "md5"))] {
+		return true
+	}
+	if stringField(call.Input, "path") == "" {
+		return false
+	}
+	// A path only counts when the transcript shows it was produced by downloading
+	// one of the escalated md5s, so an unrelated local file cannot pass.
+	for _, c := range tr.Calls {
+		if c.Name != "download" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		if annasMD5[strings.ToLower(stringField(c.Input, "md5"))] {
+			return true
+		}
+	}
+	return false
+}
+
 // assertReadEscalated verifies read works on an md5 only Anna's indexes. It is the
 // strictest of the escalation scenarios: reading requires the file itself, so a
 // pass means search, the Anna's download path and text extraction all worked.
@@ -906,8 +933,8 @@ func assertReadEscalated(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, "SURFACE GAP: model never called read on the escalated result"
 	}
-	if !annasMD5[strings.ToLower(stringField(call.Input, "md5"))] {
-		return false, functionalPrefix + "read was called with an md5 that did not come from the escalated results"
+	if !readTracesToEscalation(tr, call, annasMD5) {
+		return false, functionalPrefix + "read was called on something that did not come from the escalated results"
 	}
 	if call.Result == nil || call.Result.IsError {
 		return gradeDegraded(tr, "read of the escalated item failed live (Anna's/IPFS unavailable)")
@@ -1518,10 +1545,29 @@ func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 	if len(out.OpenAccess) == 0 {
 		return gradeDegraded(tr, "extra_sources was set but no provider returned a hit (live network)")
 	}
-	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
-		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"
+	if finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
+		return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); model referenced one in its answer", len(out.OpenAccess))
 	}
-	return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); model referenced one in its answer", len(out.OpenAccess))
+	// Not citing one is only wrong when the hits were relevant, which nothing here
+	// can decide: a search for a named paper returns open-access hits that are other
+	// papers, and citing those instead of the one that was asked for would be the
+	// worse answer. What is decidable, and what this scenario exists to catch, is
+	// the model calling something open access that never came from the open-access
+	// list — an earlier run put Sci-Hub links under an "Open-Access Papers" heading.
+	if claimsOpenAccess(tr.FinalText) {
+		return false, "model presented results as open access without citing any open_access hit: " +
+			firstChars(tr.FinalText, 160)
+	}
+	return true, fmt.Sprintf("open-access discovery surfaced %d hit(s); the model answered from the catalog "+
+		"without calling it open access", len(out.OpenAccess))
+}
+
+// claimsOpenAccess reports whether an answer describes what it found as open
+// access. It is how a model that substituted catalog results for the open-access
+// ones is told apart from one that simply answered the question it was asked.
+func claimsOpenAccess(answer string) bool {
+	lower := strings.ToLower(answer)
+	return strings.Contains(lower, "open access") || strings.Contains(lower, "open-access")
 }
 
 // finalTextMentionsOpenAccess reports whether the model's final prose references

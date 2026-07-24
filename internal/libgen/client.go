@@ -70,6 +70,10 @@ type Client struct {
 	backoffBase time.Duration // backoff base; injectable for tests
 	// maxDownloadBytes is the download size cap in bytes (0 = no limit).
 	maxDownloadBytes int64
+	// retryEverySource gives every source the full start-retry schedule rather than
+	// only the last one that can serve an item. Its zero value is the restrained
+	// behavior, so a client built without configuration gets it.
+	retryEverySource bool
 	// sourceAllowed reports whether the deployment permits a named source at all.
 	// The per-call credential paths consult it before adding a source to a chain:
 	// LIBGEN_MCP_SOURCES is the operator's decision, and a caller supplying a key
@@ -228,6 +232,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		cooldown:         make(map[string]time.Time),
 		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
 	}
+	c.retryEverySource = cfg.RetryEverySource
 	c.sourceAllowed = allowedByOperator(cfg.Sources)
 	c.sources = c.buildSourceChain(cfg)
 	for _, opt := range opts {

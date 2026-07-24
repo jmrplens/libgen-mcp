@@ -215,6 +215,20 @@ linters:
           - gosec
         text: "G101: Potential hardcoded credentials"
 
+      # The evaluator's Spanish scenario descriptions are Spanish prose, so an
+      # English spell checker has nothing useful to say about them.
+      - path: "cmd/gen_eval_pages/translations\\.go"
+        linters:
+          - misspell
+
+      # This generator reads and writes a fixed set of project paths plus a run
+      # report the operator points it at; gosec cannot see that the paths are not
+      # attacker-controlled.
+      - path: "cmd/gen_eval_pages/main\\.go"
+        linters:
+          - gosec
+        text: "G703"
+
 output:
   formats:
     text:

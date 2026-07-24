@@ -47,7 +47,7 @@ Cuando se consultan las fuentes adicionales, se consulta a cada fuente y las res
 
 Cada resultado se etiqueta con un **`origin`** (origen) que indica qué buscador lo produjo. Esa etiqueta no es decoración — indica qué identificador lleva el resultado y, por tanto, qué argumento pasar a `download`:
 
-- **`libgen`** y **`annas`** — el resultado lleva un md5. Descárgalo con el argumento `md5` de `download`.
+- **`libgen`** y **`annas`** — el resultado lleva un md5, más el formato y el tamaño del fichero, de modo que ambos se pueden comparar. Descárgalo con el argumento `md5` de `download`.
 - **`crossref`** — el resultado lleva un DOI. Descárgalo con el argumento `doi` de `download`.
 - **`arxiv`** — el resultado lleva una `pdf_url` directa. Descarga esa URL; `download` no acepta identificadores de arXiv.
 - **`openlibrary`** — el resultado lleva un `isbn` y un título, y ningún archivo. OpenLibrary es un catálogo, no un repositorio: úsalos para lanzar una `search` mejor dirigida.

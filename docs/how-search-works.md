@@ -79,8 +79,8 @@ Every result is labeled with an **`origin`** that says which searcher produced i
 is not decoration — it tells you which identifier the result carries, and therefore which
 argument to hand to `download`:
 
-- **`libgen`** and **`annas`** — the result carries an md5. Download it with `download`'s
-  `md5` argument.
+- **`libgen`** and **`annas`** — the result carries an md5, plus the file's format and
+  size, so the two can be compared. Download it with `download`'s `md5` argument.
 - **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no
   arXiv identifier.
