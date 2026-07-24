@@ -69,6 +69,8 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S33 | **Remote search escalation** — S32 against a server in remote mode |
 | S34 | **Escalated search → download** — the same catalog-miss title, but the model must go on to download it, proving an escalated result carries an md5 the `download` tool accepts |
 | S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally |
+| S36 | **Escalated record lookup** — the model must follow the escalated search with `get_details` on an md5 the catalog has no record for, which only answers via the Anna's fallback; graded on the record's `origin` |
+| S37 | **Remote escalated record lookup** — S36 against a server in remote mode |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 

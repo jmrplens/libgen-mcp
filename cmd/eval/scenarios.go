@@ -544,7 +544,58 @@ func scenarios() []scenario {
 			Remote: true,
 			Assert: assertSearchThenDownloadEscalated,
 		},
+		// S36-S37 grade the follow-up an escalated search invites. The catalog has no
+		// record for an Anna's-only md5, so get_details can only answer by falling back
+		// to Anna's — an earlier run of this harness caught a model walking into that
+		// miss, which is why the case is graded rather than assumed.
+		{
+			ID: "S36",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`then look up its full record details; tell me what collection it comes from.`,
+			Assert: assertEscalatedDetails,
+		},
+		{
+			ID: "S37",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`then look up its full record details; tell me what collection it comes from.`,
+			Remote: true,
+			Assert: assertEscalatedDetails,
+		},
 	}
+}
+
+// assertEscalatedDetails verifies get_details answered for an md5 only Anna's
+// indexes. A FAIL here is FUNCTIONAL: the search told the model to call
+// get_details, so the tool must serve the md5 the search returned. A model that
+// never reached get_details is a SURFACE GAP and also fails.
+func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	var annas bool
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			annas = true
+			break
+		}
+	}
+	if !annas {
+		return true, skipPrefix + " search returned no Anna's-origin results today (live network)"
+	}
+	call, ok := findCall(tr, "get_details")
+	if !ok {
+		return false, "model never called get_details on the escalated result"
+	}
+	var details tools.DetailsOutput
+	if derr := decodeStructured(call.Structured, &details); derr != nil {
+		return false, "get_details returned no usable record: " + derr.Error()
+	}
+	origin, _ := details.File["origin"].(string)
+	if origin != "annas" {
+		return false, fmt.Sprintf("get_details record origin = %q, want annas (the catalog has no record for this md5)", origin)
+	}
+	return true, fmt.Sprintf("get_details fell back to Anna's for the escalated md5 (collection=%v)", details.File["collection"])
 }
 
 // assertRemoteDownloadLandsLocal checks the remote block: the model calls

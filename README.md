@@ -243,6 +243,8 @@ Full metadata for a record (description, identifiers, DOI, cover, related editio
 | `object`  | string | no       | With `id`: `edition` (default) or `file`.                                             |
 | `enrich`  | bool   | no       | Add best-effort Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default. |
 
+An md5 the Library Genesis catalog does not carry — which is what a search that consulted the extra sources returns — falls back to Anna's Archive, whose record is returned labeled `origin: "annas"`. That record is thinner than a catalog one and its fields vary by source collection; note that most Anna's records publish no IPFS address, so the keyless download route is unavailable for them.
+
 The output carries a `citations` field: a `{"bibtex": ..., "ris": ...}` object built from the record's metadata, ready to paste into a reference manager (omitted when the record has no title; ISBN is never fabricated). An opt-in `enrich: true` adds a best-effort `enrichment` object with keyless metadata from Crossref (journal/container, ISSN, year, citation/reference counts, subjects) and OpenLibrary (subjects, description, cover). It runs synchronously within the call (bounded ~6s budget) and never fails the core result; it can be disabled deployment-wide with `LIBGEN_MCP_ENRICH=false`.
 
 </details>

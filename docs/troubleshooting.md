@@ -89,6 +89,31 @@ across pages (`reachable`). Pages beyond `reachable` are empty.
 
 See [Tools](tools.md#pagination-and-truncation) for the exact fields.
 
+## A search result that will not download (`origin: "annas"`)
+
+**Symptom.** A search returned a result labeled `origin: "annas"`, but `download` fails on its
+md5 with an error about no IPFS CID or no gateway serving it.
+
+**Meaning.** That result came from [an escalated search](how-search-works.md): the Library
+Genesis catalog does not carry the file, so the only route to it is Anna's Archive. The
+keyless route reads the item's IPFS address from Anna's record page — and **most Anna's
+records publish no IPFS address at all**. When there is none, there is nothing to fetch
+keylessly, and this is expected rather than a fault.
+
+**Fix.** In order of effort:
+
+- Set `LIBGEN_MCP_ANNAS_KEY` to an Anna's Archive membership key. The member fast-download
+  API serves items with no IPFS address, and the keyless IPFS route stays as the fallback.
+  See [Configuration](configuration.md).
+- Search again with different terms; another edition of the same work may be in the catalog,
+  which downloads through the ordinary sources.
+- Call `get_details` on the md5 anyway. It falls back to Anna's record, so you still get the
+  title, author, year, language and ISBNs even when the bytes are out of reach — enough to
+  find the item elsewhere.
+
+A gateway that is merely slow reports a timeout instead; retrying later often succeeds, since
+the public IPFS gateways vary in how quickly they locate an item.
+
 ## Raising the log level
 
 Most problems are easier to diagnose at `debug`, which traces each mirror attempt, cooldown,

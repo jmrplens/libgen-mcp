@@ -99,6 +99,24 @@ Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(it
 
 Como la cadena es un único slice ordenado filtrado por `Supports`, a un elemento libro se le ofrece `[libgen, randombook, annas]`, a uno artículo `[unpaywall, scihub, scidb]`, y a uno que lleva ambos se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
 
+## Camino de búsqueda
+
+La cadena de descarga anterior es una de las dos federaciones del servidor. La otra es el camino de búsqueda, con una estructura distinta: la cadena de descarga está ordenada y se detiene en el primer éxito, mientras que los buscadores se ejecutan en paralelo y sus respuestas se fusionan.
+
+Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary) — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
+
+| Modo     | Cuándo se ejecutan los adicionales                    | Planificación                                                             |
+| -------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| `auto`   | Solo cuando el catálogo no devuelve nada o falla      | Después del catálogo, porque la decisión depende de su respuesta          |
+| `always` | En cada búsqueda                                      | A la vez que el catálogo, porque la decisión no depende de él             |
+| `never`  | Nunca                                                 | —                                                                         |
+
+Cada buscador adicional implementa `discovery.Provider` (`Name`, `Search`), y `Federate` ejecuta el conjunto en paralelo con recuperación de pánico por proveedor, así que un proveedor que falle no puede tumbar la búsqueda. La fusión se hace por espacio de identificadores: los resultados de Anna's llevan md5 y se unen a `results` etiquetados con `origin: "annas"`, mientras que los de acceso abierto llevan DOI y se quedan en `open_access`. Los duplicados se eliminan por md5, y un archivo presente tanto en el catálogo como en Anna's conserva el registro del catálogo, que lleva metadatos más ricos.
+
+`get_details` sigue la misma división. Un md5 del que el catálogo no tiene registro — que es justo lo que devuelve una búsqueda escalada — recurre a la propia página de registro de Anna's, analizada por etiqueta y no por posición, porque el juego de campos varía según la colección de origen.
+
+Para el recorrido conceptual con diagramas, ver [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/).
+
 ## Transportes
 
 El servidor habla MCP sobre dos transportes:
