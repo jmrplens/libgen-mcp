@@ -186,6 +186,12 @@ Complexity budgets are enforced by golangci-lint: `gocyclo` min-complexity 20,
 `gocognit` 25, `nestif` 5. Keep functions under these; factor helpers out rather
 than raising the thresholds.
 
+**SonarCloud is stricter than the linter.** The project's quality gate
+(`jmrplens_libgen-mcp2`) enforces **cognitive complexity ≤ 15** per function
+independently of `.golangci.yml`, so a function that `gocognit 25` happily passes
+locally can still fail the gate on the PR. Treat 15 as the real budget for
+cognitive complexity; the linter only catches the worst offenders.
+
 ## Documentation Rules
 
 Docs are **bilingual and kept in parity**:
@@ -242,14 +248,17 @@ LIBGEN_EVAL=1 ANTHROPIC_API_KEY=sk-... go run -tags eval ./cmd/eval
 
 ## Release Process
 
-The version lives in `VERSION` and is mirrored into three manifests. To cut a
+The version lives in `VERSION` and is mirrored into four manifests. To cut a
 release:
 
 1. Bump `VERSION`.
 2. Update the version in `server.json`, `mcpb/manifest.json`, and
    `lhm.plugin.json` to match (verified by `make check-server-json`,
    `make check-mcpb-manifest`, `make check-lhm-manifest`).
-3. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
+3. Update the version in `.plugin/plugin.json` too. **It has no `make check-*`
+   target**, so nothing fails when it drifts — check it by hand every release, or
+   add a gate for it modeled on `check-lhm-manifest`.
+4. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
 
 ## Commit & PR Conventions
 

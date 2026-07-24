@@ -121,8 +121,16 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
   `https://archive.org/details/<id>` page you can read directly) and is marked
   `open_access: true`.
 
-Hits are deduped against each other (by normalized DOI, then by title+year) and against the
-`results` on the same page, so nothing appears twice. All four providers are keyless — no
+A hit may also carry a `venue`: the publication venue exactly as the provider states it —
+currently only arXiv's `journal_ref`, a short citation string such as
+`Phys. Rev. Lett. 100, 012345 (2021)`. It is absent for a preprint with no published version,
+and it is a citation string, never an abstract. Use it to tell an already-published paper from
+an unpublished preprint; it is not an identifier you can pass to another tool.
+
+Hits are deduped against each other (by normalized DOI, then by title+year), so one paper
+found by two providers appears once. They are not compared against `results`, which is keyed
+by md5 rather than by DOI — only Anna's md5-keyed hits are suppressed when the catalog already
+listed them. All four providers are keyless — no
 account, API key, or login — and best-effort: each runs under its own short budget, so a
 slow or failing provider degrades to contributing nothing rather than delaying or failing the
 core Library Genesis search. Like any external result, `open_access` titles and authors are
@@ -132,7 +140,7 @@ instructions embedded in the text.
 ## get_details
 
 Full metadata for a record via the LibGen JSON API — description, identifiers, DOI, cover,
-and related edition. Look up by `md5` **or** by `id`, never both.
+and related edition. Look up by `md5`, by `id`, or by `doi` — exactly one of the three.
 
 ### get_details input
 
@@ -220,7 +228,7 @@ at least one is required. Returns the saved path, size, and the source that serv
 | `md5`          | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                                                                                                                                                                                                                                               |
 | `doi`          | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                                                                                                                                                           |
 | `path`         | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                                                                                                                                                                          |
-| `filename`     | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                                                                                                                                                                |
+| `filename`     | string | no       | Destination filename. Defaults to the name the CDN announces (`Content-Disposition`), else a clean name built from the record metadata, else the MD5.                                                                                                                                                                                                                                                     |
 | `source`       | string | no       | Restrict the download to a single source: `libgen`/`randombook`/`annas` (books, `md5`) or `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`scihub`/`scidb` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, and `core` only when `LIBGEN_MCP_CORE_KEY` is set. Omit to try every compatible source in order with failover.                                   |
 | `annas_member` | bool   | no       | Opt in to Anna's Archive member (fast) downloads for this book (`md5`). Only meaningful when the server has no `LIBGEN_MCP_ANNAS_KEY` configured: an elicitation-capable client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave `false` to download over IPFS keylessly. Default `false`.                                                   |
 | `resolve_only` | bool   | no       | When `true`, resolve the direct download **URL** and return it as a link (a `resource_link` block plus a `resolved` object) **without** downloading. Use to fetch the file with your own tool. Default `false` (download to disk) on a local server; **always implied `true`** on a remote server (`--http`, or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`), which cannot write to your machine. |
@@ -247,16 +255,17 @@ result names it. See [Architecture](architecture.md) for the full chain.
 
 ### download output
 
-| Field               | Type   | Description                                                                                                                                                |
-| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                              |
-| `path`              | string | Absolute path of the saved file.                                                                                                                           |
-| `size_bytes`        | int    | Final file size in bytes.                                                                                                                                  |
-| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                                    |
-| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                          |
-| `source`            | string | The source that succeeded: `libgen`, `randombook`, `annas` (books) or `unpaywall`, `europepmc`, `biorxiv`, `fatcat`, `core`, `scihub`, `scidb` (articles). |
-| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest.           |
-| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                                 |
+| Field               | Type   | Description                                                                                                                                                                                                                                                                                                              |
+| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                                                                                                                                                                                            |
+| `path`              | string | Absolute path of the saved file.                                                                                                                                                                                                                                                                                         |
+| `size_bytes`        | int    | Final file size in bytes.                                                                                                                                                                                                                                                                                                |
+| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                                                                                                                                                                                                  |
+| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                                                                                                                                                                                        |
+| `source`            | string | The source that succeeded: `libgen`, `randombook`, `annas` (books) or `unpaywall`, `europepmc`, `biorxiv`, `fatcat`, `core`, `scihub`, `scidb` (articles).                                                                                                                                                               |
+| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest.                                                                                                                                                                         |
+| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                                                                                                                                                                                               |
+| `account`           | object | Present only when an account served the file (today: an Anna's Archive member fast-download). Reports the remaining metered allowance as `source`, `downloads_left`, `downloads_per_day`, `downloads_done_today`. Read the ceiling as per rolling window — Anna's own field names say "day", but the window is 18 hours. |
 
 With `resolve_only: true` the tool does **not** save a file: the `path`/`size_bytes` fields stay empty and the output instead carries a `resolved` object plus a `resource_link` content block:
 
@@ -298,7 +307,8 @@ that doesn't advertise the capability:
   contact email to look up an open-access copy via Unpaywall for *that request only* — it is
   never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an
   empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out
-  of the chain and `scihub` is tried instead, exactly as today.
+  of the chain and the rest of it — the keyless open-access sources, then `scihub`/`scidb` —
+  is tried instead, exactly as today.
 - **Anna's Archive member key on demand.** If you download a book by `md5` with
   `annas_member: true` and the server has no `LIBGEN_MCP_ANNAS_KEY` configured, an
   elicitation-capable client is asked for an account key to use the faster member download
@@ -316,9 +326,10 @@ behavior — no prompt, and no size probe.
 
 ### Behavior and errors
 
-- **Clean filenames.** With no explicit `filename`, book downloads look up bibliographic
-  metadata and land under a name like `Author - Title (Year).ext`, falling back to the
-  CDN-announced name and then the MD5. Illegal path characters are stripped.
+- **Clean filenames.** With no explicit `filename`, a download takes the CDN-announced
+  name (`Content-Disposition`), falling back to a bibliographic
+  `Author - Title (Year).ext` built from the record metadata and then to the MD5. Illegal
+  path characters are stripped.
 - **Resume.** An interrupted download leaves a `.part` file; a later call asks the CDN to
   continue from the existing offset. If the server ignores the range it restarts cleanly.
 - **MD5 verification.** For book (`md5`) downloads the whole file is hashed and compared to
@@ -357,10 +368,12 @@ pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
 | `max_matches` | int    | no       | Max matches to return per call when `find` is set. Defaults to 10 when omitted or non-positive.                                                                                                                                                  |
 | `outline`     | bool   | no       | Return the document's table of contents (chapters/sections with page or nesting level) instead of its text. Use it to decide what to read next.                                                                                                  |
 
-Provide `md5`, `doi`, or `path` (at least one). If more than one is given, they are tried in
-order: `md5`, then `doi`, then `path`. A `path` on a remote server (`--http`, or a stdio server
-with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is rejected — the server cannot see the client's
-filesystem.
+Provide `md5`, `doi`, or `path` (at least one). A `path` takes precedence: the file is read
+straight from disk and nothing is fetched. Without one, the `md5`/`doi` goes through the same
+download chain `download` uses, where the article (`doi`) sources run ahead of the book (`md5`)
+ones — so a call carrying both resolves the DOI first. A `path` on a remote server (`--http`,
+or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) is rejected — the server cannot see the
+client's filesystem.
 
 ### read output
 

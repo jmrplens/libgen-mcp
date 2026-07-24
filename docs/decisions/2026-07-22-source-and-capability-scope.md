@@ -104,6 +104,35 @@ Sources evaluated:
 First wave: arXiv + Crossref search + OpenLibrary resolver. The MAYBE rows are gated behind
 demand. Federated results must dedup against libgen and be clearly labeled by origin.
 
+#### Correction — 2026-07-25 (article *download* sources)
+
+The table above evaluated candidates as **discovery** sources for `search`, and its verdicts
+still stand for that purpose. Two of its rows have since been overtaken for the **download**
+chain, and two sources it never considered now ship. Recorded here rather than edited into the
+table, so the original reasoning stays legible.
+
+**Changed — CORE.** Listed "NO-GO — registered key required". The key requirement is real, but
+registration is free and the project already had a precedent for a source that is off by
+default and switched on by one setting (`unpaywall`, gated on a contact email). CORE therefore
+ships as the `core` article source, gated on `LIBGEN_MCP_CORE_KEY` and left out of the chain
+entirely when it is unset. The keyless ethos is preserved the same way `unpaywall` preserves
+it: nothing about the default configuration changes.
+
+**Changed — Internet Archive.** Listed "MAYBE — noisy; per-item availability varies; defer".
+The noise is a property of *browsing* the archive, not of resolving a known DOI against it.
+Via Internet Archive Scholar's fatcat API a DOI maps to a specific release with a specific file
+list, so the per-item variance is visible up front rather than after a fetch. Shipped as the
+keyless `fatcat` source, preferring a direct archive.org copy over a Wayback capture.
+
+**Added — Europe PMC and bioRxiv/medRxiv.** Neither was evaluated in the table; both were
+found afterwards and both are keyless, single-purpose DOI resolvers with no account and no
+quota. `europepmc` serves the open-access subset of PubMed Central; `biorxiv` resolves
+`10.1101` preprint DOIs to the versioned `.full.pdf`. They lead the article chain alongside
+`unpaywall`, so a freely licensed copy is preferred before any shadow-library fallback.
+
+The article chain that results is `unpaywall → europepmc → biorxiv → fatcat → core → scihub →
+scidb`: legal open access first, shadow libraries only as fallback.
+
 ### 4. Deepen the read loop — GO (pure-Go)
 
 - **`search_in_document`** — search the already-extracted text and return snippet + page/offset
@@ -143,7 +172,11 @@ clients and the no-friction promise must keep working unchanged.
   collections are a strict subset of the seven this project's own `search` already
   indexes (`nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`,
   `fiction_rus`). No new servers, no new corpus, fewer collections.
-- OpenAlex (now key-required), Semantic Scholar keyless dependency, CORE (key required).
+- OpenAlex (now key-required), Semantic Scholar keyless dependency.
+- ~~CORE (key required).~~ **Corrected 2026-07-25 — see §3:** registration is free and the
+  source ships as an opt-in `core` download source behind `LIBGEN_MCP_CORE_KEY`, off by
+  default. ~~Internet Archive (noisy, deferred).~~ Also corrected — it ships as the keyless
+  `fatcat` download source, resolving a DOI through Internet Archive Scholar.
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
 - Resource subscriptions, sampling, MCP logging (no fit; logging also deprecated in the RC).
