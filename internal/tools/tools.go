@@ -736,6 +736,17 @@ func annasRecordFields(rec *discovery.AnnasRecord) map[string]any {
 	return fields
 }
 
+// firstNonEmptyField returns the first of the named fields that carries a value,
+// or "" when none does.
+func firstNonEmptyField(record map[string]any, names ...string) string {
+	for _, name := range names {
+		if v := stringField(record, name); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // detailsEnrich augments out with best-effort external metadata: the DOI comes
 // from the edition record (falling back to the file record) and the ISBN from the
 // edition's isbn/identifier field when present. A nil Enrich result simply means
@@ -745,9 +756,13 @@ func detailsEnrich(ctx context.Context, c *libgen.Client, out *DetailsOutput) {
 	if doi == "" {
 		doi = stringField(out.File, "doi")
 	}
-	isbn := stringField(out.Edition, "isbn")
+	// The ISBN falls back from the edition to the file, as the DOI above already
+	// did. A record that has no edition at all — an Anna's fallback, which returns
+	// the file alone — would otherwise never be enriched, however plainly it stated
+	// its ISBN.
+	isbn := firstNonEmptyField(out.Edition, "isbn", "identifier")
 	if isbn == "" {
-		isbn = stringField(out.Edition, "identifier")
+		isbn = firstNonEmptyField(out.File, "isbn", "identifier")
 	}
 	out.Enrichment = c.Enrich(ctx, doi, isbn)
 	if step := enrichmentNextStep(out.Enrichment); step != "" {

@@ -2604,3 +2604,52 @@ func TestMergeCarriesFormatAndSizeFromAnnas(t *testing.T) {
 		t.Errorf("merged result lost the file description: ext=%q size=%q", got.Extension, got.Size)
 	}
 }
+
+// TestAnnasFallbackEnrichesByISBN verifies an Anna's record with an ISBN reaches
+// the same keyless metadata a catalog record would. The fallback already returns
+// what Anna's knows about the file; stopping there leaves a lookup on the table
+// that costs nothing and that the caller explicitly asked for.
+func TestAnnasFallbackEnrichesByISBN(t *testing.T) {
+	openLibrary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"title":"Sejarah Indonesia","subjects":["History"],
+			"description":"A survey.","covers":[12345]}`))
+	}))
+	t.Cleanup(openLibrary.Close)
+	// The tools layer enriches through the libgen client, whose API roots are its
+	// own; pointing discovery's at the stub would leave this hitting the live site.
+	t.Cleanup(libgen.SetEnrichBasesForTest("", openLibrary.URL))
+
+	page := mustReadFile(t, "../discovery/testdata/annas_md5_zlib.html")
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/md5/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(page)
+	}))
+	t.Cleanup(annas.Close)
+
+	// The catalog knows nothing, so the Anna's fallback is the only route.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: true, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, staticMirrors{annas.URL})
+	_, out, err := handler(context.Background(), nil, DetailsInput{
+		MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", Enrich: true,
+	})
+	if err != nil {
+		t.Fatalf("the Anna's fallback should have answered: %v", err)
+	}
+	if got := stringField(out.File, "origin"); got != "annas" {
+		t.Fatalf("file.origin = %q, want annas", got)
+	}
+	if out.Enrichment == nil || out.Enrichment.OpenLibrary == nil {
+		t.Fatalf("the record carries an ISBN but no OpenLibrary metadata came back: %+v", out.Enrichment)
+	}
+}
