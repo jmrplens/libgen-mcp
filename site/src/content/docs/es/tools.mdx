@@ -135,7 +135,15 @@ Metadatos completos de un registro vía la API JSON de LibGen — descripción, 
 | `citations`  | object | `{"bibtex": ..., "ris": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro. Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil); el ISBN nunca se inventa cuando falta. |
 | `enrichment` | object | Metadatos externos best-effort (Crossref/OpenLibrary), presentes solo cuando se pidió `enrich` y se encontró algo. Ver [Enriquecimiento de metadatos](#enriquecimiento-de-metadatos).                                                                          |
 
-Una consulta por `md5` devuelve `file` y, en la medida de lo posible, su `edition` relacionada. Una consulta por `id` devuelve el objeto que se haya pedido. Una consulta que no coincide con nada devuelve un error "no file found".
+Una consulta por `md5` devuelve `file` y, en la medida de lo posible, su `edition` relacionada. Una consulta por `id` devuelve el objeto que se haya pedido. Una consulta que no coincide con nada devuelve un error "no record".
+
+### Registros que el catálogo no tiene
+
+Una [búsqueda que ha consultado las fuentes adicionales](/libgen-mcp/es/how-search-works/) devuelve md5 que el catálogo de Library Genesis nunca indexó, así que consultarlos en el catálogo no encuentra nada. En lugar de fallar, `get_details` recurre a Anna's Archive y devuelve lo que esta publica para ese md5, con `file.origin` a `annas` para que sepas qué índice ha respondido.
+
+Ese registro es **más pobre que uno del catálogo** y sus campos varían según la colección de la que venga el ítem. Todos los registros de Anna's observados llevan `title`, `author`, `language`, `year`, `content_type`, `collection`, `filesize` y `filepath`; `isbn`/`isbn10` e `ipfs_cid` aparecen en una minoría. Ojo en particular a que la mayoría **no** tiene `ipfs_cid`, así que la ruta de descarga sin clave por IPFS no está disponible para ellos: hace falta una clave de socio u otra fuente. `author` es el campo propio de Anna's y a veces es la cadena del productor del PDF en lugar de una persona.
+
+Solo cuando ninguno de los dos índices tiene el md5 devuelve la herramienta el error de ausencia del catálogo.
 
 ### Enriquecimiento de metadatos
 

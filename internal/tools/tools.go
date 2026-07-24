@@ -146,9 +146,9 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
-		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).",
+		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("get_details", detailsHandler(client, cfg)))
+	}, withRecovery("get_details", detailsHandler(client, cfg, libgen.AnnasMirrorLister(cfg))))
 	book, article := client.EnabledSourceNames()
 	desc := downloadToolDescription(book, article)
 	if o.remoteDownloads {
@@ -517,7 +517,7 @@ func markdownResult(md string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: md}}}
 }
 
-func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
+func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
 		var (
@@ -529,6 +529,9 @@ func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Det
 			return nil, zero, errors.New("provide md5 or id, not both")
 		case in.MD5 != "":
 			out, err = detailsByMD5(ctx, c, in.MD5)
+			if err != nil {
+				out, err = detailsFromAnnas(ctx, annasMirrors, in.MD5, err)
+			}
 		case in.ID != "":
 			out, err = detailsByID(ctx, c, in.Object, in.ID)
 		default:
@@ -544,6 +547,53 @@ func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Det
 		}
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// detailsFromAnnas looks an md5 up in Anna's Archive after the Library Genesis
+// catalog came up empty. A search that consulted the extra sources returns md5s
+// the catalog never indexed, so without this the follow-up the search itself
+// suggests would always fail on them.
+//
+// catalogErr is returned unchanged when Anna's has nothing either: the caller
+// asked the catalog a question, and "the catalog has no such record" is a better
+// answer than an Anna's transport error. The record is labeled origin=annas
+// because its metadata is thinner than a catalog record's.
+func detailsFromAnnas(ctx context.Context, annasMirrors discovery.MirrorLister, md5 string, catalogErr error) (DetailsOutput, error) {
+	if annasMirrors == nil {
+		return DetailsOutput{}, catalogErr
+	}
+	rec, err := discovery.NewAnnas(annasMirrors).Details(ctx, md5)
+	if err != nil {
+		return DetailsOutput{}, catalogErr
+	}
+	return DetailsOutput{File: annasRecordFields(rec)}, nil
+}
+
+// annasRecordFields renders an Anna's record as a file record, using the catalog's
+// own field names so a caller reads both the same way. Empty fields are omitted
+// rather than rendered blank, since which fields a record carries varies by the
+// collection it came from.
+func annasRecordFields(rec *discovery.AnnasRecord) map[string]any {
+	fields := map[string]any{"origin": "annas", "md5": rec.MD5}
+	for name, value := range map[string]string{
+		"title":        rec.Title,
+		"author":       rec.Author,
+		"year":         rec.Year,
+		"language":     rec.Language,
+		"extension":    rec.Extension,
+		"filesize":     rec.Filesize,
+		"content_type": rec.ContentType,
+		"collection":   rec.Collection,
+		"filepath":     rec.Filepath,
+		"isbn":         rec.ISBN13,
+		"isbn10":       rec.ISBN10,
+		"ipfs_cid":     rec.IPFSCID,
+	} {
+		if value != "" {
+			fields[name] = value
+		}
+	}
+	return fields
 }
 
 // detailsEnrich augments out with best-effort external metadata: the DOI comes

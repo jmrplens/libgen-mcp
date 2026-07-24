@@ -89,6 +89,11 @@ flowchart LR
     O -->|arxiv / crossref<br/>/ openlibrary| P[has a DOI<br/>→ download by doi]
 ```
 
+An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool
+falls back to Anna's own metadata and labels the record `origin: "annas"`. That record is
+thinner than a catalog one, and most Anna's items publish no IPFS address — so a keyless
+download may still not be possible even when the metadata is.
+
 This split is why Anna's hits merge into the main results list alongside the catalog hits,
 while the open-access hits appear in a separate list: the two groups are keyed differently,
 and `download` reads the key to know where to fetch from. Treat the `origin` as the

@@ -35,7 +35,7 @@ Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
 
 **Get record details**
 
-Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).
+Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).
 
 **Parameters:**
 

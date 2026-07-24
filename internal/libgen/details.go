@@ -32,7 +32,11 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition ma
 		return nil, nil, err
 	}
 	if len(files) == 0 {
-		return nil, nil, fmt.Errorf("no file found for md5 %s — verify the md5 comes from a search result (run the search tool first to obtain valid md5s)", md5)
+		// A search that escalated to the extra sources returns md5s the catalog
+		// never had, so telling the caller to run a search first would send it back
+		// down a path it already took. Name the catalog instead, so a caller that
+		// has a fallback index knows which one came up empty.
+		return nil, nil, fmt.Errorf("the Library Genesis catalog has no record for md5 %s", md5)
 	}
 	for id, f := range files {
 		f["file_id"] = id

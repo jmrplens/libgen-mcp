@@ -58,6 +58,8 @@ flowchart LR
     O -->|arxiv / crossref<br/>/ openlibrary| P[tiene un DOI<br/>→ descargar por doi]
 ```
 
+Un resultado de Anna's también sirve para `get_details`: el catálogo no tiene registro de él, así que la herramienta recurre a los metadatos propios de Anna's y etiqueta el registro con `origin: "annas"`. Ese registro es más pobre que uno del catálogo, y la mayoría de ítems de Anna's no publica dirección IPFS, así que puede que la descarga sin clave siga sin ser posible aunque los metadatos sí lo sean.
+
 Esta división es la razón por la que los resultados de Anna's se fusionan en la lista principal junto a los del catálogo, mientras que los de acceso abierto aparecen en una lista aparte: los dos grupos se identifican de forma distinta, y `download` lee la clave para saber de dónde obtener el archivo. Considera el `origin` como la instrucción para el siguiente paso — te dice exactamente qué argumento pasar.
 
 Una distinción que vale la pena afirmar con claridad: **Anna's Archive no es una fuente de acceso abierto.** Es una biblioteca en la sombra, no una editorial de material con licencia libre, así que se lista aparte de los proveedores de acceso abierto (arXiv, Crossref, OpenLibrary). No infieras nada sobre la licencia de un resultado del mero hecho de que una búsqueda lo haya encontrado.

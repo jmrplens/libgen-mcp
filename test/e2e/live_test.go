@@ -649,6 +649,56 @@ func TestE2ESearchNeverMode(t *testing.T) {
 	}
 }
 
+// TestE2EGetDetailsFallsBackToAnnas verifies the follow-up a search suggests works
+// on an escalated result: the Library Genesis catalog has no record for the pinned
+// md5, so get_details must answer from Anna's Archive instead of failing. It goes
+// through the MCP tools layer, since that is the only path a real client takes.
+func TestE2EGetDetailsFallsBackToAnnas(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "get_details", Arguments: map[string]any{"md5": item.MD5},
+	})
+	if err != nil {
+		t.Fatalf("get_details tool error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("get_details on an Anna's-only md5 returned an error: %v", res.Content)
+	}
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatalf("marshaling structured content: %v", merr)
+	}
+	var out tools.DetailsOutput
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatalf("decoding details output: %v", uerr)
+	}
+	if got, _ := out.File["origin"].(string); got != "annas" {
+		t.Fatalf("file.origin = %q, want annas — the catalog should not have answered", got)
+	}
+	if got, _ := out.File["title"].(string); got == "" {
+		t.Fatal("the fallback record carries no title")
+	}
+	t.Logf("annas fallback record: title=%v collection=%v size=%v",
+		out.File["title"], out.File["collection"], out.File["filesize"])
+}
+
 // TestE2ESearchEscalatedResultIsDownloadable closes the loop: an item found only via
 // escalation must actually download through the annas source, proving search and
 // download line up rather than each half working alone.

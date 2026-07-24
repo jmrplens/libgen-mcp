@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -81,6 +82,30 @@ func TestDetailsByIDNotFound(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	if _, err := c.DetailsByID(context.Background(), "e", "999999"); err == nil {
 		t.Error("DetailsByID() for a missing id should fail")
+	}
+}
+
+// TestDetailsByMD5NotFoundNamesTheEscalatedCase verifies the miss message tells the
+// caller the truth. A search that escalated to the extra sources returns md5s the
+// Library Genesis catalog never had, so telling the caller to "run the search tool
+// first" sends it back down a path it already took; the message must instead name
+// the catalog as the index that came up empty, which is what the tools layer needs
+// to know before trying its Anna's Archive fallback.
+func TestDetailsByMD5NotFoundNamesTheEscalatedCase(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	_, _, err := c.DetailsByMD5(context.Background(), "00dd2b0b58e81e3c6e7cb9e7b72dee23")
+	if err == nil {
+		t.Fatal("DetailsByMD5() for a missing md5 should fail")
+	}
+	if !strings.Contains(err.Error(), "catalog") {
+		t.Errorf("error %q should name the catalog as the index that came up empty", err)
+	}
+	if strings.Contains(err.Error(), "run the search tool first") {
+		t.Errorf("error %q still tells the caller to search again, which an escalated md5 already did", err)
 	}
 }
 

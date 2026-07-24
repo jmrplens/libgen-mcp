@@ -155,7 +155,24 @@ Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is 
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
 returns whichever object was requested. A lookup that matches nothing returns a
-"no file found" error.
+"no record" error.
+
+### Records the catalog does not carry
+
+A [search that consulted the extra sources](how-search-works.md) returns md5s the Library
+Genesis catalog never indexed, so a catalog lookup for one of them finds nothing. Rather
+than fail, `get_details` falls back to Anna's Archive and returns what it publishes for
+that md5, with `file.origin` set to `annas` so you know which index answered.
+
+That record is **thinner than a catalog record** and its fields vary by the collection the
+item came from. Every Anna's record observed carries `title`, `author`, `language`, `year`,
+`content_type`, `collection`, `filesize` and `filepath`; `isbn`/`isbn10` and `ipfs_cid`
+appear on a minority. Note in particular that most records have **no** `ipfs_cid`, so the
+keyless IPFS download route is unavailable for them — a member key or another source is
+needed to fetch those. `author` is Anna's own field and is occasionally a PDF producer
+string rather than a person.
+
+Only when neither index has the md5 does the tool return the catalog's own miss error.
 
 ### Metadata enrichment
 

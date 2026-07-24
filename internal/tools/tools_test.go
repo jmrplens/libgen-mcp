@@ -1313,6 +1313,59 @@ func TestDetailsByMD5LookupError(t *testing.T) {
 	}
 }
 
+// TestDetailsFallsBackToAnnas verifies get_details answers for an md5 the Library
+// Genesis catalog never had. A search that escalated returns exactly such md5s, so
+// without this fallback the tool the caller is told to use would always fail on
+// them. The record must be labeled with its origin, since Anna's metadata is
+// thinner than the catalog's and the caller should know which it is reading.
+func TestDetailsFallsBackToAnnas(t *testing.T) {
+	page := mustReadFile(t, "../discovery/testdata/annas_md5_zlib.html")
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/md5/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(page)
+	}))
+	t.Cleanup(annas.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, staticMirrors{annas.URL})
+	_, out, err := handler(context.Background(), nil, DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23"})
+	if err != nil {
+		t.Fatalf("get_details on an Anna's-only md5 should fall back, got error: %v", err)
+	}
+	if got := stringField(out.File, "title"); got != "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" {
+		t.Errorf("file.title = %q, want the Anna's title", got)
+	}
+	if got := stringField(out.File, "origin"); got != "annas" {
+		t.Errorf("file.origin = %q, want %q so the caller knows which index answered", got, "annas")
+	}
+	if strings.Join(out.NextSteps, "\n") == "" {
+		t.Error("a fallback record should still carry download guidance")
+	}
+}
+
+// TestDetailsSurfacesTheCatalogErrorWhenAnnasHasNothingEither verifies the catalog's
+// error survives when the fallback finds nothing, so a genuinely unknown md5 is
+// still reported as unknown rather than as an Anna's outage.
+func TestDetailsSurfacesTheCatalogErrorWhenAnnasHasNothingEither(t *testing.T) {
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(annas.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, staticMirrors{annas.URL})
+	_, _, err := handler(context.Background(), nil, DetailsInput{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if err == nil {
+		t.Fatal("an md5 neither index knows should fail")
+	}
+	if !strings.Contains(err.Error(), "catalog") {
+		t.Errorf("error %q should be the catalog's own miss", err)
+	}
+}
+
 // TestDetailsByIDLookupError covers detailsByID's error return when the client's
 // lookup fails, for both the edition (default) and file objects.
 func TestDetailsByIDLookupError(t *testing.T) {
@@ -2247,7 +2300,7 @@ func TestDetailsHandler_EnrichEnabled(t *testing.T) {
 
 	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1, EnrichEnabled: true}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
-	h := detailsHandler(client, cfg)
+	h := detailsHandler(client, cfg, nil)
 
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, DetailsInput{MD5: md5, Enrich: true})
 	if err != nil {
