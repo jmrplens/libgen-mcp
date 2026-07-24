@@ -37,9 +37,9 @@ const (
 	// opposed to a SURFACE GAP), so a reader can tell "our bug" from "the model
 	// didn't discover the capability".
 	functionalPrefix = "FUNCTIONAL: "
-	// notExtractableDetail is the skip reason when a fetched file has no
+	// notExtractableDetail opens the reason a fetched file yielded no
 	// extractable text (scanned/unsupported); the concrete reason is appended.
-	notExtractableDetail = " file was not extractable ("
+	notExtractableDetail = "the file was not extractable ("
 	// badDownloadMD5Detail is the failure detail when a download call's md5 is not
 	// a 32-char hex string.
 	badDownloadMD5Detail = "download md5 is not 32-hex"
@@ -1259,7 +1259,7 @@ func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why strin
 	}
 	// A DOI needs no grounding in a search result: it is an identifier the user
 	// supplies directly, and looking it up is the whole point of accepting it.
-	if doi := stringField(call.Input, "doi"); doi != "" {
+	if stringField(call.Input, "doi") != "" {
 		return true, ""
 	}
 	return false, "get_details call set none of md5, id or doi"
@@ -1292,7 +1292,7 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 	// Whether today's copy is a scan is live luck; whether the model then invents a
 	// summary of text it never saw is exactly what this scenario should catch.
 	if !out.Extractable {
-		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
 	if strings.TrimSpace(out.Text) == "" {
 		return false, "extractable read returned no text"
@@ -1487,7 +1487,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
 	// Whether this particular copy contains the term is live luck; claiming a
 	// passage that the search did not return is not.
@@ -1527,7 +1527,7 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return gradeDegraded(tr, "the file was not extractable ("+out.Reason+")")
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
 	// A PDF with no embedded table of contents is common and legitimate, and a model
 	// that then reads the book's own contents page and compiles one from it has done

@@ -21,9 +21,12 @@ func decodeObjects(body []byte) (map[string]map[string]any, error) {
 	return objs, nil
 }
 
+// jsonAPIPath is the catalog's JSON endpoint, used by every lookup here.
+const jsonAPIPath = "/json.php"
+
 // DetailsByMD5 returns the file record and its first related edition.
 func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition map[string]any, err error) {
-	body, _, err := c.get(ctx, "/json.php", url.Values{"object": {"f"}, "md5": {md5}, "addkeys": {"*"}})
+	body, _, err := c.get(ctx, jsonAPIPath, url.Values{"object": {"f"}, "md5": {md5}, "addkeys": {"*"}})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -67,7 +70,7 @@ func (c *Client) DetailsByMD5(ctx context.Context, md5 string) (file, edition ma
 // and returns unrelated articles, including ones that merely carry a different DOI
 // in their title.
 func (c *Client) DetailsByDOI(ctx context.Context, doi string) (edition, file map[string]any, err error) {
-	body, _, err := c.get(ctx, "/json.php", url.Values{"object": {"e"}, "doi": {doi}, "addkeys": {"*"}})
+	body, _, err := c.get(ctx, jsonAPIPath, url.Values{"object": {"e"}, "doi": {doi}, "addkeys": {"*"}})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,7 +113,7 @@ func (c *Client) DetailsByID(ctx context.Context, object, id string) (map[string
 	if object == "f" {
 		q.Set("addkeys", "*")
 	}
-	body, _, err := c.get(ctx, "/json.php", q)
+	body, _, err := c.get(ctx, jsonAPIPath, q)
 	if err != nil {
 		return nil, err
 	}

@@ -245,20 +245,26 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 			tr.FinalText = textOf(resp.Content)
 			return tr, nil
 		}
-		results := make([]contentBlock, 0, len(uses))
-		for _, use := range uses {
-			call, block := executeTool(ctx, session, use, logs)
-			tr.Calls = append(tr.Calls, call)
-			results = append(results, block)
-			// Simulate the agent's own fetch tool: pull any resolve-only download
-			// link to local disk (remote block).
-			if f := maybeFetchResolved(ctx, call); f != nil {
-				tr.Fetched = append(tr.Fetched, *f)
-			}
-		}
-		messages = append(messages, message{Role: "user", Content: results})
+		messages = append(messages, message{Role: "user", Content: tr.runTools(ctx, session, uses, logs)})
 	}
 	return tr, nil
+}
+
+// runTools executes one turn's tool calls against the live session, recording each
+// and returning the tool_result blocks to feed back to the model.
+func (tr *transcript) runTools(ctx context.Context, session *mcp.ClientSession, uses []contentBlock, logs *logCapture) []contentBlock {
+	results := make([]contentBlock, 0, len(uses))
+	for _, use := range uses {
+		call, block := executeTool(ctx, session, use, logs)
+		tr.Calls = append(tr.Calls, call)
+		results = append(results, block)
+		// Simulate the agent's own fetch tool: pull any resolve-only download link
+		// to local disk (remote block).
+		if f := maybeFetchResolved(ctx, call); f != nil {
+			tr.Fetched = append(tr.Fetched, *f)
+		}
+	}
+	return results
 }
 
 // newTurnRecord flattens one model reply into its record.
