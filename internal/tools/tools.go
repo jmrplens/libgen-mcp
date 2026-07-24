@@ -43,7 +43,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): auto consults them only when the catalog finds nothing, always consults them on every search, never restricts the search to the catalog. Omit to use the server default (auto unless configured otherwise); a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps

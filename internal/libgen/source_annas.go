@@ -142,7 +142,9 @@ func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client,
 	if tryMember {
 		memberURL, memberAccount, mErr := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
 		if mErr == nil {
-			return memberURL, "", memberAccount, nil
+			// The member path never fetches the record page — that is the point of
+			// the fast route — so the type comes from the URL it hands back.
+			return memberURL, extFromURL(memberURL), memberAccount, nil
 		}
 		memberErr = mErr
 	}
@@ -285,6 +287,16 @@ func extractAnnasExt(body []byte) string {
 		return ""
 	}
 	return strings.TrimPrefix(strings.ToLower(path.Ext(string(m[1]))), ".")
+}
+
+// extFromURL returns the lowercase extension of a URL's path, without the leading
+// dot, or "" when it has none.
+func extFromURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(path.Ext(u.Path)), ".")
 }
 
 func extractIPFSCID(body []byte) (string, bool) {

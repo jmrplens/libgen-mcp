@@ -509,3 +509,31 @@ func TestAnnasResolveCarriesTheExtension(t *testing.T) {
 		t.Errorf("Resolved.Ext = %q, want pdf — an extensionless save makes the file unreadable", got.Ext)
 	}
 }
+
+// TestAnnasMemberResolveCarriesTheExtension verifies the member tier also announces
+// the file type. It never fetches the record page — that is the point of the fast
+// path — so the extension has to come from the URL the API hands back, or a keyed
+// deployment would save extensionless files that read cannot open.
+func TestAnnasMemberResolveCarriesTheExtension(t *testing.T) {
+	file := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusPartialContent)
+	}))
+	defer file.Close()
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "fast_download") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"download_url":"` + file.URL + `/dl/Some%20Book.pdf"}`))
+	}))
+	defer mirror.Close()
+
+	s := annasSource{mirrors: staticMirrors{mirror.URL}, key: "secret"}
+	got, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Ext != "pdf" {
+		t.Errorf("Resolved.Ext = %q, want pdf", got.Ext)
+	}
+}
