@@ -298,16 +298,6 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 	return sources, nil
 }
 
-// withPerCallUnpaywall augments the selected source chain for a single call so a
-// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
-// a DOI download even when the server configured no email and thus left Unpaywall
-// out of the chain. It returns a NEW slice (never mutating the client's shared
-// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
-// unset), and the chain does not already include an enabled Unpaywall source, it
-// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
-// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
-// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
-// returned as-is, keeping the default (headless) behavior byte-identical to today.
 // withPerCallAnnas prepends an Anna's source carrying a per-call account key when
 // an md5 item supplies one, so a caller can enable the member fast-download tier
 // for a single request against a server that configured no key. It is a no-op
@@ -361,6 +351,16 @@ func (c *Client) sourceEnabled(name string) bool {
 	return c.sourceAllowed(name)
 }
 
+// withPerCallUnpaywall augments the selected source chain for a single call so a
+// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
+// a DOI download even when the server configured no email and thus left Unpaywall
+// out of the chain. It returns a NEW slice (never mutating the client's shared
+// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
+// unset), and the chain does not already include an enabled Unpaywall source, it
+// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
+// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
+// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
+// returned as-is, keeping the default (headless) behavior byte-identical to today.
 func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
 	if item.Email == "" || item.DOI == "" || item.Source != "" {
 		return sources
@@ -378,6 +378,26 @@ func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []Dow
 	}
 	adhoc := unpaywallSource{email: item.Email, http: c.http, baseURL: c.unpaywallBase}
 	return append([]DownloadSource{adhoc}, sources...)
+}
+
+// resolveWithin resolves item against one source under the per-source resolve
+// budget (Client.resolveBudget), so a source that cannot answer promptly is
+// abandoned and the chain advances instead of the whole chain waiting on it.
+//
+// The budget is a bound, not a deadline for the transfer: it covers only the
+// lookup hops a source makes to produce a URL, and is released as soon as Resolve
+// returns — the returned Resolved is a plain URL with no live body attached, so
+// the streaming that follows runs under the caller's context as before. Expiry
+// cancels only the derived context, leaving the caller's untouched, which is what
+// lets the chain move on. A non-positive budget resolves under the caller's
+// context unchanged.
+func (c *Client) resolveWithin(ctx context.Context, src DownloadSource, item Item) (Resolved, error) {
+	if c.resolveBudget <= 0 {
+		return src.Resolve(ctx, item)
+	}
+	rctx, cancel := context.WithTimeout(ctx, c.resolveBudget)
+	defer cancel()
+	return src.Resolve(rctx, item)
 }
 
 // ResolvedDownload is a direct download URL produced by ResolveLink: the bytes
@@ -412,7 +432,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 		if !src.Supports(item) {
 			continue
 		}
-		resolved, rerr := src.Resolve(ctx, item)
+		resolved, rerr := c.resolveWithin(ctx, src, item)
 		if rerr != nil {
 			errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), rerr))
 			if ctx.Err() != nil {
@@ -628,7 +648,7 @@ func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downl
 // the per-partial lock, and streams. Start-phase failures are wrapped with
 // errStartFailed so downloadFrom retries them on the schedule.
 func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
-	resolved, err := src.Resolve(ctx, req.item)
+	resolved, err := c.resolveWithin(ctx, src, req.item)
 	if err != nil {
 		return nil, startErr(err)
 	}

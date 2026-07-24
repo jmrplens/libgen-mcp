@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -26,24 +25,35 @@ const (
 
 // openLibraryFields is the projection requested from the search endpoint, trimming
 // the response to just the fields the resolver reads. Beyond the bibliographic
-// basics it asks for the availability signals (ebook_access, has_fulltext, ia,
-// cover_i) so a publicly readable book can be surfaced with a direct archive.org
-// link.
-const openLibraryFields = "title,author_name,first_publish_year,isbn,key,ebook_access,has_fulltext,ia,cover_i"
+// basics it asks for the availability signals (ebook_access, has_fulltext, ia) so a
+// publicly readable book can be surfaced with a direct archive.org link. Nothing
+// else belongs here: a field that DiscoveryResult cannot carry is paid for on every
+// search and reaches no caller.
+const openLibraryFields = "title,author_name,first_publish_year,isbn,key,ebook_access,has_fulltext,ia"
 
 // openLibraryPublicAccess is the ebook_access value OpenLibrary uses for a book that
 // is freely readable in full on the Internet Archive (as opposed to "borrowable",
 // "printdisabled" or "no_ebook").
 const openLibraryPublicAccess = "public"
 
-// openLibraryEmailRate (with a contact email) and openLibraryAnonRate (without) are
-// the inter-request intervals OpenLibrary's etiquette grants: an identified caller
-// may go faster (2 rps) than an anonymous one (1 rps). Each is the delay between
-// requests, so a smaller interval is the higher rate.
-// https://openlibrary.org/developers/api
+// openLibraryEmailRPS (a contact email is advertised in the User-Agent) and
+// openLibraryAnonRPS (no contact) are the request rates OpenLibrary's etiquette
+// grants: 1 request per second by default, tripled for a caller that identifies
+// itself with an application name and a contact address
+// (https://openlibrary.org/developers/api).
+//
+// This is the same policy internal/libgen's enrichment path applies to its own
+// OpenLibrary hops; the two are separate limiters (they are separate clients on
+// separate call paths) but they must agree on the numbers, so a change here
+// belongs in openLibraryEnrichRPS as well.
+//
+// The burst equals the rate rather than exceeding it: a limiter with a burst
+// larger than its per-second rate lets a caller fire that whole burst at once, so
+// an anonymous caller nominally honoring 1 rps would still open with two or three
+// back-to-back requests.
 const (
-	openLibraryEmailRate = time.Second / 2 // 2 rps
-	openLibraryAnonRate  = time.Second     // 1 rps
+	openLibraryEmailRPS = 3
+	openLibraryAnonRPS  = 1
 )
 
 // OpenLibraryProvider is a keyless query resolver that turns fuzzy title/author
@@ -60,20 +70,20 @@ type OpenLibraryProvider struct {
 
 // NewOpenLibrary constructs an OpenLibraryProvider with its own http.Client. When a
 // contact email is supplied it is advertised in the User-Agent and the limiter is
-// paced to OpenLibrary's identified allowance (2 rps); without one the provider
+// paced to OpenLibrary's identified allowance (3 rps); without one the provider
 // stays anonymous and drops to the unidentified allowance (1 rps), honoring
 // https://openlibrary.org/developers/api.
 func NewOpenLibrary(email string) *OpenLibraryProvider {
 	email = strings.TrimSpace(email)
 	ua := discoveryUserAgent
-	every := openLibraryAnonRate
+	rps := openLibraryAnonRPS
 	if email != "" {
 		ua += " (mailto:" + email + ")"
-		every = openLibraryEmailRate
+		rps = openLibraryEmailRPS
 	}
 	return &OpenLibraryProvider{
 		client:    newDiscoveryClient(),
-		limiter:   rate.NewLimiter(rate.Every(every), 2),
+		limiter:   rate.NewLimiter(rate.Limit(rps), rps),
 		userAgent: ua,
 	}
 }
@@ -156,9 +166,6 @@ type openLibraryDoc struct {
 	// IA holds the Internet Archive identifiers backing the book; the first one
 	// forms the archive.org "details" URL for a publicly readable copy.
 	IA []string `json:"ia"`
-	// CoverI is the OpenLibrary cover id, requested so a client can render a cover
-	// thumbnail (https://covers.openlibrary.org/b/id/<CoverI>-L.jpg).
-	CoverI int `json:"cover_i"`
 }
 
 // parseOpenLibraryDocs decodes an OpenLibrary search envelope into DiscoveryResults,

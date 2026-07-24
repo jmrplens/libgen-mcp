@@ -3,10 +3,15 @@ package libgen
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // stubSource is a test DownloadSource whose behavior (support decision, resolve
@@ -42,6 +47,83 @@ func fileCDN(t *testing.T, payload []byte, disposition string) *httptest.Server 
 		_, _ = w.Write(payload)
 	})
 	return httptest.NewServer(mux)
+}
+
+// rangeServingBody builds an httptest server that serves body at "/" with the
+// given Content-Type and honors a single "bytes=<start>-<end>" Range request the
+// way a real CDN does: a 206 carrying exactly the requested slice and a
+// Content-Range header. A request without a Range gets the whole body with a 200.
+func rangeServingBody(t *testing.T, body, contentType string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		spec := strings.TrimPrefix(r.Header.Get("Range"), "bytes=")
+		if spec == "" {
+			_, _ = io.WriteString(w, body)
+			return
+		}
+		startStr, endStr, _ := strings.Cut(spec, "-")
+		start, _ := strconv.Atoi(startStr)
+		end, _ := strconv.Atoi(endStr)
+		if end >= len(body) {
+			end = len(body) - 1
+		}
+		if start > end {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		slice := body[start : end+1]
+		w.Header().Set("Content-Range", "bytes "+strconv.Itoa(start)+"-"+strconv.Itoa(end)+"/"+strconv.Itoa(len(body)))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = io.WriteString(w, slice)
+	}))
+}
+
+// TestProbePDFMagicBytes verifies the magic-number fallback probePDF relies on
+// when a server does not announce a PDF Content-Type — the common shape for an
+// institutional fileserver behind CORE, or Europe PMC's article render path.
+//
+// The Range-honoring case is the one that matters: the probe must request enough
+// bytes for the "%PDF" marker to arrive. A one-byte range can never match it, so a
+// live open-access PDF served as application/octet-stream would be judged not a
+// PDF and its source dropped from the chain.
+func TestProbePDFMagicBytes(t *testing.T) {
+	const pdfBody = "%PDF-1.4\n1 0 obj\n"
+
+	t.Run("range honored, non-pdf content type", func(t *testing.T) {
+		srv := rangeServingBody(t, pdfBody, "application/octet-stream")
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (body starts with the %PDF magic number)")
+		}
+	})
+
+	t.Run("range ignored, full body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = io.WriteString(w, pdfBody)
+		}))
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (server ignored Range and returned the whole PDF)")
+		}
+	})
+
+	t.Run("non-pdf body", func(t *testing.T) {
+		srv := rangeServingBody(t, "<html><body>gone</body></html>", "application/octet-stream")
+		defer srv.Close()
+		if probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = true, want false (body is not a PDF)")
+		}
+	})
+
+	t.Run("pdf content type short-circuits", func(t *testing.T) {
+		srv := rangeServingBody(t, "not really a pdf", "application/pdf")
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (Content-Type names a PDF)")
+		}
+	})
 }
 
 // TestEscapeDOIPath verifies that escapeDOIPath keeps a DOI's slashes literal
@@ -145,6 +227,71 @@ func TestDownloadSourceChainFallback(t *testing.T) {
 	}
 	if !res.Verified {
 		t.Error("Verified = false, want true")
+	}
+}
+
+// slowSource is a test DownloadSource whose Resolve blocks for delay unless the
+// context is canceled first, in which case it reports the context error the way a
+// well-behaved source does. It exists to prove a source cannot hold the chain for
+// longer than its resolve budget.
+type slowSource struct {
+	name     string
+	delay    time.Duration
+	resolved Resolved
+}
+
+func (s slowSource) Name() string       { return s.name }
+func (s slowSource) Supports(Item) bool { return true }
+func (s slowSource) Resolve(ctx context.Context, _ Item) (Resolved, error) {
+	timer := time.NewTimer(s.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return Resolved{}, ctx.Err()
+	case <-timer.C:
+		return s.resolved, nil
+	}
+}
+
+// TestResolveBudgetBoundsEachSource verifies that a source which cannot resolve
+// promptly is abandoned at its budget rather than being allowed to spend the whole
+// request timeout (or, for a multi-hop source, several of them) while the sources
+// behind it wait.
+//
+// The article chain grew to seven sources, most of which resolve over the same
+// bounded-per-request client; without a per-source budget their worst cases add up
+// serially in front of the last-resort source, which is the one most likely to
+// actually serve the file. The chain must still advance and complete.
+func TestResolveBudgetBoundsEachSource(t *testing.T) {
+	payload := []byte("%PDF-1.4 budget payload")
+	cdn := fileCDN(t, payload, `attachment; filename="b.pdf"`)
+	defer cdn.Close()
+
+	const budget = 150 * time.Millisecond
+	cfg := &config.Config{
+		Timeout:                budget,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 1,
+	}
+	slow := slowSource{name: "slow", delay: 10 * time.Second}
+	good := stubSource{name: "good", supports: true, resolved: Resolved{FileURL: cdn.URL + "/file"}}
+	c := New(staticMirrors{}, cfg, WithSources(slow, good))
+
+	started := time.Now()
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/budget"}, t.TempDir(), "")
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v, want the chain to advance past the slow source", err)
+	}
+	if res.Source != "good" {
+		t.Errorf("Source = %q, want %q", res.Source, "good")
+	}
+	// Generous headroom over the budget so the assertion is about the bound, not
+	// about scheduling jitter; the unbounded behavior takes the source's full 10s.
+	if limit := 5 * time.Second; elapsed >= limit {
+		t.Errorf("chain took %v, want under %v: the slow source was not bounded by its resolve budget", elapsed, limit)
 	}
 }
 

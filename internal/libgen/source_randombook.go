@@ -344,12 +344,7 @@ func (s randombookSource) base() string {
 }
 
 // client returns the configured HTTP client or http.DefaultClient.
-func (s randombookSource) client() *http.Client {
-	if s.http != nil {
-		return s.http
-	}
-	return http.DefaultClient
-}
+func (s randombookSource) client() *http.Client { return httpClientOr(s.http) }
 
 // normalizeMirrorBase turns a discovered mirror reference into a clean base URL:
 // it trims surrounding whitespace and any trailing slash, and prepends https://

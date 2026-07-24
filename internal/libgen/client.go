@@ -64,8 +64,8 @@ type Client struct {
 	// mirror budget.
 	enrichLimiter *rate.Limiter
 	// olLimiter governs the OpenLibrary enrichment hops specifically. OpenLibrary
-	// asks callers to stay within 1 req/s unidentified or up to ~3 req/s with a
-	// contact email (https://openlibrary.org/developers/api), a tighter budget than
+	// asks callers to stay within 1 req/s unidentified or 3 req/s with a contact
+	// email (openLibraryEnrichAnonRPS / openLibraryEnrichRPS), a tighter budget than
 	// Crossref's, so it gets its own limiter rather than sharing enrichLimiter.
 	olLimiter *rate.Limiter
 	// enrichEmail is the contact address advertised to Crossref's polite pool via
@@ -89,6 +89,15 @@ type Client struct {
 	// are made before a source is deemed unable to start; an empty schedule means a
 	// single attempt with no start-retries. Injectable so tests use tiny waits.
 	startRetryWaits []time.Duration
+	// resolveBudget bounds how long ONE source may spend in Resolve before the
+	// chain moves on. Resolution is serial and every source in front of the one
+	// that can actually serve an item spends its own failure time first, so without
+	// a per-source bound a DOI chain of seven sources — several of which make more
+	// than one sequential request — can burn minutes before the last-resort source
+	// is even tried. It is derived from cfg.Timeout, i.e. each source gets one
+	// request's worth of time to resolve however many hops it needs; a
+	// non-positive value disables the bound (a Client built directly by a test).
+	resolveBudget time.Duration
 	// stallTimeout is the progress-resetting stall window while streaming: a
 	// transfer is aborted only when no bytes arrive within it, never for being
 	// merely slow. A non-positive value disables the stall guard. Injectable so
@@ -234,12 +243,13 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		dl:               &http.Client{},
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		enrichLimiter:    rate.NewLimiter(5, 5),
-		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), openLibraryEnrichBurst),
+		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), olRPS),
 		enrichEmail:      cfg.UnpaywallEmail,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,
 		startRetryWaits:  cfg.DownloadStartRetryWaits,
+		resolveBudget:    cfg.Timeout,
 		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
@@ -254,15 +264,6 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	return c
 }
 
-// buildSourceChain assembles the ordered download-source chain from config in
-// config.KnownSources order; because Download filters each source by
-// Supports(item), this single ordered slice yields the right per-item order: an
-// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
-// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
-// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
-// or gated off, like core without a key — are left out. Each non-LibGen source uses the client's
-// page HTTP client (with timeout) for its resolution lookups; libgenSource holds
-// c so it can reuse the mirror failover in ResolveGetURL.
 // fixedMirrors is a MirrorLister over a hardcoded list, used as the offline
 // fallback when a mirror Manager cannot be built.
 type fixedMirrors []string
@@ -306,6 +307,15 @@ func allowedByOperator(configured []string) func(string) bool {
 	}
 }
 
+// buildSourceChain assembles the ordered download-source chain from config in
+// config.KnownSources order; because Download filters each source by
+// Supports(item), this single ordered slice yields the right per-item order: an
+// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
+// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
+// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
+// or gated off, like core without a key — are left out. Each non-LibGen source uses
+// the client's page HTTP client (with timeout) for its resolution lookups;
+// libgenSource holds c so it can reuse the mirror failover in ResolveGetURL.
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	// Discovered once and shared by every Anna's-backed source, so one discovery
 	// and one cache serve them all. Built unconditionally (not only when scidb or

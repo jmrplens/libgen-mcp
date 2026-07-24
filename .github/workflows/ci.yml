@@ -32,10 +32,17 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -count=1 -coverpkg=./internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
-          go tool cover -func=coverage.out | tail -1
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          go tool cover -func=coverage.out | grep '^total:'
+          # The summary line is anchored: a plain "total" also matches any function
+          # whose name contains it, which yields two values and turns the comparison
+          # below into an awk syntax error that silently passes the gate.
+          COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
           echo "Total coverage (internal/): ${COVERAGE}%"
-          if awk "BEGIN {exit !(${COVERAGE} + 0 < ${COVERAGE_MIN} + 0)}"; then
+          if [ -z "${COVERAGE}" ]; then
+            echo "FAIL: no total coverage line in coverage.out"
+            exit 1
+          fi
+          if ! awk "BEGIN {exit !(${COVERAGE} + 0 >= ${COVERAGE_MIN} + 0)}" 2>/dev/null; then
             echo "FAIL: coverage ${COVERAGE}% is below minimum ${COVERAGE_MIN}%"
             exit 1
           fi

@@ -17,18 +17,30 @@ import (
 // TestNew_OpenLibraryEnrichLimiter verifies the enrichment OpenLibrary limiter is
 // paced by the presence of a contact email: identified deployments get the 3 rps
 // allowance, anonymous ones drop to 1 rps, honoring OpenLibrary's etiquette.
+//
+// The burst is pinned to the rate as well. A burst above the per-second rate is
+// spendable in one go, so an anonymous deployment claiming 1 rps would still fire
+// the enrichment hops back to back.
 func TestNew_OpenLibraryEnrichLimiter(t *testing.T) {
 	base := &config.Config{Timeout: time.Second, RateRPS: 1, RateBurst: 1, MaxConcurrentDownloads: 1}
 
 	withEmail := *base
 	withEmail.UnpaywallEmail = "dev@example.com"
-	if got := New(staticMirrors{}, &withEmail).olLimiter.Limit(); got != rate.Limit(openLibraryEnrichRPS) {
+	identified := New(staticMirrors{}, &withEmail)
+	if got := identified.olLimiter.Limit(); got != rate.Limit(openLibraryEnrichRPS) {
 		t.Errorf("identified olLimiter = %v, want %v (3 rps)", got, rate.Limit(openLibraryEnrichRPS))
+	}
+	if got := identified.olLimiter.Burst(); got != openLibraryEnrichRPS {
+		t.Errorf("identified olLimiter burst = %d, want %d (the rate itself)", got, openLibraryEnrichRPS)
 	}
 
 	anon := *base
-	if got := New(staticMirrors{}, &anon).olLimiter.Limit(); got != rate.Limit(openLibraryEnrichAnonRPS) {
+	anonymous := New(staticMirrors{}, &anon)
+	if got := anonymous.olLimiter.Limit(); got != rate.Limit(openLibraryEnrichAnonRPS) {
 		t.Errorf("anonymous olLimiter = %v, want %v (1 rps)", got, rate.Limit(openLibraryEnrichAnonRPS))
+	}
+	if got := anonymous.olLimiter.Burst(); got != openLibraryEnrichAnonRPS {
+		t.Errorf("anonymous olLimiter burst = %d, want %d: a larger burst exceeds the rate it claims to honor", got, openLibraryEnrichAnonRPS)
 	}
 }
 

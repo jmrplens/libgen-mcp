@@ -113,9 +113,15 @@ coverage: test ## Generate an HTML coverage report (coverage.html)
 
 cover-check: ## Fail if coverage over internal/ is below COVERAGE_MIN
 	go test -count=1 -coverpkg=$(COVERAGE_PKGS) -coverprofile=coverage.internal.out $(COVERAGE_PKGS)
-	@go tool cover -func=coverage.internal.out | grep total
-	@COVERAGE=$$(go tool cover -func=coverage.internal.out | grep total | awk '{print $$3}' | tr -d '%'); \
-	if awk "BEGIN {exit !($$COVERAGE + 0 < $(COVERAGE_MIN) + 0)}"; then \
+	@go tool cover -func=coverage.internal.out | grep '^total:'
+	@# The summary line is anchored: a plain "total" also matches any function whose
+	@# name contains it (e.g. totalSizeLocked), which yields two values and turns the
+	@# comparison below into an awk syntax error that silently passes the gate.
+	@COVERAGE=$$(go tool cover -func=coverage.internal.out | grep '^total:' | awk '{print $$3}' | tr -d '%'); \
+	if [ -z "$$COVERAGE" ]; then \
+		echo "FAIL: no total coverage line in coverage.internal.out"; exit 1; \
+	fi; \
+	if ! awk "BEGIN {exit !($$COVERAGE + 0 >= $(COVERAGE_MIN) + 0)}" 2>/dev/null; then \
 		echo "FAIL: coverage $$COVERAGE% is below minimum $(COVERAGE_MIN)%"; exit 1; \
 	fi; \
 	echo "PASS: coverage $$COVERAGE% meets minimum $(COVERAGE_MIN)%"

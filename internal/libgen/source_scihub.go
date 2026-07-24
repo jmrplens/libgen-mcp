@@ -65,10 +65,7 @@ func (s scihubSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	if scheme == "" {
 		scheme = scihubDefaultScheme
 	}
-	httpClient := s.http
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient := httpClientOr(s.http)
 
 	var lastErr error
 	for _, host := range s.hosts {
