@@ -88,7 +88,6 @@ transfer:
   its `.part` is kept for a later resume. The per-request `LIBGEN_MCP_TIMEOUT` never applies
   to a streaming download.
 
-
 The schedule is spent on the **last** source that can serve the item, not on each one
 in turn. A source with another behind it gets a single attempt, so a source that is down
 does not hold up one that is not — a download the next source answers in seconds would
