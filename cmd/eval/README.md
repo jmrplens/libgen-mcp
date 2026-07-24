@@ -75,7 +75,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them |
 | S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage |
 | S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored |
-| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission *and* on no ISBN or page count appearing anyway |
+| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway |
 | S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds |
 | S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory |
 
@@ -199,7 +199,11 @@ re-grading an old record will show that — it needs a real run.
 The record has to be faithful for this to mean anything, which is a property worth
 checking rather than assuming: run one scenario live with `--record`, then
 `--regrade` that record, and the two outcomes should be identical down to the
-message.
+message. Both times that check has been run it found something — a progress
+notification stored without the token that ties it to its call, and an assertion
+reading a credential from the environment instead of from the transcript. An
+assertion that consults anything outside the transcript is not re-gradable, and
+the mismatch is how you find out.
 
 ## Cost, rate, and network caveats
 

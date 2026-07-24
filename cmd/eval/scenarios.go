@@ -84,9 +84,10 @@ const elicitOADOI = "10.1371/journal.pmed.0020124"
 // annasKeyFromEnv is the Anna's Archive membership key as configured when the
 // harness started. It is captured at package initialization because a scenario
 // clears LIBGEN_MCP_ANNAS_KEY from the environment to force the elicitation path:
-// reading it later would find the cleared value. Empty when no key is configured,
-// which turns the membership scenario into a skip rather than a failure — the key
-// is a paid credential and is never checked into the repository.
+// reading it later would find the cleared value. Empty when none is configured,
+// in which case the host declines that prompt — which is how an assertion learns
+// there was no key, without reading the environment itself. The key is a paid
+// credential and is never checked into the repository.
 var annasKeyFromEnv = strings.TrimSpace(os.Getenv("LIBGEN_MCP_ANNAS_KEY"))
 
 func unpaywallEmail() string {
@@ -657,6 +658,10 @@ func scenarios() []scenario {
 	}
 }
 
+// fabricatedISBN matches an ISBN-13 in prose. Nothing returned one for an invented
+// book, so an answer carrying one made it up.
+var fabricatedISBN = regexp.MustCompile(`97[89][- 0-9]{10,}`)
+
 // assertReportsNothingFound verifies a model asked for something that does not
 // exist says so. Every tool call it can make will come up empty, so the only wrong
 // move left is describing a book nobody has — which is precisely the failure a
@@ -678,32 +683,31 @@ func assertReportsNothingFound(tr transcript) (pass bool, detail string) {
 		return false, "model did not report the miss; it answered: " + firstChars(tr.FinalText, 200)
 	}
 	// An ISBN or a page count in the answer would be fabricated: nothing returned one.
-	if isbn := regexp.MustCompile(`97[89][- 0-9]{10,}`); isbn.MatchString(tr.FinalText) {
+	if fabricatedISBN.MatchString(tr.FinalText) {
 		return false, "model reported the miss but still produced an ISBN: " + firstChars(tr.FinalText, 200)
 	}
 	return true, "nothing exists by that name and the model said so, inventing no metadata"
 }
 
-// assertRestrictedSourcesHonored verifies LIBGEN_MCP_SOURCES holds. The deployment
-// permits the catalog only, so a DOI download has no source that can serve it: the
-// tool must refuse, and the model must pass that on rather than claim a file.
-func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
-	var sawDOIAttempt, doiRefused bool
+// doiDownloadOutcome reports whether the model tried a DOI download and whether
+// every such attempt was refused.
+func doiDownloadOutcome(tr transcript) (attempted, refused bool) {
 	for _, c := range tr.Calls {
 		if c.Name != "download" || stringField(c.Input, "doi") == "" {
 			continue
 		}
-		sawDOIAttempt = true
+		attempted = true
 		if c.Result != nil && c.Result.IsError {
-			doiRefused = true
+			refused = true
 		}
 	}
-	if sawDOIAttempt && !doiRefused {
-		return false, functionalPrefix + "a DOI download was served by a deployment whose only source is the catalog"
-	}
-	// The real question is which source served anything that did succeed. A model
-	// that finds a legitimate route through the permitted source has done well; a
-	// source outside the list appearing here is the restriction leaking.
+	return attempted, refused
+}
+
+// sourceOutsideAllowlist returns the name of a source that served a download while
+// not being permitted, or "" when every successful download came from an allowed
+// one.
+func sourceOutsideAllowlist(tr transcript, allowed ...string) string {
 	for _, c := range tr.Calls {
 		if c.Name != "download" || c.Result == nil || c.Result.IsError {
 			continue
@@ -712,10 +716,30 @@ func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
 		if derr := decodeStructured(c.Structured, &out); derr != nil {
 			continue
 		}
-		if out.Source != "" && !strings.EqualFold(out.Source, "libgen") {
-			return false, functionalPrefix + "download was served by " + out.Source +
-				", which this deployment does not permit"
+		if out.Source == "" || slices.ContainsFunc(allowed, func(a string) bool {
+			return strings.EqualFold(a, out.Source)
+		}) {
+			continue
 		}
+		return out.Source
+	}
+	return ""
+}
+
+// assertRestrictedSourcesHonored verifies LIBGEN_MCP_SOURCES holds. The deployment
+// permits the catalog only, so a DOI download has no source that can serve it: the
+// tool must refuse, and the model must pass that on rather than claim a file.
+func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
+	sawDOIAttempt, doiRefused := doiDownloadOutcome(tr)
+	if sawDOIAttempt && !doiRefused {
+		return false, functionalPrefix + "a DOI download was served by a deployment whose only source is the catalog"
+	}
+	// The real question is which source served anything that did succeed. A model
+	// that finds a legitimate route through the permitted source has done well; a
+	// source outside the list appearing here is the restriction leaking.
+	if used := sourceOutsideAllowlist(tr, "libgen"); used != "" {
+		return false, functionalPrefix + "download was served by " + used +
+			", which this deployment does not permit"
 	}
 	if !sawDOIAttempt {
 		return false, "SURFACE GAP: model never tried the DOI it was given"
@@ -903,8 +927,15 @@ func assertReadEscalated(tr transcript) (pass bool, detail string) {
 // must set it. The key itself arrives through elicitation, so this also proves that
 // prompt is answerable end to end.
 func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
-	if annasKeyFromEnv == "" {
-		return true, skipPrefix + " no LIBGEN_MCP_ANNAS_KEY configured, so the member tier cannot be exercised"
+	// Read from the transcript, not from the environment: this scenario clears the
+	// configured key so the elicitation always fires, and the host answers it with
+	// the key it has — accepting when one exists, declining when none does. Deriving
+	// it this way keeps the assertion a pure function of the transcript, which is
+	// what lets a recorded run be re-graded later.
+	for _, e := range tr.Elicitations {
+		if strings.Contains(strings.ToLower(e.Field), "key") && e.Action != "accept" {
+			return true, skipPrefix + " no Anna's membership key was available, so the member tier cannot be exercised"
+		}
 	}
 	call, ok := findCall(tr, "download")
 	if !ok {
