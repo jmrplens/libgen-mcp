@@ -87,7 +87,7 @@ type DetailsOutput struct {
 // client's machine — the client (or an agent's own fetch tool) retrieves the URL.
 type ResolvedLink struct {
 	URL       string            `json:"url" jsonschema:"the direct URL to download the file from"`
-	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook, unpaywall or scihub"`
+	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook or annas for books; unpaywall, europepmc, biorxiv, fatcat, core, scihub or scidb for articles"`
 	Filename  string            `json:"filename,omitempty" jsonschema:"a suggested filename for the saved file"`
 	MIMEType  string            `json:"mime_type,omitempty" jsonschema:"the likely content type of the file"`
 	Headers   map[string]string `json:"headers,omitempty" jsonschema:"request headers to set when fetching the URL (e.g. Referer for sci-hub); absent when the URL is fetchable as-is"`
@@ -111,7 +111,7 @@ type DownloadInput struct {
 	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5 or doi"`
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
 	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
-	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen or randombook for books (md5); unpaywall or scihub for articles (doi). Omit to try every compatible source in order with failover"`
+	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen, randombook or annas for books (md5); unpaywall, europepmc, biorxiv, fatcat, core, scihub or scidb for articles (doi). Omit to try every compatible source in order with failover"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 }

@@ -55,21 +55,33 @@ problem — re-check the query or identifier rather than your connection.
 
 **Symptom.** A `download` with a `doi` fails, or returns nothing useful.
 
-**Meaning.** Articles are fetched by DOI through two sources in order:
+**Meaning.** Articles are fetched by DOI through several sources in order — the legal
+open-access providers first, then the shadow-library fallbacks:
 
 1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled
    DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain
    advances.
-2. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+2. **`europepmc`** — serves the PDF when Europe PMC holds the article's open-access full text;
+   reports whether the DOI is simply not indexed or indexed without an OA full text.
+3. **`biorxiv`** — only for `10.1101` preprint DOIs; returns the latest version's full-text PDF
+   from bioRxiv or medRxiv.
+4. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar has one.
+5. **`core`** — only when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access download URL.
+6. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
    article page with an extractable PDF.
+7. **`scidb`** — Anna's Archive's SciDB viewer, covering papers published after Sci-Hub stopped
+   indexing.
 
 **Fixes.**
 
 - Confirm the DOI is correct (copy it exactly from the article search result).
-- If only Unpaywall failed, the article likely is not open access; Sci-Hub is the fallback.
+- If the open-access providers all failed, the article likely is not open access; Sci-Hub and
+  SciDB are the fallbacks.
 - Sci-Hub mirrors rotate and go down often. Update `LIBGEN_MCP_SCIHUB_HOSTS` with a currently
   working host list if all defaults fail.
-- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL` — until you do, Unpaywall is disabled and only Sci-Hub is tried for DOIs. The API expects a real contact address.
+- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL` — until you do, Unpaywall is disabled (the other
+  open-access sources and Sci-Hub are still tried). The API expects a real contact address.
+- Set `LIBGEN_MCP_CORE_KEY` (a free CORE API key) to add CORE to the open-access chain.
 - Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
   LibGen digest for them.
 

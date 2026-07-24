@@ -34,7 +34,7 @@ head:
             "name": "¿Por qué faltan algunos artículos en los resultados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Los artículos se obtienen por DOI a través de dos fuentes por orden: unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y scihub es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con truncated: true indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo."
+              "text": "Los artículos se obtienen por DOI a través de varias fuentes por orden, primero los proveedores legales de acceso abierto: unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto; luego se prueban europepmc (texto completo de Europe PMC), biorxiv (preprints 10.1101), fatcat (Internet Archive Scholar) y core (una clave de API gratuita de CORE, cuando LIBGEN_MCP_CORE_KEY está fijado); finalmente los fallbacks de bibliotecas en la sombra scihub y scidb. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en acceso abierto, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con truncated: true indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo."
             }
           },
           {
@@ -82,17 +82,23 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 
 **Síntoma.** Un `download` con un `doi` falla, o no devuelve nada útil.
 
-**Significado.** Los artículos se obtienen por DOI a través de dos fuentes por orden:
+**Significado.** Los artículos se obtienen por DOI a través de varias fuentes por orden — primero los proveedores legales de acceso abierto, luego los fallbacks de bibliotecas en la sombra:
 
 1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza.
-2. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+2. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
+3. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
+4. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando Scholar tiene una.
+5. **`core`** — solo cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE.
+6. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+7. **`scidb`** — el visor SciDB de Anna's Archive, que cubre artículos publicados tras el cese de indexación de Sci-Hub.
 
 **Soluciones.**
 
 - Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
-- Si solo falló Unpaywall, es probable que el artículo no sea de acceso abierto; Sci-Hub es el fallback.
+- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y SciDB son los fallbacks.
 - Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
-- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada y para los DOI solo se prueba Sci-Hub. La API espera una dirección de contacto real.
+- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
+- Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
 - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
 
 ## Resultados de búsqueda truncados
@@ -170,7 +176,7 @@ Una discrepancia de MD5 (`integrity check failed: MD5 mismatch`) significa que l
 
 ### ¿Por qué faltan algunos artículos en los resultados?
 
-Los artículos se obtienen por DOI a través de dos fuentes por orden: `unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y `scihub` es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con `truncated: true` indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo.
+Los artículos se obtienen por DOI a través de varias fuentes por orden, primero los proveedores legales de acceso abierto: `unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto; luego se prueban `europepmc` (texto completo de Europe PMC), `biorxiv` (preprints `10.1101`), `fatcat` (Internet Archive Scholar) y `core` (una clave de API gratuita de CORE, cuando `LIBGEN_MCP_CORE_KEY` está fijado); finalmente los fallbacks de bibliotecas en la sombra `scihub` y `scidb`. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en acceso abierto, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con `truncated: true` indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo.
 
 ### ¿Dónde guarda libgen-mcp los archivos descargados?
 

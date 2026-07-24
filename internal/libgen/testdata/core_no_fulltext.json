@@ -1,0 +1,13 @@
+{
+  "totalHits": 1,
+  "limit": 1,
+  "offset": 0,
+  "results": [
+    {
+      "id": 87654321,
+      "doi": "10.9999/metadata.only",
+      "title": "A work CORE has metadata for but no downloadable full text",
+      "downloadUrl": null
+    }
+  ]
+}

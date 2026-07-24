@@ -437,6 +437,128 @@ func skipRandombookDiagnosedError(t *testing.T, md5 string, err error) {
 	}
 }
 
+// europePMCLiveDOI is a reliably open-access PLOS Biology article whose full text
+// Europe PMC holds (PMC4991899), verified served as application/pdf on 2026-07-24.
+const europePMCLiveDOI = "10.1371/journal.pbio.1002533"
+
+// biorxivLiveDOI is a real, CC0-licensed bioRxiv preprint (verified present in the
+// details API on 2026-07-24), so the biorxiv source has a deterministic target.
+const biorxivLiveDOI = "10.1101/2020.12.30.424878"
+
+// fatcatLiveDOI is a long-established open-access DOI Internet Archive Scholar is
+// expected to have preserved; older OA works are the case fatcat is strongest for.
+const fatcatLiveDOI = "10.1371/journal.pbio.1002533"
+
+// TestE2EEuropePMCClassifiedOutcome exercises the europepmc source end to end
+// against the live Europe PMC APIs, restricted to source=europepmc so no other
+// source can mask its behavior. On error the failure must be one of the known,
+// diagnosed classes; anything else fails the test.
+func TestE2EEuropePMCClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := client.DownloadItem(ctx, libgen.Item{DOI: europePMCLiveDOI, Source: "europepmc"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("europepmc reported a download of %d bytes", res.SizeBytes)
+		}
+		assertPDF(t, res.Path)
+		t.Logf("europepmc served a real PDF: bytes=%d", res.SizeBytes)
+		return
+	}
+	known := []string{
+		"not indexed",               // DOI absent from Europe PMC
+		"no open-access full text",  // indexed but no OA full text
+		"no reachable PDF endpoint", // both render endpoints unreachable
+		"returned HTTP",             // search API answered non-200
+		"requesting",                // transport failure reaching Europe PMC
+		"context deadline",          // a slow endpoint inside the timeout budget
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("europepmc unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("europepmc failed in an undiagnosed way: %v", err)
+}
+
+// TestE2EBiorxivClassifiedOutcome exercises the biorxiv source end to end against
+// the live bioRxiv details API and content host, restricted to source=biorxiv. On
+// error the failure must be one of the known, diagnosed classes.
+func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := client.DownloadItem(ctx, libgen.Item{DOI: biorxivLiveDOI, Source: "biorxiv"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("biorxiv reported a download of %d bytes", res.SizeBytes)
+		}
+		assertPDF(t, res.Path)
+		t.Logf("biorxiv served a real PDF: bytes=%d", res.SizeBytes)
+		return
+	}
+	known := []string{
+		"not found on bioRxiv or medRxiv", // neither server carries the DOI
+		"returned HTTP",                   // details API answered non-200
+		"requesting",                      // transport failure reaching bioRxiv
+		"HTML page",                       // content host served an interstitial, not the PDF
+		"context deadline",                // a slow endpoint inside the timeout budget
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("biorxiv unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("biorxiv failed in an undiagnosed way: %v", err)
+}
+
+// TestE2EFatcatClassifiedOutcome exercises the fatcat source end to end against the
+// live fatcat API and Internet Archive, restricted to source=fatcat. On error the
+// failure must be one of the known, diagnosed classes.
+func TestE2EFatcatClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := client.DownloadItem(ctx, libgen.Item{DOI: fatcatLiveDOI, Source: "fatcat"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("fatcat reported a download of %d bytes", res.SizeBytes)
+		}
+		t.Logf("fatcat served a real download: bytes=%d", res.SizeBytes)
+		return
+	}
+	known := []string{
+		"unknown to fatcat",                  // fatcat has no release for the DOI
+		"no preserved Internet Archive file", // release known but nothing preserved
+		"returned HTTP",                      // API answered an unexpected status
+		"requesting",                         // transport failure reaching fatcat/IA
+		"HTML page",                          // IA served an interstitial, not the PDF
+		"context deadline",                   // a slow endpoint inside the timeout budget
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("fatcat unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("fatcat failed in an undiagnosed way: %v", err)
+}
+
 // scidbLiveDOI is a long-established, heavily-mirrored DOI verified served by
 // SciDB on 2026-07-23, which keeps this live check deterministic.
 const scidbLiveDOI = "10.1016/j.cell.2011.02.013"

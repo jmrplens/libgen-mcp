@@ -218,7 +218,7 @@ at least one is required. Returns the saved path, size, and the source that serv
 | `doi`          | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                                                                                                                                                           |
 | `path`         | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                                                                                                                                                                          |
 | `filename`     | string | no       | Destination filename. Defaults to a clean name from the record metadata, else the name the mirror announces, else the MD5.                                                                                                                                                                                                                                                                                |
-| `source`       | string | no       | Restrict the download to a single source: `libgen`/`randombook` (books, `md5`) or `unpaywall`/`scihub` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set. Omit to try every compatible source in order with failover.                                                                                                                                            |
+| `source`       | string | no       | Restrict the download to a single source: `libgen`/`randombook`/`annas` (books, `md5`) or `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`scihub`/`scidb` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, and `core` only when `LIBGEN_MCP_CORE_KEY` is set. Omit to try every compatible source in order with failover.                                   |
 | `resolve_only` | bool   | no       | When `true`, resolve the direct download **URL** and return it as a link (a `resource_link` block plus a `resolved` object) **without** downloading. Use to fetch the file with your own tool. Default `false` (download to disk) on a local server; **always implied `true`** on a remote server (`--http`, or a stdio server with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`), which cannot write to your machine. |
 
 At least one of `md5` or `doi` is required. A malformed `md5` (not 32 hex chars) is
@@ -229,37 +229,37 @@ rejected before any work.
 The download runs through a fixed source chain, filtered by what each item supports:
 
 - **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror
-  discovery).
-- **Article** (`doi` only) → `unpaywall` (open-access PDF), then `scihub`.
-- **Both `md5` and `doi`** → article sources first (`unpaywall`, `scihub`), then book
-  sources (`libgen`, `randombook`).
+  discovery), then `annas` (Anna's Archive).
+- **Article** (`doi` only) → the legal open-access providers first — `unpaywall`, `europepmc`,
+  `biorxiv`, `fatcat`, `core` — then the shadow-library fallbacks `scihub` and `scidb`.
+- **Both `md5` and `doi`** → article sources first, then book sources.
 
 The first source that resolves and streams a valid file wins; the `source` field in the
 result names it. See [Architecture](architecture.md) for the full chain.
 
 ### download output
 
-| Field               | Type   | Description                                                                                                                                      |
-| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                    |
-| `path`              | string | Absolute path of the saved file.                                                                                                                 |
-| `size_bytes`        | int    | Final file size in bytes.                                                                                                                        |
-| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                          |
-| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                |
-| `source`            | string | The source that succeeded: `libgen`, `randombook`, `unpaywall`, or `scihub`.                                                                     |
-| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest. |
-| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                       |
+| Field               | Type   | Description                                                                                                                                                |
+| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                              |
+| `path`              | string | Absolute path of the saved file.                                                                                                                           |
+| `size_bytes`        | int    | Final file size in bytes.                                                                                                                                  |
+| `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                                    |
+| `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                          |
+| `source`            | string | The source that succeeded: `libgen`, `randombook`, `annas` (books) or `unpaywall`, `europepmc`, `biorxiv`, `fatcat`, `core`, `scihub`, `scidb` (articles). |
+| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest.           |
+| `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                                 |
 
 With `resolve_only: true` the tool does **not** save a file: the `path`/`size_bytes` fields stay empty and the output instead carries a `resolved` object plus a `resource_link` content block:
 
-| Field                 | Type   | Description                                                                                       |
-| --------------------- | ------ | ------------------------------------------------------------------------------------------------- |
-| `resolved.url`        | string | The direct URL to download the file from.                                                         |
-| `resolved.source`     | string | The source that resolved it (`libgen`, `randombook`, `unpaywall`, `scihub`).                      |
-| `resolved.filename`   | string | A suggested filename.                                                                             |
-| `resolved.mime_type`  | string | The likely content type (e.g. `application/pdf`).                                                 |
-| `resolved.headers`    | object | Request headers to set when fetching (e.g. a `Referer` for sci-hub); absent when none are needed. |
-| `resolved.verify_md5` | bool   | `true` when the fetched bytes should hash to the requested `md5` (book downloads).                |
+| Field                 | Type   | Description                                                                                                                              |
+| --------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolved.url`        | string | The direct URL to download the file from.                                                                                                |
+| `resolved.source`     | string | The source that resolved it (`libgen`, `randombook`, `annas`, `unpaywall`, `europepmc`, `biorxiv`, `fatcat`, `core`, `scihub`, `scidb`). |
+| `resolved.filename`   | string | A suggested filename.                                                                                                                    |
+| `resolved.mime_type`  | string | The likely content type (e.g. `application/pdf`).                                                                                        |
+| `resolved.headers`    | object | Request headers to set when fetching (e.g. a `Referer` for sci-hub); absent when none are needed.                                        |
+| `resolved.verify_md5` | bool   | `true` when the fetched bytes should hash to the requested `md5` (book downloads).                                                       |
 
 ### Where the file goes: local vs. remote
 
@@ -333,7 +333,7 @@ pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
 | `md5`         | string | one of   | File md5 from a book search result. Must be a 32-character hex string.                                                                                                     |
 | `doi`         | string | one of   | DOI from an article search result.                                                                                                                                         |
 | `path`        | string | one of   | Read an already-downloaded local file by absolute path. Local server only — rejected on a remote server.                                                                   |
-| `source`      | string | no       | Restrict the fetch to one source (`libgen`/`randombook` for `md5`; `unpaywall`/`scihub` for `doi`).                                                                        |
+| `source`      | string | no       | Restrict the fetch to one source (`libgen`/`randombook`/`annas` for `md5`; `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`scihub`/`scidb` for `doi`).                  |
 | `start_page`  | int    | no       | First page to read (PDF), 1-based. Ignored when `cursor` is set.                                                                                                           |
 | `max_pages`   | int    | no       | Max pages to read this call (PDF). Defaults to `LIBGEN_MCP_READ_DEFAULT_PAGES` when omitted or non-positive.                                                               |
 | `offset`      | int    | no       | Character offset to start from (EPUB/TXT). Ignored when `cursor` is set.                                                                                                   |

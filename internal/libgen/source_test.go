@@ -227,6 +227,36 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 		s := scidbSource{mirrors: staticMirrors{page.URL}}
 		assertDeclaresExt(t, s, Item{DOI: doi})
 	})
+
+	t.Run("europepmc", func(t *testing.T) {
+		search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
+		defer search.Close()
+		render := europePMCRenderServer(t)
+		defer render.Close()
+		s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
+
+	t.Run("biorxiv", func(t *testing.T) {
+		api := biorxivFixtureServer(t, map[string]string{"biorxiv": "biorxiv_hit.json"}, nil)
+		defer api.Close()
+		s := biorxivSource{http: api.Client(), apiBase: api.URL, contentBase: "https://content.example"}
+		assertDeclaresExt(t, s, Item{DOI: "10.1101/known"})
+	})
+
+	t.Run("fatcat", func(t *testing.T) {
+		srv := fatcatServer(t, "fatcat_hit.json", http.StatusOK, nil)
+		defer srv.Close()
+		s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
+
+	t.Run("core", func(t *testing.T) {
+		srv := coreServer(t, "core_hit.json", http.StatusOK, nil)
+		defer srv.Close()
+		s := coreSource{http: srv.Client(), key: "k", apiBase: srv.URL}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
 }
 
 // assertDeclaresExt resolves an item and fails when the source announced no type.

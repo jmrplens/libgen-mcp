@@ -1,0 +1,20 @@
+{
+  "version": "6.9",
+  "hitCount": 1,
+  "resultList": {
+    "result": [
+      {
+        "id": "27541692",
+        "source": "MED",
+        "pmid": "27541692",
+        "pmcid": "PMC4991899",
+        "doi": "10.1371/journal.pbio.1002533",
+        "title": "Revised Estimates for the Number of Human and Bacteria Cells in the Body.",
+        "isOpenAccess": "Y",
+        "inEPMC": "Y",
+        "inPMC": "Y",
+        "hasPDF": "Y"
+      }
+    ]
+  }
+}
