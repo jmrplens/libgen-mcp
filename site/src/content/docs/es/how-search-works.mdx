@@ -22,7 +22,7 @@ Cuándo ocurre esta escalada lo controla un único ajuste de tres valores — el
 
 - **`auto` (por defecto).** Consultar las fuentes adicionales solo cuando el catálogo no devuelve nada o falla. Una búsqueda ordinaria nunca las paga; un fallo dispara un rescate.
 - **`always`.** Consultar las fuentes adicionales en cada búsqueda. Como esta decisión no depende de lo que responda el catálogo, las fuentes adicionales se consultan _a la vez_ que el catálogo y no después, así que una búsqueda forzada cuesta una vuelta de latencia en lugar de dos. Útil cuando quieres específicamente la red más amplia, a costa de tráfico extra en cada llamada.
-- **`never`.** Restringir cada búsqueda al catálogo, incluso ante un fallo. Existe para despliegues que, por razones de política, no deben contactar en absoluto con los proveedores adicionales.
+- **`never`.** Restringir cada búsqueda al catálogo, incluso ante un fallo. Como valor por defecto del despliegue (`LIBGEN_MCP_EXTRA_SOURCES=never`) esto es un **cierre, no un valor por defecto**: un `extra_sources` por llamada no puede reactivar las fuentes adicionales, porque una política que un cliente cualquiera puede saltarse no es una política. Las búsquedas siguen funcionando; simplemente no van más allá.
 
 La decisión entera es lo bastante pequeña para dibujarla:
 

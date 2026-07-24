@@ -22,7 +22,7 @@ When this escalation happens is controlled by a single three-valued setting — 
 
 - **`auto` (the default).** Consult the extra sources only when the catalog returns nothing or fails outright. An ordinary search never pays for them; a miss triggers a rescue.
 - **`always`.** Consult the extra sources on every search. Because this decision does not depend on what the catalog answers, the extra sources are queried _at the same time_ as the catalog rather than after it, so a forced search costs one round of latency instead of two. Useful when you specifically want the widest net, at the cost of extra traffic on every call.
-- **`never`.** Restrict every search to the catalog, even on a miss. Exists for deployments that, for policy reasons, must not contact the extra providers at all.
+- **`never`.** Restrict every search to the catalog, even on a miss. As a deployment default (`LIBGEN_MCP_EXTRA_SOURCES=never`) this is a **lock, not a default**: a per-call `extra_sources` cannot re-enable the extras, because a policy an individual caller can overrule is not a policy. Searches still work — they simply never reach further.
 
 The whole decision is small enough to draw:
 

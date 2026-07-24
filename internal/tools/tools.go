@@ -43,7 +43,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): auto consults them only when the catalog finds nothing, always consults them on every search, never restricts the search to the catalog. Omit to use the server default (auto unless configured otherwise),enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): auto consults them only when the catalog finds nothing, always consults them on every search, never restricts the search to the catalog. Omit to use the server default (auto unless configured otherwise); a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -456,7 +456,16 @@ const extraLimit = 10
 // resolveExtraMode picks the mode for this call: an explicit per-call value wins,
 // otherwise the deployment default applies. An unrecognized per-call value is an
 // error rather than a silent fallback, so a caller learns about the typo.
+//
+// A deployment set to never is the one exception: it is a lock, not a default. It
+// exists so an operator can guarantee the server never contacts the extra
+// providers, and a caller able to ask for them anyway would make that guarantee
+// worthless. The call still succeeds — the catalog answers as usual — it simply
+// does not reach further.
 func resolveExtraMode(in SearchInput, cfg *config.Config) (config.ExtraSourcesMode, error) {
+	if cfg.ExtraSources == config.ExtraSourcesNever {
+		return config.ExtraSourcesNever, nil
+	}
 	if strings.TrimSpace(in.ExtraSources) == "" {
 		return cfg.ExtraSources, nil
 	}

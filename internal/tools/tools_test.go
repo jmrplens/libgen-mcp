@@ -2126,6 +2126,24 @@ func TestResolveExtraModePrecedence(t *testing.T) {
 	}
 }
 
+// TestDeploymentNeverCannotBeOverridden verifies never is a lock, not a default.
+// It exists so a deployment can guarantee it never contacts the extra providers;
+// a caller able to ask for them anyway would make that guarantee worthless — and a
+// live evaluator run caught a model doing exactly that, retrying with always after
+// an empty catalog search.
+func TestDeploymentNeverCannotBeOverridden(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesNever}
+	for _, asked := range []string{"", "auto", "always", "never"} {
+		got, err := resolveExtraMode(SearchInput{ExtraSources: asked}, cfg)
+		if err != nil {
+			t.Fatalf("extra_sources=%q returned an error: %v", asked, err)
+		}
+		if got != config.ExtraSourcesNever {
+			t.Errorf("extra_sources=%q resolved to %q against a never deployment; want never", asked, got)
+		}
+	}
+}
+
 // TestForcedEscalationIsAlwaysModeOnly verifies only the always mode is forced.
 // auto depends on the catalog's outcome and never must not run the extras at all,
 // so neither may start before the catalog has answered.

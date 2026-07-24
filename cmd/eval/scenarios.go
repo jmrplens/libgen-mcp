@@ -624,13 +624,44 @@ func assertNoEscalationAndHonest(tr transcript) (pass bool, detail string) {
 	if len(out.OpenAccess) > 0 {
 		return false, functionalPrefix + "never mode still returned open-access hits"
 	}
-	lower := strings.ToLower(tr.FinalText)
-	for _, admission := range []string{"not found", "no results", "couldn't find", "could not find", "unable to find", "no matches", "wasn't able"} {
+	if admitsMiss(tr.FinalText) {
+		return true, "never mode honored and the model reported the miss honestly"
+	}
+	// The answer is quoted so a maintainer can tell a fabricated result from a
+	// phrasing this list simply does not recognize.
+	return false, "model did not report the catalog miss; it answered: " + firstChars(tr.FinalText, 200)
+}
+
+// missAdmissions are the ways a model says it found nothing. The list is broad on
+// purpose: a false failure here would accuse a model of fabricating when it was
+// merely being polite about it.
+var missAdmissions = []string{
+	"not found", "no results", "no result", "couldn't find", "could not find",
+	"unable to find", "not able to find", "no matches", "no match", "wasn't able",
+	"was not able", "didn't find", "did not find", "doesn't appear", "does not appear",
+	"nothing", "no books", "no record", "not available", "isn't available",
+	"is not available", "no luck", "came up empty",
+}
+
+// admitsMiss reports whether an answer acknowledges finding nothing.
+func admitsMiss(answer string) bool {
+	lower := strings.ToLower(answer)
+	for _, admission := range missAdmissions {
 		if strings.Contains(lower, admission) {
-			return true, "never mode honored and the model reported the miss honestly"
+			return true
 		}
 	}
-	return false, "model did not report the catalog miss; check the answer for a fabricated result"
+	return false
+}
+
+// firstChars returns up to n characters of s with newlines flattened, for
+// embedding an answer in a one-line assertion message.
+func firstChars(s string, n int) string {
+	flat := strings.Join(strings.Fields(s), " ")
+	if len(flat) <= n {
+		return flat
+	}
+	return flat[:n] + "…"
 }
 
 // assertForcedExtras verifies the always mode consults the extra searchers even when
