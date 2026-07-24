@@ -46,7 +46,8 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)
 - LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source
 - LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)
-- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)
+- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)
+- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, scidb, libgen, randombook, annas (empty = all)
 - LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)
 
 Tools:

@@ -144,7 +144,7 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall or scihub)"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall scihub scidb or annas)"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
@@ -152,6 +152,10 @@ type DownloadResult struct {
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
 	Resumed bool `json:"resumed" jsonschema:"true when the download resumed from a pre-existing partial via an HTTP Range request"`
+
+	// Account reports the serving account's remaining metered allowance when the
+	// source used one (currently only Anna's member tier). Nil for keyless paths.
+	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining metered download allowance of the account that served the file when one was used"`
 }
 
 // errIntegrityCheckFailed is returned when the downloaded content's MD5 digest
@@ -302,6 +306,42 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 // present its Resolve honors item.Email directly, so no prepend is needed (avoiding
 // trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
 // returned as-is, keeping the default (headless) behavior byte-identical to today.
+// withPerCallAnnas prepends an Anna's source carrying a per-call account key when
+// an md5 item supplies one, so a caller can enable the member fast-download tier
+// for a single request against a server that configured no key. It is a no-op
+// without a key, without an md5, or when a non-annas source was explicitly
+// requested. When source: "annas" is pinned the selected (configured-key) source
+// is replaced with one carrying the per-call key, so the member tier takes effect
+// even against a keyless server. When no source is pinned and an annas source is
+// already in the chain, the configured key wins there. The mirror lister is the
+// same one buildSourceChain initializes unconditionally.
+func (c *Client) withPerCallAnnas(item Item, sources []DownloadSource) []DownloadSource {
+	if item.AnnasKey == "" || item.MD5 == "" {
+		return sources
+	}
+	if src := strings.TrimSpace(item.Source); src != "" && !strings.EqualFold(src, "annas") {
+		return sources
+	}
+	adhoc := annasSource{mirrors: c.annasMirrors, http: c.http, key: item.AnnasKey}
+	// When source: "annas" is pinned, replace the selected source so the per-call
+	// key actually reaches the member API instead of the configured (empty) key.
+	if strings.EqualFold(strings.TrimSpace(item.Source), "annas") {
+		for i, s := range sources {
+			if s.Name() == "annas" {
+				sources[i] = adhoc
+				return sources
+			}
+		}
+		return []DownloadSource{adhoc}
+	}
+	for _, s := range sources {
+		if s.Name() == "annas" {
+			return sources
+		}
+	}
+	return append([]DownloadSource{adhoc}, sources...)
+}
+
 func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
 	if item.Email == "" || item.DOI == "" || item.Source != "" {
 		return sources
@@ -341,6 +381,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 		return ResolvedDownload{}, err
 	}
 	sources = c.withPerCallUnpaywall(item, sources)
+	sources = c.withPerCallAnnas(item, sources)
 	var errs []error
 	for _, src := range sources {
 		if !src.Supports(item) {
@@ -442,6 +483,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		return nil, selErr
 	}
 	sources = c.withPerCallUnpaywall(item, sources)
+	sources = c.withPerCallAnnas(item, sources)
 
 	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
 	// Try each supporting source in order: a source that fails to resolve or whose
@@ -653,6 +695,7 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		Source:           src.Name(),
 		Verified:         resolved.VerifyMD5,
 		Resumed:          resume,
+		Account:          resolved.Account,
 	}, nil
 }
 

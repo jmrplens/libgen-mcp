@@ -30,6 +30,12 @@ type Item struct {
 	// When set on a DOI item, it can pull the Unpaywall source into the download
 	// chain even if the server configured no email (see Client.withPerCallUnpaywall).
 	Email string
+	// AnnasKey is an optional per-call Anna's Archive account secret, supplied on
+	// demand; it enables the member fast-download path for this item only and is
+	// never persisted. When set on an md5 item, it can pull the Anna's source into
+	// the download chain even if the server configured no key (see
+	// Client.withPerCallAnnas).
+	AnnasKey string
 	// Meta carries bibliographic fields for naming; may be nil.
 	Meta *FileMeta
 }
@@ -49,6 +55,32 @@ type Resolved struct {
 	// Ext is a fallback file extension (without a leading dot) applied when the
 	// chosen filename has none; empty to leave naming untouched.
 	Ext string
+	// Account, when non-nil, carries metered-account state the source observed
+	// while resolving (currently only Anna's member quota). It is a by-product of
+	// a resolve that already had to happen: the provider exposes this data only on
+	// the download call itself, and that call consumes an allowance, so it is
+	// never fetched just to report it. Nil whenever no account is involved.
+	Account *AccountInfo
+}
+
+// AccountInfo reports a provider account's metered download allowance as observed
+// during a resolve, so a caller can see how much of the quota remains. Fields the
+// provider does not report stay zero.
+//
+// Naming caveat for Anna's Archive: the API's own field names say "per day" and
+// "today", but the site describes the same counter as "fast downloads used (last
+// 18 hours)" — a rolling window, not a calendar day. The provider's names are kept
+// here so the mapping stays obvious, but callers should read the ceiling as
+// "per rolling window" rather than "per midnight-to-midnight day".
+type AccountInfo struct {
+	// Source is the Name() of the source the allowance belongs to.
+	Source string `json:"source" jsonschema:"the download source this account belongs to"`
+	// DownloadsLeft is the remaining allowance for the current window.
+	DownloadsLeft int `json:"downloads_left" jsonschema:"downloads still available in the current window"`
+	// DownloadsPerDay is the account's ceiling per rolling window.
+	DownloadsPerDay int `json:"downloads_per_day" jsonschema:"the account's download ceiling per rolling window (18h for Anna's despite the field name)"`
+	// DownloadsDoneToday is how much of the ceiling has been consumed.
+	DownloadsDoneToday int `json:"downloads_done_today" jsonschema:"downloads already consumed in the current window"`
 }
 
 // DownloadSource resolves an Item to a concrete, streamable URL. Implementations

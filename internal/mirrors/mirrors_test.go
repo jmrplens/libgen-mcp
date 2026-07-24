@@ -339,3 +339,91 @@ func TestNewManagerCacheDirError(t *testing.T) {
 		t.Fatal("NewManager() without a resolvable cache dir should fail")
 	}
 }
+
+// TestParseFamilyAnnas verifies the Anna's Archive family extracts only
+// annas-archive.<tld> hosts from a catalog page that also lists unrelated ones,
+// deduplicating and preserving document order.
+func TestParseFamilyAnnas(t *testing.T) {
+	page := `<html><body>
+		<a href="https://annas-archive.gl">gl</a>
+		<a href="https://annas-archive.pk/">pk</a>
+		<a href="https://libgen.li">not annas</a>
+		<a href="https://annas-archive.gl">dup</a>
+	</body></html>`
+
+	got, err := ParseFamily(strings.NewReader(page), AnnasFamily)
+	if err != nil {
+		t.Fatalf("ParseFamily: %v", err)
+	}
+	want := []string{"https://annas-archive.gl", "https://annas-archive.pk"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseFamily() = %v, want %v", got, want)
+	}
+}
+
+// TestParseFamilyLibgenUnchanged pins that generalizing the parser leaves the
+// libgen family's behavior — and the exported Parse entry point — untouched.
+func TestParseFamilyLibgenUnchanged(t *testing.T) {
+	page := `<html><body><a href="https://libgen.li">li</a><a href="https://annas-archive.gl">no</a></body></html>`
+	got, err := Parse(strings.NewReader(page))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if want := []string{"https://libgen.li"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Parse() = %v, want %v", got, want)
+	}
+}
+
+// TestNewManagerForAnnasCachePath verifies the Anna's manager derives its own
+// cache file, so the two families never overwrite each other's cached list, and
+// takes its own preferred mirror.
+func TestNewManagerForAnnasCachePath(t *testing.T) {
+	m, err := NewManagerFor(AnnasFamily, &config.Config{Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewManagerFor: %v", err)
+	}
+	if base := filepath.Base(m.CachePath); base != "annas-mirrors.json" {
+		t.Errorf("cache basename = %q, want annas-mirrors.json", base)
+	}
+	if m.Preferred != "https://annas-archive.gl" {
+		t.Errorf("Preferred = %q, want https://annas-archive.gl", m.Preferred)
+	}
+
+	libgenMgr, err := NewManagerFor(LibgenFamily, &config.Config{Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewManagerFor(libgen): %v", err)
+	}
+	if libgenMgr.CachePath == m.CachePath {
+		t.Errorf("both families share cache path %q", m.CachePath)
+	}
+}
+
+// TestNewManagerForAnnasIgnoresConfiguredMirror verifies that LIBGEN_MIRROR (a
+// libgen-family setting) does not hijack the Anna's family's preferred host.
+func TestNewManagerForAnnasIgnoresConfiguredMirror(t *testing.T) {
+	cfg := &config.Config{Timeout: time.Second, Mirror: "https://libgen.example"}
+	m, err := NewManagerFor(AnnasFamily, cfg)
+	if err != nil {
+		t.Fatalf("NewManagerFor: %v", err)
+	}
+	if m.Preferred != "https://annas-archive.gl" {
+		t.Errorf("Preferred = %q, want the Anna's default despite cfg.Mirror", m.Preferred)
+	}
+}
+
+// TestAnnasFallbackUsedWithoutNetworkOrCache verifies a zero-network, zero-cache
+// Anna's manager still yields the family's hardcoded mirrors rather than the
+// libgen ones.
+func TestAnnasFallbackUsedWithoutNetworkOrCache(t *testing.T) {
+	m, err := NewManagerFor(AnnasFamily, &config.Config{Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewManagerFor: %v", err)
+	}
+	m.CachePath = filepath.Join(t.TempDir(), "absent.json")
+	m.SourceURL = "http://127.0.0.1:0/unreachable"
+
+	got := m.Mirrors(context.Background())
+	if len(got) == 0 || !strings.Contains(got[0], "annas-archive") {
+		t.Fatalf("Mirrors() = %v, want the Anna's fallback list", got)
+	}
+}

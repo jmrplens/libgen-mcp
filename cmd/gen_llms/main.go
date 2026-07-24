@@ -232,7 +232,8 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)\n")
 	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source\n")
 	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
-	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, libgen, randombook (empty = all)\n")
+	b.WriteString("- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)\n")
+	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, scidb, libgen, randombook, annas (empty = all)\n")
 	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n\n")
 
 	b.WriteString("Tools:\n\n")
@@ -436,7 +437,8 @@ var configEnvVars = []envVarDoc{
 	{"LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT", "60s", "(0, 1h]", "Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed."},
 	{"LIBGEN_MCP_UNPAYWALL_EMAIL", "empty (unpaywall disabled)", "empty, or an email with @ and a dotted domain", "Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it."},
 	{"LIBGEN_MCP_SCIHUB_HOSTS", "sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf", "comma-separated bare hosts (no scheme, no path)", "Ordered Sci-Hub mirror hosts, tried in order until one serves an article."},
-	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, libgen, randombook", "Enabled/ordered download sources. Empty enables all."},
+	{"LIBGEN_MCP_ANNAS_KEY", "empty (keyless IPFS)", "Anna's Archive account secret string", "Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path."},
+	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, scidb, libgen, randombook, annas", "Enabled/ordered download sources. Empty enables all."},
 	{"LIBGEN_MCP_REMOTE_DOWNLOADS", "false", "1/true/0/false", "Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it."},
 }
 
@@ -456,10 +458,10 @@ func writeLLMSFullConfiguration(b *strings.Builder) {
 func writeLLMSFullDownloadSources(b *strings.Builder) {
 	b.WriteString("## Download sources\n\n")
 	b.WriteString("The `download` tool resolves a file through an ordered chain of sources. Which branch runs depends on the identifier supplied:\n\n")
-	b.WriteString("- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook` as a fallback.\n")
-	b.WriteString("- **Articles (by `doi`):** tried against `unpaywall` (open-access PDF, requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`).\n")
+	b.WriteString("- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook`, then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set) as fallbacks.\n")
+	b.WriteString("- **Articles (by `doi`):** tried against `unpaywall` (open-access PDF, requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`), then `scidb` (Anna's Archive SciDB viewer).\n")
 	b.WriteString("- **Both `md5` and `doi` given:** article sources are tried first, then the book sources.\n\n")
-	b.WriteString("`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `unpaywall,scihub,libgen,randombook`. An empty value enables all.\n\n")
+	b.WriteString("`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `unpaywall,scihub,scidb,libgen,randombook,annas`. An empty value enables all.\n\n")
 	b.WriteString("**Verification:** book (`md5`) downloads are MD5-verified against the requested hash (`verified:true`). DOI/article downloads are not hash-verified (`verified:false`).\n\n")
 }
 
