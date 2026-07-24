@@ -524,23 +524,23 @@ func scenarios() []scenario {
 		// (test/e2e/testdata/escalation_item.json) defines the query and md5.
 		{
 			ID:     "S32",
-			Prompt: `Find the book "Buku Praktis Bahasa Indonesia Jilid 2" and tell me its file format and size.`,
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me its file format and size.`,
 			Assert: assertSearchEscalation,
 		},
 		{
 			ID:     "S33",
-			Prompt: `Find the book "Buku Praktis Bahasa Indonesia Jilid 2" and tell me its file format and size.`,
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me its file format and size.`,
 			Remote: true,
 			Assert: assertSearchEscalation,
 		},
 		{
 			ID:     "S34",
-			Prompt: `Find and download the book "Buku Praktis Bahasa Indonesia Jilid 2".`,
+			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
 			Assert: assertSearchThenDownloadEscalated,
 		},
 		{
 			ID:     "S35",
-			Prompt: `Find and download the book "Buku Praktis Bahasa Indonesia Jilid 2".`,
+			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
 			Remote: true,
 			Assert: assertSearchThenDownloadEscalated,
 		},
