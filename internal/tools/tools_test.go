@@ -184,7 +184,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			name:       "default without email or core key disables unpaywall and core",
 			mutate:     func(*config.Config) {},
 			wantEnum:   []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"},
-			wantAbsent: []string{"unpaywall"},
+			wantAbsent: []string{"unpaywall", "core"},
 		},
 		{
 			name:       "unpaywall enabled once an email is set",
