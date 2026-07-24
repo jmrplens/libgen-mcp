@@ -720,24 +720,44 @@ func scenarios() []scenario {
 			Prompt: fmt.Sprintf("Download the preprint with DOI %s. Don't restrict it to a particular "+
 				"source — let the server pick.", biorxivDOI),
 			// The DOI-prefix gate does the routing here, which is why no source is
-			// named. Unpaywall is forced off because it would otherwise serve this
-			// preprint first, and Europe PMC indexes the DOI without holding an
-			// open-access full text for it — so bioRxiv claiming the 10.1101 prefix is
-			// the only way the file arrives, and the serving source is the evidence
-			// that the gate routed rather than fell through.
-			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
-			Assert:   assertS46Biorxiv,
+			// named: Europe PMC indexes this DOI without holding an open-access full
+			// text for it, so bioRxiv claiming the 10.1101 prefix is the only way the
+			// file can arrive, and the serving source is the evidence that the gate
+			// routed rather than fell through. The shadow libraries stay in the list
+			// behind it, so winning means winning against them.
+			//
+			// Unpaywall is excluded through LIBGEN_MCP_SOURCES, not by emptying its
+			// email. Emptying the email does NOT keep it out: this harness advertises
+			// elicitation, so a DOI download with no configured email makes the server
+			// ask the host for one, and the answer puts an ad-hoc Unpaywall at the HEAD
+			// of the chain (libgen.withPerCallUnpaywall). A first run of this scenario
+			// was served by unpaywall for exactly that reason. Only the operator's
+			// source list gates that path, which is what this sets.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         "europepmc,biorxiv,scihub,scidb",
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS46Biorxiv,
 		},
 		{
 			ID: "S47",
 			Prompt: fmt.Sprintf("Download the article with DOI %s from fatcat, the Internet Archive "+
 				"Scholar source.", openAccessDOI),
 			// The fatcat API has been unreachable from some networks for a while, so
-			// what this grades is the model reaching the source — and, when the upstream
-			// does not answer, that it says so instead of claiming a file. The source
-			// selection is the model behavior under test either way.
-			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
-			Assert:   assertS47Fatcat,
+			// what this grades is the model reaching the source — and then either
+			// recovering to another provider or saying plainly that nothing arrived.
+			// The source selection is the model behavior under test either way.
+			//
+			// The retry schedule is shrunk the way S9 shrinks it. Left at its default
+			// the unreachable API burned 330 seconds of a 360-second scenario budget in
+			// a live run, leaving the model no room to answer — so the scenario would
+			// have been graded on a turn budget the eval itself exhausted.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_UNPAYWALL_EMAIL":            "",
+				"LIBGEN_MCP_TIMEOUT":                    "10s",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+			},
+			Assert: assertS47Fatcat,
 		},
 		{
 			ID: "S48",
@@ -759,11 +779,22 @@ func scenarios() []scenario {
 			ID: "S49",
 			Prompt: fmt.Sprintf("Download the open-access article with DOI %s. Don't restrict it to a "+
 				"particular source — let the server choose the best one.", openAccessDOI),
-			// The chain-ordering promise, with Unpaywall forced off so the providers
-			// behind it have to carry the DOI on their own. A shadow library serving a
-			// known open-access article means the chain reached past a legal copy.
-			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": ""},
-			Assert:   assertOpenAccessChainOrder,
+			// The chain-ordering promise: an open-access provider must beat the shadow
+			// libraries to a DOI that is open access.
+			//
+			// Unpaywall is excluded through the source list rather than by emptying its
+			// email, for the reason spelled out on S46 — the elicited per-call email
+			// puts it back at the head of the chain, and a first run of this scenario
+			// passed on Unpaywall alone, proving nothing about the providers behind it.
+			// fatcat is left out too: it is unreachable from this network and would add
+			// its whole retry schedule to the scenario without being able to serve
+			// anything, and the promise under test is open-access-before-shadow, which
+			// the remaining providers carry.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         "europepmc,biorxiv,scihub,scidb",
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertOpenAccessChainOrder,
 		},
 	}
 }
@@ -2204,11 +2235,11 @@ func assertS6Randombook(tr transcript) (pass bool, detail string) {
 // failure is graded on honesty, since the model behavior under test (source
 // selection) was still correct.
 func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
-	call, ok := findCall(tr, "download")
-	if !ok {
+	if _, any := findCall(tr, "download"); !any {
 		return false, noDownloadCall
 	}
-	if stringField(call.Input, "source") != want {
+	call, ok := findSourcedCall(tr, want)
+	if !ok {
 		return false, "download source arg is not " + want
 	}
 	if key == "doi" && !isDOI(stringField(call.Input, "doi")) {
@@ -2218,9 +2249,58 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
+		// Selecting the source is what this grades, and that already held. A model
+		// that is told the source is down and then routes around it has done the best
+		// thing available to it, so it is not asked to also report a miss it did not
+		// have — only a model that came away with nothing is.
+		if served := servedBySomeSource(tr); served != "" {
+			return true, "model set source=" + want +
+				"; that upstream was down, and it recovered to " + served + " rather than claiming a file"
+		}
 		return gradeDegraded(tr, "model set source="+want+" correctly but the live download failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, want)
+}
+
+// findSourcedCall returns the download call that ASKED for the named source,
+// preferring one that succeeded. It is what a source-selection scenario has to
+// grade: findCall answers "which call worked", and those are different questions
+// the moment a model reacts to a dead upstream by trying another source.
+//
+// A live run made the difference concrete. The model correctly pinned fatcat, the
+// fatcat API was unreachable, and it recovered to Europe PMC — so findCall handed
+// back the Europe PMC call and the assertion reported "download source arg is not
+// fatcat" about a model that had asked for fatcat first.
+func findSourcedCall(tr transcript, want string) (call toolCall, found bool) {
+	var first toolCall
+	for _, c := range tr.Calls {
+		if c.Name != "download" || !strings.EqualFold(stringField(c.Input, "source"), want) {
+			continue
+		}
+		if !found {
+			first, found = c, true
+		}
+		if c.Result == nil || !c.Result.IsError {
+			return c, true
+		}
+	}
+	return first, found
+}
+
+// servedBySomeSource returns the source that actually delivered a file in this
+// transcript, or "" when nothing did.
+func servedBySomeSource(tr transcript) string {
+	for _, c := range tr.Calls {
+		if c.Name != "download" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var res libgen.DownloadResult
+		if decodeStructured(c.Structured, &res) != nil || res.Path == "" || res.SizeBytes <= 0 {
+			continue
+		}
+		return res.Source
+	}
+	return ""
 }
 
 // gradeArticleSource grades WHICH source served a DOI the eval knows to be open
