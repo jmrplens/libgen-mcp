@@ -39,15 +39,16 @@ func Federate(ctx context.Context, query string, limit int, providers ...Provide
 }
 
 // dedupResults flattens the per-provider result slices in provider order and drops
-// any result whose DOI, or whose title+year key, was already seen. Keeping the
+// any result whose md5, DOI, or title+year key was already seen. Keeping the
 // per-provider layout makes the merge deterministic regardless of goroutine timing.
 func dedupResults(perProvider [][]DiscoveryResult) []DiscoveryResult {
 	seenDOI := map[string]bool{}
 	seenTitle := map[string]bool{}
+	seenMD5 := map[string]bool{}
 	merged := []DiscoveryResult{}
 	for _, batch := range perProvider {
 		for _, r := range batch {
-			if isDuplicate(r, seenDOI, seenTitle) {
+			if isDuplicate(r, seenDOI, seenTitle, seenMD5) {
 				continue
 			}
 			merged = append(merged, r)
@@ -56,10 +57,17 @@ func dedupResults(perProvider [][]DiscoveryResult) []DiscoveryResult {
 	return merged
 }
 
-// isDuplicate reports whether r was already seen by DOI or title+year, recording
-// its keys as seen when it is not. A result with neither a DOI nor a title+year key
-// is always kept (it carries no identity to dedup on).
-func isDuplicate(r DiscoveryResult, seenDOI, seenTitle map[string]bool) bool {
+// isDuplicate reports whether r was already seen by md5, DOI, or title+year,
+// recording its keys as seen when it is not. md5 is checked first: a matching
+// digest is the same file regardless of how the title was written. A result with
+// no key at all is always kept.
+func isDuplicate(r DiscoveryResult, seenDOI, seenTitle, seenMD5 map[string]bool) bool {
+	if md5 := strings.ToLower(strings.TrimSpace(r.MD5)); md5 != "" {
+		if seenMD5[md5] {
+			return true
+		}
+		seenMD5[md5] = true
+	}
 	if doi := NormalizeDOI(r.DOI); doi != "" {
 		if seenDOI[doi] {
 			return true
@@ -80,6 +88,13 @@ func isDuplicate(r DiscoveryResult, seenDOI, seenTitle map[string]bool) bool {
 // (typically cfg.UnpaywallEmail); pass "" to omit it.
 func DefaultProviders(email string) []Provider {
 	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary()}
+}
+
+// ExtraProviders returns every searcher consulted beyond the Library Genesis
+// catalog: the keyless open-access providers plus Anna's Archive. email is the
+// Crossref polite-pool contact; annasMirrors supplies Anna's base URLs.
+func ExtraProviders(email string, annasMirrors MirrorLister) []Provider {
+	return append(DefaultProviders(email), NewAnnas(annasMirrors))
 }
 
 // NormalizeDOI lowercases and trims a DOI so two spellings of the same identifier
