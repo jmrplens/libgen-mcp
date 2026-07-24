@@ -1943,9 +1943,9 @@ func oaDiscoveryServers(t *testing.T) *int32 {
 }
 
 // oaSession builds a search-capable MCP session against the libgen book fixtures
-// with the given open-access deployment default, so the open-access tests can
+// with the given extra-sources deployment default, so the escalation tests can
 // drive the real search handler end to end.
-func oaSession(t *testing.T, openAccessDefault bool) *mcp.ClientSession {
+func oaSession(t *testing.T, mode config.ExtraSourcesMode) *mcp.ClientSession {
 	t.Helper()
 	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
 	mux := http.NewServeMux()
@@ -1954,7 +1954,7 @@ func oaSession(t *testing.T, openAccessDefault bool) *mcp.ClientSession {
 	t.Cleanup(srv.Close)
 	cfg := &config.Config{
 		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
-		RetryAttempts: 1, UnpaywallEmail: "test@example.com", OpenAccessEnabled: openAccessDefault,
+		RetryAttempts: 1, UnpaywallEmail: "test@example.com", ExtraSources: mode,
 	}
 	return newDownloadSession(t, cfg, staticMirrors{srv.URL})
 }
@@ -1984,14 +1984,14 @@ func oaSearchOutput(t *testing.T, session *mcp.ClientSession, args map[string]an
 }
 
 // TestSearchTool_OpenAccessOptIn verifies the per-call opt-in: with
-// include_open_access=true the search output carries origin-labeled OA hits and the
-// discovery servers were called; with the flag off (and the deployment default
-// off) the OA slice is empty and NO discovery request is made.
+// extra_sources=always the search output carries origin-labeled OA hits and the
+// discovery servers were called; with extra_sources=never the OA slice is empty
+// and NO discovery request is made.
 func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	hits := oaDiscoveryServers(t)
-	session := oaSession(t, false)
+	session := oaSession(t, config.ExtraSourcesAuto)
 
-	oa := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": true})
+	oa := oaSearchOutput(t, session, map[string]any{"query": "golang", "extra_sources": "always"})
 	if len(oa) == 0 {
 		t.Fatalf("open_access should be populated when opted in, got none")
 	}
@@ -2007,7 +2007,7 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	}
 
 	atomic.StoreInt32(hits, 0)
-	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": false})
+	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "extra_sources": "never"})
 	if len(off) != 0 {
 		t.Errorf("open_access should be empty when opted out, got %d", len(off))
 	}
@@ -2016,46 +2016,89 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	}
 }
 
-// TestSearchTool_OpenAccessDefaultOff verifies that with neither a per-call flag
-// nor the deployment default set, OA discovery stays off and unqueried.
+// TestSearchTool_OpenAccessDefaultOff verifies that in auto mode with catalog
+// hits present, discovery stays off and unqueried — the common path stays cheap.
 func TestSearchTool_OpenAccessDefaultOff(t *testing.T) {
 	hits := oaDiscoveryServers(t)
-	session := oaSession(t, false)
+	session := oaSession(t, config.ExtraSourcesAuto)
 	oa := oaSearchOutput(t, session, map[string]any{"query": "golang"})
 	if len(oa) != 0 {
-		t.Errorf("open_access should be empty by default, got %d", len(oa))
+		t.Errorf("open_access should be empty by default with catalog hits, got %d", len(oa))
 	}
 	if got := atomic.LoadInt32(hits); got != 0 {
 		t.Errorf("discovery was called %d times by default, want 0", got)
 	}
 }
 
-// TestSearchTool_OpenAccessDedupVsLibgen verifies that an OA hit whose DOI or
-// title+year matches a libgen result is dropped from the OA slice, so the same work
-// is never presented twice.
-func TestSearchTool_OpenAccessDedupVsLibgen(t *testing.T) {
-	oaDiscoveryServers(t)
-	// A libgen result sharing the arXiv fixture's DOI must suppress that OA hit.
-	out := SearchOutput{Results: []libgen.Result{
-		{Title: "Some Book", DOI: "10.1000/XYZ123", Year: "2021"},
+// TestShouldEscalate covers the trigger matrix across all three modes.
+func TestShouldEscalate(t *testing.T) {
+	cases := []struct {
+		name string
+		mode config.ExtraSourcesMode
+		hits int
+		err  error
+		want bool
+	}{
+		{"auto, catalog answered", config.ExtraSourcesAuto, 3, nil, false},
+		{"auto, catalog empty", config.ExtraSourcesAuto, 0, nil, true},
+		{"auto, catalog failed", config.ExtraSourcesAuto, 0, errors.New("mirrors down"), true},
+		{"always, catalog answered", config.ExtraSourcesAlways, 3, nil, true},
+		{"always, catalog empty", config.ExtraSourcesAlways, 0, nil, true},
+		{"never, catalog empty", config.ExtraSourcesNever, 0, nil, false},
+		{"never, catalog failed", config.ExtraSourcesNever, 0, errors.New("down"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldEscalate(tc.mode, tc.hits, tc.err); got != tc.want {
+				t.Fatalf("shouldEscalate = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestResolveExtraModePrecedence verifies an explicit per-call mode overrides the
+// deployment default in either direction, that a blank value defers to it, and that
+// an unrecognized value is rejected rather than silently ignored.
+func TestResolveExtraModePrecedence(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesAlways}
+
+	if got, err := resolveExtraMode(SearchInput{}, cfg); err != nil || got != config.ExtraSourcesAlways {
+		t.Fatalf("blank = (%q, %v), want the deployment default", got, err)
+	}
+	if got, err := resolveExtraMode(SearchInput{ExtraSources: "never"}, cfg); err != nil || got != config.ExtraSourcesNever {
+		t.Fatalf("explicit never = (%q, %v), want never", got, err)
+	}
+	if _, err := resolveExtraMode(SearchInput{ExtraSources: "sometimes"}, cfg); err == nil {
+		t.Fatal("an unknown per-call mode must be rejected")
+	}
+}
+
+// TestMergeExtraHitsSplitsByKeySpace verifies md5-keyed hits join the catalog
+// results labeled by origin, DOI-keyed hits go to the open-access list, and an
+// md5 already in the catalog is dropped so the richer catalog record survives.
+func TestMergeExtraHitsSplitsByKeySpace(t *testing.T) {
+	const dupMD5 = "d64efd386ed7227592499460aca2044b"
+	out := &SearchOutput{Results: []libgen.Result{
+		{MD5: dupMD5, Title: "Already in the catalog", Origin: "libgen", Extension: "pdf"},
 	}}
-	cfg := &config.Config{UnpaywallEmail: "test@example.com", OpenAccessEnabled: true}
-	force := true
-	appendOpenAccess(context.Background(), cfg, SearchInput{Query: "golang", IncludeOpenAccess: &force}, &out)
-	for _, r := range out.OpenAccess {
-		if discovery.NormalizeDOI(r.DOI) == "10.1000/xyz123" {
-			t.Errorf("OA hit sharing a libgen DOI should have been deduped, got %+v", r)
-		}
+
+	mergeExtraHits(out, []discovery.DiscoveryResult{
+		{Origin: "annas", MD5: dupMD5, Title: "Duplicate from Anna's"},
+		{Origin: "annas", MD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Title: "New book"},
+		{Origin: "arxiv", DOI: "10.1/x", Title: "A paper", OpenAccess: true},
+	})
+
+	if len(out.Results) != 2 {
+		t.Fatalf("Results = %d, want the catalog entry plus one new md5 hit", len(out.Results))
 	}
-	// The distinct Crossref hit must survive the libgen dedup.
-	var keptCrossref bool
-	for _, r := range out.OpenAccess {
-		if r.Origin == "crossref" {
-			keptCrossref = true
-		}
+	if out.Results[0].Title != "Already in the catalog" {
+		t.Errorf("the catalog record must win the md5 collision, got %q", out.Results[0].Title)
 	}
-	if !keptCrossref {
-		t.Errorf("distinct crossref OA hit should survive libgen dedup, got %+v", out.OpenAccess)
+	if out.Results[1].Origin != "annas" || out.Results[1].MD5 != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Errorf("Results[1] = %+v, want the new Anna's hit labeled annas", out.Results[1])
+	}
+	if len(out.OpenAccess) != 1 || out.OpenAccess[0].Origin != "arxiv" {
+		t.Errorf("OpenAccess = %+v, want only the DOI-keyed hit", out.OpenAccess)
 	}
 }
 
@@ -2086,44 +2129,6 @@ func TestHumanBytes(t *testing.T) {
 		if got := humanBytes(tc.n); got != tc.want {
 			t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
 		}
-	}
-}
-
-// TestDedupOpenAccessVsLibgen_DedupAndKeep covers dedupOpenAccessVsLibgen's two
-// suppression arms plus the keep path: a hit whose DOI matches a libgen result is
-// dropped, a hit whose title+year key matches is dropped, and an unrelated hit
-// survives.
-func TestDedupOpenAccessVsLibgen_DedupAndKeep(t *testing.T) {
-	results := []libgen.Result{{DOI: "10.1/x", Title: "Deep Learning", Year: "2016"}}
-	hits := []discovery.DiscoveryResult{
-		{DOI: "10.1/x", Title: "Some DOI Dup"},                 // dropped: DOI already in libgen
-		{Title: "Deep Learning", Year: "2016"},                 // dropped: title+year already in libgen
-		{Title: "Unique Work", Year: "1999", DOI: "10.2/keep"}, // kept
-	}
-	kept := dedupOpenAccessVsLibgen(hits, results)
-	if len(kept) != 1 {
-		t.Fatalf("kept %d hits, want 1: %+v", len(kept), kept)
-	}
-	if kept[0].Title != "Unique Work" {
-		t.Errorf("kept[0].Title = %q, want %q", kept[0].Title, "Unique Work")
-	}
-}
-
-// TestAppendOpenAccess_NoSurvivingHits covers appendOpenAccess' empty-hits arm:
-// with open access enabled and a non-blank query but a canceled context, Federate
-// yields nothing, so the function attaches no OpenAccess block and adds no
-// next-step — core search output is left untouched.
-func TestAppendOpenAccess_NoSurvivingHits(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // no provider can return anything under a canceled context
-	cfg := &config.Config{OpenAccessEnabled: true}
-	out := SearchOutput{}
-	appendOpenAccess(ctx, cfg, SearchInput{Query: "anything"}, &out)
-	if out.OpenAccess != nil {
-		t.Errorf("no hits should leave OpenAccess nil, got %+v", out.OpenAccess)
-	}
-	if len(out.NextSteps) != 0 {
-		t.Errorf("no hits should add no next-step, got %v", out.NextSteps)
 	}
 }
 

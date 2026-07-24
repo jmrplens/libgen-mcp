@@ -258,6 +258,13 @@ var annasMirrorsFor = func(cfg *config.Config) MirrorLister {
 	return m
 }
 
+// AnnasMirrorLister builds the Anna's Archive mirror lister, exported so the
+// tools layer's discovery integration can share the same discovered mirrors
+// without importing internal/mirrors or rebuilding the manager.
+func AnnasMirrorLister(cfg *config.Config) MirrorLister {
+	return annasMirrorsFor(cfg)
+}
+
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	// Discovered once and shared by every Anna's-backed source, so one discovery
 	// and one cache serve them all. Built unconditionally (not only when scidb or

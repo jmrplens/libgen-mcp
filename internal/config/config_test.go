@@ -397,7 +397,7 @@ func TestLoadBadNumericEnv(t *testing.T) {
 		"LIBGEN_MCP_LOG_LEVEL":                "verbose",
 		"LIBGEN_MCP_REMOTE_DOWNLOADS":         "maybe",
 		"LIBGEN_MCP_ENRICH":                   "sometimes",
-		"LIBGEN_MCP_OPEN_ACCESS":              "perhaps",
+		"LIBGEN_MCP_EXTRA_SOURCES":            "sometimes",
 	}
 	for envKey, badVal := range cases {
 		t.Run(envKey, func(t *testing.T) {
@@ -751,5 +751,34 @@ func TestLoadAnnasKey(t *testing.T) {
 	}
 	if cfg.AnnasKey != "" {
 		t.Fatalf("AnnasKey = %q, want empty (keyless default)", cfg.AnnasKey)
+	}
+}
+
+// TestLoadExtraSources verifies LIBGEN_MCP_EXTRA_SOURCES accepts each mode,
+// defaults to auto, and rejects an unknown value at startup rather than guessing.
+func TestLoadExtraSources(t *testing.T) {
+	for _, want := range []ExtraSourcesMode{ExtraSourcesAuto, ExtraSourcesAlways, ExtraSourcesNever} {
+		t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", string(want))
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load(%s): %v", want, err)
+		}
+		if cfg.ExtraSources != want {
+			t.Fatalf("ExtraSources = %q, want %q", cfg.ExtraSources, want)
+		}
+	}
+
+	t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ExtraSources != ExtraSourcesAuto {
+		t.Fatalf("default = %q, want auto", cfg.ExtraSources)
+	}
+
+	t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", "sometimes")
+	if _, lerr := Load(); lerr == nil {
+		t.Fatal("an unknown mode must fail at startup, not fall back silently")
 	}
 }

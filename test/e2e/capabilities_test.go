@@ -590,7 +590,7 @@ func validOrigin(origin string) bool {
 }
 
 // TestE2ESearchOpenAccessIncluded drives the search tool with
-// include_open_access=true for a research-y query against the LIVE site (which
+// extra_sources=always for a research-y query against the LIVE site (which
 // also hits arXiv/Crossref/OpenLibrary). It asserts the OpenAccess list is
 // populated, each hit is labeled by a known origin, and no DOI is duplicated. It
 // gates on requireLive and SKIPS when the open-access providers return nothing.
@@ -602,7 +602,7 @@ func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search",
-		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "include_open_access": true},
+		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "extra_sources": "always"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool(search) error: %v", err)
@@ -633,16 +633,16 @@ func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 	t.Logf("open_access hits=%d unique_dois=%d", len(out.OpenAccess), len(seenDOI))
 }
 
-// TestE2ESearchOpenAccessOmittedDefault proves that with include_open_access
-// omitted and the deployment default OFF, a core search still works and returns no
-// open-access hits. It gates on requireLive; the config's OpenAccessEnabled is
+// TestE2ESearchOpenAccessOmittedDefault proves that with extra_sources=never
+// and the deployment default OFF, a core search still works and returns no
+// open-access hits. It gates on requireLive; the config's ExtraSources is
 // forced off so an environment default cannot perturb the assertion.
 func TestE2ESearchOpenAccessOmittedDefault(t *testing.T) {
 	env := requireLive(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	cfg := *env.cfg // shallow copy so the forced flag is local to this test
-	cfg.OpenAccessEnabled = false
+	cfg.ExtraSources = config.ExtraSourcesNever
 	session := newToolSession(t, ctx, env.client, &cfg, nil)
 
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{

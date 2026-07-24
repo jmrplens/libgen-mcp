@@ -164,7 +164,7 @@ func TestE2EHTTPRemoteReadByMD5(t *testing.T) {
 }
 
 // TestE2EHTTPRemoteSearchOpenAccess proves open-access discovery works over HTTP:
-// a search with include_open_access=true returns OA hits labeled by a known
+// a search with extra_sources=always returns OA hits labeled by a known
 // origin. It gates on requireLive and SKIPS when the open-access providers return
 // nothing.
 func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
@@ -175,7 +175,7 @@ func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
 	_, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search",
-		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "include_open_access": true},
+		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "extra_sources": "always"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool(search) over HTTP error: %v", err)

@@ -410,7 +410,7 @@ func scenarios() []scenario {
 				`literature (arXiv, Crossref) for a freely available copy; tell me what you found, ` +
 				`including its DOI or arXiv link.`,
 			// Open-access discovery: like S10-S13, this is deliberately under-specified —
-			// the prompt never names include_open_access, so the model must discover the
+			// the prompt never names extra_sources, so the model must discover the
 			// search field itself and then surface one of the federated open-access hits
 			// (arxiv/crossref) in its answer. A live provider outage is a SKIP, not a
 			// failure, since the flag/plumbing already did its job.
@@ -937,7 +937,7 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 }
 
 // assertOpenAccessDiscovery checks the S20 open-access discovery flow: the model
-// must set include_open_access itself (the prompt only asks it to "also check the
+// must set extra_sources itself (the prompt only asks it to "also check the
 // open-access literature", it never names the field) and then surface one of the
 // federated arXiv/Crossref/OpenLibrary hits in its final answer. An empty
 // open_access list is a SKIP — the keyless providers are best-effort third-party
@@ -947,12 +947,12 @@ func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 	if err != nil {
 		return false, err.Error()
 	}
-	include, _ := call.Input["include_open_access"].(bool)
-	if !include {
-		return false, "model did not set include_open_access on the search call"
+	extra, _ := call.Input["extra_sources"].(string)
+	if extra != "always" {
+		return false, "model did not set extra_sources to \"always\" on the search call"
 	}
 	if len(out.OpenAccess) == 0 {
-		return true, skipPrefix + " include_open_access was set but no provider returned a hit (live network)"
+		return true, skipPrefix + " extra_sources was set but no provider returned a hit (live network)"
 	}
 	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
 		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"

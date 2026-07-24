@@ -35,14 +35,14 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query             string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
-	Topics            []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
-	SearchIn          []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
-	ResultsPerPage    int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
-	Page              int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
-	Order             string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
-	OrderMode         string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	IncludeOpenAccess *bool    `json:"include_open_access,omitempty" jsonschema:"also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin; overrides the server default"`
+	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
+	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
+	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
+	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
+	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
+	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"when to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): auto consults them only when the catalog finds nothing, always consults them on every search, never restricts the search to the catalog. Omit to use the server default (auto unless configured otherwise),enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -141,7 +141,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("search", searchHandler(client, cfg)))
+	}, withRecovery("search", searchHandler(client, cfg, libgen.AnnasMirrorLister(cfg))))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
@@ -346,9 +346,13 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 	}
 }
 
-func searchHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
+func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 		var zero SearchOutput
+		mode, err := resolveExtraMode(in, cfg)
+		if err != nil {
+			return nil, zero, err
+		}
 		params := libgen.SearchParams{
 			Query:          in.Query,
 			Topics:         in.Topics,
@@ -358,112 +362,131 @@ func searchHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Sear
 			Order:          in.Order,
 			OrderMode:      in.OrderMode,
 		}
-		page, mirror, err := c.Search(ctx, params)
-		if err != nil {
-			return nil, zero, err
+		// Validate up front so an input error (bad topic, bad page) is returned
+		// immediately without escalating — escalation is for catalog outages and
+		// misses, not for caller mistakes.
+		if verr := params.Validate(); verr != nil {
+			return nil, zero, verr
 		}
-		per := in.ResultsPerPage
-		if per == 0 {
-			per = 25
+		page, mirror, searchErr := c.Search(ctx, params)
+
+		var out SearchOutput
+		if searchErr == nil {
+			out = buildSearchOutput(page, mirror, in)
 		}
-		curPage := in.Page
-		if curPage == 0 {
-			curPage = 1
+
+		if shouldEscalate(mode, len(out.Results), searchErr) && strings.TrimSpace(in.Query) != "" {
+			hits := discovery.Federate(ctx, in.Query, extraLimit,
+				discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
+			mergeExtraHits(&out, hits)
+			if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
+				return nil, zero, searchErr
+			}
+		} else if searchErr != nil {
+			return nil, zero, searchErr
 		}
-		out := SearchOutput{
-			Results:        page.Results,
-			Page:           curPage,
-			ResultsPerPage: per,
-			TotalFiles:     page.TotalFiles,
-			Reachable:      page.Reachable,
-			Truncated:      page.Truncated,
-			HasMore:        len(page.Results) >= per,
-			Mirror:         mirror,
-		}
-		if page.Truncated {
-			out.Hint = fmt.Sprintf("Only the first %d of %s results are reachable; "+
-				"refine your query (add author/year, use title-only columns, or narrow topics).",
-				page.Reachable, page.TotalFiles)
-		}
-		if out.Results == nil {
-			out.Results = []libgen.Result{}
-		}
+
 		out.NextSteps = searchNextSteps(out)
-		appendOpenAccess(ctx, cfg, in, &out)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
 }
 
-// openAccessLimit bounds how many hits each open-access provider is asked for when
-// discovery is folded into a search, keeping the merged payload small.
-const openAccessLimit = 10
-
-// openAccessEnabled resolves the effective open-access flag for a call: an explicit
-// per-call include_open_access wins (either direction), otherwise the deployment
-// default cfg.OpenAccessEnabled applies.
-func openAccessEnabled(in SearchInput, cfg *config.Config) bool {
-	if in.IncludeOpenAccess != nil {
-		return *in.IncludeOpenAccess
+// buildSearchOutput assembles the SearchOutput from a successful catalog page,
+// deriving page and per-page defaults from the input and flagging truncation.
+func buildSearchOutput(page *libgen.SearchPage, mirror string, in SearchInput) SearchOutput {
+	per := in.ResultsPerPage
+	if per == 0 {
+		per = 25
 	}
-	return cfg.OpenAccessEnabled
+	curPage := in.Page
+	if curPage == 0 {
+		curPage = 1
+	}
+	out := SearchOutput{
+		Results:        page.Results,
+		Page:           curPage,
+		ResultsPerPage: per,
+		TotalFiles:     page.TotalFiles,
+		Reachable:      page.Reachable,
+		Truncated:      page.Truncated,
+		HasMore:        len(page.Results) >= per,
+		Mirror:         mirror,
+	}
+	if page.Truncated {
+		out.Hint = fmt.Sprintf("Only the first %d of %s results are reachable; "+
+			"refine your query (add author/year, use title-only columns, or narrow topics).",
+			page.Reachable, page.TotalFiles)
+	}
+	if out.Results == nil {
+		out.Results = []libgen.Result{}
+	}
+	return out
 }
 
-// appendOpenAccess federates the keyless open-access providers for the query and
-// attaches the deduped hits to out. It is best-effort and a no-op when the effective
-// flag is off or the query is blank, so core libgen search is never affected. Hits
-// already present among the libgen results (by DOI or title+year) are dropped, and a
-// follow-up next-step explaining how to fetch them is appended when any survive.
-func appendOpenAccess(ctx context.Context, cfg *config.Config, in SearchInput, out *SearchOutput) {
-	if !openAccessEnabled(in, cfg) || strings.TrimSpace(in.Query) == "" {
-		return
+// extraLimit bounds how many hits each extra searcher is asked for, keeping the
+// merged payload small.
+const extraLimit = 10
+
+// resolveExtraMode picks the mode for this call: an explicit per-call value wins,
+// otherwise the deployment default applies. An unrecognized per-call value is an
+// error rather than a silent fallback, so a caller learns about the typo.
+func resolveExtraMode(in SearchInput, cfg *config.Config) (config.ExtraSourcesMode, error) {
+	if strings.TrimSpace(in.ExtraSources) == "" {
+		return cfg.ExtraSources, nil
 	}
-	hits := discovery.Federate(ctx, in.Query, openAccessLimit, discovery.DefaultProviders(cfg.UnpaywallEmail)...)
-	hits = dedupOpenAccessVsLibgen(hits, out.Results)
-	if len(hits) == 0 {
-		return
-	}
-	out.OpenAccess = hits
-	out.NextSteps = append(out.NextSteps, openAccessNextStep)
+	return config.ParseExtraSourcesMode(in.ExtraSources)
 }
 
-// openAccessNextStep tells the model how to act on the open-access hits: fetch a
-// paper by its doi or arXiv pdf_url via read/download, or use an openlibrary
-// isbn/title to refine a libgen search. Their titles/authors are untrusted external
-// text.
-const openAccessNextStep = "The open_access results are open-access hits (untrusted external metadata): fetch a paper with download/read by its doi, read an arXiv pdf_url directly, or use an openlibrary isbn/title to refine a libgen search."
+// shouldEscalate reports whether to consult the extra searchers for this call.
+// Under auto they run when the catalog returned nothing or failed outright — a
+// mirror outage is at least as bad as a miss, and is exactly when a rescue route
+// matters.
+func shouldEscalate(mode config.ExtraSourcesMode, catalogHits int, catalogErr error) bool {
+	switch mode {
+	case config.ExtraSourcesNever:
+		return false
+	case config.ExtraSourcesAlways:
+		return true
+	default:
+		return catalogHits == 0 || catalogErr != nil
+	}
+}
 
-// dedupOpenAccessVsLibgen drops any open-access hit whose normalized DOI, or whose
-// title+year key, already appears among the libgen results, so the same work is
-// never shown in both lists.
-func dedupOpenAccessVsLibgen(hits []discovery.DiscoveryResult, results []libgen.Result) []discovery.DiscoveryResult {
-	seenDOI, seenTitle := libgenDedupKeys(results)
-	kept := make([]discovery.DiscoveryResult, 0, len(hits))
+// mergeExtraHits folds federated hits into out, splitting them by key space:
+// md5-keyed hits (Anna's) join the catalog result list labeled by origin, while
+// DOI-keyed hits stay in the open-access list. An md5 already among the catalog
+// results is dropped so the richer catalog record survives.
+func mergeExtraHits(out *SearchOutput, hits []discovery.DiscoveryResult) {
+	if out.Results == nil {
+		out.Results = []libgen.Result{}
+	}
+	if out.OpenAccess == nil {
+		out.OpenAccess = []discovery.DiscoveryResult{}
+	}
+	seen := map[string]bool{}
+	for _, r := range out.Results {
+		if r.MD5 != "" {
+			seen[strings.ToLower(r.MD5)] = true
+		}
+	}
 	for _, h := range hits {
-		if doi := discovery.NormalizeDOI(h.DOI); doi != "" && seenDOI[doi] {
+		md5 := strings.ToLower(strings.TrimSpace(h.MD5))
+		if md5 == "" {
+			out.OpenAccess = append(out.OpenAccess, h)
 			continue
 		}
-		if key := discovery.TitleYearKey(h.Title, h.Year); key != "" && seenTitle[key] {
+		if seen[md5] {
 			continue
 		}
-		kept = append(kept, h)
+		seen[md5] = true
+		out.Results = append(out.Results, libgen.Result{
+			Origin:  h.Origin,
+			MD5:     h.MD5,
+			Title:   h.Title,
+			Authors: h.Authors,
+			Year:    h.Year,
+		})
 	}
-	return kept
-}
-
-// libgenDedupKeys builds the sets of normalized DOIs and title+year keys present in
-// the libgen results, used to suppress duplicate open-access hits.
-func libgenDedupKeys(results []libgen.Result) (doi, titleYear map[string]bool) {
-	doi = map[string]bool{}
-	titleYear = map[string]bool{}
-	for _, r := range results {
-		if d := discovery.NormalizeDOI(r.DOI); d != "" {
-			doi[d] = true
-		}
-		if key := discovery.TitleYearKey(r.Title, r.Year); key != "" {
-			titleYear[key] = true
-		}
-	}
-	return doi, titleYear
 }
 
 // markdownResult wraps a human-readable Markdown rendering in a CallToolResult.
