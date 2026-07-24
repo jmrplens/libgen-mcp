@@ -150,17 +150,30 @@ func walkNamedChildren(node map[string]any, kind string, report func(category, d
 	for _, key := range keys {
 		switch children := node[key].(type) {
 		case map[string]any:
-			for _, name := range sortedKeys(children) {
-				if child, ok := children[name].(map[string]any); ok {
-					walkSchema(child, kind, report)
-				}
-			}
+			walkSchemaMap(children, kind, report)
 		case []any:
-			for _, entry := range children {
-				if child, ok := entry.(map[string]any); ok {
-					walkSchema(child, kind, report)
-				}
-			}
+			walkSchemaList(children, kind, report)
+		}
+	}
+}
+
+// walkSchemaMap recurses into each named subschema of a map-shaped block
+// ($defs/definitions), visiting names in sorted order for a deterministic
+// report.
+func walkSchemaMap(children map[string]any, kind string, report func(category, detail string)) {
+	for _, name := range sortedKeys(children) {
+		if child, ok := children[name].(map[string]any); ok {
+			walkSchema(child, kind, report)
+		}
+	}
+}
+
+// walkSchemaList recurses into each subschema of a list-shaped block
+// (allOf/anyOf/oneOf).
+func walkSchemaList(entries []any, kind string, report func(category, detail string)) {
+	for _, entry := range entries {
+		if child, ok := entry.(map[string]any); ok {
+			walkSchema(child, kind, report)
 		}
 	}
 }
