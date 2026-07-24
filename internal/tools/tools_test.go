@@ -2459,3 +2459,40 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 		t.Errorf("a catalog result should not pin a source; got %q", catalog)
 	}
 }
+
+// TestDetailsByDOIFallsBackToEnrichment verifies a DOI the catalog does not carry
+// still answers with what is available. An open-access hit carries a DOI the
+// catalog has never heard of — a live run caught a model taking a Crossref DOI to
+// get_details, receiving a hard error, and spending a turn recovering, when the
+// journal and citation metadata it had asked for was a keyless lookup away.
+func TestDetailsByDOIFallsBackToEnrichment(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"container-title":["Cell"],"is-referenced-by-count":42,
+			"title":["Hallmarks of Cancer"],"published":{"date-parts":[[2011]]}}}`))
+	}))
+	t.Cleanup(crossref.Close)
+	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	t.Cleanup(restore)
+
+	// The catalog answers every json.php lookup with an empty array: no record.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: true, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, nil)
+	_, out, err := handler(context.Background(), nil, DetailsInput{DOI: "10.1016/j.cell.2011.02.013", Enrich: true})
+	if err != nil {
+		t.Fatalf("a DOI the catalog lacks should still answer from Crossref, got: %v", err)
+	}
+	if out.Enrichment == nil {
+		t.Fatal("no enrichment returned; the fallback produced nothing useful")
+	}
+	if out.Enrichment.Crossref == nil || out.Enrichment.Crossref.ContainerTitle != "Cell" {
+		t.Errorf("enrichment did not carry the Crossref journal: %+v", out.Enrichment)
+	}
+}

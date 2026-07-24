@@ -149,6 +149,11 @@ A `doi` lookup uses the catalog's own DOI key, which matches exactly. Searching 
 DOI as free text is not a substitute: the catalog matches it loosely and returns
 unrelated articles, including ones that merely carry a different DOI in their title.
 
+A DOI the catalog has no record for — which is what an open-access hit carries —
+falls back to the keyless external metadata, returning the `enrichment` object with
+`file.origin` set to `crossref`. Only when nothing answers is the catalog's own miss
+reported.
+
 ### get_details output
 
 | Field        | Type   | Description                                                                                                                                                                                                                     |

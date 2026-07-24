@@ -619,6 +619,9 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 			out, err = detailsByID(ctx, c, in.Object, in.ID)
 		case in.DOI != "":
 			out, err = detailsByDOI(ctx, c, in.DOI)
+			if err != nil {
+				out, err = detailsFromEnrichment(ctx, c, cfg, in.DOI, err)
+			}
 		default:
 			return nil, zero, errors.New("provide exactly one of md5, id or doi")
 		}
@@ -656,6 +659,32 @@ func detailsByDOI(ctx context.Context, c *libgen.Client, doi string) (DetailsOut
 		return DetailsOutput{}, err
 	}
 	return DetailsOutput{Edition: edition, File: file}, nil
+}
+
+// detailsFromEnrichment answers a DOI the catalog has no record for, using the
+// keyless external metadata instead. It mirrors the md5 fallback to Anna's: an
+// identifier from a search result should not be a dead end at the follow-up the
+// search itself suggests.
+//
+// The DOIs that reach here are the ones open-access hits carry, which the catalog
+// has never indexed — a live run caught a model taking a Crossref DOI here,
+// getting a hard error, and spending a turn recovering, while the journal and
+// citation metadata it asked for was one keyless lookup away.
+//
+// catalogErr survives when nothing external answers either, so a genuinely unknown
+// DOI is still reported as unknown to the catalog.
+func detailsFromEnrichment(ctx context.Context, c *libgen.Client, cfg *config.Config, doi string, catalogErr error) (DetailsOutput, error) {
+	if !cfg.EnrichEnabled {
+		return DetailsOutput{}, catalogErr
+	}
+	enrichment := c.Enrich(ctx, doi, "")
+	if enrichment == nil {
+		return DetailsOutput{}, catalogErr
+	}
+	return DetailsOutput{
+		File:       map[string]any{"origin": "crossref", "doi": doi},
+		Enrichment: enrichment,
+	}, nil
 }
 
 // detailsFromAnnas looks an md5 up in Anna's Archive after the Library Genesis
