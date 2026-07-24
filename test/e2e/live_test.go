@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -93,9 +95,11 @@ func TestE2EGetDetails(t *testing.T) {
 // hashes to the requested md5.
 //
 // Small-target choice: rather than hardcode an md5 that may vanish, the test
-// searches with order=size, order_mode=asc and picks the first result whose
-// parsed size is non-zero and within maxE2EDownloadBytes. A per-client download
-// cap enforces the same ceiling defensively. If the download cannot complete
+// searches with order=size, order_mode=asc and picks the first result whose parsed
+// size sits inside [minE2EDownloadBytes, maxE2EDownloadBytes]. The FLOOR matters as
+// much as the ceiling: without it the ordering hands every run the catalog's
+// smallest row — an 87-byte stub — and the download proves nothing. A per-client
+// download cap enforces the ceiling defensively. If the download cannot complete
 // (expired key, blocked CDN), it falls back to proving the
 // ads.php -> get.php -> CDN chain resolves and that the first bytes are a valid,
 // non-HTML file, without pulling the whole payload.
@@ -105,19 +109,10 @@ func TestE2EDownloadSmall(t *testing.T) {
 	cfg.MaxDownloadBytes = maxE2EDownloadBytes
 	client := buildClient(t, cfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	page, _, err := client.Search(ctx, libgen.SearchParams{
-		Query: "python", Topics: []string{"nonfiction"}, Order: "size", OrderMode: "asc",
-	})
-	if err != nil {
-		t.Fatalf("Search error: %v", err)
-	}
-	target := smallestDownloadable(page.Results)
-	if target.MD5 == "" {
-		t.Skip("no small downloadable target found; skipping to stay polite")
-	}
+	target := smallBookTarget(t, ctx, client, "python")
 	t.Logf("download target md5=%s size=%q title=%q", target.MD5, target.Size, target.Title)
 	pace()
 
@@ -128,6 +123,10 @@ func TestE2EDownloadSmall(t *testing.T) {
 	}
 	if !res.Verified {
 		t.Errorf("download not integrity-verified: %+v", res)
+	}
+	if res.SizeBytes < minE2EDownloadBytes {
+		t.Errorf("downloaded %d bytes for a target the catalog sized at %q; the size floor did not hold",
+			res.SizeBytes, target.Size)
 	}
 	assertFileMD5(t, res.Path, target.MD5)
 	t.Logf("downloaded md5=%s bytes=%d source=%s path=%s", target.MD5, res.SizeBytes, res.Source, res.Path)
@@ -449,42 +448,59 @@ const biorxivLiveDOI = "10.1101/2020.12.30.424878"
 // expected to have preserved; older OA works are the case fatcat is strongest for.
 const fatcatLiveDOI = "10.1371/journal.pbio.1002533"
 
+// downloadFromSource runs a source-restricted live download of doi and returns the
+// outcome, so every classified-outcome case shares one harness: a size-capped
+// client, a fresh temp dir, and no other source able to mask the one under test.
+func downloadFromSource(t *testing.T, ctx context.Context, doi, source string) (*libgen.DownloadResult, error) {
+	t.Helper()
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+	return client.DownloadItem(ctx, libgen.Item{DOI: doi, Source: source}, t.TempDir(), "")
+}
+
+// europePMCFailures are the KNOWN, diagnosed ways the europepmc source can fail
+// live. Each pattern pins the source's own error prefix plus a specific diagnosis,
+// and the transport class additionally pins the EBI host, so a source repointed at
+// the wrong upstream fails the test instead of skipping it.
+var europePMCFailures = []sourceFailure{
+	diagnosed("europepmc", `"[^"]*" is not indexed`, "DOI absent from Europe PMC"),
+	diagnosed("europepmc", `"[^"]*" is indexed but has no open-access full text`, "indexed but not open access"),
+	diagnosed("europepmc", `no reachable PDF endpoint for `, "both render endpoints unreachable"),
+	diagnosed("europepmc", `"[^"]*" returned HTTP \d+`, "search API answered an unexpected status"),
+	transportTo("europepmc", "requesting ", "www.ebi.ac.uk"),
+}
+
 // TestE2EEuropePMCClassifiedOutcome exercises the europepmc source end to end
 // against the live Europe PMC APIs, restricted to source=europepmc so no other
 // source can mask its behavior. On error the failure must be one of the known,
 // diagnosed classes; anything else fails the test.
 func TestE2EEuropePMCClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	cfg := loadLiveConfig(t)
-	cfg.MaxDownloadBytes = maxE2EDownloadBytes
-	client := buildClient(t, cfg)
-
+	requireUpstream(t, "europepmc", "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=test&format=json")
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	res, err := client.DownloadItem(ctx, libgen.Item{DOI: europePMCLiveDOI, Source: "europepmc"}, t.TempDir(), "")
+	res, err := downloadFromSource(t, ctx, europePMCLiveDOI, "europepmc")
 	if err == nil {
-		if res.SizeBytes <= 0 {
-			t.Fatalf("europepmc reported a download of %d bytes", res.SizeBytes)
-		}
-		assertPDF(t, res.Path)
-		t.Logf("europepmc served a real PDF: bytes=%d", res.SizeBytes)
+		assertSourcePDF(t, "europepmc", res)
 		return
 	}
-	known := []string{
-		"not indexed",               // DOI absent from Europe PMC
-		"no open-access full text",  // indexed but no OA full text
-		"no reachable PDF endpoint", // both render endpoints unreachable
-		"returned HTTP",             // search API answered non-200
-		"requesting",                // transport failure reaching Europe PMC
-		"context deadline",          // a slow endpoint inside the timeout budget
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("europepmc unavailable in a known way: %v", err)
-		}
-	}
-	t.Fatalf("europepmc failed in an undiagnosed way: %v", err)
+	classifyOrFail(t, "europepmc", err, europePMCFailures)
+}
+
+// biorxivFailures are the KNOWN, diagnosed ways the biorxiv source can fail live.
+// The details-API classes pin api.biorxiv.org; the content-host class covers the
+// interstitial bioRxiv serves in place of the PDF, which arrives from the download
+// stream rather than the source, so it is matched on the chain's own wrapper.
+var biorxivFailures = []sourceFailure{
+	diagnosed("biorxiv", `"[^"]*" not found on bioRxiv or medRxiv`, "neither server carries the DOI"),
+	diagnosed("biorxiv", `(bio|med)rxiv returned HTTP \d+`, "details API answered an unexpected status"),
+	transportTo("biorxiv", "requesting ", "api.biorxiv.org"),
+	{
+		re:  regexp.MustCompile(`source biorxiv: .*HTML page instead of the file`),
+		why: "the content host served an interstitial, not the PDF",
+	},
 }
 
 // TestE2EBiorxivClassifiedOutcome exercises the biorxiv source end to end against
@@ -492,35 +508,33 @@ func TestE2EEuropePMCClassifiedOutcome(t *testing.T) {
 // error the failure must be one of the known, diagnosed classes.
 func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	cfg := loadLiveConfig(t)
-	cfg.MaxDownloadBytes = maxE2EDownloadBytes
-	client := buildClient(t, cfg)
-
+	requireUpstream(t, "biorxiv", "https://api.biorxiv.org/details/biorxiv/"+biorxivLiveDOI)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	res, err := client.DownloadItem(ctx, libgen.Item{DOI: biorxivLiveDOI, Source: "biorxiv"}, t.TempDir(), "")
+	res, err := downloadFromSource(t, ctx, biorxivLiveDOI, "biorxiv")
 	if err == nil {
-		if res.SizeBytes <= 0 {
-			t.Fatalf("biorxiv reported a download of %d bytes", res.SizeBytes)
-		}
-		assertPDF(t, res.Path)
-		t.Logf("biorxiv served a real PDF: bytes=%d", res.SizeBytes)
+		assertSourcePDF(t, "biorxiv", res)
 		return
 	}
-	known := []string{
-		"not found on bioRxiv or medRxiv", // neither server carries the DOI
-		"returned HTTP",                   // details API answered non-200
-		"requesting",                      // transport failure reaching bioRxiv
-		"HTML page",                       // content host served an interstitial, not the PDF
-		"context deadline",                // a slow endpoint inside the timeout budget
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("biorxiv unavailable in a known way: %v", err)
-		}
-	}
-	t.Fatalf("biorxiv failed in an undiagnosed way: %v", err)
+	classifyOrFail(t, "biorxiv", err, biorxivFailures)
+}
+
+// fatcatAPIProbe is the fatcat API root the source calls. The classified-outcome
+// case probes it first: it does not answer from every network, and without the
+// precondition the test spent its full 90 s timeout budget establishing that.
+const fatcatAPIProbe = "https://api.fatcat.wiki/v0/release/lookup?doi=" + fatcatLiveDOI
+
+// fatcatFailures are the KNOWN, diagnosed ways the fatcat source can fail live.
+var fatcatFailures = []sourceFailure{
+	diagnosed("fatcat", `"[^"]*" is unknown to fatcat`, "fatcat has no release for the DOI"),
+	diagnosed("fatcat", `"[^"]*" has no preserved Internet Archive file`, "release known but nothing preserved"),
+	diagnosed("fatcat", `"[^"]*" returned HTTP \d+`, "API answered an unexpected status"),
+	transportTo("fatcat", "requesting ", "api.fatcat.wiki"),
+	{
+		re:  regexp.MustCompile(`source fatcat: .*HTML page instead of the file`),
+		why: "the Internet Archive served an interstitial, not the PDF",
+	},
 }
 
 // TestE2EFatcatClassifiedOutcome exercises the fatcat source end to end against the
@@ -528,45 +542,76 @@ func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
 // failure must be one of the known, diagnosed classes.
 func TestE2EFatcatClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	cfg := loadLiveConfig(t)
-	cfg.MaxDownloadBytes = maxE2EDownloadBytes
-	client := buildClient(t, cfg)
-
+	requireUpstream(t, "fatcat", fatcatAPIProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	res, err := client.DownloadItem(ctx, libgen.Item{DOI: fatcatLiveDOI, Source: "fatcat"}, t.TempDir(), "")
+	res, err := downloadFromSource(t, ctx, fatcatLiveDOI, "fatcat")
 	if err == nil {
-		if res.SizeBytes <= 0 {
-			t.Fatalf("fatcat reported a download of %d bytes", res.SizeBytes)
-		}
-		// Assert the bytes really are a PDF, not merely non-empty: fatcat records
-		// often omit the mimetype, so a non-PDF archive asset selected by mistake
-		// would still arrive as a plausible-looking file under a .pdf name.
-		assertPDF(t, res.Path)
-		t.Logf("fatcat served a real PDF: bytes=%d", res.SizeBytes)
+		// The PDF check matters more here than elsewhere: fatcat records often omit
+		// the mimetype, so a non-PDF archive asset picked by mistake would still
+		// arrive as a plausible-looking file under a .pdf name.
+		assertSourcePDF(t, "fatcat", res)
 		return
 	}
-	known := []string{
-		"unknown to fatcat",                  // fatcat has no release for the DOI
-		"no preserved Internet Archive file", // release known but nothing preserved
-		"returned HTTP",                      // API answered an unexpected status
-		"requesting",                         // transport failure reaching fatcat/IA
-		"HTML page",                          // IA served an interstitial, not the PDF
-		"context deadline",                   // a slow endpoint inside the timeout budget
+	classifyOrFail(t, "fatcat", err, fatcatFailures)
+}
+
+// scihubLiveDOI is a long-established, heavily-cited DOI: if Sci-Hub carries
+// anything, it carries this.
+const scihubLiveDOI = "10.1016/j.cell.2011.02.013"
+
+// scihubFailures are the KNOWN, diagnosed ways the scihub source can fail live.
+// Every class requires the outer "no mirror resolved" wrapper AND a specific inner
+// diagnosis, and the transport class pins the sci-hub.<tld> host family, so a
+// source pointed at some other host fails rather than skipping. Sci-Hub is the
+// most fragile source in the chain — its mirrors rotate and block — which is
+// exactly why the failure it reports has to stay legible.
+var scihubFailures = []sourceFailure{
+	diagnosed("scihub", `no mirror resolved "[^"]*": scihub: host "[^"]*" served no PDF link`,
+		"mirrors reachable, article absent from Sci-Hub"),
+	diagnosed("scihub", `no mirror resolved "[^"]*": scihub: host "[^"]*" returned HTTP \d+`,
+		"every mirror answered an unexpected status"),
+	diagnosed("scihub", `no mirror resolved "[^"]*": scihub: requesting "sci-hub\.[a-z]+"`,
+		"every sci-hub mirror was unreachable"),
+	diagnosed("scihub", `no hosts configured for `, "no Sci-Hub hosts configured"),
+}
+
+// TestE2ESciHubClassifiedOutcome exercises the scihub source end to end against the
+// live Sci-Hub mirrors, restricted to source=scihub so no other source can mask its
+// behavior. It was the only one of the ten known sources with no source-restricted
+// live test, and the most fragile: its mirror list rotates, so a silent move from
+// "the mirrors are blocking us today" to "we are asking them the wrong way" had
+// nothing watching for it. On error the failure must be one of the known, diagnosed
+// classes; anything else fails the test.
+func TestE2ESciHubClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, scihubLiveDOI, "scihub")
+	if err == nil {
+		assertSourcePDF(t, "scihub", res)
+		return
 	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("fatcat unavailable in a known way: %v", err)
-		}
-	}
-	t.Fatalf("fatcat failed in an undiagnosed way: %v", err)
+	classifyOrFail(t, "scihub", err, scihubFailures)
 }
 
 // coreLiveDOI is an open-access DOI whose CORE record served a live PDF on
 // 2026-07-24; CORE's download URLs go stale often, so the test tolerates a
 // diagnosed "no live file today" outcome rather than pinning on permanence.
 const coreLiveDOI = "10.1186/s12864-016-3299-5"
+
+// coreFailures are the KNOWN, diagnosed ways the core source can fail live. The
+// transport class pins api.core.ac.uk so a repointed source cannot pass as an
+// upstream outage.
+var coreFailures = []sourceFailure{
+	diagnosed("core", `"[^"]*" has no downloadable open-access full text`, "CORE has no live file for this DOI today"),
+	diagnosed("core", `"[^"]*" is not in CORE`, "CORE does not hold the DOI"),
+	diagnosed("core", `API key rejected \(HTTP \d+\)`, "the API key is invalid or expired"),
+	diagnosed("core", `"[^"]*" returned HTTP \d+`, "the API answered an unexpected status"),
+	transportTo("core", "requesting ", "api.core.ac.uk"),
+}
 
 // TestE2ECoreClassifiedOutcome exercises the opt-in core source end to end against
 // the live CORE API, restricted to source=core. It is skipped unless
@@ -578,35 +623,16 @@ func TestE2ECoreClassifiedOutcome(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("LIBGEN_MCP_CORE_KEY")) == "" {
 		t.Skip("LIBGEN_MCP_CORE_KEY not set; the core source is opt-in and out of the chain")
 	}
-	cfg := loadLiveConfig(t)
-	cfg.MaxDownloadBytes = maxE2EDownloadBytes
-	client := buildClient(t, cfg)
-
+	requireUpstream(t, "core", "https://api.core.ac.uk/v3/")
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	res, err := client.DownloadItem(ctx, libgen.Item{DOI: coreLiveDOI, Source: "core"}, t.TempDir(), "")
+	res, err := downloadFromSource(t, ctx, coreLiveDOI, "core")
 	if err == nil {
-		if res.SizeBytes <= 0 {
-			t.Fatalf("core reported a download of %d bytes", res.SizeBytes)
-		}
-		assertPDF(t, res.Path)
-		t.Logf("core served a real PDF: bytes=%d", res.SizeBytes)
+		assertSourcePDF(t, "core", res)
 		return
 	}
-	known := []string{
-		"no downloadable open-access full text", // CORE has no live file for this DOI today
-		"is not in CORE",                        // CORE does not hold the DOI
-		"API key rejected",                      // key invalid or expired
-		"requesting",                            // transport failure reaching CORE
-		"context deadline",                      // a slow endpoint inside the timeout budget
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("core unavailable in a known way: %v", err)
-		}
-	}
-	t.Fatalf("core failed in an undiagnosed way: %v", err)
+	classifyOrFail(t, "core", err, coreFailures)
 }
 
 // scidbLiveDOI is a long-established, heavily-mirrored DOI verified served by
@@ -665,6 +691,132 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 	}
 	skipIfAnnasUnavailable(t, err)
 	t.Fatalf("annas failed in an undiagnosed way: %v", err)
+}
+
+// TestE2EDownloadToolHonorsSourceArgument proves the `source` argument works where
+// a real client actually sets it: as a tool argument over MCP. Every other
+// source-restricted case in this suite builds a libgen.Item{Source: …} directly,
+// which bypasses validateDownloadInput and the dynamically-built enum entirely —
+// so the argument a model would pass had no live coverage at all. It resolves the
+// pinned Anna's-only md5 with source="annas" and asserts the resolved link really
+// came from that source.
+func TestE2EDownloadToolHonorsSourceArgument(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	session := connectInMemory(t, ctx, server, nil)
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": item.MD5, "source": "annas", "resolve_only": true},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download source=annas) transport error: %v", err)
+	}
+	if res.IsError {
+		// A live Anna's outage is tolerated; a rejected argument is not, so the
+		// error text has to name a known unavailability rather than a bad input.
+		skipIfAnnasUnavailable(t, errors.New(textOf(res)))
+		t.Fatalf("download with source=annas failed in an undiagnosed way: %v", res.Content)
+	}
+	var out tools.DownloadOutput
+	decodeStructured(t, res, &out)
+	if out.Resolved == nil {
+		t.Fatalf("resolve_only with source=annas returned no link: %+v", out)
+	}
+	if out.Resolved.Source != "annas" {
+		t.Errorf("resolved.source = %q, want annas — the source argument did not pin the chain", out.Resolved.Source)
+	}
+	t.Logf("tool-layer source argument honored: resolved via %s", out.Resolved.Source)
+}
+
+// TestE2EDownloadToolAdvertisesEveryEnabledSource proves the download tool's
+// `source` enum, as served over ListTools, names every source the deployment has
+// enabled. The enum is the model's ONLY discovery path to a source — a provider
+// missing from it is a provider no client will ever ask for by name — and it was
+// covered by unit tests alone, never over a real tools/list round-trip.
+func TestE2EDownloadToolAdvertisesEveryEnabledSource(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	session := connectInMemory(t, ctx, server, nil)
+
+	list, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools error: %v", err)
+	}
+	enum := downloadSourceEnum(t, list)
+	for _, want := range expectedSourceEnum(env.cfg) {
+		if !slices.Contains(enum, want) {
+			t.Errorf("download source enum omits %q; a model has no way to ask for it. got %v", want, enum)
+		}
+	}
+	t.Logf("download source enum advertises %v", enum)
+}
+
+// listedSchema is the slice of an advertised input schema this suite inspects: the
+// `source` property's enum. A tools/list result carries the schema as decoded JSON,
+// so it is re-marshaled through this shape rather than reaching into the server's
+// own schema type.
+type listedSchema struct {
+	Properties struct {
+		Source struct {
+			Enum []string `json:"enum"`
+		} `json:"source"`
+	} `json:"properties"`
+}
+
+// downloadSourceEnum extracts the download tool's `source` enum from a tools/list
+// result. It FAILS when the tool, the property, or the enum is missing: each is a
+// discoverability guarantee, not an optional extra.
+func downloadSourceEnum(t *testing.T, list *mcp.ListToolsResult) []string {
+	t.Helper()
+	for _, tool := range list.Tools {
+		if tool.Name != "download" {
+			continue
+		}
+		raw, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatalf("marshaling the download tool's input schema: %v", err)
+		}
+		var schema listedSchema
+		if uerr := json.Unmarshal(raw, &schema); uerr != nil {
+			t.Fatalf("decoding the download tool's input schema: %v", uerr)
+		}
+		if len(schema.Properties.Source.Enum) == 0 {
+			t.Fatalf("the download tool advertises no source enum; every enabled source is undiscoverable. schema: %s", raw)
+		}
+		return schema.Properties.Source.Enum
+	}
+	t.Fatal("tools/list did not advertise a download tool")
+	return nil
+}
+
+// expectedSourceEnum lists the sources this deployment must advertise: every
+// KnownSource the configuration enables, minus the two that are credential-gated
+// and legitimately absent when their credential is not set.
+func expectedSourceEnum(cfg *config.Config) []string {
+	want := make([]string, 0, len(config.KnownSources))
+	for _, name := range config.KnownSources {
+		if len(cfg.Sources) > 0 && !slices.Contains(cfg.Sources, name) {
+			continue
+		}
+		if name == "unpaywall" && strings.TrimSpace(cfg.UnpaywallEmail) == "" {
+			continue
+		}
+		if name == "core" && strings.TrimSpace(cfg.CoreKey) == "" {
+			continue
+		}
+		want = append(want, name)
+	}
+	return want
 }
 
 // escalationItem is the pinned catalog-miss / Anna's-hit fixture.

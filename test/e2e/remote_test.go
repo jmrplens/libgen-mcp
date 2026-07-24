@@ -60,22 +60,12 @@ func newMCPDownloadEnv(t *testing.T, ctx context.Context, remote bool) *mcpDownl
 }
 
 // smallBookTarget searches nonfiction ordered by ascending size and returns the
-// smallest downloadable result (canonical md5, parseable non-zero size within the
-// polite cap). It skips the calling test when no such target is available, to stay
-// a polite citizen of the public mirrors.
+// smallest downloadable result inside the suite's size band — above
+// minE2EDownloadBytes so the download is a real one, below maxE2EDownloadBytes so
+// it stays polite. It skips the calling test when no such target is available.
 func smallBookTarget(t *testing.T, ctx context.Context, client *libgen.Client, query string) libgen.Result {
 	t.Helper()
-	page, _, err := client.Search(ctx, libgen.SearchParams{
-		Query: query, Topics: []string{"nonfiction"}, Order: "size", OrderMode: "asc",
-	})
-	if err != nil {
-		t.Fatalf("Search error: %v", err)
-	}
-	target := smallestDownloadable(page.Results)
-	if target.MD5 == "" {
-		t.Skip("no small downloadable target found; skipping to stay polite")
-	}
-	return target
+	return findLiveTarget(t, ctx, client, liveTarget{topic: "nonfiction", query: query})
 }
 
 // callDownload invokes the `download` tool and decodes its structured output. It
@@ -200,8 +190,9 @@ func TestE2EMCPDownloadLocalToDisk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("saved file missing on disk: %v", err)
 	}
-	if info.Size() == 0 {
-		t.Fatalf("saved file is empty: %s", out.Path)
+	if info.Size() < minE2EDownloadBytes {
+		t.Errorf("saved %d bytes for a target the catalog sized at %q; the size floor did not hold (%s)",
+			info.Size(), target.Size, out.Path)
 	}
 	t.Logf("saved md5=%s bytes=%d source=%s path=%s markdown=%d bytes",
 		target.MD5, out.SizeBytes, out.Source, out.Path, len(textOf(res)))

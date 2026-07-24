@@ -148,7 +148,7 @@ func TestE2EHTTPRemoteReadByMD5(t *testing.T) {
 	defer cancel()
 
 	client, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
-	target := smallestTargetIn(t, ctx, client, "nonfiction", "python")
+	target := readableTargetIn(t, ctx, client, "nonfiction", "python")
 	t.Logf("http remote read target md5=%s size=%q ext=%q", target.MD5, target.Size, target.Extension)
 	pace()
 

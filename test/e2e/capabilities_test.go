@@ -19,6 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
@@ -392,22 +393,13 @@ func newReadSession(t *testing.T, ctx context.Context) (*libgen.Client, *mcp.Cli
 	return client, newToolSession(t, ctx, client, cfg, nil)
 }
 
-// smallestTargetIn searches one topic ordered by ascending size and returns the
-// smallest downloadable result (canonical md5, parseable non-zero size within the
-// polite cap). It SKIPS the calling test when no such target is available.
-func smallestTargetIn(t *testing.T, ctx context.Context, client *libgen.Client, topic, query string) libgen.Result {
+// readableTargetIn returns the smallest live target in the suite's size band whose
+// extension the read tool can actually extract (PDF or EPUB). The read cases need
+// that guarantee: left to the catalog's size ordering they were handed archives
+// and stub text files, and the assertions they could make on those were vacuous.
+func readableTargetIn(t *testing.T, ctx context.Context, client *libgen.Client, topic, query string) libgen.Result {
 	t.Helper()
-	page, _, err := client.Search(ctx, libgen.SearchParams{
-		Query: query, Topics: []string{topic}, Order: "size", OrderMode: "asc",
-	})
-	if err != nil {
-		t.Fatalf("Search error: %v", err)
-	}
-	target := smallestDownloadable(page.Results)
-	if target.MD5 == "" {
-		t.Skipf("no small downloadable %s target for %q; skipping to stay polite", topic, query)
-	}
-	return target
+	return findLiveTarget(t, ctx, client, liveTarget{topic: topic, query: query, exts: readableExts})
 }
 
 // callRead invokes the read tool and decodes its structured ReadOutput. It SKIPS
@@ -450,7 +442,7 @@ func TestE2EReadRefusesToInviteInvention(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	client, session := newReadSession(t, ctx)
-	target := smallestTargetIn(t, ctx, client, "nonfiction", "python")
+	target := readableTargetIn(t, ctx, client, "nonfiction", "python")
 	pace()
 
 	// A term almost certainly absent, so the empty-result branch is the live one.
@@ -477,18 +469,19 @@ func assertForbidsInvention(t *testing.T, steps []string, branch string) {
 	}
 }
 
-// TestE2EReadModes drives the read tool's three modes against a real small file
-// from the LIVE site: sequential text (with a cursor when more remains), find (a
-// plausible common word), and outline (entries or a clean no-outline result). Each
-// mode must lead with the UNTRUSTED warning. It gates on requireLive; find and
-// outline are best-effort (zero matches / no TOC are valid, not failures), and the
-// whole test SKIPS if the target is not extractable.
+// TestE2EReadModes drives the read tool's three modes against a real document from
+// the LIVE site — a PDF or EPUB above the suite's size floor, so each mode has
+// something to work on. It asserts sequential text (with a cursor when more
+// remains), find (which must locate a word this common), and outline (whose two
+// branches are BOTH asserted, never merely logged). Each mode must lead with the
+// UNTRUSTED warning. It gates on requireLive and SKIPS if the target turns out not
+// to be extractable.
 func TestE2EReadModes(t *testing.T) {
 	requireLive(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	client, session := newReadSession(t, ctx)
-	target := smallestTargetIn(t, ctx, client, "nonfiction", "python")
+	target := readableTargetIn(t, ctx, client, "nonfiction", "python")
 	t.Logf("read target md5=%s size=%q ext=%q title=%q", target.MD5, target.Size, target.Extension, target.Title)
 	pace()
 
@@ -507,17 +500,154 @@ func TestE2EReadModes(t *testing.T) {
 
 	find := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "find": "the", "max_matches": 5})
 	assertUntrustedFirst(t, find)
+	assertFindShape(t, find, target)
+	pace()
+
+	outline := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "outline": true})
+	assertUntrustedFirst(t, outline)
+	assertOutlineShape(t, outline)
+}
+
+// assertFindShape asserts a find over a real document behaved: every returned
+// match carries a snippet, and the match count and the returned matches agree. A
+// document of this size that contains no occurrence of "the" at all is possible
+// (a non-English text), so a zero-match result is graded as the no-match branch
+// rather than passed over.
+func assertFindShape(t *testing.T, find tools.ReadOutput, target libgen.Result) {
+	t.Helper()
 	for i := range find.Matches {
 		if strings.TrimSpace(find.Matches[i].Snippet) == "" {
 			t.Errorf("find match %d carried an empty snippet", i)
 		}
 	}
-	t.Logf("find matches=%d total=%d", len(find.Matches), find.MatchCount)
+	switch {
+	case find.MatchCount > 0 && len(find.Matches) == 0:
+		t.Errorf("find reported %d matches but returned none", find.MatchCount)
+	case find.MatchCount == 0 && len(find.Matches) > 0:
+		t.Errorf("find returned %d matches but a total of 0", len(find.Matches))
+	case find.MatchCount == 0:
+		// The no-match branch must say so rather than leave the model free to
+		// quote passages it never received.
+		assertForbidsInvention(t, find.NextSteps, "no matches")
+		t.Logf("no occurrence of %q in %q (%s); graded the no-match branch", "the", target.Title, target.Extension)
+	default:
+		t.Logf("find matches=%d total=%d", len(find.Matches), find.MatchCount)
+	}
+}
+
+// assertOutlineShape asserts the read tool's outline mode, whichever branch a real
+// document lands in. The suite used to only log the entry count, so the feature had
+// no live protection at all: an outline that silently stopped being parsed, or one
+// whose entries lost their titles or pages, would have gone unnoticed.
+//
+// With entries: every entry needs a title, a non-negative level, a page inside the
+// document when it states one, and the guidance must tell the model how to jump
+// there. Without entries: the no-TOC branch must be reported explicitly and must
+// forbid inventing chapter titles — a valid document with no embedded table of
+// contents is a normal outcome, but it has to be a stated one.
+func assertOutlineShape(t *testing.T, outline tools.ReadOutput) {
+	t.Helper()
+	if !outline.Extractable {
+		t.Fatalf("outline on an extractable document reported extractable=false: %s", outline.Reason)
+	}
+	joined := strings.Join(outline.NextSteps, "\n")
+	if len(outline.Outline) == 0 {
+		if !strings.Contains(joined, "no embedded table of contents") {
+			t.Errorf("the no-TOC branch must say the document has none; got %q", joined)
+		}
+		assertForbidsInvention(t, outline.NextSteps, "empty outline")
+		t.Logf("outline: document has no embedded table of contents (branch asserted)")
+		return
+	}
+	if !strings.Contains(joined, "start_page") {
+		t.Errorf("an outline with entries must tell the model how to jump to one; got %q", joined)
+	}
+	for i, e := range outline.Outline {
+		if strings.TrimSpace(e.Title) == "" {
+			t.Errorf("outline entry %d has no title: %+v", i, e)
+		}
+		if e.Level < 0 {
+			t.Errorf("outline entry %d has a negative level: %+v", i, e)
+		}
+		if outline.TotalPages > 0 && (e.Page < 0 || e.Page > outline.TotalPages) {
+			t.Errorf("outline entry %d points to page %d, outside a %d-page document", i, e.Page, outline.TotalPages)
+		}
+	}
+	t.Logf("outline: %d entries, first %q (level %d, page %d)",
+		len(outline.Outline), outline.Outline[0].Title, outline.Outline[0].Level, outline.Outline[0].Page)
+}
+
+// TestE2EReadPaginationRoundTrip proves the read tool's pagination actually works
+// end to end: it reads a first chunk, feeds the RETURNED cursor back into a second
+// call, and asserts the second chunk is different content that starts where the
+// first left off. No test ever fed a cursor back before, so cursor, start_page,
+// max_pages, offset and max_chars — five input fields — had no live coverage
+// between them.
+//
+// It asks for a deliberately small chunk so has_more is set even on a modest
+// document. It gates on requireLive and SKIPS when the target is not extractable
+// or is short enough to fit in one chunk.
+func TestE2EReadPaginationRoundTrip(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	client, session := newReadSession(t, ctx)
+	target := readableTargetIn(t, ctx, client, "nonfiction", "python")
+	t.Logf("pagination target md5=%s size=%q ext=%q", target.MD5, target.Size, target.Extension)
 	pace()
 
-	outline := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "outline": true})
-	assertUntrustedFirst(t, outline)
-	t.Logf("outline entries=%d extractable=%v", len(outline.Outline), outline.Extractable)
+	// A small max_chars plus a single page makes has_more reachable for any real
+	// document, and exercises max_pages/max_chars alongside the cursor.
+	first := callRead(t, ctx, session, map[string]any{
+		"md5": target.MD5, "max_chars": 2000, "max_pages": 1, "start_page": 1,
+	})
+	assertUntrustedFirst(t, first)
+	if !first.Extractable {
+		t.Skipf("target %s is not extractable (%s); pagination needs extractable text", target.MD5, first.Reason)
+	}
+	if !first.HasMore {
+		t.Skipf("target %s fits in one chunk (%d chars, %d pages); nothing to page through",
+			target.MD5, len(first.Text), first.TotalPages)
+	}
+	if first.Cursor == "" {
+		t.Fatal("read reported has_more but returned no cursor to continue with")
+	}
+	if !strings.Contains(strings.Join(first.NextSteps, "\n"), first.Cursor) {
+		t.Error("the follow-up guidance should hand the model the cursor it must pass back")
+	}
+	pace()
+
+	second := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "cursor": first.Cursor, "max_chars": 2000})
+	assertUntrustedFirst(t, second)
+	assertAdvanced(t, first, second)
+}
+
+// assertAdvanced asserts a cursor-resumed read really moved forward: it returned
+// text, that text differs from the first chunk, and its start position (page for a
+// PDF, character offset for an EPUB/TXT) is past where the first chunk began.
+// Identical text with an advanced offset would mean the cursor was accepted and
+// ignored, which is the failure worth catching.
+func assertAdvanced(t *testing.T, first, second tools.ReadOutput) {
+	t.Helper()
+	if strings.TrimSpace(second.Text) == "" {
+		t.Fatal("the cursor-resumed read returned no text")
+	}
+	if second.Text == first.Text {
+		t.Error("the cursor-resumed read returned the same text; the cursor was accepted but ignored")
+	}
+	switch {
+	case first.PageStart > 0 || second.PageStart > 0:
+		if second.PageStart <= first.PageStart {
+			t.Errorf("page_start did not advance: %d then %d", first.PageStart, second.PageStart)
+		}
+	default:
+		if second.CharStart <= first.CharStart {
+			t.Errorf("char_start did not advance: %d then %d", first.CharStart, second.CharStart)
+		}
+	}
+	t.Logf("paged on: chunk 1 pages %d-%d chars %d-%d, chunk 2 pages %d-%d chars %d-%d",
+		first.PageStart, first.PageEnd, first.CharStart, first.CharEnd,
+		second.PageStart, second.PageEnd, second.CharStart, second.CharEnd)
 }
 
 // TestE2EReadNotExtractable exercises the not-extractable path via an unsupported
@@ -530,7 +660,12 @@ func TestE2EReadNotExtractable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	client, session := newReadSession(t, ctx)
-	target := smallestTargetIn(t, ctx, client, "comics", "batman")
+	// Comics carry no floor of their own worth speaking of: the collection jumps
+	// from stub rows straight to hundreds of megabytes, so this case asks only for
+	// something big enough to be a real archive rather than a placeholder.
+	target := findLiveTarget(t, ctx, client, liveTarget{
+		topic: "comics", query: "batman", minBytes: minComicBytes,
+	})
 	t.Logf("not-extractable target md5=%s size=%q ext=%q", target.MD5, target.Size, target.Extension)
 	pace()
 
@@ -613,6 +748,14 @@ func TestE2EReadEPUB(t *testing.T) {
 		}
 	}
 	t.Logf("epub find matches=%d total=%d", len(find.Matches), find.MatchCount)
+	pace()
+
+	// A full-length novel is the likeliest target in the suite to carry a real
+	// navigation document, so the outline's with-entries branch gets its best shot
+	// here; the file is already cached server-side, so the extra call is cheap.
+	outline := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "outline": true})
+	assertUntrustedFirst(t, outline)
+	assertOutlineShape(t, outline)
 }
 
 // validOrigin reports whether an open-access hit's origin label is one of the
@@ -629,8 +772,9 @@ func validOrigin(origin string) bool {
 // TestE2ESearchOpenAccessIncluded drives the search tool with
 // extra_sources=always for a research-y query against the LIVE site (which
 // also hits arXiv/Crossref/OpenLibrary). It asserts the OpenAccess list is
-// populated, each hit is labeled by a known origin, and no DOI is duplicated. It
-// gates on requireLive and SKIPS when the open-access providers return nothing.
+// populated, each hit is labeled by a known origin, no DOI is duplicated, and the
+// per-provider discovery fields hold up against real data. It gates on requireLive
+// and SKIPS when the open-access providers return nothing.
 func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 	env := requireLive(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -652,13 +796,32 @@ func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 	if len(out.OpenAccess) == 0 {
 		t.Skip("no open-access hits (providers unreachable or no matches); skipping")
 	}
+	assertOriginsAndDedup(t, out.OpenAccess)
+	assertArchiveLinksAreOpen(t, out.OpenAccess)
+	assertOpenAccessDiscriminates(t, out.OpenAccess)
+	assertArxivVenue(t, out.OpenAccess)
+	pace()
+
+	// A second, book-shaped query so OpenLibrary actually contributes: a papers
+	// query reaches it, but public-domain classics are where it publishes the
+	// free-to-read archive links this invariant is about.
+	books := callSearch(t, ctx, env, map[string]any{
+		"query": "Alice's Adventures in Wonderland", "extra_sources": "always",
+	})
+	assertOriginsAndDedup(t, books.OpenAccess)
+	assertArchiveLinksAreOpen(t, books.OpenAccess)
+}
+
+// assertOriginsAndDedup asserts every hit is labeled by a known discovery provider
+// and that no DOI appears twice across the merged list.
+func assertOriginsAndDedup(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
 	seenDOI := map[string]bool{}
-	for i := range out.OpenAccess {
-		h := out.OpenAccess[i]
-		if !validOrigin(h.Origin) {
-			t.Errorf("open-access hit %d has an unexpected origin %q", i, h.Origin)
+	for i := range hits {
+		if !validOrigin(hits[i].Origin) {
+			t.Errorf("open-access hit %d has an unexpected origin %q", i, hits[i].Origin)
 		}
-		doi := strings.ToLower(strings.TrimSpace(h.DOI))
+		doi := strings.ToLower(strings.TrimSpace(hits[i].DOI))
 		if doi == "" {
 			continue
 		}
@@ -667,7 +830,105 @@ func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 		}
 		seenDOI[doi] = true
 	}
-	t.Logf("open_access hits=%d unique_dois=%d", len(out.OpenAccess), len(seenDOI))
+	t.Logf("open_access hits=%d unique_dois=%d", len(hits), len(seenDOI))
+}
+
+// assertArchiveLinksAreOpen asserts the OpenLibrary archive link keeps its promise:
+// it is only ever set for a publicly readable book, so a hit carrying one must be
+// labeled open access, and the link must be an archive.org details page — the only
+// shape the renderer and the model are told to expect. When no hit carries one it
+// says so explicitly, naming how many OpenLibrary hits there were, rather than
+// passing as though the invariant had been checked.
+func assertArchiveLinksAreOpen(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
+	var fromOpenLibrary, withArchive int
+	for i := range hits {
+		h := hits[i]
+		if h.Origin == "openlibrary" {
+			fromOpenLibrary++
+		}
+		if h.ArchiveURL == "" {
+			continue
+		}
+		withArchive++
+		if h.Origin != "openlibrary" {
+			t.Errorf("hit %d carries an archive_url but came from %q, not openlibrary", i, h.Origin)
+		}
+		if !h.OpenAccess {
+			t.Errorf("hit %d carries archive_url %q but open_access is false; the link means freely readable", i, h.ArchiveURL)
+		}
+		if !strings.Contains(h.ArchiveURL, "archive.org/details/") {
+			t.Errorf("hit %d archive_url %q is not an archive.org details page", i, h.ArchiveURL)
+		}
+	}
+	if withArchive == 0 {
+		t.Logf("no archive_url across %d hits (%d from openlibrary); the free-to-read link invariant could not be graded this run",
+			len(hits), fromOpenLibrary)
+		return
+	}
+	t.Logf("archive_url present on %d of %d hits (%d from openlibrary)", withArchive, len(hits), fromOpenLibrary)
+}
+
+// assertOpenAccessDiscriminates asserts open_access is a judgement and not a
+// rubber stamp. Crossref decides it with a license heuristic; if that heuristic
+// ever regresses to always-true the flag stops carrying information, and every
+// paywalled record starts claiming to be free. A page of Crossref hits where none
+// is open access is plausible; one where ALL of them are is the shape worth
+// flagging.
+func assertOpenAccessDiscriminates(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
+	var crossref, crossrefOA int
+	for i := range hits {
+		if hits[i].Origin != "crossref" {
+			continue
+		}
+		crossref++
+		if hits[i].OpenAccess {
+			crossrefOA++
+		}
+	}
+	if crossref < 3 {
+		t.Logf("only %d crossref hits this run; too few to grade the open-access heuristic", crossref)
+		return
+	}
+	if crossrefOA == crossref {
+		t.Errorf("all %d crossref hits claim open_access; the license heuristic looks like it regressed to always-true", crossref)
+	}
+	t.Logf("open_access true on %d of %d crossref hits", crossrefOA, crossref)
+}
+
+// assertArxivVenue asserts the arXiv venue field survives the round trip: a
+// journal_ref is a short citation string, never an abstract, so any venue that
+// comes back must be short and must not be prose. arXiv only states one for the
+// preprints that later appeared in a journal, so a run where none does is a
+// legitimate data condition — it is reported explicitly rather than passing
+// silently as though the field had been checked.
+func assertArxivVenue(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
+	var arxiv, withVenue int
+	for i := range hits {
+		if hits[i].Origin != "arxiv" {
+			continue
+		}
+		arxiv++
+		venue := strings.TrimSpace(hits[i].Venue)
+		if venue == "" {
+			continue
+		}
+		withVenue++
+		if len(venue) > 300 {
+			t.Errorf("arxiv hit %d has a %d-character venue; journal_ref is a citation, not an abstract: %q",
+				i, len(venue), venue)
+		}
+	}
+	switch {
+	case arxiv == 0:
+		t.Logf("no arXiv hits this run; the venue field could not be graded")
+	case withVenue == 0:
+		t.Logf("none of the %d arXiv hits state a journal_ref this run; venue could not be graded (arXiv states one only for published preprints)", arxiv)
+	default:
+		t.Logf("venue present on %d of %d arXiv hits", withVenue, arxiv)
+	}
 }
 
 // TestE2ESearchOpenAccessOmittedDefault proves that with extra_sources=never
