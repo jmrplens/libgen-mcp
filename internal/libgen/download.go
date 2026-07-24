@@ -322,6 +322,9 @@ func (c *Client) withPerCallAnnas(item Item, sources []DownloadSource) []Downloa
 	if src := strings.TrimSpace(item.Source); src != "" && !strings.EqualFold(src, "annas") {
 		return sources
 	}
+	if !c.sourceEnabled("annas") {
+		return sources
+	}
 	adhoc := annasSource{mirrors: c.annasMirrors, http: c.http, key: item.AnnasKey}
 	// When source: "annas" is pinned, replace the selected source so the per-call
 	// key actually reaches the member API instead of the configured (empty) key.
@@ -342,8 +345,28 @@ func (c *Client) withPerCallAnnas(item Item, sources []DownloadSource) []Downloa
 	return append([]DownloadSource{adhoc}, sources...)
 }
 
+// sourceEnabled reports whether the deployment's LIBGEN_MCP_SOURCES list permits a
+// source. A client built without the predicate (a test constructing one directly)
+// permits everything, keeping the historical behavior.
+//
+// It deliberately consults the operator's list alone, not config.SourceEnabled,
+// which also refuses unpaywall when no contact email is configured — that absence
+// is exactly what a per-call email exists to fix.
+func (c *Client) sourceEnabled(name string) bool {
+	if c.sourceAllowed == nil {
+		return true
+	}
+	return c.sourceAllowed(name)
+}
+
 func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
 	if item.Email == "" || item.DOI == "" || item.Source != "" {
+		return sources
+	}
+	// Unpaywall may be missing from the chain for two different reasons: no contact
+	// email was configured (which a per-call email fixes) or the operator excluded
+	// it (which a caller must not be able to undo). Only the first is ours to fix.
+	if !c.sourceEnabled("unpaywall") {
 		return sources
 	}
 	for _, s := range sources {
