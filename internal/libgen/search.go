@@ -137,6 +137,10 @@ type Result struct {
 	Size      string           `json:"size,omitempty" jsonschema:"human-readable file size"`
 	Extension string           `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub)"`
 	Type      string           `json:"type,omitempty" jsonschema:"record type"`
+	// Origin labels which searcher produced this record, so a merged result list
+	// can tell a catalog hit from one federated in from elsewhere. "libgen" for
+	// catalog results; other searchers stamp their own name.
+	Origin    string           `json:"origin,omitempty" jsonschema:"which searcher produced this record: libgen for the catalog, annas for Anna's Archive"`
 	Downloads []DownloadOption `json:"downloads" jsonschema:"labeled download links; prefer the download tool, which handles mirrors and verification"`
 }
 
@@ -225,7 +229,7 @@ func isTruncated(totalFiles string, reachable int) bool {
 }
 
 func parseRow(cells []*html.Node, base string) *Result {
-	r := Result{}
+	r := Result{Origin: "libgen"}
 	parseIdentifiers(cells[0], &r)
 	if m := doiRe.FindStringSubmatch(nodeText(cells[0])); m != nil {
 		r.DOI = strings.TrimSpace(m[1])
