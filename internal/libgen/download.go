@@ -514,13 +514,20 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	// Try each supporting source in order: a source that fails to resolve or whose
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to
 	// the next. The first success returns; if all fail, the joined errors surface.
-	var errs []error
+	// Only the sources that can serve this item matter, and the last of them is the
+	// one worth waiting on: see downloadFrom.
+	supporting := make([]DownloadSource, 0, len(sources))
 	for _, src := range sources {
-		if !src.Supports(item) {
-			continue
+		if src.Supports(item) {
+			supporting = append(supporting, src)
 		}
+	}
+
+	var errs []error
+	for i, src := range supporting {
+		lastResort := i == len(supporting)-1
 		started := time.Now()
-		res, err := c.downloadFrom(ctx, src, req)
+		res, err := c.downloadFrom(ctx, src, req, lastResort)
 		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
 			return res, nil
@@ -584,8 +591,17 @@ type downloadReq struct {
 // (HTML page, stall, short read, MD5 mismatch, ...) is returned as-is so the
 // caller can advance to the next source. Context cancellation between or within
 // waits aborts immediately.
-func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
+func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downloadReq, lastResort bool) (*DownloadResult, error) {
 	waits := c.startRetryWaits
+	// The schedule is there to outlast a blip on the source that is going to serve
+	// the file. Spending it on a source while another one is still waiting turns a
+	// download that the next source would answer in seconds into a minute of
+	// waiting — measured at 235 seconds for an item the catalog does not carry, of
+	// which under two were transfer. A source with a successor gets one attempt;
+	// the last one, with nothing behind it, gets the full schedule.
+	if !lastResort && !c.retryEverySource {
+		waits = nil
+	}
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		res, err := c.startAttempt(ctx, src, req)

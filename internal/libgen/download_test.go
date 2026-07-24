@@ -2118,3 +2118,97 @@ func TestDownloadLogsEachSourceAttempt(t *testing.T) {
 		t.Errorf("the chain never logged why it moved on; log=%s", log)
 	}
 }
+
+// countingDeadSource never starts and counts how often it was asked to.
+type countingDeadSource struct {
+	name     string
+	attempts *atomic.Int32
+}
+
+func (s countingDeadSource) Name() string     { return s.name }
+func (countingDeadSource) Supports(Item) bool { return true }
+func (s countingDeadSource) Resolve(context.Context, Item) (Resolved, error) {
+	s.attempts.Add(1)
+	// An unreachable host is what the schedule is built to outlast, so this is the
+	// failure shape that triggers a retry rather than an immediate advance.
+	return Resolved{FileURL: "http://127.0.0.1:0/x"}, nil
+}
+
+// TestChainDoesNotSpendTheFullScheduleOnEverySource verifies a failing source does
+// not hold up the next one. The schedule exists to outlast a blip on the source
+// that is going to serve the file; spending it on every source in turn makes a
+// download another source would answer in seconds take a minute — measured at 235
+// seconds for an item the catalog does not carry, of which under two were transfer.
+func TestChainDoesNotSpendTheFullScheduleOnEverySource(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("served by the second source ", 20))
+	want := md5Hex(payload)
+	var hits atomic.Int32
+	srv := flakyStartCDN(t, want, payload, 0, &hits)
+	defer srv.Close()
+
+	var attempts atomic.Int32
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(5)
+	c.stallTimeout = 2 * time.Second
+	c.sources = []DownloadSource{
+		countingDeadSource{name: "dead", attempts: &attempts},
+		libgenSource{c: c},
+	}
+
+	if _, err := c.DownloadItem(context.Background(), Item{MD5: want}, t.TempDir(), ""); err != nil {
+		t.Fatalf("the second source should have served the file: %v", err)
+	}
+	if got := attempts.Load(); got > 1 {
+		t.Errorf("the dead source was attempted %d times while another source was waiting; want 1", got)
+	}
+}
+
+// TestLastSourceStillGetsTheFullSchedule verifies the restraint does not cost the
+// schedule its purpose. With nothing behind it, a source that would have recovered
+// on a later attempt must still be given one: outlasting a transient failure is
+// exactly what the schedule is for.
+func TestLastSourceStillGetsTheFullSchedule(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("recovered on a later attempt ", 20))
+	want := md5Hex(payload)
+	var hits atomic.Int32
+	srv := flakyStartCDN(t, want, payload, 2, &hits) // fails twice, then serves
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(5)
+	c.stallTimeout = 2 * time.Second
+
+	if _, err := c.Download(context.Background(), want, t.TempDir(), "", nil); err != nil {
+		t.Fatalf("the only source should have recovered on its third attempt: %v", err)
+	}
+	if got := hits.Load(); got != 3 {
+		t.Errorf("CDN hits = %d, want 3 — the last source must keep its retries", got)
+	}
+}
+
+// TestRetryEverySourceRestoresTheOldBehavior verifies the escape hatch works, so a
+// deployment that prefers every source to get the full schedule can have it.
+func TestRetryEverySourceRestoresTheOldBehavior(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("second source ", 20))
+	want := md5Hex(payload)
+	var hits atomic.Int32
+	srv := flakyStartCDN(t, want, payload, 0, &hits)
+	defer srv.Close()
+
+	var attempts atomic.Int32
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(3)
+	c.stallTimeout = 2 * time.Second
+	c.retryEverySource = true
+	c.sources = []DownloadSource{
+		countingDeadSource{name: "dead", attempts: &attempts},
+		libgenSource{c: c},
+	}
+
+	if _, err := c.DownloadItem(context.Background(), Item{MD5: want}, t.TempDir(), ""); err != nil {
+		t.Fatalf("the second source should still have served the file: %v", err)
+	}
+	if got := attempts.Load(); got != 4 {
+		t.Errorf("dead source attempts = %d, want 4 (one per wait plus the first)", got)
+	}
+}
