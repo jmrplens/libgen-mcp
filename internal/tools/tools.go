@@ -373,26 +373,8 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 		if verr := params.Validate(); verr != nil {
 			return nil, zero, verr
 		}
-		forced := forcedEscalation(mode) && strings.TrimSpace(in.Query) != ""
-		var (
-			extraWG   sync.WaitGroup
-			extraHits []discovery.DiscoveryResult
-		)
-		if forced {
-			extraWG.Go(func() {
-				// The handler's own recovery cannot catch a panic raised on another
-				// goroutine — it would take the whole server down — so this one
-				// guards itself and degrades to no extra hits.
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("forced extra search panicked", "panic", r, "stack", debug.Stack())
-					}
-				}()
-				extraHits = discovery.Federate(ctx, in.Query, extraLimit,
-					discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
-			})
-		}
-		defer extraWG.Wait()
+		extras := startExtras(ctx, mode, in.Query, cfg, annasMirrors)
+		defer extras.wait()
 		page, mirror, searchErr := c.Search(ctx, params)
 
 		var out SearchOutput
@@ -400,14 +382,7 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 			out = buildSearchOutput(page, mirror, in)
 		}
 
-		extraWG.Wait()
-		switch {
-		case forced:
-			mergeExtraHits(&out, extraHits)
-		case shouldEscalate(mode, len(out.Results), searchErr) && strings.TrimSpace(in.Query) != "":
-			mergeExtraHits(&out, discovery.Federate(ctx, in.Query, extraLimit,
-				discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...))
-		}
+		mergeExtraHits(&out, extras.collect(ctx, mode, in.Query, cfg, annasMirrors, len(out.Results), searchErr))
 		if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
 			return nil, zero, searchErr
 		}
@@ -415,6 +390,68 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 		out.NextSteps = searchNextSteps(out)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
+}
+
+// extraSearch carries an in-flight forced search of the extra sources. The forced
+// mode does not depend on the catalog's outcome, so it starts before the catalog
+// is queried and costs one round of latency instead of two; the other modes leave
+// it idle and decide after the catalog has answered.
+type extraSearch struct {
+	wg      sync.WaitGroup
+	hits    []discovery.DiscoveryResult
+	started bool
+}
+
+// startExtras kicks off the extra searchers when the mode forces them, and returns
+// an idle handle otherwise. An empty query never starts anything: there is nothing
+// to ask the searchers.
+func startExtras(ctx context.Context, mode config.ExtraSourcesMode, query string,
+	cfg *config.Config, annasMirrors discovery.MirrorLister,
+) *extraSearch {
+	e := &extraSearch{}
+	if !forcedEscalation(mode) || strings.TrimSpace(query) == "" {
+		return e
+	}
+	e.started = true
+	e.wg.Go(func() {
+		// The handler's own recovery cannot catch a panic raised on another
+		// goroutine — it would take the whole server down — so this one guards
+		// itself and degrades to no extra hits.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("forced extra search panicked", "panic", r, "stack", debug.Stack())
+			}
+		}()
+		e.hits = federateExtras(ctx, query, cfg, annasMirrors)
+	})
+	return e
+}
+
+// wait joins the forced search. It is safe to call more than once, so the handler
+// can defer it against an early return and still join it on the normal path.
+func (e *extraSearch) wait() { e.wg.Wait() }
+
+// collect returns the hits to merge: the forced search's own results once it has
+// finished, or a fresh search when the catalog's outcome calls for one, or nothing.
+func (e *extraSearch) collect(ctx context.Context, mode config.ExtraSourcesMode, query string,
+	cfg *config.Config, annasMirrors discovery.MirrorLister, catalogHits int, catalogErr error,
+) []discovery.DiscoveryResult {
+	e.wait()
+	if e.started {
+		return e.hits
+	}
+	if shouldEscalate(mode, catalogHits, catalogErr) && strings.TrimSpace(query) != "" {
+		return federateExtras(ctx, query, cfg, annasMirrors)
+	}
+	return nil
+}
+
+// federateExtras runs every extra searcher concurrently for one query.
+func federateExtras(ctx context.Context, query string, cfg *config.Config,
+	annasMirrors discovery.MirrorLister,
+) []discovery.DiscoveryResult {
+	return discovery.Federate(ctx, query, extraLimit,
+		discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
 }
 
 // buildSearchOutput assembles the SearchOutput from a successful catalog page,
