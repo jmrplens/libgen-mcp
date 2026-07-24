@@ -254,15 +254,6 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	return c
 }
 
-// buildSourceChain assembles the ordered download-source chain from config in
-// config.KnownSources order; because Download filters each source by
-// Supports(item), this single ordered slice yields the right per-item order: an
-// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
-// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
-// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
-// or gated off, like core without a key — are left out. Each non-LibGen source uses the client's
-// page HTTP client (with timeout) for its resolution lookups; libgenSource holds
-// c so it can reuse the mirror failover in ResolveGetURL.
 // fixedMirrors is a MirrorLister over a hardcoded list, used as the offline
 // fallback when a mirror Manager cannot be built.
 type fixedMirrors []string
@@ -306,6 +297,15 @@ func allowedByOperator(configured []string) func(string) bool {
 	}
 }
 
+// buildSourceChain assembles the ordered download-source chain from config in
+// config.KnownSources order; because Download filters each source by
+// Supports(item), this single ordered slice yields the right per-item order: an
+// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
+// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
+// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
+// or gated off, like core without a key — are left out. Each non-LibGen source uses
+// the client's page HTTP client (with timeout) for its resolution lookups;
+// libgenSource holds c so it can reuse the mirror failover in ResolveGetURL.
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	// Discovered once and shared by every Anna's-backed source, so one discovery
 	// and one cache serve them all. Built unconditionally (not only when scidb or

@@ -298,16 +298,6 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 	return sources, nil
 }
 
-// withPerCallUnpaywall augments the selected source chain for a single call so a
-// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
-// a DOI download even when the server configured no email and thus left Unpaywall
-// out of the chain. It returns a NEW slice (never mutating the client's shared
-// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
-// unset), and the chain does not already include an enabled Unpaywall source, it
-// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
-// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
-// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
-// returned as-is, keeping the default (headless) behavior byte-identical to today.
 // withPerCallAnnas prepends an Anna's source carrying a per-call account key when
 // an md5 item supplies one, so a caller can enable the member fast-download tier
 // for a single request against a server that configured no key. It is a no-op
@@ -361,6 +351,16 @@ func (c *Client) sourceEnabled(name string) bool {
 	return c.sourceAllowed(name)
 }
 
+// withPerCallUnpaywall augments the selected source chain for a single call so a
+// per-call Unpaywall email (supplied on demand) can pull the Unpaywall source into
+// a DOI download even when the server configured no email and thus left Unpaywall
+// out of the chain. It returns a NEW slice (never mutating the client's shared
+// chain): when item carries an Email and a DOI, targets the whole chain (item.Source
+// unset), and the chain does not already include an enabled Unpaywall source, it
+// prepends an ad-hoc unpaywallSource keyed by item.Email. When Unpaywall is already
+// present its Resolve honors item.Email directly, so no prepend is needed (avoiding
+// trying Unpaywall twice). When item.Email is empty NOTHING changes: the chain is
+// returned as-is, keeping the default (headless) behavior byte-identical to today.
 func (c *Client) withPerCallUnpaywall(item Item, sources []DownloadSource) []DownloadSource {
 	if item.Email == "" || item.DOI == "" || item.Source != "" {
 		return sources

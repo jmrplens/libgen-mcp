@@ -59,10 +59,7 @@ func (s scidbSource) Supports(it Item) bool { return it.DOI != "" }
 // answers non-200, or embeds no PDF is skipped; when none yields a PDF an error
 // is returned so the download chain advances to the next source.
 func (s scidbSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
-	httpClient := s.http
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient := httpClientOr(s.http)
 
 	var lastErr error
 	for _, mirror := range s.mirrors.Mirrors(ctx) {

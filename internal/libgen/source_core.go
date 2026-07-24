@@ -140,9 +140,4 @@ func (s coreSource) lookupDownloadURL(ctx context.Context, doi string) (string, 
 
 // client returns the configured HTTP client, or the shared default when none was
 // set.
-func (s coreSource) client() *http.Client {
-	if s.http != nil {
-		return s.http
-	}
-	return http.DefaultClient
-}
+func (s coreSource) client() *http.Client { return httpClientOr(s.http) }

@@ -113,7 +113,9 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 		"format":   {"json"},
 		"pageSize": {"1"},
 	}
-	endpoint := strings.TrimRight(base, "?") + "?" + q.Encode()
+	// Trim a trailing separator as well as a stray "?": the query is appended with
+	// its own "?", and a base ending in "/" would otherwise address a different path.
+	endpoint := strings.TrimRight(base, "/?") + "?" + q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
@@ -145,10 +147,11 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 // probes because the backend can be unreachable from a given network while the
 // article path stays up (both are official Europe PMC endpoints).
 func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, error) {
-	base := strings.TrimRight(s.renderBase, "/")
+	base := s.renderBase
 	if base == "" {
 		base = europePMCRenderBase
 	}
+	base = strings.TrimRight(base, "/")
 	candidates := []string{
 		base + "/backend/ptpmcrender.fcgi?accid=" + url.QueryEscape(pmcid) + "&blobtype=pdf",
 		base + "/articles/" + url.PathEscape(pmcid) + "?pdf=render",
@@ -163,9 +166,4 @@ func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, erro
 
 // client returns the configured HTTP client, or the shared default when none was
 // set.
-func (s europePMCSource) client() *http.Client {
-	if s.http != nil {
-		return s.http
-	}
-	return http.DefaultClient
-}
+func (s europePMCSource) client() *http.Client { return httpClientOr(s.http) }

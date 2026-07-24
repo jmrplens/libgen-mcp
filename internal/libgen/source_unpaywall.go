@@ -137,10 +137,7 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	}
 	req.Header.Set("User-Agent", userAgent)
 
-	httpClient := s.http
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return Resolved{}, fmt.Errorf("unpaywall: requesting %q: %w", it.DOI, err)

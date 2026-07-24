@@ -110,10 +110,7 @@ func (s annasSource) Supports(it Item) bool { return it.MD5 != "" }
 // answer. An error is returned when no mirror yields a usable URL, so the chain
 // advances to the next source.
 func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
-	httpClient := s.http
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient := httpClientOr(s.http)
 
 	tryMember := s.key != ""
 	var lastErr error

@@ -8,15 +8,33 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
+// httpClientOr returns c, or http.DefaultClient when c is nil. Every source keeps
+// its *http.Client optional so a zero-value source stays usable (tests construct
+// them directly), and this is the one place that decision is written down.
+func httpClientOr(c *http.Client) *http.Client {
+	if c != nil {
+		return c
+	}
+	return http.DefaultClient
+}
+
 // pdfProbeSniff is how many leading bytes of a candidate URL are read to confirm
-// it serves a PDF when the response Content-Type is inconclusive.
+// it serves a PDF when the response Content-Type is inconclusive. It must stay at
+// least as large as the "%PDF" marker, and it is also what the probe's Range
+// request asks for: a shorter range would return fewer bytes than the marker needs
+// and the magic-number check could never match.
 const pdfProbeSniff = 8
 
+// pdfProbeRange is the Range header the probe sends, covering exactly the
+// pdfProbeSniff leading bytes the magic-number check reads.
+var pdfProbeRange = "bytes=0-" + strconv.Itoa(pdfProbeSniff-1)
+
 // probePDF reports whether candidate currently serves a PDF, using a cheap
-// single-byte Range GET so the check does not pull the whole file. It accepts a
+// few-byte Range GET so the check does not pull the whole file. It accepts a
 // 200/206 whose Content-Type names a PDF, or whose first bytes are the %PDF magic
 // number. It carries only the shared User-Agent — never any Authorization — so it
 // is safe to point at a file/CDN URL whose credentials must stay on the API host.
@@ -24,16 +42,20 @@ const pdfProbeSniff = 8
 // can fall through. It is shared by the DOI sources that must confirm a resolved
 // PDF endpoint is live before returning it (Europe PMC's render fallback, CORE's
 // often-stale download URLs).
+//
+// The requested range covers the whole marker on purpose: a server that honors
+// Range returns exactly what was asked for, so a shorter request would leave the
+// magic-number fallback unable to match and every endpoint that does not advertise
+// a PDF Content-Type — an institutional fileserver answering with
+// application/octet-stream, say — would be judged not a PDF.
 func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bool {
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	httpClient = httpClientOr(httpClient)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, http.NoBody)
 	if err != nil {
 		return false
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Range", "bytes=0-0")
+	req.Header.Set("Range", pdfProbeRange)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return false

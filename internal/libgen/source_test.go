@@ -3,8 +3,10 @@ package libgen
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -42,6 +44,83 @@ func fileCDN(t *testing.T, payload []byte, disposition string) *httptest.Server 
 		_, _ = w.Write(payload)
 	})
 	return httptest.NewServer(mux)
+}
+
+// rangeServingBody builds an httptest server that serves body at "/" with the
+// given Content-Type and honors a single "bytes=<start>-<end>" Range request the
+// way a real CDN does: a 206 carrying exactly the requested slice and a
+// Content-Range header. A request without a Range gets the whole body with a 200.
+func rangeServingBody(t *testing.T, body, contentType string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		spec := strings.TrimPrefix(r.Header.Get("Range"), "bytes=")
+		if spec == "" {
+			_, _ = io.WriteString(w, body)
+			return
+		}
+		startStr, endStr, _ := strings.Cut(spec, "-")
+		start, _ := strconv.Atoi(startStr)
+		end, _ := strconv.Atoi(endStr)
+		if end >= len(body) {
+			end = len(body) - 1
+		}
+		if start > end {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		slice := body[start : end+1]
+		w.Header().Set("Content-Range", "bytes "+strconv.Itoa(start)+"-"+strconv.Itoa(end)+"/"+strconv.Itoa(len(body)))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = io.WriteString(w, slice)
+	}))
+}
+
+// TestProbePDFMagicBytes verifies the magic-number fallback probePDF relies on
+// when a server does not announce a PDF Content-Type — the common shape for an
+// institutional fileserver behind CORE, or Europe PMC's article render path.
+//
+// The Range-honoring case is the one that matters: the probe must request enough
+// bytes for the "%PDF" marker to arrive. A one-byte range can never match it, so a
+// live open-access PDF served as application/octet-stream would be judged not a
+// PDF and its source dropped from the chain.
+func TestProbePDFMagicBytes(t *testing.T) {
+	const pdfBody = "%PDF-1.4\n1 0 obj\n"
+
+	t.Run("range honored, non-pdf content type", func(t *testing.T) {
+		srv := rangeServingBody(t, pdfBody, "application/octet-stream")
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (body starts with the %PDF magic number)")
+		}
+	})
+
+	t.Run("range ignored, full body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = io.WriteString(w, pdfBody)
+		}))
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (server ignored Range and returned the whole PDF)")
+		}
+	})
+
+	t.Run("non-pdf body", func(t *testing.T) {
+		srv := rangeServingBody(t, "<html><body>gone</body></html>", "application/octet-stream")
+		defer srv.Close()
+		if probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = true, want false (body is not a PDF)")
+		}
+	})
+
+	t.Run("pdf content type short-circuits", func(t *testing.T) {
+		srv := rangeServingBody(t, "not really a pdf", "application/pdf")
+		defer srv.Close()
+		if !probePDF(context.Background(), srv.Client(), srv.URL) {
+			t.Error("probePDF() = false, want true (Content-Type names a PDF)")
+		}
+	})
 }
 
 // TestEscapeDOIPath verifies that escapeDOIPath keeps a DOI's slashes literal
