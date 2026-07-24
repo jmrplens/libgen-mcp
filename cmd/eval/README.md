@@ -174,6 +174,30 @@ jq -r '"\(.id) \(.duration_ms)ms"' eval-record.jsonl | sort -k2 -n -r | head
 jq -r 'select(.id=="S40") | .calls[] | select(.duration_ms>10000) | .server_logs[]' eval-record.jsonl
 ```
 
+## Re-grading a recorded run
+
+An assertion is a pure function of a transcript, and the record holds the whole
+transcript — so `--regrade` re-runs every assertion against a past run instead of
+calling anything live:
+
+```bash
+go run -tags eval ./cmd/eval --regrade eval-record.jsonl
+```
+
+It makes no network calls, spends no API credit and no download quota, needs no
+gating, and finishes in a second. Outcomes that changed are marked `(was PASS)` /
+`(was FAIL)`, so the effect of an assertion change is visible at a glance. Pass
+`--results-doc` alongside it to regenerate the results table from the re-grade.
+
+It is valid for a change to the **assertions only**. Changing the server, the
+tools or a prompt changes what a live run would produce, and no amount of
+re-grading an old record will show that — it needs a real run.
+
+The record has to be faithful for this to mean anything, which is a property worth
+checking rather than assuming: run one scenario live with `--record`, then
+`--regrade` that record, and the two outcomes should be identical down to the
+message.
+
 ## Cost, rate, and network caveats
 
 - **It costs money**: every scenario spends Anthropic API tokens (small model,

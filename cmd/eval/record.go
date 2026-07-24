@@ -109,8 +109,12 @@ type elicitRecord struct {
 	Action  string `json:"action"`
 }
 
-// progressRecord is one progress notification, flattened for the record.
+// progressRecord is one progress notification, flattened for the record. The
+// token is kept because it is what ties a notification to the call that emitted
+// it — without it a re-grade cannot tell a download's progress from anything
+// else's, and reports a working stream as missing.
 type progressRecord struct {
+	Token    string  `json:"token,omitempty"`
 	Progress float64 `json:"progress"`
 	Total    float64 `json:"total,omitempty"`
 	Message  string  `json:"message,omitempty"`

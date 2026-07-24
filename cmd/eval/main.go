@@ -39,7 +39,13 @@ func main() {
 	keep := flag.Bool("keep-downloads", false, "keep the temporary download directory instead of removing it")
 	resultsDoc := flag.String("results-doc", "", "write a markdown results table to this path")
 	record := flag.String("record", "", "write a full JSONL record of every scenario to this path (prompt, turns, tool calls, server logs, responses, final answer)")
+	regradeFrom := flag.String("regrade", "", "re-run the assertions against a previously recorded run instead of calling anything live; valid for assertion changes only")
 	flag.Parse()
+
+	// Re-grading makes no network calls and spends nothing, so it is not gated.
+	if *regradeFrom != "" {
+		os.Exit(regrade(*regradeFrom, *resultsDoc))
+	}
 
 	if os.Getenv("LIBGEN_EVAL") != "1" || strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")) == "" {
 		fmt.Println("libgen-mcp eval is gated. This is a LIVE harness (real Anthropic API + real libgen mirrors + real downloads).")
@@ -170,7 +176,9 @@ func buildRecord(sc scenario, tr transcript, oc outcome, started time.Time, runE
 	}
 	for i := range tr.Progress {
 		p := tr.Progress[i]
-		rec.Progress = append(rec.Progress, progressRecord{Progress: p.Progress, Total: p.Total, Message: p.Message})
+		rec.Progress = append(rec.Progress, progressRecord{
+			Token: fmt.Sprint(p.ProgressToken), Progress: p.Progress, Total: p.Total, Message: p.Message,
+		})
 	}
 	return rec
 }
