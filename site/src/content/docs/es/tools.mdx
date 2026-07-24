@@ -185,9 +185,9 @@ Se requiere al menos uno de `md5` o `doi`. Un `md5` mal formado (no 32 caractere
 
 La descarga recorre una cadena de fuentes fija, filtrada por lo que admite cada elemento:
 
-- **Libro** (`md5` solo) → `libgen` (clave de ads.php + CDN), luego `randombook` (descubrimiento de mirrors frescos).
-- **Artículo** (`doi` solo) → `unpaywall` (PDF de acceso abierto), luego `scihub`. `unpaywall` requiere que `LIBGEN_MCP_UNPAYWALL_EMAIL` esté fijado; si no, está desactivada y para artículos solo se prueba `scihub`.
-- **Ambos `md5` y `doi`** → primero las fuentes de artículo (`unpaywall`, `scihub`), luego las de libro (`libgen`, `randombook`).
+- **Libro** (`md5` solo) → `libgen` (clave de ads.php + CDN), luego `randombook` (descubrimiento de mirrors frescos), luego `annas` (IPFS sin clave, o descarga rápida de miembros cuando `LIBGEN_MCP_ANNAS_KEY` está fijado).
+- **Artículo** (`doi` solo) → `unpaywall` (PDF de acceso abierto), luego `scihub`, luego `scidb` (visor SciDB de Anna's Archive). `unpaywall` requiere que `LIBGEN_MCP_UNPAYWALL_EMAIL` esté fijado; si no, está desactivada y se prueba `scihub` primero.
+- **Ambos `md5` y `doi`** → primero las fuentes de artículo (`unpaywall`, `scihub`, `scidb`), luego las de libro (`libgen`, `randombook`, `annas`).
 
 Gana la primera fuente que resuelve y transmite un archivo válido; el campo `source` del resultado la nombra. Consulta [Arquitectura](/libgen-mcp/es/architecture/) para la cadena completa.
 

@@ -95,19 +95,25 @@ func (s annasSource) Name() string { return "annas" }
 func (s annasSource) Supports(it Item) bool { return it.MD5 != "" }
 
 // Resolve turns an md5 into a streamable URL, trying each discovered mirror in
-// order. With a key configured the member API is attempted first and the keyless
-// IPFS path is the fallback; without one only IPFS is used. An error is returned
-// when no mirror yields a usable URL, so the chain advances to the next source.
+// order. With a key configured the member API is attempted on the first mirror
+// only and the keyless IPFS path is the fallback on every mirror; without a key
+// only IPFS is used. The member API is tried at most once because each call
+// consumes the account's metered allowance regardless of which mirror answered,
+// so calling it on every mirror would burn one unit per mirror for the same
+// answer. An error is returned when no mirror yields a usable URL, so the chain
+// advances to the next source.
 func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	httpClient := s.http
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
+	tryMember := s.key != ""
 	var lastErr error
 	for _, mirror := range s.mirrors.Mirrors(ctx) {
 		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
-		fileURL, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5)
+		fileURL, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5, tryMember)
+		tryMember = false // the single member attempt is spent, whether it succeeded or failed
 		if err != nil {
 			lastErr = err
 			continue
@@ -121,12 +127,12 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 }
 
 // resolveMirror resolves a single mirror, preferring the member fast-download API
-// when a key is configured and falling back to the keyless IPFS path. When both
+// when tryMember is true, and falling back to the keyless IPFS path. When both
 // fail the IPFS error is returned, wrapping the member error so a rejected key
 // stays visible in diagnostics instead of being silently replaced.
-func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string) (string, *AccountInfo, error) {
+func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string, tryMember bool) (string, *AccountInfo, error) {
 	var memberErr error
-	if s.key != "" {
+	if tryMember {
 		fileURL, account, err := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
 		if err == nil {
 			return fileURL, account, nil

@@ -401,3 +401,69 @@ func TestAnnasUnreachableMemberURLFallsBackToIPFS(t *testing.T) {
 		t.Fatalf("FileURL = %q, want the IPFS fallback %q", got.FileURL, want)
 	}
 }
+
+// TestAnnasMemberAPICalledOnceAcrossMirrors verifies the member fast-download API
+// is invoked at most once even when multiple mirrors are configured, because each
+// call consumes the account's metered allowance — calling it on every mirror would
+// burn one unit per mirror for the same answer.
+func TestAnnasMemberAPICalledOnceAcrossMirrors(t *testing.T) {
+	const md5 = "d64efd386ed7227592499460aca2044b"
+
+	var apiCalls int
+	// Both mirrors' member API endpoints reject the key, forcing the loop to
+	// advance past mirror 1 to mirror 2's IPFS path. The assertion is that the
+	// member API is hit exactly once (on mirror 1), not once per mirror.
+	reject := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/dyn/api/fast_download.json" {
+			apiCalls++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"Not a member"}`))
+			return
+		}
+		http.NotFound(w, r)
+	}
+	mirror1 := httptest.NewServer(http.HandlerFunc(reject))
+	defer mirror1.Close()
+	mirror2 := httptest.NewServer(http.HandlerFunc(reject))
+	defer mirror2.Close()
+
+	s := annasSource{mirrors: staticMirrors{mirror1.URL, mirror2.URL}, http: mirror1.Client(), key: "k"}
+	_, _ = s.Resolve(context.Background(), Item{MD5: md5})
+	if apiCalls != 1 {
+		t.Fatalf("member API called %d times across mirrors, want exactly 1 (allowance is account-level)", apiCalls)
+	}
+}
+
+// TestPerCallAnnasKeyReplacesPinnedSource verifies that when source: "annas" is
+// pinned and a per-call key is supplied, the selected annas source is replaced
+// with one carrying the per-call key — so the member tier takes effect even
+// against a server that configured no key.
+func TestPerCallAnnasKeyReplacesPinnedSource(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	configured := annasSource{key: ""} // keyless configured source
+	sources := []DownloadSource{configured}
+
+	got := c.withPerCallAnnas(Item{MD5: "abc", AnnasKey: "runtime", Source: "annas"}, sources)
+	if len(got) != 1 {
+		t.Fatalf("chain = %d sources, want 1 (replacement not append)", len(got))
+	}
+	s, ok := got[0].(annasSource)
+	if !ok {
+		t.Fatalf("source = %T, want annasSource", got[0])
+	}
+	if s.key != "runtime" {
+		t.Fatalf("key = %q, want the per-call key %q", s.key, "runtime")
+	}
+}
+
+// TestPerCallAnnasKeyIgnoredForNonAnnasSource verifies a per-call key is dropped
+// when a non-annas source is explicitly pinned (e.g. source: "libgen").
+func TestPerCallAnnasKeyIgnoredForNonAnnasSource(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	base := []DownloadSource{libgenSource{c: c}}
+	got := c.withPerCallAnnas(Item{MD5: "abc", AnnasKey: "k", Source: "libgen"}, base)
+	if len(got) != len(base) {
+		t.Errorf("chain grew to %d for a non-annas pinned source, want unchanged", len(got))
+	}
+}

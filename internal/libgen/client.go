@@ -260,13 +260,13 @@ var annasMirrorsFor = func(cfg *config.Config) MirrorLister {
 
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	// Discovered once and shared by every Anna's-backed source, so one discovery
-	// and one cache serve them all.
-	annasLister := func() MirrorLister {
-		if c.annasMirrors == nil {
-			c.annasMirrors = annasMirrorsFor(cfg)
-		}
-		return c.annasMirrors
+	// and one cache serve them all. Built unconditionally (not only when scidb or
+	// annas are enabled) because withPerCallAnnas needs a non-nil lister for an
+	// ad-hoc source even when neither named source is in the default chain.
+	if c.annasMirrors == nil {
+		c.annasMirrors = annasMirrorsFor(cfg)
 	}
+	annasLister := func() MirrorLister { return c.annasMirrors }
 	factories := map[string]func() DownloadSource{
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },

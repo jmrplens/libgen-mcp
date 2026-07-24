@@ -106,18 +106,19 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` | 60s | (0, 1h] | Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed. |
 | `LIBGEN_MCP_UNPAYWALL_EMAIL` | empty (unpaywall disabled) | empty, or an email with @ and a dotted domain | Contact email for the Unpaywall API (article/DOI downloads). Empty disables the unpaywall source — its API rejects requests without an email — so set your own address to enable it. |
 | `LIBGEN_MCP_SCIHUB_HOSTS` | sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf | comma-separated bare hosts (no scheme, no path) | Ordered Sci-Hub mirror hosts, tried in order until one serves an article. |
-| `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, scihub, libgen, randombook | Enabled/ordered download sources. Empty enables all. |
+| `LIBGEN_MCP_ANNAS_KEY` | empty (keyless IPFS) | Anna's Archive account secret string | Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path. |
+| `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, scihub, scidb, libgen, randombook, annas | Enabled/ordered download sources. Empty enables all. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | false | 1/true/0/false | Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it. |
 
 ## Download sources
 
 The `download` tool resolves a file through an ordered chain of sources. Which branch runs depends on the identifier supplied:
 
-- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook` as a fallback.
-- **Articles (by `doi`):** tried against `unpaywall` (open-access PDF, requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`).
+- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook`, then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set) as fallbacks.
+- **Articles (by `doi`):** tried against `unpaywall` (open-access PDF, requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`), then `scidb` (Anna's Archive SciDB viewer).
 - **Both `md5` and `doi` given:** article sources are tried first, then the book sources.
 
-`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `unpaywall,scihub,libgen,randombook`. An empty value enables all.
+`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `unpaywall,scihub,scidb,libgen,randombook,annas`. An empty value enables all.
 
 **Verification:** book (`md5`) downloads are MD5-verified against the requested hash (`verified:true`). DOI/article downloads are not hash-verified (`verified:false`).
 

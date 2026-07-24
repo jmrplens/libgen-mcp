@@ -135,18 +135,7 @@ func Load() (*Config, error) {
 		EnrichEnabled:           true,
 		OpenAccessEnabled:       false,
 	}
-	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
-		cfg.UnpaywallEmail = v
-	}
-	if v := os.Getenv("LIBGEN_MCP_ANNAS_KEY"); v != "" {
-		cfg.AnnasKey = v
-	}
-	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
-		cfg.ScihubHosts = splitHosts(v)
-	}
-	if v := os.Getenv("LIBGEN_MCP_SOURCES"); v != "" {
-		cfg.Sources = splitHosts(v)
-	}
+	loadStringVars(cfg)
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
 	} else {
@@ -177,6 +166,23 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// loadStringVars applies the simple string-based environment overrides that need
+// no validation. Extracted from Load to keep its cognitive complexity in check.
+func loadStringVars(cfg *Config) {
+	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
+		cfg.UnpaywallEmail = v
+	}
+	if v := os.Getenv("LIBGEN_MCP_ANNAS_KEY"); v != "" {
+		cfg.AnnasKey = v
+	}
+	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
+		cfg.ScihubHosts = splitHosts(v)
+	}
+	if v := os.Getenv("LIBGEN_MCP_SOURCES"); v != "" {
+		cfg.Sources = splitHosts(v)
+	}
 }
 
 // loadDownloadTuning fills the download-tuning fields (the stall timeout and the

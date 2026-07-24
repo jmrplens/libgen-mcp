@@ -655,10 +655,9 @@ func elicitAnnasKey(ctx context.Context, req *mcp.CallToolRequest, cfg *config.C
 	if !in.AnnasMember || strings.TrimSpace(in.MD5) == "" || strings.TrimSpace(cfg.AnnasKey) != "" || !elicitationSupported(req) {
 		return ""
 	}
-	// The per-call prepend only fires for an unnamed source, so an elicited key
-	// could never take effect when a specific source was requested. Skip the
-	// prompt rather than ask a dead-end question.
-	if strings.TrimSpace(in.Source) != "" {
+	// The per-call key only takes effect for an unnamed source or an explicit
+	// "annas" source; any other pinned source makes the key a dead-end question.
+	if src := strings.TrimSpace(in.Source); src != "" && !strings.EqualFold(src, "annas") {
 		return ""
 	}
 	key, ok := elicitText(ctx, req,

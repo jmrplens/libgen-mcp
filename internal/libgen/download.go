@@ -144,7 +144,7 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall scihub or scidb)"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook unpaywall scihub scidb or annas)"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
@@ -309,19 +309,36 @@ func (c *Client) selectSources(name string) ([]DownloadSource, error) {
 // withPerCallAnnas prepends an Anna's source carrying a per-call account key when
 // an md5 item supplies one, so a caller can enable the member fast-download tier
 // for a single request against a server that configured no key. It is a no-op
-// without a key, without an md5, when a specific source was requested, or when an
-// annas source is already in the chain — the configured key wins there. The
-// mirror lister is built the same way as the configured source's.
+// without a key, without an md5, or when a non-annas source was explicitly
+// requested. When source: "annas" is pinned the selected (configured-key) source
+// is replaced with one carrying the per-call key, so the member tier takes effect
+// even against a keyless server. When no source is pinned and an annas source is
+// already in the chain, the configured key wins there. The mirror lister is the
+// same one buildSourceChain initializes unconditionally.
 func (c *Client) withPerCallAnnas(item Item, sources []DownloadSource) []DownloadSource {
-	if item.AnnasKey == "" || item.MD5 == "" || item.Source != "" {
+	if item.AnnasKey == "" || item.MD5 == "" {
 		return sources
+	}
+	if src := strings.TrimSpace(item.Source); src != "" && !strings.EqualFold(src, "annas") {
+		return sources
+	}
+	adhoc := annasSource{mirrors: c.annasMirrors, http: c.http, key: item.AnnasKey}
+	// When source: "annas" is pinned, replace the selected source so the per-call
+	// key actually reaches the member API instead of the configured (empty) key.
+	if strings.EqualFold(strings.TrimSpace(item.Source), "annas") {
+		for i, s := range sources {
+			if s.Name() == "annas" {
+				sources[i] = adhoc
+				return sources
+			}
+		}
+		return []DownloadSource{adhoc}
 	}
 	for _, s := range sources {
 		if s.Name() == "annas" {
 			return sources
 		}
 	}
-	adhoc := annasSource{mirrors: c.annasMirrors, http: c.http, key: item.AnnasKey}
 	return append([]DownloadSource{adhoc}, sources...)
 }
 

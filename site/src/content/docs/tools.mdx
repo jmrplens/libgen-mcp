@@ -182,9 +182,9 @@ At least one of `md5` or `doi` is required. A malformed `md5` (not 32 hex chars)
 
 The download runs through a fixed source chain, filtered by what each item supports:
 
-- **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror discovery).
-- **Article** (`doi` only) → `unpaywall` (open-access PDF; only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, otherwise skipped), then `scihub`.
-- **Both `md5` and `doi`** → article sources first (`unpaywall`, `scihub`), then book sources (`libgen`, `randombook`).
+- **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror discovery), then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set).
+- **Article** (`doi` only) → `unpaywall` (open-access PDF; only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, otherwise skipped), then `scihub`, then `scidb` (Anna's Archive SciDB viewer).
+- **Both `md5` and `doi`** → article sources first (`unpaywall`, `scihub`, `scidb`), then book sources (`libgen`, `randombook`, `annas`).
 
 The first source that resolves and streams a valid file wins; the `source` field in the result names it. See [Architecture](/libgen-mcp/architecture/) for the full chain.
 

@@ -139,18 +139,20 @@ flowchart TD
 
 Download sources implement a common interface — `Name`, `Supports(item)`, and
 `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built
-from configuration in the fixed order `unpaywall → scihub → libgen → randombook`, and each
+from configuration in the fixed order `unpaywall → scihub → scidb → libgen → randombook → annas`, and each
 source is offered only the items it supports:
 
 | Source       | Keyed by | Role                  | How it resolves                                                                                                                                                                                                                                                        |
 | ------------ | -------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unpaywall`  | DOI      | Open-access articles  | Queries the Unpaywall API for a best open-access PDF link. Returns an error (advancing the chain) when the DOI is not OA or exposes no PDF. Disabled — and absent from the chain — unless `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, since the API requires a contact email. |
 | `scihub`     | DOI      | Article fallback      | Requests `https://<host>/<doi>` on each configured Sci-Hub host in turn, scraping the embedded PDF link from the first that serves an article page.                                                                                                                    |
+| `scidb`      | DOI      | Article fallback      | Resolves the DOI through Anna's Archive SciDB viewer and takes the embedded PDF URL. Covers papers published after Sci-Hub stopped indexing.                                                                                                                           |
 | `libgen`     | MD5      | Primary book provider | Resolves the LibGen link chain (`ads.php` key → `get.php` → CDN) through the mirror failover client, and requires MD5 verification.                                                                                                                                    |
 | `randombook` | MD5      | Book fallback         | Queries the randombook.org API to discover fresh libgen-family mirror hostnames for the MD5, then runs the LibGen link chain against those hosts.                                                                                                                      |
+| `annas`      | MD5      | Book fallback         | Resolves the md5 through Anna's Archive: reads the item's IPFS CID from the book page and streams from the first public gateway that serves it. With `LIBGEN_MCP_ANNAS_KEY` set, tries the member fast-download API first and keeps IPFS as the fallback.              |
 
 Because the chain is a single ordered slice filtered by `Supports`, a book item is offered
-`[libgen, randombook]`, an article item `[unpaywall, scihub]`, and an item carrying both is
+`[libgen, randombook, annas]`, an article item `[unpaywall, scihub, scidb]`, and an item carrying both is
 offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from
 this chain without reordering it. `Download` tries each supporting source in turn and returns
 the first success; if all fail, it returns the joined per-source errors.

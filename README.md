@@ -338,9 +338,9 @@ Hits are returned in a separate `open_access` array, deduped against the catalog
 
 `download` runs an ordered fallback chain and stops at the first source that delivers a valid file:
 
-- **Books (by `md5`):** `libgen` (mirror `ads.php` key + CDN redirect) → `randombook` (fresh-mirror discovery).
-- **Articles (by `doi`):** `unpaywall` (open-access PDF, only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set) → `scihub` (rotating Sci-Hub hosts). A `doi` surfaced by open-access discovery (above) is fetched by exactly this chain.
-- **Both `md5` and `doi` given:** article sources (`unpaywall`, `scihub`) are tried first, then book sources (`libgen`, `randombook`).
+- **Books (by `md5`):** `libgen` (mirror `ads.php` key + CDN redirect) → `randombook` (fresh-mirror discovery) → `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set).
+- **Articles (by `doi`):** `unpaywall` (open-access PDF, only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set) → `scihub` (rotating Sci-Hub hosts) → `scidb` (Anna's Archive SciDB viewer). A `doi` surfaced by open-access discovery (above) is fetched by exactly this chain.
+- **Both `md5` and `doi` given:** article sources (`unpaywall`, `scihub`, `scidb`) are tried first, then book sources (`libgen`, `randombook`, `annas`).
 
 You can restrict or reorder which sources participate with `LIBGEN_MCP_SOURCES`. Additional guarantees:
 
