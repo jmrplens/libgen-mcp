@@ -467,9 +467,11 @@ func writeLLMSFullDownloadSources(b *strings.Builder) {
 	b.WriteString("## Download sources\n\n")
 	b.WriteString("The `download` tool resolves a file through an ordered chain of sources. Which branch runs depends on the identifier supplied:\n\n")
 	b.WriteString("- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook`, then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set) as fallbacks.\n")
-	b.WriteString("- **Articles (by `doi`):** tried against `unpaywall` (open-access PDF, requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`), then `scidb` (Anna's Archive SciDB viewer).\n")
+	b.WriteString("- **Articles (by `doi`):** the open-access providers first — `unpaywall` (requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `europepmc` (Europe PMC open-access full text), then `biorxiv` (`10.1101` preprints), then `fatcat` (Internet Archive Scholar), then `core` (requires `LIBGEN_MCP_CORE_KEY`) — then the shadow-library fallbacks `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`) and `scidb` (Anna's Archive SciDB viewer).\n")
 	b.WriteString("- **Both `md5` and `doi` given:** article sources are tried first, then the book sources.\n\n")
-	b.WriteString("`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `unpaywall,scihub,scidb,libgen,randombook,annas`. An empty value enables all.\n\n")
+	// The recognized names come from config.KnownSources rather than a literal, so
+	// this reference cannot drift when a source is added or the chain is reordered.
+	fmt.Fprintf(b, "`LIBGEN_MCP_SOURCES` selects and orders which sources take part; the recognized names in natural chain order are `%s`. An empty value enables all.\n\n", strings.Join(config.KnownSources, ","))
 	b.WriteString("**Verification:** book (`md5`) downloads are MD5-verified against the requested hash (`verified:true`). DOI/article downloads are not hash-verified (`verified:false`).\n\n")
 }
 
