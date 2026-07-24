@@ -521,8 +521,8 @@ func loadEscalationItem(t *testing.T) escalationItem {
 		t.Fatalf("reading escalation fixture: %v", err)
 	}
 	var it escalationItem
-	if err := json.Unmarshal(b, &it); err != nil {
-		t.Fatalf("decoding escalation fixture: %v", err)
+	if uerr := json.Unmarshal(b, &it); uerr != nil {
+		t.Fatalf("decoding escalation fixture: %v", uerr)
 	}
 	return it
 }
@@ -554,11 +554,11 @@ func callSearch(t *testing.T, ctx context.Context, env *liveEnv, args map[string
 	}
 	data, err := json.Marshal(res.StructuredContent)
 	if err != nil {
-		t.Fatalf("marshalling structured content: %v", err)
+		t.Fatalf("marshaling structured content: %v", err)
 	}
 	var out tools.SearchOutput
-	if err := json.Unmarshal(data, &out); err != nil {
-		t.Fatalf("decoding search output: %v", err)
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatalf("decoding search output: %v", uerr)
 	}
 	return out
 }
