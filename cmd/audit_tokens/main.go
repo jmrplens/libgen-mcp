@@ -53,10 +53,15 @@ func run(w io.Writer) error {
 	}
 	// Measure the full tool surface regardless of the ambient environment: the
 	// download tool's source enum shrinks when sources are disabled (e.g. unpaywall
-	// without an email), so enable everything for a deterministic upper-bound count.
+	// without an email, core without an API key), so enable everything for a
+	// deterministic upper-bound count. Every credential-gated source needs a
+	// placeholder, or the reported figure would depend on whoever ran the audit.
 	cfg.Sources = nil
 	if cfg.UnpaywallEmail == "" {
 		cfg.UnpaywallEmail = "audit@example.com"
+	}
+	if cfg.CoreKey == "" {
+		cfg.CoreKey = "audit-placeholder-key"
 	}
 
 	mgr, err := mirrors.NewManager(cfg)

@@ -139,12 +139,18 @@ func listTools() ([]*mcp.Tool, error) {
 		cfg = &config.Config{}
 	}
 	// The download tool advertises only the sources enabled in the ambient config
-	// (unpaywall is off without a contact email, and LIBGEN_MCP_SOURCES can trim
-	// the chain), but the generated docs must describe the full capability set —
-	// so enable every source for documentation regardless of the environment.
+	// (unpaywall is off without a contact email, core is off without an API key, and
+	// LIBGEN_MCP_SOURCES can trim the chain), but the generated docs must describe
+	// the full capability set — so enable every source for documentation regardless
+	// of the environment. Every credential-gated source needs a placeholder here, or
+	// the committed output would differ between a machine that has the credential
+	// and one that does not, making the --check gate depend on whoever ran it.
 	cfg.Sources = nil
 	if cfg.UnpaywallEmail == "" {
 		cfg.UnpaywallEmail = "docs@example.com"
+	}
+	if cfg.CoreKey == "" {
+		cfg.CoreKey = "docs-placeholder-key"
 	}
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {

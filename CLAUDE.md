@@ -266,5 +266,9 @@ release:
   stage files explicitly so a stray binary or `.env` is never committed. Prefer
   `go run ./cmd/<x>/` over building when you just need to run a tool.
 - **Full surface for audits.** The audit tools force every source on
-  (`cfg.Sources = nil`, a placeholder Unpaywall email) so their output is
-  deterministic regardless of the ambient environment.
+  (`cfg.Sources = nil`, plus a placeholder for every credential-gated source —
+  Unpaywall email and CORE key) so their output is deterministic regardless of
+  the ambient environment. A new credential-gated source must add its placeholder
+  to **both** `cmd/gen_llms` and `cmd/audit_tokens`, or the committed llms files
+  and the token figure will differ between a machine that holds the credential
+  and one that does not, and `make check-llms` will pass or fail by accident.
