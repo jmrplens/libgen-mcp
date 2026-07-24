@@ -34,7 +34,7 @@ head:
             "name": "How do I download research papers by DOI with libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Pass a doi to the download tool. Articles are fetched by DOI through two sources in order: unpaywall, which returns a PDF only when the article is genuinely open access, and then sci-hub as a fallback. The unpaywall source is disabled unless LIBGEN_MCP_UNPAYWALL_EMAIL is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset only sci-hub is tried. You can adjust the Sci-Hub mirrors tried with LIBGEN_MCP_SCIHUB_HOSTS, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified."
+              "text": "Pass a doi to the download tool. Articles are fetched by DOI through three sources in order: unpaywall, which returns a PDF only when the article is genuinely open access, then sci-hub, and then scidb (the Anna's Archive SciDB viewer) as a final fallback. The unpaywall source is disabled unless LIBGEN_MCP_UNPAYWALL_EMAIL is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset sci-hub and scidb are tried. You can adjust the Sci-Hub mirrors tried with LIBGEN_MCP_SCIHUB_HOSTS, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified."
             }
           },
           {
@@ -168,7 +168,7 @@ Set `LIBGEN_MCP_DOWNLOAD_DIR` to the destination directory; it defaults to `~/Do
 
 ### How do I download research papers by DOI with libgen-mcp?
 
-Pass a `doi` to the `download` tool. Articles are fetched by DOI through two sources in order: `unpaywall`, which returns a PDF only when the article is genuinely open access, and then `sci-hub` as a fallback. The `unpaywall` source is disabled unless `LIBGEN_MCP_UNPAYWALL_EMAIL` is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset only `sci-hub` is tried. You can adjust the Sci-Hub mirrors tried with `LIBGEN_MCP_SCIHUB_HOSTS`, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified.
+Pass a `doi` to the `download` tool. Articles are fetched by DOI through three sources in order: `unpaywall`, which returns a PDF only when the article is genuinely open access, then `sci-hub`, and then `scidb` (the Anna's Archive SciDB viewer) as a final fallback. The `unpaywall` source is disabled unless `LIBGEN_MCP_UNPAYWALL_EMAIL` is set to a contact address, because the Unpaywall API rejects lookups without an email; when it is unset `sci-hub` and `scidb` are tried. You can adjust the Sci-Hub mirrors tried with `LIBGEN_MCP_SCIHUB_HOSTS`, a comma-separated list of bare hosts. Note that DOI downloads are not MD5-verified.
 
 ### How do I limit the request rate in libgen-mcp?
 
