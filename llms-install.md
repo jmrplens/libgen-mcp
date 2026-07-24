@@ -10,9 +10,9 @@ A single-binary MCP server (Go) that lets an AI assistant search and download
 from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books,
 research papers, magazines, comics, and standards. It exposes four tools over
 stdio: `search`, `get_details`, `download`, and `read`. Books resolve by MD5
-(libgen + randombook); articles resolve by DOI (Unpaywall + Sci-Hub); `read`
-extracts and paginates text — fetched server-side by MD5 or DOI, or read
-from an absolute local path.
+(libgen + randombook + Anna's Archive); articles resolve by DOI (Unpaywall +
+Sci-Hub + SciDB); `read` extracts and paginates text — fetched server-side by
+MD5 or DOI, or read from an absolute local path.
 
 **No account, token, or credentials are required.** Unlike many MCP servers,
 there is nothing to authenticate — skip straight to installation.
@@ -113,10 +113,10 @@ user asks for the behavior:
 | Variable                     | Default        | Purpose                                                                   |
 | ---------------------------- | -------------- | ------------------------------------------------------------------------- |
 | `LIBGEN_MCP_DOWNLOAD_DIR`    | `~/Downloads`  | Destination directory for `download`.                                     |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | maintainer's   | Contact email for the Unpaywall API. Recommended if resolving DOIs.       |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | empty (unset)  | Contact email for the Unpaywall API. Unset by default, which disables the Unpaywall source (Sci-Hub and SciDB still serve DOIs without it); set your own address to enable it. |
 | `LIBGEN_MIRROR`              | auto-discovery | Pin a specific Library Genesis mirror, e.g. `https://libgen.li`.          |
 | `LIBGEN_MCP_LOG_LEVEL`       | `info`         | `debug`, `info`, `warn`, or `error`.                                      |
-| `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources: `unpaywall`, `scihub`, `libgen`, `randombook`. |
+| `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources: `unpaywall`, `scihub`, `scidb`, `libgen`, `randombook`, `annas`. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | `false`       | Set to `1` when hosting the stdio server remotely (e.g. behind `mcp-proxy`): `download` returns a link instead of saving a file to an unreachable disk. |
 
 Full reference: <https://jmrplens.github.io/libgen-mcp/configuration/>

@@ -55,18 +55,19 @@ problem — re-check the query or identifier rather than your connection.
 
 **Symptom.** A `download` with a `doi` fails, or returns nothing useful.
 
-**Meaning.** Articles are fetched by DOI through two sources in order:
+**Meaning.** Articles are fetched by DOI through three sources in order:
 
 1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled
    DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain
-   advances.
+   advances. (Only in the chain when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set; otherwise skipped.)
 2. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
    article page with an extractable PDF.
+3. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing.
 
 **Fixes.**
 
 - Confirm the DOI is correct (copy it exactly from the article search result).
-- If only Unpaywall failed, the article likely is not open access; Sci-Hub is the fallback.
+- If only Unpaywall failed, the article likely is not open access; Sci-Hub and then SciDB are the fallbacks.
 - Sci-Hub mirrors rotate and go down often. Update `LIBGEN_MCP_SCIHUB_HOSTS` with a currently
   working host list if all defaults fail.
 - Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL` — until you do, Unpaywall is disabled and only Sci-Hub is tried for DOIs. The API expects a real contact address.

@@ -34,7 +34,7 @@ head:
             "name": "¿Por qué faltan algunos artículos en los resultados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Los artículos se obtienen por DOI a través de dos fuentes por orden: unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y scihub es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con truncated: true indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo."
+              "text": "Los artículos se obtienen por DOI a través de tres fuentes por orden: unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto (y solo cuando LIBGEN_MCP_UNPAYWALL_EMAIL está fijado), scihub es el siguiente fallback, y scidb (el visor SciDB de Anna's Archive) se prueba en último lugar. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con truncated: true indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo."
             }
           },
           {
@@ -82,15 +82,16 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 
 **Síntoma.** Un `download` con un `doi` falla, o no devuelve nada útil.
 
-**Significado.** Los artículos se obtienen por DOI a través de dos fuentes por orden:
+**Significado.** Los artículos se obtienen por DOI a través de tres fuentes por orden:
 
-1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza.
+1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Solo forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, se omite.)
 2. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+3. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada.
 
 **Soluciones.**
 
 - Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
-- Si solo falló Unpaywall, es probable que el artículo no sea de acceso abierto; Sci-Hub es el fallback.
+- Si solo falló Unpaywall, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son los fallbacks.
 - Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
 - Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada y para los DOI solo se prueba Sci-Hub. La API espera una dirección de contacto real.
 - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
@@ -170,7 +171,7 @@ Una discrepancia de MD5 (`integrity check failed: MD5 mismatch`) significa que l
 
 ### ¿Por qué faltan algunos artículos en los resultados?
 
-Los artículos se obtienen por DOI a través de dos fuentes por orden: `unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto, y `scihub` es el fallback. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con `truncated: true` indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo.
+Los artículos se obtienen por DOI a través de tres fuentes por orden: `unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto (y solo cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado), `scihub` es el siguiente fallback, y `scidb` (el visor SciDB de Anna's Archive) se prueba en último lugar. Si un artículo no aparece, confirma que el DOI es correcto, ten en cuenta que un DOI de pago probablemente no esté en Unpaywall, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione si todos los de por defecto fallan. En las búsquedas, un resultado con `truncated: true` indica que el mirror informa más coincidencias de las que sirve realmente; refina la consulta en lugar de paginar más profundo.
 
 ### ¿Dónde guarda libgen-mcp los archivos descargados?
 

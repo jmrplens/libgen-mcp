@@ -28,7 +28,7 @@ head:
             "name": "¿Qué puede hacer libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Busca en el catálogo de Library Genesis, devuelve metadatos y hashes MD5 por resultado, obtiene los detalles completos de un registro y descarga archivos a un directorio local. Los libros se descargan por MD5 desde LibGen, y los artículos se obtienen por DOI desde fuentes de acceso abierto (Unpaywall) y Sci-Hub. La herramienta search puede además, de forma opcional, federar el descubrimiento de literatura de acceso abierto sin clave desde arXiv, Crossref y OpenLibrary, fusionado y deduplicado junto a los resultados de Library Genesis. Los mirrors se descubren automáticamente y se cachean, con failover transparente, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan."
+              "text": "Busca en el catálogo de Library Genesis, devuelve metadatos y hashes MD5 por resultado, obtiene los detalles completos de un registro y descarga archivos a un directorio local. Los libros se descargan por MD5 desde LibGen, y los artículos se obtienen por DOI desde fuentes de acceso abierto (Unpaywall), Sci-Hub y SciDB. La herramienta search puede además, de forma opcional, consultar fuentes extra sin clave — Anna's Archive, arXiv, Crossref y OpenLibrary — fusionadas y deduplicadas junto a los resultados de Library Genesis. Los mirrors se descubren automáticamente y se cachean, con failover transparente, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan."
             }
           },
           {
@@ -69,7 +69,7 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 **LibGen MCP** es un servidor [MCP](https://modelcontextprotocol.io), escrito en Go, para buscar y descargar desde **Library Genesis** (la familia de mirrors `libgen.li`). Expone cuatro herramientas — `search`, `get_details`, `download` y `read` — a cualquier cliente compatible con MCP como Claude Code, Claude Desktop o tu propio agente.
 
-Los mirrors se descubren automáticamente y se cachean, con failover transparente, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan. Los artículos también pueden obtenerse por DOI desde fuentes de acceso abierto y Sci-Hub. `search` también puede, opcionalmente, federar el descubrimiento de literatura de acceso abierto sin clave desde arXiv, Crossref y OpenLibrary — fusionado, deduplicado y etiquetado por origen junto a los resultados habituales de Library Genesis.
+Los mirrors se descubren automáticamente y se cachean, con failover transparente, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan. Los artículos también pueden obtenerse por DOI desde fuentes de acceso abierto (Unpaywall), Sci-Hub y SciDB. `search` también puede, opcionalmente, consultar fuentes extra sin clave — Anna's Archive, arXiv, Crossref y OpenLibrary — fusionadas, deduplicadas y etiquetadas por origen junto a los resultados habituales de Library Genesis.
 
 <CardGrid>
 	<Card title="Cuatro herramientas" icon="puzzle">
@@ -82,11 +82,13 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 		y un limitador de tasa compartido.
 	</Card>
 	<Card title="Libros y artículos" icon="open-book">
-		Libros por MD5 desde LibGen; artículos por DOI desde Unpaywall y Sci-Hub.
+		Libros por MD5 desde LibGen; artículos por DOI desde Unpaywall, Sci-Hub y
+		SciDB.
 	</Card>
-	<Card title="Descubrimiento de acceso abierto" icon="magnifier">
+	<Card title="Descubrimiento de fuentes extra" icon="magnifier">
 		`search` puede activar opcionalmente el descubrimiento sin clave desde
-		arXiv, Crossref y OpenLibrary — sin cuenta ni API key.
+		fuentes extra — Anna's Archive, arXiv, Crossref y OpenLibrary — sin cuenta ni
+		API key.
 	</Card>
 	<Card title="Configurado por entorno" icon="setting">
 		Cada opción es una variable de entorno con un valor por defecto documentado
@@ -129,7 +131,7 @@ libgen-mcp es un servidor Model Context Protocol (MCP) de código abierto, escri
 
 ### ¿Qué puede hacer libgen-mcp?
 
-Busca en el catálogo de Library Genesis, devuelve metadatos y hashes MD5 por resultado, obtiene los detalles completos de un registro y descarga archivos a un directorio local. Los libros se descargan por MD5 desde LibGen, y los artículos se obtienen por DOI desde fuentes de acceso abierto (Unpaywall) y Sci-Hub. La herramienta `search` puede además, de forma opcional, federar el descubrimiento de literatura de acceso abierto sin clave desde arXiv, Crossref y OpenLibrary, fusionado y deduplicado junto a los resultados de Library Genesis. Los mirrors se descubren automáticamente y se cachean, con failover transparente, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan.
+Busca en el catálogo de Library Genesis, devuelve metadatos y hashes MD5 por resultado, obtiene los detalles completos de un registro y descarga archivos a un directorio local. Los libros se descargan por MD5 desde LibGen, y los artículos se obtienen por DOI desde fuentes de acceso abierto (Unpaywall), Sci-Hub y SciDB. La herramienta `search` puede además, de forma opcional, consultar fuentes extra sin clave — Anna's Archive, arXiv, Crossref y OpenLibrary — fusionadas y deduplicadas junto a los resultados de Library Genesis. Los mirrors se descubren automáticamente y se cachean, con failover transparente, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan.
 
 ### ¿Necesito una cuenta, clave de API o token para usar libgen-mcp?
 
