@@ -25,13 +25,23 @@ const enrichTimeout = 6 * time.Second
 const enrichMaxBody = 1 << 20 // 1 MiB
 
 // openLibraryEnrichRPS and openLibraryEnrichAnonRPS are the OpenLibrary enrichment
-// request rates: identified (a contact email is configured) versus anonymous,
-// honoring https://openlibrary.org/developers/api. openLibraryEnrichBurst lets the
-// two-hop ISBN → work lookup proceed without an inter-hop stall.
+// request rates: identified (a contact email is configured) versus anonymous.
+// OpenLibrary asks for 1 request per second by default and grants three times that
+// to a caller that identifies itself with an application name and a contact address
+// (https://openlibrary.org/developers/api).
+//
+// internal/discovery's OpenLibrary provider applies the same policy on its own call
+// path (openLibraryEmailRPS / openLibraryAnonRPS); the limiters are separate but the
+// numbers must agree, so change both together.
+//
+// The burst equals the chosen rate rather than being fixed at the identified one:
+// a burst above the per-second rate is spendable all at once, so an anonymous
+// deployment nominally honoring 1 rps would still open with three back-to-back
+// requests. The two-hop ISBN → work lookup therefore pays one inter-hop second when
+// anonymous, which is the correct price for not being identified.
 const (
 	openLibraryEnrichRPS     = 3
 	openLibraryEnrichAnonRPS = 1
-	openLibraryEnrichBurst   = 3
 )
 
 // crossrefBase and openLibraryBase are the enrichment API roots. They are package

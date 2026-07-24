@@ -155,8 +155,10 @@ func TestOpenLibrary_PublicBookArchiveURL(t *testing.T) {
 }
 
 // TestOpenLibrary_AvailabilityFieldsRequested verifies the search request asks for
-// the availability projection (ebook_access, has_fulltext, ia, cover_i) so a
-// readable book can be recognized.
+// the availability projection (ebook_access, has_fulltext, ia) so a readable book
+// can be recognized, and for nothing beyond what the mapper reads: a projection
+// field that DiscoveryResult cannot carry is paid for on every search and never
+// reaches a caller.
 func TestOpenLibrary_AvailabilityFieldsRequested(t *testing.T) {
 	var gotFields string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -169,10 +171,13 @@ func TestOpenLibrary_AvailabilityFieldsRequested(t *testing.T) {
 	if _, err := NewOpenLibrary("").Search(context.Background(), "q", 5); err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
-	for _, field := range []string{"ebook_access", "has_fulltext", "ia", "cover_i"} {
+	for _, field := range []string{"ebook_access", "has_fulltext", "ia"} {
 		if !strings.Contains(gotFields, field) {
 			t.Errorf("fields projection %q missing %q", gotFields, field)
 		}
+	}
+	if strings.Contains(gotFields, "cover_i") {
+		t.Errorf("fields projection %q still asks for cover_i, which no DiscoveryResult field carries", gotFields)
 	}
 }
 
@@ -203,14 +208,26 @@ func TestOpenLibrary_UserAgentEtiquette(t *testing.T) {
 	}
 }
 
-// TestOpenLibrary_RateFromEmail verifies the limiter rate follows the etiquette: an
-// identified provider is paced to the 2 rps interval and an anonymous one to 1 rps.
+// TestOpenLibrary_RateFromEmail verifies the limiter follows OpenLibrary's
+// etiquette: an identified provider is paced to 3 rps and an anonymous one to 1 rps.
+//
+// It also pins the burst to the rate. A burst above the per-second rate is
+// spendable all at once, so an anonymous provider claiming 1 rps could still open a
+// search with several back-to-back requests.
 func TestOpenLibrary_RateFromEmail(t *testing.T) {
-	if got := NewOpenLibrary("dev@example.com").limiter.Limit(); got != rate.Every(openLibraryEmailRate) {
-		t.Errorf("identified limit = %v, want %v (2 rps)", got, rate.Every(openLibraryEmailRate))
+	identified := NewOpenLibrary("dev@example.com")
+	if got := identified.limiter.Limit(); got != rate.Limit(openLibraryEmailRPS) {
+		t.Errorf("identified limit = %v, want %v (3 rps)", got, rate.Limit(openLibraryEmailRPS))
 	}
-	if got := NewOpenLibrary("").limiter.Limit(); got != rate.Every(openLibraryAnonRate) {
-		t.Errorf("anonymous limit = %v, want %v (1 rps)", got, rate.Every(openLibraryAnonRate))
+	if got := identified.limiter.Burst(); got != openLibraryEmailRPS {
+		t.Errorf("identified burst = %d, want %d (the rate itself)", got, openLibraryEmailRPS)
+	}
+	anonymous := NewOpenLibrary("")
+	if got := anonymous.limiter.Limit(); got != rate.Limit(openLibraryAnonRPS) {
+		t.Errorf("anonymous limit = %v, want %v (1 rps)", got, rate.Limit(openLibraryAnonRPS))
+	}
+	if got := anonymous.limiter.Burst(); got != openLibraryAnonRPS {
+		t.Errorf("anonymous burst = %d, want %d: a larger burst exceeds the rate it claims to honor", got, openLibraryAnonRPS)
 	}
 }
 

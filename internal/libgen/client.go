@@ -64,8 +64,8 @@ type Client struct {
 	// mirror budget.
 	enrichLimiter *rate.Limiter
 	// olLimiter governs the OpenLibrary enrichment hops specifically. OpenLibrary
-	// asks callers to stay within 1 req/s unidentified or up to ~3 req/s with a
-	// contact email (https://openlibrary.org/developers/api), a tighter budget than
+	// asks callers to stay within 1 req/s unidentified or 3 req/s with a contact
+	// email (openLibraryEnrichAnonRPS / openLibraryEnrichRPS), a tighter budget than
 	// Crossref's, so it gets its own limiter rather than sharing enrichLimiter.
 	olLimiter *rate.Limiter
 	// enrichEmail is the contact address advertised to Crossref's polite pool via
@@ -234,7 +234,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		dl:               &http.Client{},
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		enrichLimiter:    rate.NewLimiter(5, 5),
-		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), openLibraryEnrichBurst),
+		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), olRPS),
 		enrichEmail:      cfg.UnpaywallEmail,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
