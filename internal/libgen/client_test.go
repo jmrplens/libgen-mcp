@@ -395,14 +395,15 @@ func baseChainConfig() *config.Config {
 }
 
 // TestNewWiresSourceChainFromConfig verifies New assembles the full ordered chain
-// [unpaywall, scihub, libgen, randombook] and that Supports filters it into the
-// right per-item order: articles get [unpaywall, scihub], books get
-// [libgen, randombook].
+// in config.KnownSources order (the keyless open-access sources are wired, core is
+// left out for want of a key) and that Supports filters it into the right per-item
+// order: articles get the doi sources, books get the md5 sources.
 func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	c := New(staticMirrors{}, baseChainConfig())
 
-	if got, want := sourceNames(c), []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"}; !slices.Equal(got, want) {
-		t.Fatalf("chain = %v, want %v", got, want)
+	wantChain := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"}
+	if got := sourceNames(c); !slices.Equal(got, wantChain) {
+		t.Fatalf("chain = %v, want %v", got, wantChain)
 	}
 
 	var book, article []string
@@ -410,15 +411,29 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		if s.Supports(Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}) {
 			book = append(book, s.Name())
 		}
-		if s.Supports(Item{DOI: "10.1/x"}) {
+		// A preprint DOI is a valid DOI every article source accepts, so it counts
+		// the prefix-restricted biorxiv source alongside the prefix-agnostic ones.
+		if s.Supports(Item{DOI: "10.1101/2020.01.01.000000"}) {
 			article = append(article, s.Name())
 		}
 	}
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book chain = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article chain = %v, want %v", article, want)
+	}
+}
+
+// TestNewWiresCoreWhenKeyed verifies the opt-in CORE source joins the article chain
+// once an API key is configured, in its canonical position before scihub.
+func TestNewWiresCoreWhenKeyed(t *testing.T) {
+	cfg := baseChainConfig()
+	cfg.CoreKey = "test-key"
+	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
+	want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb"}
+	if !slices.Equal(article, want) {
+		t.Errorf("article chain (keyed) = %v, want %v", article, want)
 	}
 }
 
@@ -430,7 +445,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
 
@@ -440,7 +455,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book (no email) = %v, want %v", book, want)
 	}
-	if want := []string{"scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
 	}
 }

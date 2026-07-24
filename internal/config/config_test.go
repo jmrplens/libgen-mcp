@@ -716,12 +716,14 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 	}
 }
 
-// TestKnownSourcesIncludesSciDB pins the canonical chain order the download
-// pipeline relies on: scidb follows scihub, so it acts as the article fallback
-// that covers Sci-Hub's indexing gap, and annas sits last so it is the final
-// book rescue after libgen and randombook.
-func TestKnownSourcesIncludesSciDB(t *testing.T) {
-	want := []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"}
+// TestKnownSourcesOrder pins the canonical chain order the download pipeline
+// relies on: the article (DOI) sources lead with the legal open-access providers
+// (unpaywall, then europepmc, biorxiv, fatcat, core) before the shadow-library
+// fallbacks (scihub, then scidb, which covers Sci-Hub's indexing gap); the book
+// (md5) sources follow, with annas last as the final rescue after libgen and
+// randombook.
+func TestKnownSourcesOrder(t *testing.T) {
+	want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"}
 	if len(KnownSources) != len(want) {
 		t.Fatalf("KnownSources = %v, want %v", KnownSources, want)
 	}
@@ -729,6 +731,43 @@ func TestKnownSourcesIncludesSciDB(t *testing.T) {
 		if KnownSources[i] != w {
 			t.Fatalf("KnownSources[%d] = %q, want %q (full: %v)", i, KnownSources[i], w, KnownSources)
 		}
+	}
+}
+
+// TestLoadCoreKey verifies LIBGEN_MCP_CORE_KEY populates CoreKey, and that an unset
+// variable leaves it empty so the core source stays out of the chain by default.
+func TestLoadCoreKey(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_CORE_KEY", "core-secret")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CoreKey != "core-secret" {
+		t.Fatalf("CoreKey = %q, want core-secret", cfg.CoreKey)
+	}
+
+	t.Setenv("LIBGEN_MCP_CORE_KEY", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CoreKey != "" {
+		t.Fatalf("CoreKey = %q, want empty (opt-in default)", cfg.CoreKey)
+	}
+}
+
+// TestSourceEnabledCoreRequiresKey verifies the core source is gated on a
+// configured API key, mirroring the unpaywall/email gate: enabled with a key,
+// disabled without one even when explicitly listed in Sources.
+func TestSourceEnabledCoreRequiresKey(t *testing.T) {
+	if !(&Config{CoreKey: "k"}).SourceEnabled("core") {
+		t.Error("SourceEnabled(core) with a key = false, want true")
+	}
+	if (&Config{}).SourceEnabled("core") {
+		t.Error("SourceEnabled(core) without a key = true, want false")
+	}
+	if (&Config{Sources: []string{"core"}}).SourceEnabled("core") {
+		t.Error("SourceEnabled(core) listed but keyless = true, want false")
 	}
 }
 

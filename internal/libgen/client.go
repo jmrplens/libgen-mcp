@@ -113,9 +113,10 @@ type Client struct {
 	annasMirrors MirrorLister
 	// sources is the ordered download-source chain Download tries for each Item,
 	// advancing to the next when one fails to resolve or stream. It is built from
-	// config by buildSourceChain as [unpaywall, scihub, libgen, randombook], then
-	// filtered per item by Supports so books try [libgen, randombook] and articles
-	// try [unpaywall, scihub].
+	// config by buildSourceChain in config.KnownSources order, then filtered per
+	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
+	// articles try the doi sources (unpaywall, europepmc, biorxiv, fatcat, core,
+	// scihub, scidb).
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
 	// same md5 into the same dir), keyed by the absolute .part path. The .part
@@ -253,12 +254,13 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	return c
 }
 
-// buildSourceChain assembles the ordered download-source chain from config. The
-// slice order is [unpaywall, scihub, libgen, randombook]; because Download filters
-// each source by Supports(item), this single ordered slice yields the right
-// per-item order: an article (DOI-keyed) item is offered to [unpaywall, scihub]
-// and a book (md5-keyed) item to [libgen, randombook]. Sources omitted from
-// LIBGEN_MCP_SOURCES are left out. Each non-LibGen source uses the client's
+// buildSourceChain assembles the ordered download-source chain from config in
+// config.KnownSources order; because Download filters each source by
+// Supports(item), this single ordered slice yields the right per-item order: an
+// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
+// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
+// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
+// or gated off, like core without a key — are left out. Each non-LibGen source uses the client's
 // page HTTP client (with timeout) for its resolution lookups; libgenSource holds
 // c so it can reuse the mirror failover in ResolveGetURL.
 // fixedMirrors is a MirrorLister over a hardcoded list, used as the offline
@@ -315,6 +317,10 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	annasLister := func() MirrorLister { return c.annasMirrors }
 	factories := map[string]func() DownloadSource{
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
+		"europepmc":  func() DownloadSource { return europePMCSource{http: c.http} },
+		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
+		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
+		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },
 		"scidb":      func() DownloadSource { return scidbSource{mirrors: annasLister(), http: c.http} },
 		"libgen":     func() DownloadSource { return libgenSource{c: c} },
@@ -338,9 +344,15 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 // LIBGEN_MCP_SOURCES and derives the split from each source's own Supports, so
 // callers advertise only usable sources (e.g. in the download tool's schema)
 // without duplicating the book/article categorization.
+//
+// The article probe DOI carries the bioRxiv/medRxiv preprint prefix (10.1101) so
+// prefix-restricted sources like biorxiv are still counted as article sources and
+// advertised: a preprint DOI is a valid DOI that the general article sources also
+// accept, so this probe matches the full "can serve some article" set rather than
+// only the prefix-agnostic ones.
 func (c *Client) EnabledSourceNames() (book, article []string) {
 	bookProbe := Item{MD5: "0"}
-	articleProbe := Item{DOI: "0"}
+	articleProbe := Item{DOI: biorxivDOIPrefix + "0"}
 	for _, s := range c.sources {
 		if s.Supports(bookProbe) {
 			book = append(book, s.Name())

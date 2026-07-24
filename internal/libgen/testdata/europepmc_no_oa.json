@@ -1,0 +1,19 @@
+{
+  "version": "6.9",
+  "hitCount": 1,
+  "resultList": {
+    "result": [
+      {
+        "id": "21376230",
+        "source": "MED",
+        "pmid": "21376230",
+        "doi": "10.1016/j.cell.2011.02.013",
+        "title": "Hallmarks of cancer: the next generation.",
+        "isOpenAccess": "N",
+        "inEPMC": "N",
+        "inPMC": "N",
+        "hasPDF": "N"
+      }
+    ]
+  }
+}

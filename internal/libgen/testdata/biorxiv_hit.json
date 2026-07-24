@@ -1,0 +1,30 @@
+{
+  "messages": [
+    {
+      "status": "ok",
+      "category": "all"
+    }
+  ],
+  "collection": [
+    {
+      "title": "MVA Vector Vaccines Inhibit SARS CoV-2 Replication",
+      "doi": "10.1101/2020.12.30.424878",
+      "date": "2021-01-01",
+      "version": "1",
+      "type": "new results",
+      "license": "cc0",
+      "category": "microbiology",
+      "server": "bioRxiv"
+    },
+    {
+      "title": "MVA Vector Vaccines Inhibit SARS CoV-2 Replication",
+      "doi": "10.1101/2020.12.30.424878",
+      "date": "2021-02-15",
+      "version": "2",
+      "type": "new results",
+      "license": "cc0",
+      "category": "microbiology",
+      "server": "bioRxiv"
+    }
+  ]
+}

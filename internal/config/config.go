@@ -46,6 +46,7 @@ type Config struct {
 	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
 	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
 	AnnasKey               string        // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
+	CoreKey                string        // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
 	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
@@ -147,7 +148,13 @@ func defaultStartRetryWaits() []time.Duration {
 // KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
-var KnownSources = []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"}
+//
+// The article (DOI) sources lead with the legal open-access providers — unpaywall,
+// then Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar (fatcat) and CORE —
+// before the shadow-library fallbacks (scihub, scidb), so a freely licensed copy
+// is always preferred when one exists. The book (md5) sources keep their order:
+// libgen, randombook, annas.
+var KnownSources = []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"}
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
@@ -221,6 +228,9 @@ func loadStringVars(cfg *Config) {
 	}
 	if v := os.Getenv("LIBGEN_MCP_ANNAS_KEY"); v != "" {
 		cfg.AnnasKey = v
+	}
+	if v := os.Getenv("LIBGEN_MCP_CORE_KEY"); v != "" {
+		cfg.CoreKey = v
 	}
 	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
 		cfg.ScihubHosts = splitHosts(v)
@@ -550,11 +560,16 @@ func validateSources(sources []string) error {
 
 // SourceEnabled reports whether the named download source should be part of the
 // chain. When Sources is empty every source is enabled; otherwise only the listed
-// names (compared case-insensitively) are. The unpaywall source is additionally
-// gated on a configured contact email: its API rejects requests without one, so
-// an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables it regardless of the Sources list.
+// names (compared case-insensitively) are. Two sources are additionally gated on a
+// credential: unpaywall on a configured contact email (its API rejects requests
+// without one, so an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables it), and core on a
+// configured API key (an empty LIBGEN_MCP_CORE_KEY leaves the source out of the
+// chain), regardless of the Sources list.
 func (c *Config) SourceEnabled(name string) bool {
 	if strings.EqualFold(strings.TrimSpace(name), "unpaywall") && strings.TrimSpace(c.UnpaywallEmail) == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(name), "core") && strings.TrimSpace(c.CoreKey) == "" {
 		return false
 	}
 	if len(c.Sources) == 0 {

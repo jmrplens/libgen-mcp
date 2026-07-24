@@ -32,7 +32,7 @@ type ReadInput struct {
 	MD5       string `json:"md5,omitempty" jsonschema:"file md5 from a book search result; provide md5, doi, or path"`
 	DOI       string `json:"doi,omitempty" jsonschema:"DOI from an article search result; provide md5, doi, or path"`
 	Path      string `json:"path,omitempty" jsonschema:"read an already-downloaded local file by absolute path (local server only; ignored/rejected on a remote server)"`
-	Source    string `json:"source,omitempty" jsonschema:"restrict the fetch to one source (libgen/randombook for md5; unpaywall/scihub for doi)"`
+	Source    string `json:"source,omitempty" jsonschema:"restrict the fetch to one source (libgen/randombook/annas for md5; unpaywall/europepmc/biorxiv/fatcat/core/scihub/scidb for doi; unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY)"`
 	StartPage int    `json:"start_page,omitempty" jsonschema:"first page to read (PDF), 1-based; ignored when cursor is set"`
 	MaxPages  int    `json:"max_pages,omitempty" jsonschema:"max pages to read this call (PDF)"`
 	Offset    int    `json:"offset,omitempty" jsonschema:"character offset to start from (EPUB/TXT); ignored when cursor is set"`

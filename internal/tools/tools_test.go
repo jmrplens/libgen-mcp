@@ -181,15 +181,21 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			wantAbsent: []string{"unpaywall", "scihub"},
 		},
 		{
-			name:       "default without email disables unpaywall",
+			name:       "default without email or core key disables unpaywall and core",
 			mutate:     func(*config.Config) {},
-			wantEnum:   []string{"scihub", "scidb", "libgen", "randombook", "annas"},
-			wantAbsent: []string{"unpaywall"},
+			wantEnum:   []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantAbsent: []string{"unpaywall", "core"},
 		},
 		{
 			name:       "unpaywall enabled once an email is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
-			wantEnum:   []string{"unpaywall", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantAbsent: nil,
+		},
+		{
+			name:       "core joins the enum once its key is set",
+			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com"; c.CoreKey = "k" },
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: nil,
 		},
 	}

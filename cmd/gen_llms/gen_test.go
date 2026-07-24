@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // newProjectRoot creates a temp dir containing go.mod (and a VERSION file) and
@@ -206,6 +208,22 @@ func TestStaticFullSections(t *testing.T) {
 				t.Fatalf("%s output missing %q", tc.name, tc.want)
 			}
 		})
+	}
+}
+
+// TestDownloadSourcesNamesEveryKnownSource verifies the download-source section
+// documents every recognized source name. The section is prose, so it silently
+// went stale when sources were added; deriving the check from config.KnownSources
+// makes a future addition fail here instead of shipping a reference that
+// contradicts the server.
+func TestDownloadSourcesNamesEveryKnownSource(t *testing.T) {
+	var b strings.Builder
+	writeLLMSFullDownloadSources(&b)
+	got := b.String()
+	for _, name := range config.KnownSources {
+		if !strings.Contains(got, "`"+name+"`") && !strings.Contains(got, name+",") && !strings.Contains(got, ","+name) {
+			t.Errorf("download-source section never mentions the %q source", name)
+		}
 	}
 }
 
