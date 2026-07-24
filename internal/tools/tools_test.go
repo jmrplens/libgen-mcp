@@ -217,7 +217,7 @@ func TestSearchNextSteps(t *testing.T) {
 	withResults := searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", DOI: "10.1/x"}},
 		Page:    1,
-	})
+	}, false)
 	joined := strings.Join(withResults, "\n")
 	if !strings.Contains(joined, "get_details") || !strings.Contains(joined, "download") {
 		t.Errorf("next_steps should mention get_details and download; got %q", joined)
@@ -229,7 +229,7 @@ func TestSearchNextSteps(t *testing.T) {
 		t.Errorf("next_steps should embed the first result's doi; got %q", joined)
 	}
 
-	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}})
+	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false)
 	if len(empty) == 0 || !strings.Contains(empty[0], "No matches") {
 		t.Errorf("empty search should suggest recovery; got %q", empty)
 	}
@@ -2426,7 +2426,7 @@ func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
 // model that has been asked to find something and told only "try broadening" can
 // still answer as if it had found it.
 func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
-	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}), "\n"))
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false), "\n"))
 	if !strings.Contains(joined, "do not") {
 		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
 	}
@@ -2445,7 +2445,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	escalated := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
 		Page:    1,
-	}), "\n")
+	}, false), "\n")
 	if !strings.Contains(escalated, `"source":"annas"`) {
 		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
 	}
@@ -2454,7 +2454,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	catalog := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
 		Page:    1,
-	}), "\n")
+	}, false), "\n")
 	if strings.Contains(catalog, `"source"`) {
 		t.Errorf("a catalog result should not pin a source; got %q", catalog)
 	}
@@ -2651,5 +2651,27 @@ func TestAnnasFallbackEnrichesByISBN(t *testing.T) {
 	}
 	if out.Enrichment == nil || out.Enrichment.OpenLibrary == nil {
 		t.Fatalf("the record carries an ISBN but no OpenLibrary metadata came back: %+v", out.Enrichment)
+	}
+}
+
+// TestSearchNextStepsSeparatesOpenAccessFromTheCatalog verifies the guidance says
+// which results are open access and which are not. Asked for open-access papers, a
+// model that received only OpenLibrary hits — a book catalog, carrying no DOI and
+// no PDF — answered with articles from the catalog results instead, listing
+// Sci-Hub links under an "Open-Access Papers" heading. Nothing in the response had
+// told it those are different things.
+func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
+		OpenAccess: []discovery.DiscoveryResult{
+			{Origin: "openlibrary", Title: "A Book", ISBN: "9780000000001"},
+		},
+		Page: 1,
+	}, true), "\n"))
+	if !strings.Contains(joined, "open_access") {
+		t.Errorf("guidance never names the open_access list; got %q", joined)
+	}
+	if !strings.Contains(joined, "not open access") {
+		t.Errorf("guidance never says the catalog results are not open access; got %q", joined)
 	}
 }

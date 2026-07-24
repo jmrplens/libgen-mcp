@@ -96,7 +96,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 			Downloads: []libgen.DownloadOption{{Label: "GET", URL: "https://mirror/dl/1"}},
 		}},
 	}
-	out.NextSteps = searchNextSteps(out)
+	out.NextSteps = searchNextSteps(out, false)
 
 	md := renderSearchMarkdown(out)
 	if !strings.Contains(md, "Download links") {
@@ -115,7 +115,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 	if resultsHaveLinks(noLinks.Results) {
 		t.Fatal("fixture should have no links")
 	}
-	if strings.Contains(strings.Join(searchNextSteps(noLinks), "\n"), "download links") {
+	if strings.Contains(strings.Join(searchNextSteps(noLinks, false), "\n"), "download links") {
 		t.Error("next_steps should not mention download links when results carry none")
 	}
 }

@@ -270,7 +270,7 @@ func resultsHaveLinks(results []libgen.Result) bool {
 // concrete, ready-to-run example that uses the first result's real identifier so
 // the model can pivot to get_details/download without guessing the argument shape.
 // On zero results it returns recovery suggestions instead.
-func searchNextSteps(out SearchOutput) []string {
+func searchNextSteps(out SearchOutput, extrasRan bool) []string {
 	if len(out.Results) == 0 {
 		return []string{
 			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
@@ -289,6 +289,9 @@ func searchNextSteps(out SearchOutput) []string {
 		steps = append(steps,
 			fmt.Sprintf("To fetch an article, call download with its doi, e.g. {\"doi\":%q}.", first.DOI))
 	}
+	if step := openAccessStep(out.OpenAccess, extrasRan); step != "" {
+		steps = append(steps, step)
+	}
 	if resultsHaveLinks(out.Results) {
 		steps = append(steps, hintIncludeLinks)
 	}
@@ -298,6 +301,36 @@ func searchNextSteps(out SearchOutput) []string {
 		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
 	}
 	return steps
+}
+
+// openAccessStep says which of the two result lists is open access, and warns when
+// the open-access hits carry nothing to fetch.
+//
+// Asked for open-access papers, a model that received only OpenLibrary hits — a
+// book catalog, so no DOI and no PDF — answered with articles from the catalog
+// results instead, listing Sci-Hub links under an "Open-Access Papers" heading.
+// Nothing in the response had told it the two lists mean different things.
+func openAccessStep(hits []discovery.DiscoveryResult, extrasRan bool) string {
+	if !extrasRan {
+		return ""
+	}
+	const preamble = "Only the open_access entries are open access; the results list is not open access, " +
+		"whatever its origin, so do not present it as such. "
+	if len(hits) == 0 {
+		return preamble + "The open-access providers returned nothing for this query — report that, " +
+			"rather than offering a catalog result in place of one."
+	}
+	var actionable int
+	for _, h := range hits {
+		if h.DOI != "" || h.PDFURL != "" {
+			actionable++
+		}
+	}
+	if actionable == 0 {
+		return preamble + "None of these open_access entries carries a DOI or a pdf_url, so none of them is " +
+			"directly fetchable — say so rather than substituting a catalog result."
+	}
+	return preamble + fmt.Sprintf("%d of %d carry a doi or pdf_url you can fetch.", actionable, len(hits))
 }
 
 // downloadStep phrases the download follow-up for a result, pinning the source
@@ -400,12 +433,13 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 			out = buildSearchOutput(page, mirror, in)
 		}
 
-		mergeExtraHits(&out, extras.collect(ctx, mode, in.Query, cfg, annasMirrors, len(out.Results), searchErr))
+		hits, extrasRan := extras.collect(ctx, mode, in.Query, cfg, annasMirrors, len(out.Results), searchErr)
+		mergeExtraHits(&out, hits)
 		if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
 			return nil, zero, searchErr
 		}
 
-		out.NextSteps = searchNextSteps(out)
+		out.NextSteps = searchNextSteps(out, extrasRan)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
 }
@@ -449,19 +483,22 @@ func startExtras(ctx context.Context, mode config.ExtraSourcesMode, query string
 // can defer it against an early return and still join it on the normal path.
 func (e *extraSearch) wait() { e.wg.Wait() }
 
-// collect returns the hits to merge: the forced search's own results once it has
-// finished, or a fresh search when the catalog's outcome calls for one, or nothing.
+// collect returns the hits to merge — the forced search's own results once it has
+// finished, or a fresh search when the catalog's outcome calls for one — and
+// whether the extra searchers ran at all. That second answer is not derivable from
+// an empty hit list: extras that ran and found nothing is a different thing to
+// report than extras that were never asked.
 func (e *extraSearch) collect(ctx context.Context, mode config.ExtraSourcesMode, query string,
 	cfg *config.Config, annasMirrors discovery.MirrorLister, catalogHits int, catalogErr error,
-) []discovery.DiscoveryResult {
+) (hits []discovery.DiscoveryResult, ran bool) {
 	e.wait()
 	if e.started {
-		return e.hits
+		return e.hits, true
 	}
 	if shouldEscalate(mode, catalogHits, catalogErr) && strings.TrimSpace(query) != "" {
-		return federateExtras(ctx, query, cfg, annasMirrors)
+		return federateExtras(ctx, query, cfg, annasMirrors), true
 	}
-	return nil
+	return nil, false
 }
 
 // federateExtras runs every extra searcher concurrently for one query.
