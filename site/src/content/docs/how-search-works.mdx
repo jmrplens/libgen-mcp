@@ -50,7 +50,7 @@ Every result is labeled with an **`origin`** that says which searcher produced i
 - **`libgen`** and **`annas`** — the result carries an md5, plus the file's format and size, so the two can be compared. Download it with `download`'s `md5` argument.
 - **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no arXiv identifier.
-- **`openlibrary`** — the result carries an `isbn` and a title, and no file at all. OpenLibrary is a catalog, not a repository: use those to run a better-targeted `search`.
+- **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a catalog, not a repository, so use those to run a better-targeted `search` — unless the book is publicly readable, in which case it also carries an `archive_url` you can read directly on the Internet Archive.
 
 ```mermaid
 flowchart LR

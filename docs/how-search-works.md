@@ -84,8 +84,10 @@ argument to hand to `download`:
 - **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no
   arXiv identifier.
-- **`openlibrary`** — the result carries an `isbn` and a title, and no file at all.
-  OpenLibrary is a catalog, not a repository: use those to run a better-targeted `search`.
+- **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a
+  catalog, not a repository, so use those to run a better-targeted `search` — unless the book
+  is publicly readable, in which case it also carries an `archive_url` you can read directly on
+  the Internet Archive.
 
 ```mermaid
 flowchart LR

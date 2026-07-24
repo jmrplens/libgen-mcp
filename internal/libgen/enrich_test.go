@@ -8,7 +8,29 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
+
+// TestNew_OpenLibraryEnrichLimiter verifies the enrichment OpenLibrary limiter is
+// paced by the presence of a contact email: identified deployments get the 3 rps
+// allowance, anonymous ones drop to 1 rps, honoring OpenLibrary's etiquette.
+func TestNew_OpenLibraryEnrichLimiter(t *testing.T) {
+	base := &config.Config{Timeout: time.Second, RateRPS: 1, RateBurst: 1, MaxConcurrentDownloads: 1}
+
+	withEmail := *base
+	withEmail.UnpaywallEmail = "dev@example.com"
+	if got := New(staticMirrors{}, &withEmail).olLimiter.Limit(); got != rate.Limit(openLibraryEnrichRPS) {
+		t.Errorf("identified olLimiter = %v, want %v (3 rps)", got, rate.Limit(openLibraryEnrichRPS))
+	}
+
+	anon := *base
+	if got := New(staticMirrors{}, &anon).olLimiter.Limit(); got != rate.Limit(openLibraryEnrichAnonRPS) {
+		t.Errorf("anonymous olLimiter = %v, want %v (1 rps)", got, rate.Limit(openLibraryEnrichAnonRPS))
+	}
+}
 
 // crossrefFixture is a realistic Crossref `{"message":{...}}` body carrying the
 // container title, ISSN, volume, issue, publisher, published year, reference and
@@ -205,15 +227,15 @@ func TestEnrichGet_ErrorPaths(t *testing.T) {
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if resp := c.enrichGet(canceled, "http://example.invalid"); resp != nil {
+	if resp := c.enrichGet(canceled, "http://example.invalid", c.enrichLimiter); resp != nil {
 		_ = resp.Body.Close()
 		t.Error("enrichGet with a canceled context should return nil (limiter wait fails)")
 	}
-	if resp := c.enrichGet(context.Background(), "http://\x7f"); resp != nil {
+	if resp := c.enrichGet(context.Background(), "http://\x7f", c.enrichLimiter); resp != nil {
 		_ = resp.Body.Close()
 		t.Error("enrichGet with an unbuildable URL should return nil")
 	}
-	if resp := c.enrichGet(context.Background(), "http://127.0.0.1:0"); resp != nil {
+	if resp := c.enrichGet(context.Background(), "http://127.0.0.1:0", c.enrichLimiter); resp != nil {
 		_ = resp.Body.Close()
 		t.Error("enrichGet against an unreachable address should return nil")
 	}
@@ -232,7 +254,7 @@ func TestEnrichGet_PoliteMailtoUA(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	c.enrichEmail = "polite@example.com"
 
-	resp := c.enrichGet(context.Background(), srv.URL)
+	resp := c.enrichGet(context.Background(), srv.URL, c.enrichLimiter)
 	if resp == nil {
 		t.Fatal("enrichGet returned nil for a 200 response")
 	}

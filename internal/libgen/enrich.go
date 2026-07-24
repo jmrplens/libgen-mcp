@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // enrichTimeout is the hard wall-clock budget for a whole Enrich call: both the
@@ -21,6 +23,16 @@ const enrichTimeout = 6 * time.Second
 // enrichMaxBody bounds how many bytes of any enrichment response are read before
 // decoding, guarding against an unexpectedly large or hostile body.
 const enrichMaxBody = 1 << 20 // 1 MiB
+
+// openLibraryEnrichRPS and openLibraryEnrichAnonRPS are the OpenLibrary enrichment
+// request rates: identified (a contact email is configured) versus anonymous,
+// honoring https://openlibrary.org/developers/api. openLibraryEnrichBurst lets the
+// two-hop ISBN → work lookup proceed without an inter-hop stall.
+const (
+	openLibraryEnrichRPS     = 3
+	openLibraryEnrichAnonRPS = 1
+	openLibraryEnrichBurst   = 3
+)
 
 // crossrefBase and openLibraryBase are the enrichment API roots. They are package
 // variables (not constants) so tests can point them at local httptest servers.
@@ -115,13 +127,14 @@ func (c *Client) Enrich(ctx context.Context, doi, isbn string) *Enrichment {
 	return &Enrichment{Crossref: cr, OpenLibrary: ol}
 }
 
-// enrichGet issues a GET to an enrichment API after waiting on the separate
-// enrichment rate limiter, setting the polite-pool User-Agent (the package
-// userAgent plus a mailto when a contact email is configured). It returns the
-// response on a 200 and nil otherwise (including any transport or limiter error),
-// so callers degrade silently. The caller owns closing the returned body.
-func (c *Client) enrichGet(ctx context.Context, rawURL string) *http.Response {
-	if err := c.enrichLimiter.Wait(ctx); err != nil {
+// enrichGet issues a GET to an enrichment API after waiting on the supplied rate
+// limiter, setting the polite-pool User-Agent (the package userAgent plus a mailto
+// when a contact email is configured). Crossref and OpenLibrary pass different
+// limiters so each API is paced to its own etiquette. It returns the response on a
+// 200 and nil otherwise (including any transport or limiter error), so callers
+// degrade silently. The caller owns closing the returned body.
+func (c *Client) enrichGet(ctx context.Context, rawURL string, limiter *rate.Limiter) *http.Response {
+	if err := limiter.Wait(ctx); err != nil {
 		return nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
@@ -150,7 +163,7 @@ func (c *Client) fetchCrossref(ctx context.Context, doi string) *CrossrefWork {
 	// Preserve the DOI's slashes: escapeDOIPath escapes each path segment but
 	// keeps "/" literal, since Crossref routes on the raw DOI path (a %2F-encoded
 	// slash can miss the record). Same reason the download DOI sources use it.
-	resp := c.enrichGet(ctx, c.crossrefURL()+"/works/"+escapeDOIPath(doi))
+	resp := c.enrichGet(ctx, c.crossrefURL()+"/works/"+escapeDOIPath(doi), c.enrichLimiter)
 	if resp == nil {
 		return nil
 	}
@@ -244,7 +257,7 @@ func (c *Client) fetchOpenLibrary(ctx context.Context, isbn string) *OLBook {
 // fetchOLISBN requests hop 1, the OpenLibrary ISBN record, returning nil on any
 // failure (non-200, transport error, or unparseable body).
 func (c *Client) fetchOLISBN(ctx context.Context, isbn string) *olISBNRecord {
-	resp := c.enrichGet(ctx, c.openLibraryURL()+"/isbn/"+url.PathEscape(isbn)+".json")
+	resp := c.enrichGet(ctx, c.openLibraryURL()+"/isbn/"+url.PathEscape(isbn)+".json", c.olLimiter)
 	if resp == nil {
 		return nil
 	}
@@ -268,7 +281,7 @@ type olWorkRecord struct {
 // Subjects and Description from it. It is silent on any failure — the ISBN
 // record's cover/link already gathered on hop 1 still stand.
 func (c *Client) fetchOLWork(ctx context.Context, workKey string, book *OLBook) {
-	resp := c.enrichGet(ctx, c.openLibraryURL()+workKey+".json")
+	resp := c.enrichGet(ctx, c.openLibraryURL()+workKey+".json", c.olLimiter)
 	if resp == nil {
 		return
 	}

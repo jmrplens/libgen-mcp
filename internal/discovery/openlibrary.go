@@ -25,25 +25,56 @@ const (
 )
 
 // openLibraryFields is the projection requested from the search endpoint, trimming
-// the response to just the fields the resolver reads.
-const openLibraryFields = "title,author_name,first_publish_year,isbn,key"
+// the response to just the fields the resolver reads. Beyond the bibliographic
+// basics it asks for the availability signals (ebook_access, has_fulltext, ia,
+// cover_i) so a publicly readable book can be surfaced with a direct archive.org
+// link.
+const openLibraryFields = "title,author_name,first_publish_year,isbn,key,ebook_access,has_fulltext,ia,cover_i"
+
+// openLibraryPublicAccess is the ebook_access value OpenLibrary uses for a book that
+// is freely readable in full on the Internet Archive (as opposed to "borrowable",
+// "printdisabled" or "no_ebook").
+const openLibraryPublicAccess = "public"
+
+// openLibraryEmailRate (with a contact email) and openLibraryAnonRate (without) are
+// the inter-request intervals OpenLibrary's etiquette grants: an identified caller
+// may go faster (2 rps) than an anonymous one (1 rps). Each is the delay between
+// requests, so a smaller interval is the higher rate.
+// https://openlibrary.org/developers/api
+const (
+	openLibraryEmailRate = time.Second / 2 // 2 rps
+	openLibraryAnonRate  = time.Second     // 1 rps
+)
 
 // OpenLibraryProvider is a keyless query resolver that turns fuzzy title/author
 // queries into canonical identifiers (ISBN/title/year) which feed a Library Genesis
-// search. It is NOT a download source, so its results never carry a PDF URL and are
-// never marked open-access. Its limiter and http.Client are self-contained, so it
-// never shares state with libgen's client.
+// search. It is primarily a resolver, not a download source, so its results carry no
+// PDF URL; the one exception is a publicly readable book, which it surfaces with a
+// free-to-read archive.org link and marks open-access. Its limiter and http.Client
+// are self-contained, so it never shares state with libgen's client.
 type OpenLibraryProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client    *http.Client
+	limiter   *rate.Limiter
+	userAgent string
 }
 
-// NewOpenLibrary constructs an OpenLibraryProvider with its own http.Client and a
-// rate limiter pacing requests to a polite 2 requests/second (burst 2).
-func NewOpenLibrary() *OpenLibraryProvider {
+// NewOpenLibrary constructs an OpenLibraryProvider with its own http.Client. When a
+// contact email is supplied it is advertised in the User-Agent and the limiter is
+// paced to OpenLibrary's identified allowance (2 rps); without one the provider
+// stays anonymous and drops to the unidentified allowance (1 rps), honoring
+// https://openlibrary.org/developers/api.
+func NewOpenLibrary(email string) *OpenLibraryProvider {
+	email = strings.TrimSpace(email)
+	ua := discoveryUserAgent
+	every := openLibraryAnonRate
+	if email != "" {
+		ua += " (mailto:" + email + ")"
+		every = openLibraryEmailRate
+	}
 	return &OpenLibraryProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(time.Second), 2),
+		client:    newDiscoveryClient(),
+		limiter:   rate.NewLimiter(rate.Every(every), 2),
+		userAgent: ua,
 	}
 }
 
@@ -65,7 +96,7 @@ func (p *OpenLibraryProvider) Search(ctx context.Context, query string, limit in
 
 	rawURL := buildOpenLibraryURL(query, limit)
 
-	status, body, err := boundedGet(ctx, p.client, rawURL)
+	status, body, err := boundedGetUA(ctx, p.client, rawURL, p.userAgent)
 	if err != nil {
 		// Context errors propagate so the federation layer can tell "caller went
 		// away" from "source degraded"; everything else degrades to empty.
@@ -115,6 +146,19 @@ type openLibraryDoc struct {
 	FirstPublishYear int      `json:"first_publish_year"`
 	ISBN             []string `json:"isbn"`
 	Key              string   `json:"key"`
+	// EbookAccess is the availability tier ("public", "borrowable",
+	// "printdisabled", "no_ebook"); only "public" is freely readable in full.
+	EbookAccess string `json:"ebook_access"`
+	// HasFulltext reports whether OpenLibrary holds any full-text scan; it is
+	// requested for client display and gates the readable-book signal alongside
+	// EbookAccess.
+	HasFulltext bool `json:"has_fulltext"`
+	// IA holds the Internet Archive identifiers backing the book; the first one
+	// forms the archive.org "details" URL for a publicly readable copy.
+	IA []string `json:"ia"`
+	// CoverI is the OpenLibrary cover id, requested so a client can render a cover
+	// thumbnail (https://covers.openlibrary.org/b/id/<CoverI>-L.jpg).
+	CoverI int `json:"cover_i"`
 }
 
 // parseOpenLibraryDocs decodes an OpenLibrary search envelope into DiscoveryResults,
@@ -134,21 +178,40 @@ func parseOpenLibraryDocs(body []byte) []DiscoveryResult {
 
 // openLibraryDocToResult maps one OpenLibrary doc onto a DiscoveryResult: the title,
 // "; "-joined author names, the first-publish year, and the first ISBN (empty when
-// none). Origin is "openlibrary"; because this is a resolver and not a download
-// source, DOI/PDFURL stay empty and OpenAccess stays false.
+// none). Origin is "openlibrary". For most docs this is a resolver hit — DOI/PDFURL
+// stay empty and OpenAccess is false — but a publicly readable book (ebook_access
+// "public" with an Internet Archive id) additionally carries a free-to-read
+// archive.org link and is marked open-access.
 func openLibraryDocToResult(doc openLibraryDoc) DiscoveryResult {
 	year := ""
 	if doc.FirstPublishYear > 0 {
 		year = strconv.Itoa(doc.FirstPublishYear)
 	}
+	archiveURL := openLibraryArchiveURL(doc)
 	return DiscoveryResult{
 		Origin:     "openlibrary",
 		Title:      strings.TrimSpace(doc.Title),
 		Authors:    openLibraryAuthors(doc.AuthorName),
 		Year:       year,
 		ISBN:       firstNonEmpty(doc.ISBN),
-		OpenAccess: false,
+		ArchiveURL: archiveURL,
+		OpenAccess: archiveURL != "",
 	}
+}
+
+// openLibraryArchiveURL returns a free-to-read archive.org "details" URL when the
+// doc is a publicly readable book — ebook_access "public", full text held, and an
+// Internet Archive id present — and "" otherwise. The id is path-escaped so an odd
+// identifier cannot corrupt the URL.
+func openLibraryArchiveURL(doc openLibraryDoc) string {
+	if doc.EbookAccess != openLibraryPublicAccess || !doc.HasFulltext {
+		return ""
+	}
+	ia := firstNonEmpty(doc.IA)
+	if ia == "" {
+		return ""
+	}
+	return "https://archive.org/details/" + url.PathEscape(ia)
 }
 
 // openLibraryAuthors joins author names with "; ", skipping any entry that collapses

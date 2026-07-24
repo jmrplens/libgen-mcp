@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // staticMirrors is a MirrorLister over a fixed list, pointing the provider at a
@@ -89,6 +90,43 @@ func TestAnnasProviderSearchesFirstReachableMirror(t *testing.T) {
 	}
 	if p.Name() != "annas" {
 		t.Errorf("Name() = %q, want annas", p.Name())
+	}
+}
+
+// TestAnnasProviderBoundedClient verifies NewAnnas equips the provider with a
+// bounded http.Client (non-nil, with a timeout) rather than leaving it to fall back
+// on the timeout-less http.DefaultClient, so a stalled mirror can never hang a
+// federated search indefinitely.
+func TestAnnasProviderBoundedClient(t *testing.T) {
+	p := NewAnnas(staticMirrors{})
+	if p.http == nil {
+		t.Fatal("NewAnnas left http nil, want a bounded client")
+	}
+	if p.http.Timeout <= 0 {
+		t.Errorf("NewAnnas client timeout = %v, want a positive bound", p.http.Timeout)
+	}
+}
+
+// TestAnnasProviderSearchHonorsContextDeadline verifies Search threads its context
+// through the mirror request: a mirror that blocks until the caller's short deadline
+// expires makes Search return the context error rather than hanging, the same
+// bounded behavior arXiv/Crossref/OpenLibrary give. It also exercises the per-call
+// timeout wiring, since the request is issued under the deadline-bearing context.
+func TestAnnasProviderSearchHonorsContextDeadline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done() // block until the client's context expires
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	got, err := NewAnnas(staticMirrors{srv.URL}).Search(ctx, "q", 3)
+	if err == nil {
+		t.Fatal("Search() error = nil, want a context deadline error")
+	}
+	if got != nil {
+		t.Errorf("Search() = %v, want nil results on a deadline error", got)
 	}
 }
 

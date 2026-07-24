@@ -87,7 +87,7 @@ func isDuplicate(r DiscoveryResult, seenDOI, seenTitle, seenMD5 map[string]bool)
 // arxiv, crossref, openlibrary. email is the Crossref polite-pool mailto contact
 // (typically cfg.UnpaywallEmail); pass "" to omit it.
 func DefaultProviders(email string) []Provider {
-	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary()}
+	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary(email)}
 }
 
 // ExtraProviders returns every searcher consulted beyond the Library Genesis

@@ -39,6 +39,11 @@ type DiscoveryResult struct {
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
 	DOI     string `json:"doi,omitempty" jsonschema:"article DOI; pass to read or download to fetch this paper"`
 	ISBN    string `json:"isbn,omitempty" jsonschema:"ISBN; use it to refine a libgen search"`
+	// Venue is the publication venue when the source states one — currently arXiv's
+	// journal_ref (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the bibliographic
+	// citation for a preprint that later appeared in a journal. It is a short
+	// citation string, never an abstract, so it stays cheap to carry.
+	Venue string `json:"venue,omitempty" jsonschema:"publication venue as the provider states it (arXiv journal_ref): a short citation string, never an abstract"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
 	MD5 string `json:"md5,omitempty" jsonschema:"file md5 for an md5-keyed result (Anna's Archive); pass to get_details or download"`
@@ -46,9 +51,14 @@ type DiscoveryResult struct {
 	// compared with a catalog result on the two attributes people sort by. Both are
 	// as the provider states them — the size is a human string like "12.0MB", not a
 	// byte count — and both are empty when it states neither.
-	Extension  string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
-	Size       string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
-	PDFURL     string `json:"pdf_url,omitempty" jsonschema:"a directly-fetchable open-access PDF URL when known"`
+	Extension string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
+	Size      string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
+	PDFURL    string `json:"pdf_url,omitempty" jsonschema:"a directly-fetchable open-access PDF URL when known"`
+	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
+	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
+	// for every other result, so it doubles as the "this book is freely readable"
+	// signal in the locator column.
+	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org details page for a publicly readable book"`
 	OpenAccess bool   `json:"open_access" jsonschema:"true when the record is open access"`
 }
 
@@ -75,11 +85,20 @@ func newDiscoveryClient() *http.Client {
 // other transport failure surfaces as an error the caller may choose to soften to
 // an empty result.
 func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status int, body []byte, err error) {
+	return boundedGetUA(ctx, client, rawURL, discoveryUserAgent)
+}
+
+// boundedGetUA is boundedGet with an explicit User-Agent, letting a provider that
+// must identify itself differently — e.g. OpenLibrary, whose etiquette grants a
+// higher rate to a request carrying a contact email in its agent string — override
+// the default discovery agent. Its context and body-bounding semantics are
+// identical to boundedGet.
+func boundedGetUA(ctx context.Context, client *http.Client, rawURL, userAgent string) (status int, body []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return 0, nil, err
 	}
-	req.Header.Set("User-Agent", discoveryUserAgent)
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, nil, err
