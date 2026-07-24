@@ -29,6 +29,19 @@ const (
 // PDF; a link carrying it supplies the result's PDFURL.
 const crossrefPDFType = "application/pdf"
 
+// crossrefCreativeCommonsHost is the host every Creative Commons license URL
+// carries; a license whose URL contains it is a defensible open-access signal,
+// unlike the proprietary publisher licenses paywalled works also advertise.
+const crossrefCreativeCommonsHost = "creativecommons.org"
+
+// crossrefTextMiningApplications are the link intended-application values that
+// require a subscription and 403 for anonymous users; a PDF link marked with one
+// of them is neither a usable full-text link nor an open-access signal.
+var crossrefTextMiningApplications = map[string]bool{
+	"text-mining":         true,
+	"similarity-checking": true,
+}
+
 // CrossrefProvider is a keyless open-access discovery source backed by the Crossref
 // works-search endpoint. Its limiter and http.Client are self-contained, so it
 // never shares state with libgen's enrichment client.
@@ -87,7 +100,13 @@ func (p *CrossrefProvider) Search(ctx context.Context, query string, limit int) 
 // with select= and appending the polite-pool mailto when a contact email is set.
 func (p *CrossrefProvider) buildURL(query string, limit int) string {
 	params := url.Values{}
-	params.Set("query", query)
+	// query.bibliographic is Crossref's citation-oriented field query: it scores
+	// title/author/container/year together, giving far better hits for a known
+	// reference than the generic query= free-text search. The select= projection
+	// keeps "link" (not the invalid subfield "intended-application", which Crossref
+	// rejects): selecting "link" already returns full Resource Link objects, each
+	// carrying its intended-application, so the PDF-link chooser can read it.
+	params.Set("query.bibliographic", query)
 	params.Set("rows", strconv.Itoa(clampCrossrefLimit(limit)))
 	params.Set("select", "DOI,title,author,issued,license,link")
 	if p.email != "" {
@@ -123,8 +142,14 @@ type crossrefWorkItem struct {
 	Title   []string          `json:"title"`
 	Author  []crossrefAuthor  `json:"author"`
 	Issued  crossrefIssued    `json:"issued"`
-	License []json.RawMessage `json:"license"`
+	License []crossrefLicense `json:"license"`
 	Link    []crossrefLink    `json:"link"`
+}
+
+// crossrefLicense is the subset of a Crossref license entry read here: only the URL
+// matters, since a Creative Commons URL is the open-access signal.
+type crossrefLicense struct {
+	URL string `json:"URL"`
 }
 
 type crossrefAuthor struct {
@@ -139,6 +164,10 @@ type crossrefIssued struct {
 type crossrefLink struct {
 	URL         string `json:"URL"`
 	ContentType string `json:"content-type"`
+	// IntendedApplication is Crossref's audience marker for the link: "unspecified"
+	// is the reader-facing full-text link, whereas "text-mining" and
+	// "similarity-checking" require a subscription and 403 for anonymous users.
+	IntendedApplication string `json:"intended-application"`
 }
 
 // parseCrossrefWorks decodes a Crossref works envelope into DiscoveryResults,
@@ -158,18 +187,37 @@ func parseCrossrefWorks(body []byte) []DiscoveryResult {
 
 // crossrefItemToResult maps one Crossref work item onto a DiscoveryResult: the
 // first title, "; "-joined "Given Family" author names, the issued year, the DOI,
-// a directly-fetchable PDF URL from the links, and OpenAccess heuristically true
-// when the work advertises any license.
+// a usable full-text PDF URL from the links, and OpenAccess set by a defensible
+// heuristic (a Creative Commons license or a usable free full-text link).
 func crossrefItemToResult(item crossrefWorkItem) DiscoveryResult {
+	pdf := crossrefPDFURL(item.Link)
 	return DiscoveryResult{
 		Origin:     "crossref",
 		Title:      firstNonEmpty(item.Title),
 		Authors:    crossrefAuthors(item.Author),
 		Year:       crossrefYear(item.Issued),
 		DOI:        strings.TrimSpace(item.DOI),
-		PDFURL:     crossrefPDFURL(item.Link),
-		OpenAccess: len(item.License) > 0,
+		PDFURL:     pdf,
+		OpenAccess: crossrefOpenAccess(item.License, pdf),
 	}
+}
+
+// crossrefOpenAccess is the open-access heuristic: a work is treated as open access
+// when it carries a Creative Commons license (its URL contains creativecommons.org)
+// OR when it exposes a usable free full-text link (a non-empty pdf, which
+// crossrefPDFURL only ever fills from anonymous-usable links). It deliberately does
+// NOT treat the mere presence of a license as OA, since paywalled works routinely
+// advertise proprietary publisher licenses.
+func crossrefOpenAccess(licenses []crossrefLicense, usablePDF string) bool {
+	if usablePDF != "" {
+		return true
+	}
+	for _, l := range licenses {
+		if strings.Contains(strings.ToLower(l.URL), crossrefCreativeCommonsHost) {
+			return true
+		}
+	}
+	return false
 }
 
 // crossrefAuthors joins author records as "Given Family" with "; ", skipping any
@@ -197,10 +245,14 @@ func crossrefYear(issued crossrefIssued) string {
 	return ""
 }
 
-// crossrefPDFURL returns the first link whose content-type marks a PDF, or "".
+// crossrefPDFURL returns a usable full-text PDF link, or "". It only ever returns a
+// link whose intended-application is anonymous-usable ("unspecified" or unset):
+// text-mining and similarity-checking links 403 for anonymous users, so surfacing
+// one would hand the caller a link it cannot fetch. When a work exposes only such
+// restricted links, "" is returned rather than a link that would fail.
 func crossrefPDFURL(links []crossrefLink) string {
 	for _, l := range links {
-		if l.ContentType == crossrefPDFType && l.URL != "" {
+		if l.ContentType == crossrefPDFType && l.URL != "" && !crossrefTextMiningApplications[l.IntendedApplication] {
 			return l.URL
 		}
 	}

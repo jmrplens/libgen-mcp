@@ -92,7 +92,7 @@ Cada resultado lleva al menos un identificador accionable, según su `origin`:
 
 - **`doi` (crossref)** — pásalo a `download` o `read` igual que un DOI de un resultado de Library Genesis.
 - **`pdf_url` (siempre en arxiv; en crossref cuando hay un enlace directo a PDF publicado)** — un PDF de acceso abierto directamente descargable; obtenlo tú mismo (no es una descarga de Library Genesis, así que `download`/`read` no lo resuelven).
-- **`isbn`/`title` (openlibrary)** — OpenLibrary es un _resolutor de consultas_ sin clave, no una fuente de descarga: nunca lleva `pdf_url` y nunca se marca `open_access: true`. Usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior.
+- **`isbn`/`title` (openlibrary)** — OpenLibrary es principalmente un _resolutor de consultas_ sin clave: usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior. La única excepción es un libro de lectura pública — uno que OpenLibrary indica como libremente legible por completo en Internet Archive — que además lleva un `archive_url` (una página `https://archive.org/details/<id>` que puedes leer directamente) y se marca `open_access: true`.
 
 <Aside type="caution">
 	Los resultados se dedupan entre sí (por DOI normalizado, luego por

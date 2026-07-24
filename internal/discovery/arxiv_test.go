@@ -10,9 +10,10 @@ import (
 )
 
 // arxivFeedFixture is a realistic two-entry arXiv Atom feed: the first entry
-// carries an arxiv:doi and an explicit pdf link; the second has neither, so its
-// PDF URL must be reconstructed from the abstract id. Both carry author names and
-// a <published> date the parser reads the year from.
+// carries an arxiv:doi, an arxiv:journal_ref and an explicit pdf link; the second
+// has none of those, so its PDF URL must be reconstructed from the abstract id and
+// its Venue stays empty. Both carry author names and a <published> date the parser
+// reads the year from.
 const arxivFeedFixture = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
   <entry>
@@ -23,6 +24,7 @@ const arxivFeedFixture = `<?xml version="1.0" encoding="UTF-8"?>
     <author><name>Jane Doe</name></author>
     <author><name>John Smith</name></author>
     <arxiv:doi>10.1000/xyz123</arxiv:doi>
+    <arxiv:journal_ref>Phys. Rev. Lett. 100, 012345 (2021)</arxiv:journal_ref>
     <link href="http://arxiv.org/abs/2101.00001v1" rel="alternate" type="text/html"/>
     <link title="pdf" href="http://arxiv.org/pdf/2101.00001v1" rel="related" type="application/pdf"/>
   </entry>
@@ -92,9 +94,16 @@ func TestArxiv_ParsesEntries(t *testing.T) {
 		t.Errorf("first Origin/OpenAccess = %q/%v, want arxiv/true", first.Origin, first.OpenAccess)
 	}
 
+	if first.Venue != "Phys. Rev. Lett. 100, 012345 (2021)" {
+		t.Errorf("first.Venue = %q, want the arxiv:journal_ref", first.Venue)
+	}
+
 	second := got[1]
 	if second.DOI != "" {
 		t.Errorf("second.DOI = %q, want empty (no arxiv:doi)", second.DOI)
+	}
+	if second.Venue != "" {
+		t.Errorf("second.Venue = %q, want empty (no journal_ref)", second.Venue)
 	}
 }
 

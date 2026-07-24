@@ -102,12 +102,13 @@ type atomFeed struct {
 }
 
 type atomEntry struct {
-	ID        string       `xml:"id"`
-	Title     string       `xml:"title"`
-	Published string       `xml:"published"`
-	Authors   []atomAuthor `xml:"author"`
-	DOI       string       `xml:"doi"`
-	Links     []atomLink   `xml:"link"`
+	ID         string       `xml:"id"`
+	Title      string       `xml:"title"`
+	Published  string       `xml:"published"`
+	Authors    []atomAuthor `xml:"author"`
+	DOI        string       `xml:"doi"`
+	JournalRef string       `xml:"journal_ref"`
+	Links      []atomLink   `xml:"link"`
 }
 
 type atomAuthor struct {
@@ -137,8 +138,9 @@ func parseArxivFeed(body []byte) []DiscoveryResult {
 
 // arxivEntryToResult maps one Atom entry onto a DiscoveryResult: whitespace-collapsed
 // title, "; "-joined author names, the publication year from <published>, the
-// arxiv:doi when present, and a directly-fetchable PDF URL. Origin is "arxiv" and
-// OpenAccess is always true.
+// arxiv:doi when present, the arxiv:journal_ref (the venue the preprint appeared in)
+// when present, and a directly-fetchable PDF URL. Origin is "arxiv" and OpenAccess
+// is always true.
 func arxivEntryToResult(e atomEntry) DiscoveryResult {
 	names := make([]string, 0, len(e.Authors))
 	for _, a := range e.Authors {
@@ -156,6 +158,7 @@ func arxivEntryToResult(e atomEntry) DiscoveryResult {
 		Authors:    strings.Join(names, "; "),
 		Year:       year,
 		DOI:        strings.TrimSpace(e.DOI),
+		Venue:      strings.Join(strings.Fields(e.JournalRef), " "),
 		PDFURL:     arxivPDFURL(e),
 		OpenAccess: true,
 	}

@@ -10,8 +10,9 @@ import (
 )
 
 // TestOpenAccessLocator covers every arm of openAccessLocator: a DOI wins first,
-// then an arXiv pdf_url, then an OpenLibrary isbn, and finally the empty default
-// when a hit carries none of them. Each present arm is labeled with its key.
+// then an arXiv pdf_url, then a free-to-read archive.org url, then an OpenLibrary
+// isbn, and finally the empty default when a hit carries none of them. Each present
+// arm is labeled with its key.
 func TestOpenAccessLocator(t *testing.T) {
 	cases := []struct {
 		name string
@@ -20,6 +21,7 @@ func TestOpenAccessLocator(t *testing.T) {
 	}{
 		{"doi wins", discovery.DiscoveryResult{DOI: "10.1/x", PDFURL: "http://p", ISBN: "978"}, "doi:10.1/x"},
 		{"pdf_url", discovery.DiscoveryResult{PDFURL: "http://p/f.pdf", ISBN: "978"}, "pdf_url:http://p/f.pdf"},
+		{"archive_url over isbn", discovery.DiscoveryResult{ArchiveURL: "https://archive.org/details/x", ISBN: "978"}, "archive_url:https://archive.org/details/x"},
 		{"isbn", discovery.DiscoveryResult{ISBN: "9780131103627"}, "isbn:9780131103627"},
 		{"none", discovery.DiscoveryResult{Title: "T"}, ""},
 	}

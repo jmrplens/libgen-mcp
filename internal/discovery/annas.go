@@ -42,8 +42,12 @@ type AnnasProvider struct {
 	http *http.Client
 }
 
-// NewAnnas builds a provider searching the given Anna's Archive mirrors.
-func NewAnnas(m MirrorLister) *AnnasProvider { return &AnnasProvider{mirrors: m} }
+// NewAnnas builds a provider searching the given Anna's Archive mirrors, equipped
+// with its own bounded http.Client (via newDiscoveryClient) so a stalled mirror can
+// never hang a search on the timeout-less http.DefaultClient.
+func NewAnnas(m MirrorLister) *AnnasProvider {
+	return &AnnasProvider{mirrors: m, http: newDiscoveryClient()}
+}
 
 // Name reports the origin label stamped on this provider's results.
 func (p *AnnasProvider) Name() string { return "annas" }
@@ -53,6 +57,11 @@ func (p *AnnasProvider) Name() string { return "annas" }
 // none answers, so a federated search is never failed by this provider. Only a
 // context error propagates.
 func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
+	// several mirrors in sequence can never outlive the discovery budget.
+	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
+	defer cancel()
+
 	httpClient := p.http
 	if httpClient == nil {
 		httpClient = http.DefaultClient
