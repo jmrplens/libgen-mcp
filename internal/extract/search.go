@@ -19,9 +19,9 @@ import (
 // the page text (PDF) or into the whole document (EPUB/TXT). Snippet is a
 // one-line context window around the hit.
 type Match struct {
-	Page       int    `json:"page,omitempty"`
-	CharOffset int    `json:"char_offset"`
-	Snippet    string `json:"snippet"`
+	Page       int    `json:"page,omitempty" jsonschema:"1-based PDF page the hit is on (0 for EPUB/TXT)"`
+	CharOffset int    `json:"char_offset" jsonschema:"rune offset of the hit into the page text (PDF) or the whole document (EPUB/TXT)"`
+	Snippet    string `json:"snippet" jsonschema:"one-line context window of text around the hit"`
 }
 
 // SearchOpts tunes a Search. MaxMatches caps how many matches a single call
