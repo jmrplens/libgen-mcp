@@ -106,6 +106,124 @@ func TestCrossref_ParsesItems(t *testing.T) {
 	}
 }
 
+// crossrefPaywalledFixture is a single-item works response for a paywalled work
+// that nonetheless carries a (non-Creative-Commons) publisher license and only a
+// text-mining full-text link — the anonymous-hostile combination the OA heuristic
+// must NOT mislabel as open access. It must map to OpenAccess=false with an empty
+// PDFURL: the license is not a CC URL and the only PDF link is intended for
+// text-mining (which 403s for anonymous users), so neither OA signal holds.
+const crossrefPaywalledFixture = `{
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1000/paywalled",
+        "title": ["A Closed Access Study"],
+        "author": [{"given": "Paywall", "family": "Publisher"}],
+        "issued": {"date-parts": [[2022]]},
+        "license": [{"URL": "https://www.elsevier.com/tdm/userlicense/1.0/"}],
+        "link": [
+          {"URL": "http://example.org/tdm.pdf", "content-type": "application/pdf", "intended-application": "text-mining"}
+        ]
+      }
+    ]
+  }
+}`
+
+// crossrefLinkPreferenceFixture is a single-item works response whose work carries
+// two application/pdf links: one intended for text-mining (403s for anonymous
+// users) and one intended-application "unspecified" (the reader-facing link). The
+// parser must pick the unspecified link as the PDFURL and treat the work as open
+// access on the strength of that usable full-text link.
+const crossrefLinkPreferenceFixture = `{
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1000/twolinks",
+        "title": ["Two Links"],
+        "issued": {"date-parts": [[2023]]},
+        "link": [
+          {"URL": "http://example.org/tdm.pdf", "content-type": "application/pdf", "intended-application": "text-mining"},
+          {"URL": "http://example.org/reader.pdf", "content-type": "application/pdf", "intended-application": "unspecified"}
+        ]
+      }
+    ]
+  }
+}`
+
+// TestCrossref_PaywalledWithLicenseStaysClosed verifies the OA heuristic does not
+// treat a paywalled work as open access merely because it advertises a license: a
+// non-Creative-Commons license plus a text-mining-only PDF link must yield
+// OpenAccess=false and an empty PDFURL.
+func TestCrossref_PaywalledWithLicenseStaysClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(crossrefPaywalledFixture))
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	got, err := NewCrossref("").Search(context.Background(), "closed", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(got))
+	}
+	if got[0].OpenAccess {
+		t.Error("OpenAccess = true, want false (non-CC license + text-mining-only link)")
+	}
+	if got[0].PDFURL != "" {
+		t.Errorf("PDFURL = %q, want empty (only a text-mining link, which 403s)", got[0].PDFURL)
+	}
+}
+
+// TestCrossref_PrefersUnspecifiedLink verifies that when a work exposes both a
+// text-mining and an "unspecified" PDF link, the reader-facing unspecified link is
+// chosen and the presence of that usable full-text link marks the work open access.
+func TestCrossref_PrefersUnspecifiedLink(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(crossrefLinkPreferenceFixture))
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	got, err := NewCrossref("").Search(context.Background(), "two links", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(got))
+	}
+	if got[0].PDFURL != "http://example.org/reader.pdf" {
+		t.Errorf("PDFURL = %q, want the unspecified reader link", got[0].PDFURL)
+	}
+	if !got[0].OpenAccess {
+		t.Error("OpenAccess = false, want true (has a usable unspecified full-text link)")
+	}
+}
+
+// TestCrossref_QueryBibliographic verifies the provider sends the query on the
+// query.bibliographic field (Crossref's citation-oriented field query) rather than
+// the generic query= parameter.
+func TestCrossref_QueryBibliographic(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		_, _ = w.Write([]byte(crossrefItemsFixture))
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	if _, err := NewCrossref("").Search(context.Background(), "neural networks", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if got := gotQuery.Get("query.bibliographic"); got != "neural networks" {
+		t.Errorf("query.bibliographic = %q, want %q", got, "neural networks")
+	}
+	if _, ok := gotQuery["query"]; ok {
+		t.Error("generic query= present, want only query.bibliographic")
+	}
+}
+
 // TestCrossref_PolitePoolMailto verifies that a non-empty contact email is sent as
 // the polite-pool mailto query parameter, and that an empty email adds no mailto.
 func TestCrossref_PolitePoolMailto(t *testing.T) {

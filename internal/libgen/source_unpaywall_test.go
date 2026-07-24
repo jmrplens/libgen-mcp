@@ -69,6 +69,130 @@ func TestUnpaywallResolveNotOA(t *testing.T) {
 	}
 }
 
+// TestUnpaywall_OALocationsPreferPublished verifies that when best_oa_location
+// carries no direct PDF link, Resolve scans oa_locations and prefers a
+// published/publisher version's url_for_pdf over an earlier repository version.
+func TestUnpaywall_OALocationsPreferPublished(t *testing.T) {
+	const body = `{
+	  "is_oa": true,
+	  "best_oa_location": {"url_for_pdf": null, "url": "https://landing.example/article"},
+	  "oa_locations": [
+	    {"url_for_pdf": "https://repo.example/preprint.pdf", "url": "https://repo.example/rec", "host_type": "repository", "version": "submittedVersion"},
+	    {"url_for_pdf": "https://publisher.example/final.pdf", "url": "https://publisher.example/rec", "host_type": "publisher", "version": "publishedVersion"}
+	  ]
+	}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL != "https://publisher.example/final.pdf" {
+		t.Errorf("FileURL = %q, want the published/publisher PDF", res.FileURL)
+	}
+}
+
+// TestUnpaywall_OALocationsAnyPDF verifies that when no location is a
+// published/publisher version, Resolve still returns the first oa_location that
+// exposes a url_for_pdf rather than failing.
+func TestUnpaywall_OALocationsAnyPDF(t *testing.T) {
+	const body = `{
+	  "is_oa": true,
+	  "best_oa_location": {"url_for_pdf": null, "url": "https://landing.example/article"},
+	  "oa_locations": [
+	    {"url_for_pdf": null, "url": "https://repo.example/landing", "host_type": "repository", "version": "submittedVersion"},
+	    {"url_for_pdf": "https://repo.example/preprint.pdf", "url": "https://repo.example/rec", "host_type": "repository", "version": "acceptedVersion"}
+	  ]
+	}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL != "https://repo.example/preprint.pdf" {
+		t.Errorf("FileURL = %q, want the only PDF-bearing location", res.FileURL)
+	}
+}
+
+// TestUnpaywall_LandingURLLastResort verifies that an OA record exposing no
+// url_for_pdf anywhere falls back to best_oa_location.url (the landing page) rather
+// than failing, since that URL commonly redirects to the article file.
+func TestUnpaywall_LandingURLLastResort(t *testing.T) {
+	const body = `{
+	  "is_oa": true,
+	  "best_oa_location": {"url_for_pdf": null, "url": "https://landing.example/article"},
+	  "oa_locations": [
+	    {"url_for_pdf": null, "url": "https://landing.example/article", "host_type": "publisher", "version": "publishedVersion"}
+	  ]
+	}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL != "https://landing.example/article" {
+		t.Errorf("FileURL = %q, want the landing-page fallback", res.FileURL)
+	}
+}
+
+// TestUnpaywall_DistinctDiagnoses verifies the error taxonomy stays distinct: a
+// not-open-access record reports "not open access", while an OA record with no
+// downloadable location reports "no open-access PDF". The two are separate
+// diagnoses so a caller can tell a paywalled DOI from an OA one Unpaywall simply
+// cannot serve a file for.
+func TestUnpaywall_DistinctDiagnoses(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "not OA",
+			body: `{"is_oa": false, "best_oa_location": null, "oa_locations": []}`,
+			want: "not open access",
+		},
+		{
+			name: "OA but no downloadable location",
+			body: `{"is_oa": true, "best_oa_location": null, "oa_locations": []}`,
+			want: "no open-access PDF",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+			s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+			_, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+			if err == nil {
+				t.Fatalf("Resolve() error = nil, want %q", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("Resolve() error = %q, want it to contain %q", err.Error(), tc.want)
+			}
+		})
+	}
+}
+
 // TestUnpaywallRawSlashInPath verifies the DOI keeps its raw slash in the request
 // path (the documented /v2/<doi> shape) rather than being percent-encoded to %2F.
 func TestUnpaywallRawSlashInPath(t *testing.T) {
