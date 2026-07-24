@@ -124,6 +124,52 @@ func TestBiorxivResolveNotFound(t *testing.T) {
 	}
 }
 
+// TestBiorxivResolveErrorThenMissIsNotReportedAsNotFound verifies a lookup FAILURE
+// is never laundered into a definitive "not found". When bioRxiv errors (HTTP 500)
+// and medRxiv then explicitly misses, the retained failure must surface: reporting
+// "not found on bioRxiv or medRxiv" would assert the preprint does not exist when
+// one service merely broke, which is a different, actionable condition.
+func TestBiorxivResolveErrorThenMissIsNotReportedAsNotFound(t *testing.T) {
+	miss, err := os.ReadFile("testdata/biorxiv_miss.json")
+	if err != nil {
+		t.Fatalf("reading miss fixture: %v", err)
+	}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/biorxiv/") {
+			w.WriteHeader(http.StatusInternalServerError) // the server broke
+			return
+		}
+		_, _ = w.Write(miss) // medRxiv genuinely does not carry it
+	}))
+	defer api.Close()
+
+	s := biorxivSource{http: api.Client(), apiBase: api.URL}
+	_, rerr := s.Resolve(context.Background(), Item{DOI: "10.1101/2020.12.30.424878"})
+	if rerr == nil {
+		t.Fatal("Resolve() should fail when one server errors and the other misses")
+	}
+	if strings.Contains(rerr.Error(), "not found on bioRxiv or medRxiv") {
+		t.Errorf("a lookup failure was reported as a definitive miss: %v", rerr)
+	}
+	if !strings.Contains(rerr.Error(), "returned HTTP 500") {
+		t.Errorf("error should surface the retained lookup failure, got: %v", rerr)
+	}
+}
+
+// TestBiorxivResolveBothMissIsNotFound verifies the definitive wording is still
+// used when BOTH servers explicitly miss, which is the only case that proves the
+// preprint is absent.
+func TestBiorxivResolveBothMissIsNotFound(t *testing.T) {
+	api := biorxivFixtureServer(t, map[string]string{}, nil) // both answer the miss fixture
+	defer api.Close()
+
+	s := biorxivSource{http: api.Client(), apiBase: api.URL}
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.1101/does.not.exist"})
+	if err == nil || !strings.Contains(err.Error(), "not found on bioRxiv or medRxiv") {
+		t.Fatalf("Resolve() error = %v, want the definitive not-found wording when both miss", err)
+	}
+}
+
 // TestBiorxivResolveHTTPError verifies a non-200 from the details API surfaces as
 // an error rather than a resolved URL.
 func TestBiorxivResolveHTTPError(t *testing.T) {

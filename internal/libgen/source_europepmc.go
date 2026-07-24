@@ -78,12 +78,17 @@ func (s europePMCSource) Supports(it Item) bool { return it.DOI != "" }
 // article's full text is held open-access, returns a render URL for its PDF. A DOI
 // Europe PMC does not index, or indexes without an open-access full text, yields a
 // distinct error so the caller tries the next source.
+//
+// All three conditions are required: a PMCID to address the record, inEPMC=Y so the
+// full text is actually held here, and isOpenAccess=Y so serving it is within this
+// source's open-access-only remit. Europe PMC holds plenty of full text it may not
+// redistribute freely, so the OA flag is a license check, not a redundant one.
 func (s europePMCSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	rec, err := s.lookup(ctx, it.DOI)
 	if err != nil {
 		return Resolved{}, err
 	}
-	if rec.PMCID == "" || !strings.EqualFold(rec.InEPMC, "Y") {
+	if rec.PMCID == "" || !strings.EqualFold(rec.InEPMC, "Y") || !strings.EqualFold(rec.IsOpenAccess, "Y") {
 		return Resolved{}, fmt.Errorf("europepmc: %q is indexed but has no open-access full text", it.DOI)
 	}
 	fileURL, err := s.pdfURL(ctx, rec.PMCID)

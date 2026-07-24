@@ -1,0 +1,20 @@
+{
+  "version": "6.9",
+  "hitCount": 1,
+  "resultList": {
+    "result": [
+      {
+        "id": "31000000",
+        "source": "MED",
+        "pmid": "31000000",
+        "pmcid": "PMC9999999",
+        "doi": "10.9999/indexed.but.not.oa",
+        "title": "A record Europe PMC holds without an open-access licence.",
+        "isOpenAccess": "N",
+        "inEPMC": "Y",
+        "inPMC": "Y",
+        "hasPDF": "Y"
+      }
+    ]
+  }
+}

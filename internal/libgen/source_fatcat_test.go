@@ -99,6 +99,42 @@ func TestFatcatResolveNoArchivedFile(t *testing.T) {
 	}
 }
 
+// TestFatcatResolveUntypedNonPDF verifies a preserved file that records no mimetype
+// and whose archive URLs are plainly not PDFs (a .zip bundle, an .xml record) is
+// refused rather than selected. fatcat often omits the mimetype, so trusting the
+// host alone would save a ZIP under a .pdf name — the download pipeline only
+// rejects HTML, so nothing downstream would catch it.
+func TestFatcatResolveUntypedNonPDF(t *testing.T) {
+	srv := fatcatServer(t, "fatcat_untyped_nonpdf.json", http.StatusOK, nil)
+	defer srv.Close()
+
+	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/untyped.nonpdf"})
+	if err == nil || !strings.Contains(err.Error(), "no preserved Internet Archive file") {
+		t.Fatalf("Resolve() error = %v, want a 'no preserved' error for untyped non-PDF assets", err)
+	}
+}
+
+// TestFatcatResolveUntypedPDFURLAccepted verifies the mimetype-less path still
+// works when the URL itself looks like a PDF, so tightening the check does not
+// discard the many real fatcat records that omit the mimetype.
+func TestFatcatResolveUntypedPDFURLAccepted(t *testing.T) {
+	body := `{"files":[{"urls":[{"url":"https://archive.org/download/x/paper.pdf","rel":"archive"}]}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
+	got, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want the untyped but PDF-shaped URL to be accepted", err)
+	}
+	if got.FileURL != "https://archive.org/download/x/paper.pdf" {
+		t.Errorf("FileURL = %q, want the untyped .pdf archive URL", got.FileURL)
+	}
+}
+
 // TestFatcatResolveHTTPError verifies a non-200, non-404 status surfaces as an
 // error.
 func TestFatcatResolveHTTPError(t *testing.T) {

@@ -540,7 +540,11 @@ func TestE2EFatcatClassifiedOutcome(t *testing.T) {
 		if res.SizeBytes <= 0 {
 			t.Fatalf("fatcat reported a download of %d bytes", res.SizeBytes)
 		}
-		t.Logf("fatcat served a real download: bytes=%d", res.SizeBytes)
+		// Assert the bytes really are a PDF, not merely non-empty: fatcat records
+		// often omit the mimetype, so a non-PDF archive asset selected by mistake
+		// would still arrive as a plausible-looking file under a .pdf name.
+		assertPDF(t, res.Path)
+		t.Logf("fatcat served a real PDF: bytes=%d", res.SizeBytes)
 		return
 	}
 	known := []string{

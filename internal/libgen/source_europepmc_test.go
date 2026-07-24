@@ -133,6 +133,26 @@ func TestEuropePMCResolveNoOpenAccess(t *testing.T) {
 	}
 }
 
+// TestEuropePMCResolveIndexedButNotOpenAccess verifies the OA flag is enforced, not
+// merely parsed: a record Europe PMC holds in full text (inEPMC=Y, with a PMCID)
+// but which is NOT open access must be refused rather than handed back as a PDF
+// URL. Without this the source would breach its open-access-only contract for every
+// paywalled article PMC happens to hold.
+func TestEuropePMCResolveIndexedButNotOpenAccess(t *testing.T) {
+	search := europePMCSearchServer(t, "europepmc_indexed_not_oa.json", http.StatusOK, nil)
+	defer search.Close()
+	// A render server that would happily serve a PDF, so a pass here can only mean
+	// the OA guard let the record through.
+	render := europePMCRenderServer(t)
+	defer render.Close()
+
+	s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/indexed.but.not.oa"})
+	if err == nil || !strings.Contains(err.Error(), "no open-access full text") {
+		t.Fatalf("Resolve() error = %v, want a 'no open-access full text' error for a non-OA record", err)
+	}
+}
+
 // TestEuropePMCResolveHTTPError verifies a non-200 from the search API surfaces as
 // an error.
 func TestEuropePMCResolveHTTPError(t *testing.T) {

@@ -3,6 +3,7 @@ package libgen
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -72,24 +73,43 @@ func (s biorxivSource) Supports(it Item) bool {
 	return it.DOI != "" && strings.HasPrefix(it.DOI, biorxivDOIPrefix)
 }
 
+// errBiorxivNoRecord marks the one outcome that proves a server does not carry a
+// DOI: it answered normally and its collection held no record. It is distinguished
+// from transport, HTTP and decode failures so Resolve never reports "not found"
+// on the strength of a server that merely broke.
+var errBiorxivNoRecord = errors.New("no record")
+
 // Resolve confirms the preprint on bioRxiv then medRxiv and returns its latest
-// version's full-text PDF URL on the matching content host. A DOI neither server
-// knows yields an error so the caller tries the next source.
+// version's full-text PDF URL on the matching content host.
+//
+// The two failure modes are kept apart. Only when BOTH servers explicitly answered
+// "no record" is the DOI definitively absent, and only then is that claimed. If
+// either lookup failed for any other reason (transport, non-200, malformed body),
+// that failure is surfaced instead: a broken service is an actionable, retryable
+// condition, whereas "not found on bioRxiv or medRxiv" tells the caller the
+// preprint does not exist — a claim a failed request cannot support.
 func (s biorxivSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
-	var lastErr error
+	var failure error // a lookup that broke, as opposed to one that answered "no"
+	misses := 0
 	for _, server := range biorxivServers {
 		version, err := s.lookupVersion(ctx, server, it.DOI)
-		if err != nil {
-			lastErr = err
-			continue
+		switch {
+		case err == nil:
+			return Resolved{
+				FileURL:   s.pdfURL(server, it.DOI, version),
+				VerifyMD5: false,
+				Ext:       "pdf",
+			}, nil
+		case errors.Is(err, errBiorxivNoRecord):
+			misses++
+		case failure == nil:
+			failure = err // keep the first real failure; a later miss must not mask it
 		}
-		return Resolved{
-			FileURL:   s.pdfURL(server, it.DOI, version),
-			VerifyMD5: false,
-			Ext:       "pdf",
-		}, nil
 	}
-	return Resolved{}, fmt.Errorf("biorxiv: %q not found on bioRxiv or medRxiv: %w", it.DOI, lastErr)
+	if misses == len(biorxivServers) {
+		return Resolved{}, fmt.Errorf("biorxiv: %q not found on bioRxiv or medRxiv", it.DOI)
+	}
+	return Resolved{}, fmt.Errorf("biorxiv: could not confirm %q: %w", it.DOI, failure)
 }
 
 // lookupVersion queries one server's details API for the DOI and returns its
@@ -129,7 +149,9 @@ func (s biorxivSource) lookupVersion(ctx context.Context, server, doi string) (s
 	}
 	version, ok := latestBiorxivVersion(rec.Collection)
 	if !ok {
-		return "", fmt.Errorf("biorxiv: %s has no record for %q", server, doi)
+		// The server answered normally and carries nothing for this DOI: the one
+		// outcome that is evidence of absence rather than of a failure.
+		return "", fmt.Errorf("biorxiv: %s has %w for %q", server, errBiorxivNoRecord, doi)
 	}
 	return version, nil
 }

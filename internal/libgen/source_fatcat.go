@@ -117,14 +117,23 @@ func (s fatcatSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 // release's files: a direct archive.org copy is preferred over another
 // archive.org subdomain, which is preferred over a Wayback capture; anything not
 // on the Internet Archive is skipped. The bool reports whether one was found.
+//
+// A file whose mimetype fatcat did not record is admitted only when the URL itself
+// looks like a PDF: the source hands its result back with Ext "pdf" and the
+// download pipeline rejects only HTML, so an untyped ZIP or XML asset would
+// otherwise be saved under a .pdf name with nothing downstream to catch it.
 func pickArchivedPDF(files []fatcatFile) (string, bool) {
 	best := ""
 	bestScore := 0
 	for _, f := range files {
-		if !fileLooksPDF(f) {
-			continue
+		typed := strings.EqualFold(f.Mimetype, "application/pdf")
+		if !typed && f.Mimetype != "" {
+			continue // explicitly some other type
 		}
 		for _, u := range f.URLs {
+			if !typed && !urlLooksPDF(u.URL) {
+				continue // untyped: the URL must vouch for it
+			}
 			if sc := archiveScore(u.URL); sc > bestScore {
 				best, bestScore = u.URL, sc
 			}
@@ -133,11 +142,17 @@ func pickArchivedPDF(files []fatcatFile) (string, bool) {
 	return best, best != ""
 }
 
-// fileLooksPDF reports whether a fatcat file is (or may be) a PDF: an explicit
-// application/pdf mimetype, or an unset mimetype (fatcat does not always record
-// one) so a plausibly-PDF archive URL is not discarded on a missing field.
-func fileLooksPDF(f fatcatFile) bool {
-	return f.Mimetype == "" || strings.EqualFold(f.Mimetype, "application/pdf")
+// urlLooksPDF reports whether a URL's path names a PDF, used to vouch for a
+// preserved file whose mimetype fatcat did not record. A Wayback capture embeds the
+// original URL in its path (…/web/<ts>/https://host/paper.pdf), so matching the
+// path's suffix rather than parsing a single extension covers both shapes. Query
+// strings are ignored, since the path carries the filename.
+func urlLooksPDF(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return strings.HasSuffix(strings.ToLower(u.Path), ".pdf")
 }
 
 // archiveScore ranks a URL by how directly it is served from the Internet
