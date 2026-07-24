@@ -336,6 +336,11 @@ export default defineConfig({
 							translations: { es: "Arquitectura" },
 						},
 						{
+							slug: "how-search-works",
+							label: "How search works",
+							translations: { es: "Cómo funciona la búsqueda" },
+						},
+						{
 							slug: "eval-results",
 							label: "LLM eval results",
 							translations: { es: "Resultados del eval con LLM" },

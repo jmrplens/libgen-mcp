@@ -53,7 +53,22 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk |
 | S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally |
 | S19 | **Search → read → summarize**: model searches for a paper by title, calls `read` (not `download`) with the DOI found in the search results, and writes its own summary of the extracted first page rather than dumping the UNTRUSTED text verbatim |
-| S20 | **Open-access discovery** — under-specified like S10–S13: the prompt asks the model to "also check the open-access literature" without naming `include_open_access`; the model must set the flag itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live) |
+| S20 | **Open-access discovery** — under-specified like S10–S13: the prompt asks the model to "also check the open-access literature" without naming `extra_sources`; the model must set it to `always` itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live) |
+| S21 | **Citations** — asks for a BibTeX citation; the model must reach `get_details` (which builds it) rather than fabricate one |
+| S22 | **Enrichment** — asks for a paywalled DOI's journal and citation count, so the model must set `enrich=true` on `get_details` to pull the Crossref metadata |
+| S23 | **In-document search** — asks to search *inside* a book, so the model must call `read` with a `find` argument instead of downloading the whole file |
+| S24 | **Outline** — asks for a book's table of contents, so the model must call `read` with `outline=true` |
+| S25 | **Elicited Unpaywall email** — the deployment email is forced empty, so the download can only succeed via the per-call email the host's elicitation handler supplies |
+| S26 | **Elicited save confirmation** — a disk-writing download must raise the save-confirmation prompt; the host counts the confirmations it answers, so the assertion is hard, not inferred |
+| S27 | **Remote in-document search** — S23 against a server in remote mode |
+| S28 | **Remote outline** — S24 against a server in remote mode |
+| S29 | **Remote open-access discovery** — S20 against a server in remote mode, phrased as an open-ended research request |
+| S30 | **Remote enrichment** — S22 against a server in remote mode |
+| S31 | **Remote citations** — S21 against a server in remote mode |
+| S32 | **Search escalation** — the title is one the Library Genesis catalog does not carry, so a hit can only come from the automatic escalation to Anna's Archive; the model must report the file's format and size without being told to ask for extra sources |
+| S33 | **Remote search escalation** — S32 against a server in remote mode |
+| S34 | **Escalated search → download** — the same catalog-miss title, but the model must go on to download it, proving an escalated result carries an md5 the `download` tool accepts |
+| S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
