@@ -71,6 +71,10 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally |
 | S36 | **Escalated record lookup** — the model must follow the escalated search with `get_details` on an md5 the catalog has no record for, which only answers via the Anna's fallback; graded on the record's `origin` |
 | S37 | **Remote escalated record lookup** — S36 against a server in remote mode |
+| S38 | **A never deployment is a lock** — the server default is `never` and the prompt is a known catalog miss; graded on the extras staying out of the results _and_ on the model reporting the miss instead of inventing one |
+| S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them |
+| S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage |
+| S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
