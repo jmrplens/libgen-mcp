@@ -62,31 +62,31 @@ func (c *Client) openLibraryURL() string {
 // CrossrefWork is the subset of a Crossref work record surfaced by enrichment:
 // bibliographic container metadata plus reference and citation counts.
 type CrossrefWork struct {
-	ContainerTitle string   `json:"container_title,omitempty"` // journal/book title
-	ISSN           []string `json:"issn,omitempty"`
-	Volume         string   `json:"volume,omitempty"`
-	Issue          string   `json:"issue,omitempty"`
-	Publisher      string   `json:"publisher,omitempty"`
-	PublishedYear  int      `json:"published_year,omitempty"`
-	ReferenceCount int      `json:"reference_count,omitempty"`
-	CitationCount  int      `json:"citation_count,omitempty"` // is-referenced-by-count
-	Subjects       []string `json:"subjects,omitempty"`
+	ContainerTitle string   `json:"container_title,omitempty" jsonschema:"the journal or book title the work appears in"`
+	ISSN           []string `json:"issn,omitempty" jsonschema:"ISSNs of the containing publication"`
+	Volume         string   `json:"volume,omitempty" jsonschema:"volume number"`
+	Issue          string   `json:"issue,omitempty" jsonschema:"issue number"`
+	Publisher      string   `json:"publisher,omitempty" jsonschema:"publisher name"`
+	PublishedYear  int      `json:"published_year,omitempty" jsonschema:"year of publication"`
+	ReferenceCount int      `json:"reference_count,omitempty" jsonschema:"number of references the work cites"`
+	CitationCount  int      `json:"citation_count,omitempty" jsonschema:"number of works that cite this one (Crossref is-referenced-by count)"`
+	Subjects       []string `json:"subjects,omitempty" jsonschema:"subject or category labels"`
 }
 
 // OLBook is the subset of an OpenLibrary work (plus its ISBN record's cover)
 // surfaced by enrichment: subjects, a description and links.
 type OLBook struct {
-	Subjects    []string `json:"subjects,omitempty"`
-	Description string   `json:"description,omitempty"`
-	CoverURL    string   `json:"cover_url,omitempty"`
-	OpenLibURL  string   `json:"open_library_url,omitempty"`
+	Subjects    []string `json:"subjects,omitempty" jsonschema:"subject or category labels for the work"`
+	Description string   `json:"description,omitempty" jsonschema:"a prose description or synopsis of the work"`
+	CoverURL    string   `json:"cover_url,omitempty" jsonschema:"URL of a cover image for the edition"`
+	OpenLibURL  string   `json:"open_library_url,omitempty" jsonschema:"URL of the work's OpenLibrary page"`
 }
 
 // Enrichment bundles the best-effort external metadata found for a record. Either
 // side may be nil when that source yielded nothing.
 type Enrichment struct {
-	Crossref    *CrossrefWork `json:"crossref,omitempty"`
-	OpenLibrary *OLBook       `json:"open_library,omitempty"`
+	Crossref    *CrossrefWork `json:"crossref,omitempty" jsonschema:"best-effort Crossref metadata, looked up by DOI"`
+	OpenLibrary *OLBook       `json:"open_library,omitempty" jsonschema:"best-effort OpenLibrary metadata, looked up by ISBN"`
 }
 
 // SetEnrichBasesForTest overrides the enrichment API roots (Crossref,

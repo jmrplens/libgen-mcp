@@ -6,9 +6,9 @@
 .PHONY: all build build-probe build-all run version \
         test test-short test-race test-e2e eval coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
-        format-md-tables check-md-tables \
+        format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
-        gen-llms check-llms eval-pages check-eval-pages audit-tokens \
+        gen-llms check-llms eval-pages check-eval-pages audit-tokens audit-surface-quality \
         install-tools release-check check-server-json check-mcpb-manifest check-lhm-manifest \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -153,6 +153,9 @@ format-md-tables: ## Normalize Markdown pipe tables in README.md and docs/
 check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
 	go run ./cmd/format_md_tables/ --check
 
+check-doc-links: ## Fail if any tracked Markdown/MDX local link or path is broken
+	node scripts/check-doc-links.mjs
+
 godoc-audit: ## Report missing/malformed Go doc comments (Markdown)
 	go run ./cmd/godoc_tool/ audit --format=markdown
 
@@ -173,6 +176,9 @@ check-eval-pages: ## Fail if the evaluator results pages are stale (CI mode)
 
 audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool definitions
 	go run ./cmd/audit_tokens/
+
+audit-surface-quality: ## Fail if the MCP tool surface violates a quality convention (CI gate)
+	go run ./cmd/audit_surface_quality/
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
 install-tools: ## Install golangci-lint and govulncheck
