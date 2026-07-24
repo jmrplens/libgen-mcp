@@ -135,7 +135,7 @@ The download chain always runs in the fixed order `unpaywall → europepmc → b
 - **Books** (identified by `md5`) are tried against `libgen`, then `randombook`, then `annas`.
 - **Articles** (identified by `doi`) are tried against the legal open-access providers first — `unpaywall` (only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set), then `europepmc`, `biorxiv`, `fatcat`, and `core` (only when `LIBGEN_MCP_CORE_KEY` is set) — then the shadow-library fallbacks `scihub` and `scidb`.
 
-The open-access article sources are all keyless (except `core`, which needs a free key): `europepmc` fetches an article's PDF from Europe PMC when it holds the open-access full text; `biorxiv` resolves `10.1101` preprint DOIs to the versioned `.full.pdf` on bioRxiv/medRxiv; `fatcat` returns a copy preserved on the Internet Archive via Internet Archive Scholar (preferring a direct archive.org copy over a Wayback capture); and `core` returns CORE's download URL.
+The open-access article sources are all keyless (except `core`, which needs a free key): `europepmc` fetches an article's PDF from Europe PMC when it holds the open-access full text; `biorxiv` resolves `10.1101` preprint DOIs to the versioned `.full.pdf` on bioRxiv/medRxiv; `fatcat` returns a copy preserved on the Internet Archive via Internet Archive Scholar (preferring a direct archive.org copy over a Wayback capture); and `core` returns CORE's download URL when CORE hosts a live copy (the URL is liveness-probed first, since CORE's links go stale often).
 
 `scidb` serves scholarly articles through Anna's Archive's SciDB viewer. It is fully keyless and sits after `scihub` because it reaches papers published after Sci-Hub stopped indexing, covering that gap rather than replacing it.
 

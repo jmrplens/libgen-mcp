@@ -252,9 +252,7 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 	})
 
 	t.Run("core", func(t *testing.T) {
-		srv := coreServer(t, "core_hit.json", http.StatusOK, nil)
-		defer srv.Close()
-		s := coreSource{http: srv.Client(), key: "k", apiBase: srv.URL}
+		s, _ := coreLiveSource(t)
 		assertDeclaresExt(t, s, Item{DOI: doi})
 	})
 }

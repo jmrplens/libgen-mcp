@@ -144,8 +144,9 @@ The open-access article sources are all **keyless** (except `core`, which needs 
 - `fatcat` looks a DOI up in [Internet Archive Scholar](https://scholar.archive.org)'s catalog
   and returns a preserved copy hosted on the Internet Archive (preferring a direct archive.org
   copy over a Wayback capture).
-- `core` looks a DOI up in [CORE](https://core.ac.uk) and returns its download URL; it is
-  opt-in via `LIBGEN_MCP_CORE_KEY`.
+- `core` looks a DOI up in [CORE](https://core.ac.uk) and returns its download URL when CORE
+  hosts a live copy (the URL is liveness-probed first, since CORE's links go stale often); it
+  is opt-in via `LIBGEN_MCP_CORE_KEY`.
 
 `scidb` serves scholarly articles through Anna's Archive's SciDB viewer. It is fully
 keyless and sits after `scihub` because it reaches papers published after Sci-Hub

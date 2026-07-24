@@ -1,13 +1,53 @@
 package libgen
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 )
+
+// pdfProbeSniff is how many leading bytes of a candidate URL are read to confirm
+// it serves a PDF when the response Content-Type is inconclusive.
+const pdfProbeSniff = 8
+
+// probePDF reports whether candidate currently serves a PDF, using a cheap
+// single-byte Range GET so the check does not pull the whole file. It accepts a
+// 200/206 whose Content-Type names a PDF, or whose first bytes are the %PDF magic
+// number. It carries only the shared User-Agent — never any Authorization — so it
+// is safe to point at a file/CDN URL whose credentials must stay on the API host.
+// A transport error, a non-2xx status, or a non-PDF body yields false so the caller
+// can fall through. It is shared by the DOI sources that must confirm a resolved
+// PDF endpoint is live before returning it (Europe PMC's render fallback, CORE's
+// often-stale download URLs).
+func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bool {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, http.NoBody)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return false
+	}
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "pdf") {
+		return true
+	}
+	head, _ := io.ReadAll(io.LimitReader(resp.Body, pdfProbeSniff))
+	return bytes.HasPrefix(head, []byte("%PDF"))
+}
 
 // Item is a download request expressed independently of any particular source: a
 // file may be identified by its LibGen MD5, by a DOI, or by both, and carries

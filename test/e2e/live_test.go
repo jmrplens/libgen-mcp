@@ -559,6 +559,52 @@ func TestE2EFatcatClassifiedOutcome(t *testing.T) {
 	t.Fatalf("fatcat failed in an undiagnosed way: %v", err)
 }
 
+// coreLiveDOI is an open-access DOI whose CORE record served a live PDF on
+// 2026-07-24; CORE's download URLs go stale often, so the test tolerates a
+// diagnosed "no live file today" outcome rather than pinning on permanence.
+const coreLiveDOI = "10.1186/s12864-016-3299-5"
+
+// TestE2ECoreClassifiedOutcome exercises the opt-in core source end to end against
+// the live CORE API, restricted to source=core. It is skipped unless
+// LIBGEN_MCP_CORE_KEY is configured (the source is out of the chain without a key).
+// On error the failure must be one of the known, diagnosed classes; anything else
+// fails the test.
+func TestE2ECoreClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	if strings.TrimSpace(os.Getenv("LIBGEN_MCP_CORE_KEY")) == "" {
+		t.Skip("LIBGEN_MCP_CORE_KEY not set; the core source is opt-in and out of the chain")
+	}
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := client.DownloadItem(ctx, libgen.Item{DOI: coreLiveDOI, Source: "core"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("core reported a download of %d bytes", res.SizeBytes)
+		}
+		assertPDF(t, res.Path)
+		t.Logf("core served a real PDF: bytes=%d", res.SizeBytes)
+		return
+	}
+	known := []string{
+		"no downloadable open-access full text", // CORE has no live file for this DOI today
+		"is not in CORE",                        // CORE does not hold the DOI
+		"API key rejected",                      // key invalid or expired
+		"requesting",                            // transport failure reaching CORE
+		"context deadline",                      // a slow endpoint inside the timeout budget
+	}
+	for _, k := range known {
+		if strings.Contains(err.Error(), k) {
+			t.Skipf("core unavailable in a known way: %v", err)
+		}
+	}
+	t.Fatalf("core failed in an undiagnosed way: %v", err)
+}
+
 // scidbLiveDOI is a long-established, heavily-mirrored DOI verified served by
 // SciDB on 2026-07-23, which keeps this live check deterministic.
 const scidbLiveDOI = "10.1016/j.cell.2011.02.013"

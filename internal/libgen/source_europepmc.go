@@ -1,7 +1,6 @@
 package libgen
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,10 +23,6 @@ const europePMCRenderBase = "https://europepmc.org"
 // europePMCMaxBody bounds how many bytes of a Europe PMC search JSON response are
 // read, guarding against an unexpectedly large or hostile body.
 const europePMCMaxBody = 1 << 20 // 1 MiB
-
-// europePMCProbeSniff is how many leading bytes of a candidate PDF endpoint are
-// read to confirm it serves a PDF when the Content-Type is inconclusive.
-const europePMCProbeSniff = 8
 
 // europePMCSource resolves a DOI to a freely downloadable PDF through Europe PMC
 // (https://europepmc.org), which mirrors the open-access subset of PubMed Central.
@@ -154,36 +149,11 @@ func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, erro
 		base + "/articles/" + url.PathEscape(pmcid) + "?pdf=render",
 	}
 	for _, c := range candidates {
-		if s.serves(ctx, c) {
+		if probePDF(ctx, s.client(), c) {
 			return c, nil
 		}
 	}
 	return "", fmt.Errorf("europepmc: no reachable PDF endpoint for %s", pmcid)
-}
-
-// serves reports whether a candidate URL currently returns a PDF. It asks for a
-// single byte so the check stays cheap, accepting the response when the
-// Content-Type names a PDF or the first bytes are the %PDF magic number.
-func (s europePMCSource) serves(ctx context.Context, candidate string) bool {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, http.NoBody)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Range", "bytes=0-0")
-	resp, err := s.client().Do(req)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		return false
-	}
-	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "pdf") {
-		return true
-	}
-	head, _ := io.ReadAll(io.LimitReader(resp.Body, europePMCProbeSniff))
-	return bytes.HasPrefix(head, []byte("%PDF"))
 }
 
 // client returns the configured HTTP client, or the shared default when none was
