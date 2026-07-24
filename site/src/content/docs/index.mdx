@@ -28,7 +28,7 @@ head:
             "name": "What can libgen-mcp do?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall) and Sci-Hub sources. The search tool can additionally, opt-in, federate keyless open-access discovery from arXiv, Crossref, and OpenLibrary, merged and deduped alongside the Library Genesis results. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
+              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall), Sci-Hub, and SciDB sources. The search tool can additionally, opt-in, consult keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged and deduped alongside the Library Genesis results. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
             }
           },
           {
@@ -69,7 +69,7 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 **LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
-Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched from open-access and Sci-Hub sources by DOI. `search` can additionally, opt-in, federate keyless open-access discovery from arXiv, Crossref, and OpenLibrary — merged, deduped, and labeled by origin alongside the usual Library Genesis results.
+Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Articles can also be fetched by DOI from open-access (Unpaywall), Sci-Hub, and SciDB sources. `search` can additionally, opt-in, consult keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged, deduped, and labeled by origin alongside the usual Library Genesis results.
 
 <CardGrid>
 	<Card title="Four tools" icon="puzzle">
@@ -82,11 +82,12 @@ Mirrors are discovered automatically and cached, with transparent failover, so t
 		limiter.
 	</Card>
 	<Card title="Books and articles" icon="open-book">
-		Books by MD5 from LibGen; articles by DOI from Unpaywall and Sci-Hub.
+		Books by MD5 from LibGen; articles by DOI from Unpaywall, Sci-Hub, and
+		SciDB.
 	</Card>
-	<Card title="Open-access discovery" icon="magnifier">
-		`search` can opt in to keyless discovery from arXiv, Crossref, and
-		OpenLibrary — no account or API key needed.
+	<Card title="Extra-source discovery" icon="magnifier">
+		`search` can opt in to keyless discovery from extra sources — Anna's Archive,
+		arXiv, Crossref, and OpenLibrary — no account or API key needed.
 	</Card>
 	<Card title="Configured by env" icon="setting">
 		Every option is an environment variable with a documented default and
@@ -128,7 +129,7 @@ libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go,
 
 ### What can libgen-mcp do?
 
-It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall) and Sci-Hub sources. The `search` tool can additionally, opt-in, federate keyless open-access discovery from arXiv, Crossref, and OpenLibrary, merged and deduped alongside the Library Genesis results. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and articles are fetched by DOI from open-access (Unpaywall), Sci-Hub, and SciDB sources. The `search` tool can additionally, opt-in, consult keyless extra sources — Anna's Archive, arXiv, Crossref, and OpenLibrary — merged and deduped alongside the Library Genesis results. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 

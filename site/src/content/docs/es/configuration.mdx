@@ -34,7 +34,7 @@ head:
             "name": "¿Cómo descargo artículos por DOI?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Pasa el doi de un artículo a la herramienta download. Los artículos se obtienen por DOI a través de dos fuentes por orden: primero unpaywall, que devuelve un PDF solo cuando el artículo es de acceso abierto, y luego scihub, que prueba cada host de LIBGEN_MCP_SCIHUB_HOSTS hasta que uno sirve el artículo. La fuente unpaywall solo participa cuando fijas tu propia dirección en LIBGEN_MCP_UNPAYWALL_EMAIL, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email unpaywall está desactivada y solo se prueba scihub. Ten en cuenta que las descargas por DOI no se verifican por MD5."
+              "text": "Pasa el doi de un artículo a la herramienta download. Los artículos se obtienen por DOI a través de tres fuentes por orden: primero unpaywall, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego scihub, que prueba cada host de LIBGEN_MCP_SCIHUB_HOSTS hasta que uno sirve el artículo, y por último scidb (el visor SciDB de Anna's Archive). La fuente unpaywall solo participa cuando fijas tu propia dirección en LIBGEN_MCP_UNPAYWALL_EMAIL, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email unpaywall está desactivada y se prueban scihub y scidb. Ten en cuenta que las descargas por DOI no se verifican por MD5."
             }
           },
           {
@@ -158,7 +158,7 @@ Fija `LIBGEN_MCP_DOWNLOAD_DIR` con la ruta del directorio de destino; por defect
 
 ### ¿Cómo descargo artículos por DOI?
 
-Pasa el `doi` de un artículo a la herramienta `download`. Los artículos se obtienen por DOI a través de dos fuentes por orden: primero `unpaywall`, que devuelve un PDF solo cuando el artículo es de acceso abierto, y luego `scihub`, que prueba cada host de `LIBGEN_MCP_SCIHUB_HOSTS` hasta que uno sirve el artículo. La fuente `unpaywall` solo participa cuando fijas tu propia dirección en `LIBGEN_MCP_UNPAYWALL_EMAIL`, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email `unpaywall` está desactivada y solo se prueba `scihub`. Ten en cuenta que las descargas por DOI no se verifican por MD5.
+Pasa el `doi` de un artículo a la herramienta `download`. Los artículos se obtienen por DOI a través de tres fuentes por orden: primero `unpaywall`, que devuelve un PDF solo cuando el artículo es de acceso abierto, luego `scihub`, que prueba cada host de `LIBGEN_MCP_SCIHUB_HOSTS` hasta que uno sirve el artículo, y por último `scidb` (el visor SciDB de Anna's Archive). La fuente `unpaywall` solo participa cuando fijas tu propia dirección en `LIBGEN_MCP_UNPAYWALL_EMAIL`, que se envía a la API de Unpaywall en cada consulta de artículo; sin ese email `unpaywall` está desactivada y se prueban `scihub` y `scidb`. Ten en cuenta que las descargas por DOI no se verifican por MD5.
 
 ### ¿Cómo limito la tasa de peticiones?
 
