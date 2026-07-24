@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,6 +41,30 @@ const (
 	// maxE2EDownloadBytes caps live downloads so a size-parsing mistake can never
 	// pull a large file. It keeps the suite a polite citizen of the public mirrors.
 	maxE2EDownloadBytes = 25 << 20 // 25 MiB
+	// minE2EDownloadBytes is the size FLOOR every live download and read target
+	// must clear. A size-ascending catalog search leads with degenerate rows — the
+	// first nonfiction "python" hit is an 87-byte .txt — and without a floor every
+	// test that "downloaded" or "read" a file moved those 87 bytes: no pagination,
+	// no in-document matches, no table of contents, no PDF path. 100 KiB clears the
+	// stub rows (the catalog's real books start around it) while staying small
+	// enough to be polite.
+	minE2EDownloadBytes = 100 << 10 // 100 KiB
+	// targetSearchPages bounds how many size-ascending pages are walked when
+	// hunting for a target above the floor. Page one sits entirely below it, so at
+	// least two are normally needed.
+	targetSearchPages = 4
+	// targetPageSize is the results-per-page used while hunting for a target, so
+	// the floor is usually reached within two pages.
+	targetPageSize = 100
+	// minComicBytes is the floor for the not-extractable read case. The comics
+	// collection has almost nothing between its stub rows and its multi-hundred-
+	// megabyte scans, so it needs a lower bar than the rest of the suite: enough to
+	// be a genuine archive with no text layer, which is all that case has to prove.
+	minComicBytes = 32 << 10 // 32 KiB
+	// upstreamProbeTimeout bounds a source's reachability precondition. It is
+	// deliberately short: a host that blackholes connections must cost seconds, not
+	// the test's whole timeout budget.
+	upstreamProbeTimeout = 3 * time.Second
 )
 
 // md5Re matches a canonical lowercase LibGen md5 digest.
@@ -131,23 +156,52 @@ func preferredMirror(t *testing.T, mgr *mirrors.Manager) string {
 // within probeTimeout. Redirects are not followed, so a 3xx is observed directly.
 func reachable(t *testing.T, base string) bool {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/index.php", http.NoBody)
+	status, err := probeStatus(base+"/index.php", probeTimeout)
 	if err != nil {
 		return false
 	}
+	return status >= 200 && status < 400
+}
+
+// probeStatus GETs url with a short budget and returns the status code it
+// answered with. Redirects are not followed, so a 3xx is observed directly. It is
+// the shared primitive behind both the mirror gate and the per-source upstream
+// preconditions.
+func probeStatus(url string, timeout time.Duration) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return 0, err
+	}
 	req.Header.Set("User-Agent", "libgen-mcp-e2e-probe")
 	client := &http.Client{
-		Timeout:       probeTimeout,
+		Timeout:       timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false
+		return 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
+	return resp.StatusCode, nil
+}
+
+// requireUpstream SKIPS the calling test when a source's own upstream does not
+// answer probeURL within upstreamProbeTimeout. ANY status counts as reachable —
+// the question is whether the host answers at all, which a 404 settles as well as
+// a 200.
+//
+// It exists because a blackholed upstream otherwise burns the test's entire
+// timeout budget proving nothing: api.fatcat.wiki does not answer from every
+// network, and the fatcat case spent 90 s — 27% of a 335 s suite — reaching that
+// conclusion. Reachability is a PRECONDITION only: once the host answers, the
+// test's failure classification stays strict.
+func requireUpstream(t *testing.T, name, probeURL string) {
+	t.Helper()
+	if _, err := probeStatus(probeURL, upstreamProbeTimeout); err != nil {
+		t.Skipf("upstream unreachable: %s did not answer %s within %s (%v)", name, probeURL, upstreamProbeTimeout, err)
+	}
 }
 
 // pace inserts the courtesy pause between successive live requests.
@@ -208,20 +262,90 @@ func firstMD5(t *testing.T, ctx context.Context, c *libgen.Client, query string)
 	return ""
 }
 
-// smallestDownloadable returns the first result (from a size-ascending search)
-// that has a canonical md5 and a parseable, non-zero size within the polite cap.
-// It returns a zero Result when none qualifies.
-func smallestDownloadable(results []libgen.Result) libgen.Result {
+// liveTarget describes the live catalog target a download or read test needs.
+type liveTarget struct {
+	// topic is the collection to search.
+	topic string
+	// query is the search query.
+	query string
+	// exts, when non-empty, restricts the target to these lowercase extensions —
+	// used by the read cases, which need a format the extractors actually support.
+	exts []string
+	// minBytes overrides minE2EDownloadBytes for a collection whose real files sit
+	// below it (comics jump straight from stub rows to hundreds of megabytes, and
+	// nothing in between). Zero means the default floor.
+	minBytes int64
+}
+
+// floor returns the size floor this target requires.
+func (spec liveTarget) floor() int64 {
+	if spec.minBytes > 0 {
+		return spec.minBytes
+	}
+	return minE2EDownloadBytes
+}
+
+// readableExts are the extensions the read tool can extract text from, so a read
+// case asks for one of these rather than gambling on whatever the catalog's size
+// ordering happens to put first.
+var readableExts = []string{"pdf", "epub"}
+
+// findLiveTarget walks a size-ascending live search for the SMALLEST result that
+// clears minE2EDownloadBytes, stays within maxE2EDownloadBytes, carries a
+// canonical md5 and (when spec.exts is set) has one of the wanted extensions.
+//
+// It pages because page one of a size-ascending search sits entirely below the
+// floor: the floor is what makes the download and read cases real, so reaching it
+// is worth the extra request. It SKIPS the calling test when no page yields a
+// qualifying target, which is a live-data condition rather than a code fault.
+func findLiveTarget(t *testing.T, ctx context.Context, c *libgen.Client, spec liveTarget) libgen.Result {
+	t.Helper()
+	for p := 1; p <= targetSearchPages; p++ {
+		page, _, err := c.Search(ctx, libgen.SearchParams{
+			Query: spec.query, Topics: []string{spec.topic},
+			Order: "size", OrderMode: "asc",
+			ResultsPerPage: targetPageSize, Page: p,
+		})
+		if err != nil {
+			t.Fatalf("Search(%q, page %d) error: %v", spec.query, p, err)
+		}
+		if target := qualifyingTarget(page.Results, spec); target.MD5 != "" {
+			return target
+		}
+		if len(page.Results) < targetPageSize {
+			break
+		}
+	}
+	t.Skipf("no %s target for %q between %d and %d bytes (exts %v) across %d pages; skipping to stay polite",
+		spec.topic, spec.query, spec.floor(), maxE2EDownloadBytes, spec.exts, targetSearchPages)
+	return libgen.Result{}
+}
+
+// qualifyingTarget returns the first result on a size-ascending page that carries
+// a canonical md5, has one of the wanted extensions (any, when exts is empty) and
+// a parseable size inside [spec.floor(), maxE2EDownloadBytes]. It returns a zero
+// Result when the page holds none.
+func qualifyingTarget(results []libgen.Result, spec liveTarget) libgen.Result {
 	for i := range results {
 		r := results[i]
-		if !md5Re.MatchString(r.MD5) {
+		if !md5Re.MatchString(r.MD5) || !hasExtension(r, spec.exts) {
 			continue
 		}
-		if n, ok := parseSize(r.Size); ok && n > 0 && n <= maxE2EDownloadBytes {
+		if n, ok := parseSize(r.Size); ok && n >= spec.floor() && n <= maxE2EDownloadBytes {
 			return r
 		}
 	}
 	return libgen.Result{}
+}
+
+// hasExtension reports whether r's extension is one of want (case-insensitive).
+// An empty want accepts any extension.
+func hasExtension(r libgen.Result, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	got := strings.ToLower(strings.TrimSpace(r.Extension))
+	return slices.Contains(want, got)
 }
 
 // parseSize converts a human-readable size such as "1.2 MB" or "820 KB" into a
@@ -242,6 +366,76 @@ func parseSize(s string) (int64, bool) {
 		return 0, false
 	}
 	return int64(num * m), true
+}
+
+// sourceFailure is one KNOWN, diagnosed way a download source can fail against
+// its live upstream.
+//
+// The pattern must pin BOTH the source that failed and the specific diagnosis.
+// The bare substrings this suite used to match on — "requesting", "returned HTTP",
+// "context deadline" — appear in almost every failure a download can produce,
+// including a code regression that points a source at the wrong host: matching on
+// them classified "we are calling it wrong" as "the upstream is down today", which
+// is precisely the confusion the classified-outcome discipline exists to prevent.
+type sourceFailure struct {
+	// re matches the error text, anchored on the source's own message prefix.
+	re *regexp.Regexp
+	// why names the class in the SKIP message.
+	why string
+}
+
+// diagnosed builds a failure class whose pattern requires the source's own error
+// prefix ("<source>: ") immediately followed by diag, a regular-expression
+// fragment naming the specific diagnosis. Every source in internal/libgen prefixes
+// its errors this way, so the pair identifies the failure unambiguously.
+func diagnosed(source, diag, why string) sourceFailure {
+	return sourceFailure{re: regexp.MustCompile(regexp.QuoteMeta(source+": ") + diag), why: why}
+}
+
+// transportTo builds the transport-failure class for a source: the error must come
+// from the source's own request wrapper AND name the host the source is supposed
+// to be calling (Go's *url.Error carries the full URL). Pinning the host is what
+// separates "the upstream is down today" from "we are calling the wrong upstream" —
+// a source repointed at a bad host fails with identical wrapper text, and must
+// FAIL here rather than skip.
+func transportTo(source, wrapper, host string) sourceFailure {
+	return sourceFailure{
+		re: regexp.MustCompile(
+			regexp.QuoteMeta(source+": "+wrapper) + `.*` + regexp.QuoteMeta(`"https://`+host+`/`)),
+		why: "transport failure reaching " + host,
+	}
+}
+
+// classifyOrFail requires a live source failure to match one of the KNOWN,
+// diagnosed classes and SKIPs with that class's reason. An error outside the set
+// FAILS: a new, unrecognized failure mode must surface here rather than be
+// tolerated as flakiness and discovered by chance later.
+func classifyOrFail(t *testing.T, source string, err error, classes []sourceFailure) {
+	t.Helper()
+	msg := err.Error()
+	for _, c := range classes {
+		if c.re.MatchString(msg) {
+			t.Skipf("%s unavailable in a known way (%s): %v", source, c.why, err)
+		}
+	}
+	t.Fatalf("%s failed in an undiagnosed way — update this test's classification only if this is a legitimate new outcome, not if we are calling the upstream wrong: %v", source, err)
+}
+
+// assertSourcePDF asserts the best case of a source-restricted article download:
+// the named source served the file, it is non-empty, and the bytes really are a
+// PDF. The source check matters because a chain bug could have another provider
+// answer, and the PDF check because several sources omit the mimetype, so a
+// non-PDF asset would still arrive under a .pdf name.
+func assertSourcePDF(t *testing.T, source string, res *libgen.DownloadResult) {
+	t.Helper()
+	if res.SizeBytes <= 0 {
+		t.Fatalf("%s reported a download of %d bytes", source, res.SizeBytes)
+	}
+	if res.Source != source {
+		t.Errorf("Source = %q, want %q — another source answered a restricted download", res.Source, source)
+	}
+	assertPDF(t, res.Path)
+	t.Logf("%s served a real PDF: bytes=%d", source, res.SizeBytes)
 }
 
 // assertFileMD5 asserts that the file at path exists, is non-empty, and hashes to

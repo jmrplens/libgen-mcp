@@ -2427,6 +2427,156 @@ func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
 	}
 }
 
+// annasProbeInput drives the "aprobe" tool below: it carries the DownloadInput
+// fields elicitAnnasKey branches on, plus the key the server is configured with.
+type annasProbeInput struct {
+	MD5           string `json:"md5,omitempty"`
+	Source        string `json:"source,omitempty"`
+	AnnasMember   bool   `json:"annas_member,omitempty"`
+	ConfiguredKey string `json:"configured_key,omitempty"`
+}
+
+// annasProbeOutput carries the key elicitAnnasKey produced back to the test.
+type annasProbeOutput struct {
+	Key string `json:"key"`
+}
+
+// newAnnasProbeSession wires an in-memory MCP server exposing an "aprobe" tool
+// that calls elicitAnnasKey with a config/input built from the request, so tests
+// can exercise its capability-gated branches through a real round-trip. A nil
+// handler means the client advertises no elicitation capability. It mirrors
+// newUnpaywallProbeSession, the harness for the sibling credential prompt.
+func newAnnasProbeSession(t *testing.T, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	mcp.AddTool(server, &mcp.Tool{Name: "aprobe", Description: "exercises elicitAnnasKey for tests"},
+		func(ctx context.Context, req *mcp.CallToolRequest, in annasProbeInput) (*mcp.CallToolResult, annasProbeOutput, error) {
+			cfg := &config.Config{AnnasKey: in.ConfiguredKey}
+			key := elicitAnnasKey(ctx, req, cfg, DownloadInput{
+				MD5: in.MD5, Source: in.Source, AnnasMember: in.AnnasMember,
+			})
+			return nil, annasProbeOutput{Key: key}, nil
+		})
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"},
+		&mcp.ClientOptions{ElicitationHandler: handler})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+// callAprobe drives the aprobe tool once and returns the key elicitAnnasKey
+// produced.
+func callAprobe(t *testing.T, session *mcp.ClientSession, in annasProbeInput) string {
+	t.Helper()
+	args, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshaling aprobe input: %v", err)
+	}
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "aprobe", Arguments: json.RawMessage(args)})
+	if err != nil {
+		t.Fatalf("CallTool(aprobe) failed: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("aprobe returned a tool error: %+v", res.Content)
+	}
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshaling aprobe output: %v", err)
+	}
+	var out annasProbeOutput
+	if uerr := json.Unmarshal(raw, &out); uerr != nil {
+		t.Fatalf("decoding aprobe output: %v", uerr)
+	}
+	return out.Key
+}
+
+// annasMemberBook is the input shape that makes elicitAnnasKey prompt: an md5
+// book download that explicitly opted in to the member tier.
+var annasMemberBook = annasProbeInput{MD5: "0123456789abcdef0123456789abcdef", AnnasMember: true}
+
+// TestElicitAnnasKey_AcceptedKeyIsUsed covers the happy path: an opted-in book
+// download against a keyless server prompts the client, and the accepted secret
+// comes back trimmed for use on this request only.
+func TestElicitAnnasKey_AcceptedKeyIsUsed(t *testing.T) {
+	session := newAnnasProbeSession(t, acceptHandler(map[string]any{"key": "  SECRET123  "}))
+	if got := callAprobe(t, session, annasMemberBook); got != "SECRET123" {
+		t.Errorf("an accepted key should come back trimmed, got %q", got)
+	}
+}
+
+// TestElicitAnnasKey_PinnedAnnasSourceStillPrompts covers the one named source the
+// per-call key can still take effect for: pinning source="annas" replaces the
+// configured (keyless) source with one carrying the elicited key, so the prompt
+// must still fire.
+func TestElicitAnnasKey_PinnedAnnasSourceStillPrompts(t *testing.T) {
+	session := newAnnasProbeSession(t, acceptHandler(map[string]any{"key": "SECRET123"}))
+	in := annasMemberBook
+	in.Source = "ANNAS" // case-insensitive by contract
+	if got := callAprobe(t, session, in); got != "SECRET123" {
+		t.Errorf("source=annas should still prompt for a key, got %q", got)
+	}
+}
+
+// TestElicitAnnasKey_SkippedBranches covers every arm that must collapse to ""
+// WITHOUT prompting. The handler would accept a key, so a non-empty result proves
+// the prompt fired where it should not have: each of these is a dead-end question
+// the user would be asked for nothing.
+func TestElicitAnnasKey_SkippedBranches(t *testing.T) {
+	cases := []struct {
+		name string
+		in   annasProbeInput
+		why  string
+	}{
+		{"no opt-in", annasProbeInput{MD5: annasMemberBook.MD5}, "the keyless IPFS path already works, so an unrequested prompt is a nag"},
+		{"no md5", annasProbeInput{AnnasMember: true}, "the member tier is a book path; there is nothing to fetch without an md5"},
+		{"server has a key", annasProbeInput{MD5: annasMemberBook.MD5, AnnasMember: true, ConfiguredKey: "CONFIGURED"}, "the configured key already covers the request"},
+		{"other source pinned", annasProbeInput{MD5: annasMemberBook.MD5, AnnasMember: true, Source: "libgen"}, "the per-call key can never reach a non-annas source"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newAnnasProbeSession(t, acceptHandler(map[string]any{"key": "SECRET123"}))
+			if got := callAprobe(t, session, tc.in); got != "" {
+				t.Errorf("%s: expected no prompt and \"\", got %q", tc.why, got)
+			}
+		})
+	}
+}
+
+// TestElicitAnnasKey_NoCapability covers the fallback path: a client that never
+// advertised elicitation is not prompted, so the annas source stays keyless and
+// resolves over IPFS exactly as it does today.
+func TestElicitAnnasKey_NoCapability(t *testing.T) {
+	session := newAnnasProbeSession(t, nil)
+	if got := callAprobe(t, session, annasMemberBook); got != "" {
+		t.Errorf("a client without the elicitation capability should yield \"\", got %q", got)
+	}
+}
+
+// TestElicitAnnasKey_DeclineAndEmpty covers the two answers that must leave the
+// download keyless: a declined prompt, and an accepted prompt with a blank key
+// (the prompt itself offers "leave empty to download over IPFS instead").
+func TestElicitAnnasKey_DeclineAndEmpty(t *testing.T) {
+	declined := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "decline"}, nil
+	}
+	if got := callAprobe(t, newAnnasProbeSession(t, declined), annasMemberBook); got != "" {
+		t.Errorf("a declined prompt should yield \"\", got %q", got)
+	}
+	blank := acceptHandler(map[string]any{"key": "   "})
+	if got := callAprobe(t, newAnnasProbeSession(t, blank), annasMemberBook); got != "" {
+		t.Errorf("a blank key should yield \"\", got %q", got)
+	}
+}
+
 // TestSearchNextStepsForbidsInventingResults verifies an empty search tells the
 // model not to fill the gap. The recovery advice alone leaves the door open: a
 // model that has been asked to find something and told only "try broadening" can
