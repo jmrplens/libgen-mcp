@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 42 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 45 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -37,7 +37,7 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Forty-two scenarios (S1–S41 plus the S6b variant) cover search, details, downloads, source selection, error
+Forty-five scenarios (S1–S44 plus the S6b variant) cover search, details, downloads, source selection, error
 recovery, progress, link resolution, reading and summarizing extracted text,
 open-access discovery, the escalation beyond the Library Genesis catalog, and —
 importantly — **unguided** prompts that give the model no hints, testing whether
@@ -99,6 +99,9 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 | S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them                                                                                                                                                           |
 | S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage                                                                                                                                        |
 | S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored                                                                                                                       |
+| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway                                                                                                       |
+| S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds                                                                                        |
+| S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory                                                                                                                                                    |
 
 ## Local and remote blocks
 
@@ -117,8 +120,11 @@ transport, ten scenarios in all.
 
 The table below is a single live run of the full suite against `claude-haiku-4-5`
 (real Anthropic API, real mirrors, real downloads): **42 passed, 0 failed, 0
-skipped** — every scenario, including the 10 that run against a server in remote
-(`--http`) mode.
+skipped** — every scenario in the suite as it stood, including the 10 that run
+against a server in remote (`--http`) mode.
+
+S42–S44 were added after that run and are not in the table below. Each was
+verified live on its own; they will appear here after the next full run.
 
 A clean sweep is worth reading carefully rather than celebrating. It is the first
 one this suite has produced, and it took removing the two things that were hiding

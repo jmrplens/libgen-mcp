@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos, progreso, citas, enriquecimiento, lectura en documento (find/outline), descubrimiento de acceso abierto, escalada más allá del catálogo y elicitación en 42 escenarios."
+description: "Cómo se prueba libgen-mcp contra un LLM real: un arnés controlado conduce a Claude sobre MCP contra el sitio en vivo, evaluando selección de herramienta, argumentos, descargas, reintentos, progreso, citas, enriquecimiento, lectura en documento (find/outline), descubrimiento de acceso abierto, escalada más allá del catálogo y elicitación en 45 escenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -41,7 +41,7 @@ condición de red, nunca un fallo del modelo.
 
 ## Escenarios
 
-Cuarenta y dos escenarios (S1–S41 más la variante S6b) cubren búsqueda, detalles, descargas, selección de
+Cuarenta y cinco escenarios (S1–S44 más la variante S6b) cubren búsqueda, detalles, descargas, selección de
 fuente, recuperación de errores, progreso, resolución de enlaces, lectura y
 resumen de texto extraído, descubrimiento de acceso abierto, la escalada más
 allá del catálogo de Library Genesis y — de forma importante — prompts **sin
@@ -106,6 +106,9 @@ Varios se repiten contra un servidor en modo **remoto** (`--http`).
 | S39 | **Un despliegue en always fuerza las adicionales** — una consulta ordinaria que el catálogo responde de sobra; los resultados de origen adicional solo pueden estar ahí porque el valor por defecto del despliegue los forzó                                                                                                                                  |
 | S40 | **Leer un ítem escalado** — la más estricta de las comprobaciones de escalada: la búsqueda, la ruta de descarga de Anna's, el tipo de fichero y la extracción de texto tienen que sostenerse todas para que el modelo cite un pasaje                                                                                                                          |
 | S41 | **Opt-in de membresía de Anna's** — el prompt menciona tener cuenta sin nombrar `annas_member`, así que el modelo debe descubrir el argumento; la clave llega por elicitación y no se almacena nunca                                                                                                                                                          |
+| S42 | **No existe nada con ese nombre** — un libro y un autor inventados para esta prueba, así que toda llamada sale vacía y la única respuesta correcta es decirlo; se evalúa la admisión _y_ que no aparezca igualmente un ISBN o un número de páginas                                                                                                            |
+| S43 | **Un despliegue restringido aguanta** — `LIBGEN_MCP_SOURCES` permite solo el catálogo, así que la descarga por DOI debe rechazarse; se evalúa el rechazo y que nada fuera de la lista haya servido el fichero, sea cual sea la ruta que el modelo encuentre después                                                                                           |
+| S44 | **Paginación** — pide la segunda página de resultados, así que el modelo debe descubrir el argumento `page` en lugar de repetir la misma búsqueda o continuar la lista de memoria                                                                                                                                                                             |
 
 ## Bloques local y remoto
 
@@ -126,8 +129,12 @@ escenarios en total.
 
 La tabla siguiente es una única ejecución en vivo de la suite completa contra
 `claude-haiku-4-5` (API real de Anthropic, mirrors reales, descargas reales):
-**42 pasaron, 0 fallaron, 0 en SKIP** — todos los escenarios, incluidos los 10 que
-corren contra un servidor en modo remoto (`--http`).
+**42 pasaron, 0 fallaron, 0 en SKIP** — todos los escenarios de la suite tal como estaba,
+incluidos los 10 que corren contra un servidor en modo remoto (`--http`).
+
+S42–S44 se añadieron después de esa corrida y no están en la tabla siguiente. Cada
+uno se verificó en vivo por separado; aparecerán aquí tras la próxima corrida
+completa.
 
 Un pleno merece leerse con cuidado más que celebrarse. Es el primero que produce
 esta suite, y ha hecho falta quitar las dos cosas que tapaban problemas:

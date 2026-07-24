@@ -180,3 +180,52 @@ func TestOutlineAndSearchSniffToo(t *testing.T) {
 		t.Errorf("Search() on an extensionless PDF: %s", res.Reason)
 	}
 }
+
+// TestEntryPointsAgreeOnFormat verifies the three ways into this package identify
+// a file the same way. Extract, Outline and Search each dispatch on their own, and
+// a fix applied to one of them left the other two reporting a real book as
+// unsupported — the path a live evaluator run caught a model inventing a table of
+// contents for.
+func TestEntryPointsAgreeOnFormat(t *testing.T) {
+	pdf, err := os.ReadFile("testdata/sample.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]struct {
+		path       string
+		recognized bool
+	}{
+		"named pdf":         {path: "testdata/sample.pdf", recognized: true},
+		"named txt":         {path: "testdata/sample.txt", recognized: true},
+		"extensionless pdf": {path: writeTemp(t, "deadbeef", pdf), recognized: true},
+		"unknown bytes":     {path: writeTemp(t, "nothing", []byte("not a document")), recognized: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			chunk, cerr := Extract(context.Background(), tc.path, Req{})
+			if cerr != nil {
+				t.Fatal(cerr)
+			}
+			outline, oerr := Outline(context.Background(), tc.path)
+			if oerr != nil {
+				t.Fatal(oerr)
+			}
+			search, serr := Search(context.Background(), tc.path, "the", SearchOpts{MaxMatches: 1})
+			if serr != nil {
+				t.Fatal(serr)
+			}
+			// "Recognized" is about dispatch, not about yielding text: a scanned PDF is
+			// recognized and still has nothing to extract. What must never differ is
+			// whether an entry point knows what the file is.
+			for entry, reason := range map[string]string{
+				"Extract": chunk.Reason, "Outline": outline.Reason, "Search": search.Reason,
+			} {
+				unrecognized := strings.Contains(reason, "unrecognized") ||
+					strings.Contains(reason, "unsupported file extension")
+				if unrecognized == tc.recognized {
+					t.Errorf("%s disagrees: recognized=%v, reason=%q", entry, !unrecognized, reason)
+				}
+			}
+		})
+	}
+}

@@ -2496,3 +2496,92 @@ func TestDetailsByDOIFallsBackToEnrichment(t *testing.T) {
 		t.Errorf("enrichment did not carry the Crossref journal: %+v", out.Enrichment)
 	}
 }
+
+// TestEnrichKillSwitchCannotBeLifted verifies LIBGEN_MCP_ENRICH=false holds against
+// a per-call enrich=true. It is documented as a deployment kill-switch, and a
+// switch a caller can flip is not one — the same hole found in the extra-sources
+// never mode and in the per-call credential paths.
+func TestEnrichKillSwitchCannotBeLifted(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"container-title":["Cell"],"is-referenced-by-count":1}}`))
+	}))
+	t.Cleanup(crossref.Close)
+	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	t.Cleanup(restore)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"1":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee","doi":"10.1/x"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: false, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, nil)
+	_, out, err := handler(context.Background(), nil, DetailsInput{
+		MD5: "87a4ebdaf21fa6cc70009a3dd63194ee", Enrich: true,
+	})
+	if err != nil {
+		t.Fatalf("the lookup itself should still work: %v", err)
+	}
+	if out.Enrichment != nil {
+		t.Errorf("enrichment was produced against a deployment that forbids it: %+v", out.Enrichment)
+	}
+}
+
+// TestSingleValueFieldsSayTheyAreNotArrays verifies every string field on the
+// search input warns it is not an array when array-valued fields sit beside it.
+// A model sent extra_sources=["always"], having pattern-matched topics and
+// search_in; order and order_mode already carried the warning, evidently for the
+// same reason, and the field added later did not.
+func TestSingleValueFieldsSayTheyAreNotArrays(t *testing.T) {
+	schema, err := jsonschema.For[SearchInput](nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arrays []string
+	for name, prop := range schema.Properties {
+		if prop.Items != nil {
+			arrays = append(arrays, name)
+		}
+	}
+	// No arrays would mean nothing can be confused with one — and would also mean
+	// this test has stopped testing anything, so it is a failure, not a skip.
+	if len(arrays) == 0 {
+		t.Fatal("no array-valued fields found; the schema shape changed and this check is now vacuous")
+	}
+	// query is free text: nobody sends a sentence as an array. Every other string
+	// field carries a short token, which is exactly what gets mistaken for one of
+	// the array-valued fields beside it.
+	freeText := map[string]bool{"query": true}
+	for name, prop := range schema.Properties {
+		if prop.Items != nil || prop.Type != "string" || freeText[name] {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(prop.Description), "single value") {
+			t.Errorf("%q is a token-valued string beside %v but never says it is not an array: %q",
+				name, arrays, prop.Description)
+		}
+	}
+}
+
+// TestFieldErrorsNameTheField verifies an invalid argument is reported against the
+// argument, not against something the caller never touched. The extra-sources mode
+// error named LIBGEN_MCP_EXTRA_SOURCES even when the value came from the search
+// call, sending a model to inspect an environment variable it had never set.
+func TestFieldErrorsNameTheField(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesAuto}
+	_, err := resolveExtraMode(SearchInput{ExtraSources: "sometimes"}, cfg)
+	if err == nil {
+		t.Fatal("an unrecognized mode should be rejected")
+	}
+	if !strings.Contains(err.Error(), "extra_sources") {
+		t.Errorf("error %q should name the argument the caller set", err)
+	}
+	if strings.Contains(err.Error(), "LIBGEN_MCP_") {
+		t.Errorf("error %q points the caller at an environment variable it never set", err)
+	}
+}
