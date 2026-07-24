@@ -81,11 +81,46 @@ type Config struct {
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
-	// OpenAccessEnabled is the deployment default for the search tool's open-access
-	// discovery (arXiv/Crossref/OpenLibrary). LIBGEN_MCP_OPEN_ACCESS, default false:
-	// OA discovery is off unless a caller opts in per call; a deployment sets it true
-	// to make OA on by default while each call can still override it.
-	OpenAccessEnabled bool
+	// ExtraSources is the deployment default for when the extra searchers (Anna's
+	// Archive plus the open-access providers) are consulted. LIBGEN_MCP_EXTRA_SOURCES,
+	// default auto.
+	ExtraSources ExtraSourcesMode
+}
+
+// ExtraSourcesMode selects when the extra searchers (Anna's Archive plus the
+// open-access providers) are consulted. The behavior is three-valued, so it is an
+// enum rather than a bool: "always" and "never" are each different from the
+// default and from each other.
+type ExtraSourcesMode string
+
+const (
+	// ExtraSourcesAuto consults the extra searchers only when the Library Genesis
+	// catalog returns nothing or fails. It is the default.
+	ExtraSourcesAuto ExtraSourcesMode = "auto"
+	// ExtraSourcesAlways consults them on every search, concurrently with the catalog.
+	ExtraSourcesAlways ExtraSourcesMode = "always"
+	// ExtraSourcesNever restricts every search to the catalog, even on a miss. It
+	// exists for policy: a deployment may have reasons not to contact the extra
+	// providers at all.
+	ExtraSourcesNever ExtraSourcesMode = "never"
+)
+
+// ParseExtraSourcesMode converts an environment value to a mode, rejecting anything
+// unrecognized so a typo fails at startup instead of silently changing behavior.
+func ParseExtraSourcesMode(v string) (ExtraSourcesMode, error) {
+	switch ExtraSourcesMode(strings.ToLower(strings.TrimSpace(v))) {
+	case ExtraSourcesAuto:
+		return ExtraSourcesAuto, nil
+	case ExtraSourcesAlways:
+		return ExtraSourcesAlways, nil
+	case ExtraSourcesNever:
+		return ExtraSourcesNever, nil
+	default:
+		// The caller names the surface: the same parse serves the environment
+		// variable and the per-call argument, and telling a model its search
+		// argument was an environment variable sends it looking in the wrong place.
+		return "", fmt.Errorf("unknown extra-sources mode %q (allowed: auto, always, never)", v)
+	}
 }
 
 // defaultStartRetryWaits returns the built-in start-retry schedule: three waits
@@ -133,7 +168,7 @@ func Load() (*Config, error) {
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
-		OpenAccessEnabled:       false,
+		ExtraSources:            ExtraSourcesAuto,
 	}
 	loadStringVars(cfg)
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
@@ -236,8 +271,14 @@ func loadNumeric(cfg *Config) error {
 	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
 		return err
 	}
-	if err := envBool("LIBGEN_MCP_OPEN_ACCESS", &cfg.OpenAccessEnabled); err != nil {
-		return err
+	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {
+		mode, err := ParseExtraSourcesMode(v)
+		if err != nil {
+			// Startup names the variable; the parser cannot, because the same parse
+			// also serves the per-call search argument.
+			return fmt.Errorf("LIBGEN_MCP_EXTRA_SOURCES: %w", err)
+		}
+		cfg.ExtraSources = mode
 	}
 	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
 		return err

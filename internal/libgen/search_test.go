@@ -105,6 +105,9 @@ func TestParseSearchBooks(t *testing.T) {
 		if r.Downloads[0].Label != "libgen" || !strings.HasPrefix(r.Downloads[0].URL, "https://libgen.li/ads.php?md5=") {
 			t.Errorf("result %d: first download = %+v", i, r.Downloads[0])
 		}
+		if r.Origin != "libgen" {
+			t.Errorf("result %d: Origin = %q, want libgen", i, r.Origin)
+		}
 	}
 	// Known row from the 2026-07-17 capture (adjust to the committed fixture):
 	const wantMD5 = "87a4ebdaf21fa6cc70009a3dd63194ee"

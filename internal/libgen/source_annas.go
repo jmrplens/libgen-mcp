@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -27,6 +28,12 @@ var (
 	annasCIDv1 = regexp.MustCompile(`\bbaf[a-z2-7]{10,}\b`)
 	annasCIDv0 = regexp.MustCompile(`\bQm[1-9A-HJ-NP-Za-km-z]{44}\b`)
 )
+
+// annasFilepath captures the stored path a record page publishes as a labeled
+// code, which is where the file's extension comes from. It is matched by label
+// rather than by position because the set of codes a record carries varies by the
+// collection it came from.
+var annasFilepath = regexp.MustCompile(`>Filepath</span><span[^>]*>([^<]+)<`)
 
 // defaultIPFSGateways is the ordered list of public IPFS gateways tried when a
 // source configures none. dweb.link and w3s.link were verified serving real bytes
@@ -112,13 +119,13 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	var lastErr error
 	for _, mirror := range s.mirrors.Mirrors(ctx) {
 		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
-		fileURL, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5, tryMember)
+		fileURL, ext, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5, tryMember)
 		tryMember = false // the single member attempt is spent, whether it succeeded or failed
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		return Resolved{FileURL: fileURL, VerifyMD5: true, Account: account}, nil
+		return Resolved{FileURL: fileURL, Ext: ext, VerifyMD5: true, Account: account}, nil
 	}
 	if lastErr != nil {
 		return Resolved{}, fmt.Errorf("annas: no mirror resolved %q: %w", it.MD5, lastErr)
@@ -130,23 +137,25 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 // when tryMember is true, and falling back to the keyless IPFS path. When both
 // fail the IPFS error is returned, wrapping the member error so a rejected key
 // stays visible in diagnostics instead of being silently replaced.
-func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string, tryMember bool) (string, *AccountInfo, error) {
+func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client, base, md5 string, tryMember bool) (fileURL, ext string, account *AccountInfo, err error) {
 	var memberErr error
 	if tryMember {
-		fileURL, account, err := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
-		if err == nil {
-			return fileURL, account, nil
+		memberURL, memberAccount, mErr := s.resolveViaMemberAPI(ctx, httpClient, base, md5)
+		if mErr == nil {
+			// The member path never fetches the record page — that is the point of
+			// the fast route — so the type comes from the URL it hands back.
+			return memberURL, extFromURL(memberURL), memberAccount, nil
 		}
-		memberErr = err
+		memberErr = mErr
 	}
-	fileURL, ipfsErr := s.resolveViaIPFS(ctx, httpClient, base, md5)
+	fileURL, ext, ipfsErr := s.resolveViaIPFS(ctx, httpClient, base, md5)
 	if ipfsErr == nil {
-		return fileURL, nil, nil
+		return fileURL, ext, nil, nil
 	}
 	if memberErr != nil {
-		return "", nil, fmt.Errorf("%w (member API: %w)", ipfsErr, memberErr)
+		return "", "", nil, fmt.Errorf("%w (member API: %w)", ipfsErr, memberErr)
 	}
-	return "", nil, ipfsErr
+	return "", "", nil, ipfsErr
 }
 
 // resolveViaMemberAPI asks a mirror's member fast-download API for a direct URL.
@@ -196,10 +205,10 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 
 // resolveViaIPFS reads one mirror's book page for an IPFS CID and returns the
 // first gateway URL that actually serves it.
-func (s annasSource) resolveViaIPFS(ctx context.Context, httpClient *http.Client, base, md5 string) (string, error) {
-	cid, err := s.fetchCID(ctx, httpClient, base, md5)
+func (s annasSource) resolveViaIPFS(ctx context.Context, httpClient *http.Client, base, md5 string) (fileURL, ext string, err error) {
+	cid, ext, err := s.fetchCID(ctx, httpClient, base, md5)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	gateways := s.gateways
 	if len(gateways) == 0 {
@@ -208,32 +217,33 @@ func (s annasSource) resolveViaIPFS(ctx context.Context, httpClient *http.Client
 	for _, gw := range gateways {
 		candidate := strings.TrimRight(gw, "/") + "/" + cid
 		if s.probe(ctx, httpClient, candidate) {
-			return candidate, nil
+			return candidate, ext, nil
 		}
 	}
-	return "", fmt.Errorf("annas: no IPFS gateway served %q", cid)
+	return "", "", fmt.Errorf("annas: no IPFS gateway served %q", cid)
 }
 
-// fetchCID requests a mirror's book page and extracts the item's IPFS CID.
-func (s annasSource) fetchCID(ctx context.Context, httpClient *http.Client, base, md5 string) (string, error) {
+// fetchCID requests a mirror's book page and extracts the item's IPFS CID along
+// with the file extension the page publishes (empty when it publishes none).
+func (s annasSource) fetchCID(ctx context.Context, httpClient *http.Client, base, md5 string) (cid, ext string, err error) {
 	resp, err := s.get(ctx, httpClient, base+"/md5/"+url.PathEscape(md5), nil)
 	if err != nil {
-		return "", fmt.Errorf("annas: requesting %q: %w", base, err)
+		return "", "", fmt.Errorf("annas: requesting %q: %w", base, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("annas: mirror %q returned HTTP %d", base, resp.StatusCode)
+		return "", "", fmt.Errorf("annas: mirror %q returned HTTP %d", base, resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, annasMaxBody))
 	if err != nil {
-		return "", fmt.Errorf("annas: reading %q: %w", base, err)
+		return "", "", fmt.Errorf("annas: reading %q: %w", base, err)
 	}
 	cid, ok := extractIPFSCID(body)
 	if !ok {
-		return "", fmt.Errorf("annas: mirror %q embedded no IPFS CID for %q", base, md5)
+		return "", "", fmt.Errorf("annas: mirror %q embedded no IPFS CID for %q", base, md5)
 	}
-	return cid, nil
+	return cid, extractAnnasExt(body), nil
 }
 
 // probe reports whether a gateway actually serves the content, using a
@@ -267,6 +277,28 @@ func (s annasSource) get(ctx context.Context, httpClient *http.Client, endpoint 
 // extractIPFSCID extracts the item's IPFS CID from an Anna's book page body,
 // preferring the v1 (bafy…) form and falling back to v0 (Qm…). The bool reports
 // whether one was found.
+// extractAnnasExt returns the lowercase file extension a record page publishes
+// for the item, without the leading dot, or "" when the page carries none. The
+// IPFS route addresses a file by content and announces no name, so this is the
+// only chance to learn the type before the bytes are saved.
+func extractAnnasExt(body []byte) string {
+	m := annasFilepath.FindSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(path.Ext(string(m[1]))), ".")
+}
+
+// extFromURL returns the lowercase extension of a URL's path, without the leading
+// dot, or "" when it has none.
+func extFromURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(path.Ext(u.Path)), ".")
+}
+
 func extractIPFSCID(body []byte) (string, bool) {
 	if m := annasCIDv1.Find(body); m != nil {
 		return string(m), true

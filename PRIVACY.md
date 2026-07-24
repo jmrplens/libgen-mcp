@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-19
+Last updated: 2026-07-24
 
 **libgen-mcp** is a local Model Context Protocol (MCP) server. It runs entirely
 on your machine and acts as a bridge between your MCP client (Claude Desktop,
@@ -36,18 +36,39 @@ AI assistant) make. There are no background connections. The destinations are:
   finds no open-access copy, the article `download` chain falls through to the
   configured Sci-Hub hosts (`LIBGEN_MCP_SCIHUB_HOSTS`, e.g. `sci-hub.ee`),
   requesting `https://<host>/<doi>` until one serves the paper.
+- **The extra searchers (when a search reaches beyond the catalog).** A `search`
+  may send **your query text** to Anna's Archive (`annas-archive.gl` and its
+  mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org) and
+  [OpenLibrary](https://openlibrary.org). When this happens is under your
+  control, via the `extra_sources` argument or `LIBGEN_MCP_EXTRA_SOURCES`: by
+  default (`auto`) only when the Library Genesis catalog returns nothing or
+  fails, with `always` on every search, and with `never` not at all. The Crossref
+  request carries the same contact email as Unpaywall. `get_details` also queries
+  Anna's Archive, sending **only the md5**, when the catalog has no record for it.
+- **Anna's Archive and IPFS gateways (only when you download through them).**
+  The `scidb` source resolves an article `download` by `doi` through Anna's
+  Archive, and the `annas` source resolves a book `download` by `md5` there,
+  then fetches the file from a public IPFS gateway (`dweb.link`, `w3s.link`,
+  `ipfs.io`, `gateway.pinata.cloud`). If you set `LIBGEN_MCP_ANNAS_KEY` — or
+  supply a key for a single call when asked — that key is sent to Anna's
+  Archive to use your membership's faster download tier. It is used for that
+  request and never written to disk.
 
 These external services handle your queries under their own policies; the
 maintainer of this project has no relationship with them and no visibility into
 those requests. You can restrict which download sources participate with
-`LIBGEN_MCP_SOURCES`. There are no other network destinations — no update
-checks, no phone-home.
+`LIBGEN_MCP_SOURCES`, and which searchers a `search` may reach with
+`LIBGEN_MCP_EXTRA_SOURCES=never`. There are no other network destinations — no
+update checks, no phone-home.
 
 ## Credentials
 
-None. Library Genesis, its mirrors, and the article sources used here require no
-account or token, so the server never asks for, stores, or transmits any
-credentials.
+None are required. Library Genesis, its mirrors, and the keyless article and
+search sources used here need no account or token. The one optional credential
+is an Anna's Archive membership key (`LIBGEN_MCP_ANNAS_KEY`, or supplied for a
+single call through your client's elicitation prompt), which unlocks that site's
+faster member download tier. It is sent only to Anna's Archive, only on a
+download you asked for, and is never persisted by the server.
 
 ## Local storage and downloads
 
@@ -61,8 +82,9 @@ credentials.
 ## Data retention and sharing
 
 The server retains nothing after it exits and shares data with no third parties
-beyond the Library Genesis mirrors and, for article DOIs, the Unpaywall and
-Sci-Hub sources you explicitly invoke.
+beyond the destinations listed under [Data flows](#data-flows) — the Library
+Genesis mirrors, the extra searchers a `search` may reach, and the article and
+book download sources you invoke.
 
 ## Responsible use
 

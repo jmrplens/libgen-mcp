@@ -2026,3 +2026,54 @@ func TestSelectSourcesUnpaywallHint(t *testing.T) {
 		t.Errorf("unpaywall error %q should point at the email gate", err)
 	}
 }
+
+// TestPerCallCredentialsRespectTheSourceAllowlist verifies a per-call credential
+// cannot bring back a source the deployment removed. LIBGEN_MCP_SOURCES is how an
+// operator says which sources this server may use at all; a caller able to lift
+// that by supplying a key or an email would make it advisory, which is the same
+// hole the extra-sources never mode had.
+func TestPerCallCredentialsRespectTheSourceAllowlist(t *testing.T) {
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 10,
+		RetryAttempts: 1,
+		// The operator allows the catalog and nothing else.
+		Sources: []string{"libgen"},
+	}
+	c := New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+
+	withKey := c.withPerCallAnnas(Item{MD5: "d64efd386ed7227592499460aca2044b", AnnasKey: "secret"}, c.sources)
+	for _, s := range withKey {
+		if s.Name() == "annas" {
+			t.Error("a per-call Anna's key brought back a source the deployment removed")
+		}
+	}
+
+	withEmail := c.withPerCallUnpaywall(Item{DOI: "10.1/x", Email: "someone@example.com"}, c.sources)
+	for _, s := range withEmail {
+		if s.Name() == "unpaywall" {
+			t.Error("a per-call email brought back a source the deployment removed")
+		}
+	}
+}
+
+// TestPerCallEmailStillEnablesUnpaywallWhenAllowed verifies the intended case still
+// works: unpaywall is absent because no contact email was configured, not because
+// the operator excluded it, so a per-call email pulls it in.
+func TestPerCallEmailStillEnablesUnpaywallWhenAllowed(t *testing.T) {
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 10,
+		RetryAttempts: 1, // no Sources list: every source allowed; no email: unpaywall inactive
+	}
+	c := New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+
+	got := c.withPerCallUnpaywall(Item{DOI: "10.1/x", Email: "someone@example.com"}, c.sources)
+	var found bool
+	for _, s := range got {
+		if s.Name() == "unpaywall" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("a per-call email should enable unpaywall when the deployment allows the source")
+	}
+}

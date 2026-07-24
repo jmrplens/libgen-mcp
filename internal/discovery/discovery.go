@@ -33,12 +33,15 @@ const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libge
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin     string `json:"origin"` // "arxiv" | "crossref" | "openlibrary"
-	Title      string `json:"title,omitempty"`
-	Authors    string `json:"authors,omitempty"`
-	Year       string `json:"year,omitempty"`
-	DOI        string `json:"doi,omitempty"`
-	ISBN       string `json:"isbn,omitempty"`
+	Origin  string `json:"origin"` // "arxiv" | "crossref" | "openlibrary"
+	Title   string `json:"title,omitempty"`
+	Authors string `json:"authors,omitempty"`
+	Year    string `json:"year,omitempty"`
+	DOI     string `json:"doi,omitempty"`
+	ISBN    string `json:"isbn,omitempty"`
+	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
+	// Empty for the DOI-keyed open-access providers.
+	MD5        string `json:"md5,omitempty"`
 	PDFURL     string `json:"pdf_url,omitempty"` // a directly-fetchable OA PDF when known
 	OpenAccess bool   `json:"open_access"`
 }

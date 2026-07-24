@@ -5,7 +5,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -57,6 +59,7 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 	// called once per scenario before the model runs, so a fresh session starts at
 	// zero and the count the assertion reads reflects only this scenario's run.
 	confirmElicitations.Store(0)
+	resetElicitations()
 	// Advertise the elicitation capability so scenarios that hit an on-demand
 	// prompt (Unpaywall email for a DOI download, or the download-save
 	// confirmation) can exercise the real elicitation surface end to end. The
@@ -114,21 +117,64 @@ func toolDefs(ctx context.Context, session *mcp.ClientSession) ([]toolDef, error
 // actually fired rather than merely inferring it from a completed download.
 var confirmElicitations atomic.Int64
 
+// elicitLog records every elicitation the server raised during the current
+// scenario and how the host answered it. newHostSession clears it, runScenario
+// snapshots it, so a run's record shows the prompts as well as their effects.
+var elicitLog struct {
+	mu      sync.Mutex
+	entries []elicitRecord
+}
+
+// recordElicitation appends one answered prompt to the scenario's log.
+func recordElicitation(field, message, action string) {
+	elicitLog.mu.Lock()
+	defer elicitLog.mu.Unlock()
+	elicitLog.entries = append(elicitLog.entries, elicitRecord{Field: field, Message: message, Action: action})
+}
+
+// elicitationsSnapshot returns the prompts raised since the last reset.
+func elicitationsSnapshot() []elicitRecord {
+	elicitLog.mu.Lock()
+	defer elicitLog.mu.Unlock()
+	return slices.Clone(elicitLog.entries)
+}
+
+// resetElicitations clears the log at the start of a scenario.
+func resetElicitations() {
+	elicitLog.mu.Lock()
+	defer elicitLog.mu.Unlock()
+	elicitLog.entries = nil
+}
+
 // confirmElicitationCount returns how many download-save confirmation prompts the
 // handler has answered since the last newHostSession reset.
 func confirmElicitationCount() int { return int(confirmElicitations.Load()) }
 
-// evalElicitationHandler answers the two elicitation prompts the server can raise
+// evalElicitationHandler answers the elicitation prompts the server can raise
 // during a scenario. It branches on the single top-level field of the requested
 // schema: an "email" field (the on-demand Unpaywall contact email) is answered
-// with unpaywallEmail(); any other prompt is the download-save confirmation, which
+// with unpaywallEmail(), a "key" field (the Anna's membership key) from the
+// captured environment; any other prompt is the download-save confirmation, which
 // it accepts (confirm=true) so a real download flow proceeds instead of stalling.
 // It never declines: the eval measures whether the model reaches the capability,
 // not whether a human would approve, so a deterministic accept keeps the flow live.
 func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 	field := evalElicitFieldName(req)
 	if strings.Contains(strings.ToLower(field), "email") {
+		recordElicitation(field, elicitMessage(req), "accept")
 		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: unpaywallEmail()}}, nil
+	}
+	// The Anna's Archive membership key. It is answered from the environment
+	// captured before any scenario cleared it, and declined when there is none, so
+	// the server falls back to the keyless route rather than being handed an empty
+	// key it would have to reject.
+	if strings.Contains(strings.ToLower(field), "key") {
+		if annasKeyFromEnv == "" {
+			recordElicitation(field, elicitMessage(req), "decline")
+			return &mcp.ElicitResult{Action: "decline"}, nil
+		}
+		recordElicitation(field, elicitMessage(req), "accept")
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: annasKeyFromEnv}}, nil
 	}
 	if field == "" {
 		field = "confirm"
@@ -136,7 +182,16 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	// Record that a download-save confirmation prompt fired and was accepted, so the
 	// confirmation scenario can hard-assert the elicitation surface actually ran.
 	confirmElicitations.Add(1)
+	recordElicitation(field, elicitMessage(req), "accept")
 	return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
+}
+
+// elicitMessage returns the prompt text the server showed, or "" when it sent none.
+func elicitMessage(req *mcp.ElicitRequest) string {
+	if req == nil || req.Params == nil {
+		return ""
+	}
+	return req.Params.Message
 }
 
 // evalElicitFieldName returns the single top-level property name of an

@@ -34,7 +34,7 @@ your shell, or with `-e` flags on `docker run`.
 | `LIBGEN_MCP_READ_CACHE_BYTES`           | `536870912` (512 MiB)                                    | `[1048576, 53687091200]` (1 MiB–50 GiB), int                                              | Total-size cap of the `read` tool's server-side temp-file cache (built by `FetchToTemp`): downloaded read files past this aggregate size are evicted, least-recently-used first, never while a `read` call holds a reference.                                                                                                                                                                                                                            |
 | `LIBGEN_MCP_READ_CACHE_TTL`             | `10m`                                                    | `[1s, 24h]`, Go duration                                                                  | How long an unreferenced `read` temp file lingers before eviction, so successive pages of one read reuse a single fetch while idle files are reclaimed.                                                                                                                                                                                                                                                                                                  |
 | `LIBGEN_MCP_ENRICH`                     | `true`                                                   | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)                                 | Deployment kill-switch for `get_details`' opt-in `enrich` metadata (Crossref/OpenLibrary). Default `true` means enrichment is *allowed*; set `false` to *forbid* it entirely, regardless of the per-call `enrich` flag. A non-boolean value fails startup.                                                                                                                                                                                               |
-| `LIBGEN_MCP_OPEN_ACCESS`                | `false`                                                  | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)                                 | Deployment default for `search`'s opt-in open-access discovery (arXiv/Crossref/OpenLibrary). Default `false` means a call only federates open-access hits when it sets `include_open_access: true`; set `true` to make discovery on by default while a call can still opt out with `include_open_access: false`. A non-boolean value fails startup.                                                                                                      |
+| `LIBGEN_MCP_EXTRA_SOURCES`              | `auto`                                                   | `auto`, `always`, `never`                                                                 | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. `auto`: only when the Library Genesis catalog returns nothing or fails. `always`: on every search, alongside the catalog. `never`: catalog only, even on a miss. A per-call `extra_sources` argument overrides this default in either direction — except `never`, which is a lock no call can lift; an unrecognized value fails startup.                          |
 
 ## Notes on specific variables
 
@@ -169,14 +169,17 @@ calls to those two third-party APIs, for example in a locked-down or offline-pre
 deployment. See [Tools](tools.md#metadata-enrichment) for what enrichment adds and its 6-second
 best-effort budget.
 
-### `LIBGEN_MCP_OPEN_ACCESS`
+### `LIBGEN_MCP_EXTRA_SOURCES`
 
-Controls the *deployment default* for `search`'s opt-in `include_open_access` argument — it
-does not force discovery on or off unconditionally, since a call's own `include_open_access`
-always wins when set. The default `false` means open-access discovery (arXiv, Crossref,
-OpenLibrary) only runs on a call that explicitly passes `include_open_access: true`; setting
-this variable to `true` flips the deployment default so discovery runs on every `search` call
-unless one explicitly passes `include_open_access: false` to opt out. All three providers are
-keyless (no account or API key) and best-effort, each bounded by its own short per-request
-budget so a slow or failing provider never delays or fails the core Library Genesis search.
-See [Tools](tools.md#open-access-discovery) for the merged `open_access` output shape.
+Controls when the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are
+consulted. The default `auto` consults them only when the Library Genesis catalog returns
+nothing or fails; `always` consults them on every search, concurrently with the catalog;
+`never` restricts every search to the catalog, even on a miss. A per-call `extra_sources`
+argument overrides this default in either direction, with one exception: a deployment set to
+`never` is a **lock**, not a default — no call can re-enable the extras, because a policy an
+individual caller can overrule is not a policy. All four providers are keyless (no
+account or API key) and best-effort, each bounded by its own short per-request budget so a
+slow or failing provider never delays or fails the core Library Genesis search. Anna's
+md5-keyed hits merge into `results` (labeled by `origin`); arXiv/Crossref/OpenLibrary hits
+appear in the separate `open_access` array. See [Tools](tools.md#open-access-discovery)
+for the output shape.

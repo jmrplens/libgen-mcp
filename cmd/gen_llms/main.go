@@ -234,7 +234,8 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
 	b.WriteString("- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)\n")
 	b.WriteString("- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, scidb, libgen, randombook, annas (empty = all)\n")
-	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n\n")
+	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n")
+	b.WriteString("- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)\n\n")
 
 	b.WriteString("Tools:\n\n")
 	for _, t := range toolList {
@@ -253,7 +254,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	writeLLMSLink(&b, "Tools", docsSiteURL+"tools/", "Per-tool reference for "+toolNames(toolList))
 	writeLLMSLink(&b, "Architecture", docsSiteURL+"architecture/", "Internal architecture, mirror discovery and download sources")
 	writeLLMSLink(&b, "Troubleshooting", docsSiteURL+"troubleshooting/", "Common setup and runtime issues")
-	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to Library Genesis mirrors and article sources")
+	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes")
 	writeLLMSLink(&b, "Headless install", repoBlobURL+"llms-install.md", "Machine-readable install guide for AI assistants")
 
 	b.WriteString("\n## Optional\n\n")
@@ -440,6 +441,7 @@ var configEnvVars = []envVarDoc{
 	{"LIBGEN_MCP_ANNAS_KEY", "empty (keyless IPFS)", "Anna's Archive account secret string", "Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path."},
 	{"LIBGEN_MCP_SOURCES", "empty (all enabled)", "comma-separated subset of: unpaywall, scihub, scidb, libgen, randombook, annas", "Enabled/ordered download sources. Empty enables all."},
 	{"LIBGEN_MCP_REMOTE_DOWNLOADS", "false", "1/true/0/false", "Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it."},
+	{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
 }
 
 // writeLLMSFullConfiguration writes the environment-variable reference table.

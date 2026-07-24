@@ -19,16 +19,16 @@ hashes, and per-result download options, plus pagination metadata.
 
 ### search input
 
-| Parameter             | Type     | Required | Description                                                                                                                                                                                                                                          |
-| --------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `query`               | string   | yes      | Search text.                                                                                                                                                                                                                                         |
-| `topics`              | string[] | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all collections.                                                                                                             |
-| `search_in`           | string[] | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit to match all fields.                                                                                                                                                 |
-| `results_per_page`    | int      | no       | Results per page: `25`, `50`, or `100`. Default `25`.                                                                                                                                                                                                |
-| `page`                | int      | no       | Result page, starting at `1`. Default `1`.                                                                                                                                                                                                           |
-| `order`               | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                                      |
-| `order_mode`          | string   | no       | Sort direction: `asc` or `desc`.                                                                                                                                                                                                                     |
-| `include_open_access` | bool     | no       | Also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin. A three-state override: omit to use the deployment default (`LIBGEN_MCP_OPEN_ACCESS`), `true`/`false` to force it on/off for this call. |
+| Parameter          | Type     | Required | Description                                                                                                                                                                                                                                                                                                 |
+| ------------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`            | string   | yes      | Search text.                                                                                                                                                                                                                                                                                                |
+| `topics`           | string[] | no       | Collections to search: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`, `fiction_rus`. Omit for all collections.                                                                                                                                                                    |
+| `search_in`        | string[] | no       | Fields to match: `title`, `author`, `series`, `year`, `publisher`, `isbn`. Omit to match all fields.                                                                                                                                                                                                        |
+| `results_per_page` | int      | no       | Results per page: `25`, `50`, or `100`. Default `25`.                                                                                                                                                                                                                                                       |
+| `page`             | int      | no       | Result page, starting at `1`. Default `1`.                                                                                                                                                                                                                                                                  |
+| `order`            | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                                                                                             |
+| `order_mode`       | string   | no       | Sort direction: `asc` or `desc`.                                                                                                                                                                                                                                                                            |
+| `extra_sources`    | string   | no       | When to search beyond the Library Genesis catalog (Anna's Archive, arXiv, Crossref, OpenLibrary): `auto` consults them only when the catalog finds nothing or fails outright, `always` consults them on every search, `never` restricts the search to the catalog. Omit to use the server default (`auto`). |
 
 ### search output
 
@@ -66,19 +66,22 @@ than `asc`/`desc`. Connectivity and mirror problems surface as described in
 
 ### Open-access discovery
 
-Set `include_open_access: true` to also federate the keyless open-access literature —
-[arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and
-[OpenLibrary](https://openlibrary.org/) — and merge the hits into an `open_access` field
-alongside the usual Library Genesis `results`. It is **off by default**: an omitted
-`include_open_access` follows the deployment's `LIBGEN_MCP_OPEN_ACCESS` default (itself
-`false` — see [Configuration](configuration.md)); the argument is a three-state override, so
-a call can force it on (`true`) or off (`false`) regardless of that default.
+Beyond the Library Genesis catalog, `search` can also consult **extra sources** —
+[Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/),
+[Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) —
+controlled by the `extra_sources` argument (`auto`/`always`/`never`) and its deployment
+default `LIBGEN_MCP_EXTRA_SOURCES` (itself `auto` — see [Configuration](configuration.md)).
+The default `auto` consults them only when the catalog returns nothing or fails; `always`
+consults them on every search, concurrently with the catalog; `never` restricts the search
+to the catalog, even on a miss. Anna's md5-keyed hits merge into `results` (labeled
+`origin: "annas"`); arXiv, Crossref, and OpenLibrary hits appear in a separate `open_access`
+field alongside `results`.
 
 ```json
 {
   "query": "attention is all you need",
   "topics": ["articles"],
-  "include_open_access": true
+  "extra_sources": "always"
 }
 ```
 
@@ -116,7 +119,7 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
   Use its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`.
 
 Hits are deduped against each other (by normalized DOI, then by title+year) and against the
-`results` on the same page, so nothing appears twice. All three providers are keyless — no
+`results` on the same page, so nothing appears twice. All four providers are keyless — no
 account, API key, or login — and best-effort: each runs under its own short budget, so a
 slow or failing provider degrades to contributing nothing rather than delaying or failing the
 core Library Genesis search. Like any external result, `open_access` titles and authors are
@@ -130,15 +133,26 @@ and related edition. Look up by `md5` **or** by `id`, never both.
 
 ### get_details input
 
-| Parameter | Type   | Required | Description                                                                                                                             |
-| --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.          |
-| `id`      | string | one of   | Edition or file id.                                                                                                                     |
-| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                          |
-| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default. |
+| Parameter | Type   | Required | Description                                                                                                                                                        |
+| --------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `md5`     | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.                                     |
+| `id`      | string | one of   | Edition or file id.                                                                                                                                                |
+| `doi`     | string | one of   | Article DOI, e.g. `10.1016/j.cell.2011.02.013`. Looked up exactly against the catalog; the response carries the edition plus the file `md5` to pass to `download`. |
+| `object`  | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                                                     |
+| `enrich`  | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                            |
 
-Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is not
-32 hex chars, or an `object` other than `edition`/`file` returns an input error.
+Provide exactly one of `md5`, `id` or `doi`. Supplying more than one, none, an `md5`
+that is not 32 hex chars, or an `object` other than `edition`/`file` returns an input
+error.
+
+A `doi` lookup uses the catalog's own DOI key, which matches exactly. Searching for a
+DOI as free text is not a substitute: the catalog matches it loosely and returns
+unrelated articles, including ones that merely carry a different DOI in their title.
+
+A DOI the catalog has no record for — which is what an open-access hit carries —
+falls back to the keyless external metadata, returning the `enrichment` object with
+`file.origin` set to `crossref`. Only when nothing answers is the catalog's own miss
+reported.
 
 ### get_details output
 
@@ -152,7 +166,24 @@ Provide exactly one of `md5` or `id`. Supplying both, neither, an `md5` that is 
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
 returns whichever object was requested. A lookup that matches nothing returns a
-"no file found" error.
+"no record" error.
+
+### Records the catalog does not carry
+
+A [search that consulted the extra sources](how-search-works.md) returns md5s the Library
+Genesis catalog never indexed, so a catalog lookup for one of them finds nothing. Rather
+than fail, `get_details` falls back to Anna's Archive and returns what it publishes for
+that md5, with `file.origin` set to `annas` so you know which index answered.
+
+That record is **thinner than a catalog record** and its fields vary by the collection the
+item came from. Every Anna's record observed carries `title`, `author`, `language`, `year`,
+`content_type`, `collection`, `filesize` and `filepath`; `isbn`/`isbn10` and `ipfs_cid`
+appear on a minority. Note in particular that most records have **no** `ipfs_cid`, so the
+keyless IPFS download route is unavailable for them — a member key or another source is
+needed to fetch those. `author` is Anna's own field and is occasionally a PDF producer
+string rather than a person.
+
+Only when neither index has the md5 does the tool return the catalog's own miss error.
 
 ### Metadata enrichment
 

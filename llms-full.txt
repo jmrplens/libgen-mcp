@@ -20,7 +20,7 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 **Parameters:**
 
-- `include_open_access` (boolean): also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin; overrides the server default
+- `extra_sources` (string): a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never
 - `order` (string): a single value (not an array) to sort by: id time_added title author year or size
 - `order_mode` (string): a single value (not an array): asc or desc
 - `page` (integer): result page number starting at 1 (default 1)
@@ -35,13 +35,14 @@ Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
 
 **Get record details**
 
-Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).
+Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition), by edition/file id, or by an article's doi (exact lookup returning the edition plus the file md5 to download). The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).
 
 **Parameters:**
 
+- `doi` (string): article DOI, e.g. 10.1016/j.cell.2011.02.013 (use exactly one of md5, id or doi). Looked up exactly, and the returned record carries the md5 to pass to download
 - `enrich` (boolean): when true, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN); best-effort and off by default
-- `id` (string): edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field
-- `md5` (string): file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field
+- `id` (string): edition or file id from a search result (use exactly one of md5, id or doi). Get it from a result's edition_id or file_id field
+- `md5` (string): file md5 hash from a search result (use exactly one of md5, id or doi). Get it from a prior search result's md5 field
 - `object` (string): with id: a single value edition (default) or file
 
 Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
@@ -109,6 +110,7 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_ANNAS_KEY` | empty (keyless IPFS) | Anna's Archive account secret string | Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path. |
 | `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, scihub, scidb, libgen, randombook, annas | Enabled/ordered download sources. Empty enables all. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | false | 1/true/0/false | Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it. |
+| `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
 
 ## Download sources
 

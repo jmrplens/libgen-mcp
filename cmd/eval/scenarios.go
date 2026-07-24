@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
@@ -19,8 +20,15 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
-// skipPrefix marks an assertion message as a SKIP (an unmet precondition or a
-// flaky live mirror), not a pass or a fail.
+// skipPrefix marks an assertion message as a SKIP, not a pass or a fail. It is
+// reserved for the two cases where there is genuinely nothing to grade: an unmet
+// precondition (a capability the deployment has not configured) and a model that
+// ran out of turns before answering.
+//
+// A live mirror or source that fails is NOT one of them. The model's behavior is
+// still fully observable there, and the only wrong move left to it is claiming a
+// result it never received — so those are graded by gradeDegraded rather than
+// skipped. A scenario that skips routinely is not testing anything.
 const skipPrefix = "SKIP:"
 
 // Shared detail-string fragments, so an assertion's phrasing stays consistent and
@@ -30,9 +38,9 @@ const (
 	// opposed to a SURFACE GAP), so a reader can tell "our bug" from "the model
 	// didn't discover the capability".
 	functionalPrefix = "FUNCTIONAL: "
-	// notExtractableDetail is the skip reason when a fetched file has no
+	// notExtractableDetail opens the reason a fetched file yielded no
 	// extractable text (scanned/unsupported); the concrete reason is appended.
-	notExtractableDetail = " file was not extractable ("
+	notExtractableDetail = "the file was not extractable ("
 	// badDownloadMD5Detail is the failure detail when a download call's md5 is not
 	// a 32-char hex string.
 	badDownloadMD5Detail = "download md5 is not 32-hex"
@@ -73,6 +81,15 @@ const elicitOADOI = "10.1371/journal.pmed.0020124"
 // loads it from .env, so live runs use the real address), otherwise the committed
 // evalUnpaywallEmail fallback so an env-less run still exercises the open-access
 // path.
+// annasKeyFromEnv is the Anna's Archive membership key as configured when the
+// harness started. It is captured at package initialization because a scenario
+// clears LIBGEN_MCP_ANNAS_KEY from the environment to force the elicitation path:
+// reading it later would find the cleared value. Empty when none is configured,
+// in which case the host declines that prompt — which is how an assertion learns
+// there was no key, without reading the environment itself. The key is a paid
+// credential and is never checked into the repository.
+var annasKeyFromEnv = strings.TrimSpace(os.Getenv("LIBGEN_MCP_ANNAS_KEY"))
+
 func unpaywallEmail() string {
 	if v := strings.TrimSpace(os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL")); v != "" {
 		return v
@@ -155,12 +172,25 @@ func stringField(input map[string]any, key string) string {
 
 // findCall returns the first tool call with the given name.
 func findCall(tr transcript, name string) (toolCall, bool) {
+	// The first call that did not error, not simply the first call. A model that
+	// gets an argument wrong, is told so, and retries has made one effective
+	// choice — the one that worked — and grading the abandoned attempt instead
+	// reports a success as a failure. A run where every attempt errored still
+	// returns the first, so a genuine failure is still surfaced.
+	var first toolCall
+	var found bool
 	for _, c := range tr.Calls {
-		if c.Name == name {
+		if c.Name != name {
+			continue
+		}
+		if !found {
+			first, found = c, true
+		}
+		if c.Result == nil || !c.Result.IsError {
 			return c, true
 		}
 	}
-	return toolCall{}, false
+	return first, found
 }
 
 // decodeStructured re-marshals a JSON-decoded structured content value into a
@@ -410,7 +440,7 @@ func scenarios() []scenario {
 				`literature (arXiv, Crossref) for a freely available copy; tell me what you found, ` +
 				`including its DOI or arXiv link.`,
 			// Open-access discovery: like S10-S13, this is deliberately under-specified —
-			// the prompt never names include_open_access, so the model must discover the
+			// the prompt never names extra_sources, so the model must discover the
 			// search field itself and then surface one of the federated open-access hits
 			// (arxiv/crossref) in its answer. A live provider outage is a SKIP, not a
 			// failure, since the flag/plumbing already did its job.
@@ -518,7 +548,451 @@ func scenarios() []scenario {
 			Remote: true,
 			Assert: assertCitations,
 		},
+		// S32-S35 cover the extra-sources escalation: the model searches for a title
+		// the Library Genesis catalog does not carry, and must still find it because
+		// the search escalates to Anna's Archive automatically. The pinned fixture
+		// (test/e2e/testdata/escalation_item.json) defines the query and md5.
+		{
+			ID:     "S32",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			Assert: assertSearchEscalation,
+		},
+		{
+			ID:     "S33",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			Remote: true,
+			Assert: assertSearchEscalation,
+		},
+		{
+			ID:     "S34",
+			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
+			Assert: assertSearchThenDownloadEscalated,
+		},
+		{
+			ID:     "S35",
+			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
+			Remote: true,
+			Assert: assertSearchThenDownloadEscalated,
+		},
+		// S36-S37 grade the follow-up an escalated search invites. The catalog has no
+		// record for an Anna's-only md5, so get_details can only answer by falling back
+		// to Anna's — an earlier run of this harness caught a model walking into that
+		// miss, which is why the case is graded rather than assumed.
+		{
+			ID: "S36",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`then look up its full record details; tell me what collection it comes from.`,
+			Assert: assertEscalatedDetails,
+		},
+		{
+			ID: "S37",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`then look up its full record details; tell me what collection it comes from.`,
+			Remote: true,
+			Assert: assertEscalatedDetails,
+		},
+		// S38-S39 grade the two deployment defaults the per-call argument falls back
+		// to. Neither prompt mentions extra sources, so what is under test is the
+		// server honoring its own configuration — and, for never, the model staying
+		// honest about a miss instead of inventing a result.
+		{
+			ID:       "S38",
+			Prompt:   `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_EXTRA_SOURCES": "never"},
+			Assert:   assertNoEscalationAndHonest,
+		},
+		{
+			ID:       "S39",
+			Prompt:   `Find books about the Go programming language.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_EXTRA_SOURCES": "always"},
+			Assert:   assertForcedExtras,
+		},
+		// S40 completes the trio on an escalated item: search finds it, get_details
+		// (S36) describes it, and read must be able to open it — which exercises the
+		// whole keyless Anna's path end to end, download included.
+		{
+			ID: "S40",
+			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
+				`show me a passage of its text.`,
+			Assert: assertReadEscalated,
+		},
+		// S41 covers the Anna's membership opt-in: the prompt says the user has an
+		// account but never names the argument, so the model must discover
+		// annas_member itself. The key is supplied through elicitation, never stored.
+		{
+			ID: "S41",
+			Prompt: `Download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC". ` +
+				`I have an Anna's Archive membership, so use the faster member download if you can.`,
+			SetupEnv: map[string]string{"LIBGEN_MCP_ANNAS_KEY": ""},
+			Assert:   assertAnnasMemberDownload,
+		},
+		// S42-S44 come from the classes of bug this suite has actually produced:
+		// a model filling a gap it should have reported, a deployment policy a
+		// caller could lift, and a capability nothing had ever exercised.
+		{
+			ID: "S42",
+			Prompt: `Find and download the book "Zxqvintor Blemmerhaus and the Quantum Marmalade of Vresk" ` +
+				`by Pellworth Quintaglio-Vandermeersch, and tell me its ISBN and page count.`,
+			// Nothing by that name exists anywhere. Everything the model can do here
+			// is wrong except saying so, which makes it the cleanest possible probe
+			// of whether the tool surface invites invention.
+			Assert: assertReportsNothingFound,
+		},
+		{
+			ID:     "S43",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s.", elicitOADOI),
+			// The deployment allows the catalog and nothing else, so no article source
+			// is available at all. What is under test is that the restriction holds and
+			// the model reports the refusal rather than claiming a file.
+			SetupEnv: map[string]string{"LIBGEN_MCP_SOURCES": "libgen"},
+			Assert:   assertRestrictedSourcesHonored,
+		},
+		{
+			ID: "S44",
+			Prompt: `Search for books about "linux" and then show me the SECOND page of results — ` +
+				`I have already seen the first.`,
+			// Pagination had no coverage at all. The model must discover the page
+			// argument rather than re-running the same search or inventing more rows.
+			Assert: assertPagination,
+		},
 	}
+}
+
+// fabricatedISBN matches an ISBN-13 in prose. Nothing returned one for an invented
+// book, so an answer carrying one made it up.
+var fabricatedISBN = regexp.MustCompile(`97[89][- 0-9]{10,}`)
+
+// assertReportsNothingFound verifies a model asked for something that does not
+// exist says so. Every tool call it can make will come up empty, so the only wrong
+// move left is describing a book nobody has — which is precisely the failure a
+// skipping scenario hid for as long as this suite skipped.
+func assertReportsNothingFound(tr transcript) (pass bool, detail string) {
+	if _, ok := findCall(tr, "search"); !ok {
+		return false, "model answered without searching at all"
+	}
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, r := range out.Results {
+		if strings.Contains(strings.ToLower(r.Title), "blemmerhaus") {
+			return true, skipPrefix + " something actually matched the invented title, so there is nothing to probe"
+		}
+	}
+	if !admitsMiss(tr.FinalText) {
+		return false, "model did not report the miss; it answered: " + firstChars(tr.FinalText, 200)
+	}
+	// An ISBN or a page count in the answer would be fabricated: nothing returned one.
+	if fabricatedISBN.MatchString(tr.FinalText) {
+		return false, "model reported the miss but still produced an ISBN: " + firstChars(tr.FinalText, 200)
+	}
+	return true, "nothing exists by that name and the model said so, inventing no metadata"
+}
+
+// doiDownloadOutcome reports whether the model tried a DOI download and whether
+// every such attempt was refused.
+func doiDownloadOutcome(tr transcript) (attempted, refused bool) {
+	for _, c := range tr.Calls {
+		if c.Name != "download" || stringField(c.Input, "doi") == "" {
+			continue
+		}
+		attempted = true
+		if c.Result != nil && c.Result.IsError {
+			refused = true
+		}
+	}
+	return attempted, refused
+}
+
+// sourceOutsideAllowlist returns the name of a source that served a download while
+// not being permitted, or "" when every successful download came from an allowed
+// one.
+func sourceOutsideAllowlist(tr transcript, allowed ...string) string {
+	for _, c := range tr.Calls {
+		if c.Name != "download" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var out tools.DownloadOutput
+		if derr := decodeStructured(c.Structured, &out); derr != nil {
+			continue
+		}
+		if out.Source == "" || slices.ContainsFunc(allowed, func(a string) bool {
+			return strings.EqualFold(a, out.Source)
+		}) {
+			continue
+		}
+		return out.Source
+	}
+	return ""
+}
+
+// assertRestrictedSourcesHonored verifies LIBGEN_MCP_SOURCES holds. The deployment
+// permits the catalog only, so a DOI download has no source that can serve it: the
+// tool must refuse, and the model must pass that on rather than claim a file.
+func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
+	sawDOIAttempt, doiRefused := doiDownloadOutcome(tr)
+	if sawDOIAttempt && !doiRefused {
+		return false, functionalPrefix + "a DOI download was served by a deployment whose only source is the catalog"
+	}
+	// The real question is which source served anything that did succeed. A model
+	// that finds a legitimate route through the permitted source has done well; a
+	// source outside the list appearing here is the restriction leaking.
+	if used := sourceOutsideAllowlist(tr, "libgen"); used != "" {
+		return false, functionalPrefix + "download was served by " + used +
+			", which this deployment does not permit"
+	}
+	if !sawDOIAttempt {
+		return false, "SURFACE GAP: model never tried the DOI it was given"
+	}
+	if admitsMiss(tr.FinalText) {
+		return true, "restriction held and the model reported the refusal instead of claiming a file"
+	}
+	return true, "restriction held; the model routed through the permitted source instead of the refused one"
+}
+
+// assertPagination verifies the model reaches the second page rather than
+// re-running the same search or continuing the list from its own head.
+func assertPagination(tr transcript) (pass bool, detail string) {
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		if page, okNum := c.Input["page"].(float64); okNum && page >= 2 {
+			var out tools.SearchOutput
+			if derr := decodeStructured(c.Structured, &out); derr != nil {
+				return false, derr.Error()
+			}
+			if out.Page < 2 {
+				return false, functionalPrefix + fmt.Sprintf("asked for page %v, got page %d back", page, out.Page)
+			}
+			if len(out.Results) == 0 {
+				return gradeDegraded(tr, "the mirror served no second page for this query")
+			}
+			return true, fmt.Sprintf("model set page=%v and received page %d with %d results", page, out.Page, len(out.Results))
+		}
+	}
+	return false, "SURFACE GAP: model never set the page argument — the pagination field's description may not convey it"
+}
+
+// assertNoEscalationAndHonest verifies the never mode is honored and the model does
+// not paper over the resulting miss. A catalog-only search for a title the catalog
+// lacks must return no extra-origin hits at all, and the model must say so rather
+// than describe a file it never saw.
+func assertNoEscalationAndHonest(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			return false, functionalPrefix + "never mode still returned Anna's-origin results"
+		}
+	}
+	if len(out.OpenAccess) > 0 {
+		return false, functionalPrefix + "never mode still returned open-access hits"
+	}
+	if admitsMiss(tr.FinalText) {
+		return true, "never mode honored and the model reported the miss honestly"
+	}
+	// The answer is quoted so a maintainer can tell a fabricated result from a
+	// phrasing this list simply does not recognize.
+	return false, "model did not report the catalog miss; it answered: " + firstChars(tr.FinalText, 200)
+}
+
+// missAdmissions are the ways a model says it found nothing, or could not read
+// what it found. The list is broad, because a false failure here would accuse a
+// model of fabricating when it was merely being polite about it — but every entry
+// is a phrase, never a bare word. "error" or "nothing" on their own appear in
+// plenty of successful answers, and matching those would hand out honesty credit
+// to exactly the fabrications this is meant to catch.
+var missAdmissions = []string{
+	"not found", "no results", "no result", "couldn't find", "could not find",
+	"unable to find", "not able to find", "no matches", "no match", "wasn't able",
+	"was not able", "didn't find", "did not find", "doesn't appear", "does not appear",
+	"found nothing", "no books", "no record", "not available", "isn't available",
+	"is not available", "no luck", "came up empty",
+	// Reading a file that turned out to be unreadable.
+	"not extractable", "no text", "couldn't extract", "could not extract",
+	"unable to extract", "couldn't read", "could not read", "unable to read",
+	"scanned", "image-only", "image only", "no table of contents", "no outline",
+	"could not be extracted", "cannot be extracted", "could not be read",
+	"cannot be read", "download failed", "could not download", "unable to download",
+}
+
+// admitsMiss reports whether an answer acknowledges coming up empty — no result,
+// or a result it could not read. It is how a degraded live run is still graded:
+// the model cannot control whether a PDF is a scan, but it can control whether it
+// says so instead of inventing the contents.
+func admitsMiss(answer string) bool {
+	lower := strings.ToLower(answer)
+	for _, admission := range missAdmissions {
+		if strings.Contains(lower, admission) {
+			return true
+		}
+	}
+	return false
+}
+
+// gradeDegraded grades a scenario whose live payload did not arrive. The model's
+// behavior is still fully observable, and the only wrong move left is to claim a
+// result it never received — so this asserts honesty rather than skipping.
+//
+// It exists because a scenario that routinely skips is not testing anything: the
+// live world varies, but what the model does about it should not.
+func gradeDegraded(tr transcript, what string) (pass bool, detail string) {
+	// No answer at all is the one case with nothing to judge: a model that ran out
+	// of turns has not fabricated anything, so this stays a skip.
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return true, skipPrefix + " " + what + "; the model produced no final answer (turn budget)"
+	}
+	if admitsMiss(tr.FinalText) {
+		return true, what + "; the model reported that plainly instead of inventing a result"
+	}
+	return false, what + "; the model did not say so, it answered: " + firstChars(tr.FinalText, 160)
+}
+
+// firstChars returns up to n characters of s with newlines flattened, for
+// embedding an answer in a one-line assertion message.
+func firstChars(s string, n int) string {
+	flat := strings.Join(strings.Fields(s), " ")
+	if len(flat) <= n {
+		return flat
+	}
+	return flat[:n] + "…"
+}
+
+// assertForcedExtras verifies the always mode consults the extra searchers even when
+// the catalog answers. The query is an ordinary one the catalog has plenty of, so
+// extra-origin hits can only be there because the mode forced them.
+func assertForcedExtras(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	if len(out.Results) == 0 {
+		return gradeDegraded(tr, "the catalog returned nothing for an ordinary query (live mirror)")
+	}
+	var fromAnnas int
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+	}
+	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
+		return gradeDegraded(tr, "always mode ran but no extra searcher returned a hit (live network)")
+	}
+	return true, fmt.Sprintf("always mode consulted the extras alongside a %d-result catalog page (annas=%d, open access=%d)",
+		len(out.Results), fromAnnas, len(out.OpenAccess))
+}
+
+// assertReadEscalated verifies read works on an md5 only Anna's indexes. It is the
+// strictest of the escalation scenarios: reading requires the file itself, so a
+// pass means search, the Anna's download path and text extraction all worked.
+func assertReadEscalated(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	annasMD5 := map[string]bool{}
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.MD5 != "" {
+			annasMD5[strings.ToLower(r.MD5)] = true
+		}
+	}
+	if len(annasMD5) == 0 {
+		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
+	}
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "SURFACE GAP: model never called read on the escalated result"
+	}
+	if !annasMD5[strings.ToLower(stringField(call.Input, "md5"))] {
+		return false, functionalPrefix + "read was called with an md5 that did not come from the escalated results"
+	}
+	if call.Result == nil || call.Result.IsError {
+		return gradeDegraded(tr, "read of the escalated item failed live (Anna's/IPFS unavailable)")
+	}
+	var read tools.ReadOutput
+	if derr := decodeStructured(call.Structured, &read); derr != nil {
+		return false, derr.Error()
+	}
+	if !read.Extractable {
+		return gradeDegraded(tr, "the escalated item was not extractable ("+read.Reason+")")
+	}
+	return true, fmt.Sprintf("read opened an Anna's-only item (%d chars extracted)", len(read.Text))
+}
+
+// assertAnnasMemberDownload verifies the membership opt-in is discoverable: the
+// prompt says the user has an account without naming annas_member, so the model
+// must set it. The key itself arrives through elicitation, so this also proves that
+// prompt is answerable end to end.
+func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
+	// Read from the transcript, not from the environment: this scenario clears the
+	// configured key so the elicitation always fires, and the host answers it with
+	// the key it has — accepting when one exists, declining when none does. Deriving
+	// it this way keeps the assertion a pure function of the transcript, which is
+	// what lets a recorded run be re-graded later.
+	for _, e := range tr.Elicitations {
+		if strings.Contains(strings.ToLower(e.Field), "key") && e.Action != "accept" {
+			return true, skipPrefix + " no Anna's membership key was available, so the member tier cannot be exercised"
+		}
+	}
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if member, _ := call.Input["annas_member"].(bool); !member {
+		return false, "SURFACE GAP: model never set annas_member despite the user offering a membership"
+	}
+	// The scenario is about discovering the argument, which the check above already
+	// settled. A spent allowance or an unreachable file host is the account's
+	// business, not the tool surface's — so it is graded on honesty, not skipped.
+	if downloadFailed(call) {
+		return gradeDegraded(tr, "member download failed live (quota, mirror or gateway)")
+	}
+	var out tools.DownloadOutput
+	if derr := decodeStructured(call.Structured, &out); derr != nil {
+		return false, derr.Error()
+	}
+	if out.Account == nil {
+		return true, "model set annas_member; the download went over the keyless path, so no allowance was reported"
+	}
+	return true, fmt.Sprintf("member download reported the account allowance (%d of %d left)",
+		out.Account.DownloadsLeft, out.Account.DownloadsPerDay)
+}
+
+// assertEscalatedDetails verifies get_details answered for an md5 only Anna's
+// indexes. A FAIL here is FUNCTIONAL: the search told the model to call
+// get_details, so the tool must serve the md5 the search returned. A model that
+// never reached get_details is a SURFACE GAP and also fails.
+func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	var annas bool
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			annas = true
+			break
+		}
+	}
+	if !annas {
+		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
+	}
+	call, ok := findCall(tr, "get_details")
+	if !ok {
+		return false, "model never called get_details on the escalated result"
+	}
+	var details tools.DetailsOutput
+	if derr := decodeStructured(call.Structured, &details); derr != nil {
+		return false, "get_details returned no usable record: " + derr.Error()
+	}
+	origin, _ := details.File["origin"].(string)
+	if origin != "annas" {
+		return false, fmt.Sprintf("get_details record origin = %q, want annas (the catalog has no record for this md5)", origin)
+	}
+	return true, fmt.Sprintf("get_details fell back to Anna's for the escalated md5 (collection=%v)", details.File["collection"])
 }
 
 // assertRemoteDownloadLandsLocal checks the remote block: the model calls
@@ -530,8 +1004,12 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
+	// What is under test is the remote contract: the model calls download and the
+	// server hands back a link instead of a file. Whether the publisher then serves
+	// the harness is the publisher's decision, not this project's behavior, so it is
+	// evidence rather than the gate.
 	if downloadFailed(call) {
-		return true, skipPrefix + " remote resolve failed live (mirror/network)"
+		return gradeDegraded(tr, "remote resolve failed live (mirror/network)")
 	}
 	for _, f := range tr.Fetched {
 		if f.Err == "" && f.Size > 0 {
@@ -540,7 +1018,7 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	}
 	for _, f := range tr.Fetched {
 		if f.Err != "" {
-			return true, skipPrefix + " resolved a link but the live fetch failed: " + f.Err
+			return true, "remote: model got a link and the server returned it; the harness's own fetch was refused upstream (" + f.Err + ")"
 		}
 	}
 	return false, "remote download returned no fetchable link that landed locally"
@@ -561,7 +1039,7 @@ func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 		return false, "resolve call carried neither a valid md5 nor doi"
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model set resolve_only correctly but the live resolve failed (mirror/network)"
+		return gradeDegraded(tr, "model set resolve_only correctly but the live resolve failed (mirror/network)")
 	}
 	var out struct {
 		Resolved *struct {
@@ -575,7 +1053,7 @@ func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 	if out.Resolved == nil || !strings.HasPrefix(out.Resolved.URL, "http") {
 		return false, "resolve_only returned no resolved URL"
 	}
-	return true, fmt.Sprintf("resolved a URL via %s without downloading: %s", out.Resolved.Source, out.Resolved.URL)
+	return true, fmt.Sprintf("resolved a URL via %s without downloading: %s", out.Resolved.Source, redactURL(out.Resolved.URL))
 }
 
 // assertOrderedTableWithLinks checks a large, ordered results request that asks
@@ -595,10 +1073,10 @@ func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
 		return false, "model did not set an order for a sorted list"
 	}
 	if len(out.Results) < 25 {
-		return true, fmt.Sprintf("%s ordered search returned only %d results from the mirror", skipPrefix, len(out.Results))
+		return gradeDegraded(tr, fmt.Sprintf("ordered search returned only %d results from the mirror", len(out.Results)))
 	}
 	if !resultsCarryLinks(out.Results) {
-		return true, skipPrefix + " results carried no download links from the mirror"
+		return gradeDegraded(tr, "results carried no download links from the mirror")
 	}
 	if !finalTextHasLink(tr.FinalText) {
 		return false, "model did not include any download link in its answer despite the results carrying links"
@@ -634,7 +1112,7 @@ func assertDownloadProgress(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " download did not complete live, so no progress could be emitted (mirror/network)"
+		return gradeDegraded(tr, "download did not complete live, so no progress could be emitted (mirror/network)")
 	}
 	var last *mcp.ProgressNotificationParams
 	n := 0
@@ -672,7 +1150,7 @@ func assertNaturalSearch(titleToken string) func(transcript) (bool, string) {
 			return false, fmt.Sprintf("query %q does not mention %q", query, titleToken)
 		}
 		if len(out.Results) == 0 {
-			return true, skipPrefix + " search well-formed but the mirror returned 0 results"
+			return gradeDegraded(tr, "search well-formed but the mirror returned 0 results")
 		}
 		topics := stringSlice(call.Input, "topics")
 		return true, fmt.Sprintf("unguided search; %d results; topics=%v", len(out.Results), topics)
@@ -695,7 +1173,7 @@ func assertNaturalBookDownload(tr transcript) (pass bool, detail string) {
 		return false, "download md5 did not come from a prior search result"
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model discovered the md5 download flow but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "model discovered the md5 download flow but the live fetch failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, "")
 }
@@ -723,7 +1201,7 @@ func assertNaturalArticleDownload(tr transcript) (pass bool, detail string) {
 		via = "search"
 	}
 	if downloadFailed(call) {
-		return true, fmt.Sprintf("%s model chose a valid doi (%s) but the live fetch failed (mirror/network)", skipPrefix, via)
+		return gradeDegraded(tr, fmt.Sprintf("model chose a valid doi (%s) but the live fetch failed (mirror/network)", via))
 	}
 	ok2, msg := checkDownloadedFile(call, "")
 	if !ok2 {
@@ -783,7 +1261,7 @@ func assertS3(tr transcript) (pass bool, detail string) {
 		return false, "topics missing standards"
 	}
 	if len(out.Results) == 0 {
-		return true, skipPrefix + " standards search returned 0 results from the mirror"
+		return gradeDegraded(tr, "standards search returned 0 results from the mirror")
 	}
 	return true, fmt.Sprintf("standards search; %d results", len(out.Results))
 }
@@ -802,7 +1280,7 @@ func assertS4(tr transcript) (pass bool, detail string) {
 		return false, "get_details md5 did not come from a prior search result"
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " details lookup failed against the live mirror"
+		return gradeDegraded(tr, "details lookup failed against the live mirror")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
@@ -873,6 +1351,67 @@ func idInSearchResults(tr transcript, id string) bool {
 	return false
 }
 
+// readTextGrounded reports whether any read call actually returned text or
+// matches, so an answer describing contents has a source in the transcript rather
+// than being invented. It is what separates a model that compiled an answer from
+// what it read from one that made it up.
+func readTextGrounded(tr transcript) bool {
+	for _, c := range tr.Calls {
+		if c.Name != "read" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var out tools.ReadOutput
+		if err := decodeStructured(c.Structured, &out); err != nil {
+			continue
+		}
+		if strings.TrimSpace(out.Text) != "" || len(out.Matches) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// findOutlineCall returns the read call to grade an outline scenario against: the
+// one that actually produced a table of contents, if any, else the first read.
+//
+// A model handed a copy with no embedded outline may legitimately try another
+// copy, and grading its first attempt would call a correct recovery a fabrication
+// — which is exactly what a live run reported before this existed.
+func findOutlineCall(tr transcript) (toolCall, bool) {
+	var firstOutline toolCall
+	var haveOutline bool
+	for _, c := range tr.Calls {
+		if c.Name != "read" {
+			continue
+		}
+		// Only a call that asked for an outline can be graded as one. Falling back
+		// to any read at all would report a model that did set outline=true, then
+		// read sequentially, as never having discovered the capability.
+		if asked, _ := c.Input["outline"].(bool); !asked {
+			continue
+		}
+		if !haveOutline {
+			firstOutline, haveOutline = c, true
+		}
+		if c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var out tools.ReadOutput
+		if err := decodeStructured(c.Structured, &out); err != nil {
+			continue
+		}
+		if len(out.Outline) > 0 {
+			return c, true
+		}
+	}
+	if haveOutline {
+		return firstOutline, true
+	}
+	// No outline call at all: hand back any read so the assertion can report the
+	// missing argument rather than the missing call.
+	return findCall(tr, "read")
+}
+
 // detailsIdentifierGrounded verifies a get_details call was keyed by an identifier
 // from a prior search result: a 32-hex md5 traced to search, or an edition/file id
 // traced to search. It guards enrichment/citation provenance (S22) so a model that
@@ -894,7 +1433,12 @@ func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why strin
 		}
 		return true, ""
 	}
-	return false, "get_details call set neither md5 nor id"
+	// A DOI needs no grounding in a search result: it is an identifier the user
+	// supplies directly, and looking it up is the whole point of accepting it.
+	if stringField(call.Input, "doi") != "" {
+		return true, ""
+	}
+	return false, "get_details call set none of md5, id or doi"
 }
 
 func assertReadSummary(tr transcript) (pass bool, detail string) {
@@ -915,14 +1459,16 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 		return false, why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
+	// Whether today's copy is a scan is live luck; whether the model then invents a
+	// summary of text it never saw is exactly what this scenario should catch.
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
 	if strings.TrimSpace(out.Text) == "" {
 		return false, "extractable read returned no text"
@@ -936,8 +1482,26 @@ func assertReadSummary(tr transcript) (pass bool, detail string) {
 	return true, fmt.Sprintf("read %s (%d chars); model summarized it in %d chars", out.Format, len(out.Text), len(tr.FinalText))
 }
 
+// redactURL strips a resolved link's query string, keeping the host and path.
+//
+// A libgen download URL carries a short-lived access key in its query, and these
+// messages are published verbatim in the results tables — a static analyzer flagged
+// one as a leaked credential, correctly. What the message is for is showing which
+// host answered, which survives redaction intact.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "(unparseable URL)"
+	}
+	if u.RawQuery == "" {
+		return u.String()
+	}
+	u.RawQuery = ""
+	return u.String() + "?(query redacted)"
+}
+
 // assertOpenAccessDiscovery checks the S20 open-access discovery flow: the model
-// must set include_open_access itself (the prompt only asks it to "also check the
+// must set extra_sources itself (the prompt only asks it to "also check the
 // open-access literature", it never names the field) and then surface one of the
 // federated arXiv/Crossref/OpenLibrary hits in its final answer. An empty
 // open_access list is a SKIP — the keyless providers are best-effort third-party
@@ -947,12 +1511,12 @@ func assertOpenAccessDiscovery(tr transcript) (pass bool, detail string) {
 	if err != nil {
 		return false, err.Error()
 	}
-	include, _ := call.Input["include_open_access"].(bool)
-	if !include {
-		return false, "model did not set include_open_access on the search call"
+	extra, _ := call.Input["extra_sources"].(string)
+	if extra != "always" {
+		return false, "model did not set extra_sources to \"always\" on the search call"
 	}
 	if len(out.OpenAccess) == 0 {
-		return true, skipPrefix + " include_open_access was set but no provider returned a hit (live network)"
+		return gradeDegraded(tr, "extra_sources was set but no provider returned a hit (live network)")
 	}
 	if !finalTextMentionsOpenAccess(tr.FinalText, out.OpenAccess) {
 		return false, "model did not reference any open-access hit (origin, doi, or pdf_url) in its answer"
@@ -1009,14 +1573,14 @@ func assertCitations(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " get_details failed against the live mirror"
+		return gradeDegraded(tr, "get_details failed against the live mirror")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if out.Citations == nil || !strings.HasPrefix(strings.TrimSpace(out.Citations.BibTeX), "@") {
-		return true, skipPrefix + " get_details returned no BibTeX (record metadata too sparse to build one)"
+		return gradeDegraded(tr, "get_details returned no BibTeX (record metadata too sparse to build one)")
 	}
 	if !finalTextHasCitation(tr.FinalText) {
 		return false, "FUNCTIONAL: get_details returned BibTeX but the model did not surface a citation in its answer"
@@ -1069,14 +1633,14 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " get_details(enrich) failed against the live mirror/Crossref"
+		return gradeDegraded(tr, "get_details(enrich) failed against the live mirror/Crossref")
 	}
 	var out tools.DetailsOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if out.Enrichment == nil || out.Enrichment.Crossref == nil {
-		return true, skipPrefix + " enrich=true but Crossref returned no metadata (best-effort external API)"
+		return gradeDegraded(tr, "enrich=true but Crossref returned no metadata (best-effort external API)")
 	}
 	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref) {
 		if strings.TrimSpace(tr.FinalText) == "" {
@@ -1110,17 +1674,19 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read(find) failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read(find) failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
+	// Whether this particular copy contains the term is live luck; claiming a
+	// passage that the search did not return is not.
 	if out.MatchCount == 0 {
-		return true, skipPrefix + " read(find) ran but found no matches for the term in this copy"
+		return gradeDegraded(tr, "read(find) ran but found no matches for the term in this copy")
 	}
 	if strings.TrimSpace(tr.FinalText) == "" {
 		return false, "FUNCTIONAL: read(find) returned matches but the model showed no passage"
@@ -1135,7 +1701,7 @@ func assertReadFind(tr transcript) (pass bool, detail string) {
 // convey table-of-contents mode). A PDF with no embedded outline, or a live fetch
 // failure, is a SKIP — the mode still ran correctly.
 func assertReadOutline(tr transcript) (pass bool, detail string) {
-	call, ok := findCall(tr, "read")
+	call, ok := findOutlineCall(tr)
 	if !ok {
 		return false, "SURFACE GAP: model never called read — the outline capability lives on read and was not discovered"
 	}
@@ -1148,17 +1714,24 @@ func assertReadOutline(tr transcript) (pass bool, detail string) {
 		return false, functionalPrefix + why
 	}
 	if call.Result == nil || call.Result.IsError {
-		return true, skipPrefix + " read(outline) failed against the live mirror/source chain"
+		return gradeDegraded(tr, "read(outline) failed against the live mirror/source chain")
 	}
 	var out tools.ReadOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
 		return false, err.Error()
 	}
 	if !out.Extractable {
-		return true, skipPrefix + notExtractableDetail + out.Reason + ")"
+		return gradeDegraded(tr, notExtractableDetail+out.Reason+")")
 	}
+	// A PDF with no embedded table of contents is common and legitimate, and a model
+	// that then reads the book's own contents page and compiles one from it has done
+	// nothing wrong — the text is right there in the transcript. Only an answer with
+	// no source behind it is a fabrication.
 	if len(out.Outline) == 0 {
-		return true, skipPrefix + " read(outline) ran cleanly but this PDF has no embedded table of contents"
+		if readTextGrounded(tr) {
+			return true, "no embedded table of contents; the model read the document and compiled one from its text"
+		}
+		return gradeDegraded(tr, "read(outline) ran cleanly but this file has no embedded table of contents")
 	}
 	if strings.TrimSpace(tr.FinalText) == "" {
 		return false, "FUNCTIONAL: outline returned entries but the model produced no answer"
@@ -1182,7 +1755,7 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model downloaded by DOI (host answered the email elicitation) but the live OA chain failed"
+		return gradeDegraded(tr, "model downloaded by DOI (host answered the email elicitation) but the live OA chain failed")
 	}
 	var res libgen.DownloadResult
 	if err := decodeStructured(call.Structured, &res); err != nil {
@@ -1219,9 +1792,9 @@ func assertConfirmedDownload(tr transcript) (pass bool, detail string) {
 	}
 	if downloadFailed(call) {
 		if tr.ConfirmElicits == 0 {
-			return true, skipPrefix + " live fetch failed before any save-confirmation elicitation fired (mirror/network)"
+			return gradeDegraded(tr, "live fetch failed before any save-confirmation elicitation fired (mirror/network)")
 		}
-		return true, skipPrefix + " confirmation elicitation fired but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "confirmation elicitation fired but the live fetch failed (mirror/network)")
 	}
 	if tr.ConfirmElicits == 0 {
 		return false, "FUNCTIONAL: download completed but no save-confirmation elicitation fired — the confirmation surface did not run"
@@ -1244,7 +1817,7 @@ func assertS5(tr transcript) (pass bool, detail string) {
 		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " valid md5 download but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "valid md5 download but the live fetch failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, "")
 }
@@ -1279,7 +1852,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 		return false, badDownloadMD5Detail
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " model set source=" + want + " correctly but the live download failed (mirror/network)"
+		return gradeDegraded(tr, "model set source="+want+" correctly but the live download failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, want)
 }
@@ -1294,7 +1867,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 		return false, notAValidDOI
 	}
 	if downloadFailed(call) {
-		return true, skipPrefix + " valid DOI download but the live fetch failed (mirror/network)"
+		return gradeDegraded(tr, "valid DOI download but the live fetch failed (mirror/network)")
 	}
 	fileOK, msg := checkDownloadedFile(call, "")
 	if !fileOK {
@@ -1416,4 +1989,68 @@ func selectScenarios(all []scenario, only string) []scenario {
 		}
 	}
 	return out
+}
+
+// assertSearchEscalation verifies the search was called and returned at least one
+// Anna's-origin result (evidence the auto escalation fired), and that the model
+// did not give up with "not found". A live provider outage is a SKIP.
+func assertSearchEscalation(tr transcript) (pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	_ = call
+	var fromAnnas int
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+	}
+	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
+		return gradeDegraded(tr, "escalation produced no extra-origin results (live network)")
+	}
+	if fromAnnas == 0 {
+		return gradeDegraded(tr, "only open-access hits, no Anna's-origin results today")
+	}
+	lower := strings.ToLower(tr.FinalText)
+	if strings.Contains(lower, "not found") || strings.Contains(lower, "no results") || strings.Contains(lower, "couldn't find") {
+		return false, "model reported not-found despite escalation returning Anna's results"
+	}
+	return true, fmt.Sprintf("escalation surfaced %d Anna's-origin result(s); model did not report not-found", fromAnnas)
+}
+
+// assertSearchThenDownloadEscalated verifies the model searched, then downloaded
+// an item found via escalation (Anna's origin). A live download failure is a SKIP.
+func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string) {
+	_, out, err := searchOutput(tr)
+	if err != nil {
+		return false, err.Error()
+	}
+	var annasMD5s []string
+	for _, r := range out.Results {
+		if r.Origin == "annas" && r.MD5 != "" {
+			annasMD5s = append(annasMD5s, strings.ToLower(r.MD5))
+		}
+	}
+	if len(annasMD5s) == 0 {
+		return gradeDegraded(tr, "no Anna's-origin result to download (live network)")
+	}
+	dlCall, ok := findCall(tr, "download")
+	if !ok {
+		return false, "model searched but did not call download"
+	}
+	dlMD5, _ := dlCall.Input["md5"].(string)
+	dlMD5 = strings.ToLower(strings.TrimSpace(dlMD5))
+	if dlMD5 == "" {
+		return false, "download call has no md5"
+	}
+	// Not a live-network skip: the escalation did surface Anna's results, so
+	// downloading something else is the model failing the flow under test.
+	if !slices.Contains(annasMD5s, dlMD5) {
+		return false, "model downloaded an md5 not from an Anna's-origin result"
+	}
+	if dlCall.Result != nil && dlCall.Result.IsError {
+		return gradeDegraded(tr, "download call returned a tool error (live network)")
+	}
+	return true, fmt.Sprintf("model searched, found an Anna's-origin item, and downloaded it (md5=%s)", dlMD5)
 }

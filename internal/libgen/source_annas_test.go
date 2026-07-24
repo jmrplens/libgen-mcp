@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -465,5 +466,74 @@ func TestPerCallAnnasKeyIgnoredForNonAnnasSource(t *testing.T) {
 	got := c.withPerCallAnnas(Item{MD5: "abc", AnnasKey: "k", Source: "libgen"}, base)
 	if len(got) != len(base) {
 		t.Errorf("chain grew to %d for a non-annas pinned source, want unchanged", len(got))
+	}
+}
+
+// TestExtractAnnasExtFromRecordPage verifies the file extension is read off the
+// record page. Anna's serves the bytes over IPFS under a content address that
+// carries no filename, so without this the saved file is extensionless and the
+// read tool cannot pick an extractor for it — a real PDF becomes unreadable.
+func TestExtractAnnasExtFromRecordPage(t *testing.T) {
+	page, err := os.ReadFile("../discovery/testdata/annas_md5_zlib.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extractAnnasExt(page); got != "pdf" {
+		t.Errorf("extractAnnasExt() = %q, want pdf", got)
+	}
+	if got := extractAnnasExt([]byte(`<html><body>no record here</body></html>`)); got != "" {
+		t.Errorf("extractAnnasExt() on a non-record page = %q, want empty", got)
+	}
+}
+
+// TestAnnasResolveCarriesTheExtension verifies the resolved item announces the
+// file type. The IPFS gateway URL ends in a content address with no name, so
+// without this the saved file has no extension and read cannot extract it.
+func TestAnnasResolveCarriesTheExtension(t *testing.T) {
+	gw := gatewayServing(http.StatusPartialContent)
+	defer gw.Close()
+	page := annasBookPage("QmTest0000000000000000000000000000000000000000",
+		"bafyworkingcidzzzz234567") +
+		`<span class="x">Filepath</span><span class="y">zlib/no-category/Author/Some Book.pdf</span>`
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer mirror.Close()
+
+	s := annasSource{mirrors: staticMirrors{mirror.URL}, gateways: []string{gw.URL}}
+	got, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Ext != "pdf" {
+		t.Errorf("Resolved.Ext = %q, want pdf — an extensionless save makes the file unreadable", got.Ext)
+	}
+}
+
+// TestAnnasMemberResolveCarriesTheExtension verifies the member tier also announces
+// the file type. It never fetches the record page — that is the point of the fast
+// path — so the extension has to come from the URL the API hands back, or a keyed
+// deployment would save extensionless files that read cannot open.
+func TestAnnasMemberResolveCarriesTheExtension(t *testing.T) {
+	file := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusPartialContent)
+	}))
+	defer file.Close()
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "fast_download") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"download_url":"` + file.URL + `/dl/Some%20Book.pdf"}`))
+	}))
+	defer mirror.Close()
+
+	s := annasSource{mirrors: staticMirrors{mirror.URL}, key: "secret"}
+	got, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got.Ext != "pdf" {
+		t.Errorf("Resolved.Ext = %q, want pdf", got.Ext)
 	}
 }

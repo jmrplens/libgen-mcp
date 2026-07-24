@@ -164,7 +164,7 @@ func TestE2EHTTPRemoteReadByMD5(t *testing.T) {
 }
 
 // TestE2EHTTPRemoteSearchOpenAccess proves open-access discovery works over HTTP:
-// a search with include_open_access=true returns OA hits labeled by a known
+// a search with extra_sources=always returns OA hits labeled by a known
 // origin. It gates on requireLive and SKIPS when the open-access providers return
 // nothing.
 func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
@@ -175,7 +175,7 @@ func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
 	_, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
 	res, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search",
-		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "include_open_access": true},
+		Arguments: map[string]any{"query": "graphene", "topics": []string{"articles"}, "extra_sources": "always"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool(search) over HTTP error: %v", err)
@@ -194,6 +194,70 @@ func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
 		}
 	}
 	t.Logf("open_access hits over HTTP=%d", len(out.OpenAccess))
+}
+
+// TestE2EHTTPRemoteSearchEscalates proves the escalation survives the HTTP
+// transport: the same catalog-miss query that escalates in-process must escalate
+// over HTTP too, since a hosted deployment is where an unreachable catalog matters
+// most. The result must also be usable — its md5 is what a remote caller passes to
+// download to get a link back.
+func TestE2EHTTPRemoteSearchEscalates(t *testing.T) {
+	requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	_, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "search",
+		// auto is explicit: the deployment default is configurable, so an omitted
+		// argument could quietly exercise always or never instead.
+		Arguments: map[string]any{"query": item.Query, "extra_sources": "auto"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(search) over HTTP error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("search tool returned an error result over HTTP: %+v", res.Content)
+	}
+	var out tools.SearchOutput
+	decodeStructured(t, res, &out)
+	var fromAnnas int
+	for i := range out.Results {
+		if out.Results[i].Origin == "annas" {
+			fromAnnas++
+		}
+	}
+	if fromAnnas == 0 {
+		t.Fatalf("no Anna's-origin results over HTTP for a catalog miss; escalation did not happen (results=%d)", len(out.Results))
+	}
+	t.Logf("escalated over HTTP: annas hits=%d of %d results", fromAnnas, len(out.Results))
+}
+
+// TestE2EHTTPRemoteRejectsUnknownExtraSources proves an unrecognized mode is an
+// error rather than a silent fallback to the default, so a caller that mistypes
+// the argument learns about it instead of quietly getting different behavior.
+func TestE2EHTTPRemoteRejectsUnknownExtraSources(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, _, session := newRemoteHTTPSession(t, ctx, mcp.ClientOptions{})
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "golang", "extra_sources": "sometimes"},
+	})
+	if err == nil && (res == nil || !res.IsError) {
+		t.Fatal("an unrecognized extra_sources value should be rejected")
+	}
+	t.Logf("unrecognized mode rejected as expected: err=%v content=%v", err, contentOrNil(res))
+}
+
+// contentOrNil returns a result's content, or nil when the call failed outright.
+func contentOrNil(res *mcp.CallToolResult) any {
+	if res == nil {
+		return nil
+	}
+	return res.Content
 }
 
 // TestE2EHTTPRemotePrompts proves the prompt surface works over the HTTP

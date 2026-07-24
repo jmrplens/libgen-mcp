@@ -168,3 +168,42 @@ func TestDefaultProviders(t *testing.T) {
 		}
 	}
 }
+
+// TestDedupKeysOnMD5 verifies two results sharing an md5 collapse to one, even when
+// their titles differ — the md5 is the stronger identity for file-keyed results.
+func TestDedupKeysOnMD5(t *testing.T) {
+	const md5 = "d64efd386ed7227592499460aca2044b"
+	merged := dedupResults([][]DiscoveryResult{
+		{{Origin: "annas", MD5: md5, Title: "Data Science Essentials"}},
+		{{Origin: "annas", MD5: md5, Title: "Data Science Essentials (2nd printing)"}},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("got %d results, want 1 after md5 dedup", len(merged))
+	}
+}
+
+// TestDedupKeepsDistinctMD5s verifies distinct md5s survive.
+func TestDedupKeepsDistinctMD5s(t *testing.T) {
+	merged := dedupResults([][]DiscoveryResult{
+		{{Origin: "annas", MD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Title: "A"}},
+		{{Origin: "annas", MD5: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Title: "B"}},
+	})
+	if len(merged) != 2 {
+		t.Fatalf("got %d results, want both kept", len(merged))
+	}
+}
+
+// TestExtraProvidersIncludesAnnasAndOA verifies the extra set is the open-access
+// providers plus Anna's.
+func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
+	got := ExtraProviders("", staticMirrors{"https://annas-archive.gl"})
+	names := map[string]bool{}
+	for _, p := range got {
+		names[p.Name()] = true
+	}
+	for _, want := range []string{"arxiv", "crossref", "openlibrary", "annas"} {
+		if !names[want] {
+			t.Errorf("ExtraProviders missing %q (got %v)", want, names)
+		}
+	}
+}

@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -488,6 +490,282 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 		t.Logf("annas served a real download: md5=%s bytes=%d verified=%v", md5, res.SizeBytes, res.Verified)
 		return
 	}
+	skipIfAnnasUnavailable(t, err)
+	t.Fatalf("annas failed in an undiagnosed way: %v", err)
+}
+
+// escalationItem is the pinned catalog-miss / Anna's-hit fixture.
+type escalationItem struct {
+	Query string `json:"query"`
+	MD5   string `json:"md5"`
+	Title string `json:"title"`
+	Note  string `json:"note"`
+}
+
+// loadEscalationItem reads the pinned fixture describing an item Anna's carries
+// and the Library Genesis catalog does not.
+func loadEscalationItem(t *testing.T) escalationItem {
+	t.Helper()
+	b, err := os.ReadFile("testdata/escalation_item.json")
+	if err != nil {
+		t.Fatalf("reading escalation fixture: %v", err)
+	}
+	var it escalationItem
+	if uerr := json.Unmarshal(b, &it); uerr != nil {
+		t.Fatalf("decoding escalation fixture: %v", uerr)
+	}
+	return it
+}
+
+// callSearch registers the tools on an in-process MCP server, calls search with
+// the given arguments, and decodes the structured output — following the same
+// pattern as newMCPDownloadEnv but for the search tool.
+func callSearch(t *testing.T, ctx context.Context, env *liveEnv, args map[string]any) tools.SearchOutput {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "search", Arguments: args})
+	if err != nil {
+		t.Fatalf("search tool error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("search tool returned error: %v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshaling structured content: %v", err)
+	}
+	var out tools.SearchOutput
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatalf("decoding search output: %v", uerr)
+	}
+	return out
+}
+
+// TestE2ESearchEscalatesOnCatalogMiss is the core proof: a query for an item the
+// catalog does not carry must still return it, sourced from Anna's, without the
+// caller asking for anything special.
+func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// auto is passed explicitly: the deployment default is configurable, so an
+	// omitted argument could silently exercise always or never instead.
+	out := callSearch(t, ctx, env, map[string]any{"query": item.Query, "extra_sources": "auto"})
+
+	var fromAnnas int
+	var foundPinned bool
+	for _, r := range out.Results {
+		if r.Origin == "annas" {
+			fromAnnas++
+		}
+		if strings.EqualFold(r.MD5, item.MD5) {
+			foundPinned = true
+		}
+	}
+	if fromAnnas == 0 {
+		t.Fatalf("no Anna's-origin results for a query the catalog misses; escalation did not happen (results=%d)", len(out.Results))
+	}
+	// The query is the item's own title, so Anna's ranking it off the page means
+	// the fixture no longer describes reality and must be re-pinned.
+	if !foundPinned {
+		t.Fatalf("pinned md5 %s absent from %d Anna's results for its own title; re-pin the fixture", item.MD5, fromAnnas)
+	}
+}
+
+// TestE2ESearchDoesNotEscalateOnCatalogHit verifies the common path stays cheap: a
+// query the catalog answers must not pull in extra sources, so ordinary searches
+// neither slow down nor add third-party traffic.
+func TestE2ESearchDoesNotEscalateOnCatalogHit(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": "python", "extra_sources": "auto"})
+	if len(out.Results) == 0 {
+		t.Skip("the catalog returned nothing for a broad query today; cannot assert the no-escalation path")
+	}
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("catalog hit still escalated: found a %q result", r.Origin)
+		}
+	}
+}
+
+// TestE2ESearchAlwaysMode verifies extra_sources=always consults the extra searchers
+// even when the catalog already answered.
+func TestE2ESearchAlwaysMode(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": "python", "extra_sources": "always"})
+	if len(out.Results) == 0 && len(out.OpenAccess) == 0 {
+		t.Skip("no source answered for this query today")
+	}
+	var extra int
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			extra++
+		}
+	}
+	if extra == 0 && len(out.OpenAccess) == 0 {
+		t.Fatal("extra_sources=always produced no extra-origin results at all")
+	}
+}
+
+// TestE2ESearchNeverMode verifies extra_sources=never is honored even when the catalog
+// returns nothing, so a caller or deployment can demand catalog-only behavior.
+func TestE2ESearchNeverMode(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{"query": item.Query, "extra_sources": "never"})
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("extra_sources=never still returned a %q result", r.Origin)
+		}
+	}
+}
+
+// TestE2ENeverIsALockNotADefault verifies a deployment configured to never cannot
+// be talked out of it. The setting exists so an operator can guarantee the server
+// contacts no extra provider; a caller able to ask for them anyway would make that
+// guarantee worthless. A live evaluator run caught exactly that — a model retried
+// with always after an empty catalog search and reached Anna's.
+func TestE2ENeverIsALockNotADefault(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	locked := *env.cfg
+	locked.ExtraSources = config.ExtraSourcesNever
+	lockedEnv := &liveEnv{cfg: &locked, client: env.client}
+
+	// The query is a known catalog miss and the call explicitly asks for the extras,
+	// so anything other than an empty, catalog-only page means the lock leaked.
+	out := callSearch(t, ctx, lockedEnv, map[string]any{"query": item.Query, "extra_sources": "always"})
+	for _, r := range out.Results {
+		if r.Origin != "" && r.Origin != "libgen" {
+			t.Fatalf("a never deployment returned a %q result despite the lock", r.Origin)
+		}
+	}
+	if len(out.OpenAccess) > 0 {
+		t.Fatalf("a never deployment returned %d open-access hits despite the lock", len(out.OpenAccess))
+	}
+}
+
+// TestE2EEscalatedDownloadKeepsItsFileType verifies an escalated download lands as
+// a usable file. Anna's serves bytes over IPFS, which addresses content and
+// announces no name, so the type has to come from the record: without it the file
+// saves extensionless and every reader downstream is blind to what it is.
+func TestE2EEscalatedDownloadKeepsItsFileType(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: item.MD5, Source: "annas"}, t.TempDir(), "")
+	if err != nil {
+		skipIfAnnasUnavailable(t, err)
+		t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+	}
+	if ext := strings.ToLower(filepath.Ext(res.Path)); ext == "" {
+		t.Fatalf("saved %q with no extension; read cannot choose an extractor for it", res.Path)
+	}
+	t.Logf("escalated item saved as %s (%d bytes)", filepath.Base(res.Path), res.SizeBytes)
+}
+
+// TestE2EReadEscalatedItem verifies the whole escalated chain ends somewhere
+// useful: an item the catalog does not carry is found, fetched from Anna's and
+// read. It is the strictest of these tests — a pass means search, the Anna's
+// download path, the file type and text extraction all held together.
+func TestE2EReadEscalatedItem(t *testing.T) {
+	requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+
+	_, session := newReadSession(t, ctx)
+	out := callRead(t, ctx, session, map[string]any{"md5": item.MD5})
+	if !out.Extractable {
+		t.Fatalf("escalated item was not extractable: %s", out.Reason)
+	}
+	if strings.TrimSpace(out.Text) == "" {
+		t.Fatal("escalated item reported extractable but yielded no text")
+	}
+	t.Logf("read %d characters from an item the catalog does not carry", len(out.Text))
+}
+
+// TestE2EGetDetailsByDOI verifies a DOI resolves exactly, and to something
+// downloadable. A live evaluator run showed a model reaching for get_details with
+// a DOI, being rejected, and spending three more turns searching its way to the
+// md5 the catalog could have handed it straight away.
+func TestE2EGetDetailsByDOI(t *testing.T) {
+	env := requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	const doi = "10.1016/j.cell.2011.02.013" // Hallmarks of Cancer: The Next Generation
+	edition, file, err := env.client.DetailsByDOI(ctx, doi)
+	if err != nil {
+		t.Fatalf("DetailsByDOI(%s) error: %v", doi, err)
+	}
+	if got, _ := edition["doi"].(string); !strings.EqualFold(got, doi) {
+		t.Errorf("edition.doi = %q, want %q — the lookup must be exact, not a text match", got, doi)
+	}
+	if file == nil {
+		t.Fatal("no file beside the edition; a DOI lookup must yield an md5 to download")
+	}
+	if md5, _ := file["md5"].(string); !md5Re.MatchString(md5) {
+		t.Errorf("file.md5 = %q, want a 32-hex digest", md5)
+	}
+	t.Logf("doi=%s edition=%v md5=%v", doi, edition["title"], file["md5"])
+}
+
+// TestE2EExtensionlessFileStillReads verifies content decides when the name does
+// not. A file fetched by content address, or from a CDN that announces no
+// filename, lands with no extension; dispatching on the name alone reported real
+// books as unsupported, and a model handed that answered with an invented table
+// of contents. The pinned escalation item comes over IPFS, which is exactly that
+// case.
+func TestE2EExtensionlessFileStillReads(t *testing.T) {
+	requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
+	defer cancel()
+
+	_, session := newReadSession(t, ctx)
+	out := callRead(t, ctx, session, map[string]any{"md5": item.MD5})
+	if !out.Extractable {
+		t.Fatalf("an IPFS-fetched PDF must still be recognized by content: %s", out.Reason)
+	}
+	if out.Format != "pdf" {
+		t.Errorf("Format = %q, want pdf — the format was not recovered from the bytes", out.Format)
+	}
+}
+
+// skipIfAnnasUnavailable skips on the known ways Anna's and the public IPFS
+// gateways fail live, and returns otherwise so the caller can fail on anything
+// undiagnosed rather than tolerating a new failure mode silently.
+func skipIfAnnasUnavailable(t *testing.T, err error) {
+	t.Helper()
 	known := []string{
 		"embedded no IPFS CID",   // item not pinned to IPFS
 		"no IPFS gateway served", // every gateway down or lacking the block
@@ -501,5 +779,75 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 			t.Skipf("annas unavailable in a known way: %v", err)
 		}
 	}
-	t.Fatalf("annas failed in an undiagnosed way: %v", err)
+}
+
+// TestE2EGetDetailsFallsBackToAnnas verifies the follow-up a search suggests works
+// on an escalated result: the Library Genesis catalog has no record for the pinned
+// md5, so get_details must answer from Anna's Archive instead of failing. It goes
+// through the MCP tools layer, since that is the only path a real client takes.
+func TestE2EGetDetailsFallsBackToAnnas(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"}, nil)
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "get_details", Arguments: map[string]any{"md5": item.MD5},
+	})
+	if err != nil {
+		t.Fatalf("get_details tool error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("get_details on an Anna's-only md5 returned an error: %v", res.Content)
+	}
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatalf("marshaling structured content: %v", merr)
+	}
+	var out tools.DetailsOutput
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatalf("decoding details output: %v", uerr)
+	}
+	if got, _ := out.File["origin"].(string); got != "annas" {
+		t.Fatalf("file.origin = %q, want annas — the catalog should not have answered", got)
+	}
+	if got, _ := out.File["title"].(string); got == "" {
+		t.Fatal("the fallback record carries no title")
+	}
+	t.Logf("annas fallback record: title=%v collection=%v size=%v",
+		out.File["title"], out.File["collection"], out.File["filesize"])
+}
+
+// TestE2ESearchEscalatedResultIsDownloadable closes the loop: an item found only via
+// escalation must actually download through the annas source, proving search and
+// download line up rather than each half working alone.
+func TestE2ESearchEscalatedResultIsDownloadable(t *testing.T) {
+	env := requireLive(t)
+	item := loadEscalationItem(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: item.MD5, Source: "annas"}, t.TempDir(), "")
+	if err == nil {
+		if res.SizeBytes <= 0 {
+			t.Fatalf("downloaded %d bytes", res.SizeBytes)
+		}
+		t.Logf("escalated item downloaded: bytes=%d verified=%v", res.SizeBytes, res.Verified)
+		return
+	}
+	skipIfAnnasUnavailable(t, err)
+	t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
 }

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -89,6 +90,17 @@ func maybeFetchResolved(ctx context.Context, call toolCall) *fetchedFile {
 // maxTurns bounds how many model calls one scenario conversation may make.
 const maxTurns = 6
 
+// scenarioBudget bounds the wall time of one scenario. Turns are bounded, but a
+// single tool call was not: a download or read that sits on an established but
+// silent connection blocks the scenario, and with it the whole run, forever —
+// three full runs stalled on the last scenario before this existed, each with
+// established IPFS gateway sockets and no bytes moving.
+//
+// It is generous on purpose. The slowest honest scenarios take a little over two
+// minutes, so anything past this is not slow, it is stuck, and reporting it as
+// stuck is more useful than waiting.
+var scenarioBudget = 6 * time.Minute
+
 // maxToolResultLen caps the size of a tool result fed back to the model.
 const maxToolResultLen = 20_000
 
@@ -128,6 +140,12 @@ type toolCall struct {
 	Input      map[string]any
 	Result     *mcp.CallToolResult
 	Structured any
+	// Duration is how long the tool took to answer, and ServerLogs is what the MCP
+	// server logged internally while serving it. Neither is graded; both are
+	// recorded, because they are the only view of what happened between the request
+	// and the response.
+	Duration   time.Duration
+	ServerLogs []string
 }
 
 // transcript captures everything a scenario's assertions grade against: every
@@ -144,6 +162,16 @@ type transcript struct {
 	// elicitation handler answered during this scenario (see confirmElicitations);
 	// the confirmation scenario hard-asserts it fired.
 	ConfirmElicits int
+	// Turns is the conversation as it happened, recorded rather than graded: the
+	// prose the model wrote alongside each set of tool calls, what the reply cost,
+	// and how long it took. An intermediate turn is often where a wrong decision is
+	// first visible, and none of it survived anywhere before.
+	Turns []turnRecord
+	// Elicitations is every prompt the server raised back at the host.
+	Elicitations []elicitRecord
+	// Tools is the surface the model was shown: what it had to work from when
+	// choosing a tool and its arguments.
+	Tools []toolDef
 }
 
 // runScenario drives one scenario to completion: it applies any per-scenario
@@ -152,8 +180,16 @@ type transcript struct {
 // MCP session; feed tool_result blocks back) until the model answers without a
 // tool call or the turn budget is exhausted.
 func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr transcript, err error) {
+	ctx, cancel := context.WithTimeout(ctx, scenarioBudget)
+	defer cancel()
+
 	restore := applyEnv(sc.SetupEnv)
 	defer restore()
+
+	// Everything the MCP server logs from here on is both printed and kept, so each
+	// call's internal decisions can be attached to the request that caused them.
+	logs, restoreLog := captureServerLogs()
+	defer restoreLog()
 
 	session, progress, cleanup, err := newHostSession(ctx, sc.Remote)
 	if err != nil {
@@ -165,6 +201,7 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 	if err != nil {
 		return transcript{}, err
 	}
+	tr.Tools = defs
 
 	toolChoice := sc.ToolChoice
 	if toolChoice == "" {
@@ -177,9 +214,11 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 	defer func() {
 		tr.Progress = progress.snapshot()
 		tr.ConfirmElicits = confirmElicitationCount()
+		tr.Elicitations = elicitationsSnapshot()
 	}()
 	messages := []message{{Role: "user", Content: []contentBlock{{Type: "text", Text: sc.Prompt}}}}
-	for range maxTurns {
+	for turn := 1; turn <= maxTurns; turn++ {
+		started := time.Now()
 		resp, callErr := ac.call(ctx, anthropicRequest{
 			Model:       evalModel,
 			MaxTokens:   maxTokens,
@@ -189,34 +228,65 @@ func runScenario(ctx context.Context, ac *anthropicClient, sc scenario) (tr tran
 			Messages:    messages,
 		})
 		if callErr != nil {
+			// A blown budget shows up here, on whichever call happened to be next.
+			// Say so plainly: the time went to the scenario, not to this request, and
+			// the record's per-call durations show where.
+			if ctx.Err() != nil {
+				callErr = fmt.Errorf("scenario exceeded its %s budget (see the record's per-call durations for where the time went)", scenarioBudget)
+			}
+			tr.Turns = append(tr.Turns, turnRecord{N: turn, LatencyMS: time.Since(started).Milliseconds(), Error: callErr.Error()})
 			return tr, callErr
 		}
+		uses := toolUseBlocks(resp.Content)
+		tr.Turns = append(tr.Turns, newTurnRecord(turn, time.Since(started), resp, uses))
 		messages = append(messages, message{Role: "assistant", Content: resp.Content})
 
-		uses := toolUseBlocks(resp.Content)
 		if len(uses) == 0 {
 			tr.FinalText = textOf(resp.Content)
 			return tr, nil
 		}
-		results := make([]contentBlock, 0, len(uses))
-		for _, use := range uses {
-			call, block := executeTool(ctx, session, use)
-			tr.Calls = append(tr.Calls, call)
-			results = append(results, block)
-			// Simulate the agent's own fetch tool: pull any resolve-only download
-			// link to local disk (remote block).
-			if f := maybeFetchResolved(ctx, call); f != nil {
-				tr.Fetched = append(tr.Fetched, *f)
-			}
-		}
-		messages = append(messages, message{Role: "user", Content: results})
+		messages = append(messages, message{Role: "user", Content: tr.runTools(ctx, session, uses, logs)})
 	}
 	return tr, nil
 }
 
+// runTools executes one turn's tool calls against the live session, recording each
+// and returning the tool_result blocks to feed back to the model.
+func (tr *transcript) runTools(ctx context.Context, session *mcp.ClientSession, uses []contentBlock, logs *logCapture) []contentBlock {
+	results := make([]contentBlock, 0, len(uses))
+	for _, use := range uses {
+		call, block := executeTool(ctx, session, use, logs)
+		tr.Calls = append(tr.Calls, call)
+		results = append(results, block)
+		// Simulate the agent's own fetch tool: pull any resolve-only download link
+		// to local disk (remote block).
+		if f := maybeFetchResolved(ctx, call); f != nil {
+			tr.Fetched = append(tr.Fetched, *f)
+		}
+	}
+	return results
+}
+
+// newTurnRecord flattens one model reply into its record.
+func newTurnRecord(n int, latency time.Duration, resp anthropicResponse, uses []contentBlock) turnRecord {
+	rec := turnRecord{
+		N:          n,
+		LatencyMS:  latency.Milliseconds(),
+		StopReason: resp.StopReason,
+		Text:       textOf(resp.Content),
+	}
+	if resp.Usage != nil {
+		rec.InputTokens, rec.OutputTokens = resp.Usage.InputTokens, resp.Usage.OutputTokens
+	}
+	for _, use := range uses {
+		rec.ToolUses = append(rec.ToolUses, toolUseRecord{Name: use.Name, Input: use.Input})
+	}
+	return rec
+}
+
 // executeTool runs one model tool_use against the live MCP session and returns
 // both the recorded toolCall and the tool_result block to feed back to the model.
-func executeTool(ctx context.Context, session *mcp.ClientSession, use contentBlock) (toolCall, contentBlock) {
+func executeTool(ctx context.Context, session *mcp.ClientSession, use contentBlock, logs *logCapture) (toolCall, contentBlock) {
 	call := toolCall{Name: use.Name, Input: use.Input}
 	params := &mcp.CallToolParams{Name: use.Name, Arguments: use.Input}
 	// Attach a progress token to download calls so the server emits progress
@@ -224,7 +294,13 @@ func executeTool(ctx context.Context, session *mcp.ClientSession, use contentBlo
 	if use.Name == "download" {
 		params.SetProgressToken(downloadProgressToken)
 	}
+	// Calls run one after another, so the log written between these two marks is
+	// this call's own — which is what attributes the server's internal decisions to
+	// the request that caused them.
+	mark, started := logs.mark(), time.Now()
 	res, err := session.CallTool(ctx, params)
+	call.Duration = time.Since(started)
+	call.ServerLogs = logs.since(mark)
 	if err != nil {
 		return call, contentBlock{
 			Type:      "tool_result",

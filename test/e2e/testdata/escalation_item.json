@@ -1,0 +1,6 @@
+{
+  "query": "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC",
+  "md5": "00dd2b0b58e81e3c6e7cb9e7b72dee23",
+  "title": "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC",
+  "note": "Present in Anna's Archive, absent from the Library Genesis catalog as of 2026-07-24. Verified three ways, all of which must hold for the escalation tests to mean anything: libgen.li json.php?object=f&md5=... returns exactly [] for this md5; a libgen.li index.php search for this query returns zero result rows (so the auto mode escalates); and Anna's md5 page publishes an IPFS CID (QmQg2L4vJwKFPiaDpdSY5d42EZ4XFkg8Dzpcuwxk23noyF), so the escalated hit is actually downloadable without a key. Re-pin with the commands in plan/2026-07-24-extra-search-sources.md if the catalog later absorbs it — and check json.php against a known-present md5 first, because a json.php outage returns a body that is easy to misread as absence."
+}

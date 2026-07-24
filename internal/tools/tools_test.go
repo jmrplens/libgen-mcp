@@ -1313,6 +1313,59 @@ func TestDetailsByMD5LookupError(t *testing.T) {
 	}
 }
 
+// TestDetailsFallsBackToAnnas verifies get_details answers for an md5 the Library
+// Genesis catalog never had. A search that escalated returns exactly such md5s, so
+// without this fallback the tool the caller is told to use would always fail on
+// them. The record must be labeled with its origin, since Anna's metadata is
+// thinner than the catalog's and the caller should know which it is reading.
+func TestDetailsFallsBackToAnnas(t *testing.T) {
+	page := mustReadFile(t, "../discovery/testdata/annas_md5_zlib.html")
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/md5/") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write(page)
+	}))
+	t.Cleanup(annas.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, staticMirrors{annas.URL})
+	_, out, err := handler(context.Background(), nil, DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23"})
+	if err != nil {
+		t.Fatalf("get_details on an Anna's-only md5 should fall back, got error: %v", err)
+	}
+	if got := stringField(out.File, "title"); got != "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" {
+		t.Errorf("file.title = %q, want the Anna's title", got)
+	}
+	if got := stringField(out.File, "origin"); got != "annas" {
+		t.Errorf("file.origin = %q, want %q so the caller knows which index answered", got, "annas")
+	}
+	if strings.Join(out.NextSteps, "\n") == "" {
+		t.Error("a fallback record should still carry download guidance")
+	}
+}
+
+// TestDetailsSurfacesTheCatalogErrorWhenAnnasHasNothingEither verifies the catalog's
+// error survives when the fallback finds nothing, so a genuinely unknown md5 is
+// still reported as unknown rather than as an Anna's outage.
+func TestDetailsSurfacesTheCatalogErrorWhenAnnasHasNothingEither(t *testing.T) {
+	annas := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(annas.Close)
+
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, staticMirrors{annas.URL})
+	_, _, err := handler(context.Background(), nil, DetailsInput{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"})
+	if err == nil {
+		t.Fatal("an md5 neither index knows should fail")
+	}
+	if !strings.Contains(err.Error(), "catalog") {
+		t.Errorf("error %q should be the catalog's own miss", err)
+	}
+}
+
 // TestDetailsByIDLookupError covers detailsByID's error return when the client's
 // lookup fails, for both the edition (default) and file objects.
 func TestDetailsByIDLookupError(t *testing.T) {
@@ -1943,9 +1996,9 @@ func oaDiscoveryServers(t *testing.T) *int32 {
 }
 
 // oaSession builds a search-capable MCP session against the libgen book fixtures
-// with the given open-access deployment default, so the open-access tests can
+// with the given extra-sources deployment default, so the escalation tests can
 // drive the real search handler end to end.
-func oaSession(t *testing.T, openAccessDefault bool) *mcp.ClientSession {
+func oaSession(t *testing.T, mode config.ExtraSourcesMode) *mcp.ClientSession {
 	t.Helper()
 	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
 	mux := http.NewServeMux()
@@ -1954,7 +2007,7 @@ func oaSession(t *testing.T, openAccessDefault bool) *mcp.ClientSession {
 	t.Cleanup(srv.Close)
 	cfg := &config.Config{
 		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
-		RetryAttempts: 1, UnpaywallEmail: "test@example.com", OpenAccessEnabled: openAccessDefault,
+		RetryAttempts: 1, UnpaywallEmail: "test@example.com", ExtraSources: mode,
 	}
 	return newDownloadSession(t, cfg, staticMirrors{srv.URL})
 }
@@ -1984,14 +2037,14 @@ func oaSearchOutput(t *testing.T, session *mcp.ClientSession, args map[string]an
 }
 
 // TestSearchTool_OpenAccessOptIn verifies the per-call opt-in: with
-// include_open_access=true the search output carries origin-labeled OA hits and the
-// discovery servers were called; with the flag off (and the deployment default
-// off) the OA slice is empty and NO discovery request is made.
+// extra_sources=always the search output carries origin-labeled OA hits and the
+// discovery servers were called; with extra_sources=never the OA slice is empty
+// and NO discovery request is made.
 func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	hits := oaDiscoveryServers(t)
-	session := oaSession(t, false)
+	session := oaSession(t, config.ExtraSourcesAuto)
 
-	oa := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": true})
+	oa := oaSearchOutput(t, session, map[string]any{"query": "golang", "extra_sources": "always"})
 	if len(oa) == 0 {
 		t.Fatalf("open_access should be populated when opted in, got none")
 	}
@@ -2007,7 +2060,7 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	}
 
 	atomic.StoreInt32(hits, 0)
-	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "include_open_access": false})
+	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "extra_sources": "never"})
 	if len(off) != 0 {
 		t.Errorf("open_access should be empty when opted out, got %d", len(off))
 	}
@@ -2016,46 +2069,188 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	}
 }
 
-// TestSearchTool_OpenAccessDefaultOff verifies that with neither a per-call flag
-// nor the deployment default set, OA discovery stays off and unqueried.
+// TestSearchTool_OpenAccessDefaultOff verifies that in auto mode with catalog
+// hits present, discovery stays off and unqueried — the common path stays cheap.
 func TestSearchTool_OpenAccessDefaultOff(t *testing.T) {
 	hits := oaDiscoveryServers(t)
-	session := oaSession(t, false)
+	session := oaSession(t, config.ExtraSourcesAuto)
 	oa := oaSearchOutput(t, session, map[string]any{"query": "golang"})
 	if len(oa) != 0 {
-		t.Errorf("open_access should be empty by default, got %d", len(oa))
+		t.Errorf("open_access should be empty by default with catalog hits, got %d", len(oa))
 	}
 	if got := atomic.LoadInt32(hits); got != 0 {
 		t.Errorf("discovery was called %d times by default, want 0", got)
 	}
 }
 
-// TestSearchTool_OpenAccessDedupVsLibgen verifies that an OA hit whose DOI or
-// title+year matches a libgen result is dropped from the OA slice, so the same work
-// is never presented twice.
-func TestSearchTool_OpenAccessDedupVsLibgen(t *testing.T) {
-	oaDiscoveryServers(t)
-	// A libgen result sharing the arXiv fixture's DOI must suppress that OA hit.
-	out := SearchOutput{Results: []libgen.Result{
-		{Title: "Some Book", DOI: "10.1000/XYZ123", Year: "2021"},
+// TestShouldEscalate covers the trigger matrix across all three modes.
+func TestShouldEscalate(t *testing.T) {
+	cases := []struct {
+		name string
+		mode config.ExtraSourcesMode
+		hits int
+		err  error
+		want bool
+	}{
+		{"auto, catalog answered", config.ExtraSourcesAuto, 3, nil, false},
+		{"auto, catalog empty", config.ExtraSourcesAuto, 0, nil, true},
+		{"auto, catalog failed", config.ExtraSourcesAuto, 0, errors.New("mirrors down"), true},
+		{"always, catalog answered", config.ExtraSourcesAlways, 3, nil, true},
+		{"always, catalog empty", config.ExtraSourcesAlways, 0, nil, true},
+		{"never, catalog empty", config.ExtraSourcesNever, 0, nil, false},
+		{"never, catalog failed", config.ExtraSourcesNever, 0, errors.New("down"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldEscalate(tc.mode, tc.hits, tc.err); got != tc.want {
+				t.Fatalf("shouldEscalate = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestResolveExtraModePrecedence verifies an explicit per-call mode overrides the
+// deployment default in either direction, that a blank value defers to it, and that
+// an unrecognized value is rejected rather than silently ignored.
+func TestResolveExtraModePrecedence(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesAlways}
+
+	if got, err := resolveExtraMode(SearchInput{}, cfg); err != nil || got != config.ExtraSourcesAlways {
+		t.Fatalf("blank = (%q, %v), want the deployment default", got, err)
+	}
+	if got, err := resolveExtraMode(SearchInput{ExtraSources: "never"}, cfg); err != nil || got != config.ExtraSourcesNever {
+		t.Fatalf("explicit never = (%q, %v), want never", got, err)
+	}
+	if _, err := resolveExtraMode(SearchInput{ExtraSources: "sometimes"}, cfg); err == nil {
+		t.Fatal("an unknown per-call mode must be rejected")
+	}
+}
+
+// TestDeploymentNeverCannotBeOverridden verifies never is a lock, not a default.
+// It exists so a deployment can guarantee it never contacts the extra providers;
+// a caller able to ask for them anyway would make that guarantee worthless — and a
+// live evaluator run caught a model doing exactly that, retrying with always after
+// an empty catalog search.
+func TestDeploymentNeverCannotBeOverridden(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesNever}
+	for _, asked := range []string{"", "auto", "always", "never"} {
+		got, err := resolveExtraMode(SearchInput{ExtraSources: asked}, cfg)
+		if err != nil {
+			t.Fatalf("extra_sources=%q returned an error: %v", asked, err)
+		}
+		if got != config.ExtraSourcesNever {
+			t.Errorf("extra_sources=%q resolved to %q against a never deployment; want never", asked, got)
+		}
+	}
+}
+
+// TestForcedEscalationIsAlwaysModeOnly verifies only the always mode is forced.
+// auto depends on the catalog's outcome and never must not run the extras at all,
+// so neither may start before the catalog has answered.
+func TestForcedEscalationIsAlwaysModeOnly(t *testing.T) {
+	cases := map[config.ExtraSourcesMode]bool{
+		config.ExtraSourcesAlways: true,
+		config.ExtraSourcesAuto:   false,
+		config.ExtraSourcesNever:  false,
+	}
+	for mode, want := range cases {
+		if got := forcedEscalation(mode); got != want {
+			t.Errorf("forcedEscalation(%q) = %v, want %v", mode, got, want)
+		}
+	}
+}
+
+// rendezvousTimeout bounds how long one side of the concurrency rendezvous waits
+// for the other. A sequential implementation waits it out in full and then fails,
+// so a regression reports a clear error instead of hanging the suite.
+const rendezvousTimeout = 3 * time.Second
+
+// awaitPeer blocks until peer is closed, reporting a failure if the wait times out.
+// It is called from httptest handler goroutines, so it uses t.Errorf (safe from any
+// goroutine) rather than t.Fatalf.
+func awaitPeer(t *testing.T, peer <-chan struct{}, side string) {
+	t.Helper()
+	select {
+	case <-peer:
+	case <-time.After(rendezvousTimeout):
+		t.Errorf("%s ran without its counterpart in flight: the forced path is still sequential", side)
+	}
+}
+
+// TestForcedSearchQueriesExtrasConcurrently verifies the extra searchers are already
+// in flight while the catalog is still being queried, so a forced search costs one
+// round of latency rather than two.
+//
+// Both sides announce themselves and then wait for the other: run sequentially,
+// whichever side goes first waits out rendezvousTimeout and fails; run concurrently,
+// both proceed at once.
+func TestForcedSearchQueriesExtrasConcurrently(t *testing.T) {
+	catalogEntered, extraEntered := make(chan struct{}), make(chan struct{})
+	var catalogOnce, extraOnce sync.Once
+
+	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) {
+		catalogOnce.Do(func() { close(catalogEntered) })
+		awaitPeer(t, extraEntered, "the catalog search")
+		_, _ = w.Write(searchHTML)
+	})
+	catalog := httptest.NewServer(mux)
+	t.Cleanup(catalog.Close)
+
+	// arXiv stands in for the extra searchers: Federate runs them concurrently, so
+	// one of them reaching the rendezvous proves the whole set was started early.
+	arxiv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		extraOnce.Do(func() { close(extraEntered) })
+		awaitPeer(t, catalogEntered, "the extra searchers")
+		_, _ = w.Write([]byte(oaArxivFeed))
+	}))
+	quiet := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(func() { arxiv.Close(); quiet.Close() })
+	restore := discovery.SetBasesForTest(arxiv.URL, quiet.URL, quiet.URL)
+	t.Cleanup(restore)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 10 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, UnpaywallEmail: "test@example.com", ExtraSources: config.ExtraSourcesAlways,
+	}
+	handler := searchHandler(libgen.New(staticMirrors{catalog.URL}, cfg), cfg, staticMirrors{quiet.URL})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, _, err := handler(ctx, nil, SearchInput{Query: "golang"}); err != nil {
+		t.Fatalf("forced search failed: %v", err)
+	}
+}
+
+// TestMergeExtraHitsSplitsByKeySpace verifies md5-keyed hits join the catalog
+// results labeled by origin, DOI-keyed hits go to the open-access list, and an
+// md5 already in the catalog is dropped so the richer catalog record survives.
+func TestMergeExtraHitsSplitsByKeySpace(t *testing.T) {
+	const dupMD5 = "d64efd386ed7227592499460aca2044b"
+	out := &SearchOutput{Results: []libgen.Result{
+		{MD5: dupMD5, Title: "Already in the catalog", Origin: "libgen", Extension: "pdf"},
 	}}
-	cfg := &config.Config{UnpaywallEmail: "test@example.com", OpenAccessEnabled: true}
-	force := true
-	appendOpenAccess(context.Background(), cfg, SearchInput{Query: "golang", IncludeOpenAccess: &force}, &out)
-	for _, r := range out.OpenAccess {
-		if discovery.NormalizeDOI(r.DOI) == "10.1000/xyz123" {
-			t.Errorf("OA hit sharing a libgen DOI should have been deduped, got %+v", r)
-		}
+
+	mergeExtraHits(out, []discovery.DiscoveryResult{
+		{Origin: "annas", MD5: dupMD5, Title: "Duplicate from Anna's"},
+		{Origin: "annas", MD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Title: "New book"},
+		{Origin: "arxiv", DOI: "10.1/x", Title: "A paper", OpenAccess: true},
+	})
+
+	if len(out.Results) != 2 {
+		t.Fatalf("Results = %d, want the catalog entry plus one new md5 hit", len(out.Results))
 	}
-	// The distinct Crossref hit must survive the libgen dedup.
-	var keptCrossref bool
-	for _, r := range out.OpenAccess {
-		if r.Origin == "crossref" {
-			keptCrossref = true
-		}
+	if out.Results[0].Title != "Already in the catalog" {
+		t.Errorf("the catalog record must win the md5 collision, got %q", out.Results[0].Title)
 	}
-	if !keptCrossref {
-		t.Errorf("distinct crossref OA hit should survive libgen dedup, got %+v", out.OpenAccess)
+	if out.Results[1].Origin != "annas" || out.Results[1].MD5 != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Errorf("Results[1] = %+v, want the new Anna's hit labeled annas", out.Results[1])
+	}
+	if len(out.OpenAccess) != 1 || out.OpenAccess[0].Origin != "arxiv" {
+		t.Errorf("OpenAccess = %+v, want only the DOI-keyed hit", out.OpenAccess)
 	}
 }
 
@@ -2086,44 +2281,6 @@ func TestHumanBytes(t *testing.T) {
 		if got := humanBytes(tc.n); got != tc.want {
 			t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
 		}
-	}
-}
-
-// TestDedupOpenAccessVsLibgen_DedupAndKeep covers dedupOpenAccessVsLibgen's two
-// suppression arms plus the keep path: a hit whose DOI matches a libgen result is
-// dropped, a hit whose title+year key matches is dropped, and an unrelated hit
-// survives.
-func TestDedupOpenAccessVsLibgen_DedupAndKeep(t *testing.T) {
-	results := []libgen.Result{{DOI: "10.1/x", Title: "Deep Learning", Year: "2016"}}
-	hits := []discovery.DiscoveryResult{
-		{DOI: "10.1/x", Title: "Some DOI Dup"},                 // dropped: DOI already in libgen
-		{Title: "Deep Learning", Year: "2016"},                 // dropped: title+year already in libgen
-		{Title: "Unique Work", Year: "1999", DOI: "10.2/keep"}, // kept
-	}
-	kept := dedupOpenAccessVsLibgen(hits, results)
-	if len(kept) != 1 {
-		t.Fatalf("kept %d hits, want 1: %+v", len(kept), kept)
-	}
-	if kept[0].Title != "Unique Work" {
-		t.Errorf("kept[0].Title = %q, want %q", kept[0].Title, "Unique Work")
-	}
-}
-
-// TestAppendOpenAccess_NoSurvivingHits covers appendOpenAccess' empty-hits arm:
-// with open access enabled and a non-blank query but a canceled context, Federate
-// yields nothing, so the function attaches no OpenAccess block and adds no
-// next-step — core search output is left untouched.
-func TestAppendOpenAccess_NoSurvivingHits(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // no provider can return anything under a canceled context
-	cfg := &config.Config{OpenAccessEnabled: true}
-	out := SearchOutput{}
-	appendOpenAccess(ctx, cfg, SearchInput{Query: "anything"}, &out)
-	if out.OpenAccess != nil {
-		t.Errorf("no hits should leave OpenAccess nil, got %+v", out.OpenAccess)
-	}
-	if len(out.NextSteps) != 0 {
-		t.Errorf("no hits should add no next-step, got %v", out.NextSteps)
 	}
 }
 
@@ -2161,7 +2318,7 @@ func TestDetailsHandler_EnrichEnabled(t *testing.T) {
 
 	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1, EnrichEnabled: true}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
-	h := detailsHandler(client, cfg)
+	h := detailsHandler(client, cfg, nil)
 
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, DetailsInput{MD5: md5, Enrich: true})
 	if err != nil {
@@ -2261,5 +2418,170 @@ func TestElicitUnpaywallEmail_InvalidEmail(t *testing.T) {
 	session := newUnpaywallProbeSession(t, acceptHandler(map[string]any{"email": "not-an-email"}))
 	if got := callUprobe(t, session, unpaywallProbeInput{DOI: "10.1/x"}); got != "" {
 		t.Errorf("an implausible email should yield \"\", got %q", got)
+	}
+}
+
+// TestSearchNextStepsForbidsInventingResults verifies an empty search tells the
+// model not to fill the gap. The recovery advice alone leaves the door open: a
+// model that has been asked to find something and told only "try broadening" can
+// still answer as if it had found it.
+func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}), "\n"))
+	if !strings.Contains(joined, "do not") {
+		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
+	}
+	if !strings.Contains(joined, "were not returned") && !strings.Contains(joined, "did not receive") {
+		t.Errorf("empty-search guidance must name the thing not to invent; got %q", joined)
+	}
+}
+
+// TestSearchNextStepsPinsTheSourceForEscalatedResults verifies an Anna's-origin
+// result is told to download with source="annas". Without it the chain starts at
+// libgen and burns its whole start-retry schedule on an md5 the catalog does not
+// have: a live run measured 235 seconds for a download that takes seconds once the
+// source is pinned.
+func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
+	const annasMD5 = "00dd2b0b58e81e3c6e7cb9e7b72dee23"
+	escalated := strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
+		Page:    1,
+	}), "\n")
+	if !strings.Contains(escalated, `"source":"annas"`) {
+		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
+	}
+
+	// A catalog result must not be pinned: the chain's ordinary order is right for it.
+	catalog := strings.Join(searchNextSteps(SearchOutput{
+		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
+		Page:    1,
+	}), "\n")
+	if strings.Contains(catalog, `"source"`) {
+		t.Errorf("a catalog result should not pin a source; got %q", catalog)
+	}
+}
+
+// TestDetailsByDOIFallsBackToEnrichment verifies a DOI the catalog does not carry
+// still answers with what is available. An open-access hit carries a DOI the
+// catalog has never heard of — a live run caught a model taking a Crossref DOI to
+// get_details, receiving a hard error, and spending a turn recovering, when the
+// journal and citation metadata it had asked for was a keyless lookup away.
+func TestDetailsByDOIFallsBackToEnrichment(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"container-title":["Cell"],"is-referenced-by-count":42,
+			"title":["Hallmarks of Cancer"],"published":{"date-parts":[[2011]]}}}`))
+	}))
+	t.Cleanup(crossref.Close)
+	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	t.Cleanup(restore)
+
+	// The catalog answers every json.php lookup with an empty array: no record.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: true, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, nil)
+	_, out, err := handler(context.Background(), nil, DetailsInput{DOI: "10.1016/j.cell.2011.02.013", Enrich: true})
+	if err != nil {
+		t.Fatalf("a DOI the catalog lacks should still answer from Crossref, got: %v", err)
+	}
+	if out.Enrichment == nil {
+		t.Fatal("no enrichment returned; the fallback produced nothing useful")
+	}
+	if out.Enrichment.Crossref == nil || out.Enrichment.Crossref.ContainerTitle != "Cell" {
+		t.Errorf("enrichment did not carry the Crossref journal: %+v", out.Enrichment)
+	}
+}
+
+// TestEnrichKillSwitchCannotBeLifted verifies LIBGEN_MCP_ENRICH=false holds against
+// a per-call enrich=true. It is documented as a deployment kill-switch, and a
+// switch a caller can flip is not one — the same hole found in the extra-sources
+// never mode and in the per-call credential paths.
+func TestEnrichKillSwitchCannotBeLifted(t *testing.T) {
+	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"container-title":["Cell"],"is-referenced-by-count":1}}`))
+	}))
+	t.Cleanup(crossref.Close)
+	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	t.Cleanup(restore)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"1":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee","doi":"10.1/x"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: false, UnpaywallEmail: "test@example.com",
+	}
+	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, nil)
+	_, out, err := handler(context.Background(), nil, DetailsInput{
+		MD5: "87a4ebdaf21fa6cc70009a3dd63194ee", Enrich: true,
+	})
+	if err != nil {
+		t.Fatalf("the lookup itself should still work: %v", err)
+	}
+	if out.Enrichment != nil {
+		t.Errorf("enrichment was produced against a deployment that forbids it: %+v", out.Enrichment)
+	}
+}
+
+// TestSingleValueFieldsSayTheyAreNotArrays verifies every string field on the
+// search input warns it is not an array when array-valued fields sit beside it.
+// A model sent extra_sources=["always"], having pattern-matched topics and
+// search_in; order and order_mode already carried the warning, evidently for the
+// same reason, and the field added later did not.
+func TestSingleValueFieldsSayTheyAreNotArrays(t *testing.T) {
+	schema, err := jsonschema.For[SearchInput](nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var arrays []string
+	for name, prop := range schema.Properties {
+		if prop.Items != nil {
+			arrays = append(arrays, name)
+		}
+	}
+	// No arrays would mean nothing can be confused with one — and would also mean
+	// this test has stopped testing anything, so it is a failure, not a skip.
+	if len(arrays) == 0 {
+		t.Fatal("no array-valued fields found; the schema shape changed and this check is now vacuous")
+	}
+	// query is free text: nobody sends a sentence as an array. Every other string
+	// field carries a short token, which is exactly what gets mistaken for one of
+	// the array-valued fields beside it.
+	freeText := map[string]bool{"query": true}
+	for name, prop := range schema.Properties {
+		if prop.Items != nil || prop.Type != "string" || freeText[name] {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(prop.Description), "single value") {
+			t.Errorf("%q is a token-valued string beside %v but never says it is not an array: %q",
+				name, arrays, prop.Description)
+		}
+	}
+}
+
+// TestFieldErrorsNameTheField verifies an invalid argument is reported against the
+// argument, not against something the caller never touched. The extra-sources mode
+// error named LIBGEN_MCP_EXTRA_SOURCES even when the value came from the search
+// call, sending a model to inspect an environment variable it had never set.
+func TestFieldErrorsNameTheField(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesAuto}
+	_, err := resolveExtraMode(SearchInput{ExtraSources: "sometimes"}, cfg)
+	if err == nil {
+		t.Fatal("an unrecognized mode should be rejected")
+	}
+	if !strings.Contains(err.Error(), "extra_sources") {
+		t.Errorf("error %q should name the argument the caller set", err)
+	}
+	if strings.Contains(err.Error(), "LIBGEN_MCP_") {
+		t.Errorf("error %q points the caller at an environment variable it never set", err)
 	}
 }

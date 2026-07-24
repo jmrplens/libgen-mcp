@@ -1,6 +1,6 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery and elicitation across 31 scenarios."
+description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 45 scenarios."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -37,55 +37,71 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Twenty-nine scenarios (S1–S20 plus a S6b variant, and S21–S29) cover search,
-details, downloads, source selection, error recovery, progress, link
-resolution, reading/summarizing extracted text, open-access discovery, and —
-importantly — **unguided** prompts that give the model no hints, testing
-whether the tool surface is self-describing enough for an LLM to use unaided.
+Forty-five scenarios (S1–S44 plus the S6b variant) cover search, details, downloads, source selection, error
+recovery, progress, link resolution, reading and summarizing extracted text,
+open-access discovery, the escalation beyond the Library Genesis catalog, and —
+importantly — **unguided** prompts that give the model no hints, testing whether
+the tool surface is self-describing enough for an LLM to use unaided.
 
-S21–S29 were added to cover every capability shipped since v1.2.0: BibTeX/RIS
-**citations**, opt-in **enrichment** (Crossref journal/citation-count
-metadata), the `read` tool's **find** (in-document search) and **outline**
-(table of contents) modes, keyless **open-access discovery** federated into
-`search`, and capability-gated **elicitation** (an on-demand Unpaywall email
-prompt, and a download-confirmation prompt) with its deterministic fallback.
-S27–S29 repeat the find/outline/open-access checks against a server running in
-**remote** (`--http`) mode.
+S21–S31 cover the capabilities shipped since v1.2.0: BibTeX/RIS **citations**,
+opt-in **enrichment** (Crossref journal and citation-count metadata), the `read`
+tool's **find** (in-document search) and **outline** (table of contents) modes,
+and capability-gated **elicitation** (an on-demand Unpaywall email prompt, and a
+download-confirmation prompt) with its deterministic fallback.
 
-| ID  | What it checks                                                                                                                                                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------- |
-| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                                                                               |
-| S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                                                                             |
-| S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                                                                                 |
-| S4  | `get_details` on an md5 taken from a prior search result                                                                                                                                                                                         |
-| S5  | Book download by md5: saved path + non-zero size                                                                                                                                                                                                 |
-| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI                                                                                                                                                         |
-| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5                                                                                                                                                                     |
-| S7  | Open-access article by DOI via unpaywall (needs a contact email)                                                                                                                                                                                 |
-| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it                                                                                                                                                           |
-| S9  | **Start-retries**: Sci-Hub pinned to a dead host; the staged retry schedule must exhaust and surface the actionable "could not start" error, and the model must not fabricate success                                                            |
-| S10 | **Unguided book search** ("I want to read _Dune_…") — model forms a search from a bare request, no collection/field hints                                                                                                                        |
-| S11 | **Unguided comics search** ("find the graphic novel _Watchmen_") — model must discover the right collection unaided                                                                                                                              |
-| S12 | **Unguided book download** ("download _Clean Code_…") — model searches, then downloads by an md5 it discovered, choosing the source itself                                                                                                       |
-| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover articles are keyed by DOI, not md5                                                                                                                 |
-| S14 | **Download progress** — a progress token is attached; progress notifications must reach the client end to end during a live download                                                                                                             |
-| S15 | **Ordered table with links** — a large sorted request; the model must set a big page size + ordering and include the results' download links in its answer                                                                                       |
-| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — the model must set `resolve_only=true`, and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path               |
-| S17 | **Remote download (book)** — same "download _The C Programming Language_" request, but the server runs in **remote mode** (`--http`): `download` returns a link, and the harness — acting as the agent's own fetch tool — pulls it to local disk |
-| S18 | **Remote download (article)** — same for a paywalled DOI; the model just calls `download`, the remote server returns a link, and the harness fetches it to local disk                                                                            |
-| S19 | **Search → read → summarize** — model searches for a paper by title, calls `read` (not `download`) with the DOI found in the results, and writes its own summary of the extracted first page instead of dumping the UNTRUSTED text verbatim      |
-| S20 | **Open-access discovery** — under-specified like S10–S13: the model must discover `include_open_access` itself and reference one of the federated arXiv/Crossref hits in its answer                                                              |
-| S21 | **Citations** — the model must call `get_details` and surface its BibTeX citation for a book found by search, rather than fabricate one                                                                                                          |
-| S22 | **Enrichment** — user asks which journal a paper appeared in and how often it's been cited; the model must set `enrich=true` on `get_details` to pull the Crossref journal/citation-count metadata and surface it in its answer                  |
-| S23 | **read find mode** — the model must call `read` with a `find` argument (in-document search) to locate a term and show a passage, instead of downloading the whole file or reading sequentially                                                   |
-| S24 | **read outline mode** — the model must call `read` with `outline=true` to return a table of contents / chapter list instead of reading text                                                                                                      |
-| S25 | **Elicitation — email on demand** — an open-access DOI download with no configured Unpaywall email; the model must proceed and let the host's elicitation handler supply the email per-call                                                      |
-| S26 | **Elicitation — download confirmation** — a disk-writing download raises a save-confirmation prompt; the harness hard-asserts the confirmation actually fired AND the download still completed                                                   |
-| S27 | **Remote read find** — S23 repeated against a server running in remote (`--http`) mode                                                                                                                                                           |
-| S28 | **Remote read outline** — S24 repeated against a server running in remote (`--http`) mode                                                                                                                                                        |
-| S29 | **Remote open-access discovery** — under-specified like S20, against a server running in remote (`--http`) mode                                                                                                                                  |
-| S30 | remote                                                                                                                                                                                                                                           | ✅ PASS | remote mode: set `enrich=true`; Crossref journal="Cell", 56 374 citations; model answered |
-| S31 | remote                                                                                                                                                                                                                                           | ✅ PASS | remote mode: searched, called `get_details`, surfaced the returned BibTeX citation        |
+S32–S41 cover the **extra search sources**: a title the catalog does not carry
+must still be found, described, downloaded and read through Anna's Archive; the
+three deployment modes must behave as documented, including `never` being a lock
+no call can lift; and the membership tier must be discoverable from the tool
+surface alone. Several repeat against a server in **remote** (`--http`) mode.
+
+| ID  | What it checks                                                                                                                                                                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5                                                                                                                                                                                                                                                |
+| S2  | Article search: articles topic, at least one result with a valid DOI                                                                                                                                                                                                                                                              |
+| S3  | Standards search (SKIPs if the mirror returns 0)                                                                                                                                                                                                                                                                                  |
+| S4  | `get_details` on an md5 taken from a prior search result                                                                                                                                                                                                                                                                          |
+| S5  | Book download by md5: saved path + non-zero size                                                                                                                                                                                                                                                                                  |
+| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI                                                                                                                                                                                                                                          |
+| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5                                                                                                                                                                                                                                                      |
+| S7  | Open-access article by DOI via unpaywall (needs a contact email)                                                                                                                                                                                                                                                                  |
+| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it                                                                                                                                                                                                                                            |
+| S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success                                                                                                                               |
+| S10 | **Unguided book search** ("I want to read _Dune_…") — model must form a search from a bare request, no collection/field hints                                                                                                                                                                                                     |
+| S11 | **Unguided search, comics** ("find the graphic novel _Watchmen_") — tests whether the model discovers the right collection unaided                                                                                                                                                                                                |
+| S12 | **Unguided book download** ("download _Clean Code_…") — model must search, then download by an md5 it discovered, choosing the source itself                                                                                                                                                                                      |
+| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover that articles are keyed by DOI, not md5                                                                                                                                                                                             |
+| S14 | **Download progress** — attaches a progress token to the download and asserts progress notifications actually reach the client end to end                                                                                                                                                                                         |
+| S15 | **Ordered table with links** — a large, sorted results request; asserts the model sets a big page size + ordering and includes the results' download links in its answer (the tool's next_steps instructs it to)                                                                                                                  |
+| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — asserts the model sets `resolve_only=true` and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path                                                                                             |
+| S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk                                                       |
+| S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally                                                                                                                                                                        |
+| S19 | **Search → read → summarize**: model searches for a paper by title, calls `read` (not `download`) with the DOI found in the search results, and writes its own summary of the extracted first page rather than dumping the UNTRUSTED text verbatim                                                                                |
+| S20 | **Open-access discovery** — under-specified like S10–S13: the prompt asks the model to "also check the open-access literature" without naming `extra_sources`; the model must set it to `always` itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live) |
+| S21 | **Citations** — asks for a BibTeX citation; the model must reach `get_details` (which builds it) rather than fabricate one                                                                                                                                                                                                        |
+| S22 | **Enrichment** — asks for a paywalled DOI's journal and citation count, so the model must set `enrich=true` on `get_details` to pull the Crossref metadata                                                                                                                                                                        |
+| S23 | **In-document search** — asks to search _inside_ a book, so the model must call `read` with a `find` argument instead of downloading the whole file                                                                                                                                                                               |
+| S24 | **Outline** — asks for a book's table of contents, so the model must call `read` with `outline=true`                                                                                                                                                                                                                              |
+| S25 | **Elicited Unpaywall email** — the deployment email is forced empty, so the download can only succeed via the per-call email the host's elicitation handler supplies                                                                                                                                                              |
+| S26 | **Elicited save confirmation** — a disk-writing download must raise the save-confirmation prompt; the host counts the confirmations it answers, so the assertion is hard, not inferred                                                                                                                                            |
+| S27 | **Remote in-document search** — S23 against a server in remote mode                                                                                                                                                                                                                                                               |
+| S28 | **Remote outline** — S24 against a server in remote mode                                                                                                                                                                                                                                                                          |
+| S29 | **Remote open-access discovery** — S20 against a server in remote mode, phrased as an open-ended research request                                                                                                                                                                                                                 |
+| S30 | **Remote enrichment** — S22 against a server in remote mode                                                                                                                                                                                                                                                                       |
+| S31 | **Remote citations** — S21 against a server in remote mode                                                                                                                                                                                                                                                                        |
+| S32 | **Search escalation** — the title is one the Library Genesis catalog does not carry, so a hit can only come from the automatic escalation to Anna's Archive; the model must report the file's format and size without being told to ask for extra sources                                                                         |
+| S33 | **Remote search escalation** — S32 against a server in remote mode                                                                                                                                                                                                                                                                |
+| S34 | **Escalated search → download** — the same catalog-miss title, but the model must go on to download it, proving an escalated result carries an md5 the `download` tool accepts                                                                                                                                                    |
+| S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally                                                                                                                                                                                        |
+| S36 | **Escalated record lookup** — the model must follow the escalated search with `get_details` on an md5 the catalog has no record for, which only answers via the Anna's fallback; graded on the record's `origin`                                                                                                                  |
+| S37 | **Remote escalated record lookup** — S36 against a server in remote mode                                                                                                                                                                                                                                                          |
+| S38 | **A never deployment is a lock** — the server default is `never` and the prompt is a known catalog miss; graded on the extras staying out of the results _and_ on the model reporting the miss instead of inventing one                                                                                                           |
+| S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them                                                                                                                                                           |
+| S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage                                                                                                                                        |
+| S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored                                                                                                                       |
+| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway                                                                                                       |
+| S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds                                                                                        |
+| S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory                                                                                                                                                    |
 
 ## Local and remote blocks
 
@@ -95,56 +111,84 @@ server in remote mode (`--http`), where `download` returns a link instead of
 saving a file. The harness then fetches that link to the sandbox — standing in
 for an agent's own fetch tool — so the file lands locally in both cases.
 Together the two blocks verify the model behaves the same while the server
-behaves differently, and the file ends up local either way. S27–S29 form a
-second remote block, repeating the new read-find/read-outline/open-access
-checks over the same `--http` transport.
+behaves differently, and the file ends up local either way. S27–S31, and the
+remote half of S32–S37, form a second remote block: the read, open-access,
+citation, enrichment and escalation checks repeated over the same `--http`
+transport, ten scenarios in all.
 
 ## Latest results
 
-The table below is a single live run of the full suite against
-`claude-haiku-4-5` (real Anthropic API, real mirrors, real downloads):
-**28 passed, 0 failed, 4 skipped** (of 30 including the `S6b` variant). Every
-skip is a live-data condition (a mirror down, an HTTP 403, a scanned PDF with
-no text layer, an unsupported file extension) — never a model or server
-failure. No scenario failed.
+The table below is a single live run of the full suite against `claude-haiku-4-5`
+(real Anthropic API, real mirrors, real downloads): **45 passed, 0 failed, 0
+skipped** — every scenario, including the 10 that run against a server in remote
+(`--http`) mode.
 
-| ID  | Mode   | Result  | Evidence                                                                                                          |
-| --- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------- |
-| S1  | local  | ✅ PASS | nonfiction search, 25 results, first md5 valid                                                                    |
-| S2  | local  | ✅ PASS | articles search, result with a valid DOI                                                                          |
-| S3  | local  | ✅ PASS | standards search, 25 results                                                                                      |
-| S4  | local  | ✅ PASS | `get_details` returned a File/Edition record                                                                      |
-| S5  | local  | ✅ PASS | downloaded a book (~983 KB) via `libgen` (MD5-verified)                                                           |
-| S6  | local  | ✅ PASS | model set `source:"scihub"`; downloaded ~6.5 MB                                                                   |
-| S6b | local  | ⏭️ SKIP | model set `source:"randombook"` correctly; live download failed (mirror/network)                                  |
-| S7  | local  | ✅ PASS | downloaded a DOI via `unpaywall`                                                                                  |
-| S8  | local  | ✅ PASS | model asked to clarify instead of guessing (no tool call)                                                         |
-| S9  | local  | ✅ PASS | start-retries exhausted; actionable error surfaced; no fabricated success                                         |
-| S10 | local  | ✅ PASS | picked `topics:[fiction]` unaided                                                                                 |
-| S11 | local  | ✅ PASS | picked `topics:[comics]` unaided                                                                                  |
-| S12 | local  | ✅ PASS | searched, then downloaded by md5 (~2.4 MB) via `libgen`                                                           |
-| S13 | local  | ✅ PASS | searched → found DOI → downloaded via `scihub`                                                                    |
-| S14 | local  | ✅ PASS | received 17 progress notifications, final `982888/982888`                                                         |
-| S15 | local  | ✅ PASS | ordered page of 100; model surfaced the download links in its answer                                              |
-| S16 | local  | ✅ PASS | resolved a URL via `libgen` without downloading (`resolve_only`)                                                  |
-| S17 | remote | ✅ PASS | remote mode: model got a link; harness fetched ~983 KB to local disk                                              |
-| S18 | remote | ⏭️ SKIP | remote mode: resolved a link but the live fetch returned HTTP 403                                                 |
-| S19 | local  | ⏭️ SKIP | the found PDF had no extractable text layer (scanned/image-only; OCR not supported)                               |
-| S20 | local  | ✅ PASS | open-access discovery surfaced 17 hits; model referenced one in its answer                                        |
-| S21 | local  | ✅ PASS | searched, called `get_details`, and surfaced the returned BibTeX citation                                         |
-| S22 | local  | ✅ PASS | set `enrich=true`; Crossref journal="Cell", 56 374 citations; model answered the ask                              |
-| S23 | local  | ✅ PASS | used `read` with `find="pointer"`; 503 matches; surfaced a passage                                                |
-| S24 | local  | ✅ PASS | used `read` with `outline=true`; 221 table-of-contents entries                                                    |
-| S25 | local  | ✅ PASS | OA DOI download via the host-supplied per-call email; ~256 KB fetched                                             |
-| S26 | local  | ✅ PASS | save-confirmation elicitation fired once, host accepted; ~4.4 MB downloaded — confirmation did not block the flow |
-| S27 | remote | ✅ PASS | remote mode: used `read` `find="pointer"`; 503 matches; surfaced a passage                                        |
-| S28 | remote | ⏭️ SKIP | remote mode: the found file was not extractable (unsupported extension)                                           |
-| S29 | remote | ✅ PASS | remote mode: open-access discovery surfaced 20 hits; model referenced one                                         |
+A clean sweep is worth reading carefully rather than celebrating. It took removing
+the two things that were hiding trouble: scenarios that skipped whenever live data
+misbehaved, and assertions that graded one arbitrary attempt instead of what the
+model achieved. A skip that recurs is not a passing test, it is an unasked
+question — and the first one this suite stopped skipping turned out to be a model
+inventing a table of contents for a file it could not read.
 
-Skips are expected and healthy: the harness treats a live-mirror or live-data
-condition (a 403, a 404, a scanned-only PDF, an unsupported container) as a
-SKIP, so a transient upstream problem never masquerades as a model or server
-bug.
+The two errored tool calls in the table are deliberate: one scenario pins a dead
+host to prove the retry schedule surfaces an actionable error, and another
+restricts the deployment to the catalog to prove the restriction holds.
+
+| ID  | Mode   | Result  | Evidence                                                                                                                                                                           |
+| --- | ------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | local  | ✅ PASS | nonfiction search; 25 results; first md5 ok                                                                                                                                        |
+| S2  | local  | ✅ PASS | articles search; found a result with a valid DOI                                                                                                                                   |
+| S3  | local  | ✅ PASS | standards search; 25 results                                                                                                                                                       |
+| S4  | local  | ✅ PASS | get_details returned a File or Edition record                                                                                                                                      |
+| S5  | local  | ✅ PASS | downloaded 982888 bytes via libgen                                                                                                                                                 |
+| S6  | local  | ✅ PASS | downloaded 6460651 bytes via scihub                                                                                                                                                |
+| S6b | local  | ✅ PASS | downloaded 982888 bytes via randombook                                                                                                                                             |
+| S7  | local  | ✅ PASS | downloaded DOI via unpaywall                                                                                                                                                       |
+| S8  | local  | ✅ PASS | model asked to clarify instead of guessing (no tool call)                                                                                                                          |
+| S9  | local  | ✅ PASS | start-retries exhausted; actionable error surfaced and the model did not fabricate success                                                                                         |
+| S10 | local  | ✅ PASS | unguided search; 25 results; topics=[fiction]                                                                                                                                      |
+| S11 | local  | ✅ PASS | unguided search; 25 results; topics=[comics]                                                                                                                                       |
+| S12 | local  | ✅ PASS | downloaded 2404614 bytes via libgen                                                                                                                                                |
+| S13 | local  | ✅ PASS | downloaded 6460651 bytes via scihub (doi via search)                                                                                                                               |
+| S14 | local  | ✅ PASS | received 16 progress notification(s); final progress=982888 total=982888                                                                                                           |
+| S15 | local  | ✅ PASS | ordered page of 100 with links; model surfaced links in its answer                                                                                                                 |
+| S16 | local  | ✅ PASS | resolved a URL via libgen without downloading: https://libgen.li/get.php?(query redacted)                                                                                          |
+| S17 | remote | ✅ PASS | remote: model got a link, harness fetched 982888 bytes to local disk                                                                                                               |
+| S18 | remote | ✅ PASS | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (HTTP 403)                                                                       |
+| S19 | local  | ✅ PASS | the file was not extractable (no extractable text layer (likely a scanned or image-only PDF); OCR is not supported); the model reported that plainly instead of inventing a result |
+| S20 | local  | ✅ PASS | open-access discovery surfaced 17 hit(s); model referenced one in its answer                                                                                                       |
+| S21 | local  | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                                                                      |
+| S22 | local  | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56388; model answered the ask                                                                                             |
+| S23 | local  | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                                                            |
+| S24 | local  | ✅ PASS | model used read outline=true; 221 table-of-contents entr(ies) returned                                                                                                             |
+| S25 | local  | ✅ PASS | DOI download succeeded via scihub (255629 bytes); the host answered any email elicitation the server raised                                                                        |
+| S26 | local  | ✅ PASS | save-confirmation elicitation fired 1x and the host accepted it; downloaded 4366258 bytes via libgen — confirmation did not block the flow                                         |
+| S27 | remote | ✅ PASS | model used read find="pointer"; 503 match(es); model surfaced a passage                                                                                                            |
+| S28 | remote | ✅ PASS | no embedded table of contents; the model read the document and compiled one from its text                                                                                          |
+| S29 | remote | ✅ PASS | open-access discovery surfaced 20 hit(s); model referenced one in its answer                                                                                                       |
+| S30 | remote | ✅ PASS | model set enrich=true; Crossref journal="Cell" citations=56388; model answered the ask                                                                                             |
+| S31 | remote | ✅ PASS | model searched, called get_details, and surfaced the returned BibTeX citation                                                                                                      |
+| S32 | local  | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                                                                     |
+| S33 | remote | ✅ PASS | escalation surfaced 10 Anna's-origin result(s); model did not report not-found                                                                                                     |
+| S34 | local  | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                                                              |
+| S35 | remote | ✅ PASS | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23)                                                                              |
+| S36 | local  | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                                                            |
+| S37 | remote | ✅ PASS | get_details fell back to Anna's for the escalated md5 (collection=zlib)                                                                                                            |
+| S38 | local  | ✅ PASS | never mode honored and the model reported the miss honestly                                                                                                                        |
+| S39 | local  | ✅ PASS | always mode consulted the extras alongside a 29-result catalog page (annas=4, open access=28)                                                                                      |
+| S40 | local  | ✅ PASS | read opened an Anna's-only item (1536 chars extracted)                                                                                                                             |
+| S41 | local  | ✅ PASS | member download reported the account allowance (45 of 50 left)                                                                                                                     |
+| S42 | local  | ✅ PASS | nothing exists by that name and the model said so, inventing no metadata                                                                                                           |
+| S43 | local  | ✅ PASS | restriction held; the model routed through the permitted source instead of the refused one                                                                                         |
+| S44 | local  | ✅ PASS | model set page=2 and received page 2 with 25 results                                                                                                                               |
+
+A live-data condition — a 403, a scanned-only PDF, a mirror that will not serve
+the harness — no longer skips a scenario. The model's behavior is still fully
+observable when the payload does not arrive, and the only wrong move left to it is
+claiming a result it never received, so those runs are graded on whether the answer
+says plainly that nothing came back. SKIP is reserved for the two cases with
+genuinely nothing to grade: a capability the deployment has not configured, and a
+model that ran out of turns before answering.
 
 ## Running it yourself
 

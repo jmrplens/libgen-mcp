@@ -97,7 +97,14 @@ func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult
 			Reason: "unsupported format " + ext + ": text extraction is not available (comic/scanned/proprietary container)",
 		}, nil
 	default:
-		return SearchResult{Reason: "unsupported file extension " + ext}, nil
+		// Same reasoning as Extract: an extensionless file is identified by content.
+		switch sniffFormat(path) {
+		case "pdf":
+			return searchPDF(ctx, path, query, o)
+		case "epub":
+			return searchEPUB(ctx, path, query, o)
+		}
+		return SearchResult{Reason: UnrecognizedReason(ext)}, nil
 	}
 }
 

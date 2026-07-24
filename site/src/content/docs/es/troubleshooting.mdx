@@ -109,6 +109,20 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 
 Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los campos exactos.
 
+## Un resultado que no se descarga (`origin: "annas"`)
+
+**Síntoma.** Una búsqueda devolvió un resultado etiquetado `origin: "annas"`, pero `download` falla con su md5 y da un error sobre la ausencia de CID de IPFS o de una pasarela que lo sirva.
+
+**Significado.** Ese resultado vino de [una búsqueda escalada](/libgen-mcp/es/how-search-works/): el catálogo de Library Genesis no tiene el archivo, así que la única vía es Anna's Archive. La ruta sin clave lee la dirección IPFS del ítem en la página de Anna's — y **la mayoría de registros de Anna's no publica ninguna dirección IPFS**. Cuando no la hay, no hay nada que descargar sin clave, y esto es lo esperable, no un fallo.
+
+**Solución.** Por orden de esfuerzo:
+
+- Poner en `LIBGEN_MCP_ANNAS_KEY` una clave de membresía de Anna's Archive. La API de descarga rápida de socio sirve ítems sin dirección IPFS, y la ruta IPFS sin clave se mantiene como respaldo. Ver [Configuración](/libgen-mcp/es/configuration/).
+- Buscar de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, y esa sí se descarga por las fuentes ordinarias.
+- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año e idioma — más el ISBN cuando ese registro lo lleva, que es una minoría — aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
+
+Una pasarela que solo va lenta devuelve un timeout en su lugar; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían mucho en lo que tardan en localizar un ítem.
+
 ## Subir el nivel de log
 
 La mayoría de los problemas son más fáciles de diagnosticar en `debug`, que traza cada intento de mirror, enfriamiento y failover:

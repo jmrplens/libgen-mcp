@@ -49,6 +49,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)
 - LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, scihub, scidb, libgen, randombook, annas (empty = all)
 - LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)
+- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)
 
 Tools:
 
@@ -64,7 +65,7 @@ Tools:
 - [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
 - [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
-- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to Library Genesis mirrors and article sources
+- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
 ## Optional

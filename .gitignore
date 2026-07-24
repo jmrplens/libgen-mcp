@@ -29,3 +29,8 @@ coverage.html
 # Local environment secrets — ANTHROPIC_API_KEY for the gated eval, etc.
 # (also covered by the global gitignore; pinned here so a fresh clone is safe)
 .env
+
+# Full record of a live evaluator run: prompts, turns, tool calls, server logs
+# and answers. Useful locally for post-hoc analysis, too big and too volatile to
+# track.
+/eval-record.jsonl

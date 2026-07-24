@@ -8,7 +8,10 @@
 package extract
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -68,6 +71,45 @@ const (
 // honest signal only; seek-based streaming past the cap is not implemented.
 const capExceededNote = "document exceeds the 8 MiB extraction cap; text beyond it is not available"
 
+// sniffLen is how many leading bytes are read to identify a file by content. The
+// signatures below all live in the first few bytes; 512 is generous and cheap.
+const sniffLen = 512
+
+// UnrecognizedReason explains why a file could not be dispatched to an extractor,
+// naming its extension when it has one. It is shared by every entry point so the
+// three modes report the same thing about the same file.
+func UnrecognizedReason(ext string) string {
+	if ext == "" {
+		return "unrecognized content: the file carries no extension and its bytes match no supported format"
+	}
+	return "unsupported file extension " + ext + " and its bytes match no supported format (unrecognized)"
+}
+
+// sniffFormat reports the format of a file from its leading bytes, or "" when it
+// matches nothing supported.
+func sniffFormat(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	head := make([]byte, sniffLen)
+	n, _ := io.ReadFull(f, head)
+	head = head[:n]
+	switch {
+	case bytes.HasPrefix(head, []byte("%PDF-")):
+		return "pdf"
+	// An EPUB is a zip whose first entry is an uncompressed "mimetype" file naming
+	// the format, which is what distinguishes it from any other zip container.
+	case bytes.HasPrefix(head, []byte("PK\x03\x04")) && bytes.Contains(head, []byte("application/epub+zip")):
+		return "epub"
+	}
+	// Plain text is deliberately not sniffed: almost anything decodes as text,
+	// including a mirror's HTML error page, and "extracting" one of those would be
+	// worse than reporting the file as unrecognized.
+	return ""
+}
+
 // appendNote joins an existing reason with note using "; " as the separator,
 // or returns note alone when reason is empty.
 func appendNote(reason, note string) string {
@@ -99,9 +141,16 @@ func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
 			Reason: "unsupported format " + ext + ": text extraction is not available (comic/scanned/proprietary container)",
 		}, nil
 	default:
-		return Chunk{
-			Reason: "unsupported file extension " + ext,
-		}, nil
+		// The name did not identify the file, so its bytes must: anything fetched by
+		// content address, or from a CDN that announces no filename, arrives with no
+		// extension, and a real book would otherwise be reported as unsupported.
+		switch sniffFormat(path) {
+		case "pdf":
+			return extractPDF(ctx, path, r)
+		case "epub":
+			return extractEPUB(ctx, path, r)
+		}
+		return Chunk{Reason: UnrecognizedReason(ext)}, nil
 	}
 }
 

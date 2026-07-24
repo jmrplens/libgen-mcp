@@ -182,3 +182,61 @@ func TestVerifyMD5Conditional(t *testing.T) {
 		}
 	})
 }
+
+// TestSourcesThatKnowTheTypeDeclareIt verifies every source that can know what it
+// is serving says so on Resolved.Ext.
+//
+// It exists because the fix for this had to be made twice. A file fetched by
+// content address carries no name, so the saved file has no extension and the read
+// tool has no extractor to choose; the Anna's source was fixed on its keyless path
+// and still silently dropped the type on its member path. A source added later
+// should fail here rather than in a live evaluator run.
+//
+// libgen and randombook are deliberately absent: they stream from a CDN that names
+// the file in its content-disposition, so the type arrives with the bytes rather
+// than being known in advance. The extractor's content sniffing is the backstop
+// when even that is missing.
+func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
+	pdfServing := func(body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+	const doi = "10.1234/known"
+
+	t.Run("unpaywall", func(t *testing.T) {
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"is_oa":true,"best_oa_location":{"url_for_pdf":"https://example.invalid/a.pdf"}}`))
+		}))
+		defer api.Close()
+		s := unpaywallSource{email: "e@example.com", http: api.Client(), baseURL: api.URL}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
+
+	t.Run("scihub", func(t *testing.T) {
+		page := pdfServing(`<html><body><embed id="pdf" src="//example.invalid/x.pdf"></body></html>`)
+		defer page.Close()
+		s := scihubSource{hosts: []string{strings.TrimPrefix(page.URL, "http://")}, scheme: "http"}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
+
+	t.Run("scidb", func(t *testing.T) {
+		page := pdfServing(`<html><body><a href="https://example.invalid/paper.pdf">pdf</a></body></html>`)
+		defer page.Close()
+		s := scidbSource{mirrors: staticMirrors{page.URL}}
+		assertDeclaresExt(t, s, Item{DOI: doi})
+	})
+}
+
+// assertDeclaresExt resolves an item and fails when the source announced no type.
+func assertDeclaresExt(t *testing.T, s DownloadSource, it Item) {
+	t.Helper()
+	got, err := s.Resolve(context.Background(), it)
+	if err != nil {
+		t.Fatalf("%s did not resolve against its own stub: %v", s.Name(), err)
+	}
+	if got.Ext == "" {
+		t.Errorf("%s resolved without declaring a file type; a caller cannot name the saved file", s.Name())
+	}
+}

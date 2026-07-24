@@ -11,6 +11,8 @@ import (
 	mrand "math/rand/v2"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +70,11 @@ type Client struct {
 	backoffBase time.Duration // backoff base; injectable for tests
 	// maxDownloadBytes is the download size cap in bytes (0 = no limit).
 	maxDownloadBytes int64
+	// sourceAllowed reports whether the deployment permits a named source at all.
+	// The per-call credential paths consult it before adding a source to a chain:
+	// LIBGEN_MCP_SOURCES is the operator's decision, and a caller supplying a key
+	// or an email must not be able to lift it.
+	sourceAllowed func(string) bool
 	// startRetryWaits is the staged wait schedule between attempts to get a
 	// download to BEGIN (resolve + connect + first bytes). len(waits)+1 attempts
 	// are made before a source is deemed unable to start; an empty schedule means a
@@ -221,6 +228,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		cooldown:         make(map[string]time.Time),
 		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
 	}
+	c.sourceAllowed = allowedByOperator(cfg.Sources)
 	c.sources = c.buildSourceChain(cfg)
 	for _, opt := range opts {
 		opt(c)
@@ -256,6 +264,27 @@ var annasMirrorsFor = func(cfg *config.Config) MirrorLister {
 		return fixedMirrors(mirrors.AnnasFamily.Fallback)
 	}
 	return m
+}
+
+// AnnasMirrorLister builds the Anna's Archive mirror lister, exported so the
+// tools layer's discovery integration can share the same discovered mirrors
+// without importing internal/mirrors or rebuilding the manager.
+func AnnasMirrorLister(cfg *config.Config) MirrorLister {
+	return annasMirrorsFor(cfg)
+}
+
+// allowedByOperator turns LIBGEN_MCP_SOURCES into a predicate. An empty list
+// permits every source; otherwise only the listed names, compared the same way the
+// configuration compares them.
+func allowedByOperator(configured []string) func(string) bool {
+	return func(name string) bool {
+		if len(configured) == 0 {
+			return true
+		}
+		return slices.ContainsFunc(configured, func(s string) bool {
+			return strings.EqualFold(strings.TrimSpace(s), name)
+		})
+	}
 }
 
 func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {

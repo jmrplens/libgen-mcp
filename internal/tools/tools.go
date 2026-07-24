@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -35,14 +36,14 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query             string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
-	Topics            []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
-	SearchIn          []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
-	ResultsPerPage    int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
-	Page              int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
-	Order             string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
-	OrderMode         string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	IncludeOpenAccess *bool    `json:"include_open_access,omitempty" jsonschema:"also search the open-access literature (arXiv, Crossref, OpenLibrary) and merge the hits, labeled by origin; overrides the server default"`
+	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
+	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
+	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
+	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
+	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
+	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -63,8 +64,9 @@ type SearchOutput struct {
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use md5 OR id, not both). Get it from a prior search result's md5 field"`
-	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use md5 OR id, not both). Get it from a result's edition_id or file_id field"`
+	MD5    string `json:"md5,omitempty" jsonschema:"file md5 hash from a search result (use exactly one of md5, id or doi). Get it from a prior search result's md5 field"`
+	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a search result (use exactly one of md5, id or doi). Get it from a result's edition_id or file_id field"`
+	DOI    string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013 (use exactly one of md5, id or doi). Looked up exactly, and the returned record carries the md5 to pass to download"`
 	Object string `json:"object,omitempty" jsonschema:"with id: a single value edition (default) or file"`
 	Enrich bool   `json:"enrich,omitempty" jsonschema:"when true, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN); best-effort and off by default"`
 }
@@ -136,18 +138,22 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		opt(&o)
 	}
 	truthy, falsy := true, false
+	// One lister for both tools, so a single discovery and a single cache serve
+	// the search escalation and the get_details fallback instead of each building
+	// its own manager.
+	annasMirrors := libgen.AnnasMirrorLister(cfg)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search",
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("search", searchHandler(client, cfg)))
+	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
-		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition) or by edition/file id. The md5/id come from a prior search result. See also: search (to find records), download (to fetch the file).",
+		Description: "Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API. Look up by md5 (returns file + related edition), by edition/file id, or by an article's doi (exact lookup returning the edition plus the file md5 to download). The md5/id come from a prior search result. An md5 the catalog does not carry — as a search that consulted the extra sources may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. See also: search (to find records), download (to fetch the file).",
 		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("get_details", detailsHandler(client, cfg)))
+	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	desc := downloadToolDescription(book, article)
 	if o.remoteDownloads {
@@ -269,6 +275,7 @@ func searchNextSteps(out SearchOutput) []string {
 		return []string{
 			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
 				strings.Join(libgen.TopicNames(), ", ") + ".",
+			"Tell the user nothing was found; do not present titles, authors or download links that were not returned.",
 		}
 	}
 	first := out.Results[0]
@@ -276,7 +283,7 @@ func searchNextSteps(out SearchOutput) []string {
 	if first.MD5 != "" {
 		steps = append(steps,
 			fmt.Sprintf("For full metadata on a result, call get_details with its md5, e.g. {\"md5\":%q}.", first.MD5),
-			fmt.Sprintf("To fetch a book, call download with its md5, e.g. {\"md5\":%q}.", first.MD5))
+			downloadStep(first))
 	}
 	if first.DOI != "" {
 		steps = append(steps,
@@ -291,6 +298,22 @@ func searchNextSteps(out SearchOutput) []string {
 		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
 	}
 	return steps
+}
+
+// downloadStep phrases the download follow-up for a result, pinning the source
+// when the result did not come from the catalog.
+//
+// The chain starts at libgen, which is right for a catalog result and wasteful for
+// one the catalog does not have: it spends its whole start-retry schedule failing
+// before reaching the source that found the item. A live run measured 235 seconds
+// for a download that takes seconds once pinned. The origin is already known, so
+// there is no reason to make the caller discover this the slow way.
+func downloadStep(r libgen.Result) string {
+	if r.Origin != "" && r.Origin != "libgen" {
+		return fmt.Sprintf("To fetch this book, call download with its md5 AND its source — it did not come from the catalog, "+
+			"so pinning the source skips a failing chain: {\"md5\":%q,\"source\":%q}.", r.MD5, r.Origin)
+	}
+	return fmt.Sprintf("To fetch a book, call download with its md5, e.g. {\"md5\":%q}.", r.MD5)
 }
 
 // detailsNextSteps suggests the download follow-up for a details record, using
@@ -346,9 +369,13 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 	}
 }
 
-func searchHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
+func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 		var zero SearchOutput
+		mode, err := resolveExtraMode(in, cfg)
+		if err != nil {
+			return nil, zero, err
+		}
 		params := libgen.SearchParams{
 			Query:          in.Query,
 			Topics:         in.Topics,
@@ -358,112 +385,212 @@ func searchHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Sear
 			Order:          in.Order,
 			OrderMode:      in.OrderMode,
 		}
-		page, mirror, err := c.Search(ctx, params)
-		if err != nil {
-			return nil, zero, err
+		// Validate up front so an input error (bad topic, bad page) is returned
+		// immediately without escalating — escalation is for catalog outages and
+		// misses, not for caller mistakes.
+		if verr := params.Validate(); verr != nil {
+			return nil, zero, verr
 		}
-		per := in.ResultsPerPage
-		if per == 0 {
-			per = 25
+		extras := startExtras(ctx, mode, in.Query, cfg, annasMirrors)
+		defer extras.wait()
+		page, mirror, searchErr := c.Search(ctx, params)
+
+		var out SearchOutput
+		if searchErr == nil {
+			out = buildSearchOutput(page, mirror, in)
 		}
-		curPage := in.Page
-		if curPage == 0 {
-			curPage = 1
+
+		mergeExtraHits(&out, extras.collect(ctx, mode, in.Query, cfg, annasMirrors, len(out.Results), searchErr))
+		if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
+			return nil, zero, searchErr
 		}
-		out := SearchOutput{
-			Results:        page.Results,
-			Page:           curPage,
-			ResultsPerPage: per,
-			TotalFiles:     page.TotalFiles,
-			Reachable:      page.Reachable,
-			Truncated:      page.Truncated,
-			HasMore:        len(page.Results) >= per,
-			Mirror:         mirror,
-		}
-		if page.Truncated {
-			out.Hint = fmt.Sprintf("Only the first %d of %s results are reachable; "+
-				"refine your query (add author/year, use title-only columns, or narrow topics).",
-				page.Reachable, page.TotalFiles)
-		}
-		if out.Results == nil {
-			out.Results = []libgen.Result{}
-		}
+
 		out.NextSteps = searchNextSteps(out)
-		appendOpenAccess(ctx, cfg, in, &out)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
 }
 
-// openAccessLimit bounds how many hits each open-access provider is asked for when
-// discovery is folded into a search, keeping the merged payload small.
-const openAccessLimit = 10
-
-// openAccessEnabled resolves the effective open-access flag for a call: an explicit
-// per-call include_open_access wins (either direction), otherwise the deployment
-// default cfg.OpenAccessEnabled applies.
-func openAccessEnabled(in SearchInput, cfg *config.Config) bool {
-	if in.IncludeOpenAccess != nil {
-		return *in.IncludeOpenAccess
-	}
-	return cfg.OpenAccessEnabled
+// extraSearch carries an in-flight forced search of the extra sources. The forced
+// mode does not depend on the catalog's outcome, so it starts before the catalog
+// is queried and costs one round of latency instead of two; the other modes leave
+// it idle and decide after the catalog has answered.
+type extraSearch struct {
+	wg      sync.WaitGroup
+	hits    []discovery.DiscoveryResult
+	started bool
 }
 
-// appendOpenAccess federates the keyless open-access providers for the query and
-// attaches the deduped hits to out. It is best-effort and a no-op when the effective
-// flag is off or the query is blank, so core libgen search is never affected. Hits
-// already present among the libgen results (by DOI or title+year) are dropped, and a
-// follow-up next-step explaining how to fetch them is appended when any survive.
-func appendOpenAccess(ctx context.Context, cfg *config.Config, in SearchInput, out *SearchOutput) {
-	if !openAccessEnabled(in, cfg) || strings.TrimSpace(in.Query) == "" {
-		return
+// startExtras kicks off the extra searchers when the mode forces them, and returns
+// an idle handle otherwise. An empty query never starts anything: there is nothing
+// to ask the searchers.
+func startExtras(ctx context.Context, mode config.ExtraSourcesMode, query string,
+	cfg *config.Config, annasMirrors discovery.MirrorLister,
+) *extraSearch {
+	e := &extraSearch{}
+	if !forcedEscalation(mode) || strings.TrimSpace(query) == "" {
+		return e
 	}
-	hits := discovery.Federate(ctx, in.Query, openAccessLimit, discovery.DefaultProviders(cfg.UnpaywallEmail)...)
-	hits = dedupOpenAccessVsLibgen(hits, out.Results)
-	if len(hits) == 0 {
-		return
-	}
-	out.OpenAccess = hits
-	out.NextSteps = append(out.NextSteps, openAccessNextStep)
+	e.started = true
+	e.wg.Go(func() {
+		// The handler's own recovery cannot catch a panic raised on another
+		// goroutine — it would take the whole server down — so this one guards
+		// itself and degrades to no extra hits.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("forced extra search panicked", "panic", r, "stack", debug.Stack())
+			}
+		}()
+		e.hits = federateExtras(ctx, query, cfg, annasMirrors)
+	})
+	return e
 }
 
-// openAccessNextStep tells the model how to act on the open-access hits: fetch a
-// paper by its doi or arXiv pdf_url via read/download, or use an openlibrary
-// isbn/title to refine a libgen search. Their titles/authors are untrusted external
-// text.
-const openAccessNextStep = "The open_access results are open-access hits (untrusted external metadata): fetch a paper with download/read by its doi, read an arXiv pdf_url directly, or use an openlibrary isbn/title to refine a libgen search."
+// wait joins the forced search. It is safe to call more than once, so the handler
+// can defer it against an early return and still join it on the normal path.
+func (e *extraSearch) wait() { e.wg.Wait() }
 
-// dedupOpenAccessVsLibgen drops any open-access hit whose normalized DOI, or whose
-// title+year key, already appears among the libgen results, so the same work is
-// never shown in both lists.
-func dedupOpenAccessVsLibgen(hits []discovery.DiscoveryResult, results []libgen.Result) []discovery.DiscoveryResult {
-	seenDOI, seenTitle := libgenDedupKeys(results)
-	kept := make([]discovery.DiscoveryResult, 0, len(hits))
+// collect returns the hits to merge: the forced search's own results once it has
+// finished, or a fresh search when the catalog's outcome calls for one, or nothing.
+func (e *extraSearch) collect(ctx context.Context, mode config.ExtraSourcesMode, query string,
+	cfg *config.Config, annasMirrors discovery.MirrorLister, catalogHits int, catalogErr error,
+) []discovery.DiscoveryResult {
+	e.wait()
+	if e.started {
+		return e.hits
+	}
+	if shouldEscalate(mode, catalogHits, catalogErr) && strings.TrimSpace(query) != "" {
+		return federateExtras(ctx, query, cfg, annasMirrors)
+	}
+	return nil
+}
+
+// federateExtras runs every extra searcher concurrently for one query.
+func federateExtras(ctx context.Context, query string, cfg *config.Config,
+	annasMirrors discovery.MirrorLister,
+) []discovery.DiscoveryResult {
+	return discovery.Federate(ctx, query, extraLimit,
+		discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
+}
+
+// buildSearchOutput assembles the SearchOutput from a successful catalog page,
+// deriving page and per-page defaults from the input and flagging truncation.
+func buildSearchOutput(page *libgen.SearchPage, mirror string, in SearchInput) SearchOutput {
+	per := in.ResultsPerPage
+	if per == 0 {
+		per = 25
+	}
+	curPage := in.Page
+	if curPage == 0 {
+		curPage = 1
+	}
+	out := SearchOutput{
+		Results:        page.Results,
+		Page:           curPage,
+		ResultsPerPage: per,
+		TotalFiles:     page.TotalFiles,
+		Reachable:      page.Reachable,
+		Truncated:      page.Truncated,
+		HasMore:        len(page.Results) >= per,
+		Mirror:         mirror,
+	}
+	if page.Truncated {
+		out.Hint = fmt.Sprintf("Only the first %d of %s results are reachable; "+
+			"refine your query (add author/year, use title-only columns, or narrow topics).",
+			page.Reachable, page.TotalFiles)
+	}
+	if out.Results == nil {
+		out.Results = []libgen.Result{}
+	}
+	return out
+}
+
+// extraLimit bounds how many hits each extra searcher is asked for, keeping the
+// merged payload small.
+const extraLimit = 10
+
+// resolveExtraMode picks the mode for this call: an explicit per-call value wins,
+// otherwise the deployment default applies. An unrecognized per-call value is an
+// error rather than a silent fallback, so a caller learns about the typo.
+//
+// A deployment set to never is the one exception: it is a lock, not a default. It
+// exists so an operator can guarantee the server never contacts the extra
+// providers, and a caller able to ask for them anyway would make that guarantee
+// worthless. The call still succeeds — the catalog answers as usual — it simply
+// does not reach further.
+func resolveExtraMode(in SearchInput, cfg *config.Config) (config.ExtraSourcesMode, error) {
+	if cfg.ExtraSources == config.ExtraSourcesNever {
+		return config.ExtraSourcesNever, nil
+	}
+	if strings.TrimSpace(in.ExtraSources) == "" {
+		return cfg.ExtraSources, nil
+	}
+	mode, err := config.ParseExtraSourcesMode(in.ExtraSources)
+	if err != nil {
+		// Name the argument, so a caller that mistyped it knows where to look — a
+		// live evaluator run caught a model passing ["always"], an array, and being
+		// told about an environment variable it had never set.
+		return "", fmt.Errorf("extra_sources: %w", err)
+	}
+	return mode, nil
+}
+
+// shouldEscalate reports whether to consult the extra searchers for this call.
+// Under auto they run when the catalog returned nothing or failed outright — a
+// mirror outage is at least as bad as a miss, and is exactly when a rescue route
+// matters.
+func shouldEscalate(mode config.ExtraSourcesMode, catalogHits int, catalogErr error) bool {
+	switch mode {
+	case config.ExtraSourcesNever:
+		return false
+	case config.ExtraSourcesAlways:
+		return true
+	default:
+		return catalogHits == 0 || catalogErr != nil
+	}
+}
+
+// forcedEscalation reports whether the extra searchers were asked for outright
+// rather than reached as a fallback. Only the always mode qualifies: it does not
+// depend on the catalog's outcome, so it can start before the catalog has answered.
+func forcedEscalation(mode config.ExtraSourcesMode) bool {
+	return mode == config.ExtraSourcesAlways
+}
+
+// mergeExtraHits folds federated hits into out, splitting them by key space:
+// md5-keyed hits (Anna's) join the catalog result list labeled by origin, while
+// DOI-keyed hits stay in the open-access list. An md5 already among the catalog
+// results is dropped so the richer catalog record survives.
+func mergeExtraHits(out *SearchOutput, hits []discovery.DiscoveryResult) {
+	if out.Results == nil {
+		out.Results = []libgen.Result{}
+	}
+	if out.OpenAccess == nil {
+		out.OpenAccess = []discovery.DiscoveryResult{}
+	}
+	seen := map[string]bool{}
+	for _, r := range out.Results {
+		if r.MD5 != "" {
+			seen[strings.ToLower(r.MD5)] = true
+		}
+	}
 	for _, h := range hits {
-		if doi := discovery.NormalizeDOI(h.DOI); doi != "" && seenDOI[doi] {
+		md5 := strings.ToLower(strings.TrimSpace(h.MD5))
+		if md5 == "" {
+			out.OpenAccess = append(out.OpenAccess, h)
 			continue
 		}
-		if key := discovery.TitleYearKey(h.Title, h.Year); key != "" && seenTitle[key] {
+		if seen[md5] {
 			continue
 		}
-		kept = append(kept, h)
+		seen[md5] = true
+		out.Results = append(out.Results, libgen.Result{
+			Origin:  h.Origin,
+			MD5:     h.MD5,
+			Title:   h.Title,
+			Authors: h.Authors,
+			Year:    h.Year,
+		})
 	}
-	return kept
-}
-
-// libgenDedupKeys builds the sets of normalized DOIs and title+year keys present in
-// the libgen results, used to suppress duplicate open-access hits.
-func libgenDedupKeys(results []libgen.Result) (doi, titleYear map[string]bool) {
-	doi = map[string]bool{}
-	titleYear = map[string]bool{}
-	for _, r := range results {
-		if d := discovery.NormalizeDOI(r.DOI); d != "" {
-			doi[d] = true
-		}
-		if key := discovery.TitleYearKey(r.Title, r.Year); key != "" {
-			titleYear[key] = true
-		}
-	}
-	return doi, titleYear
 }
 
 // markdownResult wraps a human-readable Markdown rendering in a CallToolResult.
@@ -473,7 +600,7 @@ func markdownResult(md string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: md}}}
 }
 
-func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
+func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
 		var (
@@ -481,14 +608,22 @@ func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Det
 			err error
 		)
 		switch {
-		case in.MD5 != "" && in.ID != "":
-			return nil, zero, errors.New("provide md5 or id, not both")
+		case countKeys(in.MD5, in.ID, in.DOI) > 1:
+			return nil, zero, errors.New("provide exactly one of md5, id or doi")
 		case in.MD5 != "":
 			out, err = detailsByMD5(ctx, c, in.MD5)
+			if err != nil {
+				out, err = detailsFromAnnas(ctx, annasMirrors, in.MD5, err)
+			}
 		case in.ID != "":
 			out, err = detailsByID(ctx, c, in.Object, in.ID)
+		case in.DOI != "":
+			out, err = detailsByDOI(ctx, c, in.DOI)
+			if err != nil {
+				out, err = detailsFromEnrichment(ctx, c, cfg, in.DOI, err)
+			}
 		default:
-			return nil, zero, errors.New("provide md5 or id")
+			return nil, zero, errors.New("provide exactly one of md5, id or doi")
 		}
 		if err != nil {
 			return nil, zero, err
@@ -500,6 +635,103 @@ func detailsHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[Det
 		}
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// countKeys reports how many of the given identifiers are set, so the handler can
+// reject an ambiguous call naming more than one.
+func countKeys(keys ...string) int {
+	n := 0
+	for _, k := range keys {
+		if strings.TrimSpace(k) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// detailsByDOI looks a DOI up in the catalog. The record it returns is the
+// edition, and the file beside it carries the md5 download needs — so a caller
+// holding only a DOI reaches a downloadable identifier in one call instead of
+// guessing at a text search.
+func detailsByDOI(ctx context.Context, c *libgen.Client, doi string) (DetailsOutput, error) {
+	edition, file, err := c.DetailsByDOI(ctx, doi)
+	if err != nil {
+		return DetailsOutput{}, err
+	}
+	return DetailsOutput{Edition: edition, File: file}, nil
+}
+
+// detailsFromEnrichment answers a DOI the catalog has no record for, using the
+// keyless external metadata instead. It mirrors the md5 fallback to Anna's: an
+// identifier from a search result should not be a dead end at the follow-up the
+// search itself suggests.
+//
+// The DOIs that reach here are the ones open-access hits carry, which the catalog
+// has never indexed — a live run caught a model taking a Crossref DOI here,
+// getting a hard error, and spending a turn recovering, while the journal and
+// citation metadata it asked for was one keyless lookup away.
+//
+// catalogErr survives when nothing external answers either, so a genuinely unknown
+// DOI is still reported as unknown to the catalog.
+func detailsFromEnrichment(ctx context.Context, c *libgen.Client, cfg *config.Config, doi string, catalogErr error) (DetailsOutput, error) {
+	if !cfg.EnrichEnabled {
+		return DetailsOutput{}, catalogErr
+	}
+	enrichment := c.Enrich(ctx, doi, "")
+	if enrichment == nil {
+		return DetailsOutput{}, catalogErr
+	}
+	return DetailsOutput{
+		File:       map[string]any{"origin": "crossref", "doi": doi},
+		Enrichment: enrichment,
+	}, nil
+}
+
+// detailsFromAnnas looks an md5 up in Anna's Archive after the Library Genesis
+// catalog came up empty. A search that consulted the extra sources returns md5s
+// the catalog never indexed, so without this the follow-up the search itself
+// suggests would always fail on them.
+//
+// catalogErr is returned unchanged when Anna's has nothing either: the caller
+// asked the catalog a question, and "the catalog has no such record" is a better
+// answer than an Anna's transport error. The record is labeled origin=annas
+// because its metadata is thinner than a catalog record's.
+func detailsFromAnnas(ctx context.Context, annasMirrors discovery.MirrorLister, md5 string, catalogErr error) (DetailsOutput, error) {
+	if annasMirrors == nil {
+		return DetailsOutput{}, catalogErr
+	}
+	rec, err := discovery.NewAnnas(annasMirrors).Details(ctx, md5)
+	if err != nil {
+		return DetailsOutput{}, catalogErr
+	}
+	return DetailsOutput{File: annasRecordFields(rec)}, nil
+}
+
+// annasRecordFields renders an Anna's record as a file record, using the catalog's
+// own field names so a caller reads both the same way. Empty fields are omitted
+// rather than rendered blank, since which fields a record carries varies by the
+// collection it came from.
+func annasRecordFields(rec *discovery.AnnasRecord) map[string]any {
+	fields := map[string]any{"origin": "annas", "md5": rec.MD5}
+	for name, value := range map[string]string{
+		"title":        rec.Title,
+		"author":       rec.Author,
+		"year":         rec.Year,
+		"language":     rec.Language,
+		"extension":    rec.Extension,
+		"filesize":     rec.Filesize,
+		"content_type": rec.ContentType,
+		"collection":   rec.Collection,
+		"filepath":     rec.Filepath,
+		"isbn":         rec.ISBN13,
+		"isbn10":       rec.ISBN10,
+		"ipfs_cid":     rec.IPFSCID,
+	} {
+		if value != "" {
+			fields[name] = value
+		}
+	}
+	return fields
 }
 
 // detailsEnrich augments out with best-effort external metadata: the DOI comes

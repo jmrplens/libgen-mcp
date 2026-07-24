@@ -69,7 +69,14 @@ func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
 			Reason: "unsupported format " + ext + ": outline extraction is not available (comic/scanned/proprietary container)",
 		}, nil
 	default:
-		return OutlineResult{Reason: "unsupported file extension " + ext}, nil
+		// Same reasoning as Extract: an extensionless file is identified by content.
+		switch sniffFormat(filePath) {
+		case "pdf":
+			return pdfOutline(ctx, filePath)
+		case "epub":
+			return epubOutline(ctx, filePath)
+		}
+		return OutlineResult{Reason: UnrecognizedReason(ext)}, nil
 	}
 }
 

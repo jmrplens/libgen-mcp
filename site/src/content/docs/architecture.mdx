@@ -99,6 +99,24 @@ Download sources implement a common interface — `Name`, `Supports(item)`, and 
 
 Because the chain is a single ordered slice filtered by `Supports`, a book item is offered `[libgen, randombook, annas]`, an article item `[unpaywall, scihub, scidb]`, and an item carrying both is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from this chain without reordering it. `Download` tries each supporting source in turn and returns the first success; if all fail, it returns the joined per-source errors.
 
+## Search path
+
+The download chain above is one of two federations in the server. The other is the search path, which is structured differently: the download chain is ordered and stops at the first success, while the searchers run concurrently and their answers are merged.
+
+A search always queries the Library Genesis catalog through the same failover client. Whether it also queries the **extra searchers** — Anna's Archive plus the keyless open-access providers (arXiv, Crossref, OpenLibrary) — is decided by `ExtraSourcesMode`, resolved per call from the `extra_sources` argument and falling back to `LIBGEN_MCP_EXTRA_SOURCES`:
+
+| Mode     | When the extras run                            | Scheduling                                                              |
+| -------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| `auto`   | Only when the catalog returns nothing or fails | After the catalog, since the decision depends on the catalog's answer   |
+| `always` | Every search                                   | Concurrently with the catalog, since the decision does not depend on it |
+| `never`  | Never                                          | —                                                                       |
+
+Each extra searcher implements `discovery.Provider` (`Name`, `Search`), and `Federate` runs the set concurrently with per-provider panic recovery, so one failing provider cannot fail the search. The merge is keyed by identifier space: Anna's hits carry an md5 and join `results` labeled `origin: "annas"`, while the open-access hits carry a DOI and stay in `open_access`. Duplicates are dropped by md5, and a file present in both the catalog and Anna's keeps the catalog record, which carries the richer metadata.
+
+`get_details` follows the same split. An md5 the catalog has no record for — which is what an escalated search returns — falls back to Anna's own record page, parsed by label rather than by position because the field set varies by source collection.
+
+For the conceptual walk-through with diagrams, see [How search works](/libgen-mcp/how-search-works/).
+
 ## Transports
 
 The server speaks MCP over one of two transports, selected at startup:
