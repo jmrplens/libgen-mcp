@@ -199,6 +199,13 @@ linters:
       - std-error-handling
       - common-false-positives
 
+    paths:
+      # Agent scratch space: .claude/worktrees holds throwaway checkouts of this
+      # same module. Linting them reports every finding twice (and keeps reporting
+      # findings from worktrees that have since been deleted, via the cache), none
+      # of which belongs to the tree being checked.
+      - "\\.claude($|/)"
+
     rules:
       # Test files: relax some rules
       - path: "_test\\.go"
@@ -244,6 +251,10 @@ formatters:
     - goimports # Import grouping and ordering
     - gofumpt # Stricter gofmt-compatible formatting
     - gci # Enforce deterministic import section grouping
+  exclusions:
+    paths:
+      # See the linters exclusion above: agent worktrees are copies of this module.
+      - "\\.claude($|/)"
   settings:
     gofumpt:
       module-path: github.com/jmrplens/libgen-mcp
