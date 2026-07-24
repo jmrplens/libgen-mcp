@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -368,6 +369,18 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 		if verr := params.Validate(); verr != nil {
 			return nil, zero, verr
 		}
+		forced := forcedEscalation(mode) && strings.TrimSpace(in.Query) != ""
+		var (
+			extraWG   sync.WaitGroup
+			extraHits []discovery.DiscoveryResult
+		)
+		if forced {
+			extraWG.Go(func() {
+				extraHits = discovery.Federate(ctx, in.Query, extraLimit,
+					discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
+			})
+		}
+		defer extraWG.Wait()
 		page, mirror, searchErr := c.Search(ctx, params)
 
 		var out SearchOutput
@@ -375,14 +388,15 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 			out = buildSearchOutput(page, mirror, in)
 		}
 
-		if shouldEscalate(mode, len(out.Results), searchErr) && strings.TrimSpace(in.Query) != "" {
-			hits := discovery.Federate(ctx, in.Query, extraLimit,
-				discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...)
-			mergeExtraHits(&out, hits)
-			if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
-				return nil, zero, searchErr
-			}
-		} else if searchErr != nil {
+		extraWG.Wait()
+		switch {
+		case forced:
+			mergeExtraHits(&out, extraHits)
+		case shouldEscalate(mode, len(out.Results), searchErr) && strings.TrimSpace(in.Query) != "":
+			mergeExtraHits(&out, discovery.Federate(ctx, in.Query, extraLimit,
+				discovery.ExtraProviders(cfg.UnpaywallEmail, annasMirrors)...))
+		}
+		if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
 			return nil, zero, searchErr
 		}
 
@@ -450,6 +464,13 @@ func shouldEscalate(mode config.ExtraSourcesMode, catalogHits int, catalogErr er
 	default:
 		return catalogHits == 0 || catalogErr != nil
 	}
+}
+
+// forcedEscalation reports whether the extra searchers were asked for outright
+// rather than reached as a fallback. Only the always mode qualifies: it does not
+// depend on the catalog's outcome, so it can start before the catalog has answered.
+func forcedEscalation(mode config.ExtraSourcesMode) bool {
+	return mode == config.ExtraSourcesAlways
 }
 
 // mergeExtraHits folds federated hits into out, splitting them by key space:

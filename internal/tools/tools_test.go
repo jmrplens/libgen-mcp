@@ -2073,6 +2073,87 @@ func TestResolveExtraModePrecedence(t *testing.T) {
 	}
 }
 
+// TestForcedEscalationIsAlwaysModeOnly verifies only the always mode is forced.
+// auto depends on the catalog's outcome and never must not run the extras at all,
+// so neither may start before the catalog has answered.
+func TestForcedEscalationIsAlwaysModeOnly(t *testing.T) {
+	cases := map[config.ExtraSourcesMode]bool{
+		config.ExtraSourcesAlways: true,
+		config.ExtraSourcesAuto:   false,
+		config.ExtraSourcesNever:  false,
+	}
+	for mode, want := range cases {
+		if got := forcedEscalation(mode); got != want {
+			t.Errorf("forcedEscalation(%q) = %v, want %v", mode, got, want)
+		}
+	}
+}
+
+// rendezvousTimeout bounds how long one side of the concurrency rendezvous waits
+// for the other. A sequential implementation waits it out in full and then fails,
+// so a regression reports a clear error instead of hanging the suite.
+const rendezvousTimeout = 3 * time.Second
+
+// awaitPeer blocks until peer is closed, reporting a failure if the wait times out.
+// It is called from httptest handler goroutines, so it uses t.Errorf (safe from any
+// goroutine) rather than t.Fatalf.
+func awaitPeer(t *testing.T, peer <-chan struct{}, side string) {
+	t.Helper()
+	select {
+	case <-peer:
+	case <-time.After(rendezvousTimeout):
+		t.Errorf("%s ran without its counterpart in flight: the forced path is still sequential", side)
+	}
+}
+
+// TestForcedSearchQueriesExtrasConcurrently verifies the extra searchers are already
+// in flight while the catalog is still being queried, so a forced search costs one
+// round of latency rather than two.
+//
+// Both sides announce themselves and then wait for the other: run sequentially,
+// whichever side goes first waits out rendezvousTimeout and fails; run concurrently,
+// both proceed at once.
+func TestForcedSearchQueriesExtrasConcurrently(t *testing.T) {
+	catalogEntered, extraEntered := make(chan struct{}), make(chan struct{})
+	var catalogOnce, extraOnce sync.Once
+
+	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) {
+		catalogOnce.Do(func() { close(catalogEntered) })
+		awaitPeer(t, extraEntered, "the catalog search")
+		_, _ = w.Write(searchHTML)
+	})
+	catalog := httptest.NewServer(mux)
+	t.Cleanup(catalog.Close)
+
+	// arXiv stands in for the extra searchers: Federate runs them concurrently, so
+	// one of them reaching the rendezvous proves the whole set was started early.
+	arxiv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		extraOnce.Do(func() { close(extraEntered) })
+		awaitPeer(t, catalogEntered, "the extra searchers")
+		_, _ = w.Write([]byte(oaArxivFeed))
+	}))
+	quiet := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(func() { arxiv.Close(); quiet.Close() })
+	restore := discovery.SetBasesForTest(arxiv.URL, quiet.URL, quiet.URL)
+	t.Cleanup(restore)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 10 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, UnpaywallEmail: "test@example.com", ExtraSources: config.ExtraSourcesAlways,
+	}
+	handler := searchHandler(libgen.New(staticMirrors{catalog.URL}, cfg), cfg, staticMirrors{quiet.URL})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, _, err := handler(ctx, nil, SearchInput{Query: "golang"}); err != nil {
+		t.Fatalf("forced search failed: %v", err)
+	}
+}
+
 // TestMergeExtraHitsSplitsByKeySpace verifies md5-keyed hits join the catalog
 // results labeled by origin, DOI-keyed hits go to the open-access list, and an
 // md5 already in the catalog is dropped so the richer catalog record survives.
