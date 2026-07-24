@@ -10,6 +10,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -544,5 +546,54 @@ func TestReadVersion_ReadFileError(t *testing.T) {
 	dir := t.TempDir() // exists, but has no VERSION file
 	if got := readVersion(dir); got != "unknown" {
 		t.Fatalf("readVersion(no VERSION) = %q, want unknown", got)
+	}
+}
+
+// configGoPath resolves internal/config/config.go relative to this test file, so
+// the lookup survives the t.Chdir calls other tests in this package make.
+func configGoPath(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed; cannot locate config.go")
+	}
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "internal", "config", "config.go")
+}
+
+// envVarRe matches a LIBGEN_MIRROR or LIBGEN_MCP_* variable name as it appears in
+// a Go string literal.
+var envVarRe = regexp.MustCompile(`LIBGEN_(?:MCP_[A-Z0-9_]+|MIRROR)`)
+
+// TestConfigEnvVarsCoversConfigGo is the drift gate for the generated
+// Configuration table: every environment variable internal/config/config.go names
+// must be documented in configEnvVars and vice versa, so adding one to the config
+// without documenting it fails here instead of silently leaving a hole in
+// llms-full.txt.
+func TestConfigEnvVarsCoversConfigGo(t *testing.T) {
+	src, err := os.ReadFile(configGoPath(t))
+	if err != nil {
+		t.Fatalf("read config.go: %v", err)
+	}
+	documented := map[string]bool{}
+	for _, v := range configEnvVars() {
+		documented[v.name] = true
+	}
+	seen := map[string]bool{}
+	for _, name := range envVarRe.FindAllString(string(src), -1) {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if !documented[name] {
+			t.Errorf("%s is named by internal/config/config.go but missing from configEnvVars", name)
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("found no environment variables in config.go; the scan is broken")
+	}
+	for name := range documented {
+		if !seen[name] {
+			t.Errorf("configEnvVars documents %s, which internal/config/config.go never names", name)
+		}
 	}
 }
