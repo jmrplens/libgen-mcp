@@ -164,7 +164,7 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 
 	resp, err := s.get(ctx, httpClient, endpoint, nil)
 	if err != nil {
-		return "", nil, fmt.Errorf("annas: member request to %q: %w", base, err)
+		return "", nil, unavailable(fmt.Errorf("annas: member request to %q: %w", base, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -225,16 +225,16 @@ func (s annasSource) resolveViaIPFS(ctx context.Context, httpClient *http.Client
 func (s annasSource) fetchCID(ctx context.Context, httpClient *http.Client, base, md5 string) (cid, ext string, err error) {
 	resp, err := s.get(ctx, httpClient, base+"/md5/"+url.PathEscape(md5), nil)
 	if err != nil {
-		return "", "", fmt.Errorf("annas: requesting %q: %w", base, err)
+		return "", "", unavailable(fmt.Errorf("annas: requesting %q: %w", base, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("annas: mirror %q returned HTTP %d", base, resp.StatusCode)
+		return "", "", unavailableStatus(resp.StatusCode, fmt.Errorf("annas: mirror %q returned HTTP %d", base, resp.StatusCode))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, annasMaxBody))
 	if err != nil {
-		return "", "", fmt.Errorf("annas: reading %q: %w", base, err)
+		return "", "", unavailable(fmt.Errorf("annas: reading %q: %w", base, err))
 	}
 	cid, ok := extractIPFSCID(body)
 	if !ok {

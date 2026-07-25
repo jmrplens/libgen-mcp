@@ -101,6 +101,19 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 - Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
 - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
 
+## Falta una fuente en los errores de una descarga repetida
+
+**Síntoma.** Una `download` falla y un segundo intento informa de menos fuentes que el primero — una que falló hace un momento no aparece en absoluto.
+
+**Significado.** Esa fuente está en **enfriamiento**. Cuando una fuente falla porque no está disponible (un error de transporte, un timeout, un 5xx o un 429) se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Se omite, no se elimina: el enfriamiento expira por sí solo, no se escribe nada en disco (un reinicio lo borra) y cuando todas las fuentes capaces de servir el elemento están en enfriamiento se prueban todas igualmente. Una fuente que solo informó de que no tiene el elemento nunca se aparta.
+
+El log del servidor dice qué fuentes se omitieron y por qué — `source in cooldown, skipping` con el instante en que vuelve a ser elegible, o `every capable source is in cooldown, trying them anyway`. Ejecuta con `LIBGEN_MCP_LOG_LEVEL=info` (el valor por defecto) para verlas.
+
+**Soluciones.**
+
+- No hace falta nada: reintenta más tarde, o de inmediato con `source: "<nombre>"` para dirigirte a ese proveedor directamente — una fuente explícita siempre se prueba, esté en enfriamiento o no.
+- Si una fuente entra en enfriamiento repetidamente, es realmente inalcanzable desde este host. Compruébalo a mano antes de sospechar del servidor.
+
 ## Resultados de búsqueda truncados
 
 **Síntoma.** Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.

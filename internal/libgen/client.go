@@ -143,6 +143,21 @@ type Client struct {
 
 	mu       sync.Mutex           // protects cooldown
 	cooldown map[string]time.Time // mirror base → instant at which the cooldown expires
+
+	// sourceMu guards sourceCooldown. It is deliberately separate from mu: that one
+	// guards the per-mirror cooldown, whose keys are mirror base URLs, and conflating
+	// the two key spaces would let a failing mirror influence which download sources
+	// the chain is willing to try.
+	sourceMu sync.Mutex
+	// sourceCooldown records download sources set aside after proving unavailable:
+	// source name → instant at which the cooldown expires. It lives on the Client
+	// (which outlives every individual download) and is never persisted, so a fresh
+	// process always starts by trying every source.
+	sourceCooldown map[string]time.Time
+	// sourceCooldownWindow overrides sourceCooldownDuration. A non-positive value
+	// selects the constant; it is injectable so tests can observe an expiry without
+	// waiting minutes for one.
+	sourceCooldownWindow time.Duration
 }
 
 // refLock is a per-key serialization lock with a reference count. refs tracks how
@@ -253,6 +268,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		stallTimeout:     cfg.DownloadStallTimeout,
 		dlSem:            make(chan struct{}, maxConcurrent),
 		cooldown:         make(map[string]time.Time),
+		sourceCooldown:   make(map[string]time.Time),
 		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
 	}
 	c.retryEverySource = cfg.RetryEverySource

@@ -54,6 +54,25 @@ func SourceAttempt(source string, start time.Time, err error) {
 	slog.Info("source resolved", "source", source, "duration", duration)
 }
 
+// SourceSkipped records that the chain passed over a download source because an
+// earlier failure showed it to be unavailable and its cooldown has not expired.
+//
+// It is Info, at the same level as SourceAttempt, because a source that simply
+// vanishes from the chain log is the harder debugging problem: the reader can see
+// which sources were tried but not why one they expected is missing. until is the
+// instant the source becomes eligible again.
+func SourceSkipped(source string, until time.Time) {
+	slog.Info("source in cooldown, skipping", "source", source, "cooldown_until", until)
+}
+
+// SourceCooldownBypassed records that every source able to serve the item was in
+// cooldown, so the chain tried them regardless. A cooldown only deprioritizes a
+// source, so this is the expected outcome rather than an error — but it is worth a
+// Warn, since it means every provider for this kind of item recently failed.
+func SourceCooldownBypassed(sources []string) {
+	slog.Warn("every capable source is in cooldown, trying them anyway", "sources", sources)
+}
+
 // ToolCall records the outcome of an MCP tool execution.
 //
 // It emits an Info-level log when err is nil and an Error-level log otherwise,
