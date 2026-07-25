@@ -428,12 +428,10 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	sources = c.withPerCallUnpaywall(item, sources)
 	sources = c.withPerCallAnnas(item, sources)
 	var errs []error
-	for _, src := range sources {
-		if !src.Supports(item) {
-			continue
-		}
+	for _, src := range c.eligibleSources(supportingSources(sources, item)) {
 		resolved, rerr := c.resolveWithin(ctx, src, item)
 		if rerr != nil {
+			c.noteSourceFailure(ctx, src.Name(), rerr)
 			errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), rerr))
 			if ctx.Err() != nil {
 				break
@@ -535,13 +533,9 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to
 	// the next. The first success returns; if all fail, the joined errors surface.
 	// Only the sources that can serve this item matter, and the last of them is the
-	// one worth waiting on: see downloadFrom.
-	supporting := make([]DownloadSource, 0, len(sources))
-	for _, src := range sources {
-		if src.Supports(item) {
-			supporting = append(supporting, src)
-		}
-	}
+	// one worth waiting on: see downloadFrom. Sources a recent failure proved
+	// unavailable are passed over unless they are all that is left (eligibleSources).
+	supporting := c.eligibleSources(supportingSources(sources, item))
 
 	var errs []error
 	for i, src := range supporting {
@@ -552,6 +546,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		if err == nil {
 			return res, nil
 		}
+		c.noteSourceFailure(ctx, src.Name(), err)
 		errs = append(errs, fmt.Errorf("source %s: %w", src.Name(), err))
 		// A canceled/expired context will not recover on the next source, so stop.
 		if ctx.Err() != nil {

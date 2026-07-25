@@ -85,7 +85,7 @@ func (s coreSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	// falls through here rather than costing a wasted download attempt. The probe
 	// carries no Authorization, so the key stays on the API host, not the file URL.
 	if !probePDF(ctx, s.client(), downloadURL) {
-		return Resolved{}, fmt.Errorf("core: %q has no downloadable open-access full text", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("core: %q has no downloadable open-access full text", it.DOI))
 	}
 	return Resolved{FileURL: downloadURL, VerifyMD5: false, Ext: "pdf"}, nil
 }
@@ -114,15 +114,17 @@ func (s coreSource) lookupDownloadURL(ctx context.Context, doi string) (string, 
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("core: requesting %q: %w", doi, err)
+		return "", unavailable(fmt.Errorf("core: requesting %q: %w", doi, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return "", fmt.Errorf("core: API key rejected (HTTP %d)", resp.StatusCode)
+		// A rejected key is item-independent: every later item would be rejected the
+		// same way, so the source is unusable rather than this DOI missing.
+		return "", unavailable(fmt.Errorf("core: API key rejected (HTTP %d)", resp.StatusCode))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("core: %q returned HTTP %d", doi, resp.StatusCode)
+		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("core: %q returned HTTP %d", doi, resp.StatusCode))
 	}
 
 	var rec coreResponse
@@ -130,10 +132,10 @@ func (s coreSource) lookupDownloadURL(ctx context.Context, doi string) (string, 
 		return "", fmt.Errorf("core: decoding response for %q: %w", doi, decErr)
 	}
 	if len(rec.Results) == 0 {
-		return "", fmt.Errorf("core: %q is not in CORE", doi)
+		return "", notIndexed(fmt.Errorf("core: %q is not in CORE", doi))
 	}
 	if rec.Results[0].DownloadURL == "" {
-		return "", fmt.Errorf("core: %q has no downloadable open-access full text", doi)
+		return "", notIndexed(fmt.Errorf("core: %q has no downloadable open-access full text", doi))
 	}
 	return rec.Results[0].DownloadURL, nil
 }

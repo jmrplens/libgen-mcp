@@ -103,6 +103,19 @@ Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(it
 
 Como la cadena es un único slice ordenado filtrado por `Supports`, a un elemento libro se le ofrece `[libgen, randombook, annas]`, a uno artículo `[unpaywall, europepmc, biorxiv, fatcat, core, scihub, scidb]`, y a uno que lleva ambos se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
 
+### Enfriamiento por fuente
+
+Una fuente que falla porque está **no disponible** — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Es el equivalente a nivel de fuente del enfriamiento por mirror del cliente HTTP, y donde más importa es en un servicio caído durante horas: sin él, cada descarga de artículo paga otra vez el presupuesto completo de esa fuente.
+
+Una fuente que responde correctamente que **no tiene el elemento** — no indexado, sin acceso abierto, sin copia preservada — nunca se aparta: es una respuesta normal y correcta sobre un elemento y no dice nada sobre la salud del proveedor. Ambos casos se distinguen por la taxonomía de errores con la que cada fuente etiqueta sus fallos (`ErrSourceUnavailable` frente a `ErrNotIndexed`).
+
+Dos reglas acotan el comportamiento:
+
+- Un enfriamiento solo baja la prioridad, nunca deshabilita. Cuando **todas** las fuentes capaces de servir un elemento están en enfriamiento, la cadena las prueba igualmente — mejor intentarlo que nada — y lo indica en el log. Por eso un argumento `source:` explícito siempre llega a la fuente que nombra.
+- Nada se persiste. El estado vive en el cliente durante la vida del proceso, así que un reinicio empieza limpio.
+
+Ambas decisiones son visibles en el log junto a las líneas de intento por fuente ya existentes: una fuente omitida se registra en `INFO` con el instante en que expira su enfriamiento, y el caso de todas en enfriamiento en `WARN`.
+
 ## Camino de búsqueda
 
 La cadena de descarga anterior es una de las dos federaciones del servidor. La otra es el camino de búsqueda, con una estructura distinta: la cadena de descarga está ordenada y se detiene en el primer éxito, mientras que los buscadores se ejecutan en paralelo y sus respuestas se fusionan.

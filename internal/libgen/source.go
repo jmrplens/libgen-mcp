@@ -156,6 +156,14 @@ type DownloadSource interface {
 	Supports(it Item) bool
 	// Resolve turns the Item into a Resolved (URL + streaming directives), or
 	// returns an error so the caller can try the next source.
+	//
+	// That error should be classified with the taxonomy in sourceerr.go: wrap a
+	// failure that shows the source itself to be unreachable (transport error,
+	// timeout, 5xx/429) with unavailable, and a correct "I do not hold this item"
+	// with notIndexed. The chain sets an unavailable source aside for a while
+	// (see eligibleSources) and never penalizes a clean miss, so an untagged
+	// failure only costs the chain that optimization — it is never wrong, just
+	// less informed.
 	Resolve(ctx context.Context, it Item) (Resolved, error)
 }
 

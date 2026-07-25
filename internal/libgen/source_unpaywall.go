@@ -140,12 +140,12 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("unpaywall: requesting %q: %w", it.DOI, err)
+		return Resolved{}, unavailable(fmt.Errorf("unpaywall: requesting %q: %w", it.DOI, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return Resolved{}, fmt.Errorf("unpaywall: %q returned HTTP %d", it.DOI, resp.StatusCode)
+		return Resolved{}, unavailableStatus(resp.StatusCode, fmt.Errorf("unpaywall: %q returned HTTP %d", it.DOI, resp.StatusCode))
 	}
 
 	var rec unpaywallResponse
@@ -158,14 +158,14 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	// ("no open-access PDF"). Keeping them separate lets the chain and any log tell
 	// the two apart.
 	if !rec.IsOA {
-		return Resolved{}, fmt.Errorf("unpaywall: %q is not open access", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: %q is not open access", it.DOI))
 	}
 	fileURL := rec.bestPDFURL()
 	if fileURL == "" {
 		fileURL = rec.landingURL()
 	}
 	if fileURL == "" {
-		return Resolved{}, fmt.Errorf("unpaywall: no open-access PDF for %q", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: no open-access PDF for %q", it.DOI))
 	}
 	return Resolved{
 		FileURL:   fileURL,

@@ -163,7 +163,7 @@ func (s randombookSource) lookupID(ctx context.Context, md5 string) (string, err
 		return "", fmt.Errorf("randombook: by-id API reported an error for md5 %q", md5)
 	}
 	if rec.Result == nil {
-		return "", fmt.Errorf("randombook: md5 %q not indexed", md5)
+		return "", notIndexed(fmt.Errorf("randombook: md5 %q not indexed", md5))
 	}
 	if rec.Result.ID == "" {
 		return "", fmt.Errorf("%w: randombook by-id result carries no id", ErrLayoutChanged)
@@ -243,7 +243,7 @@ func (s randombookSource) resolveViaDownloadAPI(ctx context.Context, mirror, id 
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("randombook: probing %q: %w", base, err)
+		return "", unavailable(fmt.Errorf("randombook: probing %q: %w", base, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -277,12 +277,12 @@ func (s randombookSource) resolveViaMirror(ctx context.Context, mirror, md5 stri
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("randombook: requesting %q: %w", base, err)
+		return "", unavailable(fmt.Errorf("randombook: requesting %q: %w", base, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("randombook: mirror %q returned HTTP %d", base, resp.StatusCode)
+		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("randombook: mirror %q returned HTTP %d", base, resp.StatusCode))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
 	if err != nil {
@@ -309,12 +309,12 @@ func (s randombookSource) getJSON(ctx context.Context, endpoint string, out any)
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return fmt.Errorf("randombook: requesting %q: %w", endpoint, err)
+		return unavailable(fmt.Errorf("randombook: requesting %q: %w", endpoint, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("randombook: %q returned HTTP %d", endpoint, resp.StatusCode)
+		return unavailableStatus(resp.StatusCode, fmt.Errorf("randombook: %q returned HTTP %d", endpoint, resp.StatusCode))
 	}
 	if decErr := json.NewDecoder(io.LimitReader(resp.Body, randombookMaxBody)).Decode(out); decErr != nil {
 		return fmt.Errorf("%w: randombook: decoding %q: %w", ErrLayoutChanged, endpoint, decErr)

@@ -88,6 +88,29 @@ open-access providers first, then the shadow-library fallbacks:
 - Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
   LibGen digest for them.
 
+## A source is missing from the errors of a repeated download
+
+**Symptom.** A `download` fails, and a second attempt reports fewer sources than the first —
+one that failed a moment ago is not mentioned at all.
+
+**Meaning.** That source is in **cooldown**. When a source fails because it is unavailable (a
+transport error, a timeout, a 5xx or a 429) it is set aside for 5 minutes, so the next
+download does not spend its resolve budget on a provider that just proved unreachable. It is
+skipped, not removed: the cooldown expires on its own, nothing is written to disk (a restart
+clears it), and when every source able to serve the item is in cooldown they are all tried
+anyway. A source that merely reported it does not hold the item is never set aside.
+
+The server log says which sources were skipped and why — `source in cooldown, skipping` with
+the instant it becomes eligible again, or `every capable source is in cooldown, trying them
+anyway`. Run with `LIBGEN_MCP_LOG_LEVEL=info` (the default) to see them.
+
+**Fixes.**
+
+- Nothing is needed: retry later, or immediately with `source: "<name>"` to address that
+  provider directly — an explicit source is always tried, cooldown or not.
+- If a source is repeatedly cooled down, it is genuinely unreachable from this host. Check it
+  by hand before suspecting the server.
+
 ## Truncated search results
 
 **Symptom.** A search response has `truncated: true` and a `hint`, and paging past a certain

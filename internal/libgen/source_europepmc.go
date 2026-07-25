@@ -89,7 +89,7 @@ func (s europePMCSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 		return Resolved{}, err
 	}
 	if rec.PMCID == "" || !strings.EqualFold(rec.InEPMC, "Y") || !strings.EqualFold(rec.IsOpenAccess, "Y") {
-		return Resolved{}, fmt.Errorf("europepmc: %q is indexed but has no open-access full text", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("europepmc: %q is indexed but has no open-access full text", it.DOI))
 	}
 	fileURL, err := s.pdfURL(ctx, rec.PMCID)
 	if err != nil {
@@ -125,11 +125,11 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return europePMCResult{}, fmt.Errorf("europepmc: requesting %q: %w", doi, err)
+		return europePMCResult{}, unavailable(fmt.Errorf("europepmc: requesting %q: %w", doi, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return europePMCResult{}, fmt.Errorf("europepmc: %q returned HTTP %d", doi, resp.StatusCode)
+		return europePMCResult{}, unavailableStatus(resp.StatusCode, fmt.Errorf("europepmc: %q returned HTTP %d", doi, resp.StatusCode))
 	}
 
 	var rec europePMCResponse
@@ -137,7 +137,7 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 		return europePMCResult{}, fmt.Errorf("europepmc: decoding response for %q: %w", doi, decErr)
 	}
 	if rec.HitCount == 0 || len(rec.ResultList.Result) == 0 {
-		return europePMCResult{}, fmt.Errorf("europepmc: %q is not indexed", doi)
+		return europePMCResult{}, notIndexed(fmt.Errorf("europepmc: %q is not indexed", doi))
 	}
 	return rec.ResultList.Result[0], nil
 }
@@ -161,7 +161,9 @@ func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, erro
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("europepmc: no reachable PDF endpoint for %s", pmcid)
+	// Both candidates are official Europe PMC hosts, so neither answering is the
+	// service being unreachable rather than a statement about this article.
+	return "", unavailable(fmt.Errorf("europepmc: no reachable PDF endpoint for %s", pmcid))
 }
 
 // client returns the configured HTTP client, or the shared default when none was

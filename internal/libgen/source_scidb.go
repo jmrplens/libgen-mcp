@@ -70,7 +70,7 @@ func (s scidbSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 			continue
 		}
 		if pdfURL == "" {
-			lastErr = fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI)
+			lastErr = notIndexed(fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI))
 			continue
 		}
 		return Resolved{
@@ -102,19 +102,19 @@ func (s scidbSource) tryMirror(ctx context.Context, httpClient *http.Client, bas
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("scidb: requesting %q: %w", base, err)
+		return "", unavailable(fmt.Errorf("scidb: requesting %q: %w", base, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Gate extraction on a 200: an error or challenge page can still carry a stale
 	// marker, so scraping it would hand back a dead URL. Skip the mirror instead.
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("scidb: mirror %q returned HTTP %d", base, resp.StatusCode)
+		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("scidb: mirror %q returned HTTP %d", base, resp.StatusCode))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, scidbMaxBody))
 	if err != nil {
-		return "", fmt.Errorf("scidb: reading %q: %w", base, err)
+		return "", unavailable(fmt.Errorf("scidb: reading %q: %w", base, err))
 	}
 	pdfURL, _ := extractSciDBPDF(body)
 	return pdfURL, nil

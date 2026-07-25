@@ -93,6 +93,54 @@ func TestToolCallSuccess(t *testing.T) {
 	}
 }
 
+// TestSourceSkipped verifies a source passed over for being in cooldown is
+// reported with its name and the instant it becomes eligible again, so a shortened
+// chain is never a silent one.
+func TestSourceSkipped(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	logging.SourceSkipped("fatcat", time.Now().Add(time.Minute))
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log line %q: %v", buf.String(), err)
+	}
+	if entry["level"] != "INFO" {
+		t.Errorf("expected level INFO, got %v", entry["level"])
+	}
+	if entry["source"] != "fatcat" {
+		t.Errorf("expected source %q, got %v", "fatcat", entry["source"])
+	}
+	if entry["cooldown_until"] == nil {
+		t.Error("expected the log line to report when the cooldown expires")
+	}
+}
+
+// TestSourceCooldownBypassed verifies the all-cooled-down bypass is reported at
+// Warn with the sources it tried anyway.
+func TestSourceCooldownBypassed(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	logging.SourceCooldownBypassed([]string{"fatcat", "scidb"})
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("failed to unmarshal log line %q: %v", buf.String(), err)
+	}
+	if entry["level"] != "WARN" {
+		t.Errorf("expected level WARN, got %v", entry["level"])
+	}
+	if got, ok := entry["sources"].([]any); !ok || len(got) != 2 {
+		t.Errorf("expected the two bypassed sources, got %v", entry["sources"])
+	}
+}
+
 // TestSetupWritesStderr verifies SetupWritesStderr.
 func TestSetupWritesStderr(t *testing.T) {
 	prev := slog.Default()

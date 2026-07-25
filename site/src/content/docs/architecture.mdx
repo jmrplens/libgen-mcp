@@ -103,6 +103,19 @@ Download sources implement a common interface — `Name`, `Supports(item)`, and 
 
 Because the chain is a single ordered slice filtered by `Supports`, a book item is offered `[libgen, randombook, annas]`, an article item `[unpaywall, europepmc, biorxiv, fatcat, core, scihub, scidb]`, and an item carrying both is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from this chain without reordering it. `Download` tries each supporting source in turn and returns the first success; if all fail, it returns the joined per-source errors.
 
+### Per-source cooldown
+
+A source that fails because it is **unavailable** — a transport error, a timeout, a 5xx or a 429 — is set aside for 5 minutes, so the next download does not spend its resolve budget on a provider that just proved unreachable. This is the source-level counterpart of the per-mirror cooldown in the HTTP client, and it matters most for a service that is down for hours at a time: without it, every article download pays the full per-source budget for that provider again and again.
+
+A source that answers correctly that it does **not hold the item** — not indexed, not open access, no preserved copy — is never set aside: that is a normal, correct answer about one item and says nothing about the provider's health. The two cases are told apart by the error taxonomy each source tags its failures with (`ErrSourceUnavailable` vs `ErrNotIndexed`).
+
+Two rules bound the behavior:
+
+- A cooldown only deprioritizes. When **every** source able to serve an item is in cooldown, the chain tries them all anyway — better to try than nothing — and says so in the log. An explicit `source:` argument therefore always reaches the source it names.
+- Nothing is persisted. The state lives on the client for the life of the process, so a restart starts clean.
+
+Both decisions are visible in the log alongside the existing per-source attempt lines: a skipped source is reported at `INFO` with the instant its cooldown expires, and an all-cooled-down bypass at `WARN`.
+
 ## Search path
 
 The download chain above is one of two federations in the server. The other is the search path, which is structured differently: the download chain is ordered and stops at the first success, while the searchers run concurrently and their answers are merged.

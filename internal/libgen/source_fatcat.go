@@ -88,15 +88,15 @@ func (s fatcatSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("fatcat: requesting %q: %w", it.DOI, err)
+		return Resolved{}, unavailable(fmt.Errorf("fatcat: requesting %q: %w", it.DOI, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return Resolved{}, fmt.Errorf("fatcat: %q is unknown to fatcat", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("fatcat: %q is unknown to fatcat", it.DOI))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Resolved{}, fmt.Errorf("fatcat: %q returned HTTP %d", it.DOI, resp.StatusCode)
+		return Resolved{}, unavailableStatus(resp.StatusCode, fmt.Errorf("fatcat: %q returned HTTP %d", it.DOI, resp.StatusCode))
 	}
 
 	var rec fatcatResponse
@@ -105,7 +105,7 @@ func (s fatcatSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	}
 	fileURL, ok := pickArchivedPDF(rec.Files)
 	if !ok {
-		return Resolved{}, fmt.Errorf("fatcat: %q has no preserved Internet Archive file", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("fatcat: %q has no preserved Internet Archive file", it.DOI))
 	}
 	return Resolved{FileURL: fileURL, VerifyMD5: false, Ext: "pdf"}, nil
 }

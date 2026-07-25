@@ -107,7 +107,7 @@ func (s biorxivSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		}
 	}
 	if misses == len(biorxivServers) {
-		return Resolved{}, fmt.Errorf("biorxiv: %q not found on bioRxiv or medRxiv", it.DOI)
+		return Resolved{}, notIndexed(fmt.Errorf("biorxiv: %q not found on bioRxiv or medRxiv", it.DOI))
 	}
 	return Resolved{}, fmt.Errorf("biorxiv: could not confirm %q: %w", it.DOI, failure)
 }
@@ -133,11 +133,11 @@ func (s biorxivSource) lookupVersion(ctx context.Context, server, doi string) (s
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("biorxiv: requesting %s for %q: %w", server, doi, err)
+		return "", unavailable(fmt.Errorf("biorxiv: requesting %s for %q: %w", server, doi, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("biorxiv: %s returned HTTP %d for %q", server, resp.StatusCode, doi)
+		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("biorxiv: %s returned HTTP %d for %q", server, resp.StatusCode, doi))
 	}
 
 	var rec biorxivResponse
