@@ -1302,23 +1302,31 @@ func assertSourceCooldown(tr transcript) (pass bool, detail string) {
 	if ro, _ := call.Input["resolve_only"].(bool); ro {
 		return true, skipPrefix + " the model asked for a link instead of a download, so the chain ran only once"
 	}
-	if line, found := cooldownDecision(tr); found {
-		return true, "the chain recorded the dead source as unavailable and acted on it on the next pass: " + line
+	if marker, found := cooldownDecision(tr); found {
+		return true, "the chain recorded the dead source as unavailable and acted on it on the next pass " +
+			"(" + strconv.Quote(marker) + ")"
 	}
 	return false, functionalPrefix + "no cooldown decision was logged although the only host sci-hub was given " +
 		"is unreachable, so the failure was either misclassified or never consulted"
 }
 
-// cooldownDecision returns the first cooldown line any download call logged, and
-// whether one was logged at all.
-func cooldownDecision(tr transcript) (line string, found bool) {
+// cooldownDecision returns which cooldown marker a download call logged, and whether
+// one was logged at all.
+//
+// It reports the marker rather than the log line it found it in: the line carries the
+// wall-clock instant the cooldown expires, and these details are published verbatim in
+// the results tables, where a timestamp would make an otherwise stable row differ on
+// every run.
+func cooldownDecision(tr transcript) (marker string, found bool) {
 	for _, c := range tr.Calls {
 		if c.Name != "download" {
 			continue
 		}
 		for _, entry := range c.ServerLogs {
-			if containsAny(entry, cooldownLogMarkers...) {
-				return firstChars(entry, 220), true
+			for _, m := range cooldownLogMarkers {
+				if strings.Contains(entry, m) {
+					return m, true
+				}
 			}
 		}
 	}
