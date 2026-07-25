@@ -444,9 +444,12 @@ const europePMCLiveDOI = "10.1371/journal.pbio.1002533"
 // details API on 2026-07-24), so the biorxiv source has a deterministic target.
 const biorxivLiveDOI = "10.1101/2020.12.30.424878"
 
-// fatcatLiveDOI is a long-established open-access DOI Internet Archive Scholar is
-// expected to have preserved; older OA works are the case fatcat is strongest for.
-const fatcatLiveDOI = "10.1371/journal.pbio.1002533"
+// fatcatLiveDOI is an open-access DOI whose Internet Archive Scholar release page
+// advertises a Wayback capture that served real PDF bytes on 2026-07-25. It is
+// deliberately NOT the DOI the other article cases use: that one's two preserved
+// captures both answer a redirect loop today, which makes it a fine example of why
+// candidates are probed but a poor target for asserting a download.
+const fatcatLiveDOI = "10.1038/s41586-021-03819-2"
 
 // downloadFromSource runs a source-restricted live download of doi and returns the
 // outcome, so every classified-outcome case shares one harness: a size-capped
@@ -520,17 +523,25 @@ func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
 	classifyOrFail(t, "biorxiv", err, biorxivFailures)
 }
 
-// fatcatAPIProbe is the fatcat API root the source calls. The classified-outcome
-// case probes it first: it does not answer from every network, and without the
-// precondition the test spent its full 90 s timeout budget establishing that.
-const fatcatAPIProbe = "https://api.fatcat.wiki/v0/release/lookup?doi=" + fatcatLiveDOI
+// fatcatScholarProbe is the DOI lookup on fatcat's own web frontend, which is what
+// the source now drives: the JSON API it used to call (api.fatcat.wiki) resolves in
+// DNS but never completes a TCP handshake, from any network or client tried, with no
+// deprecation notice behind it. The classified-outcome case probes the frontend first
+// so a network that cannot reach it skips instead of burning the full timeout budget.
+const fatcatScholarProbe = "https://scholar.archive.org/fatcat/release/lookup?doi=" + fatcatLiveDOI
 
-// fatcatFailures are the KNOWN, diagnosed ways the fatcat source can fail live.
+// fatcatFailures are the KNOWN, diagnosed ways the fatcat source can fail live. The
+// transport class pins scholar.archive.org so a source repointed at some other host
+// fails the test rather than passing as an upstream outage, and the release-page class
+// is what a session challenge or a layout change surfaces as — the outcome that must
+// never masquerade as empty coverage.
 var fatcatFailures = []sourceFailure{
 	diagnosed("fatcat", `"[^"]*" is unknown to fatcat`, "fatcat has no release for the DOI"),
-	diagnosed("fatcat", `"[^"]*" has no preserved Internet Archive file`, "release known but nothing preserved"),
-	diagnosed("fatcat", `"[^"]*" returned HTTP \d+`, "API answered an unexpected status"),
-	transportTo("fatcat", "requesting ", "api.fatcat.wiki"),
+	diagnosed("fatcat", `"[^"]*" has no preserved full text`, "release known but nothing preserved"),
+	diagnosed("fatcat", `no preserved copy of "[^"]*" currently serves a PDF`, "every preserved capture is dead today"),
+	diagnosed("fatcat", `returned no release page`, "a session challenge or a changed layout, not a miss"),
+	diagnosed("fatcat", `"[^"]*" returned HTTP \d+`, "the frontend answered an unexpected status"),
+	transportTo("fatcat", "requesting ", "scholar.archive.org"),
 	{
 		re:  regexp.MustCompile(`source fatcat: .*HTML page instead of the file`),
 		why: "the Internet Archive served an interstitial, not the PDF",
@@ -538,19 +549,21 @@ var fatcatFailures = []sourceFailure{
 }
 
 // TestE2EFatcatClassifiedOutcome exercises the fatcat source end to end against the
-// live fatcat API and Internet Archive, restricted to source=fatcat. On error the
+// live Internet Archive Scholar frontend and the Wayback capture it names, restricted
+// to source=fatcat so no other source can mask its behavior. The DOI is one whose
+// preserved copy really downloads, so the expected outcome is a real PDF; on error the
 // failure must be one of the known, diagnosed classes.
 func TestE2EFatcatClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "fatcat", fatcatAPIProbe)
+	requireUpstream(t, "fatcat", fatcatScholarProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	res, err := downloadFromSource(t, ctx, fatcatLiveDOI, "fatcat")
 	if err == nil {
-		// The PDF check matters more here than elsewhere: fatcat records often omit
-		// the mimetype, so a non-PDF archive asset picked by mistake would still
-		// arrive as a plausible-looking file under a .pdf name.
+		// The PDF check matters more here than elsewhere: the release page names a
+		// Wayback capture of whatever the publisher served, so an interstitial or an
+		// error page captured under a .pdf URL would still arrive looking plausible.
 		assertSourcePDF(t, "fatcat", res)
 		return
 	}

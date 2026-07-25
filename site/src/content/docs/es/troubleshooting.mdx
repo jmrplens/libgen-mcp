@@ -87,7 +87,7 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, a un cliente con capacidad de elicitación se le pide un correo de contacto puntual, y rechazarlo simplemente pasa al siguiente proveedor.)
 2. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
 3. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
-4. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando Scholar tiene una.
+4. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando la página del release en Scholar anuncia una que sigue sirviendo un PDF; distingue un DOI que el catálogo no tiene, un release sin nada preservado y un release cuyas capturas preservadas han dejado de servir.
 5. **`core`** — solo forma parte de la cadena cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE cuando CORE aloja una copia viva.
 6. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
 7. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.

@@ -392,10 +392,10 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 	})
 
 	t.Run("fatcat", func(t *testing.T) {
-		srv := fatcatServer(t, "fatcat_hit.json", http.StatusOK, nil)
-		defer srv.Close()
-		s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-		assertDeclaresExt(t, s, Item{DOI: doi})
+		stub := startFatcatStub(t)
+		stub.files["/preserved.pdf"] = fatcatStubPDF
+		stub.release = fatcatPage(stub.srv.URL + "/preserved.pdf")
+		assertDeclaresExt(t, stub.source(), Item{DOI: doi})
 	})
 
 	t.Run("core", func(t *testing.T) {

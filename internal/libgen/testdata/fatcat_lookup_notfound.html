@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="origin-when-cross-origin">
+
+  <title>Release Lookup | Fatcat Bibliographic Database</title>
+
+  <link rel="icon" href="data:,">
+
+  <style>
+    @font-face {
+      font-family: "Jacquard";
+      src: url("/static/fcweb/Jacquard12-Regular.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    /* -- Reset & base -------------------------------------------------------- */
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: #2980b9; text-decoration: none; }
+    a:hover { color: #1a5276; }
+
+    ul, ol {
+      padding-left: 1.5em;
+      margin-bottom: 0.75rem;
+    }
+
+    li > ul, li > ol {
+      margin-bottom: 0;
+      margin-top: 0.25rem;
+    }
+
+    li {
+      margin-bottom: 0.25rem;
+    }
+
+    h1 {
+      margin-top: 3.5rem;
+    }
+
+    h3 {
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* -- Layout containers --------------------------------------------------- */
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    .container-wide {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    .container-text {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    /* -- Top navigation bar -------------------------------------------------- */
+
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: 3rem;
+      background: #1b1c1d;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+    }
+
+    .top-nav-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .top-nav a {
+      color: rgba(255, 255, 255, 0.9);
+      text-decoration: none;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .top-nav a:hover {
+      color: #fff;
+    }
+
+    .top-nav .nav-brand {
+      font-weight: bold;
+      font-size: 1rem;
+    }
+
+    .top-nav .nav-search {
+      margin-left: auto;
+    }
+
+    .top-nav .nav-search input {
+      background: transparent;
+      border: 1px solid #777;
+      color: #fff;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.875rem;
+      width: 15em;
+      border-radius: 3px;
+    }
+
+    .top-nav .nav-search input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .search-type-radios {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 0.2rem;
+    }
+
+    .search-type-radios label {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      cursor: pointer;
+    }
+
+    .search-type-radios input[type="radio"] {
+      margin: 0;
+      accent-color: #888;
+    }
+
+    @media (max-width: 640px) {
+      .mobile-hide { display: none !important; }
+
+      .top-nav .nav-search input { width: 10em; }
+    }
+
+    /* -- Entity header (grey banner with title + tabs) ----------------------- */
+
+    .entity-header {
+      background: #eee;
+      padding: 2rem 0 0;
+    }
+
+    .entity-header h1 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 0.25rem;
+    }
+
+    .entity-header .subtitle {
+      font-size: 1.1rem;
+      font-weight: normal;
+      color: #555;
+    }
+
+    .entity-header .entity-ident {
+      font-size: 0.8rem;
+      color: #777;
+      margin-top: 0.25rem;
+    }
+
+    .entity-header .entity-byline {
+      font-size: 1.05rem;
+      margin-top: 0.5rem;
+    }
+
+    /* -- Tab navigation ------------------------------------------------------ */
+
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      margin-top: 1rem;
+    }
+
+    .tab-nav a {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      color: #555;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+    }
+
+    .tab-nav a:hover {
+      color: #333;
+      border-bottom-color: #999;
+    }
+
+    .tab-nav a.active {
+      color: #333;
+      font-weight: 600;
+      background-color: white;
+    }
+
+    /* -- Two-column entity layout -------------------------------------------- */
+
+    .entity-grid {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .entity-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -- Entity grid columns ------------------------------------------------- */
+
+    .entity-main-col {
+      font-size: 1rem;
+      min-width: 0;
+    }
+
+    .entity-sidebar {
+      min-width: 0;
+    }
+
+    .entity-sidebar .segment {
+      word-wrap: break-word;
+    }
+
+    /* -- Segments (info boxes) ----------------------------------------------- */
+
+    .segment {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+
+      background: #fff;
+    }
+
+    .segment-group {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+
+    .segment-group > .segment-attached {
+      border: 0;
+      border-bottom: 1px solid #ddd;
+      border-radius: 0;
+      margin-bottom: 0;
+    }
+
+    .segment-group > .segment-attached:last-child {
+      border-bottom: 0;
+    }
+
+    .segment-attached {
+      border-radius: 0;
+      margin-bottom: 0;
+      border-top: 0;
+    }
+
+    .segment-attached:first-child {
+      border-radius: 4px 4px 0 0;
+    }
+
+    .segment-attached:last-child {
+      border-radius: 0 0 4px 4px;
+    }
+
+    .segment-muted {
+      background: #f8f8f8;
+    }
+
+    .segment b {
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+    }
+
+    /* -- Tables -------------------------------------------------------------- */
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      font-weight: 600;
+      color: #555;
+      background: #fafafa;
+    }
+
+    /* -- Messages / alerts --------------------------------------------------- */
+
+    .msg {
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .msg-error {
+      background: #fdf0f0;
+      border: 1px solid #e8c4c4;
+      color: #8b2020;
+    }
+
+    .msg-warning {
+      background: #fef9e7;
+      border: 1px solid #e8d8a0;
+      color: #7d6608;
+    }
+
+    .msg-info {
+      background: #eef6fc;
+      border: 1px solid #b8d4e8;
+      color: #1a5276;
+    }
+
+    /* -- Buttons ------------------------------------------------------------- */
+
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      line-height: 1.4;
+    }
+
+    .btn-primary {
+      background: #333;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #555;
+      color: #fff;
+    }
+
+    /* -- Labels (small inline badges) ---------------------------------------- */
+
+    .label {
+      display: inline-block;
+      padding: 0.15em 0.5em;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+
+    .label-green { background: #d4edda; color: #155724; }
+    .label-red { background: #f8d7da; color: #721c24; }
+    .label-orange { background: #fff3cd; color: #856404; }
+    .label-grey { background: #e9ecef; color: #555; }
+
+    /* -- Preservation status bar ---------------------------------------------- */
+
+    .preservation-bar {
+      display: flex;
+      height: 1.5rem;
+      border-radius: 3px;
+      overflow: hidden;
+      font-size: 0.7rem;
+      line-height: 1.5rem;
+      text-align: center;
+      color: #fff;
+    }
+
+    .preservation-bar > span {
+      display: inline-block;
+    }
+
+    /* -- Search form --------------------------------------------------------- */
+
+    .search-form {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .search-form input[type="text"] {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      font-size: 1rem;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .search-form input[type="text"]:focus {
+      outline: none;
+      border-color: #333;
+    }
+
+    .search-form button {
+      padding: 0.5rem 1.25rem;
+      font-size: 1rem;
+      background: #333;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .search-form button:hover {
+      background: #555;
+    }
+
+    /* -- Accordion (details/summary) ----------------------------------------- */
+
+    details.accordion summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      list-style: none;
+    }
+
+    details.accordion summary::-webkit-details-marker { display: none; }
+    details.accordion summary::before {
+      content: "\25b6\00a0";
+      font-size: 0.7em;
+    }
+    details.accordion[open] summary::before {
+      content: "\25bc\00a0";
+    }
+
+    details.accordion > :not(summary) {
+      padding: 0.75rem 1rem;
+    }
+
+    /* -- Main content area --------------------------------------------------- */
+
+    main {
+      flex: 1;
+      padding: 2rem 0;
+    }
+
+    /* -- Footer -------------------------------------------------------------- */
+
+    footer {
+      background: #1b1c1d;
+      color: rgba(255, 255, 255, 0.7);
+      padding: 2rem;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    footer a {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: #fff;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem 1.5rem;
+      flex-wrap: wrap;
+      list-style: none;
+    }
+
+    .footer-links li::after {
+      content: "\00b7";
+      margin-left: 1.5rem;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .footer-links li:last-child::after {
+      content: none;
+    }
+
+    
+  .lookup-section {
+    border: 1px solid #ddd;
+    border-bottom: none;
+    padding: 1rem 1.5rem;
+  }
+  .lookup-section:last-child {
+    border-bottom: 1px solid #ddd;
+  }
+  .lookup-section:first-of-type {
+    border-radius: 4px 4px 0 0;
+  }
+  .lookup-section:last-of-type {
+    border-radius: 0 0 4px 4px;
+  }
+  .lookup-section h2 {
+    margin-top: 0;
+  }
+  .lookup-form {
+    display: flex;
+    gap: 0;
+  }
+  .lookup-form input[type="text"] {
+    flex: 1;
+    font-size: 1.1rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #ccc;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+  }
+  .lookup-form button {
+    font-size: 1.1rem;
+    padding: 0.6rem 1.2rem;
+    background: #ddd;
+    border: 1px solid #ccc;
+    border-radius: 0 4px 4px 0;
+    cursor: pointer;
+  }
+  .lookup-hint {
+    font-style: italic;
+    font-size: 0.9rem;
+    color: #555;
+    margin-top: 0.4rem;
+  }
+
+  </style>
+  
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="top-nav-inner">
+    <a href="/fatcat/" class="nav-brand">Fatcat Bibliographic Database</a>
+    <a href="/fatcat/about" class="mobile-hide">About</a>
+    <a href="/fatcat/guide" class="mobile-hide">Guide</a>
+    <a href="/fatcat/changelog" class="mobile-hide">Changelog</a>
+    <a href="/" class="mobile-hide">IA Scholar</a>
+    <form class="nav-search" action="/fatcat/search" method="get" role="search" aria-label="Search">
+      <input type="text" name="q" placeholder="Search...">
+    </form>
+  </div>
+</nav>
+
+
+<main >
+
+  <div class="container-text">
+    
+<h1>Lookup Release by Identifier</h1>
+
+
+  <div class="msg msg-error" style="margin-bottom: 1rem;">
+    <b>404: Not Found</b><br>
+    Couldn't find a release with that identifier (<b><code>doi:10.9999/definitivamente-no-existe</code></b>).
+    
+      <p>You can check if it is a registered DOI by visiting:
+      <b><a href="https://doi.org/10.9999/definitivamente-no-existe">https://doi.org/10.9999/definitivamente-no-existe</a></b></p>
+    
+  </div>
+
+
+
+<div class="lookup-section">
+  <h2>DOI</h2>
+  <p><a href="https://en.wikipedia.org/wiki/Digital_object_identifier">Digital object identifier</a>: "it's not an identifier for a digital object, it's a digital identifier for an object". Except they are pretty much all digital objects. Fatcat doesn't include all DOIs (eg, for granular components or TV shows), but it should for all complete research publications. DOIs are generated by publishers, who pay a fee to registrars like Crossref, Datacite, or JALC.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="doi" placeholder="10.7717/peerj.4375" value="10.9999/definitivamente-no-existe" aria-label="DOI lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Don't include a URL like "http://dx.doi.org/"</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>PubMed</h2>
+  <p><a href="https://en.wikipedia.org/wiki/PubMed">PubMed/MEDLINE</a> is a catalog of biomedical publications. Catalog updates are published frequently, and may include deletions. Fatcat currently is only updated with new entries, it does not delete PMIDs. PubMed is edited by a large staff of trained catalogers, and has strict inclusion criteria for journals.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="pmid" placeholder="823835" value="" aria-label="PMID lookup">
+    <button type="submit">Go!</button>
+  </form>
+
+  <p style="margin-top: 1rem;"><a href="https://en.wikipedia.org/wiki/PubMed_Central#PMCID">PubMed Central Identifiers (PMCID)</a> reference works deposited in the US (or European) PMC repositories. Not all works with a PMCID have a PMID. PMCIDs can be versioned (eg, with a trailing ".2"), but these are rare and most Fatcat releases only have the non-versioned PMCID.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="pmcid" placeholder="PMC93932" value="" aria-label="PMCID lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Include the "PMC" prefix.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>Wikidata QID</h2>
+  <p><a href="https://en.wikipedia.org/wiki/Wikidata#Items">Wikidata</a> is the structured, machine-readable database that complements Wikipedia. Entities, which can include bibliographic entities like books and papers, are identified by a "QID". Fatcat also links container (journal) and creator (author) entities to Wikidata by QID. Anybody can edit Wikidata and create QIDs.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="wikidata_qid" placeholder="Q94324" value="" aria-label="Wikidata QID lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Include the "Q" prefix.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>ARK</h2>
+  <p><a href="https://en.wikipedia.org/wiki/Archival_Resource_Key">Archival Resource Keys</a> are no-cost, distributed identifiers based on URLs. Mostly used by archival systems (as opposed to publishers or repositories).</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="ark" placeholder="ark:/2349/sddd92" value="" aria-label="ARK lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Only the identifier part (starting with "ark:/"), not the full URL.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>ISBN</h2>
+  <p><a href="https://en.wikipedia.org/wiki/International_Standard_Book_Number">International Standard Book Number</a>, assigned to specific published versions of a book (including ebooks).</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="isbn13" placeholder="978-3-16-148410-0" value="" aria-label="ISBN-13 lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Canonical ISBN-13 number (not ISBN-9), with hyphens.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>arXiv</h2>
+  <p><a href="https://arxiv.org/help/arxiv_identifier">arXiv identifiers</a> are generated for works deposited in the free arxiv.org pre-print repository. Identifiers are generated for each version of a work, eg ending in "v3". Fatcat releases must be versioned; if you don't know the version you can always lookup "v1" and then look for other releases under the same work.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="arxiv" placeholder="0706.0001v1 or math-GT/0309136v2" value="" aria-label="arXiv ID lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Old and new style supported, but version always required for exact lookups.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>Handle</h2>
+  <p><a href="https://handle.net">Handle identifiers</a> are registered under the hierarchal handle.net system, maintained by CNRI. While technically all DOIs are Handles, our system treats them as distinct identifiers.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="hdl" placeholder="20.500.12690/RIN/IDDOAH/BTNH25" value="" aria-label="Handle lookup">
+    <button type="submit">Go!</button>
+  </form>
+  <div class="lookup-hint">Only include the identifier itself.</div>
+</div>
+
+
+<div class="lookup-section">
+  <h2>JSTOR</h2>
+  <p><a href="https://en.wikipedia.org/wiki/JSTOR#Content">JSTOR identifiers</a> are numbers internally assigned to works archived on <a href="https://jstor.org">jstor.org</a>. Many works also have a DOI with the number after a <code>10.2307/</code> prefix, but not all works have such a DOI. Fatcat mostly has JSTOR identifiers for works in the "Early Journal Collection", which are in the public domain.</p>
+  <form class="lookup-form" method="get" action="/fatcat/release/lookup">
+    <input type="text" name="jstor" placeholder="92492" value="" aria-label="JSTOR ID lookup">
+    <button type="submit">Go!</button>
+  </form>
+</div>
+
+
+  </div>
+
+</main>
+
+
+<footer>
+  <ul class="footer-links">
+    <li><a href="/fatcat/">Home</a></li>
+    <li><a href="/fatcat/about">About</a></li>
+    <li><a href="https://github.com/internetarchive/scholar/">Code</a></li>
+  </ul>
+</footer>
+
+
+
+</body>
+</html>

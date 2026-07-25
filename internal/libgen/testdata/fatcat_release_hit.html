@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="origin-when-cross-origin">
+
+  <title>Revised Estimates for the Number of Human and Bacteria Cells in the Body | Fatcat Bibliographic Database</title>
+
+  <link rel="icon" href="data:,">
+
+  <style>
+    @font-face {
+      font-family: "Jacquard";
+      src: url("/static/fcweb/Jacquard12-Regular.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    /* -- Reset & base -------------------------------------------------------- */
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a { color: #2980b9; text-decoration: none; }
+    a:hover { color: #1a5276; }
+
+    ul, ol {
+      padding-left: 1.5em;
+      margin-bottom: 0.75rem;
+    }
+
+    li > ul, li > ol {
+      margin-bottom: 0;
+      margin-top: 0.25rem;
+    }
+
+    li {
+      margin-bottom: 0.25rem;
+    }
+
+    h1 {
+      margin-top: 3.5rem;
+    }
+
+    h3 {
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* -- Layout containers --------------------------------------------------- */
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    .container-wide {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    .container-text {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 1rem;
+      width: 100%;
+    }
+
+    /* -- Top navigation bar -------------------------------------------------- */
+
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: 3rem;
+      background: #1b1c1d;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+    }
+
+    .top-nav-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .top-nav a {
+      color: rgba(255, 255, 255, 0.9);
+      text-decoration: none;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .top-nav a:hover {
+      color: #fff;
+    }
+
+    .top-nav .nav-brand {
+      font-weight: bold;
+      font-size: 1rem;
+    }
+
+    .top-nav .nav-search {
+      margin-left: auto;
+    }
+
+    .top-nav .nav-search input {
+      background: transparent;
+      border: 1px solid #777;
+      color: #fff;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.875rem;
+      width: 15em;
+      border-radius: 3px;
+    }
+
+    .top-nav .nav-search input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .search-type-radios {
+      display: flex;
+      gap: 0.75rem;
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-top: 0.2rem;
+    }
+
+    .search-type-radios label {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      cursor: pointer;
+    }
+
+    .search-type-radios input[type="radio"] {
+      margin: 0;
+      accent-color: #888;
+    }
+
+    @media (max-width: 640px) {
+      .mobile-hide { display: none !important; }
+
+      .top-nav .nav-search input { width: 10em; }
+    }
+
+    /* -- Entity header (grey banner with title + tabs) ----------------------- */
+
+    .entity-header {
+      background: #eee;
+      padding: 2rem 0 0;
+    }
+
+    .entity-header h1 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 0.25rem;
+    }
+
+    .entity-header .subtitle {
+      font-size: 1.1rem;
+      font-weight: normal;
+      color: #555;
+    }
+
+    .entity-header .entity-ident {
+      font-size: 0.8rem;
+      color: #777;
+      margin-top: 0.25rem;
+    }
+
+    .entity-header .entity-byline {
+      font-size: 1.05rem;
+      margin-top: 0.5rem;
+    }
+
+    /* -- Tab navigation ------------------------------------------------------ */
+
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      margin-top: 1rem;
+    }
+
+    .tab-nav a {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      color: #555;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+    }
+
+    .tab-nav a:hover {
+      color: #333;
+      border-bottom-color: #999;
+    }
+
+    .tab-nav a.active {
+      color: #333;
+      font-weight: 600;
+      background-color: white;
+    }
+
+    /* -- Two-column entity layout -------------------------------------------- */
+
+    .entity-grid {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .entity-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -- Entity grid columns ------------------------------------------------- */
+
+    .entity-main-col {
+      font-size: 1rem;
+      min-width: 0;
+    }
+
+    .entity-sidebar {
+      min-width: 0;
+    }
+
+    .entity-sidebar .segment {
+      word-wrap: break-word;
+    }
+
+    /* -- Segments (info boxes) ----------------------------------------------- */
+
+    .segment {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+
+      background: #fff;
+    }
+
+    .segment-group {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+
+    .segment-group > .segment-attached {
+      border: 0;
+      border-bottom: 1px solid #ddd;
+      border-radius: 0;
+      margin-bottom: 0;
+    }
+
+    .segment-group > .segment-attached:last-child {
+      border-bottom: 0;
+    }
+
+    .segment-attached {
+      border-radius: 0;
+      margin-bottom: 0;
+      border-top: 0;
+    }
+
+    .segment-attached:first-child {
+      border-radius: 4px 4px 0 0;
+    }
+
+    .segment-attached:last-child {
+      border-radius: 0 0 4px 4px;
+    }
+
+    .segment-muted {
+      background: #f8f8f8;
+    }
+
+    .segment b {
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+    }
+
+    /* -- Tables -------------------------------------------------------------- */
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      font-weight: 600;
+      color: #555;
+      background: #fafafa;
+    }
+
+    /* -- Messages / alerts --------------------------------------------------- */
+
+    .msg {
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .msg-error {
+      background: #fdf0f0;
+      border: 1px solid #e8c4c4;
+      color: #8b2020;
+    }
+
+    .msg-warning {
+      background: #fef9e7;
+      border: 1px solid #e8d8a0;
+      color: #7d6608;
+    }
+
+    .msg-info {
+      background: #eef6fc;
+      border: 1px solid #b8d4e8;
+      color: #1a5276;
+    }
+
+    /* -- Buttons ------------------------------------------------------------- */
+
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      line-height: 1.4;
+    }
+
+    .btn-primary {
+      background: #333;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #555;
+      color: #fff;
+    }
+
+    /* -- Labels (small inline badges) ---------------------------------------- */
+
+    .label {
+      display: inline-block;
+      padding: 0.15em 0.5em;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+
+    .label-green { background: #d4edda; color: #155724; }
+    .label-red { background: #f8d7da; color: #721c24; }
+    .label-orange { background: #fff3cd; color: #856404; }
+    .label-grey { background: #e9ecef; color: #555; }
+
+    /* -- Preservation status bar ---------------------------------------------- */
+
+    .preservation-bar {
+      display: flex;
+      height: 1.5rem;
+      border-radius: 3px;
+      overflow: hidden;
+      font-size: 0.7rem;
+      line-height: 1.5rem;
+      text-align: center;
+      color: #fff;
+    }
+
+    .preservation-bar > span {
+      display: inline-block;
+    }
+
+    /* -- Search form --------------------------------------------------------- */
+
+    .search-form {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .search-form input[type="text"] {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      font-size: 1rem;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .search-form input[type="text"]:focus {
+      outline: none;
+      border-color: #333;
+    }
+
+    .search-form button {
+      padding: 0.5rem 1.25rem;
+      font-size: 1rem;
+      background: #333;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .search-form button:hover {
+      background: #555;
+    }
+
+    /* -- Accordion (details/summary) ----------------------------------------- */
+
+    details.accordion summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      list-style: none;
+    }
+
+    details.accordion summary::-webkit-details-marker { display: none; }
+    details.accordion summary::before {
+      content: "\25b6\00a0";
+      font-size: 0.7em;
+    }
+    details.accordion[open] summary::before {
+      content: "\25bc\00a0";
+    }
+
+    details.accordion > :not(summary) {
+      padding: 0.75rem 1rem;
+    }
+
+    /* -- Main content area --------------------------------------------------- */
+
+    main {
+      flex: 1;
+      padding: 2rem 0;
+    }
+
+    /* -- Footer -------------------------------------------------------------- */
+
+    footer {
+      background: #1b1c1d;
+      color: rgba(255, 255, 255, 0.7);
+      padding: 2rem;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    footer a {
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: #fff;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem 1.5rem;
+      flex-wrap: wrap;
+      list-style: none;
+    }
+
+    .footer-links li::after {
+      content: "\00b7";
+      margin-left: 1.5rem;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .footer-links li:last-child::after {
+      content: none;
+    }
+
+    
+  .preservation-badge {
+    text-align: center;
+    padding: 0.5em 1em;
+    font-weight: bold;
+    color: #fff;
+    border-radius: 4px 4px 0 0;
+    border: 1px solid transparent;
+  }
+
+  .preservation-bright { background-color: #2ca048; }
+  .preservation-dark { background-color: #6e7b71; }
+  .preservation-none { background-color: #b71818; }
+
+  .files-table {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .files-table td {
+    vertical-align: top;
+  }
+
+  .files-table td:last-child {
+    white-space: nowrap;
+  }
+
+  </style>
+  
+  
+    <meta name="title" content="Revised Estimates for the Number of Human and Bacteria Cells in the Body">
+    <meta name="DC.title" content="Revised Estimates for the Number of Human and Bacteria Cells in the Body">
+    <meta name="citation_title" content="Revised Estimates for the Number of Human and Bacteria Cells in the Body">
+    <meta name="DC.type" content="article-journal">
+    
+    
+      <meta name="DC.creator" content="Ron Sender">
+      <meta name="citation_author" content="Ron Sender">
+    
+      <meta name="DC.creator" content="Shai Fuchs">
+      <meta name="citation_author" content="Shai Fuchs">
+    
+      <meta name="DC.creator" content="Ron Milo">
+      <meta name="citation_author" content="Ron Milo">
+    
+    
+      <meta name="DC.issued" content="2016-08-19">
+      <meta name="citation_publication_date" content="2016-08-19">
+    
+    
+      <meta name="DC.language" content="en">
+      <meta name="citation_language" content="en">
+    
+    
+      <meta name="DC.relation.ispartof" content="PLoS Biology">
+      <meta name="citation_journal_title" content="PLoS Biology">
+      <meta name="DC.publisher" content="Public Library of Science">
+      <meta name="citation_publisher" content="Public Library of Science">
+      <meta name="citation_issn" content="1544-9173">
+    
+    
+      <meta name="citation_volume" content="14">
+    
+    
+    
+      <meta name="citation_first_page" content="e1002533">
+    
+    
+      <meta name="DC.identifier" content="doi:10.1371/journal.pbio.1002533">
+      <meta name="citation_doi" content="10.1371/journal.pbio.1002533">
+    
+    
+    
+      
+    
+      
+        <meta name="DC.identifier" content="https://web.archive.org/web/20170708142320/http://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.1002533&amp;type=printable">
+        <meta name="citation_pdf_url" content="https://web.archive.org/web/20170708142320/http://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.1002533&amp;type=printable">
+      
+    
+      
+    
+      
+        <meta name="DC.identifier" content="https://web.archive.org/web/20180724110523/https://www.biorxiv.org/content/biorxiv/early/2016/01/06/036103.full.pdf">
+        <meta name="citation_pdf_url" content="https://web.archive.org/web/20180724110523/https://www.biorxiv.org/content/biorxiv/early/2016/01/06/036103.full.pdf">
+      
+    
+  
+
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="top-nav-inner">
+    <a href="/fatcat/" class="nav-brand">Fatcat Bibliographic Database</a>
+    <a href="/fatcat/about" class="mobile-hide">About</a>
+    <a href="/fatcat/guide" class="mobile-hide">Guide</a>
+    <a href="/fatcat/changelog" class="mobile-hide">Changelog</a>
+    <a href="/" class="mobile-hide">IA Scholar</a>
+    <form class="nav-search" action="/fatcat/search" method="get" role="search" aria-label="Search">
+      <input type="text" name="q" placeholder="Search...">
+    </form>
+  </div>
+</nav>
+
+
+<main itemscope itemtype="http://schema.org/ScholarlyArticle" itemid="#release">
+
+
+<div class="entity-header">
+  <div class="container">
+    
+    <h1>
+      <span itemprop="headline"><span itemprop="name">Revised Estimates for the Number of Human and Bacteria Cells in the Body</span></span>
+      
+      
+    </h1>
+
+    
+      <p class="entity-byline">
+      by
+        
+          
+            <b><a href="/fatcat/creator/3ec5b11f-95b5-436e-877b-07ce6fdf90b0">Ron Sender</a></b>
+          , 
+        
+          
+            <b><a href="/fatcat/creator/860dcaac-19cc-43eb-99b7-590d459f8b74">Shai Fuchs</a></b>
+          , 
+        
+          
+            Ron Milo
+          
+        
+        
+      </p>
+    
+
+
+    <div class="tab-nav">
+      
+      <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc" class="active">Overview</a>
+      
+        <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/contribs">Authors (3)</a>
+        <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/refs-out">References</a>
+        <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/refs-in">Cited By</a>
+        <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/metadata">Metadata</a>
+      
+
+    </div>
+  </div>
+</div>
+
+
+<div class="container" style="padding-top: 2rem;">
+<div class="entity-grid">
+
+<div class="entity-main-col">
+  
+
+
+
+
+<div class="title" itemprop="isPartOf" itemscope itemtype="http://schema.org/Periodical" itemid="#container">
+  
+    Published
+    
+      in <a href="/fatcat/container/9c814637-2f55-46ca-8d1b-0acebe8961d7"><span itemprop="name">PLoS Biology</span></a>
+    
+  
+  
+    by <span itemprop="publisher">Public Library of Science (PLoS)</span>
+  .
+
+  <p>
+  
+  
+    2016 &nbsp;
+  
+  
+    Volume 14
+  
+  
+  
+    , 
+    e1002533
+  
+</div>
+
+
+
+
+
+
+<h3>Archived Files and Locations</h3>
+<table class="files-table">
+  <tbody>
+  
+  <tr>
+    <td>
+      <code>application/pdf</code>&nbsp;&nbsp;
+      699.5 kB
+      <br><small><code><a href="/fatcat/file/482b0d92-3048-43cd-88e1-8d146c40c34d">
+            482b0d92-3048-43cd-88e1-8d146c40c34d
+        </a></code></small>
+    </td>
+    <td>
+      
+        <a href="http://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.1002533&amp;type=printable">journals.plos.org</a> (publisher)<br>
+      
+        <a href="https://web.archive.org/web/20170708142320/http://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.1002533&amp;type=printable">web.archive.org</a> (webarchive)<br>
+      
+      
+    </td>
+  </tr>
+  
+  <tr>
+    <td>
+      <code>application/pdf</code>&nbsp;&nbsp;
+      1.2 MB
+      <br><small><code><a href="/fatcat/file/e53246fe-e23b-47e8-9967-36d1eb802faa">
+            e53246fe-e23b-47e8-9967-36d1eb802faa
+        </a></code></small>
+    </td>
+    <td>
+      
+        <a href="https://www.biorxiv.org/content/biorxiv/early/2016/01/06/036103.full.pdf">www.biorxiv.org</a> (web)<br>
+      
+        <a href="https://web.archive.org/web/20180724110523/https://www.biorxiv.org/content/biorxiv/early/2016/01/06/036103.full.pdf">web.archive.org</a> (webarchive)<br>
+      
+      
+    </td>
+  </tr>
+  
+  </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+</div>
+
+<div class="entity-sidebar">
+  
+
+<div class="segment-group">
+  
+  
+    <div class="preservation-badge preservation-bright">Preserved and Accessible</div>
+  
+
+  
+
+  
+  
+    <div class="segment segment-attached">
+      <b>Type</b> <code>article-journal</code><br>
+      <b>Stage</b> <code>published
+        
+      </code><br>
+      
+        <meta itemprop="datePublished" content="2016-08-19">
+        <b>Date</b> 2016-08-19<br>
+      
+      
+      
+        <b>Language</b> <code>en</code>
+          <sup><a href="https://www.loc.gov/standards/iso639-2/php/langcodes_name.php?iso_639_1=en">?</a></sup>
+      
+    </div>
+  
+
+  
+  
+  <div class="segment segment-attached">
+  
+  
+    <b>DOI</b> <code><a href="https://doi.org/10.1371/journal.pbio.1002533" itemprop="sameAs">10.1371/journal.pbio.1002533</a></code><br>
+  
+  
+  
+    <b>PubMed</b> <a href="https://www.ncbi.nlm.nih.gov/pubmed/27541692"><code>27541692</code></a><br>
+  
+  
+    <b>PMC</b> <a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4991899/"><code>PMC4991899</code></a><br>
+  
+  
+    <b>Wikidata</b> <a href="https://www.wikidata.org/wiki/Q34537872"><code>Q34537872</code></a><br>
+  
+  
+  
+  
+  
+  
+  
+  </div>
+  
+
+  
+  
+  <div class="segment segment-attached">
+    <b><a href="/fatcat/container/9c814637-2f55-46ca-8d1b-0acebe8961d7">
+    
+      Container Metadata
+    
+    </a></b>
+    
+      <br>ISSN-L: <code>1544-9173</code>
+    
+  </div>
+  
+
+  
+  
+  <div class="segment segment-attached">
+    <b><a href="/fatcat/work/527644a3-25a3-4773-8c0b-c84da4fe23b6">Work Entity</a></b>
+    <br>access all versions, variants, and formats of this work (eg, pre-prints)
+  </div>
+  
+
+  
+  
+  <div class="segment segment-attached">
+    <details class="accordion">
+      <summary>Cite This</summary>
+      <div>
+        <a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc.bib">BibTeX</a>
+        <br><a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/citeproc?style=csl-json">CSL-JSON</a>
+        <br><a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/citeproc?style=modern-language-association">MLA</a>
+        <br><a href="/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc/citeproc?style=elsevier-harvard">Harvard</a>
+      </div>
+    </details>
+  </div>
+  
+
+  
+  <div class="segment segment-attached">
+    <details class="accordion">
+      <summary>Lookup Links</summary>
+      <div>
+        
+          <a href="https://oadoi.org/10.1371/journal.pbio.1002533">oaDOI/unpaywall</a> (OA fulltext)<br>
+          <a href="https://api.crossref.org/v1/works/http://dx.doi.org/10.1371/journal.pbio.1002533">Crossref Metadata</a> (via API)<br>
+        
+        
+          <a href="http://www.worldcat.org/search?qt=worldcat_org_art&q=Revised%20Estimates%20for%20the%20Number%20of%20Human%20and%20Bacteria%20Cells%20in%20the%20Body">Worldcat</a><br>
+        
+        
+          <a href="http://www.sherpa.ac.uk/romeo/issn/1544-9173/">SHERPA/RoMEO</a> (journal policies)<br>
+        
+        <a href="https://www.wikidata.org/w/index.php?search=Revised%20Estimates%20for%20the%20Number%20of%20Human%20and%20Bacteria%20Cells%20in%20the%20Body">wikidata.org</a><br>
+        <a href="https://core.ac.uk/search?q=Revised%20Estimates%20for%20the%20Number%20of%20Human%20and%20Bacteria%20Cells%20in%20the%20Body">CORE.ac.uk</a><br>
+        <a href="https://www.semanticscholar.org/search?q=Revised%20Estimates%20for%20the%20Number%20of%20Human%20and%20Bacteria%20Cells%20in%20the%20Body">Semantic Scholar</a><br>
+        <a href="https://scholar.google.com/scholar?q=Revised%20Estimates%20for%20the%20Number%20of%20Human%20and%20Bacteria%20Cells%20in%20the%20Body">Google Scholar</a><br>
+      </div>
+    </details>
+  </div>
+
+  
+  
+  <div class="segment segment-attached" style="font-size: 0.85rem;">
+    <b><a href="/api/fatcat/v2/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc">API JSON</a></b>
+    <br>See the raw JSON for this record from fatcat's API
+  </div>
+  
+</div>
+
+
+</div>
+
+</div>
+</div>
+
+</main>
+
+
+<footer>
+  <ul class="footer-links">
+    <li><a href="/fatcat/">Home</a></li>
+    <li><a href="/fatcat/about">About</a></li>
+    <li><a href="https://github.com/internetarchive/scholar/">Code</a></li>
+  </ul>
+</footer>
+
+
+
+</body>
+</html>

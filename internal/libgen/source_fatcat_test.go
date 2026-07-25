@@ -2,32 +2,138 @@ package libgen
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
 
-// fatcatServer builds an httptest server that answers the release lookup with the
-// named fixture under the given HTTP status, and records the DOI it was asked for.
-func fatcatServer(t *testing.T, fixture string, status int, gotDOI *string) *httptest.Server {
+// fatcatStubRelease is the release-page path the stub redirects the DOI lookup to.
+// It is the real UUID path scholar.archive.org answered for the captured fixture, so
+// the stub's redirect has the same shape as the live one.
+const fatcatStubRelease = "/fatcat/release/57a39abe-15b0-4bc1-81dc-7ce6274740cc"
+
+// fatcatStubPDF is the bytes the stub's live full-text endpoint serves: a real PDF
+// magic number, which is what probePDF looks for when the Content-Type is
+// inconclusive.
+const fatcatStubPDF = "%PDF-1.4\nstub body\n%%EOF\n"
+
+// fatcatWaybackWrapper stands in for the HTML toolbar page the Wayback Machine serves
+// instead of the archived file when a request carries no Accept header.
+const fatcatWaybackWrapper = "<!DOCTYPE html>\n<html><head><title>Wayback Machine</title></head><body></body></html>"
+
+// fatcatFixtureFulltext matches a captured release page's citation_pdf_url tags so a
+// test can repoint them at a local server. The DC.identifier twin of each tag is
+// deliberately left alone: only the citation tag is what the source reads.
+var fatcatFixtureFulltext = regexp.MustCompile(`(name="citation_pdf_url" content=")[^"]*"`)
+
+// fatcatStub is a stand-in for scholar.archive.org. It answers the DOI lookup with
+// the same 302 the live site sends, serves the release page that redirect points at,
+// and hosts the full-text endpoints the page's meta tags name — so a test can cover
+// the whole lookup → release page → candidate probe path offline.
+//
+// Its fields are set by the caller after the server is started, because a release
+// page usually has to embed the stub's own URL; every one of them is read only inside
+// the handler, i.e. after the request under test begins.
+type fatcatStub struct {
+	// srv is the running test server; srv.URL is the source's baseURL.
+	srv *httptest.Server
+	// gotDOI records the doi query parameter the lookup endpoint was asked for.
+	gotDOI string
+	// lookupStatus, when non-zero, is what the lookup endpoint answers instead of
+	// redirecting, with lookupBody as its body (the 404 and 5xx cases).
+	lookupStatus int
+	// lookupBody is the body served alongside lookupStatus.
+	lookupBody []byte
+	// release is the HTML the release page serves.
+	release string
+	// files maps a request path to the bytes served there, letting one page offer a
+	// live candidate and a dead one.
+	files map[string]string
+}
+
+// startFatcatStub starts a fake scholar.archive.org and registers its shutdown. The
+// returned stub has no release page yet: callers fill in release (and files) once
+// they can reference stub.srv.URL.
+func startFatcatStub(t *testing.T) *fatcatStub {
 	t.Helper()
-	var body []byte
-	if fixture != "" {
-		b, err := os.ReadFile("testdata/" + fixture)
-		if err != nil {
-			t.Fatalf("reading fixture %s: %v", fixture, err)
+	stub := &fatcatStub{files: map[string]string{}}
+	stub.srv = httptest.NewServer(http.HandlerFunc(stub.serve))
+	t.Cleanup(stub.srv.Close)
+	return stub
+}
+
+// serve routes the three endpoint families the source touches: the DOI lookup, the
+// release page it redirects to, and the full-text URLs the release page advertises.
+func (f *fatcatStub) serve(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case fatcatLookupPath:
+		f.gotDOI = r.URL.Query().Get("doi")
+		if f.lookupStatus != 0 {
+			w.WriteHeader(f.lookupStatus)
+			_, _ = w.Write(f.lookupBody)
+			return
 		}
-		body = b
+		http.Redirect(w, r, fatcatStubRelease, http.StatusFound)
+	case fatcatStubRelease:
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, f.release)
+	default:
+		body, ok := f.files[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		// The full-text endpoints content-negotiate the way the Wayback Machine really
+		// does: an Accept-less request gets the HTML page that wraps a capture for human
+		// readers, and only a request that says it accepts anything gets the file. Every
+		// case that expects a PDF therefore fails unless the header is sent.
+		if r.Header.Get("Accept") == "" {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = io.WriteString(w, fatcatWaybackWrapper)
+			return
+		}
+		_, _ = io.WriteString(w, body)
 	}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if gotDOI != nil {
-			*gotDOI = r.URL.Query().Get("doi")
-		}
-		w.WriteHeader(status)
-		_, _ = w.Write(body)
-	}))
+}
+
+// source returns a fatcatSource pointed at the stub.
+func (f *fatcatStub) source() fatcatSource {
+	return fatcatSource{http: f.srv.Client(), baseURL: f.srv.URL}
+}
+
+// fatcatFixture reads a captured scholar.archive.org response from testdata.
+func fatcatFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile("testdata/" + name)
+	if err != nil {
+		t.Fatalf("reading fixture %s: %v", name, err)
+	}
+	return string(b)
+}
+
+// fatcatRepointFulltext rewrites every citation_pdf_url in a captured release page to
+// target, so the real page shape can be exercised against a local server instead of
+// the web.archive.org captures it really names.
+func fatcatRepointFulltext(page, target string) string {
+	return fatcatFixtureFulltext.ReplaceAllString(page, `${1}`+target+`"`)
+}
+
+// fatcatPage renders a minimal release page carrying the given full-text candidates
+// in the same meta-tag shape the captured fixtures use, for the cases where the exact
+// candidate list matters more than the surrounding page.
+func fatcatPage(pdfURLs ...string) string {
+	var b strings.Builder
+	b.WriteString(`<html><head><meta name="citation_title" content="A Paper">`)
+	for _, u := range pdfURLs {
+		b.WriteString(`<meta name="citation_pdf_url" content="` + u + `">`)
+	}
+	b.WriteString(`</head><body></body></html>`)
+	return b.String()
 }
 
 // TestFatcatSupports verifies the source claims DOI-keyed items only and names
@@ -45,25 +151,26 @@ func TestFatcatSupports(t *testing.T) {
 	}
 }
 
-// TestFatcatResolvePrefersDirectArchive verifies a DOI resolves to the direct
-// archive.org copy over the Wayback capture and the non-archive URL, lowercases the
-// DOI in the lookup, declares a pdf extension, and leaves MD5 verification off.
-func TestFatcatResolvePrefersDirectArchive(t *testing.T) {
-	const doi = "10.1371/journal.pbio.1002533"
-	var gotDOI string
-	srv := fatcatServer(t, "fatcat_hit.json", http.StatusOK, &gotDOI)
-	defer srv.Close()
+// TestFatcatResolveServesPreservedPDF verifies the happy path over a REAL captured
+// release page: the DOI is looked up lowercased, the 302 to the release page is
+// followed, the citation_pdf_url is taken from it, and the result declares a pdf
+// extension with MD5 verification off (a DOI-keyed item carries no LibGen digest).
+func TestFatcatResolveServesPreservedPDF(t *testing.T) {
+	const doi = "10.1371/journal.PBIO.1002533"
+	stub := startFatcatStub(t)
+	stub.files["/preserved.pdf"] = fatcatStubPDF
+	stub.release = fatcatRepointFulltext(
+		fatcatFixture(t, "fatcat_release_hit.html"), stub.srv.URL+"/preserved.pdf")
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	got, err := s.Resolve(context.Background(), Item{DOI: doi})
+	got, err := stub.source().Resolve(context.Background(), Item{DOI: doi})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if gotDOI != strings.ToLower(doi) {
-		t.Errorf("lookup doi = %q, want the lowercased DOI %q", gotDOI, strings.ToLower(doi))
+	if stub.gotDOI != strings.ToLower(doi) {
+		t.Errorf("lookup doi = %q, want the lowercased DOI %q", stub.gotDOI, strings.ToLower(doi))
 	}
-	if !strings.HasPrefix(got.FileURL, "https://archive.org/download/") {
-		t.Errorf("FileURL = %q, want the direct archive.org copy", got.FileURL)
+	if got.FileURL != stub.srv.URL+"/preserved.pdf" {
+		t.Errorf("FileURL = %q, want the page's citation_pdf_url", got.FileURL)
 	}
 	if got.Ext != "pdf" {
 		t.Errorf("Ext = %q, want pdf", got.Ext)
@@ -71,124 +178,195 @@ func TestFatcatResolvePrefersDirectArchive(t *testing.T) {
 	if got.VerifyMD5 {
 		t.Error("VerifyMD5 = true, want false for a DOI-keyed item")
 	}
+	// The download stream needs the same Accept the probe sent: without it the Wayback
+	// Machine answers with the HTML page that wraps the capture, and the pipeline
+	// rejects that as an error page after a successful resolve.
+	if got.Header.Get("Accept") != "*/*" {
+		t.Errorf("Header Accept = %q, want */* so the stream gets the file and not the toolbar page",
+			got.Header.Get("Accept"))
+	}
 }
 
-// TestFatcatResolveUnknownDOI verifies an HTTP 404 (DOI unknown to fatcat) yields a
-// distinct error, separate from the no-preserved-file case.
-func TestFatcatResolveUnknownDOI(t *testing.T) {
-	srv := fatcatServer(t, "", http.StatusNotFound, nil)
-	defer srv.Close()
+// TestFatcatResolveSkipsDeadCapture verifies a release page's first candidate being
+// dead does not sink the resolve: preserved Wayback captures do go bad (one live
+// candidate for this very DOI answers a redirect loop today), so every candidate is
+// probed in page order until one really serves PDF bytes.
+func TestFatcatResolveSkipsDeadCapture(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.files["/second.pdf"] = fatcatStubPDF
+	stub.release = fatcatPage(stub.srv.URL+"/gone.pdf", stub.srv.URL+"/second.pdf")
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/nope"})
+	got, err := stub.source().Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want the second candidate to be used", err)
+	}
+	if got.FileURL != stub.srv.URL+"/second.pdf" {
+		t.Errorf("FileURL = %q, want the live second candidate", got.FileURL)
+	}
+}
+
+// TestFatcatResolveNoPreservedCopy verifies a REAL release page for a DOI fatcat
+// knows but has preserved no full text for is diagnosed as a clean miss: the source
+// answered correctly, so it must be tagged ErrNotIndexed and must NOT be put in
+// cooldown for being honest.
+func TestFatcatResolveNoPreservedCopy(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.release = fatcatFixture(t, "fatcat_release_no_file.html")
+
+	_, err := stub.source().Resolve(context.Background(), Item{DOI: "10.1038/s41586-024-07487-w"})
+	if err == nil || !strings.Contains(err.Error(), "has no preserved full text") {
+		t.Fatalf("Resolve() error = %v, want a 'no preserved full text' error", err)
+	}
+	assertCleanMiss(t, err)
+}
+
+// TestFatcatResolveUnknownDOI verifies the lookup's HTTP 404 — the answer for a DOI
+// the catalog does not hold at all — stays a distinct diagnosis from the
+// known-but-unpreserved case, and is likewise a clean miss rather than cooldown
+// evidence.
+func TestFatcatResolveUnknownDOI(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.lookupStatus = http.StatusNotFound
+	stub.lookupBody = []byte(fatcatFixture(t, "fatcat_lookup_notfound.html"))
+
+	_, err := stub.source().Resolve(context.Background(), Item{DOI: "10.9999/nope"})
 	if err == nil || !strings.Contains(err.Error(), "unknown to fatcat") {
 		t.Fatalf("Resolve() error = %v, want an 'unknown to fatcat' error", err)
 	}
+	assertCleanMiss(t, err)
 }
 
-// TestFatcatResolveNoArchivedFile verifies a DOI fatcat knows but has preserved no
-// Internet Archive file for yields a distinct error so the chain advances.
-func TestFatcatResolveNoArchivedFile(t *testing.T) {
-	srv := fatcatServer(t, "fatcat_no_archive.json", http.StatusOK, nil)
-	defer srv.Close()
+// TestFatcatResolveNoLivePreservedCopy verifies a page whose only candidate does not
+// serve PDF bytes is a clean miss about the item, matching how the CORE source treats
+// its stale download URLs: one dead capture says nothing about the catalog's health.
+func TestFatcatResolveNoLivePreservedCopy(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.files["/paper.pdf"] = "<html><body>Sorry, we can't find that page</body></html>"
+	stub.release = fatcatPage(stub.srv.URL + "/paper.pdf")
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/no.preserved.copy"})
-	if err == nil || !strings.Contains(err.Error(), "no preserved Internet Archive file") {
-		t.Fatalf("Resolve() error = %v, want a 'no preserved Internet Archive file' error", err)
+	_, err := stub.source().Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil || !strings.Contains(err.Error(), "currently serves a PDF") {
+		t.Fatalf("Resolve() error = %v, want a 'currently serves a PDF' error", err)
 	}
+	assertCleanMiss(t, err)
 }
 
-// TestFatcatResolveUntypedNonPDF verifies a preserved file that records no mimetype
-// and whose archive URLs are plainly not PDFs (a .zip bundle, an .xml record) is
-// refused rather than selected. fatcat often omits the mimetype, so trusting the
-// host alone would save a ZIP under a .pdf name — the download pipeline only
-// rejects HTML, so nothing downstream would catch it.
-func TestFatcatResolveUntypedNonPDF(t *testing.T) {
-	srv := fatcatServer(t, "fatcat_untyped_nonpdf.json", http.StatusOK, nil)
-	defer srv.Close()
+// TestFatcatResolveTransientStatus verifies a 5xx from the lookup is classified as
+// the service being unavailable, so the chain sets the source aside instead of
+// reporting empty coverage.
+func TestFatcatResolveTransientStatus(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.lookupStatus = http.StatusServiceUnavailable
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/untyped.nonpdf"})
-	if err == nil || !strings.Contains(err.Error(), "no preserved Internet Archive file") {
-		t.Fatalf("Resolve() error = %v, want a 'no preserved' error for untyped non-PDF assets", err)
+	_, err := stub.source().Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil || !strings.Contains(err.Error(), "returned HTTP 503") {
+		t.Fatalf("Resolve() error = %v, want an HTTP 503 error", err)
 	}
+	assertUnavailable(t, err)
 }
 
-// TestFatcatResolveUntypedPDFURLAccepted verifies the mimetype-less path still
-// works when the URL itself looks like a PDF, so tightening the check does not
-// discard the many real fatcat records that omit the mimetype.
-func TestFatcatResolveUntypedPDFURLAccepted(t *testing.T) {
-	body := `{"files":[{"urls":[{"url":"https://archive.org/download/x/paper.pdf","rel":"archive"}]}]}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
+// TestFatcatResolveTransportFailure verifies an unreachable host is classified as
+// unavailability rather than as the item being absent.
+func TestFatcatResolveTransportFailure(t *testing.T) {
+	stub := startFatcatStub(t)
+	s := stub.source()
+	stub.srv.Close()
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	got, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
-	if err != nil {
-		t.Fatalf("Resolve() error = %v, want the untyped but PDF-shaped URL to be accepted", err)
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil || !strings.Contains(err.Error(), "requesting") {
+		t.Fatalf("Resolve() error = %v, want a transport error", err)
 	}
-	if got.FileURL != "https://archive.org/download/x/paper.pdf" {
-		t.Errorf("FileURL = %q, want the untyped .pdf archive URL", got.FileURL)
-	}
+	assertUnavailable(t, err)
 }
 
-// TestFatcatResolveHTTPError verifies a non-200, non-404 status surfaces as an
-// error.
-func TestFatcatResolveHTTPError(t *testing.T) {
-	srv := fatcatServer(t, "", http.StatusInternalServerError, nil)
-	defer srv.Close()
+// TestFatcatResolveSessionChallenge verifies the REAL "Session Verification"
+// interstitial scholar.archive.org serves to clients it wants to vet is reported as
+// the source being unavailable — NOT as the DOI being unpreserved. A challenge that
+// read as empty coverage would hide a new wall behind a plausible miss, and would
+// keep offering the source items it cannot serve.
+func TestFatcatResolveSessionChallenge(t *testing.T) {
+	stub := startFatcatStub(t)
+	stub.lookupStatus = http.StatusOK
+	stub.lookupBody = []byte(fatcatFixture(t, "fatcat_challenge.html"))
 
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
-		t.Fatal("Resolve() should fail on an HTTP 500")
+	_, err := stub.source().Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil || !strings.Contains(err.Error(), "no release page") {
+		t.Fatalf("Resolve() error = %v, want a 'no release page' error", err)
 	}
-}
-
-// TestFatcatResolveMalformed verifies malformed JSON surfaces as a decode error
-// rather than a panic.
-func TestFatcatResolveMalformed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"files": [`))
-	}))
-	defer srv.Close()
-
-	s := fatcatSource{http: srv.Client(), apiBase: srv.URL}
-	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
-		t.Fatal("Resolve() should fail on a malformed JSON response")
+	assertUnavailable(t, err)
+	if errors.Is(err, ErrNotIndexed) {
+		t.Error("a session challenge was reported as ErrNotIndexed; a new wall would look like empty coverage")
 	}
 }
 
-// TestArchiveScore verifies the Internet Archive host ranking: a direct archive.org
-// copy outranks another archive.org subdomain, which outranks a Wayback capture,
-// and a non-archive host scores zero.
-func TestArchiveScore(t *testing.T) {
-	tests := []struct {
-		url  string
-		want int
-	}{
-		{"https://archive.org/download/x/y.pdf", 3},
-		{"https://scholar.archive.org/work/abc.pdf", 2},
-		{"https://web.archive.org/web/2018/https://x/y.pdf", 1},
-		{"https://journals.plos.org/x/file.pdf", 0},
-		{"not-a-url", 0},
+// TestFatcatFulltextURLsFromCapturedPage verifies extraction against the REAL
+// captured page: both preserved copies are returned in page order, and the first
+// one's HTML-escaped query separator is decoded — served as &amp; in the markup, it
+// would otherwise be requested as a literal "&amp;type=printable".
+func TestFatcatFulltextURLsFromCapturedPage(t *testing.T) {
+	got := fatcatFulltextURLs([]byte(fatcatFixture(t, "fatcat_release_hit.html")))
+	want := []string{
+		"https://web.archive.org/web/20170708142320/http://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.1002533&type=printable",
+		"https://web.archive.org/web/20180724110523/https://www.biorxiv.org/content/biorxiv/early/2016/01/06/036103.full.pdf",
 	}
-	for _, tt := range tests {
-		if got := archiveScore(tt.url); got != tt.want {
-			t.Errorf("archiveScore(%q) = %d, want %d", tt.url, got, tt.want)
+	if len(got) != len(want) {
+		t.Fatalf("fatcatFulltextURLs() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("candidate %d = %q, want %q", i, got[i], want[i])
 		}
 	}
 }
 
-// TestPickArchivedPDFSkipsNonPDF verifies a non-PDF file on the Internet Archive is
-// skipped even though its host would otherwise score, so only PDFs are chosen.
-func TestPickArchivedPDFSkipsNonPDF(t *testing.T) {
-	files := []fatcatFile{
-		{Mimetype: "application/xml", URLs: []fatcatURL{{URL: "https://archive.org/download/x/y.xml"}}},
+// TestFatcatFulltextURLsFilters verifies the candidate list drops what cannot be
+// fetched (a relative or non-HTTP URL), drops duplicates, and is capped so a release
+// with many preserved copies cannot turn one resolve into a burst of probes.
+func TestFatcatFulltextURLsFilters(t *testing.T) {
+	page := fatcatPage(
+		"/relative/paper.pdf",
+		"javascript:alert(1)",
+		"https://archive.org/download/a/1.pdf",
+		"https://archive.org/download/a/1.pdf",
+		"https://archive.org/download/a/2.pdf",
+		"https://archive.org/download/a/3.pdf",
+		"https://archive.org/download/a/4.pdf",
+		"https://archive.org/download/a/5.pdf",
+	)
+	got := fatcatFulltextURLs([]byte(page))
+	if len(got) != fatcatMaxCandidates {
+		t.Fatalf("fatcatFulltextURLs() returned %d candidates (%v), want the cap of %d", len(got), got, fatcatMaxCandidates)
 	}
-	if got, ok := pickArchivedPDF(files); ok {
-		t.Fatalf("pickArchivedPDF() = %q, true; want a miss for a non-PDF file", got)
+	if got[0] != "https://archive.org/download/a/1.pdf" {
+		t.Errorf("first candidate = %q, want the first fetchable URL", got[0])
+	}
+	for _, c := range got {
+		if !strings.HasPrefix(c, "https://") {
+			t.Errorf("candidate %q is not a fetchable absolute URL", c)
+		}
+	}
+}
+
+// assertCleanMiss fails unless err is the source's correct answer that it does not
+// hold the item: tagged ErrNotIndexed and therefore never cooldown-worthy.
+func assertCleanMiss(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, ErrNotIndexed) {
+		t.Errorf("error %v is not tagged ErrNotIndexed", err)
+	}
+	if cooldownWorthy(context.Background(), err) {
+		t.Error("a clean miss put the source in cooldown")
+	}
+}
+
+// assertUnavailable fails unless err is evidence the source itself could not serve
+// anything right now: tagged ErrSourceUnavailable and therefore cooldown-worthy.
+func assertUnavailable(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, ErrSourceUnavailable) {
+		t.Errorf("error %v is not tagged ErrSourceUnavailable", err)
+	}
+	if !cooldownWorthy(context.Background(), err) {
+		t.Error("an unavailable source was not put in cooldown")
 	}
 }

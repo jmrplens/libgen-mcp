@@ -67,7 +67,9 @@ open-access providers first, then the shadow-library fallbacks:
    reports whether the DOI is simply not indexed or indexed without an OA full text.
 3. **`biorxiv`** — only for `10.1101` preprint DOIs; returns the latest version's full-text PDF
    from bioRxiv or medRxiv.
-4. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar has one.
+4. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar's release page
+   advertises one that still serves a PDF; it distinguishes a DOI the catalog does not hold, a
+   release with nothing preserved, and a release whose preserved captures have all gone bad.
 5. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
    download URL when CORE hosts a live copy.
 6. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
