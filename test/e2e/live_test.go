@@ -1413,6 +1413,42 @@ func TestE2EOapenRejectsUnheldIdentifier(t *testing.T) {
 	t.Logf("oapen correctly refused an unheld DOI: %v", err)
 }
 
+// cleanRefusalBudget bounds how long a source may take to report that it does not
+// hold an item. A settled "no" costs one resolve; it must not be put through the
+// start-retry schedule, whose waits are measured in tens of seconds. The budget is
+// deliberately far above a healthy resolve so a slow network cannot make this
+// flaky, yet far below the schedule it guards against.
+const cleanRefusalBudget = 30 * time.Second
+
+// TestE2ECleanRefusalIsPrompt pins the cost of a correct "I do not hold this".
+// A live evaluator run spent 87.7s on exactly this case: the miss was wrapped as a
+// start failure, so the retry schedule re-asked a question whose answer could not
+// change, and then reported it as a connection problem. Asserting the refusal is
+// both correct AND prompt is what distinguishes the fixed behavior from the bug —
+// TestE2EOapenRejectsUnheldIdentifier alone passed throughout.
+func TestE2ECleanRefusalIsPrompt(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	started := time.Now()
+	res, err := downloadFromSource(t, ctx, "10.9999/not-a-real-doi-zzz", "oapen")
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatalf("oapen served %q for a DOI it does not hold", res.Path)
+	}
+	if !errors.Is(err, libgen.ErrNotIndexed) {
+		classifyOrFail(t, "oapen", err, oapenFailures)
+		return
+	}
+	if elapsed > cleanRefusalBudget {
+		t.Fatalf("a settled miss took %s (budget %s): the retry schedule is being spent on an answer that cannot change",
+			elapsed.Round(time.Millisecond), cleanRefusalBudget)
+	}
+	t.Logf("oapen refused an unheld DOI in %s", elapsed.Round(time.Millisecond))
+}
+
 // archiveFailures are the KNOWN, diagnosed ways the archive source can fail live.
 // The lending classes are the interesting ones: they are how the source reports that
 // it found the book and deliberately declined to download a controlled-lending copy.

@@ -233,3 +233,20 @@ func TestSourceCooldownIsRaceFree(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestNoCapableSourceDoesNotClaimACooldown verifies the "every capable source is
+// in cooldown" warning is reserved for an actual cooldown. When nothing supports
+// the item at all — a DOI on a deployment restricted to book sources — the list is
+// empty, and warning about a cooldown sends a reader chasing a state that does not
+// exist. Observed 5 times in a single live evaluator scenario.
+func TestNoCapableSourceDoesNotClaimACooldown(t *testing.T) {
+	buf := captureLog(t)
+	c := cooldownChainClient(stubSource{name: "books-only", supports: false})
+
+	if _, err := c.DownloadItem(context.Background(), Item{DOI: "10.1/x"}, t.TempDir(), ""); err == nil {
+		t.Fatal("no source supports the item, so the download must fail")
+	}
+	if strings.Contains(buf.String(), "every capable source is in cooldown") {
+		t.Errorf("warned about a cooldown with no capable source at all:\n%s", buf.String())
+	}
+}

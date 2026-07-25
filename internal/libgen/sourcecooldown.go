@@ -105,6 +105,13 @@ func (c *Client) eligibleSources(supporting []DownloadSource) []DownloadSource {
 	}
 	c.sourceMu.Unlock()
 
+	// No capable source at all is not a cooldown: there is nothing set aside and
+	// nothing to bypass. Warning about one here would send a reader debugging a
+	// restricted deployment chasing a state that does not exist; the caller's
+	// "no download source supports ..." error already says the true reason.
+	if len(supporting) == 0 {
+		return supporting
+	}
 	if len(avail) == 0 {
 		logging.SourceCooldownBypassed(cooledNames(cooled))
 		return supporting

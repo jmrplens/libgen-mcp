@@ -2212,3 +2212,75 @@ func TestRetryEverySourceRestoresTheOldBehavior(t *testing.T) {
 		t.Errorf("dead source attempts = %d, want 4 (one per wait plus the first)", got)
 	}
 }
+
+// retryProbeSchedule is a two-wait start-retry schedule short enough for a unit
+// test. newTestClient configures no waits at all, so a test about retrying has to
+// supply its own or it silently measures nothing.
+var retryProbeSchedule = []time.Duration{time.Millisecond, time.Millisecond}
+
+// TestCleanMissIsNotRetried verifies a source that correctly answers "I do not
+// hold this item" is asked exactly once. The start-retry schedule exists to
+// outlast a transport blip; a clean miss is a settled answer, so re-asking only
+// burns the schedule. Measured in a live evaluator run: a pinned source that did
+// not hold the requested DOI spent 87.7s before reporting the miss.
+func TestCleanMissIsNotRetried(t *testing.T) {
+	var attempts atomic.Int32
+	c := cooldownChainClient(countingSource{
+		name:     "only",
+		err:      notIndexed(errors.New(`"10.1/nope" is not held by this source`)),
+		attempts: &attempts,
+	})
+	c.startRetryWaits = retryProbeSchedule
+
+	if _, err := c.DownloadItem(context.Background(), Item{DOI: "10.1/nope"}, t.TempDir(), ""); err == nil {
+		t.Fatal("a source that holds nothing must fail the download")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("Resolve called %d time(s), want 1: a settled miss must not be retried", got)
+	}
+}
+
+// TestCleanMissKeepsItsOwnDiagnosis verifies the error surfaced for a clean miss
+// still says the source does not hold the item, rather than being relabeled as a
+// connection failure. The retry wrapper's message blames "resolve/connect/
+// first-byte", which is actively misleading when nothing failed to connect.
+func TestCleanMissKeepsItsOwnDiagnosis(t *testing.T) {
+	var attempts atomic.Int32
+	c := cooldownChainClient(countingSource{
+		name:     "only",
+		err:      notIndexed(errors.New(`"10.1/nope" is not held by this source`)),
+		attempts: &attempts,
+	})
+	c.startRetryWaits = retryProbeSchedule
+
+	_, err := c.DownloadItem(context.Background(), Item{DOI: "10.1/nope"}, t.TempDir(), "")
+	if err == nil {
+		t.Fatal("a source that holds nothing must fail the download")
+	}
+	if !errors.Is(err, ErrNotIndexed) {
+		t.Errorf("error lost its ErrNotIndexed tag: %v", err)
+	}
+	if strings.Contains(err.Error(), "could not be started after the retry schedule") {
+		t.Errorf("a clean miss was reported as a start failure: %v", err)
+	}
+}
+
+// TestUnavailableSourceStillGetsTheRetrySchedule guards the other side of the
+// split: a genuine transport failure is exactly what the schedule is for, so
+// narrowing the retry must not disable it.
+func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
+	var attempts atomic.Int32
+	c := cooldownChainClient(countingSource{
+		name:     "only",
+		err:      unavailable(errors.New("dial tcp: connection refused")),
+		attempts: &attempts,
+	})
+	c.startRetryWaits = retryProbeSchedule
+
+	if _, err := c.DownloadItem(context.Background(), Item{DOI: "10.1/x"}, t.TempDir(), ""); err == nil {
+		t.Fatal("an unreachable source must fail the download")
+	}
+	if got, want := int(attempts.Load()), len(retryProbeSchedule)+1; got != want {
+		t.Errorf("Resolve called %d time(s), want %d: the schedule must still apply", got, want)
+	}
+}
