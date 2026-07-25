@@ -154,14 +154,14 @@ func TestFederate_RecoversProviderPanic(t *testing.T) {
 	}
 }
 
-// TestDefaultProviders verifies DefaultProviders returns the three standard
-// keyless providers in the documented order: arxiv, crossref, openlibrary.
+// TestDefaultProviders verifies DefaultProviders returns the four standard keyless
+// providers in the documented order: arxiv, crossref, openlibrary, gutenberg.
 func TestDefaultProviders(t *testing.T) {
 	providers := DefaultProviders("")
-	if len(providers) != 3 {
-		t.Fatalf("DefaultProviders() returned %d providers, want 3", len(providers))
+	if len(providers) != 4 {
+		t.Fatalf("DefaultProviders() returned %d providers, want 4", len(providers))
 	}
-	want := []string{"arxiv", "crossref", "openlibrary"}
+	want := []string{"arxiv", "crossref", "openlibrary", "gutenberg"}
 	for i, name := range want {
 		if got := providers[i].Name(); got != name {
 			t.Errorf("provider[%d].Name() = %q, want %q", i, got, name)
@@ -198,7 +198,7 @@ func TestDedupKeepsDistinctMD5s(t *testing.T) {
 // follow the open-access providers so dedup keeps the fetchable copy of a shared DOI.
 func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
 	got := ExtraProviders("", staticMirrors{"https://annas-archive.gl"})
-	want := []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "annas"}
+	want := []string{"arxiv", "crossref", "openlibrary", "gutenberg", "dblp", "pubmed", "annas"}
 	if len(got) != len(want) {
 		t.Fatalf("ExtraProviders() returned %d providers, want %d", len(got), len(want))
 	}

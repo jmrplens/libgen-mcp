@@ -1,8 +1,8 @@
 // Package discovery federates keyless literature sources into a single result shape
 // the search tool can present and the read/download tools can act on: the open-access
-// providers (arXiv, Crossref, OpenLibrary) plus the bibliographic indexes (dblp for
-// computer science, PubMed for biomedicine), which describe a paper precisely without
-// claiming it is free to read. Every provider is best-effort: a failing source
+// providers (arXiv, Crossref, OpenLibrary, Project Gutenberg) plus the bibliographic
+// indexes (dblp for computer science, PubMed for biomedicine), which describe a paper
+// precisely without claiming it is free to read. Every provider is best-effort: a failing source
 // degrades to an empty result rather than sinking a federated search, and no source
 // requires an API key, account, or login.
 package discovery
@@ -35,7 +35,7 @@ const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libge
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, dblp, pubmed or annas"`
+	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, gutenberg, dblp, pubmed or annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
@@ -61,7 +61,13 @@ type DiscoveryResult struct {
 	// for every other result, so it doubles as the "this book is freely readable"
 	// signal in the locator column.
 	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org details page for a publicly readable book"`
-	OpenAccess bool   `json:"open_access" jsonschema:"true when the record is open access"`
+	// FullTextURL is a directly-fetchable book FILE (EPUB, plain text or PDF) for a
+	// provider whose catalog is not keyed by any identifier the download tool
+	// accepts — Project Gutenberg, whose ebooks have no DOI, ISBN or md5. It is the
+	// whole value of such a hit: without it the record could only be described, not
+	// obtained. Distinct from PDFURL, which is specifically an article PDF.
+	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"a directly-fetchable open-access book file (epub, txt or pdf), for a record with no doi/isbn/md5 to download by; fetch it with your own HTTP tool"`
+	OpenAccess  bool   `json:"open_access" jsonschema:"true when the record is open access"`
 }
 
 // Provider is a keyless open-access discovery source.
@@ -129,6 +135,9 @@ type ProviderBases struct {
 	DBLP string
 	// PubMed is the NCBI E-utilities root (pubmedBase).
 	PubMed string
+	// Gutendex is the Gutendex API root serving the Project Gutenberg catalog
+	// (gutendexBase).
+	Gutendex string
 }
 
 // SetBasesForTest overrides every provider base URL and returns a restore func that
@@ -144,12 +153,13 @@ func SetBasesForTest(bases ProviderBases) (restore func()) {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		Gutendex:    gutendexBase,
 	}
 	arxivBase, crossrefBase, openLibraryBase = bases.Arxiv, bases.Crossref, bases.OpenLibrary
-	dblpBase, pubmedBase = bases.DBLP, bases.PubMed
+	dblpBase, pubmedBase, gutendexBase = bases.DBLP, bases.PubMed, bases.Gutendex
 	return func() {
 		arxivBase, crossrefBase, openLibraryBase = old.Arxiv, old.Crossref, old.OpenLibrary
-		dblpBase, pubmedBase = old.DBLP, old.PubMed
+		dblpBase, pubmedBase, gutendexBase = old.DBLP, old.PubMed, old.Gutendex
 	}
 }
 

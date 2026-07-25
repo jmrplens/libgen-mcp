@@ -156,15 +156,18 @@ func openAccessFlag(openAccess bool) string {
 }
 
 // openAccessLocator renders the most actionable identifier for an OA hit: its doi,
-// else an arXiv pdf_url, else a free-to-read archive.org url, else an OpenLibrary
-// isbn, each labeled so the reader knows which key it is. The archive.org url ranks
-// above the isbn because it is directly readable, not just a lookup key.
+// else an arXiv pdf_url, else a Project Gutenberg full_text_url, else a free-to-read
+// archive.org url, else an OpenLibrary isbn, each labeled so the reader knows which
+// key it is. The two file URLs rank above the isbn because they are directly
+// fetchable, not just a lookup key.
 func openAccessLocator(h discovery.DiscoveryResult) string {
 	switch {
 	case h.DOI != "":
 		return "doi:" + h.DOI
 	case h.PDFURL != "":
 		return "pdf_url:" + h.PDFURL
+	case h.FullTextURL != "":
+		return "full_text_url:" + h.FullTextURL
 	case h.ArchiveURL != "":
 		return "archive_url:" + h.ArchiveURL
 	case h.ISBN != "":

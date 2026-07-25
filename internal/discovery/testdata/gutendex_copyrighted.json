@@ -1,0 +1,45 @@
+{
+ "count": 1,
+ "next": "https://gutendex.com/books/?copyright=true&page=2",
+ "previous": null,
+ "results": [
+  {
+   "id": 34323,
+   "title": "The Samurai Strategy",
+   "authors": [
+    {
+     "name": "Hoover, Thomas",
+     "birth_year": 1941,
+     "death_year": null
+    }
+   ],
+   "editors": [],
+   "translators": [],
+   "subjects": [
+    "Mystery fiction"
+   ],
+   "bookshelves": [
+    "Category: Crime, Thrillers and Mystery",
+    "Category: Novels"
+   ],
+   "languages": [
+    "en"
+   ],
+   "copyright": true,
+   "media_type": "Text",
+   "formats": {
+    "text/html": "https://www.gutenberg.org/ebooks/34323.html.images",
+    "application/epub+zip": "https://www.gutenberg.org/ebooks/34323.epub3.images",
+    "application/pdf": "https://www.gutenberg.org/files/34323/34323-pdf.pdf",
+    "application/msword": "https://www.gutenberg.org/files/34323/34323-doc.doc",
+    "application/x-mobipocket-ebook": "https://www.gutenberg.org/ebooks/34323.kf8.images",
+    "application/rdf+xml": "https://www.gutenberg.org/ebooks/34323.rdf",
+    "image/jpeg": "https://www.gutenberg.org/cache/epub/34323/pg34323.cover.medium.jpg",
+    "application/octet-stream": "https://www.gutenberg.org/files/34323/34323-8.zip",
+    "text/plain; charset=utf-8": "https://www.gutenberg.org/ebooks/34323.txt.utf-8",
+    "text/plain; charset=us-ascii": "https://www.gutenberg.org/files/34323/34323-8.txt"
+   },
+   "download_count": 33095
+  }
+ ]
+}
