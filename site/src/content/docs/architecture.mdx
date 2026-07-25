@@ -1,6 +1,57 @@
 ---
 title: Architecture
 description: The HTTP client, the download pipeline, and the multi-source chain that power libgen-mcp.
+datePublished: "2026-07-19"
+head:
+  # Mirrors the "Frequently asked questions" section at the foot of this page
+  # verbatim. Schema-only answers are a policy violation and a citation risk, so
+  # the two must be edited together.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/architecture/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/architecture/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How does libgen-mcp find a working Library Genesis mirror?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting LIBGEN_MIRROR pins one host and skips discovery entirely."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does libgen-mcp cache, and where?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Two things, both on the machine running the server and neither containing anything about you. The discovered mirror lists are cached for 24 hours as mirrors.json and annas-mirrors.json under the OS cache directory — they hold public mirror URLs only. The read tool keeps a temporary copy of each document it extracts text from, so successive pages of one document reuse a single fetch; those files are evicted on a size cap and a TTL, both configurable. Deleting either cache only forces a fresh fetch on the next call."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does a download sometimes take a minute to start?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Because getting a transfer to begin is retried on a staged schedule before it is given up on. The default waits are 5s,5s,5s,10s,10s,10s,15s — eight attempts over roughly a minute — and they are spent on resolving, connecting and receiving the first byte. Once bytes are flowing a different rule applies: the stream is cut only after 60 seconds with no new data, so a slow but progressing transfer is never killed for being slow."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can a deployment change the order the download sources are tried in?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. LIBGEN_MCP_SOURCES can remove sources from the chain, but the order is fixed in code and pinned by a test, so the open-access providers are always tried before the shadow-library fallbacks. A deployment can narrow what participates; it cannot promote a fallback."
+            }
+          }
+        ]
+      }
 ---
 
 `libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family, plus a set of pluggable download sources. This page describes the three pieces that do the work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic rename), and the **multi-source chain**.
@@ -150,3 +201,21 @@ The server speaks MCP over one of two transports, selected at startup:
 - **streamable HTTP (opt-in).** Started with `--http host:port` (for example `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport, suitable for running centrally and connecting remote HTTP-capable clients. In this mode it also mounts a `GET /health` readiness endpoint that returns `200` (body `ok`) while the server is serving — handy for container and load-balancer health checks.
 
 Both transports share the same tools, HTTP client, and download pipeline; only the request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work and shut the active transport down gracefully. Because a `--http` server runs elsewhere and cannot write to the client's disk, it flips `download` into remote download mode: every call returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. See [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote) for details.
+
+## Frequently asked questions
+
+### How does libgen-mcp find a working Library Genesis mirror?
+
+It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting `LIBGEN_MIRROR` pins one host and skips discovery entirely.
+
+### What does libgen-mcp cache, and where?
+
+Two things, both on the machine running the server and neither containing anything about you. The discovered mirror lists are cached for 24 hours as `mirrors.json` and `annas-mirrors.json` under the OS cache directory — they hold public mirror URLs only. The `read` tool keeps a temporary copy of each document it extracts text from, so successive pages of one document reuse a single fetch; those files are evicted on a size cap and a TTL, both configurable. Deleting either cache only forces a fresh fetch on the next call.
+
+### Why does a download sometimes take a minute to start?
+
+Because getting a transfer to begin is retried on a staged schedule before it is given up on. The default waits are `5s,5s,5s,10s,10s,10s,15s` — eight attempts over roughly a minute — and they are spent on resolving, connecting and receiving the first byte. Once bytes are flowing a different rule applies: the stream is cut only after 60 seconds with no new data, so a slow but progressing transfer is never killed for being slow.
+
+### Can a deployment change the order the download sources are tried in?
+
+No. `LIBGEN_MCP_SOURCES` can remove sources from the chain, but the order is fixed in code and pinned by a test, so the open-access providers are always tried before the shadow-library fallbacks. A deployment can narrow what participates; it cannot promote a fallback.

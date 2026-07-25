@@ -13,3 +13,8 @@ public/llms-full.txt
 # text as emphasis. Their tables are the generator's to own.
 src/content/docs/eval-results.mdx
 src/content/docs/es/eval-results.mdx
+
+# Generated from the repo-root PRIVACY.md by scripts/sync-privacy.mjs. If
+# Prettier reformatted it, `privacy:check` and `format:check` would each demand
+# a different file and CI could never be green.
+src/content/docs/privacy.md

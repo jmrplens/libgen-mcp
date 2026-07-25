@@ -72,3 +72,16 @@ var scenariosES = map[string]string{
 	"S59": "**PubMed** — el equivalente biomédico: una aportación de índice, citada como registro en lugar de ofrecerse como texto completo gratuito",
 	"S60": "**Enfriamiento por fuente** — sci-hub encabeza una cadena de dos fuentes con un host muerto, y la confirmación de guardado sondea antes el tamaño del fichero, así que la cadena se recorre dos veces dentro de una misma llamada: el primer recorrido debe clasificar el fallo como fuente no disponible y el segundo debe actuar en consecuencia. Se evalúa desde el log de servidor de la propia llamada",
 }
+
+// The Spanish summary sentences that carry the run's counts. They live beside the
+// scenario translations rather than in main.go because they are Spanish prose,
+// and .golangci.yml excludes this file from the English spell checker.
+const (
+	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio."
+	resultsSummaryES  = "La tabla siguiente es una única ejecución en vivo de la suite completa contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`)."
+
+	// Singular and plural tails for the lettered scenario variants. Spanish puts
+	// the noun before the id, so each template takes the joined ids.
+	variantSuffixES       = " más la variante %s"
+	variantSuffixPluralES = " más las variantes %s"
+)

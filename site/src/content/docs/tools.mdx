@@ -1,6 +1,105 @@
 ---
 title: Tools
 description: The search, get_details, download, and read tools — inputs, outputs, and error behavior.
+datePublished: "2026-07-19"
+head:
+  # The page an AI reads to answer "what can libgen-mcp do?". Nothing in the
+  # markup enumerated the tools, so each one now has a citable deep link.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "@id": "https://jmrplens.github.io/libgen-mcp/tools/#tool-list",
+        "name": "libgen-mcp MCP tools",
+        "description": "The four MCP tools exposed by libgen-mcp.",
+        "inLanguage": "en",
+        "itemListOrder": "https://schema.org/ItemListOrderAscending",
+        "numberOfItems": 4,
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/tools/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "search",
+            "description": "Search the Library Genesis catalog for books, papers, comics, magazines and standards, returning per-result metadata and MD5 hashes. Escalates to Anna's Archive and the keyless open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) according to the extra_sources policy. Read-only and open-world.",
+            "url": "https://jmrplens.github.io/libgen-mcp/tools/#search"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "get_details",
+            "description": "Fetch full metadata for a record by md5, edition or file id, or DOI, with optional keyless enrichment from Crossref and OpenLibrary, plus BibTeX and RIS citations. Read-only and open-world.",
+            "url": "https://jmrplens.github.io/libgen-mcp/tools/#get_details"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "download",
+            "description": "Resolve and download a book by MD5 or ISBN, or an article by DOI, through an ordered source chain that tries the open-access providers before any shadow-library fallback. Saves to a local directory, or returns a resource link when the server runs remotely. Non-destructive, idempotent and open-world.",
+            "url": "https://jmrplens.github.io/libgen-mcp/tools/#download"
+          },
+          {
+            "@type": "ListItem",
+            "position": 4,
+            "name": "read",
+            "description": "Extract and paginate the text of a PDF, EPUB or TXT without downloading the whole file, search within the document, and produce its outline. Read-only and open-world.",
+            "url": "https://jmrplens.github.io/libgen-mcp/tools/#read"
+          }
+        ]
+      }
+  # Mirrors the "Frequently asked questions" section at the foot of this page
+  # verbatim. Schema-only answers are a policy violation and a citation risk, so
+  # the two must be edited together.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/tools/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/tools/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Which libgen-mcp tool should I use?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It depends on what you have and what you want. Use search when you have a title, an author or a topic and need to find the record. Use get_details when you already have an identifier and want the full metadata, a citation, or Crossref and OpenLibrary enrichment. Use download when you want the file on disk. Use read when you want the text but not the file — it extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can libgen-mcp read a book without downloading it?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, and that is what read is for. It fetches the file into a server-side temporary cache, extracts the text in pure Go, and returns one page at a time, so successive calls over the same document reuse a single fetch. It also has a find mode that searches within the document and an outline mode that returns its table of contents. Nothing is written to your download directory."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I download an article that has no MD5?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Use its DOI. Books in the Library Genesis catalog are keyed by MD5, but articles are keyed by DOI, and download accepts either — plus isbn for a book from the open-access sources. Passing a DOI routes the request through the article chain, which tries Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What happens when a download source fails?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The chain moves on to the next source that can serve the item, and the tool tells you which one succeeded. A source that fails because it is unavailable — a transport error, a timeout, a 5xx or a 429 — is set aside for five minutes so it does not hold up later calls. A source that correctly answers that it does not hold the item is not penalised: that is a normal answer about one item and says nothing about the provider's health."
+            }
+          }
+        ]
+      }
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -11,7 +110,7 @@ Every result is returned on two channels: the structured JSON output documented 
 
 ## search
 
-Search the Library Genesis catalog. Returns a page of file results with metadata, MD5 hashes, and per-result download options, plus pagination metadata.
+`search` is the tool that queries the Library Genesis catalog and, when the `extra_sources` policy allows it, the nine providers beyond it. It returns a page of file results with metadata, MD5 hashes, and per-result download options, plus pagination metadata.
 
 ### search input
 
@@ -115,7 +214,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 
 ## get_details
 
-Full metadata for a record via the LibGen JSON API — description, identifiers, DOI, cover, and related edition. Look up by `md5`, by `id`, or by `doi` — exactly one of the three.
+`get_details` is the tool that fetches full metadata for one record via the LibGen JSON API — description, identifiers, DOI, cover, and related edition. It looks a record up by `md5`, by `id`, or by `doi` — exactly one of the three.
 
 ### get_details input
 
@@ -180,7 +279,7 @@ Set `enrich: true` to add a best-effort `enrichment` object with keyless data fr
 	you live. Use it only for content you are legally entitled to access.
 </Aside>
 
-Download a file to a local directory. Provide `md5` or `isbn` for a book **or** `doi` for an article; at least one is required. Returns the saved path, size, and the source that served it.
+`download` is the tool that resolves an item through the ordered source chain and saves it to a local directory. It takes `md5` or `isbn` for a book **or** `doi` for an article; at least one is required. It returns the saved path, the size, and the source that served it.
 
 ### download input
 
@@ -263,7 +362,7 @@ When the connected MCP client supports **elicitation** (asking you for input mid
 
 ## read
 
-Extract and paginate the text of a book or paper so a model can read it without downloading the whole file. Identify the file by `md5` (a book) or `doi` (an article) from a prior search, or by an absolute `path` to an already-downloaded local file (local server only). Extraction is pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
+`read` is the tool that extracts and paginates the text of a book or paper so a model can read it without downloading the whole file. It identifies the file by `md5` (a book) or `doi` (an article) from a prior search, or by an absolute `path` to an already-downloaded local file (local server only). Extraction is pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
 
 ### read input
 
@@ -417,3 +516,21 @@ Diagnose a failed or stuck download and produce a step-by-step recovery plan tai
 | `error`  | no       | The error message the `download` tool returned, if any. |
 
 All arguments are optional. The resulting decision tree only names download providers that are actually **enabled** on this server (via `LIBGEN_MCP_SOURCES`), suggests re-running `search` to rule out a stale identifier, walks through pinning `download`'s `source` parameter to isolate a failing provider, and — when a known error message is recognized — adds tailored advice for it (e.g. a malformed md5, a missing `LIBGEN_MCP_UNPAYWALL_EMAIL`, a stalled transfer, or an integrity-check failure).
+
+## Frequently asked questions
+
+### Which libgen-mcp tool should I use?
+
+It depends on what you have and what you want. Use `search` when you have a title, an author or a topic and need to find the record. Use `get_details` when you already have an identifier and want the full metadata, a citation, or Crossref and OpenLibrary enrichment. Use `download` when you want the file on disk. Use `read` when you want the text but not the file — it extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing.
+
+### Can libgen-mcp read a book without downloading it?
+
+Yes, and that is what `read` is for. It fetches the file into a server-side temporary cache, extracts the text in pure Go, and returns one page at a time, so successive calls over the same document reuse a single fetch. It also has a `find` mode that searches within the document and an `outline` mode that returns its table of contents. Nothing is written to your download directory.
+
+### How do I download an article that has no MD5?
+
+Use its DOI. Books in the Library Genesis catalog are keyed by MD5, but articles are keyed by DOI, and `download` accepts either — plus `isbn` for a book from the open-access sources. Passing a DOI routes the request through the article chain, which tries Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB.
+
+### What happens when a download source fails?
+
+The chain moves on to the next source that can serve the item, and the tool tells you which one succeeded. A source that fails because it is unavailable — a transport error, a timeout, a 5xx or a 429 — is set aside for five minutes so it does not hold up later calls. A source that correctly answers that it does not hold the item is not penalised: that is a normal answer about one item and says nothing about the provider's health.

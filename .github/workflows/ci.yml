@@ -200,6 +200,26 @@ jobs:
           version: "~> v2"
           args: check
 
+  # Every doc artifact that is generated from code. Each of these had a
+  # `make check-*` target already, but nothing ran them, so the generated
+  # regions were free to drift from their sources: the evaluator pages spent
+  # several releases claiming 45 scenarios while the tables listed 61.
+  generated-docs:
+    name: Generated docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go mod download
+      - name: Evaluator results pages match the scenario list and the run
+        run: make check-eval-pages
+      - name: llms.txt and llms-full.txt match the registered tools
+        run: make check-llms
+      - name: Markdown tables are normalized
+        run: make check-md-tables
+
   analyze-md:
     name: Analyze Markdown
     runs-on: ubuntu-latest

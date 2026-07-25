@@ -2,6 +2,59 @@
 title: Primeros pasos
 description: Instala libgen-mcp, conéctalo a un cliente MCP y ejecuta tu primera búsqueda.
 head:
+  # La única página del sitio con una forma realmente procedimental.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#howto",
+        "name": "Cómo instalar libgen-mcp y conectarlo a un asistente de IA",
+        "description": "Instala el servidor libgen-mcp, regístralo en un cliente MCP como Claude Code, Claude Desktop o VS Code, y ejecuta una primera búsqueda. Ningún paso requiere cuenta, clave de API ni token.",
+        "inLanguage": "es",
+        "totalTime": "PT5M",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "supply": [],
+        "tool": [
+          {
+            "@type": "HowToTool",
+            "name": "Un cliente compatible con MCP (Claude Code, Claude Desktop, Cursor, VS Code o tu propio agente)"
+          }
+        ],
+        "step": [
+          {
+            "@type": "HowToStep",
+            "position": 1,
+            "name": "Instala el servidor",
+            "text": "Descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH. Es un único ejecutable completamente estático sin nada más que instalar. Como alternativa, descarga la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compila desde el código con go install si tienes Go 1.26 o superior.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#instalación"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 2,
+            "name": "Regístralo en tu cliente MCP",
+            "text": "Añade el servidor a la configuración MCP de tu cliente. Claude Code, Claude Desktop y Cursor usan una clave mcpServers cuya entrada apunta command a la ruta absoluta del binario; VS Code y GitHub Copilot usan una clave servers y además fijan type a stdio. Para Claude Code todo el paso es un único comando: claude mcp add libgen -- /usr/local/bin/libgen-mcp.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#configurar-un-cliente-mcp"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 3,
+            "name": "Ejecuta tu primera búsqueda",
+            "text": "Reinicia el cliente para que recoja el servidor nuevo y pídele en lenguaje natural que busque un título en Library Genesis. El modelo llama a la herramienta search, y los resultados vuelven con metadatos y hashes MD5 por registro que puede pasar a get_details o download.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#tu-primera-búsqueda"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 4,
+            "name": "Lee un documento sin descargarlo",
+            "text": "Pide al asistente que lea o resuma un resultado en lugar de descargarlo. La herramienta read extrae y pagina el texto de un PDF, EPUB o TXT, de modo que el modelo puede resumir un artículo, buscar dentro de un libro o producir su índice sin traerse el fichero entero.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#leer-y-resumir"
+          }
+        ]
+      }
   - tag: script
     attrs:
       type: application/ld+json
@@ -47,6 +100,7 @@ head:
           }
         ]
       }
+datePublished: "2026-07-19"
 ---
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";

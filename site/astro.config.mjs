@@ -61,7 +61,9 @@ const dateModified = (() => {
 const featureList = [
 	"Search Library Genesis for books, papers, comics, magazines and standards",
 	"Four MCP tools: search, get_details, download, read",
-	"Multi-source downloads: libgen and randombook for books; Unpaywall and Sci-Hub for articles by DOI",
+	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
+	"Refuses what it may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
+	"Twelve download sources in a fixed chain with transparent per-source failover",
 	"Automatic mirror discovery, caching and transparent failover",
 	"Single cross-platform static Go binary (Linux, macOS, Windows; amd64 and arm64)",
 	"stdio and streamable HTTP transports; no account or API key required",
@@ -74,27 +76,70 @@ const softwareRequirements =
 const jsonLd = JSON.stringify({
 	"@context": "https://schema.org",
 	"@graph": [
+		// This node shares its @id with the canonical Person published at
+		// https://jmrp.io/#person. Two nodes under one @id that disagree weaken
+		// the entity rather than reinforcing it, so jobTitle, description, image
+		// and sameAs are kept identical to the portfolio's — that site is the
+		// source of truth for the identity, this one only restates it.
 		{
 			"@type": "Person",
 			"@id": authorId,
 			name: "José Manuel Requena Plens",
 			alternateName: "jmrplens",
-			jobTitle: "R&D Engineer",
+			jobTitle: "R&D · Firmware & Software Engineer",
+			description:
+				"Firmware and software engineer in Valencia, Spain — industrial embedded systems, open-source tooling, and self-hosted infrastructure.",
 			url: authorUrl,
-			image: "https://github.com/jmrplens.png",
+			image: {
+				"@type": "ImageObject",
+				url: "https://github.com/jmrplens.png",
+				width: 460,
+				height: 460,
+			},
+			// Wikidata-linked rather than bare strings, so an engine resolves each
+			// topic to a known entity instead of guessing from a label. The Q-ids
+			// match the ones the portfolio already uses.
 			knowsAbout: [
-				"Model Context Protocol",
-				"Go",
-				"Library Genesis",
-				"Developer tooling",
-				"AI assistants",
+				{
+					"@type": "Thing",
+					name: "Model Context Protocol",
+					"@id": "http://www.wikidata.org/entity/Q133436854",
+				},
+				{
+					"@type": "Thing",
+					name: "Go",
+					"@id": "http://www.wikidata.org/entity/Q37227",
+				},
+				{
+					"@type": "Thing",
+					name: "Library Genesis",
+					"@id": "http://www.wikidata.org/entity/Q22017206",
+				},
+				{
+					"@type": "Thing",
+					name: "Programming tool",
+					"@id": "http://www.wikidata.org/entity/Q1077784",
+				},
+				{
+					"@type": "Thing",
+					name: "Open access",
+					"@id": "http://www.wikidata.org/entity/Q232932",
+				},
+				{
+					"@type": "Thing",
+					name: "Digital library",
+					"@id": "http://www.wikidata.org/entity/Q212805",
+				},
 			],
 			sameAs: [
 				"https://github.com/jmrplens",
 				"https://www.linkedin.com/in/jmrplens",
 				"https://mstdn.jmrp.io/@jmrplens",
+				"https://bsky.app/profile/jmrp.io",
 				"https://scholar.google.com/citations?user=9b0kPaUAAAAJ",
 				"https://orcid.org/0000-0003-1250-6212",
+				"https://www.researchgate.net/profile/Jose-Requena-Plens-2",
+				"https://www.mathworks.com/matlabcentral/profile/authors/5890853",
 				"https://matrix.to/#/@jmrplens:matrix.jmrp.io",
 				"https://keyoxide.org/0A993B268654DBBA52B7E8D3FCF653391E2C91FC",
 			],
@@ -109,20 +154,20 @@ const jsonLd = JSON.stringify({
 			image: socialImage,
 			publisher: { "@id": authorId },
 			about: { "@id": softwareId },
-			potentialAction: {
-				"@type": "SearchAction",
-				target: {
-					"@type": "EntryPoint",
-					urlTemplate:
-						"https://jmrplens.github.io/libgen-mcp/?q={search_term_string}",
-				},
-				"query-input": "required name=search_term_string",
-			},
+			// No SearchAction: site search is Pagefind, which only opens from the
+			// search button. There is no `?q=` entry point to advertise, and Google
+			// retired the sitelinks searchbox rich result in 2024, so declaring one
+			// would be a claim nothing honours.
 		},
 		{
 			"@type": "SoftwareApplication",
 			"@id": softwareId,
 			name: "libgen-mcp",
+			// Three other GitHub projects are also called "libgen-mcp". The registry
+			// id is the only globally unique handle this server has, so it is
+			// declared alongside the names an engine is likely to see.
+			alternateName: ["LibGen MCP", "libgen-mcp (Go)"],
+			identifier: "io.github.jmrplens/libgen-mcp",
 			...(softwareVersion ? { softwareVersion } : {}),
 			applicationCategory: "DeveloperApplication",
 			applicationSubCategory: "Search Tools",
@@ -147,19 +192,41 @@ const jsonLd = JSON.stringify({
 				"MCP server to search and download books, research papers, comics, magazines and standards from Library Genesis. No account required.",
 			keywords:
 				"Model Context Protocol, MCP, Library Genesis, libgen, books, research papers, AI assistants, Go",
+			// The two subjects this software is about, as Wikidata entities. An
+			// engine that has never heard of libgen-mcp has certainly heard of
+			// these, which is what lets it place an unknown tool in a known field.
+			about: [
+				{
+					"@type": "Thing",
+					name: "Library Genesis",
+					"@id": "http://www.wikidata.org/entity/Q22017206",
+				},
+				{
+					"@type": "Thing",
+					name: "Model Context Protocol",
+					"@id": "http://www.wikidata.org/entity/Q133436854",
+				},
+			],
 			offers: {
 				"@type": "Offer",
 				price: "0",
 				priceCurrency: "USD",
 			},
 			author: { "@id": authorId },
+			// Every listing that carries this server, so an engine resolving the
+			// name lands on the same entity wherever it finds it. Note the
+			// Smithery namespace is `jmrp`, not `jmrplens`.
 			sameAs: [
 				`${fullUrl}/`,
 				repositoryUrl,
+				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
+				"https://smithery.ai/server/@jmrp/libgen-mcp",
+				"https://mcp.so/servers/libgen-mcp-d62341",
+				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
+				"https://pkg.go.dev/github.com/jmrplens/libgen-mcp",
+				"https://hub.docker.com/r/jmrplens/libgen-mcp",
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
-				"https://smithery.ai/servers/jmrp/libgen-mcp",
-				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
 			],
 		},
 		{
@@ -171,6 +238,8 @@ const jsonLd = JSON.stringify({
 			runtimePlatform: "Windows, macOS, Linux",
 			license: "https://opensource.org/licenses/MIT",
 			isPartOf: { "@id": softwareId },
+			// The forward edge to the product; `isPartOf` alone only points back.
+			targetProduct: { "@id": softwareId },
 			author: { "@id": authorId },
 		},
 	],
@@ -184,6 +253,12 @@ export default defineConfig({
 		starlight({
 			title: "LibGen MCP",
 			description: siteDescription,
+			expressiveCode: {
+				// Otherwise the code-block stylesheet is emitted as a <link> inside
+				// <body>, mid-content — it blocks render of everything after it and
+				// flashes unstyled code blocks. Inlining it puts the styles in <head>.
+				emitExternalStylesheet: false,
+			},
 			plugins: [
 				starlightLinksValidator({
 					errorOnRelativeLinks: false,
@@ -261,6 +336,17 @@ export default defineConfig({
 					tag: "meta",
 					attrs: { name: "author", content: "José Manuel Requena Plens" },
 				},
+				// GitHub Pages cannot set response headers, so the policies that do
+				// have a <meta> equivalent are declared here. X-Frame-Options,
+				// X-Content-Type-Options and Permissions-Policy are header-only and
+				// would need the site fronted by a CDN.
+				{
+					tag: "meta",
+					attrs: {
+						name: "referrer",
+						content: "strict-origin-when-cross-origin",
+					},
+				},
 				// Theme color (brand teal accent)
 				{
 					tag: "meta",
@@ -282,11 +368,23 @@ export default defineConfig({
 					content: jsonLd,
 				},
 			],
+			// The profiles a reader might actually follow. They double as visible
+			// corroboration of the Person node's sameAs set.
 			social: [
 				{
 					icon: "github",
 					label: "GitHub",
 					href: "https://github.com/jmrplens/libgen-mcp",
+				},
+				{
+					icon: "mastodon",
+					label: "Mastodon",
+					href: "https://mstdn.jmrp.io/@jmrplens",
+				},
+				{
+					icon: "linkedin",
+					label: "LinkedIn",
+					href: "https://www.linkedin.com/in/jmrplens",
 				},
 			],
 			editLink: {
@@ -344,6 +442,28 @@ export default defineConfig({
 							slug: "eval-results",
 							label: "LLM eval results",
 							translations: { es: "Resultados del eval con LLM" },
+						},
+					],
+				},
+				{
+					label: "Project",
+					translations: { es: "Proyecto" },
+					items: [
+						{
+							slug: "responsible-use",
+							label: "Responsible use",
+							translations: { es: "Uso responsable" },
+						},
+						{
+							slug: "privacy",
+							label: "Privacy policy",
+							translations: { es: "Política de privacidad" },
+						},
+						{
+							label: "Security policy",
+							translations: { es: "Política de seguridad" },
+							link: "https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md",
+							attrs: { target: "_blank", rel: "noopener noreferrer" },
 						},
 					],
 				},

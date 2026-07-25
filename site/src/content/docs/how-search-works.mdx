@@ -1,9 +1,62 @@
 ---
 title: How search works
 description: A conceptual walk through what a search queries, when it reaches beyond the Library Genesis catalog, and how each result tells you where it came from.
+datePublished: "2026-07-24"
+head:
+  # Mirrors the "Frequently asked questions" section at the foot of this page
+  # verbatim. Schema-only answers are a policy violation and a citation risk, so
+  # the two must be edited together.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/how-search-works/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/how-search-works/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "When does libgen-mcp search beyond the Library Genesis catalog?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Under the default auto policy, only when the catalog returns nothing or fails outright. An ordinary search that the catalog answers queries no other service. Setting extra_sources to always consults the extra sources on every search, concurrently with the catalog rather than after it, because that decision does not depend on the catalog's answer. Setting it to never restricts every search to the catalog even on a miss, and as a deployment default it is a lock rather than a preference: a per-call argument cannot re-enable the extras."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which sources does a search consult beyond the catalog?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an origin label naming the searcher that produced it, which is what tells you which identifier to pass to download."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How are duplicate results handled?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "They are removed by file digest. The same md5 surfaced by two sources appears once. When a file appears in both the catalog and Anna's Archive, the catalog record wins, because it carries richer metadata — publishers, languages, ISBNs and the other fields the catalog invests in collecting — and the Anna's copy is dropped rather than shown twice in a thinner form."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does a search result tell me whether a work is free to read?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Only where a source states it. Anna's Archive is a shadow library rather than a publisher of freely licensed material, so its hits are never marked open access. The bibliographic indexes dblp and PubMed index papers regardless of licensing and say nothing about it, so theirs are not either. ERIC is both at once — it hosts an authorized full text for some of what it indexes and merely lists the rest — so its hits are marked one by one. Do not infer a work's licence from the fact that a search returned it."
+            }
+          }
+        ]
+      }
 ---
 
-A `search` asks one question, but it does not always ask it of only one place. By default it queries the **Library Genesis catalog** and stops there. When that catalog has nothing — or fails outright — the search quietly reaches further, into Anna's Archive and the open-access providers, so a miss is never reported as a dead end without having looked further. This page explains that flow in plain terms: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
+**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and eight open-access providers, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
+
+This page explains that flow: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
 
 ## The default: the Library Genesis catalog
 
@@ -82,4 +135,22 @@ The two behaviors above are a deliberate trade-off:
 - **An ordinary search stays fast and quiet.** Under `auto`, a search that the catalog answers never contacts a third party. There is no extra latency, no extra traffic, and no dependency on providers you did not need — the catalog answer is the answer.
 - **A miss is never a dead end.** The moment the catalog comes up empty or fails, the search has already looked further. The same single call that would otherwise return "not found" instead returns what it found elsewhere, labeled so you know where each result came from and how to fetch it.
 
-In short: the common path is cheap, and the fallback is automatic. You get speed when the catalog has it, and reach when it does not.
+**In `auto` mode, a search the catalog answers contacts no third party at all**; only a miss or a catalog failure triggers escalation. You get speed when the catalog has it, and reach when it does not.
+
+## Frequently asked questions
+
+### When does libgen-mcp search beyond the Library Genesis catalog?
+
+Under the default `auto` policy, only when the catalog returns nothing or fails outright. An ordinary search that the catalog answers queries no other service. Setting `extra_sources` to `always` consults the extra sources on every search, concurrently with the catalog rather than after it, because that decision does not depend on the catalog's answer. Setting it to `never` restricts every search to the catalog even on a miss, and as a deployment default it is a lock rather than a preference: a per-call argument cannot re-enable the extras.
+
+### Which sources does a search consult beyond the catalog?
+
+Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an `origin` label naming the searcher that produced it, which is what tells you which identifier to pass to `download`.
+
+### How are duplicate results handled?
+
+They are removed by file digest. The same md5 surfaced by two sources appears once. When a file appears in both the catalog and Anna's Archive, the catalog record wins, because it carries richer metadata — publishers, languages, ISBNs and the other fields the catalog invests in collecting — and the Anna's copy is dropped rather than shown twice in a thinner form.
+
+### Does a search result tell me whether a work is free to read?
+
+Only where a source states it. Anna's Archive is a shadow library rather than a publisher of freely licensed material, so its hits are never marked open access. The bibliographic indexes dblp and PubMed index papers regardless of licensing and say nothing about it, so theirs are not either. ERIC is both at once — it hosts an authorized full text for some of what it indexes and merely lists the rest — so its hits are marked one by one. Do not infer a work's licence from the fact that a search returned it.
