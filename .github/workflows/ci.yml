@@ -107,7 +107,13 @@ jobs:
             "$ALLOWED_PREFIX"*) ;;
             *) echo "::error::Schema URL must start with $ALLOWED_PREFIX (got: $SCHEMA_URL)"; exit 1 ;;
           esac
-          curl -fsSL --proto '=https' --tlsv1.2 "$SCHEMA_URL" -o /tmp/mcp-schema.json
+          # The schema lives on a third-party host, so a blip there must not read
+          # as "server.json is invalid": a bare 503 from static.modelcontextprotocol.io
+          # already failed this job once. curl retries 5xx/429/timeouts by default
+          # once --retry is given.
+          curl -fsSL --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-delay 3 --retry-connrefused --max-time 60 \
+            "$SCHEMA_URL" -o /tmp/mcp-schema.json
           python3 -c "import json,jsonschema; \
             schema=json.load(open('/tmp/mcp-schema.json')); \
             inst=json.load(open('server.json')); \
