@@ -89,8 +89,9 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 3. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
 4. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando la página del release en Scholar anuncia una que sigue sirviendo un PDF; distingue un DOI que el catálogo no tiene, un release sin nada preservado y un release cuyas capturas preservadas han dejado de servir.
 5. **`core`** — solo forma parte de la cadena cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE cuando CORE aloja una copia viva.
-6. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
-7. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.
+6. **`oapen`** — para el DOI de una monografía, devuelve el libro de acceso abierto que OAPEN aloja bajo él. La mayoría de los DOI de revistas simplemente no están en su catálogo, así que normalmente informa de una ausencia limpia y la cadena avanza.
+7. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+8. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.
 
 **Soluciones.**
 
@@ -100,6 +101,21 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 - Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
 - Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
 - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
+
+## Libro no encontrado por ISBN (solo acceso abierto)
+
+**Síntoma.** Una `download` con `isbn` falla con algo como `no catalog entry states "9780141439518"` o `no freely downloadable scan ... (every candidate is lending-restricted or holds no book file)`.
+
+**Significado.** La vía `isbn` llega solo a las dos fuentes de libros de **acceso abierto** — `oapen` y `archive` — y ninguna sirve un libro que no puede redistribuir:
+
+- `oapen` aloja monografías académicas con licencia abierta. Comprueba que el registro encontrado declara realmente el ISBN (o DOI) pedido antes de servir nada, porque su búsqueda es de texto libre y de lo contrario devolvería una monografía ajena. Un libro comercial sencillamente no está ahí.
+- `archive` sirve un escaneo de Internet Archive solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** el escaneo concreto no lleva la marca `access-restricted-item` ni está en una colección de préstamo. Un libro que en el Archive solo se presta se informa como ausencia en lugar de descargarse, porque los ficheros de un elemento en préstamo o rechazan la petición o llegan con DRM e inservibles.
+
+**Soluciones.**
+
+- Para un libro con derechos vigentes, usa la vía `md5`: busca en el catálogo y descarga por el `md5` del resultado.
+- Revisa el propio ISBN — una errata, o el ISBN de otra edición, es la causa habitual. Funcionan tanto la forma de 10 como la de 13 caracteres, con o sin guiones.
+- Si el libro es un clásico de dominio público, busca de nuevo y localiza un resultado `gutenberg` en `open_access`: su `full_text_url` es el propio fichero del ebook.
 
 ## Falta una fuente en los errores de una descarga repetida
 

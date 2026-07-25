@@ -72,9 +72,12 @@ open-access providers first, then the shadow-library fallbacks:
    release with nothing preserved, and a release whose preserved captures have all gone bad.
 5. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
    download URL when CORE hosts a live copy.
-6. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+6. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
+   journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
+   chain advances.
+7. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
    article page with an extractable PDF.
-7. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
+8. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
    covers papers published after Sci-Hub stopped indexing.
 
 **Fixes.**
@@ -89,6 +92,33 @@ open-access providers first, then the shadow-library fallbacks:
 - Set `LIBGEN_MCP_CORE_KEY` (a free CORE API key) to add CORE to the open-access chain.
 - Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
   LibGen digest for them.
+
+## Book not found by ISBN (open access only)
+
+**Symptom.** A `download` with an `isbn` fails with something like `no catalog entry states
+"9780141439518"` or `no freely downloadable scan ... (every candidate is lending-restricted
+or holds no book file)`.
+
+**Meaning.** The `isbn` route reaches only the two **open-access** book sources — `oapen` and
+`archive` — and neither will serve a book it may not redistribute:
+
+- `oapen` holds openly licensed scholarly monographs. It confirms the record it found really
+  states the ISBN (or DOI) you asked for before serving anything, because its search is free
+  text and would otherwise return an unrelated monograph. A trade book is simply not there.
+- `archive` serves an Internet Archive scan only when OpenLibrary reports the book as
+  `ebook_access: public` **and** the individual scan is neither flagged `access-restricted-item`
+  nor filed in a lending collection. A book that is borrowable-only on the Archive is
+  reported as a miss rather than downloaded, because a lending item's files either refuse the
+  request or arrive DRM-wrapped and unusable.
+
+**Fixes.**
+
+- For an in-copyright book, use the `md5` route instead: search the catalog and download by
+  the result's `md5`.
+- Check the ISBN itself — a typo, or the ISBN of a different edition, is the common cause. Both
+  the 10- and 13-character forms work, with or without hyphens.
+- If the book is a public-domain classic, search again and look for a `gutenberg` hit in
+  `open_access`: its `full_text_url` is the ebook file itself.
 
 ## A source is missing from the errors of a repeated download
 

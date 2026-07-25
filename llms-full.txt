@@ -56,12 +56,13 @@ Download a file to a local directory.
 **Parameters:**
 
 - `annas_member` (boolean): opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly
-- `doi` (string): DOI from an article search result; articles are fetched by DOI; provide md5 or doi
+- `doi` (string): DOI from an article search result; articles are fetched by DOI; provide md5, isbn or doi
 - `filename` (string): destination filename (default: a clean name from the record metadata or the name the mirror announces)
-- `md5` (string): file md5 hash from a book search result; provide md5 or doi
+- `isbn` (string): ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi
+- `md5` (string): file md5 hash from a book search result; provide md5, isbn or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
 - `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
-- `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, fatcat, core, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover
+- `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
 
@@ -110,24 +111,25 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_SCIHUB_HOSTS` | sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf | comma-separated bare hosts (no scheme, no path) | Ordered Sci-Hub mirror hosts, tried in order until one serves an article. |
 | `LIBGEN_MCP_ANNAS_KEY` | empty (keyless IPFS) | Anna's Archive account secret string | Optional Anna's Archive membership key enabling the member fast-download API for books. Empty keeps the annas source keyless (IPFS only). Requires an active paid membership; an unset, expired or rejected key falls back to the keyless IPFS path. |
 | `LIBGEN_MCP_CORE_KEY` | empty (core disabled) | empty, or a CORE (core.ac.uk) API key | Optional API key (free registration) enabling the core open-access article source. Empty leaves core out of the chain, mirroring how an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables unpaywall. The key is sent only to api.core.ac.uk, never with the resolved file URL. |
-| `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, europepmc, biorxiv, fatcat, core, scihub, scidb, libgen, randombook, annas | Which download sources take part. Empty enables all. The chain order is fixed (the order above); this only removes sources from it. |
+| `LIBGEN_MCP_SOURCES` | empty (all enabled) | comma-separated subset of: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas | Which download sources take part. Empty enables all. The chain order is fixed (the order above); this only removes sources from it. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | false | 1/true/0/false | Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. For a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the client cannot reach; --http implies it. |
 | `LIBGEN_MCP_READ_MAX_CHARS` | 6000 | [500, 200000] | Characters the read tool returns per call when a call omits max_chars. |
 | `LIBGEN_MCP_READ_DEFAULT_PAGES` | 5 | [1, 200] | PDF pages the read tool returns per call when a call omits max_pages. |
 | `LIBGEN_MCP_READ_CACHE_BYTES` | 536870912 (512 MiB) | [1048576, 53687091200] | Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. |
 | `LIBGEN_MCP_READ_CACHE_TTL` | 10m | [1s, 24h] | How long an unreferenced read temp file lingers before eviction. |
 | `LIBGEN_MCP_ENRICH` | true | 1/true/0/false | Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely. |
-| `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
+| `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
 
 ## Download sources
 
 The `download` tool resolves a file through an ordered chain of sources. Which branch runs depends on the identifier supplied:
 
 - **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook`, then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set) as fallbacks.
-- **Articles (by `doi`):** the open-access providers first — `unpaywall` (requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `europepmc` (Europe PMC open-access full text), then `biorxiv` (`10.1101` preprints), then `fatcat` (Internet Archive Scholar), then `core` (requires `LIBGEN_MCP_CORE_KEY`) — then the shadow-library fallbacks `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`) and `scidb` (Anna's Archive SciDB viewer).
+- **Books (by `isbn`):** the open-access book sources — `oapen` (openly licensed scholarly monographs) then `archive` (public-domain Internet Archive scans, found via OpenLibrary and served only when both OpenLibrary and archive.org report the scan as freely downloadable rather than lending-restricted).
+- **Articles (by `doi`):** the open-access providers first — `unpaywall` (requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `europepmc` (Europe PMC open-access full text), then `biorxiv` (`10.1101` preprints), then `fatcat` (Internet Archive Scholar), then `core` (requires `LIBGEN_MCP_CORE_KEY`), then `oapen` (monograph DOIs) — then the shadow-library fallbacks `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`) and `scidb` (Anna's Archive SciDB viewer).
 - **Both `md5` and `doi` given:** article sources are tried first, then the book sources.
 
-`LIBGEN_MCP_SOURCES` selects which sources take part; it never reorders them. The recognized names, in the fixed chain order, are `unpaywall,europepmc,biorxiv,fatcat,core,scihub,scidb,libgen,randombook,annas`. An empty value enables all.
+`LIBGEN_MCP_SOURCES` selects which sources take part; it never reorders them. The recognized names, in the fixed chain order, are `unpaywall,europepmc,biorxiv,fatcat,core,oapen,archive,scihub,scidb,libgen,randombook,annas`. An empty value enables all.
 
 **Verification:** book (`md5`) downloads are MD5-verified against the requested hash (`verified:true`). DOI/article downloads are not hash-verified (`verified:false`).
 

@@ -29,10 +29,15 @@ call. Rather than hand back an empty result, the search can escalate and consult
   collections the catalog reaches nowhere else (Z-Library, Nexus/STC, DuXiu, Internet
   Archive, and more). Its hits are keyed by file digest (an md5), so they behave just like
   catalog results.
-- [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and
-  [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are not
-  md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI
-  from Crossref, a direct `pdf_url` from arXiv, and an `isbn`/title from OpenLibrary.
+- [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/),
+  [OpenLibrary](https://openlibrary.org/), and [Project Gutenberg](https://www.gutenberg.org/)
+  (through the third-party [Gutendex](https://gutendex.com/) API) — open-access providers.
+  Their hits are not md5-keyed, so they land in their own list, each carrying one actionable
+  identifier: a DOI from Crossref, a direct `pdf_url` from arXiv, an `isbn` from OpenLibrary
+  (pass it to `download` for an openly licensed copy, or use it to refine a catalog search),
+  and a `full_text_url` from Gutenberg — the ebook file itself, since a Gutenberg text has no
+  DOI, ISBN or md5 to download it by. Only records Gutenberg states are out of copyright are
+  surfaced; the ones it hosts with the rightsholder's permission are dropped.
 - [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic
   indexes, for computer science and biomedicine respectively. They answer *what the paper is*
   (venue, year, full author list, DOI) without claiming it is free to read, which is exactly

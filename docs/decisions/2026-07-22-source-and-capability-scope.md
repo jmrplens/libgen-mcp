@@ -162,6 +162,48 @@ quota. `europepmc` serves the open-access subset of PubMed Central; `biorxiv` re
 The article chain that results is `unpaywall → europepmc → biorxiv → fatcat → core → scihub →
 scidb`: legal open access first, shadow libraries only as fallback.
 
+**Amended 2026-07-25 — the same principle, applied to books (`oapen`, `archive`, and Gutenberg
+as a discovery provider).** The original evaluation treated open access as an article-side
+concern; the book side stayed md5-keyed shadow libraries plus OpenLibrary as a query resolver,
+so there was no legal path to a free full book at all. Three keyless sources close that gap, and
+where each landed is the interesting part:
+
+- **`oapen` — a download source keyed by DOI *or* ISBN.** OAPEN hosts the openly licensed
+  monographs scholarly publishers deposit, addressable by either identifier, so it is the one new
+  source that serves both the book and the article branch of the chain. Its DSpace REST search is
+  **free text**: querying an identifier it does not hold still returns a page of unrelated
+  monographs (a nonexistent DOI returned 13 hits when this was measured). The source therefore
+  re-checks the candidate record's own `oapen.identifier.doi`/`.isbn` before serving anything —
+  without that check it would occasionally hand back a *different book* and report success, which
+  is worse than any failure mode the chain already has.
+- **`archive` — a download source keyed by ISBN, chained off OpenLibrary.** OpenLibrary already
+  runs here and already requests `ebook_access` and `ia`, so it is the natural map from an ISBN to
+  the Internet Archive scans of a book. A large share of those scans are controlled-digital-lending
+  copies that advertise ordinary `.pdf`/`.epub` files and serve a DRM-wrapped or truncated one, so
+  the source gates twice — `ebook_access: public` from OpenLibrary **and** no
+  `access-restricted-item` / lending collection on the individual archive.org item — and skips a
+  candidate that fails either. Both gates are needed: a work can be publicly readable while a
+  particular scan of it is restricted.
+- **Project Gutenberg — a discovery provider, NOT a download source.** Gutenberg's catalog is
+  keyed by an internal ebook id; its texts carry no DOI and no reliable ISBN, and Gutendex (the
+  well-used third-party JSON API over the catalog — Gutenberg publishes none itself) exposes
+  neither. A `DownloadSource` resolves an identifier the *caller already holds*, so the only way
+  to key one on Gutenberg would be matching title and author — and a title match is not an
+  identity match, which is precisely the "serve a different book and call it success" failure the
+  OAPEN check exists to prevent. It ships instead as a discovery provider whose hits carry a
+  `full_text_url` (the EPUB, or plain text) and are filtered to records Gutenberg states are out
+  of copyright, so the query-to-file mapping stays visible to the caller. This is deliberate and
+  should not be "fixed" later by adding a title-keyed download source.
+
+**Keying and ordering.** `Item` gains an `ISBN` field and the download tool an `isbn` argument:
+DOI-only would have left `archive` unreachable and most OA monographs (which carry an ISBN and
+often no DOI) unfetchable, and the ISBN is already in hand — OpenLibrary discovery hits carry it.
+`config.KnownSources` becomes `unpaywall → europepmc → biorxiv → fatcat → core → oapen → archive
+→ scihub → scidb → libgen → randombook → annas`: the two new sources sit *before* the shadow
+libraries, mirroring what §3 decided for articles, so a legally free copy is always preferred when
+one exists. Ordering only matters between sources that claim the same item, so the md5 book chain
+is untouched.
+
 ### 4. Deepen the read loop — GO (pure-Go)
 
 - **`search_in_document`** — search the already-extracted text and return snippet + page/offset
