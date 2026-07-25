@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -1284,4 +1286,293 @@ func TestE2ESearchEscalatedResultIsDownloadable(t *testing.T) {
 	}
 	skipIfAnnasUnavailable(t, err)
 	t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+}
+
+// oapenLiveDOI and oapenLiveISBN identify the SAME OAPEN monograph — the European
+// Investment Bank's "European firms and climate change 2020/2021" — through each of
+// the two identifiers the source accepts. Verified live on 2026-07-25: searching
+// either returned exactly this record, whose ORIGINAL-bundle bitstream served
+// 1,850,890 bytes of application/pdf.
+const (
+	oapenLiveDOI  = "10.2867/768526"
+	oapenLiveISBN = "9789286150616"
+)
+
+// archiveLiveISBN is a Penguin edition of Pride and Prejudice: OpenLibrary reports
+// the work as ebook_access "public" and lists Internet Archive scans of it, so the
+// two-gate path has a real, public-domain target. Verified live on 2026-07-25.
+const archiveLiveISBN = "9780141439518"
+
+// archiveBorrowableISBN is J. D. Salinger's The Catcher in the Rye, which
+// OpenLibrary reported as ebook_access "borrowable" on 2026-07-25. An in-copyright
+// novel is the right probe for the lending gate: its access tier is stable in a way
+// a public-domain title's is not.
+const archiveBorrowableISBN = "9780316769488"
+
+// archiveProbeURL is the reachability precondition for the archive cases. It hits
+// archive.org rather than OpenLibrary deliberately: both hosts are needed, but
+// OpenLibrary's search endpoint is the slower of the two and would turn an ordinary
+// slow moment into a skip. An OpenLibrary failure during the test itself is still
+// caught — it matches the source's transport class and skips with that diagnosis.
+const archiveProbeURL = "https://archive.org/metadata/prideprejudice00aust"
+
+// maxScanDownloadBytes is the size cap used for the Internet Archive case. A
+// full-book page scan is an order of magnitude larger than an article PDF — the
+// candidates for this ISBN run 15–30 MB — so the suite's usual 25 MiB cap would
+// classify a perfectly correct download as an oversize failure. It is still a cap:
+// a size-parsing mistake cannot turn into an unbounded transfer.
+const maxScanDownloadBytes = 64 << 20 // 64 MiB
+
+// downloadBookFromSource runs a source-restricted live download of an ISBN-keyed
+// book and returns the outcome. It mirrors downloadFromSource for the DOI sources,
+// taking the cap explicitly because a scanned book needs a larger one than an
+// article PDF.
+func downloadBookFromSource(t *testing.T, ctx context.Context, isbn, source string, maxBytes int64) (*libgen.DownloadResult, error) {
+	t.Helper()
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxBytes
+	client := buildClient(t, cfg)
+	return client.DownloadItem(ctx, libgen.Item{ISBN: isbn, Source: source}, t.TempDir(), "")
+}
+
+// oapenFailures are the KNOWN, diagnosed ways the oapen source can fail live. The
+// two miss classes are kept apart on purpose: "no catalog entry for" means the
+// free-text search returned nothing at all, while "no catalog entry states" means it
+// returned records that turned out to be OTHER books — the case the identifier
+// re-check exists to catch, and the one worth seeing named in a skip message.
+var oapenFailures = []sourceFailure{
+	diagnosed("oapen", `no catalog entry for `, "the search returned no hits for the identifier"),
+	diagnosed("oapen", `no catalog entry states `, "the search returned only unrelated monographs"),
+	diagnosed("oapen", `"[^"]*" has no PDF bitstream`, "the record carries no downloadable PDF"),
+	diagnosed("oapen", `"[^"]*" has a PDF bitstream with no retrieve link`, "the record's PDF has no retrieve link"),
+	diagnosed("oapen", `"[^"]*" returned HTTP \d+`, "the REST API answered an unexpected status"),
+	diagnosed("oapen", `bitstream [^ ]+ does not serve a PDF`, "the bitstream endpoint is not serving the file"),
+	transportTo("oapen", "requesting ", "library.oapen.org"),
+}
+
+// TestE2EOapenByDOIClassifiedOutcome exercises the oapen source end to end against
+// the live OAPEN REST API with a monograph DOI, restricted to source=oapen so no
+// other source can mask its behavior. On error the failure must be one of the known,
+// diagnosed classes; anything else fails the test.
+func TestE2EOapenByDOIClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, oapenLiveDOI, "oapen")
+	if err == nil {
+		assertSourcePDF(t, "oapen", res)
+		return
+	}
+	classifyOrFail(t, "oapen", err, oapenFailures)
+}
+
+// TestE2EOapenByISBNClassifiedOutcome exercises the other half of the source's
+// contract: the SAME monograph fetched by its ISBN. Running both proves the ISBN key
+// is not merely accepted but actually resolves, which a DOI-only test would leave
+// untested even though every OA monograph has an ISBN and many have no DOI.
+func TestE2EOapenByISBNClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	res, err := downloadBookFromSource(t, ctx, oapenLiveISBN, "oapen", maxE2EDownloadBytes)
+	if err == nil {
+		assertSourcePDF(t, "oapen", res)
+		return
+	}
+	classifyOrFail(t, "oapen", err, oapenFailures)
+}
+
+// TestE2EOapenRejectsUnheldIdentifier is the source's correctness test against the
+// LIVE API, and the reason it is worth a network round-trip: OAPEN's /rest/search is
+// free text, so an identifier it does not hold still returns a page of unrelated
+// monographs (a nonexistent DOI returned 13 hits when this was measured). The source
+// must refuse them rather than serve the top hit as if it were the book asked for.
+//
+// A wrong-book resolve is the one failure that LOOKS like success, so this asserts
+// the negative directly: the outcome must be an error tagged ErrNotIndexed, never a
+// downloaded file.
+func TestE2EOapenRejectsUnheldIdentifier(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, "10.9999/not-a-real-doi-zzz", "oapen")
+	if err == nil {
+		t.Fatalf("oapen served %q for a DOI it does not hold — a free-text hit was mistaken for the record", res.Path)
+	}
+	if !errors.Is(err, libgen.ErrNotIndexed) {
+		classifyOrFail(t, "oapen", err, oapenFailures)
+		return
+	}
+	t.Logf("oapen correctly refused an unheld DOI: %v", err)
+}
+
+// archiveFailures are the KNOWN, diagnosed ways the archive source can fail live.
+// The lending classes are the interesting ones: they are how the source reports that
+// it found the book and deliberately declined to download a controlled-lending copy.
+var archiveFailures = []sourceFailure{
+	diagnosed("archive", `OpenLibrary knows no book with ISBN `, "OpenLibrary has no record for the ISBN"),
+	diagnosed("archive", `OpenLibrary reports [^ ]+ as "[^"]*", not publicly downloadable`, "the book is lending-only or has no ebook"),
+	diagnosed("archive", `OpenLibrary lists no Internet Archive scan for `, "no scan is linked to the book"),
+	diagnosed("archive", `no freely downloadable scan for `, "every candidate scan is lending-restricted"),
+	diagnosed("archive", `"[^"]*" returned HTTP \d+`, "OpenLibrary or archive.org answered an unexpected status"),
+	diagnosed("archive", `item "[^"]*" does not serve `, "the item's file endpoint is not serving the scan"),
+	transportTo("archive", "requesting ", "openlibrary.org"),
+	transportTo("archive", "requesting ", "archive.org"),
+}
+
+// TestE2EArchiveClassifiedOutcome exercises the archive source end to end against
+// the live OpenLibrary and archive.org APIs, restricted to source=archive. On
+// success the file must be a real PDF or EPUB — not archive.org's borrow
+// interstitial — and on error the failure must be one of the known, diagnosed
+// classes.
+func TestE2EArchiveClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "archive", archiveProbeURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	res, err := downloadBookFromSource(t, ctx, archiveLiveISBN, "archive", maxScanDownloadBytes)
+	if err == nil {
+		assertPublicDomainScan(t, res)
+		return
+	}
+	classifyOrFail(t, "archive", err, archiveFailures)
+}
+
+// TestE2EArchiveRefusesLendingRestrictedBook is the source's correctness test
+// against live data, and the one that protects the caller from a silent bad
+// download: a book the Internet Archive holds ONLY for lending must come back as a
+// clean miss, never as a file. A lending item advertises ordinary .pdf/.epub files,
+// so a source without the two access gates would "succeed" and hand over something
+// DRM-wrapped or truncated.
+func TestE2EArchiveRefusesLendingRestrictedBook(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "archive", archiveProbeURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	res, err := downloadBookFromSource(t, ctx, archiveBorrowableISBN, "archive", maxScanDownloadBytes)
+	if err == nil {
+		t.Fatalf("archive downloaded %q for a lending-restricted book — the access gates did not hold", res.Path)
+	}
+	if !errors.Is(err, libgen.ErrNotIndexed) {
+		classifyOrFail(t, "archive", err, archiveFailures)
+		return
+	}
+	t.Logf("archive correctly refused a lending-restricted book: %v", err)
+}
+
+// assertPublicDomainScan asserts the best case of an ISBN-keyed Internet Archive
+// download: the archive source served it, the file is non-empty, and its first bytes
+// are a real PDF or EPUB rather than an HTML borrow page. Both formats are accepted
+// because the source prefers a PDF and falls back to the EPUB some items are the only
+// ones to offer.
+func assertPublicDomainScan(t *testing.T, res *libgen.DownloadResult) {
+	t.Helper()
+	if res.Source != "archive" {
+		t.Errorf("Source = %q, want archive — another source answered a restricted download", res.Source)
+	}
+	if res.SizeBytes <= 0 {
+		t.Fatalf("archive reported a download of %d bytes", res.SizeBytes)
+	}
+	if strings.EqualFold(filepath.Ext(res.Path), ".epub") {
+		assertZipMagic(t, res.Path)
+	} else {
+		assertPDF(t, res.Path)
+	}
+	t.Logf("archive served a real public-domain scan: path=%s bytes=%d", filepath.Base(res.Path), res.SizeBytes)
+}
+
+// assertZipMagic asserts a file begins with the ZIP local-file-header magic, which
+// is what an EPUB container is. It exists so an EPUB result can be checked as
+// strictly as assertPDF checks a PDF, instead of being taken on trust.
+func assertZipMagic(t *testing.T, path string) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	head := make([]byte, 4)
+	n, _ := io.ReadFull(f, head)
+	if n < 4 || string(head[:2]) != "PK" {
+		t.Errorf("expected an EPUB (ZIP magic), got %q", head[:n])
+	}
+}
+
+// TestE2EGutenbergDiscoveryServesRealEbook exercises the Project Gutenberg discovery
+// provider against the live Gutendex API, and then FETCHES the file URL it
+// advertises. Fetching matters: a Gutenberg hit's whole value is its full_text_url —
+// there is no DOI, ISBN or md5 to fall back on — so a link that does not serve an
+// ebook makes the hit worthless, and only a real request proves it does.
+func TestE2EGutenbergDiscoveryServesRealEbook(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "gutenberg", "https://gutendex.com/books/?ids=1342")
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	hits, err := discovery.NewGutenberg().Search(ctx, "pride and prejudice austen", 5)
+	if err != nil {
+		// A discovery provider only ever returns a context error, and the provider
+		// imposes its own short per-search budget: an expired one means Gutendex was
+		// too slow this run, which is the same "upstream degraded" class the probe
+		// above screens for. The caller's own context expiring is a different thing —
+		// the test itself ran out of time — and must fail.
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			t.Skipf("gutendex did not answer within the provider's search budget: %v", err)
+		}
+		t.Fatalf("gutenberg search failed: %v", err)
+	}
+	if len(hits) == 0 {
+		t.Skip("gutendex returned no hits for a canonical public-domain query (provider degraded)")
+	}
+	for i := range hits {
+		h := hits[i]
+		if h.Origin != "gutenberg" {
+			t.Errorf("hit %d origin = %q, want gutenberg", i, h.Origin)
+		}
+		if !h.OpenAccess {
+			t.Errorf("hit %d (%q) is not marked open access; only public-domain records are surfaced", i, h.Title)
+		}
+		if h.FullTextURL == "" {
+			t.Errorf("hit %d (%q) carries no full_text_url, which is the only way to fetch it", i, h.Title)
+		}
+	}
+	t.Logf("gutenberg hits=%d first=%q url=%s", len(hits), hits[0].Title, hits[0].FullTextURL)
+
+	assertEbookURLServesFile(t, ctx, hits[0].FullTextURL)
+}
+
+// assertEbookURLServesFile fetches the first bytes of a discovery-advertised ebook
+// URL and asserts the response is a file rather than an HTML page. It sends
+// Accept "*/*" for the reason the shared probe does: Go sends no Accept header of
+// its own, and a content-negotiating host reads that as a browser asking for a page.
+func assertEbookURLServesFile(t *testing.T, ctx context.Context, fileURL string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
+	if err != nil {
+		t.Fatalf("building request for %s: %v", fileURL, err)
+	}
+	req.Header.Set("Accept", "*/*")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Skipf("gutenberg.org was unreachable live: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("%s returned HTTP %d, want 200 — the advertised ebook URL does not serve", fileURL, resp.StatusCode)
+	}
+	head := make([]byte, 4)
+	n, _ := io.ReadFull(io.LimitReader(resp.Body, 4), head)
+	ctype := resp.Header.Get("Content-Type")
+	if strings.Contains(strings.ToLower(ctype), "text/html") {
+		t.Fatalf("%s served text/html, not the ebook file", fileURL)
+	}
+	t.Logf("gutenberg ebook URL serves content-type=%q magic=%q", ctype, head[:n])
 }
