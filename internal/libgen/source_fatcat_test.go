@@ -370,3 +370,26 @@ func assertUnavailable(t *testing.T, err error) {
 		t.Error("an unavailable source was not put in cooldown")
 	}
 }
+
+// TestFatcatSource_RejectsUnbuildableEndpoint covers the request-construction failure.
+// The base URL is deployment-supplied, so a value carrying a control character
+// has to surface as a clean source error rather than a panic.
+func TestFatcatSource_RejectsUnbuildableEndpoint(t *testing.T) {
+	s := fatcatSource{http: http.DefaultClient, baseURL: "http://\x7f-invalid"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("an unbuildable endpoint must fail, not resolve")
+	}
+}
+
+// TestFatcatSource_FallsBackToTheProductionBase covers the default-base branch that every
+// other test skips by injecting a test server. The context is canceled first, so
+// the default is selected and the request fails before any dial: the branch is
+// exercised without the suite touching the network.
+func TestFatcatSource_FallsBackToTheProductionBase(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := fatcatSource{http: http.DefaultClient} // baseURL empty -> production constant
+	if _, err := s.Resolve(ctx, Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("a canceled context must fail the resolve")
+	}
+}

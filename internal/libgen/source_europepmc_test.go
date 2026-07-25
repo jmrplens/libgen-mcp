@@ -193,3 +193,26 @@ func TestEuropePMCResolveNoReachableRender(t *testing.T) {
 		t.Fatalf("Resolve() error = %v, want a 'no reachable PDF endpoint' error", err)
 	}
 }
+
+// TestEuropePMCSource_RejectsUnbuildableEndpoint covers the request-construction failure.
+// The base URL is deployment-supplied, so a value carrying a control character
+// has to surface as a clean source error rather than a panic.
+func TestEuropePMCSource_RejectsUnbuildableEndpoint(t *testing.T) {
+	s := europePMCSource{http: http.DefaultClient, searchBase: "http://\x7f-invalid"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("an unbuildable endpoint must fail, not resolve")
+	}
+}
+
+// TestEuropePMCSource_FallsBackToTheProductionBase covers the default-base branch that every
+// other test skips by injecting a test server. The context is canceled first, so
+// the default is selected and the request fails before any dial: the branch is
+// exercised without the suite touching the network.
+func TestEuropePMCSource_FallsBackToTheProductionBase(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := europePMCSource{http: http.DefaultClient} // searchBase empty -> production constant
+	if _, err := s.Resolve(ctx, Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("a canceled context must fail the resolve")
+	}
+}

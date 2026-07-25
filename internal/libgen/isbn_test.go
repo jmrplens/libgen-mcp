@@ -68,3 +68,24 @@ func TestISBN13Of(t *testing.T) {
 		t.Errorf("isbn13Of(junk) = %q, want empty", got)
 	}
 }
+
+// TestNormalizeISBN_XOnlyAsFinalCheckDigit pins the one rule that separates a
+// valid ISBN-10 from a string that merely looks like one: X is a check character,
+// legal only in the last position. A misplaced X reaching a source would be a
+// lookup that can never match.
+func TestNormalizeISBN_XOnlyAsFinalCheckDigit(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+	}{
+		{"X as the final check digit is kept", "043942089X", "043942089X"},
+		{"X in the middle is not an ISBN", "04394X089X", ""},
+		{"X in the first position is not an ISBN", "X439420891", ""},
+		{"lowercase x is normalized then accepted", "043942089x", "043942089X"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizeISBN(tc.in); got != tc.want {
+				t.Fatalf("NormalizeISBN(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

@@ -238,3 +238,32 @@ func TestCoreResolveMalformed(t *testing.T) {
 		t.Fatal("Resolve() should fail on a malformed JSON response")
 	}
 }
+
+// TestCoreSource_RejectsUnbuildableEndpoint covers the request-construction
+// failure. It is not dead code: apiBase is deployment-supplied, and a value with
+// a control character in it must surface as a clean source error rather than a
+// panic or a silent skip.
+func TestCoreSource_RejectsUnbuildableEndpoint(t *testing.T) {
+	s := coreSource{http: http.DefaultClient, key: "k", apiBase: "http://\x7f-invalid"}
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"})
+	if err == nil {
+		t.Fatal("an unbuildable endpoint must fail, not resolve")
+	}
+	if !strings.Contains(err.Error(), "core") {
+		t.Fatalf("error should name the source, got %v", err)
+	}
+}
+
+// TestCoreSource_FallsBackToTheProductionAPIBase covers the default-base branch,
+// which every other test skips by injecting a test server. The context is
+// canceled up front so the default is selected and the request then fails
+// before any dial — the branch is exercised without the suite touching the
+// network.
+func TestCoreSource_FallsBackToTheProductionAPIBase(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := coreSource{http: http.DefaultClient, key: "k"} // apiBase empty -> coreAPIBase
+	if _, err := s.Resolve(ctx, Item{DOI: "10.1/x"}); err == nil {
+		t.Fatal("a canceled context must fail the resolve")
+	}
+}

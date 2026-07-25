@@ -1421,6 +1421,29 @@ func assertOpenAccessChainOrder(tr transcript) (pass bool, detail string) {
 // "core is absent" by advertising nothing at all.
 var keylessArticleSources = []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb"}
 
+// downloadSourceProperty is the source parameter of the download tool's input
+// schema, narrowed to the enum these assertions read.
+type downloadSourceProperty struct {
+	// Enum lists the source values the tool advertises as acceptable.
+	Enum []string `json:"enum"`
+}
+
+// downloadSchemaProperties is the properties object of the download tool's input
+// schema, narrowed to the one property these assertions read.
+type downloadSchemaProperties struct {
+	// Source is the download tool's source parameter.
+	Source downloadSourceProperty `json:"source"`
+}
+
+// downloadInputSchemaView is the slice of the download tool's input schema this
+// file reads. It is spelled out as named types rather than a struct literal
+// nested three deep inside the function, so the shape being decoded is legible
+// on its own.
+type downloadInputSchemaView struct {
+	// Properties holds the tool's declared input properties.
+	Properties downloadSchemaProperties `json:"properties"`
+}
+
 // downloadSourceEnum returns the values of the download tool's source enum exactly
 // as the model was shown them, and whether the tool advertised one.
 //
@@ -1432,13 +1455,7 @@ func downloadSourceEnum(tr transcript) (values []string, found bool) {
 		if def.Name != "download" {
 			continue
 		}
-		var schema struct {
-			Properties struct {
-				Source struct {
-					Enum []string `json:"enum"`
-				} `json:"source"`
-			} `json:"properties"`
-		}
+		var schema downloadInputSchemaView
 		if decodeStructured(def.InputSchema, &schema) != nil {
 			return nil, false
 		}
@@ -1544,7 +1561,7 @@ func sourceOutsideAllowlist(tr transcript, allowed ...string) string {
 			continue
 		}
 		var out tools.DownloadOutput
-		if derr := decodeStructured(c.Structured, &out); derr != nil {
+		if decodeStructured(c.Structured, &out) != nil {
 			continue
 		}
 		if out.Source == "" || slices.ContainsFunc(allowed, func(a string) bool {
