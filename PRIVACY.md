@@ -54,16 +54,20 @@ AI assistant) make. There are no background connections. The destinations are:
 - **The extra searchers (when a search reaches beyond the catalog).** A `search`
   may send **your query text** to Anna's Archive (`annas-archive.gl` and its
   mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org),
-  [OpenLibrary](https://openlibrary.org), [dblp](https://dblp.org) (`dblp.org`)
-  and [PubMed](https://pubmed.ncbi.nlm.nih.gov)
-  (`eutils.ncbi.nlm.nih.gov`). When this happens is under your
+  [OpenLibrary](https://openlibrary.org), [dblp](https://dblp.org) (`dblp.org`),
+  [PubMed](https://pubmed.ncbi.nlm.nih.gov)
+  (`eutils.ncbi.nlm.nih.gov`) and [ERIC](https://eric.ed.gov)
+  (`api.ies.ed.gov`). When this happens is under your
   control, via the `extra_sources` argument or `LIBGEN_MCP_EXTRA_SOURCES`: by
   default (`auto`) only when the Library Genesis catalog returns nothing or
   fails, with `always` on every search, and with `never` not at all. When — and
   only when — you have configured `LIBGEN_MCP_UNPAYWALL_EMAIL`, the Crossref
   request carries that same address as its polite-pool contact, and the PubMed
   requests carry it as the contact address NCBI's usage etiquette asks for; with
-  no address configured, none is sent and none is invented. `get_details`
+  no address configured, none is sent and none is invented. An ERIC hit for a
+  document ERIC hosts carries a `files.eric.ed.gov` full-text URL; that host is
+  named in the result but is **never contacted by this server** — nothing is
+  fetched from it unless you follow the link yourself. `get_details`
   also queries
   Anna's Archive, sending **only the md5**, when the catalog has no record for it.
 - **Anna's Archive and IPFS gateways (only when you download through them).**

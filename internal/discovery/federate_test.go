@@ -198,7 +198,7 @@ func TestDedupKeepsDistinctMD5s(t *testing.T) {
 // follow the open-access providers so dedup keeps the fetchable copy of a shared DOI.
 func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
 	got := ExtraProviders("", staticMirrors{"https://annas-archive.gl"})
-	want := []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "annas"}
+	want := []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "eric", "annas"}
 	if len(got) != len(want) {
 		t.Fatalf("ExtraProviders() returned %d providers, want %d", len(got), len(want))
 	}

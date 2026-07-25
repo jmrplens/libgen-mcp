@@ -36,7 +36,7 @@ your shell, or with `-e` flags on `docker run`.
 | `LIBGEN_MCP_READ_CACHE_BYTES`            | `536870912` (512 MiB)                                    | `[1048576, 53687091200]` (1 MiB–50 GiB), int                                                                                        | Total-size cap of the `read` tool's server-side temp-file cache (built by `FetchToTemp`): downloaded read files past this aggregate size are evicted, least-recently-used first, never while a `read` call holds a reference.                                                                                                                                                                                                                            |
 | `LIBGEN_MCP_READ_CACHE_TTL`              | `10m`                                                    | `[1s, 24h]`, Go duration                                                                                                            | How long an unreferenced `read` temp file lingers before eviction, so successive pages of one read reuse a single fetch while idle files are reclaimed.                                                                                                                                                                                                                                                                                                  |
 | `LIBGEN_MCP_ENRICH`                      | `true`                                                   | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)                                                                           | Deployment kill-switch for `get_details`' opt-in `enrich` metadata (Crossref/OpenLibrary). Default `true` means enrichment is *allowed*; set `false` to *forbid* it entirely, regardless of the per-call `enrich` flag. A non-boolean value fails startup.                                                                                                                                                                                               |
-| `LIBGEN_MCP_EXTRA_SOURCES`               | `auto`                                                   | `auto`, `always`, `never`                                                                                                           | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) are consulted. `auto`: only when the Library Genesis catalog returns nothing or fails. `always`: on every search, alongside the catalog. `never`: catalog only, even on a miss. A per-call `extra_sources` argument overrides this default in either direction — except `never`, which is a lock no call can lift; an unrecognized value fails startup.            |
+| `LIBGEN_MCP_EXTRA_SOURCES`               | `auto`                                                   | `auto`, `always`, `never`                                                                                                           | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed, ERIC) are consulted. `auto`: only when the Library Genesis catalog returns nothing or fails. `always`: on every search, alongside the catalog. `never`: catalog only, even on a miss. A per-call `extra_sources` argument overrides this default in either direction — except `never`, which is a lock no call can lift; an unrecognized value fails startup.      |
 
 ## Notes on specific variables
 
@@ -208,16 +208,16 @@ best-effort budget.
 
 ### `LIBGEN_MCP_EXTRA_SOURCES`
 
-Controls when the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) are
-consulted. The default `auto` consults them only when the Library Genesis catalog returns
+Controls when the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed,
+ERIC) are consulted. The default `auto` consults them only when the Library Genesis catalog returns
 nothing or fails; `always` consults them on every search, concurrently with the catalog;
 `never` restricts every search to the catalog, even on a miss. A per-call `extra_sources`
 argument overrides this default in either direction, with one exception: a deployment set to
 `never` is a **lock**, not a default — no call can re-enable the extras, because a policy an
-individual caller can overrule is not a policy. All six providers are keyless (no
+individual caller can overrule is not a policy. All seven providers are keyless (no
 account or API key) and best-effort, each bounded by its own short per-request budget so a
 slow or failing provider never delays or fails the core Library Genesis search. Anna's
 md5-keyed hits merge into `results` (labeled by `origin`); the rest appear in the separate
 `open_access` array, where only an entry with `open_access: true` is known to be free to read —
-dblp and PubMed are bibliographic indexes. See [Tools](tools.md#open-access-discovery)
+dblp and PubMed are bibliographic indexes, and ERIC hosts only part of what it indexes. See [Tools](tools.md#open-access-discovery)
 for the output shape.

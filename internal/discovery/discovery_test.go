@@ -231,6 +231,7 @@ func TestSetBasesForTest(t *testing.T) {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		ERIC:        ericBase,
 	}
 	want := ProviderBases{
 		Arxiv:       "http://a.test",
@@ -238,6 +239,7 @@ func TestSetBasesForTest(t *testing.T) {
 		OpenLibrary: "http://o.test",
 		DBLP:        "http://d.test",
 		PubMed:      "http://p.test",
+		ERIC:        "http://e.test",
 	}
 
 	restore := SetBasesForTest(want)
@@ -260,5 +262,6 @@ func currentBases() ProviderBases {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		ERIC:        ericBase,
 	}
 }

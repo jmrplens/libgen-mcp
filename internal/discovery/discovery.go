@@ -2,7 +2,9 @@
 // the search tool can present and the read/download tools can act on: the open-access
 // providers (arXiv, Crossref, OpenLibrary) plus the bibliographic indexes (dblp for
 // computer science, PubMed for biomedicine), which describe a paper precisely without
-// claiming it is free to read. Every provider is best-effort: a failing source
+// claiming it is free to read, and ERIC, which reaches the education grey literature
+// — reports, theses, agency documents — that has no DOI and so appears in none of the
+// others. Every provider is best-effort: a failing source
 // degrades to an empty result rather than sinking a federated search, and no source
 // requires an API key, account, or login.
 package discovery
@@ -35,7 +37,7 @@ const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libge
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, dblp, pubmed or annas"`
+	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, dblp, pubmed, eric or annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
@@ -55,7 +57,7 @@ type DiscoveryResult struct {
 	// byte count — and both are empty when it states neither.
 	Extension string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
 	Size      string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
-	PDFURL    string `json:"pdf_url,omitempty" jsonschema:"a directly-fetchable open-access PDF URL when known"`
+	PDFURL    string `json:"pdf_url,omitempty" jsonschema:"a directly-fetchable open-access PDF URL when known; for an eric result this is the whole way to get the file, since ERIC grey literature has no DOI to pass to download"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"
@@ -129,6 +131,8 @@ type ProviderBases struct {
 	DBLP string
 	// PubMed is the NCBI E-utilities root (pubmedBase).
 	PubMed string
+	// ERIC is the Institute of Education Sciences API root (ericBase).
+	ERIC string
 }
 
 // SetBasesForTest overrides every provider base URL and returns a restore func that
@@ -144,12 +148,13 @@ func SetBasesForTest(bases ProviderBases) (restore func()) {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		ERIC:        ericBase,
 	}
 	arxivBase, crossrefBase, openLibraryBase = bases.Arxiv, bases.Crossref, bases.OpenLibrary
-	dblpBase, pubmedBase = bases.DBLP, bases.PubMed
+	dblpBase, pubmedBase, ericBase = bases.DBLP, bases.PubMed, bases.ERIC
 	return func() {
 		arxivBase, crossrefBase, openLibraryBase = old.Arxiv, old.Crossref, old.OpenLibrary
-		dblpBase, pubmedBase = old.DBLP, old.PubMed
+		dblpBase, pubmedBase, ericBase = old.DBLP, old.PubMed, old.ERIC
 	}
 }
 

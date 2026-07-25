@@ -18,6 +18,7 @@ Sometimes the catalog genuinely does not have what you are looking for — the i
 - [Anna's Archive](https://annas-archive.org/) — a shadow-library search engine that indexes collections the catalog reaches nowhere else (Z-Library, Nexus/STC, DuXiu, Internet Archive, and more). Its hits are keyed by file digest (an md5), so they behave just like catalog results.
 - [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), and [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are not md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI from Crossref, a direct `pdf_url` from arXiv, and an `isbn`/title from OpenLibrary.
 - [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic indexes, for computer science and biomedicine respectively. They answer _what the paper is_ (venue, year, full author list, DOI) without claiming it is free to read, which is exactly why they are worth asking: PubMed in particular covers the literature that has no open-access copy at all. Their hits land in the same list, never marked open access.
+- [ERIC](https://eric.ed.gov/) — the US Institute of Education Sciences' index of education research, and the only source here that reaches **grey literature**: technical reports, dissertations, conference papers and government/agency documents that carry no DOI and so appear in none of the providers above. A record ERIC hosts an authorized full text for carries a directly-fetchable `pdf_url` and is marked open access — the documents are publicly funded and served without a login. A record it merely indexes carries neither, and is a bibliographic entry like a dblp or PubMed one.
 
 When this escalation happens is controlled by a single three-valued setting — the `extra_sources` argument on the call, falling back to the deployment's `LIBGEN_MCP_EXTRA_SOURCES` default:
 
@@ -53,6 +54,7 @@ Every result is labeled with an **`origin`** that says which searcher produced i
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no arXiv identifier.
 - **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a catalog, not a repository, so use those to run a better-targeted `search` — unless the book is publicly readable, in which case it also carries an `archive_url` you can read directly on the Internet Archive.
 - **`dblp`** and **`pubmed`** — the result carries a DOI and a `venue`, and nothing is claimed about availability. Cite it, or try `download`'s `doi` argument knowing it may find no free copy.
+- **`eric`** — a result with a `pdf_url` is a hosted full text: fetch that URL, which for education grey literature is the only way to get the file, since the record has no DOI for `download` to key on. A result without one is a bibliographic entry — cite it.
 
 ```mermaid
 flowchart LR
@@ -62,6 +64,7 @@ flowchart LR
     O -->|crossref| P[has a DOI<br/>→ download by doi]
     O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
     O -->|openlibrary| S[has an isbn/title<br/>→ refine the search]
+    O -->|eric| U
     O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
 
@@ -69,7 +72,7 @@ An Anna's hit also works with `get_details`: the catalog has no record for it, s
 
 This split is why Anna's hits merge into the main results list alongside the catalog hits, while the open-access hits appear in a separate list: the two groups are keyed differently, and `download` reads the key to know where to fetch from. Treat the `origin` as the instruction for the next step — it tells you exactly which argument to pass.
 
-One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is a shadow library, not a publisher of freely-licensed material, so it is listed separately from the open-access providers (arXiv, Crossref, OpenLibrary). Nor are the bibliographic indexes (dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing about it, so their hits are never marked open access. Do not infer anything about a result's licensing from the fact that a search found it.
+One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is a shadow library, not a publisher of freely-licensed material, so it is listed separately from the open-access providers (arXiv, Crossref, OpenLibrary). Nor are the bibliographic indexes (dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing about it, so their hits are never marked open access. ERIC is both at once — it hosts some of what it indexes and merely lists the rest — which is why its hits are marked open access one by one rather than as a group. Do not infer anything about a result's licensing from the fact that a search found it.
 
 ## Why it works this way
 
