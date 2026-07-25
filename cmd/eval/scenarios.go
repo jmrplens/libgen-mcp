@@ -53,6 +53,14 @@ const (
 // download tool call.
 const noDownloadCall = "no download call"
 
+// fastStartRetryWaits is the download start-retry schedule the scenarios that
+// deliberately provoke a resolve failure shrink to. The staged schedule exists to
+// outlast a blip on a source that is going to answer, so a scenario whose source
+// cannot answer at all would otherwise spend its whole wall-clock budget waiting —
+// one such run burned 330 seconds of 360 and left the model no turn to answer in.
+// Two 1ms waits still exercise the schedule end to end, in under a millisecond.
+const fastStartRetryWaits = "1ms,1ms"
+
 // notAValidDOI is the failure detail when a download call's doi argument is not
 // a syntactically valid DOI.
 const notAValidDOI = "download doi is not a valid DOI"
@@ -441,7 +449,7 @@ func scenarios() []scenario {
 			SetupEnv: map[string]string{
 				"LIBGEN_MCP_SOURCES":                    "scihub",
 				"LIBGEN_MCP_SCIHUB_HOSTS":               "127.0.0.1",
-				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
 				"LIBGEN_MCP_TIMEOUT":                    "2s",
 			},
 			Assert: assertS9Retry,
@@ -811,7 +819,7 @@ func scenarios() []scenario {
 			SetupEnv: map[string]string{
 				"LIBGEN_MCP_UNPAYWALL_EMAIL":            "",
 				"LIBGEN_MCP_TIMEOUT":                    "20s",
-				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
 			},
 			Assert: assertS47Fatcat,
 		},
@@ -991,7 +999,7 @@ func scenarios() []scenario {
 				"LIBGEN_MCP_SOURCES":                    "scihub,scidb",
 				"LIBGEN_MCP_SCIHUB_HOSTS":               "127.0.0.1",
 				"LIBGEN_MCP_UNPAYWALL_EMAIL":            unpaywallEmail(),
-				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
 				"LIBGEN_MCP_TIMEOUT":                    "5s",
 			},
 			Assert: assertSourceCooldown,
