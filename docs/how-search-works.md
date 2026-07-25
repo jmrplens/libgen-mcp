@@ -120,7 +120,8 @@ flowchart LR
     O -->|crossref| P[has a DOI<br/>→ download by doi]
     O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
     O -->|eric| U
-    O -->|openlibrary| S[has an isbn/title<br/>→ refine the search]
+    O -->|openlibrary| S[has an isbn<br/>→ download by isbn,<br/>or refine the search]
+    O -->|gutenberg| G[has a full_text_url<br/>→ fetch the ebook directly]
     O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
 

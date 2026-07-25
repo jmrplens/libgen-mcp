@@ -60,12 +60,15 @@ The chosen filename is, in priority order: an explicit `filename`, the CDN-annou
 
 ```mermaid
 flowchart TD
-    A[download: md5 and/or doi] --> B[Build source chain\nfiltered by Supports]
-    B --> C{Next source?}
+    A[download: md5 and/or doi] --> B[Build source chain<br/>filtered by Supports]
+    B --> B2[Skip sources in cooldown<br/>unless every one of them is]
+    B2 --> C{Next source?}
     C -- none left --> Z[Return joined errors]
     C -- yes --> D[Resolve item to file URL]
-    D -- resolve fails --> C
-    D -- resolved --> E[Acquire concurrency slot\n+ per-partial lock]
+    D -- not indexed --> C
+    D -- unavailable --> Y[Cool the source down<br/>for 5 minutes]
+    Y --> C
+    D -- resolved --> E[Acquire concurrency slot<br/>+ per-partial lock]
     E --> F{Partial .part exists?}
     F -- yes --> G[Fetch with Range header]
     F -- no --> H[Fetch from start]
@@ -73,15 +76,15 @@ flowchart TD
     I -- yes --> J[Resume: append]
     I -- no / 200 --> K[Restart from zero]
     H --> K
-    J --> L[Validate: reject HTML,\nsize cap, disk space]
+    J --> L[Validate: reject HTML,<br/>size cap, disk space]
     K --> L
     L -- rejected --> C
-    L -- ok --> M[Stream to .part\ncompute MD5 + progress]
+    L -- ok --> M[Stream to .part<br/>compute MD5 + progress]
     M -- short read --> N[Keep .part for resume] --> C
     M --> O{Verify MD5?}
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
-    Q --> R[Return DownloadResult\npath, size, source, verified, resumed]
+    Q --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
 ## Multi-source chain

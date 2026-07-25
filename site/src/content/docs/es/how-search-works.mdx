@@ -63,8 +63,9 @@ flowchart LR
     O -->|annas| M
     O -->|crossref| P[tiene un DOI<br/>→ descargar por doi]
     O -->|arxiv| U[tiene una pdf_url<br/>→ descargarla directamente]
-    O -->|openlibrary| S[tiene isbn/título<br/>→ refinar la búsqueda]
+    O -->|openlibrary| S[tiene un isbn<br/>→ descargar por isbn,<br/>o refinar la búsqueda]
     O -->|eric| U
+    O -->|gutenberg| G[tiene una full_text_url<br/>→ descargar el ebook directamente]
     O -->|dblp / pubmed| C[tiene DOI + venue<br/>→ citarlo, o probar download por doi]
 ```
 
