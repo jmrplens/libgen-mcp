@@ -81,9 +81,20 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory |
 | S45 | **Europe PMC** — asks for an open-access DOI "from Europe PMC" with Unpaywall forced off, so the model must map the provider's prose name onto `source:"europepmc"` and that source must serve the bytes |
 | S46 | **bioRxiv** — a real `10.1101` preprint with no source named and Unpaywall off: Europe PMC indexes the DOI without an open-access full text, so bioRxiv claiming the preprint prefix is the only route the file can arrive by, and the serving source proves the prefix gate routes instead of falling through |
-| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the Internet Archive Scholar API is unreachable from some networks, so an upstream that does not answer is graded on the model saying so |
+| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the source drives the Internet Archive Scholar frontend since its JSON API died, so it resolves for real and the preserved copy has to arrive |
 | S48 | **An unkeyed source stays off the surface** — the CORE API key is forced empty, so `core` must be absent from `download`'s `source` enum and the model must not ask for it. Grades the tool surface itself, so it touches no third party and downloads nothing |
 | S49 | **Chain ordering** — an open-access DOI with no source named and Unpaywall off: one of the open-access providers must serve it and a shadow library must not, which is the promise the chain order makes and nothing else tested |
+| S50 | **A book by its ISBN** — a request for a legally free copy of a novel, naming neither the argument nor a source; the model must discover that `download` takes an `isbn`, and the chain must route it past OAPEN to the Internet Archive scan |
+| S51 | **OAPEN by DOI** — an open-access monograph asked for "from OAPEN", so the model maps the prose name onto `source:"oapen"` and the source serves the PDF |
+| S52 | **OAPEN by ISBN** — the same monograph through the other identifier the source accepts, which is what proves the ISBN key resolves rather than merely being accepted |
+| S53 | **OAPEN does not serve the wrong book** — a DOI OAPEN does not hold; its search is free text, so it answers with a page of unrelated monographs and the source must refuse them all rather than hand over the top hit |
+| S54 | **Internet Archive by ISBN** — a public-domain novel asked for "from the Internet Archive", reached through OpenLibrary; the file that comes back must be a real scan, not a borrow page |
+| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so a file arriving here would be DRM-wrapped or truncated and the only right outcome is a clean refusal the model passes on |
+| S56 | **Project Gutenberg** — a public-domain ebook whose hit carries a `full_text_url` and no identifier `download` accepts, so the model must hand the user the link instead of calling it unobtainable |
+| S57 | **ERIC** — education grey literature (agency reports, no DOI) whose hosted full text rides `pdf_url`, the same caller-fetches-it shape as a Gutenberg ebook |
+| S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure |
+| S59 | **PubMed** — the biomedical counterpart: an index contribution, cited as a record rather than offered as free full text |
+| S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the save-confirmation prompt probes the file size first, so the chain is walked twice inside one call: the first pass must classify the failure as the source being unavailable and the second must act on it. Graded from the call's own server log |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -119,6 +130,40 @@ are the fallback. S45–S47 each pin one of the new providers by name; S46 and S
 pin nothing and grade which source the chain reached, which is the only way the
 ordering itself gets tested. All four force `LIBGEN_MCP_UNPAYWALL_EMAIL` empty so
 Unpaywall cannot answer first and hide the source under test.
+
+**The book chain is keyed two ways, and S50–S55 test the legal one.** Every download
+graded before them was keyed by an md5 (a shadow library) or a DOI (an article). A
+book also resolves by **ISBN**, through `oapen → archive`, and both of those serve
+openly licensed copies only — so the ISBN key is the legal book path and had no
+coverage at all. S50 names neither the argument nor a source, so a pass means the
+model discovered the key from the tool description; S51–S52 and S54 pin each source by
+its prose name.
+
+The other two, S53 and S55, assert a **negative**, and they are the ones worth having.
+Each source can fail in a way that looks exactly like success: OAPEN's search is free
+text, so an identifier it does not hold still returns a page of unrelated monographs,
+and an Internet Archive lending item advertises ordinary PDF/EPUB files that download
+fine and cannot be opened. In both cases a file arriving is the failure.
+
+**S56–S59 cover the discovery providers, none of which `download` can reach.** Two
+carry a file URL the CALLER fetches — a Project Gutenberg ebook (`full_text_url`) and
+an ERIC report (`pdf_url`), neither of which has a DOI, ISBN or md5 — so what is graded
+is the model passing the link on rather than reporting the hit as unobtainable. The
+other two, dblp and PubMed, are bibliographic indexes: their records describe a paper
+without asserting it is free to read, so they are graded as citations. A provider that
+sits a run out is graded by `gradeDegraded`, both because they are best-effort (dblp
+throttles hard and undocumentedly) and because dedup keeps whichever provider answered
+a record first.
+
+**S60 grades the per-source cooldown from the server log.** A source a failure proved
+unavailable is skipped for five minutes, while a clean "not indexed" never cools one
+down — a distinction that leaves no trace in any tool result, which is why this is the
+one scenario whose evidence is `calls[].server_logs`. It is still a pure function of
+the transcript: the record keeps each call's log and `--regrade` restores it. Making
+it gradeable at all is a matter of getting both passes of the chain into one call: with
+`scihub` leading a two-source chain and pinned to a dead host, the save-confirmation
+prompt's size probe walks the chain once (recording the failure) before the download
+walks it again (acting on it).
 
 Two of the sources are gated on a credential and behave differently for it:
 `unpaywall` on the contact email above, and `core` on `LIBGEN_MCP_CORE_KEY`. S48
@@ -248,7 +293,9 @@ appearing on the Spanish page in English; add it to `scenariosES` in
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
 - **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall,
-  Europe PMC, bioRxiv, fatcat, and Sci-Hub. These are flaky and rate-limited; results
+  Europe PMC, bioRxiv, fatcat, Sci-Hub, OAPEN, OpenLibrary and the Internet Archive,
+  and the discovery providers behind Gutenberg, ERIC, dblp and PubMed. These are flaky
+  and rate-limited; results
   vary run to run. A download scenario that selected the tool and source correctly
   but fell on a dead mirror is **not** a SKIP: it is graded by `gradeDegraded` on
   whether the answer owns the miss, and passes or fails on that. See the
