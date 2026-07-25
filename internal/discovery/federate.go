@@ -92,15 +92,20 @@ func DefaultProviders(email string) []Provider {
 
 // ExtraProviders returns every searcher consulted beyond the Library Genesis
 // catalog: the keyless open-access providers, the two bibliographic indexes (dblp for
-// computer science, PubMed for biomedicine), and Anna's Archive. email is the contact
-// address the polite-pool and etiquette-aware providers identify themselves with
-// (Crossref, OpenLibrary, PubMed); annasMirrors supplies Anna's base URLs.
+// computer science, PubMed for biomedicine), ERIC for education grey literature, and
+// Anna's Archive. email is the contact address the polite-pool and etiquette-aware
+// providers identify themselves with (Crossref, OpenLibrary, PubMed); annasMirrors
+// supplies Anna's base URLs.
 //
 // The indexes come after the open-access providers on purpose: dedup keeps the first
 // occurrence of a DOI, so an arXiv or Crossref hit — which can carry a fetchable PDF —
-// wins over the bibliographic-only record of the same paper.
+// wins over the bibliographic-only record of the same paper. ERIC sits with them for
+// the same reason: the education journal articles it indexes by DOI are described
+// better by Crossref, while the reports and theses that are its real contribution
+// carry no DOI at all and so can never be deduped away.
 func ExtraProviders(email string, annasMirrors MirrorLister) []Provider {
-	return append(DefaultProviders(email), NewDBLP(), NewPubMed(email), NewAnnas(annasMirrors))
+	return append(DefaultProviders(email),
+		NewDBLP(), NewPubMed(email), NewERIC(), NewAnnas(annasMirrors))
 }
 
 // NormalizeDOI lowercases and trims a DOI so two spellings of the same identifier

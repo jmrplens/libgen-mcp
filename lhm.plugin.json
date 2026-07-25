@@ -2,7 +2,7 @@
   "identifier": "jmrplens-libgen-mcp",
   "name": "Library Genesis MCP Server",
   "version": "1.2.0",
-  "description": "Model Context Protocol server that lets your AI assistant search, download and read books, research papers, comics, magazines and standards from Library Genesis — and, when the catalog comes up empty, discover open-access literature from arXiv, Crossref and OpenLibrary, plus bibliographic records from dblp and PubMed. Four focused tools (search, get_details, download, read); one static Go binary; stdio or streamable-HTTP transport; multi-source downloads with automatic mirror discovery and failover. No account, API key or token required.",
+  "description": "Model Context Protocol server that lets your AI assistant search, download and read books, research papers, comics, magazines and standards from Library Genesis — and, when the catalog comes up empty, discover open-access literature from arXiv, Crossref and OpenLibrary, plus bibliographic records from dblp and PubMed and education grey literature from ERIC. Four focused tools (search, get_details, download, read); one static Go binary; stdio or streamable-HTTP transport; multi-source downloads with automatic mirror discovery and failover. No account, API key or token required.",
   "author": "José M. Requena Plens",
   "authorUrl": "https://github.com/jmrplens",
   "tags": [

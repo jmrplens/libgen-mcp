@@ -1991,6 +1991,16 @@ const (
                  {"idtype":"doi","value":"10.4000/pubmed-only"}]}}}`
 )
 
+// oaEricDocs is a one-doc ERIC search response used by the extra-source search tests.
+// It is a hosted ED report: no DOI at all, so it is deduped against nothing, and an
+// e_fulltextauth flag of 1 so the hit must reach the caller carrying the deterministic
+// files.eric.ed.gov URL that is the only way to obtain it.
+const oaEricDocs = `{"response":{"numFound":1,"start":0,"docs":[
+  {"id":"ED427241","title":"An Education Technical Report.",
+   "author":["Drennon, Cassandra"],"publicationdateyear":1998,
+   "institution":["Virginia Commonwealth Univ., Richmond."],"e_fulltextauth":1}
+]}}`
+
 // oaDiscoveryServers spins up an httptest server for every network-backed discovery
 // provider, points the discovery package at them for the duration of the test, and
 // returns a counter of the total discovery requests observed so a test can assert
@@ -2013,10 +2023,11 @@ func oaDiscoveryServers(t *testing.T) *int32 {
 	pubmedMux.HandleFunc("/esearch.fcgi", body(oaPubMedSearch))
 	pubmedMux.HandleFunc("/esummary.fcgi", body(oaPubMedSummary))
 	pubmed := httptest.NewServer(pubmedMux)
+	eric := httptest.NewServer(body(oaEricDocs))
 
 	restore := discovery.SetBasesForTest(discovery.ProviderBases{
 		Arxiv: arxiv.URL, Crossref: crossref.URL, OpenLibrary: openLibrary.URL,
-		DBLP: dblp.URL, PubMed: pubmed.URL,
+		DBLP: dblp.URL, PubMed: pubmed.URL, ERIC: eric.URL,
 	})
 	t.Cleanup(func() {
 		restore()
@@ -2025,6 +2036,7 @@ func oaDiscoveryServers(t *testing.T) *int32 {
 		openLibrary.Close()
 		dblp.Close()
 		pubmed.Close()
+		eric.Close()
 	})
 	return &hits
 }
@@ -2070,6 +2082,30 @@ func oaSearchOutput(t *testing.T, session *mcp.ClientSession, args map[string]an
 	return out.OpenAccess
 }
 
+// assertEricHitIsFetchable checks the property the ERIC integration rests on: the
+// hosted report reaches the caller with no DOI — download and read have no key for it
+// — but with the deterministic files.eric.ed.gov URL and an open-access flag, which is
+// the stated way to obtain the file.
+func assertEricHitIsFetchable(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
+	for _, h := range hits {
+		if h.Origin != "eric" {
+			continue
+		}
+		if h.DOI != "" {
+			t.Errorf("eric hit DOI = %q, want empty for a report with no DOI", h.DOI)
+		}
+		if h.PDFURL != "https://files.eric.ed.gov/fulltext/ED427241.pdf" {
+			t.Errorf("eric hit PDFURL = %q, want the hosted full-text URL", h.PDFURL)
+		}
+		if !h.OpenAccess {
+			t.Error("eric hit OpenAccess = false, want true for a hosted full text")
+		}
+		return
+	}
+	t.Error("no eric hit in the open-access list")
+}
+
 // TestSearchTool_OpenAccessOptIn verifies the per-call opt-in: with
 // extra_sources=always the search output carries origin-labeled OA hits and the
 // discovery servers were called; with extra_sources=never the OA slice is empty
@@ -2089,11 +2125,12 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	for _, r := range oa {
 		origins[r.Origin] = true
 	}
-	for _, want := range []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed"} {
+	for _, want := range []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "eric"} {
 		if !origins[want] {
 			t.Errorf("expected a hit labeled %q, got origins %v", want, origins)
 		}
 	}
+	assertEricHitIsFetchable(t, oa)
 
 	atomic.StoreInt32(hits, 0)
 	off := oaSearchOutput(t, session, map[string]any{"query": "golang", "extra_sources": "never"})

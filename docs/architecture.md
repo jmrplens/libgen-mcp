@@ -197,7 +197,7 @@ success, while the searchers run concurrently and their answers are merged.
 
 A search always queries the Library Genesis catalog through the same failover client. Whether
 it also queries the **extra searchers** — Anna's Archive plus the keyless open-access
-providers (arXiv, Crossref, OpenLibrary) and the bibliographic indexes (dblp, PubMed) — is
+providers (arXiv, Crossref, OpenLibrary), the bibliographic indexes (dblp, PubMed) and ERIC — is
 decided by `ExtraSourcesMode`, resolved per call from the `extra_sources` argument and falling
 back to `LIBGEN_MCP_EXTRA_SOURCES`:
 
@@ -213,6 +213,15 @@ search. The merge is keyed by identifier space: Anna's hits carry an md5 and joi
 labeled `origin: "annas"`, while the open-access hits carry a DOI and stay in `open_access`.
 Duplicates are dropped by md5, and a file present in both the catalog and Anna's keeps the
 catalog record, which carries the richer metadata.
+
+ERIC is a searcher with no matching download source, and deliberately so. Its contribution is
+education grey literature — reports, dissertations, agency documents — which carries no DOI,
+so it fits neither key space the download chain understands. It needs neither: ERIC serves
+every full text it holds from a URL derived from the record's accession number, so a hit
+arrives with its `pdf_url` already filled in and there is nothing for a `Resolve` to resolve.
+Adding an ERIC identifier to `Item`, `download` and `read` would have widened three schemas to
+wrap a string concatenation. See
+[the source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md).
 
 `get_details` follows the same split. An md5 the catalog has no record for — which is what an
 escalated search returns — falls back to Anna's own record page, parsed by label rather than
