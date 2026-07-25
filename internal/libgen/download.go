@@ -647,6 +647,14 @@ func (c *Client) downloadFrom(ctx context.Context, src DownloadSource, req downl
 func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downloadReq) (*DownloadResult, error) {
 	resolved, err := c.resolveWithin(ctx, src, req.item)
 	if err != nil {
+		// A source that answered "I do not hold this item" has settled the question:
+		// asking again cannot change the answer. Returning it unwrapped keeps it out
+		// of the start-retry schedule, which would otherwise spend its whole budget
+		// re-asking and then relabel the miss as a connection failure. Measured in a
+		// live evaluator run: 87.7s to report a DOI a pinned source does not hold.
+		if errors.Is(err, ErrNotIndexed) {
+			return nil, err
+		}
 		return nil, startErr(err)
 	}
 	// A stable partial path lets an interrupted download resume: if bytes are
