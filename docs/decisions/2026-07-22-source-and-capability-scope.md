@@ -143,9 +143,15 @@ it: nothing about the default configuration changes.
 
 **Changed — Internet Archive.** Listed "MAYBE — noisy; per-item availability varies; defer".
 The noise is a property of *browsing* the archive, not of resolving a known DOI against it.
-Via Internet Archive Scholar's fatcat API a DOI maps to a specific release with a specific file
-list, so the per-item variance is visible up front rather than after a fetch. Shipped as the
-keyless `fatcat` source, preferring a direct archive.org copy over a Wayback capture.
+Via Internet Archive Scholar's fatcat catalog a DOI maps to a specific release with a specific
+file list, so the per-item variance is visible up front rather than after a fetch. Shipped as
+the keyless `fatcat` source.
+
+*Amended 2026-07-25:* the `api.fatcat.wiki` JSON API this originally used stopped answering
+(DNS resolves, TCP never completes) with no deprecation notice, so the source now drives
+fatcat's own web frontend at `scholar.archive.org` instead — the DOI lookup there redirects to
+a release page whose `citation_pdf_url` meta tags name the preserved full-text copies. The
+decision is unchanged; only the transport is.
 
 **Added — Europe PMC and bioRxiv/medRxiv.** Neither was evaluated in the table; both were
 found afterwards and both are keyless, single-purpose DOI resolvers with no account and no

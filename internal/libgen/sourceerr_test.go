@@ -29,7 +29,7 @@ func doiSourceFor(t *testing.T, name string, srv *httptest.Server) DownloadSourc
 	case "biorxiv":
 		return biorxivSource{http: cl, apiBase: srv.URL, contentBase: srv.URL}
 	case "fatcat":
-		return fatcatSource{http: cl, apiBase: srv.URL}
+		return fatcatSource{http: cl, baseURL: srv.URL}
 	case "core":
 		return coreSource{http: cl, key: "test-key", apiBase: srv.URL}
 	case "scihub":

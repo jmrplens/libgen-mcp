@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html class="no-js">
+<meta name="viewport" content="width=device-width">
+<title>Session Verification</title>
+<style>
+    body { 
+        background: radial-gradient(39% 39% at 50% 50%, rgba(233, 239, 249, 0.7) 0%, rgba(233, 239, 249, 0) 100%); 
+        font-family: "Source Sans 3", "Noto Sans", sans-serif;
+        color: #3a5073;
+        margin: 0; 
+        padding: 0; 
+    }
+    #progress, #message { position: absolute; margin: 0; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; font-size: 125%; }
+    .no-js #progress { display: none; }
+    #progressBar { font-size: 250%; user-select: none; }
+    #progressBar.done { transition: font-size 2s linear, opacity 2s linear; font-size: 1000%; opacity: 0.5; }
+    .animate { animation: spin 2s infinite linear; }
+    @keyframes spin {
+        to { transform:rotate(360deg); }
+    }
+    iframe { display: none; }
+</style>
+<meta charset="UTF-8">
+<body>
+<form method="post" target="post" action="https://archive-it.org/_challenge" name="challenge">
+    <input type="hidden" name="ip" value="203.0.113.0">
+    <input type="hidden" name="ts" value="1784939484">
+    <input type="hidden" name="diff" value="4">
+    <input type="hidden" name="tries" value="">
+</form>
+<div id="progress"><span id="progressText"></span><div id="progressBar"></div></div>
+<iframe srcdoc="" src="about:blank" name="post"></iframe>
+<script>
+    "use strict";
+
+    document.documentElement.classList.remove('no-js');
+
+    async function challenge(diff, ip, ts) {
+        let te = new TextEncoder;
+        let tries = 0;
+        progressText.innerText = "Verifying your session, this should only take a few seconds.";
+        progressBar.innerText = '⚙️';
+        progressBar.className = 'animate';
+        for (; tries < 10_000_000; tries++) {
+            let hash = await crypto.subtle.digest("SHA-256", te.encode([ip,ts,tries].join(";")));
+            let y = new Uint8Array(hash);
+            let i = 0;
+            while(i < diff/2) {
+                if (y[i]>0x0F) break;
+                if ((i*2)+1 >= diff) return tries;
+                if (y[i++] > 0) break;
+                if ((i*2) >= diff) return tries;
+            }
+        }
+    }
+
+    async function startChallenge(form) {
+        if (location.protocol !== 'https:') {
+            progressText.innerText = 'No WebCrypto support. This must be served over a HTTPS connection.';
+            return;
+        }
+        if (!('subtle' in window.crypto)) {
+            progressText.innerText = 'No WebCrypto support in your browser. This is required to pass the challenge.';
+            return;
+        }
+
+        let backoff = 0;
+        let tryOnce = _ => {
+            if (backoff > 8) {
+                progressText.innerText = 'Failed to submit after several tries. Try reloading.';
+                return;
+            }
+            setTimeout(async _ => submitAnswer(form), 1000*(Math.pow(2, backoff++)-1));
+        };
+        form.addEventListener("error", tryOnce);
+        let iframe = document.querySelector("iframe");
+        iframe.addEventListener("load", _ => location.hash.length ? location.reload() : location.replace(location));
+        tryOnce();
+    }
+
+    async function submitAnswer(form) {
+        let start = new Date;
+        let tries = await challenge(form.diff.value, form.ip.value, form.ts.value);
+        if (tries === undefined) {
+            progressText.innerText = 'Unable to calculate challenge. Try reloading or a different browser.';
+            progressBar.innerText = '';
+            progressBar.className = 'error';
+            return;
+        }
+        form.tries.value = tries;
+        progressText.innerText = 'Took ' + (new Date - start) + 'ms';
+        console.log(`${tries} tries.\n${progressText.innerText}`);
+        form.submit();
+    }
+
+    window.addEventListener("load", _ => startChallenge(document.forms.challenge));
+</script>
+<noscript>
+    <div id="message">
+        <h1>JavaScript Required</h1>
+        <p>To protect our systems and ensure reliable access for all users, Archive-It uses a bot protection system that requires JavaScript.</p>
+        <p>Please enable JavaScript in your browser and try again. Some browser extensions may block JavaScript, so disabling them may help.</p>
+        <p>If you believe you're seeing this in error or need help, contact us at: aitratelimit (at) archive.org.</p>
+    </div>
+</noscript>
+</body>
+</html>

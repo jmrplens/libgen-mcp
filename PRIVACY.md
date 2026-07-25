@@ -41,8 +41,8 @@ AI assistant) make. There are no background connections. The destinations are:
   repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
   (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts),
-  and Internet Archive Scholar / fatcat (`api.fatcat.wiki`, then `archive.org`
-  or `web.archive.org` for the file). Each request carries only the DOI.
+  and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
+  `web.archive.org` for the file). Each request carries only the DOI.
 - **CORE (only when you request an article by DOI and configure a key).**
   `LIBGEN_MCP_CORE_KEY` is empty by default, which leaves the `core` source out
   of the chain. When you set it, the DOI is sent to `api.core.ac.uk` with the key

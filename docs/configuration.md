@@ -142,9 +142,10 @@ The open-access article sources are all **keyless** (except `core`, which needs 
   endpoint), serving only articles whose open-access full text Europe PMC actually holds.
 - `biorxiv` resolves preprint DOIs (the `10.1101` prefix) through the
   [bioRxiv/medRxiv](https://api.biorxiv.org) details API to the versioned `.full.pdf`.
-- `fatcat` looks a DOI up in [Internet Archive Scholar](https://scholar.archive.org)'s catalog
-  and returns a preserved copy hosted on the Internet Archive (preferring a direct archive.org
-  copy over a Wayback capture).
+- `fatcat` looks a DOI up on [Internet Archive Scholar](https://scholar.archive.org), fatcat's
+  own web frontend, and takes the preserved full-text URL its release page advertises — a
+  Wayback capture of the publisher's PDF. Candidates are liveness-probed in page order, so a
+  capture that has gone bad falls through to the next one rather than to a failed download.
 - `core` looks a DOI up in [CORE](https://core.ac.uk) and returns its download URL when CORE
   hosts a live copy (the URL is liveness-probed first, since CORE's links go stale often); it
   is opt-in via `LIBGEN_MCP_CORE_KEY`.

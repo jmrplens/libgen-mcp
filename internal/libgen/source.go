@@ -56,6 +56,12 @@ func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bo
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Range", pdfProbeRange)
+	// Go sends no Accept header of its own, and a content-negotiating host reads that
+	// as a browser asking for a page: the Wayback Machine answers an Accept-less
+	// request for an archived PDF with its HTML toolbar wrapper (200 text/html) and the
+	// same request carrying Accept "*/*" with the raw %PDF bytes. Saying "any type"
+	// explicitly is what a probe means, and it is what every other HTTP client sends.
+	req.Header.Set("Accept", "*/*")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return false
