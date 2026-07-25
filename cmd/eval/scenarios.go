@@ -44,11 +44,22 @@ const (
 	// badDownloadMD5Detail is the failure detail when a download call's md5 is not
 	// a 32-char hex string.
 	badDownloadMD5Detail = "download md5 is not 32-hex"
+	// badDownloadISBNDetail is the failure detail when a download call's isbn is not
+	// shaped like a ten- or thirteen-character ISBN.
+	badDownloadISBNDetail = "download isbn is not a well-formed ISBN"
 )
 
 // noDownloadCall is the failure detail when a download scenario produced no
 // download tool call.
 const noDownloadCall = "no download call"
+
+// fastStartRetryWaits is the download start-retry schedule the scenarios that
+// deliberately provoke a resolve failure shrink to. The staged schedule exists to
+// outlast a blip on a source that is going to answer, so a scenario whose source
+// cannot answer at all would otherwise spend its whole wall-clock budget waiting —
+// one such run burned 330 seconds of 360 and left the model no turn to answer in.
+// Two 1ms waits still exercise the schedule end to end, in under a millisecond.
+const fastStartRetryWaits = "1ms,1ms"
 
 // notAValidDOI is the failure detail when a download call's doi argument is not
 // a syntactically valid DOI.
@@ -72,6 +83,49 @@ const scihubDOI = "10.1016/j.cell.2011.02.013"
 // PMC indexes the DOI but holds no open-access full text for it, so a chain run
 // with Unpaywall disabled reaches bioRxiv or nothing.
 const biorxivDOI = "10.1101/833400"
+
+// oapenDOI and oapenISBN identify the SAME openly licensed monograph — the European
+// Investment Bank's "European firms and climate change 2020/2021" — through each of
+// the two identifiers the OAPEN source accepts. Verified live: either identifier
+// returns exactly this record, whose ORIGINAL-bundle bitstream serves 1.85 MB of
+// application/pdf. Both are pinned here so the DOI half and the ISBN half of the
+// source's contract are exercised against one known-good record.
+const (
+	oapenDOI  = "10.2867/768526"
+	oapenISBN = "978-92-861-5061-6"
+)
+
+// unheldOapenDOI is a syntactically valid DOI OAPEN does not hold. It is the probe
+// for the source's identifier re-check, and the reason that check exists: OAPEN's
+// /rest/search is FREE TEXT, so this DOI returns most of a page of unrelated
+// monographs (96 hits when it was measured) rather than nothing at all. A source
+// that served the top hit would hand back a different book while reporting success,
+// which is the one failure that looks exactly like a pass.
+const unheldOapenDOI = "10.9999/oapen-eval-no-such-monograph"
+
+// publicDomainISBN is a Penguin edition of Jane Austen's "Pride and Prejudice".
+// OpenLibrary reports the work as ebook_access "public" and lists Internet Archive
+// scans of it, so it is a real target for the ISBN book chain: OAPEN declines it (it
+// holds scholarly monographs) and the Internet Archive serves the scan, which makes
+// it the one scenario where the isbn chain's failover is exercised rather than only
+// its first source. It is written the way a reader would copy it off a cover, so the
+// model has to hand the tool an ISBN with separators in it.
+const publicDomainISBN = "978-0-14-143951-8"
+
+// lendingRestrictedISBN is J. D. Salinger's "The Catcher in the Rye", which
+// OpenLibrary reports as ebook_access "borrowable". An in-copyright novel is the
+// right probe for the Internet Archive's lending gate: a controlled-lending item
+// advertises ordinary .pdf and .epub files exactly like a public-domain scan does,
+// so a source without the access gates would "succeed" and hand over something
+// DRM-wrapped or truncated. Its access tier is also stable in a way a public-domain
+// title's is not.
+const lendingRestrictedISBN = "978-0-316-76948-8"
+
+// isbnBookSources are the download sources that serve a book keyed by ISBN, in chain
+// order. Both hold openly licensed copies only, which is the whole point of the key:
+// an ISBN download is the legal book path, and a shadow library appearing here would
+// mean the key routed somewhere it must not.
+var isbnBookSources = []string{"oapen", "archive"}
 
 // openAccessSources are the article sources that serve a freely licensed copy, in
 // chain order. They lead the DOI chain (see config.KnownSources) so a legal copy is
@@ -148,6 +202,13 @@ func isMD5(s string) bool { return md5Pattern.MatchString(strings.TrimSpace(s)) 
 
 // isDOI reports whether s looks like a DOI (10.<registrant>/...).
 func isDOI(s string) bool { return doiPattern.MatchString(strings.TrimSpace(s)) }
+
+// isISBN reports whether s is shaped like an ISBN, by the SAME rule the download
+// tool validates its isbn argument with (libgen.NormalizeISBN). Spelling the rule a
+// second time here would let a value pass this assertion and be rejected by the tool,
+// or the reverse — which is the divergence the tools layer exports the function to
+// avoid.
+func isISBN(s string) bool { return libgen.NormalizeISBN(s) != "" }
 
 // hasTopic reports whether the tool input's topics array contains topic.
 func hasTopic(input map[string]any, topic string) bool {
@@ -388,7 +449,7 @@ func scenarios() []scenario {
 			SetupEnv: map[string]string{
 				"LIBGEN_MCP_SOURCES":                    "scihub",
 				"LIBGEN_MCP_SCIHUB_HOSTS":               "127.0.0.1",
-				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
 				"LIBGEN_MCP_TIMEOUT":                    "2s",
 			},
 			Assert: assertS9Retry,
@@ -743,19 +804,22 @@ func scenarios() []scenario {
 			ID: "S47",
 			Prompt: fmt.Sprintf("Download the article with DOI %s from fatcat, the Internet Archive "+
 				"Scholar source.", openAccessDOI),
-			// The fatcat API has been unreachable from some networks for a while, so
-			// what this grades is the model reaching the source — and then either
-			// recovering to another provider or saying plainly that nothing arrived.
-			// The source selection is the model behavior under test either way.
+			// The source resolves for real again: the JSON API it used to call stopped
+			// answering, and it now drives the Scholar frontend, which returns the
+			// release page and its preserved Wayback captures. So this grades the whole
+			// path — the model mapping the prose name onto source=fatcat, and fatcat
+			// serving the bytes — rather than only the model's honesty about an upstream
+			// that never answers.
 			//
-			// The retry schedule is shrunk the way S9 shrinks it. Left at its default
-			// the unreachable API burned 330 seconds of a 360-second scenario budget in
-			// a live run, leaving the model no room to answer — so the scenario would
-			// have been graded on a turn budget the eval itself exhausted.
+			// The retry schedule is still shrunk the way S9 shrinks it, and the resolve
+			// budget still bounded. That is insurance rather than accommodation now: a
+			// lookup plus up to four capture probes is several round-trips, and when the
+			// host last went dark the default schedule burned 330 seconds of a
+			// 360-second scenario budget and left the model no room to answer at all.
 			SetupEnv: map[string]string{
 				"LIBGEN_MCP_UNPAYWALL_EMAIL":            "",
-				"LIBGEN_MCP_TIMEOUT":                    "10s",
-				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": "1ms,1ms",
+				"LIBGEN_MCP_TIMEOUT":                    "20s",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
 			},
 			Assert: assertS47Fatcat,
 		},
@@ -786,17 +850,495 @@ func scenarios() []scenario {
 			// email, for the reason spelled out on S46 — the elicited per-call email
 			// puts it back at the head of the chain, and a first run of this scenario
 			// passed on Unpaywall alone, proving nothing about the providers behind it.
-			// fatcat is left out too: it is unreachable from this network and would add
-			// its whole retry schedule to the scenario without being able to serve
-			// anything, and the promise under test is open-access-before-shadow, which
-			// the remaining providers carry.
+			// fatcat is back in the list: it was excluded while its API was unreachable,
+			// which would have added a whole retry schedule for a source that could not
+			// serve anything, and that stopped being true when it was repointed at the
+			// Scholar frontend. Leaving it out now would understate the chain the
+			// promise is about.
 			SetupEnv: map[string]string{
-				"LIBGEN_MCP_SOURCES":         "europepmc,biorxiv,scihub,scidb",
+				"LIBGEN_MCP_SOURCES":         "europepmc,biorxiv,fatcat,scihub,scidb",
 				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
 			},
 			Assert: assertOpenAccessChainOrder,
 		},
+		// S50-S55 cover the ISBN key and the two open-access BOOK sources it reaches.
+		// Until these, every download the suite graded was keyed by an md5 (a shadow
+		// library) or a DOI (an article): the legal book path had no coverage at all,
+		// and neither did the guards that stop each source serving the wrong file.
+		{
+			ID: "S50",
+			Prompt: `I'd like a legally free copy of Jane Austen's "Pride and Prejudice" — nothing ` +
+				`from a shadow library, please. The edition on my shelf is ISBN ` + publicDomainISBN + `.`,
+			// The headline of the new surface, and deliberately under-specified in the
+			// S10-S13 way: the prompt names no argument and no source, so a pass means
+			// the model discovered from the tool description alone that a book can be
+			// fetched by its ISBN. It is also the only scenario that exercises the isbn
+			// chain's FAILOVER — OAPEN holds scholarly monographs and declines this
+			// novel, so the file can only arrive from the Internet Archive behind it.
+			Assert: assertISBNDownload,
+		},
+		{
+			ID:     "S51",
+			Prompt: fmt.Sprintf("Download the open-access monograph with DOI %s from OAPEN.", oapenDOI),
+			// OAPEN by DOI. The provider is named in prose rather than as the enum
+			// value, the way S45 names Europe PMC, so what is graded is the model
+			// mapping "OAPEN" onto source=oapen — and then that the source serves it.
+			Assert: assertS51OapenDOI,
+		},
+		{
+			ID: "S52",
+			Prompt: `Get me the OAPEN copy of the European Investment Bank report ` +
+				`"European firms and climate change 2020/2021" — its ISBN is ` + oapenISBN + `.`,
+			// The other half of OAPEN's contract: the SAME monograph by its ISBN. Running
+			// both is what proves the ISBN key resolves rather than merely being
+			// accepted, which a DOI-only scenario would leave untested even though every
+			// open-access monograph has an ISBN and many have no DOI.
+			Assert: assertS52OapenISBN,
+		},
+		{
+			ID: "S53",
+			Prompt: fmt.Sprintf("A colleague sent me %s as the DOI of an open-access monograph. "+
+				"Fetch it from OAPEN for me.", unheldOapenDOI),
+			// The wrong-book guard, and the reason it is worth a live scenario: OAPEN's
+			// search is free text, so an identifier it does not hold still returns a page
+			// of unrelated monographs. Serving the top hit would report success while
+			// handing over a different book — the one failure that looks like a pass — so
+			// this asserts the negative directly: nothing may be served, and the model
+			// must pass the refusal on.
+			Assert: assertOapenRejectsUnheld,
+		},
+		{
+			ID: "S54",
+			Prompt: `Get me the Internet Archive's scan of "Pride and Prejudice" by Jane Austen, ` +
+				`ISBN ` + publicDomainISBN + `.`,
+			// The Internet Archive source, pinned by its prose name. It is reached
+			// through OpenLibrary, so a pass means the ISBN survived both hops and the
+			// scan that came back is a real book file rather than a borrow page.
+			Assert: assertS54Archive,
+		},
+		{
+			ID: "S55",
+			Prompt: `Can you get me the ebook of "The Catcher in the Rye" by J. D. Salinger ` +
+				`(ISBN ` + lendingRestrictedISBN + `) from the Internet Archive?`,
+			// The lending gate. A controlled-digital-lending item advertises ordinary
+			// .pdf and .epub files exactly like a public-domain scan, so a source without
+			// the access gates would "succeed" and save something DRM-wrapped or
+			// truncated. The right outcome is a clean refusal the model passes on, and a
+			// file arriving here is the failure.
+			Assert: assertArchiveRefusesLending,
+		},
+		// S56-S59 cover the four discovery providers the federated search gained. None
+		// of them is reachable through download: two carry a file URL the CALLER fetches
+		// (Gutenberg, ERIC) and two are bibliographic indexes that assert nothing about
+		// free full text (dblp, PubMed). What is graded is whether the model surfaces
+		// each kind for what it is instead of reporting it as unobtainable.
+		{
+			ID: "S56",
+			Prompt: `I want to read Mary Shelley's "Frankenstein" for free and legally — it is out ` +
+				`of copyright. Look beyond the Library Genesis catalog at the public-domain and ` +
+				`open-access libraries too, and tell me exactly how I can get the file.`,
+			// Project Gutenberg. Its ebooks carry no DOI, ISBN or md5 — only a
+			// full_text_url — so download cannot fetch one and the affordance under test
+			// is the model handing the user the link instead of calling the hit
+			// unobtainable. The prompt never names extra_sources, the way S20 does not.
+			Assert: assertGutenbergDiscovery,
+		},
+		{
+			ID: "S57",
+			Prompt: `I'm researching chronic absenteeism in elementary schools. Most of what I need ` +
+				`is US education agency reports and technical papers rather than journal articles, ` +
+				`so look beyond the Library Genesis catalog as well, and tell me how to read the ` +
+				`full text of what you find.`,
+			// ERIC, the only provider that reaches education grey literature: reports,
+			// theses and agency documents that carry no DOI and so appear in none of the
+			// others. Its hosted full text rides pdf_url, which shares Gutenberg's shape —
+			// the tool chain cannot fetch it, the user can.
+			Assert: assertERICDiscovery,
+		},
+		{
+			ID: "S58",
+			Prompt: `Give me the citations — venue, year, authors — for the computer-science papers ` +
+				`on the Raft consensus algorithm. Search beyond the Library Genesis catalog as well.`,
+			// dblp, which contributes the conference metadata arXiv and Crossref match
+			// poorly and never full text. It throttles aggressively and undocumentedly
+			// (500s, 429s and dropped connections during earlier work), and its latency
+			// scales with the number of query terms — a four-term query measured two to
+			// five seconds against a six-second per-provider budget, and lost the race
+			// under concurrency. Hence the narrow topic: a short query is the one thing
+			// this side can do about it. A run it still sits out is a skip, never a
+			// failure.
+			Assert: assertDBLPDiscovery,
+		},
+		{
+			ID: "S59",
+			Prompt: `I'm writing a literature review on off-target effects in CRISPR genome editing. ` +
+				`Search the biomedical literature beyond the Library Genesis catalog too, and give ` +
+				`me the papers you find with their identifiers.`,
+			// PubMed, the biomedical counterpart of dblp: also an index, so its records
+			// describe a paper without claiming it is free to read.
+			Assert: assertPubMedDiscovery,
+		},
+		{
+			ID:     "S60",
+			Prompt: fmt.Sprintf("Download the article with DOI %s and save it for me.", scihubDOI),
+			// The per-source cooldown. It is the one capability here whose evidence is
+			// not in the tool's answer but in what the server did on the way there, so it
+			// is graded from the call's own server log — which the record keeps and a
+			// re-grade restores, so the assertion stays a pure function of the transcript.
+			//
+			// The setup makes the cooldown fire inside a SINGLE download call, which is
+			// what makes it gradeable at all. sci-hub leads the two-source chain and its
+			// only host is a dead local address, so it fails instantly and unavoidably
+			// with a transport error — the classification the cooldown acts on. The
+			// save-confirmation prompt then probes the file's size first (HeadSize ->
+			// ResolveLink), so the chain is walked twice per call: the first pass records
+			// sci-hub's unavailability, the second consults it. A configured contact
+			// email keeps the on-demand Unpaywall prompt out of the way, and the source
+			// list keeps Unpaywall itself out of the chain.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":                    "scihub,scidb",
+				"LIBGEN_MCP_SCIHUB_HOSTS":               "127.0.0.1",
+				"LIBGEN_MCP_UNPAYWALL_EMAIL":            unpaywallEmail(),
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
+				"LIBGEN_MCP_TIMEOUT":                    "5s",
+			},
+			Assert: assertSourceCooldown,
+		},
 	}
+}
+
+// assertS51OapenDOI checks the OAPEN source keyed by a monograph DOI: the model must
+// map the provider named in prose onto source=oapen, and when the live fetch lands
+// OAPEN must be what served the bytes.
+func assertS51OapenDOI(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "oapen", "doi")
+}
+
+// assertS52OapenISBN checks the other identifier OAPEN accepts, on the same
+// monograph: an ISBN-keyed download must reach the source and come back with the
+// book.
+func assertS52OapenISBN(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "oapen", "isbn")
+}
+
+// assertS54Archive checks the Internet Archive source: the model must map the prose
+// name onto source=archive, and the ISBN must survive both hops (OpenLibrary, then
+// archive.org) to bring back a scan.
+func assertS54Archive(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "archive", "isbn")
+}
+
+// assertOapenRejectsUnheld checks OAPEN's identifier re-check against a DOI it does
+// not hold. See unheldOapenDOI for why the free-text search makes this the failure
+// worth asserting negatively.
+func assertOapenRejectsUnheld(tr transcript) (pass bool, detail string) {
+	return assertSourceRefuses(tr, "oapen", "doi", "an identifier OAPEN does not hold")
+}
+
+// assertArchiveRefusesLending checks the Internet Archive's lending gate against a
+// book the Archive holds only for borrowing. See lendingRestrictedISBN for why a
+// file arriving here would be worse than no file at all.
+func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
+	return assertSourceRefuses(tr, "archive", "isbn", "a lending-restricted book")
+}
+
+// assertGutenbergDiscovery checks the Project Gutenberg provider: a public-domain
+// ebook must reach the model with its full_text_url, and the model must hand that
+// link to the user — download takes no URL, so the link IS the way to get the file.
+func assertGutenbergDiscovery(tr transcript) (pass bool, detail string) {
+	return gradeDiscovery(tr, "gutenberg", true)
+}
+
+// assertERICDiscovery checks the ERIC provider on the grey literature that is its
+// reason to exist: reports and agency documents with no DOI, whose hosted full text
+// rides pdf_url and is fetched by the caller, exactly as a Gutenberg ebook is.
+func assertERICDiscovery(tr transcript) (pass bool, detail string) {
+	return gradeDiscovery(tr, "eric", true)
+}
+
+// assertDBLPDiscovery checks the dblp provider on a computer-science query. dblp is
+// an index, so its records are citations rather than full text and nothing about a
+// file is graded.
+func assertDBLPDiscovery(tr transcript) (pass bool, detail string) {
+	return gradeDiscovery(tr, "dblp", false)
+}
+
+// assertPubMedDiscovery checks the PubMed provider on a biomedical query, on the
+// same terms as dblp: a bibliographic contribution, not a file.
+func assertPubMedDiscovery(tr transcript) (pass bool, detail string) {
+	return gradeDiscovery(tr, "pubmed", false)
+}
+
+// assertISBNDownload grades the ISBN key with no source named: the model must
+// discover that a book can be fetched by its ISBN, and the chain must route that key
+// to one of the open-access book sources.
+//
+// A download by md5 instead is a surface gap rather than a wrong answer — the model
+// found the book, just not the legal copy the prompt asked for — and it is reported
+// as one, because the isbn field's description is the only thing that could have told
+// it otherwise.
+func assertISBNDownload(tr transcript) (pass bool, detail string) {
+	if _, any := findCall(tr, "download"); !any {
+		return false, noDownloadCall
+	}
+	call, ok := findDownloadBy(tr, func(c toolCall) bool { return isISBN(stringField(c.Input, "isbn")) })
+	if !ok {
+		return false, "SURFACE GAP: no download call carried an isbn, so the legal book path was never taken — " +
+			"the isbn field's description may not convey that a book can be fetched by it"
+	}
+	if downloadFailed(call) {
+		return gradeDegraded(tr, "the model downloaded by isbn but the live fetch failed (OAPEN/OpenLibrary/archive.org)")
+	}
+	fileOK, msg := checkDownloadedFile(call, "")
+	if !fileOK {
+		return false, functionalPrefix + msg
+	}
+	var res libgen.DownloadResult
+	if err := decodeStructured(call.Structured, &res); err != nil {
+		return false, err.Error()
+	}
+	if !slices.Contains(isbnBookSources, res.Source) {
+		return false, functionalPrefix + "an isbn download was served by " + strconv.Quote(res.Source) +
+			", which is not one of the open-access book sources (" + strings.Join(isbnBookSources, ", ") + ")"
+	}
+	return true, "model discovered the isbn key unaided; " + msg
+}
+
+// assertSourceRefuses grades a source that must decline an item CLEANLY rather than
+// serve something wrong. want is the pinned source, key the identifier it was given,
+// and why names the case in the assertion message.
+//
+// The order of the checks is the point. A file served by that source is the failure —
+// a different book, or a lending copy that downloads fine and cannot be opened — so it
+// is looked for first and reported as functional. Only after that does the model's
+// honesty matter: a refusal it does not pass on leaves the user thinking a download is
+// on its way.
+func assertSourceRefuses(tr transcript, want, key, why string) (pass bool, detail string) {
+	if _, any := findCall(tr, "download"); !any {
+		return false, noDownloadCall
+	}
+	call, ok := findSourcedCall(tr, want)
+	if !ok {
+		return false, "download source arg is not " + want
+	}
+	if keyOK, msg := downloadKeyOK(call, key); !keyOK {
+		return false, msg
+	}
+	if size, served := downloadServedBy(tr, want); served {
+		return false, fmt.Sprintf("%s%s served %d bytes for %s, which it must refuse rather than deliver",
+			functionalPrefix, want, size, why)
+	}
+	if !downloadFailed(call) {
+		return false, functionalPrefix + want + " reported success for " + why + " without producing a file"
+	}
+	if !admitsMiss(tr.FinalText) {
+		return false, want + " refused " + why + " but the model did not pass that on; it answered: " +
+			firstChars(tr.FinalText, 200)
+	}
+	return true, want + " refused " + why + " cleanly, and the model reported the miss instead of presenting a file"
+}
+
+// downloadServedBy reports whether a download in this transcript was actually served
+// by the named source, and how many bytes it produced. It answers the question a
+// refusal scenario turns on — did this source hand over a file? — independently of
+// which call the model made or how it recovered afterwards.
+func downloadServedBy(tr transcript, name string) (size int64, served bool) {
+	for _, c := range tr.Calls {
+		if c.Name != "download" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var res libgen.DownloadResult
+		if decodeStructured(c.Structured, &res) != nil {
+			continue
+		}
+		if strings.EqualFold(res.Source, name) && res.SizeBytes > 0 {
+			return res.SizeBytes, true
+		}
+	}
+	return 0, false
+}
+
+// hitsFromOrigin returns the federated hits a single provider contributed.
+func hitsFromOrigin(hits []discovery.DiscoveryResult, origin string) []discovery.DiscoveryResult {
+	out := make([]discovery.DiscoveryResult, 0, len(hits))
+	for _, h := range hits {
+		if strings.EqualFold(h.Origin, origin) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// hitFileURLs returns the directly-fetchable file URLs a provider's hits carry —
+// pdf_url for an ERIC report, full_text_url for a Gutenberg ebook — plus the host of
+// each, so an answer that quoted the link is recognized whether the model pasted the
+// whole URL or only named where it lives.
+func hitFileURLs(hits []discovery.DiscoveryResult) []string {
+	var out []string
+	for _, h := range hits {
+		for _, raw := range []string{h.PDFURL, h.FullTextURL} {
+			if raw == "" {
+				continue
+			}
+			out = append(out, raw)
+			if u, err := url.Parse(raw); err == nil && u.Host != "" {
+				out = append(out, u.Host)
+			}
+		}
+	}
+	return out
+}
+
+// gradeDiscovery grades one beyond-catalog discovery provider. fetchable says which
+// kind it is: a provider whose hits carry a file URL the CALLER fetches (Gutenberg,
+// ERIC), where the link reaching the user is the whole affordance, or a bibliographic
+// index (dblp, PubMed), where the record itself is the contribution and there is no
+// file to hand over.
+func gradeDiscovery(tr transcript, origin string, fetchable bool) (pass bool, detail string) {
+	hits, pass, detail := federatedProviderHits(tr, origin)
+	if len(hits) == 0 {
+		return pass, detail
+	}
+	if fetchable {
+		return gradeFetchableProvider(tr, origin, hits)
+	}
+	return gradeIndexProvider(tr, origin, hits)
+}
+
+// federatedProviderHits runs the part every discovery scenario shares: the model must
+// have reached past the catalog, and the provider under test must have contributed
+// something. An empty hits slice means the grade is already decided and the returned
+// pass/detail are the answer.
+//
+// A provider that contributes nothing is a SKIP rather than a failure, and unusually
+// for this suite it is not even graded on honesty: the search still returned plenty
+// from the other providers, so there is no miss for the model to own and nothing about
+// its behavior to judge. Two independent live facts produce it — these are best-effort
+// APIs on a six-second per-provider budget, and dblp in particular answers in two to
+// five seconds and drops out under concurrency — and dedup keeps whichever provider
+// answered a record first, so a paper another provider also holds is legitimately gone.
+func federatedProviderHits(tr transcript, origin string) (hits []discovery.DiscoveryResult, pass bool, detail string) {
+	call, out, err := searchOutput(tr)
+	if err != nil {
+		return nil, false, err.Error()
+	}
+	if extra, _ := call.Input["extra_sources"].(string); extra != "always" {
+		return nil, false, "SURFACE GAP: model did not set extra_sources to \"always\", so the beyond-catalog " +
+			"providers never ran and " + origin + " had no chance to answer"
+	}
+	hits = hitsFromOrigin(out.OpenAccess, origin)
+	if len(hits) == 0 {
+		return nil, true, skipPrefix + " " + origin + " contributed nothing to this federated search of " +
+			strconv.Itoa(len(out.OpenAccess)) + " hit(s), so there is none of its output to grade"
+	}
+	return hits, true, ""
+}
+
+// gradeFetchableProvider grades a provider whose hits carry a file the tool chain
+// cannot fetch: an ERIC report's pdf_url, a Project Gutenberg ebook's full_text_url.
+// download takes no URL and neither record has a doi, isbn or md5, so the link
+// reaching the user IS the capability — a model that describes the hit without it has
+// left the file out of reach.
+func gradeFetchableProvider(tr transcript, origin string, hits []discovery.DiscoveryResult) (pass bool, detail string) {
+	links := hitFileURLs(hits)
+	if len(links) == 0 {
+		return true, skipPrefix + " " + origin + " answered, but none of its hits carried a hosted full text today"
+	}
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return true, skipPrefix + " model exhausted its turn budget before answering (" + origin + " answered correctly)"
+	}
+	if !containsAny(tr.FinalText, links...) {
+		return false, "SURFACE GAP: " + origin + " returned a directly-fetchable file URL and the model did not " +
+			"pass it to the user — download takes no URL, so the link is the only way to get the file"
+	}
+	return true, fmt.Sprintf("%s surfaced %d hit(s) with a fetchable file URL, and the model handed the link over",
+		origin, len(hits))
+}
+
+// gradeIndexProvider grades a bibliographic index — dblp for computer science, PubMed
+// for biomedicine. What it must get right is the labeling: an index knows what a paper
+// IS, never that it is free to read, so its records must come back as citations and
+// never as full text. That is the promise the search response's own guidance makes
+// about the open_access list, and it is checkable exactly.
+//
+// Which of the merged hits the model then chose to write up is deliberately NOT graded.
+// A federated search returns seven providers' worth of records and a model answers from
+// the head of the list; failing it for not reaching the index's share would grade the
+// ordering of a list, not the provider.
+func gradeIndexProvider(tr transcript, origin string, hits []discovery.DiscoveryResult) (pass bool, detail string) {
+	for _, h := range hits {
+		if h.OpenAccess || h.PDFURL != "" || h.FullTextURL != "" {
+			return false, functionalPrefix + origin + " is a bibliographic index with no full text to offer, " +
+				"but it returned " + strconv.Quote(firstChars(h.Title, 60)) + " as freely readable"
+		}
+	}
+	if strings.TrimSpace(tr.FinalText) == "" {
+		return true, skipPrefix + " model exhausted its turn budget before answering (" + origin + " contributed correctly)"
+	}
+	if reportsGaveUp(tr.FinalText) {
+		return false, origin + " contributed records but the model reported the search as empty: " +
+			firstChars(tr.FinalText, 160)
+	}
+	return true, fmt.Sprintf("%s contributed %d record(s), each labeled a citation rather than free full text, "+
+		"and the model answered from the merged results", origin, len(hits))
+}
+
+// cooldownLogMarkers are the two lines the per-source cooldown writes, and between
+// them they cover every way the chain can react to a source it has just seen fail.
+// The first is the ordinary case — the source is passed over while a healthy one
+// remains — and the second is the all-cooled-down bypass, which is what happens when
+// the rest of the chain failed too. Either proves the same thing: the failure was
+// classified, recorded, and consulted on the next pass.
+var cooldownLogMarkers = []string{"source in cooldown, skipping", "every capable source is in cooldown"}
+
+// assertSourceCooldown grades the per-source cooldown from the server log the record
+// keeps for each call. See the S60 scenario comment for why one download call walks
+// the chain twice, which is what puts both passes inside a single transcript.
+//
+// It reads only tr.Calls, so it stays a pure function of the transcript and re-grades
+// identically: transcriptFromRecord restores each call's server_logs.
+func assertSourceCooldown(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if !isDOI(stringField(call.Input, "doi")) {
+		return false, notAValidDOI
+	}
+	// resolve_only never writes to disk, so it raises no save confirmation and the
+	// chain is walked once — there is no second pass for a cooldown to affect.
+	if ro, _ := call.Input["resolve_only"].(bool); ro {
+		return true, skipPrefix + " the model asked for a link instead of a download, so the chain ran only once"
+	}
+	if marker, found := cooldownDecision(tr); found {
+		return true, "the chain recorded the dead source as unavailable and acted on it on the next pass " +
+			"(" + strconv.Quote(marker) + ")"
+	}
+	return false, functionalPrefix + "no cooldown decision was logged although the only host sci-hub was given " +
+		"is unreachable, so the failure was either misclassified or never consulted"
+}
+
+// cooldownDecision returns which cooldown marker a download call logged, and whether
+// one was logged at all.
+//
+// It reports the marker rather than the log line it found it in: the line carries the
+// wall-clock instant the cooldown expires, and these details are published verbatim in
+// the results tables, where a timestamp would make an otherwise stable row differ on
+// every run.
+func cooldownDecision(tr transcript) (marker string, found bool) {
+	for _, c := range tr.Calls {
+		if c.Name != "download" {
+			continue
+		}
+		for _, entry := range c.ServerLogs {
+			for _, m := range cooldownLogMarkers {
+				if strings.Contains(entry, m) {
+					return m, true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 // assertS45EuropePMC checks the Europe PMC source: the model must map the provider
@@ -813,11 +1355,12 @@ func assertS46Biorxiv(tr transcript) (pass bool, detail string) {
 	return assertChainServedBy(tr, "biorxiv")
 }
 
-// assertS47Fatcat checks the fatcat source. The Internet Archive Scholar API is not
-// reachable from every network, so an upstream that does not answer degrades to the
-// honesty check rather than failing: assertSourcedDownload routes a failed live
-// fetch through gradeDegraded, and what it grades there — the model reporting the
-// failure instead of claiming a file — is the part that is ours.
+// assertS47Fatcat checks the fatcat source, which resolves for real since it was
+// repointed from its dead JSON API at the Internet Archive Scholar frontend: the
+// model must map the prose name onto source=fatcat, and the source must serve the
+// preserved copy. A live upstream failure still degrades to the honesty check rather
+// than failing — assertSourcedDownload routes a failed fetch through gradeDegraded —
+// because Scholar and the Wayback captures behind it are somebody else's uptime.
 func assertS47Fatcat(tr transcript) (pass bool, detail string) {
 	return assertSourcedDownload(tr, "fatcat", "doi")
 }
@@ -2229,8 +2772,28 @@ func assertS6Randombook(tr transcript) (pass bool, detail string) {
 	return assertSourcedDownload(tr, "randombook", "md5")
 }
 
+// downloadKeyOK reports whether a download call carries a well-formed identifier of
+// the given kind, and the detail to report when it does not. An unrecognized kind is
+// no constraint, so a caller that grades no particular key passes trivially.
+//
+// The three keys are answered in one place because they are one question — "was this
+// download addressed properly?" — asked by every source-pinned scenario, and spelling
+// them out per caller is how the isbn key went ungraded when it was added.
+func downloadKeyOK(call toolCall, key string) (ok bool, detail string) {
+	switch key {
+	case "doi":
+		return isDOI(stringField(call.Input, "doi")), notAValidDOI
+	case "md5":
+		return isMD5(stringField(call.Input, "md5")), badDownloadMD5Detail
+	case "isbn":
+		return isISBN(stringField(call.Input, "isbn")), badDownloadISBNDetail
+	default:
+		return true, ""
+	}
+}
+
 // assertSourcedDownload checks that the model set the source arg to want and
-// keyed the download by the expected identifier (doi or md5). When the live
+// keyed the download by the expected identifier (doi, md5 or isbn). When the live
 // fetch succeeds it also confirms DownloadResult.Source == want; a live fetch
 // failure is graded on honesty, since the model behavior under test (source
 // selection) was still correct.
@@ -2242,11 +2805,8 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 	if !ok {
 		return false, "download source arg is not " + want
 	}
-	if key == "doi" && !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
-	}
-	if key == "md5" && !isMD5(stringField(call.Input, "md5")) {
-		return false, badDownloadMD5Detail
+	if keyOK, msg := downloadKeyOK(call, key); !keyOK {
+		return false, msg
 	}
 	if downloadFailed(call) {
 		// Selecting the source is what this grades, and that already held. A model
@@ -2272,9 +2832,19 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 // back the Europe PMC call and the assertion reported "download source arg is not
 // fatcat" about a model that had asked for fatcat first.
 func findSourcedCall(tr transcript, want string) (call toolCall, found bool) {
+	return findDownloadBy(tr, func(c toolCall) bool {
+		return strings.EqualFold(stringField(c.Input, "source"), want)
+	})
+}
+
+// findDownloadBy returns the first download call matching the predicate, preferring
+// one that came back without a tool error. It is the shared body behind "which call
+// asked for this source" and "which call was keyed by an isbn": both want the
+// model's effective attempt, not merely its first one.
+func findDownloadBy(tr transcript, match func(toolCall) bool) (call toolCall, found bool) {
 	var first toolCall
 	for _, c := range tr.Calls {
-		if c.Name != "download" || !strings.EqualFold(stringField(c.Input, "source"), want) {
+		if c.Name != "download" || !match(c) {
 			continue
 		}
 		if !found {
