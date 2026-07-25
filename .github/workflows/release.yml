@@ -198,6 +198,12 @@ jobs:
   fly-deploy:
     name: Fly.io Deploy
     runs-on: ubuntu-latest
+    # Records the deployment under the release environment, so Fly.io rollouts
+    # appear in the repository's deployment history and can be gated behind a
+    # protection rule without touching this file.
+    environment:
+      name: release
+      url: https://libgen-mcp.fly.dev/
     needs: [release, docker]
     if: ${{ github.repository == 'jmrplens/libgen-mcp' }}
     steps:
@@ -239,8 +245,31 @@ jobs:
             --ha=false \
             --strategy immediate
 
-      - name: Verify deployment health
+      - name: Report machine status
         if: steps.check.outputs.skip == 'false'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: fly status --config fly.toml
+
+      # `fly status` prints the machine state but exits 0 even when the app is
+      # unhealthy, so on its own it verifies nothing. Poll the deployed server's
+      # own readiness endpoint instead, and fail the release when it never
+      # answers. The app runs scale-to-zero (min_machines_running = 0), so the
+      # first request has to wake a cold machine: hence the retries rather than a
+      # single call.
+      - name: Verify the deployed server answers
+        if: steps.check.outputs.skip == 'false'
+        env:
+          HEALTH_URL: https://libgen-mcp.fly.dev/health
+        run: |
+          for attempt in $(seq 1 10); do
+            code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 "$HEALTH_URL" || true)
+            if [ "$code" = "200" ]; then
+              echo "health check passed on attempt ${attempt}"
+              exit 0
+            fi
+            echo "attempt ${attempt}: ${HEALTH_URL} returned '${code:-no response}'"
+            sleep 10
+          done
+          echo "::error::${HEALTH_URL} never returned 200 — the release is deployed but not serving."
+          exit 1

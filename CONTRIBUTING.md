@@ -35,8 +35,9 @@ development build running is just:
 
 - **Go 1.26+** — [Download](https://go.dev/dl/). The module is
   `github.com/jmrplens/libgen-mcp`.
-- **Static-analysis tools** — `golangci-lint` and `govulncheck`. Install both
-  with `make install-tools`.
+- **Static-analysis tools** — `golangci-lint`, `govulncheck` and `goreleaser`
+  (the last one only for `make release-check`). Install all three with
+  `make install-tools`.
 - **Node.js with Corepack** (only for the docs site) — the site under `site/`
   pins `pnpm@11.8.0` via its `packageManager` field.
 - **Network access** (only for the gated end-to-end suite and the live probe).

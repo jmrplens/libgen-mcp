@@ -17,3 +17,6 @@ ignores:
   - "**/.astro/**"
   - docs/superpowers
   - .superpowers
+  # Gitignored scratch space. CI never checks it out, so linting it locally only
+  # reports errors that no pipeline can see — and that nobody should fix.
+  - plan

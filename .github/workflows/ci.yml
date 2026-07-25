@@ -183,6 +183,24 @@ jobs:
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: make govulncheck
 
+  # The release workflow only invokes GoReleaser when a tag is pushed, so a
+  # malformed .goreleaser.yml used to surface at the worst possible moment —
+  # mid-release, after the tag exists. Validate the config on every PR instead.
+  goreleaser-config:
+    name: GoReleaser config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: check
+
   analyze-md:
     name: Analyze Markdown
     runs-on: ubuntu-latest

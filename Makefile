@@ -187,10 +187,11 @@ audit-surface-quality: ## Fail if the MCP tool surface violates a quality conven
 	go run ./cmd/audit_surface_quality/
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
-install-tools: ## Install golangci-lint and govulncheck
+install-tools: ## Install golangci-lint, govulncheck and goreleaser
 	@echo "Installing static analysis tools..."
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/goreleaser/goreleaser/v2@latest
 	@echo "All tools installed."
 
 release-check: ## Validate the GoReleaser config
