@@ -115,3 +115,27 @@ func TestDownloadConsent_ConcurrentAccess(t *testing.T) {
 		t.Fatal("the session should be remembered after concurrent writes")
 	}
 }
+
+// TestDownloadConsent_PruneWithoutServerIsANoOp covers the guard that lets the
+// store work when it has no server to ask. Register always supplies one, but the
+// zero value has to stay usable: without this branch a pruning write would
+// dereference a nil server and take the download with it.
+func TestDownloadConsent_PruneWithoutServerIsANoOp(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "1"}, nil)
+	c := &downloadConsent{} // no server wired in
+
+	var sessions []*mcp.ServerSession
+	for range consentPruneThreshold + 1 {
+		ss, cs := newLiveSession(t, server)
+		t.Cleanup(func() { cs.Close() })
+		sessions = append(sessions, ss)
+		c.remember(ss) // must not panic once the threshold triggers a prune
+	}
+
+	// Nothing is pruned without a server to ask, so every session is still known.
+	for i, ss := range sessions {
+		if !c.remembered(ss) {
+			t.Fatalf("session %d was dropped even though there is no server to prune against", i)
+		}
+	}
+}

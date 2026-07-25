@@ -3044,3 +3044,65 @@ func TestConfirmationWanted_NilConfigStillAsks(t *testing.T) {
 		t.Fatal("a nil config must fall back to asking, not to silence")
 	}
 }
+
+// TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog covers the recovery a
+// zero-result search used to omit. The advice has to depend on whether the extra
+// searchers already ran: suggesting extra_sources="always" after it just ran and
+// found nothing sends the model to repeat a query that cannot succeed.
+func TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		extrasRan  bool
+		wantSubstr string
+		notWant    string
+	}{
+		{"extras not consulted", false, `extra_sources="always"`, "also returned nothing"},
+		{"extras already ran", true, "also returned nothing", `extra_sources="always"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := searchNextSteps(SearchOutput{}, tc.extrasRan)
+			joined := strings.Join(steps, "\n")
+			if !strings.Contains(joined, tc.wantSubstr) {
+				t.Fatalf("guidance missing %q:\n%s", tc.wantSubstr, joined)
+			}
+			if strings.Contains(joined, tc.notWant) {
+				t.Fatalf("guidance should not contain %q here:\n%s", tc.notWant, joined)
+			}
+			// The anti-hallucination guardrail must survive on every path.
+			if !strings.Contains(joined, "do not present titles") {
+				t.Fatalf("the do-not-invent-results guardrail was dropped:\n%s", joined)
+			}
+		})
+	}
+}
+
+// TestSearchNextSteps_ExtrasRanButFoundNothing covers the branch that fires when
+// the beyond-catalog searchers ran alongside catalog results and returned
+// nothing. The guidance matters: without it a model can present a catalog hit as
+// though the wider open-access search had endorsed it.
+func TestSearchNextSteps_ExtrasRanButFoundNothing(t *testing.T) {
+	out := SearchOutput{Results: []libgen.Result{{MD5: "d41d8cd98f00b204e9800998ecf8427e"}}}
+	joined := strings.Join(searchNextSteps(out, true), "\n")
+	if !strings.Contains(joined, "extra searchers returned nothing") {
+		t.Fatalf("missing the empty-extras guidance:\n%s", joined)
+	}
+	if !strings.Contains(joined, "not open access") {
+		t.Fatalf("missing the do-not-claim-open-access warning:\n%s", joined)
+	}
+}
+
+// TestSearchTool_RejectsAnUnknownExtraSourcesMode pins the validation path: a
+// bad extra_sources value must fail the call outright rather than silently
+// falling back to a default, which would answer a different question than the
+// one asked.
+func TestSearchTool_RejectsAnUnknownExtraSourcesMode(t *testing.T) {
+	cfg := confirmConfig(t)
+	session := newConfirmSession(t, cfg, staticMirrors{"http://127.0.0.1:0"}, nil)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "x", "extra_sources": "sometimes"},
+	})
+	if err == nil && (res == nil || !res.IsError) {
+		t.Fatalf("an unknown extra_sources mode must be rejected, got res=%+v err=%v", res, err)
+	}
+}

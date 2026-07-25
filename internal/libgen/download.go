@@ -146,11 +146,11 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file (libgen randombook annas unpaywall europepmc biorxiv fatcat core scihub or scidb)"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall europepmc biorxiv fatcat core oapen archive scihub scidb libgen randombook or annas"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
-	Verified bool `json:"verified" jsonschema:"true when the bytes' MD5 matched the requested md5 (book downloads); false for DOI sources"`
+	Verified bool `json:"verified" jsonschema:"true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download"`
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
 	Resumed bool `json:"resumed" jsonschema:"true when the download resumed from a pre-existing partial via an HTTP Range request"`

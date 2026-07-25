@@ -212,3 +212,26 @@ func TestLatestBiorxivVersion(t *testing.T) {
 		t.Error("latestBiorxivVersion(unparseable) reported a version, want a miss")
 	}
 }
+
+// TestBiorxivSource_RejectsUnbuildableEndpoint covers the request-construction failure.
+// The base URL is deployment-supplied, so a value carrying a control character
+// has to surface as a clean source error rather than a panic.
+func TestBiorxivSource_RejectsUnbuildableEndpoint(t *testing.T) {
+	s := biorxivSource{http: http.DefaultClient, apiBase: "http://\x7f-invalid"}
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1101/x"}); err == nil {
+		t.Fatal("an unbuildable endpoint must fail, not resolve")
+	}
+}
+
+// TestBiorxivSource_FallsBackToTheProductionBase covers the default-base branch that every
+// other test skips by injecting a test server. The context is canceled first, so
+// the default is selected and the request fails before any dial: the branch is
+// exercised without the suite touching the network.
+func TestBiorxivSource_FallsBackToTheProductionBase(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := biorxivSource{http: http.DefaultClient} // apiBase empty -> production constant
+	if _, err := s.Resolve(ctx, Item{DOI: "10.1101/x"}); err == nil {
+		t.Fatal("a canceled context must fail the resolve")
+	}
+}

@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -2282,5 +2284,34 @@ func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
 	}
 	if got, want := int(attempts.Load()), len(retryProbeSchedule)+1; got != want {
 		t.Errorf("Resolve called %d time(s), want %d: the schedule must still apply", got, want)
+	}
+}
+
+// TestDownloadResultSourceNamesEveryKnownSource guards a description that has
+// already drifted once. DownloadResult.Source enumerates the sources that can
+// serve a file, and it is the schema the model reads to interpret the value it
+// gets back — but oapen and archive joined the chain without being added here,
+// so for two releases it named ten of twelve. Nothing failed, because a struct
+// tag is prose to every compiler and linter in the build.
+func TestDownloadResultSourceNamesEveryKnownSource(t *testing.T) {
+	field, ok := reflect.TypeFor[DownloadResult]().FieldByName("Source")
+	if !ok {
+		t.Fatal("DownloadResult has no Source field")
+	}
+	desc := field.Tag.Get("jsonschema")
+	if desc == "" {
+		t.Fatal("DownloadResult.Source has no jsonschema description")
+	}
+	var missing []string
+	for _, name := range config.KnownSources {
+		// Word-boundary match, so "core" is not satisfied by some other word
+		// that merely contains it.
+		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(desc) {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("DownloadResult.Source description omits %v — it must name every config.KnownSources entry.\ngot: %s",
+			missing, desc)
 	}
 }

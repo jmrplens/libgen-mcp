@@ -54,7 +54,7 @@ Configuration (environment variables, all optional):
 
 Tools:
 
-- search: Search the Library Genesis catalog.
+- search: Search for books, papers, comics, magazines and standards, returning catalog results with metadata, md5 hash and downloa...
 - get_details: Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API.
 - download: Download a file to a local directory.
 - read: Extract and paginate the text of a book or paper so you can read it without downloading the whole file.

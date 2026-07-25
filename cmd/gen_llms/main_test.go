@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -532,7 +533,13 @@ func TestCompactToolDescription(t *testing.T) {
 		t.Fatalf("short: got %q", got)
 	}
 
-	longSentence := strings.Repeat("word ", 200) // one sentence, > maxFullDescRunes runes
+	// Sized from the constant, not from a number that happened to exceed it: this
+	// fixture silently stopped testing anything when maxFullDescRunes was raised.
+	longSentence := strings.Repeat("word ", maxFullDescRunes/4)
+	if utf8.RuneCountInString(longSentence) <= maxFullDescRunes {
+		t.Fatalf("fixture is no longer longer than the cap (%d runes vs %d)",
+			utf8.RuneCountInString(longSentence), maxFullDescRunes)
+	}
 	firstShort := "Concise lead sentence. " + longSentence
 	got := compactToolDescription(firstShort)
 	if got != "Concise lead sentence." {
@@ -864,5 +871,83 @@ func TestConfigEnvVarsCoversConfigGo(t *testing.T) {
 		if !seen[name] {
 			t.Errorf("configEnvVars documents %s, which internal/config/config.go never names", name)
 		}
+	}
+}
+
+// TestCompactToolDescription_KeepsParagraphs pins the behavior that a description
+// short enough to fit is reproduced whole. It used to be collapsed to its first
+// paragraph unconditionally, which silently dropped everything a tool said after
+// its opening line — in the file written for LLM discovery, with no signal.
+func TestCompactToolDescription_KeepsParagraphs(t *testing.T) {
+	desc := "Lead paragraph.\n\nSecond paragraph with the important caveat.\n\nThird."
+	got := compactToolDescription(desc)
+	if got != desc {
+		t.Fatalf("a description under the cap must survive intact:\ngot:  %q\nwant: %q", got, desc)
+	}
+	if !strings.Contains(got, "important caveat") {
+		t.Fatal("later paragraphs were dropped")
+	}
+}
+
+// TestCompactToolDescription_ShedsStructureWhenOverCap checks the fallback order
+// past the cap: first paragraph, then first sentence, then a hard truncation.
+func TestCompactToolDescription_ShedsStructureWhenOverCap(t *testing.T) {
+	lead := "Short lead."
+	over := lead + "\n\n" + strings.Repeat("word ", maxFullDescRunes)
+	if utf8.RuneCountInString(over) <= maxFullDescRunes {
+		t.Fatal("fixture no longer exceeds the cap")
+	}
+	if got := compactToolDescription(over); got != lead {
+		t.Fatalf("over-cap should fall back to the first paragraph, got %q", got)
+	}
+}
+
+// TestWriteOutputSchema covers the Returns block: it renders named fields with
+// their descriptions, and writes nothing at all for a tool that has no output
+// schema (rather than an empty heading).
+func TestWriteOutputSchema(t *testing.T) {
+	var populated strings.Builder
+	writeOutputSchema(&populated, map[string]any{
+		"type":     "object",
+		"required": []any{"path"},
+		"properties": map[string]any{
+			"path":     map[string]any{"type": "string", "description": "absolute path of the saved file"},
+			"verified": map[string]any{"type": "boolean", "description": "true when the MD5 matched"},
+		},
+	})
+	got := populated.String()
+	for _, want := range []string{"**Returns:**", "`path`", "absolute path of the saved file", "`verified`", "(required)"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Returns block missing %q:\n%s", want, got)
+		}
+	}
+
+	for _, empty := range []any{nil, "not a schema", map[string]any{"type": "object"}} {
+		var b strings.Builder
+		writeOutputSchema(&b, empty)
+		if b.String() != "" {
+			t.Fatalf("a tool without output properties must write nothing, got %q", b.String())
+		}
+	}
+}
+
+// TestLLMSFullDocumentsBothSchemas is the regression guard for the gap this
+// fixed: llms-full.txt called itself a reference "with tool schemas" while
+// documenting only what a tool takes, never what it returns.
+func TestLLMSFullDocumentsBothSchemas(t *testing.T) {
+	toolList, err := listTools()
+	if err != nil {
+		t.Skipf("tool list unavailable: %v", err)
+	}
+	var b strings.Builder
+	for _, tool := range toolList {
+		writeLLMSFullTool(&b, tool)
+	}
+	out := b.String()
+	if !strings.Contains(out, "**Parameters:**") {
+		t.Fatal("input schemas are not documented")
+	}
+	if !strings.Contains(out, "**Returns:**") {
+		t.Fatal("output schemas are not documented")
 	}
 }

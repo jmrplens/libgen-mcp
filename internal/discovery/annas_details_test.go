@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -119,5 +120,78 @@ func TestAnnasDetailsNoMirrorAnswers(t *testing.T) {
 	p := NewAnnas(staticMirrors{dead.URL})
 	if _, err := p.Details(context.Background(), "00dd2b0b58e81e3c6e7cb9e7b72dee23"); err == nil {
 		t.Error("Details() with no reachable mirror should fail")
+	}
+}
+
+// TestAnnasDetails_NilClientUsesTheDefault covers the nil-client guard. A
+// provider built as a struct literal — which the tools layer and these tests both
+// do — has no http.Client, and dereferencing that instead of falling back would
+// panic on the first lookup. The context is canceled so the fallback is
+// selected and the request then fails before any dial.
+func TestAnnasDetails_NilClientUsesTheDefault(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	p := &AnnasProvider{mirrors: staticMirrors{"http://127.0.0.1:0"}} // http is nil
+	if _, err := p.Details(ctx, "d41d8cd98f00b204e9800998ecf8427e"); err == nil {
+		t.Fatal("a canceled context must fail the lookup")
+	}
+}
+
+// TestAnnasDetails_NoMirrorsIsAnError covers the branch where the loop never
+// runs, so no per-mirror error was recorded. Returning nil there would tell the
+// caller a record was found.
+func TestAnnasDetails_NoMirrorsIsAnError(t *testing.T) {
+	p := &AnnasProvider{mirrors: staticMirrors{}, http: http.DefaultClient}
+	rec, err := p.Details(context.Background(), "d41d8cd98f00b204e9800998ecf8427e")
+	if err == nil {
+		t.Fatal("no mirrors must be an error, not a silent miss")
+	}
+	if rec != nil {
+		t.Fatalf("no record can be returned alongside an error, got %+v", rec)
+	}
+	if !strings.Contains(err.Error(), "no mirror available") {
+		t.Fatalf("error should say no mirror was available, got %v", err)
+	}
+}
+
+// TestAnnasDetails_MirrorServingNoRecordIsReported covers the "served a page but
+// it parsed to nothing" branch, which is distinct from an unreachable mirror: the
+// caller has to be able to tell "Anna's has no such record" from "Anna's could
+// not be reached".
+func TestAnnasDetails_MirrorServingNoRecordIsReported(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html><body>nothing resembling a record</body></html>"))
+	}))
+	defer srv.Close()
+
+	p := &AnnasProvider{mirrors: staticMirrors{srv.URL}, http: srv.Client()}
+	_, err := p.Details(context.Background(), "d41d8cd98f00b204e9800998ecf8427e")
+	if err == nil {
+		t.Fatal("a mirror that serves no record must be an error")
+	}
+	if !strings.Contains(err.Error(), "served no record") {
+		t.Fatalf("error should distinguish an empty record from a dead mirror, got %v", err)
+	}
+}
+
+// TestAnnasDetails_CancellationDuringFetchStopsImmediately covers the branch that
+// aborts the mirror loop on a canceled context instead of trying every remaining
+// mirror with a context that can no longer succeed.
+func TestAnnasDetails_CancellationDuringFetchStopsImmediately(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		cancel() // cancel while the first mirror is being read
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	p := &AnnasProvider{mirrors: staticMirrors{srv.URL, srv.URL, srv.URL}, http: srv.Client()}
+	if _, err := p.Details(ctx, "d41d8cd98f00b204e9800998ecf8427e"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if hits != 1 {
+		t.Fatalf("the loop kept going after cancellation: %d mirrors tried, want 1", hits)
 	}
 }
