@@ -180,6 +180,8 @@ Two rules bound the behavior:
 - A cooldown only deprioritizes. When **every** source able to serve an item is in cooldown,
   the chain tries them all anyway — better to try than nothing — and says so in the log. An
   explicit `source:` argument therefore always reaches the source it names.
+- A success lifts it. A source that just served a file is not unavailable, so serving one
+  clears its cooldown.
 - Nothing is persisted. The state lives on the client for the life of the process, so a
   restart starts clean.
 

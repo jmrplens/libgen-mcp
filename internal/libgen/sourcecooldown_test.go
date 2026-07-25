@@ -192,6 +192,26 @@ func TestPinnedSourceIgnoresItsOwnCooldown(t *testing.T) {
 	}
 }
 
+// TestSourceCooldownIsLiftedOnSuccess verifies a source that serves an item leaves
+// its cooldown behind. The all-cooled-down bypass can let a cooled source succeed,
+// and a stale entry would then make the next call skip the one source known to work.
+func TestSourceCooldownIsLiftedOnSuccess(t *testing.T) {
+	good := stubSource{name: "good", supports: true, resolved: Resolved{FileURL: "https://cdn/x.pdf", Ext: "pdf"}}
+	other := stubSource{name: "other", supports: true}
+	c := cooldownChainClient(good)
+	c.markSourceCooldown("good")
+	c.markSourceCooldown("other")
+
+	if _, err := c.ResolveLink(context.Background(), Item{DOI: "10.1/x"}); err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+
+	// "other" stays in cooldown, so there is no bypass to mask the result.
+	if got := srcNames(c.eligibleSources([]DownloadSource{good, other})); len(got) != 1 || got[0] != "good" {
+		t.Errorf("eligible sources = %v, want [good]: a source that just served must not stay in cooldown", got)
+	}
+}
+
 // TestSourceCooldownIsRaceFree exercises the cooldown map from several goroutines
 // at once, so `go test -race` proves the shared state is properly guarded.
 func TestSourceCooldownIsRaceFree(t *testing.T) {

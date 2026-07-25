@@ -438,6 +438,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 			}
 			continue
 		}
+		c.clearSourceCooldown(src.Name())
 		return ResolvedDownload{
 			URL:       resolved.FileURL,
 			Header:    resolved.Header,
@@ -544,6 +545,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		res, err := c.downloadFrom(ctx, src, req, lastResort)
 		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
+			c.clearSourceCooldown(src.Name())
 			return res, nil
 		}
 		c.noteSourceFailure(ctx, src.Name(), err)

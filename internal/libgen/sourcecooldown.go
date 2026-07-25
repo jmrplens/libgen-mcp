@@ -45,6 +45,18 @@ func (c *Client) markSourceCooldown(name string) {
 	c.sourceMu.Unlock()
 }
 
+// clearSourceCooldown lifts a source's cooldown after it served an item: whatever
+// an earlier failure suggested, a source that just answered is available.
+//
+// It matters because of the all-cooled-down bypass: that path can let a cooled-down
+// source succeed, and leaving its stale entry in place would make the next call skip
+// the one source now known to work.
+func (c *Client) clearSourceCooldown(name string) {
+	c.sourceMu.Lock()
+	delete(c.sourceCooldown, name)
+	c.sourceMu.Unlock()
+}
+
 // noteSourceFailure records what a failed source attempt taught us: an unavailable
 // source is put in cooldown so the next download does not pay for it again, while a
 // source that answered correctly that it does not hold the item is left alone.

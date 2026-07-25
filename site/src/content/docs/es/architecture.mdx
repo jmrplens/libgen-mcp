@@ -112,6 +112,7 @@ Una fuente que responde correctamente que **no tiene el elemento** — no indexa
 Dos reglas acotan el comportamiento:
 
 - Un enfriamiento solo baja la prioridad, nunca deshabilita. Cuando **todas** las fuentes capaces de servir un elemento están en enfriamiento, la cadena las prueba igualmente — mejor intentarlo que nada — y lo indica en el log. Por eso un argumento `source:` explícito siempre llega a la fuente que nombra.
+- Un éxito lo levanta. Una fuente que acaba de servir un archivo no está no disponible, así que servir uno borra su enfriamiento.
 - Nada se persiste. El estado vive en el cliente durante la vida del proceso, así que un reinicio empieza limpio.
 
 Ambas decisiones son visibles en el log junto a las líneas de intento por fuente ya existentes: una fuente omitida se registra en `INFO` con el instante en que expira su enfriamiento, y el caso de todas en enfriamiento en `WARN`.
