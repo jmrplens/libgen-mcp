@@ -298,19 +298,31 @@ func parseDurations(v string) ([]time.Duration, error) {
 	return waits, nil
 }
 
+// loadBools fills the boolean scalar fields of cfg from the environment. It is
+// split out of loadNumeric so neither grows past the cognitive-complexity budget
+// as flags are added: each variable costs one more branch, and this file is where
+// every new LIBGEN_MCP_* setting lands.
+func loadBools(cfg *Config) error {
+	for _, b := range []struct {
+		key string
+		dst *bool
+	}{
+		{"LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads},
+		{"LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled},
+		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
+		{"LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
+	} {
+		if err := envBool(b.key, b.dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // loadNumeric fills the numeric and boolean scalar fields of cfg from the
 // environment.
 func loadNumeric(cfg *Config) error {
-	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
-		return err
-	}
-	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
-		return err
-	}
-	if err := envBool("LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads); err != nil {
-		return err
-	}
-	if err := envBool("LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource); err != nil {
+	if err := loadBools(cfg); err != nil {
 		return err
 	}
 	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {
