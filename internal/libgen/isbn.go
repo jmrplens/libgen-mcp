@@ -32,6 +32,28 @@ var isbn13Prefixes = []string{"978", "979"}
 // argument with exactly this rule, and two spellings of "what counts as an ISBN"
 // would let a value pass validation and then be rejected by every source.
 func NormalizeISBN(raw string) string {
+	s, ok := isbnStrip(raw)
+	if !ok {
+		return ""
+	}
+	switch len(s) {
+	case isbn10Len:
+		// X is legal only as the final check character of an ISBN-10.
+		if strings.ContainsRune(s[:isbn10Len-1], 'X') {
+			return ""
+		}
+		return s
+	case isbn13Len:
+		return isbn13OrEmpty(s)
+	default:
+		return ""
+	}
+}
+
+// isbnStrip removes an ISBN's printed decoration — hyphens, spaces and tabs —
+// and uppercases the X check character, reporting false as soon as it meets a
+// character no ISBN can contain.
+func isbnStrip(raw string) (string, bool) {
 	var b strings.Builder
 	for _, r := range raw {
 		switch {
@@ -42,30 +64,25 @@ func NormalizeISBN(raw string) string {
 		case r == '-' || r == ' ' || r == '\t':
 			// Separators are decoration: ISBNs are printed hyphenated or spaced.
 		default:
-			return "" // any other character means this is not an ISBN
+			return "", false // any other character means this is not an ISBN
 		}
 	}
-	s := b.String()
-	switch len(s) {
-	case isbn10Len:
-		// X is legal only as the final check character of an ISBN-10.
-		if strings.ContainsRune(s[:isbn10Len-1], 'X') {
-			return ""
-		}
-		return s
-	case isbn13Len:
-		if strings.ContainsRune(s, 'X') {
-			return ""
-		}
-		for _, p := range isbn13Prefixes {
-			if strings.HasPrefix(s, p) {
-				return s
-			}
-		}
-		return ""
-	default:
+	return b.String(), true
+}
+
+// isbn13OrEmpty returns s when it is a well-shaped ISBN-13 — thirteen digits, no
+// X, and one of the Bookland prefixes — and "" when it is some other
+// thirteen-character code.
+func isbn13OrEmpty(s string) string {
+	if strings.ContainsRune(s, 'X') {
 		return ""
 	}
+	for _, p := range isbn13Prefixes {
+		if strings.HasPrefix(s, p) {
+			return s
+		}
+	}
+	return ""
 }
 
 // isbn13Of converts a normalized ISBN to its thirteen-digit form: an ISBN-13 is
