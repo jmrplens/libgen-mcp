@@ -43,7 +43,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary) and the bibliographic indexes (dblp for computer science, PubMed for biomedicine) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -59,7 +59,7 @@ type SearchOutput struct {
 	Hint           string                      `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
 	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
 	Mirror         string                      `json:"mirror" jsonschema:"the mirror base URL that served this search"`
-	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits merged from arXiv/Crossref/OpenLibrary/Project Gutenberg/dblp/PubMed, labeled by origin; only an entry with open_access true is known to be free to read (dblp and pubmed entries are bibliographic records, so cite them); fetch a paper with read/download using its doi, or an arXiv pdf_url; pass an isbn to download to fetch an openly licensed book, or use it to refine a libgen search; a gutenberg entry's full_text_url is the ebook file itself"`
+	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits merged from arXiv/Crossref/OpenLibrary/Project Gutenberg/dblp/PubMed/ERIC, labeled by origin; only an entry with open_access true is known to be free to read (dblp and pubmed entries are bibliographic records, so cite them); fetch a paper with read/download using its doi, or fetch a pdf_url/full_text_url yourself (an arXiv paper, an ERIC report or a gutenberg ebook — none has a doi to download by); pass an isbn to download to fetch an openly licensed book, or use it to refine a libgen search"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
@@ -357,28 +357,37 @@ func searchNextSteps(out SearchOutput, extrasRan bool) []string {
 // The list is not uniformly open access either: dblp and PubMed are bibliographic
 // indexes, so their entries describe a paper without asserting it is free to read,
 // and each entry's own open_access flag is the thing to trust.
+//
+// Two providers contribute hits with a file URL and NO identifier the tool chain can
+// act on — an ERIC report (pdf_url) and a Project Gutenberg ebook (full_text_url) —
+// so the wording names both: download takes no URL, and a model told only about doi
+// would report such an entry as unobtainable when its file is one fetch away.
 func openAccessStep(hits []discovery.DiscoveryResult, extrasRan bool) string {
 	if !extrasRan {
 		return ""
 	}
 	const preamble = "The results list is not open access, whatever its origin, so do not present it as such. " +
 		"In open_access, only an entry whose open_access flag is true is known to be free to read — a dblp or " +
-		"pubmed entry is a bibliographic record, so cite it rather than offering it as full text. "
+		"pubmed entry, or an eric entry with no pdf_url, is a bibliographic record, so cite it rather than " +
+		"offering it as full text. "
 	if len(hits) == 0 {
 		return preamble + "The extra searchers returned nothing for this query — report that, " +
 			"rather than offering a catalog result in place of one."
 	}
 	var actionable int
 	for _, h := range hits {
-		if h.DOI != "" || h.PDFURL != "" {
+		if h.DOI != "" || h.PDFURL != "" || h.FullTextURL != "" || h.ISBN != "" {
 			actionable++
 		}
 	}
 	if actionable == 0 {
-		return preamble + "None of these open_access entries carries a DOI or a pdf_url, so none of them is " +
-			"directly fetchable — say so rather than substituting a catalog result."
+		return preamble + "None of these open_access entries carries a doi, a file URL or an isbn, so none of " +
+			"them is directly fetchable — say so rather than substituting a catalog result."
 	}
-	return preamble + fmt.Sprintf("%d of %d carry a doi or pdf_url you can fetch.", actionable, len(hits))
+	return preamble + fmt.Sprintf("%d of %d carry something you can act on: pass a doi to read or download, "+
+		"pass an isbn to download for an openly licensed book, and fetch a pdf_url or full_text_url with your "+
+		"own HTTP tool — download takes no URL, so a file URL is how an entry with no doi (an eric report or a "+
+		"gutenberg ebook) is obtained.", actionable, len(hits))
 }
 
 // downloadStep phrases the download follow-up for a result, pinning the source
@@ -597,7 +606,8 @@ func buildSearchOutput(page *libgen.SearchPage, mirror string, in SearchInput) S
 // which at the previous figure of 10 would have grown a fully-federated search's
 // payload by half for no extra usefulness — the tail of a six-way merge is noise. 7
 // holds the combined ceiling roughly where it was (42 against 40) while spreading it
-// across more sources.
+// across more sources; ERIC since made it seven providers, and the figure still holds
+// because dedup and the per-provider tail absorb the difference.
 const extraLimit = 7
 
 // resolveExtraMode picks the mode for this call: an explicit per-call value wins,

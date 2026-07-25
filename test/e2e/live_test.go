@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1575,4 +1576,130 @@ func assertEbookURLServesFile(t *testing.T, ctx context.Context, fileURL string)
 		t.Fatalf("%s served text/html, not the ebook file", fileURL)
 	}
 	t.Logf("gutenberg ebook URL serves content-type=%q magic=%q", ctype, head[:n])
+}
+
+// ericProbeURL is the ERIC search endpoint the classified-outcome test probes before
+// spending its budget, so a network that cannot reach api.ies.ed.gov skips instead of
+// burning the whole timeout proving it.
+const ericProbeURL = "https://api.ies.ed.gov/eric/?search=test&format=json&rows=1"
+
+// ericGreyLiteratureQuery is a topic whose ERIC coverage is grey literature — agency
+// reports and evaluations that carry no DOI and appear in none of the other providers.
+// It is deliberately not a journal topic: a query arXiv or Crossref also answer would
+// be deduped by DOI before ERIC's own contribution could be observed.
+const ericGreyLiteratureQuery = "rural school district technology professional development"
+
+// ericMinFullTextBytes is the floor a served full text must clear to count as a
+// document rather than an error page that happens to start with the PDF marker.
+const ericMinFullTextBytes = 1 << 10
+
+// TestE2EERICSurfacesFetchableGreyLiterature exercises the whole ERIC path live: the
+// search tool escalates to the provider, the provider returns education grey
+// literature, and the full-text URL it advertises really serves a PDF.
+//
+// The last step is the one that matters. ERIC is wired as a discovery provider with no
+// matching download source, so the pdf_url on a hit IS the delivery mechanism — if that
+// URL does not serve bytes, the integration surfaces records nobody can obtain. The URL
+// is derived from the accession number rather than looked up, so only a live fetch can
+// prove the derivation still holds.
+func TestE2EERICSurfacesFetchableGreyLiterature(t *testing.T) {
+	env := requireLive(t)
+	requireUpstream(t, "eric", ericProbeURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	out := callSearch(t, ctx, env, map[string]any{
+		"query": ericGreyLiteratureQuery, "extra_sources": "always",
+	})
+	hosted, indexed := partitionERICHits(out.OpenAccess)
+	t.Logf("eric: %d hosted, %d index-only, out of %d beyond-catalog hits",
+		len(hosted), len(indexed), len(out.OpenAccess))
+	if len(hosted)+len(indexed) == 0 {
+		t.Fatalf("no eric-origin hits for an education grey-literature query; the provider "+
+			"is not reaching the index (beyond-catalog hits=%d)", len(out.OpenAccess))
+	}
+	assertERICIndexOnlyMakesNoClaim(t, indexed)
+	if len(hosted) == 0 {
+		t.Fatal("no eric hit advertised a pdf_url; the hosted-full-text flag is no longer being read")
+	}
+	assertERICFullTextServesPDF(ctx, t, hosted[0])
+}
+
+// partitionERICHits splits the beyond-catalog hits into the ERIC records that advertise
+// a hosted full text and the ERIC records that are bibliographic only.
+func partitionERICHits(hits []discovery.DiscoveryResult) (hosted, indexed []discovery.DiscoveryResult) {
+	for _, h := range hits {
+		switch {
+		case h.Origin != "eric":
+		case h.PDFURL != "":
+			hosted = append(hosted, h)
+		default:
+			indexed = append(indexed, h)
+		}
+	}
+	return hosted, indexed
+}
+
+// assertERICIndexOnlyMakesNoClaim verifies a record ERIC merely indexes is never
+// presented as free to read. files.eric.ed.gov answers 404 for exactly these, so an
+// open-access flag without a pdf_url would be an invitation to a dead link.
+func assertERICIndexOnlyMakesNoClaim(t *testing.T, indexed []discovery.DiscoveryResult) {
+	t.Helper()
+	for _, h := range indexed {
+		if h.OpenAccess {
+			t.Errorf("index-only eric hit %q claims open access with no pdf_url", h.Title)
+		}
+	}
+}
+
+// assertERICFullTextServesPDF fetches the hit's advertised full-text URL and asserts it
+// is a real, non-trivial PDF, logging the byte count actually transferred.
+func assertERICFullTextServesPDF(ctx context.Context, t *testing.T, hit discovery.DiscoveryResult) {
+	t.Helper()
+	if !hit.OpenAccess {
+		t.Errorf("eric hit %q advertises a pdf_url but is not flagged open access", hit.Title)
+	}
+	if !strings.HasPrefix(hit.PDFURL, "https://files.eric.ed.gov/fulltext/") {
+		t.Fatalf("eric pdf_url %q is not an ERIC-hosted full text", hit.PDFURL)
+	}
+	body, status, ctype := fetchERICFullText(ctx, t, hit.PDFURL)
+	t.Logf("eric full text: url=%s title=%q content-type=%s bytes=%d",
+		hit.PDFURL, hit.Title, ctype, len(body))
+	if status != http.StatusOK {
+		t.Fatalf("eric advertised %s but it answered HTTP %d; the hosted-full-text flag no "+
+			"longer predicts availability", hit.PDFURL, status)
+	}
+	if !bytes.HasPrefix(body, []byte("%PDF")) {
+		t.Fatalf("%s did not serve a PDF (first bytes %q)", hit.PDFURL, body[:min(len(body), 16)])
+	}
+	if len(body) < ericMinFullTextBytes {
+		t.Fatalf("%s served only %d bytes; that is not a document", hit.PDFURL, len(body))
+	}
+}
+
+// fetchERICFullText GETs an ERIC full-text URL and returns the bounded body, the status
+// and the content type. An unreachable host skips rather than fails, matching the
+// upstream-precondition discipline of the rest of the suite; anything the host actually
+// answers is the caller's to judge.
+//
+// Accept is set explicitly: Go sends none, and a content-negotiating CDN can read that
+// as a browser asking for a page rather than a client asking for the file.
+func fetchERICFullText(ctx context.Context, t *testing.T, rawURL string) (body []byte, status int, contentType string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
+	if err != nil {
+		t.Fatalf("building request for %s: %v", rawURL, err)
+	}
+	req.Header.Set("User-Agent", "libgen-mcp-e2e-probe")
+	req.Header.Set("Accept", "*/*")
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	if err != nil {
+		t.Skipf("eric full text unreachable: %s (%v)", rawURL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err = io.ReadAll(io.LimitReader(resp.Body, maxE2EDownloadBytes))
+	if err != nil {
+		t.Fatalf("reading %s: %v", rawURL, err)
+	}
+	return body, resp.StatusCode, resp.Header.Get("Content-Type")
 }

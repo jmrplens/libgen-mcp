@@ -1,0 +1,7 @@
+{
+  "error":{
+    "metadata":[
+      "error-class","org.apache.solr.common.SolrException",
+      "root-error-class","org.apache.solr.parser.TokenMgrError"],
+    "msg":"org.apache.solr.search.SyntaxError: Cannot parse 'reading\"': Lexical error at line 1, column 9.  Encountered: <EOF> after : \"\"",
+    "code":400}}

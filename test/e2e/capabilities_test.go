@@ -759,11 +759,11 @@ func TestE2EReadEPUB(t *testing.T) {
 }
 
 // validOrigin reports whether a beyond-catalog hit's origin label is one of the
-// keyless discovery providers: the four open-access ones plus the two bibliographic
-// indexes.
+// keyless discovery providers: the four open-access ones, the two bibliographic
+// indexes, and ERIC.
 func validOrigin(origin string) bool {
 	switch origin {
-	case "arxiv", "crossref", "openlibrary", "gutenberg", "dblp", "pubmed":
+	case "arxiv", "crossref", "openlibrary", "gutenberg", "dblp", "pubmed", "eric":
 		return true
 	default:
 		return false

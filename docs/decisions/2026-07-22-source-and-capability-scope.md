@@ -127,6 +127,50 @@ beyond-catalog array whose entries carry their own `open_access` flag. The field
 compatibility, and the tool's description, its next-step guidance and the rendered table all say
 that only a flagged entry is known to be free to read.
 
+#### Amendment — 2026-07-25 (ERIC, and a discovery source with no download source)
+
+**Added — ERIC.** The Institute of Education Sciences' index of education research
+(`api.ies.ed.gov/eric/`), keyless, JSON, no documented rate limit (paced to 1 rps like dblp). It
+was not in the table because the table was framed around scholarly articles, and ERIC's value
+here is the corpus that is not one: technical reports, dissertations, conference papers and
+government/agency documents — education **grey literature**, which carries no DOI and therefore
+appears in neither Crossref, nor Unpaywall, nor Europe PMC, nor any shadow library.
+
+**Decided — discovery only, no `DownloadSource`.** This is the first source deliberately wired
+as half an integration, so the reasoning is recorded rather than inferred:
+
+- ERIC is title/keyword-keyed. Its accession number (`ED427241`) is a third key space alongside
+  md5 and DOI, so a download source keyed on it would need a new identifier on `libgen.Item`
+  **and** a new field on both the `download` and `read` input schemas. Three schema expansions
+  for one source is the opposite of "few, general tools".
+- There would be nothing for it to do. ERIC serves every full text it holds at
+  `https://files.eric.ed.gov/fulltext/<id>.pdf` — derived from the accession number, with no
+  lookup step. `DownloadSource` exists to *resolve* an opaque identifier into a URL; here
+  `Resolve` would be a string concatenation wrapped in an interface.
+- `DiscoveryResult.PDFURL` already carries exactly this affordance, and already has a precedent
+  that the tool chain cannot itself fetch: OpenLibrary's `archive_url`. So a hosted ERIC record
+  is surfaced with its `pdf_url` filled in, the tool's next-step guidance states that a
+  `pdf_url` is fetched directly rather than passed to `download`, and the integration costs zero
+  new plumbing.
+
+**Measured — the availability flag, not the id prefix.** Whether ERIC hosts a document is
+carried by the record's `e_fulltextauth` field, not by the `ED`/`EJ` prefix of its accession
+number. The prefix records how the document entered the index and predicts hosting badly in both
+directions: sampled `EJ` records with the flag set serve a real PDF (`EJ1230460`, 145,619 bytes;
+`EJ1440134`, 381,600 bytes), and sampled `ED` records without it answer 404 (`ED416196`,
+`ED480030`, `ED644068`). Six of six sampled records matched the flag and none matched the prefix
+rule, so the provider reads the flag. `open_access` and `pdf_url` are set together and only when
+it is 1: ERIC's own copies are publicly funded documents served without a login, while a record
+it merely indexes says nothing about the publisher's terms.
+
+**Measured — the query must be escaped.** ERIC parses `search` as a Lucene query and answers an
+unparseable one with **HTTP 200 carrying an error object**, so an ordinary title containing a
+colon would silently return nothing. Each term is backslash-escaped and the terms are joined with
+`AND`; the default operator is `OR`, which for a two-word query returns an order of magnitude
+more hits than the caller meant (711k vs 109k for "professional development"). The cost is that
+caller-supplied Lucene syntax is escaped into literal terms — the right default when the query is
+a title or a topic.
+
 #### Correction — 2026-07-25 (article *download* sources)
 
 The table above evaluated candidates as **discovery** sources for `search`, and its verdicts

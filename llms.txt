@@ -50,7 +50,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access article source; unset leaves core out of the chain
 - LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas (empty = all; the chain order is fixed, so this only removes sources)
 - LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)
-- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)
+- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)
 
 Tools:
 
