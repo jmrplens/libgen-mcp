@@ -32,6 +32,35 @@ func TestOpenAccessLocator(t *testing.T) {
 	}
 }
 
+// TestWriteOpenAccess_FreeColumn verifies the beyond-catalog table marks only the
+// hits whose provider states they are free to read: an arXiv hit gets a "yes" in the
+// Free column, while a dblp bibliographic record leaves the cell empty rather than
+// implying its paywalled paper is downloadable.
+func TestWriteOpenAccess_FreeColumn(t *testing.T) {
+	var b strings.Builder
+	writeOpenAccess(&b, []discovery.DiscoveryResult{
+		{Origin: "arxiv", Title: "A Preprint", Year: "2021", DOI: "10.1/free", OpenAccess: true},
+		{Origin: "dblp", Title: "A Conference Paper", Year: "2018", DOI: "10.2/paywalled"},
+	})
+	got := b.String()
+	if !strings.Contains(got, "| arxiv | A Preprint | 2021 | yes | doi:10.1/free |") {
+		t.Errorf("open-access row missing its yes flag:\n%s", got)
+	}
+	if !strings.Contains(got, "| dblp | A Conference Paper | 2018 |  | doi:10.2/paywalled |") {
+		t.Errorf("bibliographic row should leave the Free cell empty:\n%s", got)
+	}
+}
+
+// TestWriteOpenAccess_NoHits verifies an empty hit list appends nothing at all, so a
+// catalog-only search carries no stray heading.
+func TestWriteOpenAccess_NoHits(t *testing.T) {
+	var b strings.Builder
+	writeOpenAccess(&b, nil)
+	if got := b.String(); got != "" {
+		t.Errorf("writeOpenAccess(nil) wrote %q, want nothing", got)
+	}
+}
+
 // TestRenderOutline_NoPageEntry covers the level-only arm of renderOutline: an
 // entry with no known page (Page == 0) renders as an indented bullet without a
 // "(p.N)" suffix, and its untrusted title still passes through mdCell.

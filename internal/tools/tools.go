@@ -43,7 +43,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary) and the bibliographic indexes (dblp for computer science, PubMed for biomedicine) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -59,7 +59,7 @@ type SearchOutput struct {
 	Hint           string                      `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
 	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
 	Mirror         string                      `json:"mirror" jsonschema:"the mirror base URL that served this search"`
-	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"open-access hits merged from arXiv/Crossref/OpenLibrary, labeled by origin; fetch a paper with read/download using its doi, or an arXiv pdf_url; use an openlibrary isbn/title to refine a libgen search"`
+	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits merged from arXiv/Crossref/OpenLibrary/dblp/PubMed, labeled by origin; only an entry with open_access true is known to be free to read (dblp and pubmed entries are bibliographic records, so cite them); fetch a paper with read/download using its doi, or an arXiv pdf_url; use an openlibrary isbn/title to refine a libgen search"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
@@ -303,21 +303,26 @@ func searchNextSteps(out SearchOutput, extrasRan bool) []string {
 	return steps
 }
 
-// openAccessStep says which of the two result lists is open access, and warns when
-// the open-access hits carry nothing to fetch.
+// openAccessStep says how the two result lists differ, and warns when the
+// beyond-catalog hits carry nothing to fetch.
 //
 // Asked for open-access papers, a model that received only OpenLibrary hits — a
 // book catalog, so no DOI and no PDF — answered with articles from the catalog
 // results instead, listing Sci-Hub links under an "Open-Access Papers" heading.
 // Nothing in the response had told it the two lists mean different things.
+//
+// The list is not uniformly open access either: dblp and PubMed are bibliographic
+// indexes, so their entries describe a paper without asserting it is free to read,
+// and each entry's own open_access flag is the thing to trust.
 func openAccessStep(hits []discovery.DiscoveryResult, extrasRan bool) string {
 	if !extrasRan {
 		return ""
 	}
-	const preamble = "Only the open_access entries are open access; the results list is not open access, " +
-		"whatever its origin, so do not present it as such. "
+	const preamble = "The results list is not open access, whatever its origin, so do not present it as such. " +
+		"In open_access, only an entry whose open_access flag is true is known to be free to read — a dblp or " +
+		"pubmed entry is a bibliographic record, so cite it rather than offering it as full text. "
 	if len(hits) == 0 {
-		return preamble + "The open-access providers returned nothing for this query — report that, " +
+		return preamble + "The extra searchers returned nothing for this query — report that, " +
 			"rather than offering a catalog result in place of one."
 	}
 	var actionable int
@@ -543,7 +548,14 @@ func buildSearchOutput(page *libgen.SearchPage, mirror string, in SearchInput) S
 
 // extraLimit bounds how many hits each extra searcher is asked for, keeping the
 // merged payload small.
-const extraLimit = 10
+//
+// It is a PER-PROVIDER budget, so the worst-case merged size is extraLimit times the
+// number of extra searchers. Adding dblp and PubMed took that count from four to six,
+// which at the previous figure of 10 would have grown a fully-federated search's
+// payload by half for no extra usefulness — the tail of a six-way merge is noise. 7
+// holds the combined ceiling roughly where it was (42 against 40) while spreading it
+// across more sources.
+const extraLimit = 7
 
 // resolveExtraMode picks the mode for this call: an explicit per-call value wins,
 // otherwise the deployment default applies. An unrecognized per-call value is an
