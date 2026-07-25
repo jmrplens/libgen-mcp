@@ -316,14 +316,15 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 
 ## Configuration
 
-**It works out of the box — zero configuration, no account.** Every variable is optional. Only four settings change what the server _does_ — everything else is a tuning knob that already works by default. Add these as `env` entries in your MCP client config, or as `-e NAME=value` with Docker:
+**It works out of the box — zero configuration, no account.** Every variable is optional. Only five settings change what the server _does_ — everything else is a tuning knob that already works by default. Add these as `env` entries in your MCP client config, or as `-e NAME=value` with Docker:
 
 - **Enable the Unpaywall article source:** `LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com` — disabled by default; the Unpaywall API needs a contact email. Without it, DOIs still resolve through the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and then Sci-Hub/SciDB.
 - **Enable the CORE article source:** `LIBGEN_MCP_CORE_KEY=…` — disabled by default; [CORE](https://core.ac.uk) needs a (free) API key. Like the Unpaywall email, this gates one whole source: without it, `core` is simply left out of the chain.
+- **Faster, steadier Anna's Archive book downloads:** `LIBGEN_MCP_ANNAS_KEY=…` — optional, and unlike the two above it does not gate a source: without it `annas` still resolves books keylessly over public IPFS gateways. With it, downloads go through the member fast-download API instead, which is quicker and does not depend on a gateway being healthy. The key comes from an active paid membership — if these sources are useful to you, consider [becoming a member](https://annas-archive.gl/donate); it is what keeps the archive online.
 - **Consult the extra searchers on every search:** `LIBGEN_MCP_EXTRA_SOURCES=always` — makes `search` consult Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC on every call, alongside the catalog; the default `auto` consults them only when the catalog finds nothing or fails, and `never` restricts every search to the catalog.
 - **Always return a link instead of saving:** `LIBGEN_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 
-Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
+Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
 ## How it works
 
