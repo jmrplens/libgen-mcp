@@ -78,6 +78,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # The job now gates every version-bearing manifest, but its name is pinned:
+  # "server.json" is a required status check in the branch ruleset, and renaming
+  # it here would leave that check pending forever.
   server-json:
     name: server.json
     runs-on: ubuntu-latest
@@ -88,13 +91,11 @@ jobs:
           python-version: "3.x"
       - name: Install jsonschema
         run: pip install --quiet jsonschema
-      - name: Version matches VERSION file
-        run: |
-          set -euo pipefail
-          SJ=$(jq -r '.version' server.json)
-          VF=$(tr -d '[:space:]' < VERSION)
-          echo "server.json=$SJ VERSION=$VF"
-          [ "$SJ" = "$VF" ] || { echo "::error::server.json version ($SJ) != VERSION ($VF)"; exit 1; }
+      # Covers every manifest that carries the version, not just server.json:
+      # lhm.plugin.json, .plugin/plugin.json and the fly.toml build arg used to
+      # drift unnoticed because nothing in CI ever read them.
+      - name: Every version-bearing manifest matches the VERSION file
+        run: make check-manifests
       - name: Validate server.json against the MCP Registry schema
         run: |
           set -euo pipefail
@@ -112,14 +113,6 @@ jobs:
             inst=json.load(open('server.json')); \
             jsonschema.validate(inst, schema); \
             print('server.json: VALID')"
-      - name: Validate mcpb/manifest.json parses and matches VERSION
-        run: |
-          set -euo pipefail
-          jq empty mcpb/manifest.json && echo "mcpb/manifest.json: valid JSON"
-          MV=$(jq -r '.version' mcpb/manifest.json)
-          VF=$(tr -d '[:space:]' < VERSION)
-          echo "mcpb/manifest.json=$MV VERSION=$VF"
-          [ "$MV" = "$VF" ] || { echo "::error::mcpb/manifest.json version ($MV) != VERSION ($VF)"; exit 1; }
 
   build:
     name: Build

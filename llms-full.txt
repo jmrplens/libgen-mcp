@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.2.0 | 4 tools
+> Version 1.3.0 | 4 tools
 
 ## Tools
 

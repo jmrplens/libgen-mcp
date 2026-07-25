@@ -248,17 +248,21 @@ LIBGEN_EVAL=1 ANTHROPIC_API_KEY=sk-... go run -tags eval ./cmd/eval
 
 ## Release Process
 
-The version lives in `VERSION` and is mirrored into four manifests. To cut a
-release:
+The version lives in `VERSION` and is mirrored into four JSON manifests plus the
+`fly.toml` build arg. To cut a release:
 
 1. Bump `VERSION`.
-2. Update the version in `server.json`, `mcpb/manifest.json`, and
-   `lhm.plugin.json` to match (verified by `make check-server-json`,
-   `make check-mcpb-manifest`, `make check-lhm-manifest`).
-3. Update the version in `.plugin/plugin.json` too. **It has no `make check-*`
-   target**, so nothing fails when it drifts — check it by hand every release, or
-   add a gate for it modeled on `check-lhm-manifest`.
+2. Update the version in `server.json` (both `.version` and the six release-asset
+   URLs), `mcpb/manifest.json`, `lhm.plugin.json`, `.plugin/plugin.json`, and the
+   `[build.args] VERSION` in `fly.toml`.
+3. Run `make check-manifests`. It gates all five against `VERSION`, and CI runs
+   it in the `server.json` job. Add any new version-bearing manifest to
+   `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
+   gated, and will silently ship the previous release's number.
 4. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
+
+The `server.json` CI job is named for a required status check in the branch
+ruleset, not for its scope — do not rename it without updating the ruleset too.
 
 ## Commit & PR Conventions
 

@@ -9,7 +9,7 @@
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms eval-pages check-eval-pages audit-tokens audit-surface-quality \
-        install-tools release-check check-server-json check-mcpb-manifest check-lhm-manifest \
+        install-tools release-check check-manifests \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
@@ -197,29 +197,27 @@ install-tools: ## Install golangci-lint, govulncheck and goreleaser
 release-check: ## Validate the GoReleaser config
 	goreleaser check
 
-check-server-json: ## Verify server.json parses and matches the VERSION file
-	@jq empty server.json && echo "server.json: valid JSON"
-	@SJ=$$(jq -r '.version' server.json); VF=$$(cat VERSION | tr -d '[:space:]'); \
-	if [ "$$SJ" != "$$VF" ]; then \
-		echo "FAIL: server.json version ($$SJ) != VERSION ($$VF)"; exit 1; \
-	fi; \
-	echo "server.json version matches VERSION ($$VF)"
+# Every JSON manifest that mirrors the VERSION file. A manifest listed here is
+# gated; one that is not silently ships the previous version's number, which is
+# how .plugin/plugin.json spent a release cycle claiming to be 1.2.0.
+VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plugin.json
 
-check-mcpb-manifest: ## Verify mcpb/manifest.json parses and matches the VERSION file
-	@jq empty mcpb/manifest.json && echo "mcpb/manifest.json: valid JSON"
-	@MV=$$(jq -r '.version' mcpb/manifest.json); VF=$$(cat VERSION | tr -d '[:space:]'); \
-	if [ "$$MV" != "$$VF" ]; then \
-		echo "FAIL: mcpb/manifest.json version ($$MV) != VERSION ($$VF)"; exit 1; \
+check-manifests: ## Verify every version-bearing manifest parses and matches the VERSION file
+	@VF=$$(tr -d '[:space:]' < VERSION); \
+	for f in $(VERSION_MANIFESTS); do \
+		jq empty "$$f" || exit 1; \
+		MV=$$(jq -r '.version' "$$f"); \
+		if [ "$$MV" != "$$VF" ]; then \
+			echo "FAIL: $$f version ($$MV) != VERSION ($$VF)"; exit 1; \
+		fi; \
+		echo "$$f: valid JSON, version matches VERSION ($$VF)"; \
+	done
+	@VF=$$(tr -d '[:space:]' < VERSION); \
+	FV=$$(sed -n 's/^ *VERSION = "\(.*\)"/\1/p' fly.toml); \
+	if [ "$$FV" != "$$VF" ]; then \
+		echo "FAIL: fly.toml build arg VERSION ($$FV) != VERSION ($$VF)"; exit 1; \
 	fi; \
-	echo "mcpb/manifest.json version matches VERSION ($$VF)"
-
-check-lhm-manifest: ## Verify lhm.plugin.json parses and matches the VERSION file
-	@jq empty lhm.plugin.json && echo "lhm.plugin.json: valid JSON"
-	@LV=$$(jq -r '.version' lhm.plugin.json); VF=$$(cat VERSION | tr -d '[:space:]'); \
-	if [ "$$LV" != "$$VF" ]; then \
-		echo "FAIL: lhm.plugin.json version ($$LV) != VERSION ($$VF)"; exit 1; \
-	fi; \
-	echo "lhm.plugin.json version matches VERSION ($$VF)"
+	echo "fly.toml: build arg VERSION matches VERSION ($$VF)"
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
