@@ -32,11 +32,18 @@ import (
 )
 
 const (
-	// maxFullDescRunes caps the length of tool descriptions in llms-full.txt to
-	// keep the file scannable. When a description exceeds this limit, generation
-	// falls back to its first sentence; if that is still too long, the text is
-	// hard-truncated at the rune boundary.
-	maxFullDescRunes      = 600
+	// maxFullDescRunes caps the length of tool descriptions in llms-full.txt.
+	// When a description exceeds it, generation falls back to its first sentence;
+	// if that is still too long, the text is hard-truncated at the rune boundary.
+	//
+	// It sits above the longest description rather than below it on purpose. At
+	// 600 this file — the one written for LLM discovery, and named "full" —
+	// published "Download a file to a local directory." as the whole of the
+	// download tool, dropping the source chains, resolve_only and the
+	// untrusted-content warning. Four tools do not need protecting from their own
+	// documentation; the cap exists to catch a runaway description, so it only has
+	// to stay ahead of the real ones.
+	maxFullDescRunes      = 1600
 	llmsFileName          = "llms.txt"
 	llmsFullFileName      = "llms-full.txt"
 	llmsSummaryItemFormat = "- %s: %s\n"
@@ -557,14 +564,23 @@ func writeLLMSFullTool(b *strings.Builder, tool *mcp.Tool) {
 	b.WriteString(compactToolDescription(tool.Description))
 	b.WriteString("\n\n")
 	writeInputSchema(b, tool.InputSchema)
+	writeOutputSchema(b, tool.OutputSchema)
 	writeAnnotations(b, tool.Annotations)
 	b.WriteString("\n")
 }
 
 func compactToolDescription(description string) string {
-	desc := firstParagraph(description)
+	desc := strings.TrimSpace(description)
+	// A description that fits is reproduced whole, blank lines and all. Collapsing
+	// to the first paragraph unconditionally — as this did — meant a tool that
+	// structured its description into paragraphs silently lost every one after the
+	// first, in the file written for LLM discovery, with nothing to signal it.
 	if utf8.RuneCountInString(desc) <= maxFullDescRunes {
 		return desc
+	}
+	// Over the cap, shed structure progressively rather than cutting mid-word.
+	if para := firstParagraph(desc); utf8.RuneCountInString(para) <= maxFullDescRunes {
+		return para
 	}
 	if sentence := firstSentence(desc); sentence != "" && utf8.RuneCountInString(sentence) <= maxFullDescRunes {
 		return sentence
@@ -591,6 +607,25 @@ func writeAnnotations(b *strings.Builder, ann *mcp.ToolAnnotations) {
 
 // writeInputSchema writes a compact representation of the tool's input schema.
 func writeInputSchema(b *strings.Builder, schema any) {
+	writeSchemaSection(b, "**Parameters:**", schema)
+}
+
+// writeOutputSchema writes a compact representation of the tool's output schema,
+// so this file documents what a call returns and not only what it takes. Without
+// it a reader could not learn that get_details hands back ready-to-paste
+// citations, that search returns a separate open_access array, or that download
+// reports whether the bytes were MD5-verified — the very fields that decide
+// whether the tool is worth calling. It costs nothing at runtime: this is a
+// static document, not part of the per-request tool definitions.
+func writeOutputSchema(b *strings.Builder, schema any) {
+	writeSchemaSection(b, "**Returns:**", schema)
+}
+
+// writeSchemaSection writes one titled property list from a JSON schema. It is
+// the shared body of writeInputSchema and writeOutputSchema; a nil, non-object or
+// property-less schema writes nothing at all, so a tool without an output schema
+// simply has no Returns block.
+func writeSchemaSection(b *strings.Builder, heading string, schema any) {
 	schemaMap, ok := schema.(map[string]any)
 	if !ok {
 		return
@@ -602,7 +637,7 @@ func writeInputSchema(b *strings.Builder, schema any) {
 
 	required := schemaRequiredSet(schemaMap)
 
-	b.WriteString("**Parameters:**\n\n")
+	b.WriteString(heading + "\n\n")
 	names := make([]string, 0, len(props))
 	for name := range props {
 		names = append(names, name)
