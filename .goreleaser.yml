@@ -105,3 +105,13 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
+  # Make a re-run recover on its own. GoReleaser publishes into a draft and
+  # un-drafts it once every asset is up, so a failed upload leaves a draft
+  # holding a partial set — which is exactly what v1.3.0 hit when
+  # uploads.github.com answered one asset with an HTTP/2 REFUSED_STREAM that Go
+  # could not retry (the request body was already written). Without these two,
+  # re-running the job cannot fix itself: the leftover draft stays and the
+  # already-uploaded assets collide on re-upload, so the tag needs a hand-deleted
+  # release before it can be released again.
+  replace_existing_draft: true
+  replace_existing_artifacts: true
