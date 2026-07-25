@@ -174,8 +174,9 @@ basta con cualquiera de ellas para omitir un aviso:
 - El argumento `skip_confirmation: true` de `download`, que suprime el aviso en una sola llamada.
 - La casilla **«dejar de preguntar durante el resto de esta sesión»** del propio aviso, que es la
   forma de desactivarlo en caliente sin reiniciar el servidor. Su alcance es la sesión del
-  cliente, así que una conexión posterior vuelve a preguntar; fija esta variable a `false` cuando
-  la exclusión deba sobrevivir a las reconexiones.
+  cliente, así que una conexión posterior vuelve a preguntar. Esta variable no es una forma
+  persistente de esa elección: fijarla a `false` desactiva el aviso para todos los clientes y
+  todas las sesiones, en lugar de recordar lo que marcó un usuario.
 
 Ninguna de las tres puede forzar la aparición de un aviso: solo lo quitan.
 

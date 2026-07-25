@@ -471,7 +471,7 @@ func configEnvVars() []envVarDoc {
 		{"LIBGEN_MCP_READ_CACHE_BYTES", "536870912 (512 MiB)", "[1048576, 53687091200]", "Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted."},
 		{"LIBGEN_MCP_READ_CACHE_TTL", "10m", "[1s, 24h]", "How long an unreferenced read temp file lingers before eviction."},
 		{"LIBGEN_MCP_ENRICH", "true", boolEnvRange, "Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely."},
-		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", "true", boolEnvRange, "Ask the user to approve each file download writes to disk. Only ever consulted when the client advertised elicitation — one that cannot be asked is never prompted. Set false to save without prompting: the deployment-wide form of download's skip_confirmation argument and of the prompt's own \"stop asking for this session\" checkbox."},
+		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", "true", boolEnvRange, "Ask the user to approve each file that download writes to disk. Only ever consulted when the client advertised elicitation — one that cannot be asked is never prompted. Set false to save without prompting: the deployment-wide form of download's skip_confirmation argument and of the prompt's own \"stop asking for this session\" checkbox."},
 		{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
 	}
 }

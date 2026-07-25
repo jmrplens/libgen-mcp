@@ -24,6 +24,11 @@ func noopRelease() {
 // returned file is named with its correct extension (DownloadItem derives it), so
 // a paginated read can dispatch on the extension. On error the returned path is
 // empty and release is a no-op.
+//
+// An optional progress callback reports the transfer the same way DownloadItem
+// does, for the read path that would otherwise fetch a large file in silence.
+// Only the first callback is used, and a cache hit reports nothing because
+// nothing is transferred.
 func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...ProgressFunc) (path string, release func(), err error) {
 	key := item.MD5
 	if key == "" {
