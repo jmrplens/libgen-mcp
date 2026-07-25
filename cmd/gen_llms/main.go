@@ -244,7 +244,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	// itself, or from the identical list written into llms-full.txt.
 	fmt.Fprintf(&b, "- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — %s (empty = all; the chain order is fixed, so this only removes sources)\n", knownSourcesList())
 	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n")
-	b.WriteString("- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)\n\n")
+	b.WriteString("- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)\n\n")
 
 	b.WriteString("Tools:\n\n")
 	for _, t := range toolList {
@@ -471,7 +471,7 @@ func configEnvVars() []envVarDoc {
 		{"LIBGEN_MCP_READ_CACHE_BYTES", "536870912 (512 MiB)", "[1048576, 53687091200]", "Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted."},
 		{"LIBGEN_MCP_READ_CACHE_TTL", "10m", "[1s, 24h]", "How long an unreferenced read temp file lingers before eviction."},
 		{"LIBGEN_MCP_ENRICH", "true", boolEnvRange, "Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely."},
-		{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
+		{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
 	}
 }
 

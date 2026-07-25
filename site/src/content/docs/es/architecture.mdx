@@ -121,7 +121,7 @@ Ambas decisiones son visibles en el log junto a las líneas de intento por fuent
 
 La cadena de descarga anterior es una de las dos federaciones del servidor. La otra es el camino de búsqueda, con una estructura distinta: la cadena de descarga está ordenada y se detiene en el primer éxito, mientras que los buscadores se ejecutan en paralelo y sus respuestas se fusionan.
 
-Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary) — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
+Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary) y los índices bibliográficos (dblp, PubMed) — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
 
 | Modo     | Cuándo se ejecutan los adicionales               | Planificación                                                    |
 | -------- | ------------------------------------------------ | ---------------------------------------------------------------- |

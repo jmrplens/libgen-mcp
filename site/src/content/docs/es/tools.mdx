@@ -24,7 +24,7 @@ Busca en el catálogo de Library Genesis. Devuelve una página de resultados de 
 | `page`             | int      | no        | Página de resultados, empezando en `1`. Por defecto `1`.                                                                                                                                                                                                                                                              |
 | `order`            | string   | no        | Ordenar por: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                                                                                                   |
 | `order_mode`       | string   | no        | Dirección de orden: `asc` o `desc`.                                                                                                                                                                                                                                                                                   |
-| `extra_sources`    | string   | no        | Cuándo buscar más allá del catálogo de Library Genesis (Anna's Archive, arXiv, Crossref, OpenLibrary): `auto` los consulta solo cuando el catálogo no encuentra nada, `always` los consulta en cada búsqueda, `never` restringe la búsqueda al catálogo. Omitir para usar el valor por defecto del servidor (`auto`). |
+| `extra_sources`    | string   | no        | Cuándo buscar más allá del catálogo de Library Genesis (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed): `auto` los consulta solo cuando el catálogo no encuentra nada, `always` los consulta en cada búsqueda, `never` restringe la búsqueda al catálogo. Omitir para usar el valor por defecto del servidor (`auto`). |
 
 ### salida de search
 
@@ -56,7 +56,9 @@ La entrada inválida se rechaza antes de cualquier llamada de red: un `query` va
 
 ### Descubrimiento de acceso abierto
 
-Más allá del catálogo de Library Genesis, `search` puede consultar también **fuentes extra** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/) y [OpenLibrary](https://openlibrary.org/) — controlado por el argumento `extra_sources` (`auto`/`always`/`never`) y su valor por defecto de despliegue `LIBGEN_MCP_EXTRA_SOURCES` (por defecto `auto` — ver [Configuración](/libgen-mcp/es/configuration/)). El valor por defecto `auto` los consulta solo cuando el catálogo no devuelve nada o falla; `always` los consulta en cada búsqueda, a la vez que el catálogo; `never` restringe la búsqueda al catálogo, incluso si no hay resultados. Los resultados de Anna's, identificados por md5, se fusionan en `results` (etiquetados `origin: "annas"`); los de arXiv, Crossref y OpenLibrary aparecen en un campo `open_access` separado junto a `results`.
+Más allá del catálogo de Library Genesis, `search` puede consultar también **fuentes extra** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [dblp](https://dblp.org/) y [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — controlado por el argumento `extra_sources` (`auto`/`always`/`never`) y su valor por defecto de despliegue `LIBGEN_MCP_EXTRA_SOURCES` (por defecto `auto` — ver [Configuración](/libgen-mcp/es/configuration/)). El valor por defecto `auto` los consulta solo cuando el catálogo no devuelve nada o falla; `always` los consulta en cada búsqueda, a la vez que el catálogo; `never` restringe la búsqueda al catálogo, incluso si no hay resultados. Los resultados de Anna's, identificados por md5, se fusionan en `results` (etiquetados `origin: "annas"`); los de arXiv, Crossref, OpenLibrary, dblp y PubMed aparecen en un campo `open_access` separado junto a `results`.
+
+Ese nombre de campo es anterior a los dos índices bibliográficos y hoy es algo impreciso: dblp y PubMed describen un artículo sin afirmar nada sobre su disponibilidad, así que **solo se sabe que es de lectura libre un resultado cuyo propio flag `open_access` sea `true`**. Un resultado de dblp o PubMed es una cita, no una descarga.
 
 ```json title="entrada de search"
 {
@@ -93,15 +95,16 @@ Cada resultado lleva al menos un identificador accionable, según su `origin`:
 - **`doi` (crossref)** — pásalo a `download` o `read` igual que un DOI de un resultado de Library Genesis.
 - **`pdf_url` (siempre en arxiv; en crossref cuando hay un enlace directo a PDF publicado)** — un PDF de acceso abierto directamente descargable; obtenlo tú mismo (no es una descarga de Library Genesis, así que `download`/`read` no lo resuelven).
 - **`isbn`/`title` (openlibrary)** — OpenLibrary es principalmente un _resolutor de consultas_ sin clave: usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior. La única excepción es un libro de lectura pública — uno que OpenLibrary indica como libremente legible por completo en Internet Archive — que además lleva un `archive_url` (una página `https://archive.org/details/<id>` que puedes leer directamente) y se marca `open_access: true`.
+- **`doi` + `venue` (dblp, pubmed)** — registros bibliográficos. dblp cubre informática y es autoridad sobre el congreso o la revista en que apareció un artículo; PubMed cubre biomedicina mucho más allá de la porción de acceso abierto, así que responde por artículos que ninguna fuente libre tiene. Cítalos, o pasa el `doi` a `download` y deja que la cadena de artículos decida si puede servirlo. Un registro sin DOI (habitual en literatura antigua) es solo metadatos.
 
-Un resultado también puede llevar un `venue`: el medio de publicación tal y como lo indica el proveedor — actualmente solo el `journal_ref` de arXiv, una cadena de cita corta como `Phys. Rev. Lett. 100, 012345 (2021)`. Está ausente en un preprint sin versión publicada, y es una cadena de cita, nunca un resumen. Úsalo para distinguir un artículo ya publicado de un preprint sin publicar; no es un identificador que puedas pasar a otra herramienta.
+Un resultado también puede llevar un `venue`: el medio de publicación tal y como lo indica el proveedor — el `journal_ref` de arXiv (una cadena de cita corta como `Phys. Rev. Lett. 100, 012345 (2021)`), la abreviatura del congreso o revista en dblp (`DAC`, `Commun. ACM`), o el nombre completo de la revista en PubMed. Está ausente en un preprint sin versión publicada, y es una cadena de cita, nunca un resumen. Úsalo para distinguir un artículo ya publicado de un preprint sin publicar; no es un identificador que puedas pasar a otra herramienta.
 
 <Aside type="caution">
 	Los resultados se dedupan entre sí (por DOI normalizado, luego por
 	título+año), así que un mismo artículo hallado por dos proveedores aparece una
 	vez. No se comparan contra `results`, que se indexa por md5 y no por DOI: solo
 	los resultados de Anna's, que sí llevan md5, se suprimen cuando el catálogo ya
-	los listaba. Los cuatro proveedores son sin clave — sin cuenta, API key ni
+	los listaba. Los seis proveedores son sin clave — sin cuenta, API key ni
 	login — y best-effort: cada uno corre bajo su propio presupuesto corto, así
 	que un proveedor lento o que falla se degrada a no aportar nada en lugar de
 	retrasar o hacer fallar la búsqueda principal de Library Genesis. Como
