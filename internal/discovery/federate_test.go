@@ -194,16 +194,17 @@ func TestDedupKeepsDistinctMD5s(t *testing.T) {
 }
 
 // TestExtraProvidersIncludesAnnasAndOA verifies the extra set is the open-access
-// providers plus Anna's.
+// providers, the bibliographic indexes, and Anna's, in that order — the indexes must
+// follow the open-access providers so dedup keeps the fetchable copy of a shared DOI.
 func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
 	got := ExtraProviders("", staticMirrors{"https://annas-archive.gl"})
-	names := map[string]bool{}
-	for _, p := range got {
-		names[p.Name()] = true
+	want := []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "annas"}
+	if len(got) != len(want) {
+		t.Fatalf("ExtraProviders() returned %d providers, want %d", len(got), len(want))
 	}
-	for _, want := range []string{"arxiv", "crossref", "openlibrary", "annas"} {
-		if !names[want] {
-			t.Errorf("ExtraProviders missing %q (got %v)", want, names)
+	for i, name := range want {
+		if gotName := got[i].Name(); gotName != name {
+			t.Errorf("provider[%d].Name() = %q, want %q", i, gotName, name)
 		}
 	}
 }

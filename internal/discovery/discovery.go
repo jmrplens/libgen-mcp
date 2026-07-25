@@ -1,8 +1,10 @@
-// Package discovery federates keyless open-access literature sources (arXiv,
-// Crossref, OpenLibrary) into a single result shape the search tool can present
-// and the read/download tools can act on. Every provider is best-effort: a
-// failing source degrades to an empty result rather than sinking a federated
-// search, and no source requires an API key, account, or login.
+// Package discovery federates keyless literature sources into a single result shape
+// the search tool can present and the read/download tools can act on: the open-access
+// providers (arXiv, Crossref, OpenLibrary) plus the bibliographic indexes (dblp for
+// computer science, PubMed for biomedicine), which describe a paper precisely without
+// claiming it is free to read. Every provider is best-effort: a failing source
+// degrades to an empty result rather than sinking a federated search, and no source
+// requires an API key, account, or login.
 package discovery
 
 import (
@@ -33,17 +35,17 @@ const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libge
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary or annas"`
+	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, dblp, pubmed or annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
 	DOI     string `json:"doi,omitempty" jsonschema:"article DOI; pass to read or download to fetch this paper"`
 	ISBN    string `json:"isbn,omitempty" jsonschema:"ISBN; use it to refine a libgen search"`
-	// Venue is the publication venue when the source states one — currently arXiv's
-	// journal_ref (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the bibliographic
-	// citation for a preprint that later appeared in a journal. It is a short
-	// citation string, never an abstract, so it stays cheap to carry.
-	Venue string `json:"venue,omitempty" jsonschema:"publication venue as the provider states it (arXiv journal_ref): a short citation string, never an abstract"`
+	// Venue is the publication venue when the source states one: arXiv's journal_ref
+	// (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the conference or journal dblp
+	// files a record under (e.g. "DAC", "Commun. ACM"), or PubMed's full journal name.
+	// It is a short citation string, never an abstract, so it stays cheap to carry.
+	Venue string `json:"venue,omitempty" jsonschema:"publication venue as the provider states it (arXiv journal_ref, dblp venue, PubMed journal): a short citation string, never an abstract"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
 	MD5 string `json:"md5,omitempty" jsonschema:"file md5 for an md5-keyed result (Anna's Archive); pass to get_details or download"`
@@ -111,15 +113,43 @@ func boundedGetUA(ctx context.Context, client *http.Client, rawURL, userAgent st
 	return resp.StatusCode, body, nil
 }
 
-// SetBasesForTest overrides the provider base URLs (arXiv, Crossref, OpenLibrary)
-// and returns a restore func that reinstates the originals. It is a test-only seam
-// used by callers in other packages to point discovery at httptest servers;
-// production code never calls it.
-func SetBasesForTest(arxiv, crossref, openLibrary string) (restore func()) {
-	oldArxiv, oldCrossref, oldOpenLibrary := arxivBase, crossrefBase, openLibraryBase
-	arxivBase, crossrefBase, openLibraryBase = arxiv, crossref, openLibrary
+// ProviderBases holds one base URL per network-backed discovery provider. It is the
+// argument to SetBasesForTest: a struct rather than a positional list so a test names
+// the provider it is standing in for, and so adding a provider does not silently
+// shift another one's URL. A zero field points that provider at an unroutable empty
+// base, which is how a test keeps a provider it does not care about quiet.
+type ProviderBases struct {
+	// Arxiv is the arXiv API root (arxivBase).
+	Arxiv string
+	// Crossref is the Crossref REST API root (crossrefBase).
+	Crossref string
+	// OpenLibrary is the OpenLibrary API root (openLibraryBase).
+	OpenLibrary string
+	// DBLP is the dblp bibliography root (dblpBase).
+	DBLP string
+	// PubMed is the NCBI E-utilities root (pubmedBase).
+	PubMed string
+}
+
+// SetBasesForTest overrides every provider base URL and returns a restore func that
+// reinstates the originals. It is a test-only seam used by callers in other packages
+// to point discovery at httptest servers; production code never calls it.
+//
+// Every provider is overridden, including the ones a given test does not exercise:
+// leaving one at its live default would have that test reach the real service.
+func SetBasesForTest(bases ProviderBases) (restore func()) {
+	old := ProviderBases{
+		Arxiv:       arxivBase,
+		Crossref:    crossrefBase,
+		OpenLibrary: openLibraryBase,
+		DBLP:        dblpBase,
+		PubMed:      pubmedBase,
+	}
+	arxivBase, crossrefBase, openLibraryBase = bases.Arxiv, bases.Crossref, bases.OpenLibrary
+	dblpBase, pubmedBase = bases.DBLP, bases.PubMed
 	return func() {
-		arxivBase, crossrefBase, openLibraryBase = oldArxiv, oldCrossref, oldOpenLibrary
+		arxivBase, crossrefBase, openLibraryBase = old.Arxiv, old.Crossref, old.OpenLibrary
+		dblpBase, pubmedBase = old.DBLP, old.PubMed
 	}
 }
 

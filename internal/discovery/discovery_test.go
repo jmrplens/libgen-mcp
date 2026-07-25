@@ -225,17 +225,40 @@ func TestBoundedGet_BodyReadErrorSurfaces(t *testing.T) {
 // TestSetBasesForTest verifies SetBasesForTest overrides every provider base URL
 // and that its restore func reinstates the originals exactly.
 func TestSetBasesForTest(t *testing.T) {
-	origArxiv, origCrossref, origOpenLibrary := arxivBase, crossrefBase, openLibraryBase
+	orig := ProviderBases{
+		Arxiv:       arxivBase,
+		Crossref:    crossrefBase,
+		OpenLibrary: openLibraryBase,
+		DBLP:        dblpBase,
+		PubMed:      pubmedBase,
+	}
+	want := ProviderBases{
+		Arxiv:       "http://a.test",
+		Crossref:    "http://c.test",
+		OpenLibrary: "http://o.test",
+		DBLP:        "http://d.test",
+		PubMed:      "http://p.test",
+	}
 
-	restore := SetBasesForTest("http://a.test", "http://c.test", "http://o.test")
-	if arxivBase != "http://a.test" || crossrefBase != "http://c.test" || openLibraryBase != "http://o.test" {
-		t.Fatalf("bases not overridden: arxiv=%q crossref=%q openlibrary=%q",
-			arxivBase, crossrefBase, openLibraryBase)
+	restore := SetBasesForTest(want)
+	if got := currentBases(); got != want {
+		t.Fatalf("bases not overridden: got %+v, want %+v", got, want)
 	}
 
 	restore()
-	if arxivBase != origArxiv || crossrefBase != origCrossref || openLibraryBase != origOpenLibrary {
-		t.Errorf("restore did not reinstate originals: arxiv=%q crossref=%q openlibrary=%q",
-			arxivBase, crossrefBase, openLibraryBase)
+	if got := currentBases(); got != orig {
+		t.Errorf("restore did not reinstate originals: got %+v, want %+v", got, orig)
+	}
+}
+
+// currentBases snapshots the package-level provider base URLs as a ProviderBases, so
+// a test can compare the whole set in one assertion.
+func currentBases() ProviderBases {
+	return ProviderBases{
+		Arxiv:       arxivBase,
+		Crossref:    crossrefBase,
+		OpenLibrary: openLibraryBase,
+		DBLP:        dblpBase,
+		PubMed:      pubmedBase,
 	}
 }
