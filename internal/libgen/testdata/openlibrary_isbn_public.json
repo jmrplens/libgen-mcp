@@ -1,0 +1,29 @@
+{
+ "numFound": 1,
+ "start": 0,
+ "numFoundExact": true,
+ "num_found": 1,
+ "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+ "q": "isbn:9780141439518",
+ "offset": null,
+ "docs": [
+  {
+   "ebook_access": "public",
+   "has_fulltext": true,
+   "ia": [
+    "bwb_KS-179-237",
+    "bwb_W8-AAE-980",
+    "synapseml_gutenberg_pride_and_prejudice_by_jane_austen",
+    "prideprejudicese0000jane",
+    "prideprejudice0000jane_l6i1",
+    "prideprejudicear0000jane"
+   ],
+   "isbn": [
+    "150047875X",
+    "1537163620",
+    "1977928021"
+   ],
+   "title": "Pride and Prejudice"
+  }
+ ]
+}

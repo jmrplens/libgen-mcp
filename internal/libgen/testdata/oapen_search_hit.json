@@ -1,0 +1,25 @@
+[
+ {
+  "uuid": "80819b46-86a6-42af-905d-d97d379c3fa9",
+  "name": "European firms and climate change 2020/2021",
+  "handle": "20.500.12657/50597",
+  "type": "item",
+  "expand": [
+   "metadata",
+   "parentCollection",
+   "parentCollectionList",
+   "parentCommunityList",
+   "bitstreams",
+   "all"
+  ],
+  "lastModified": "2025-07-29 08:32:43.267",
+  "parentCollection": null,
+  "parentCollectionList": null,
+  "parentCommunityList": null,
+  "bitstreams": null,
+  "archived": "true",
+  "withdrawn": "false",
+  "link": "/rest/items/80819b46-86a6-42af-905d-d97d379c3fa9",
+  "metadata": null
+ }
+]

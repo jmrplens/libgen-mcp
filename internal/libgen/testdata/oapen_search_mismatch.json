@@ -1,0 +1,48 @@
+[
+ {
+  "uuid": "fcb26014-5d7f-4ba3-a979-65fadeaa4251",
+  "name": "Database Principles and Technologies – Based on Huawei GaussDB",
+  "handle": "20.500.12657/59331",
+  "type": "item",
+  "expand": [
+   "metadata",
+   "parentCollection",
+   "parentCollectionList",
+   "parentCommunityList",
+   "bitstreams",
+   "all"
+  ],
+  "lastModified": "2025-03-26 09:03:42.889",
+  "parentCollection": null,
+  "parentCollectionList": null,
+  "parentCommunityList": null,
+  "bitstreams": null,
+  "archived": "true",
+  "withdrawn": "false",
+  "link": "/rest/items/fcb26014-5d7f-4ba3-a979-65fadeaa4251",
+  "metadata": null
+ },
+ {
+  "uuid": "09d3e87c-72bd-4527-aa53-05728bb288d9",
+  "name": "Supercomputing Frontiers",
+  "handle": "20.500.12657/23326",
+  "type": "item",
+  "expand": [
+   "metadata",
+   "parentCollection",
+   "parentCollectionList",
+   "parentCommunityList",
+   "bitstreams",
+   "all"
+  ],
+  "lastModified": "2025-03-10 15:48:04.254",
+  "parentCollection": null,
+  "parentCollectionList": null,
+  "parentCommunityList": null,
+  "bitstreams": null,
+  "archived": "true",
+  "withdrawn": "false",
+  "link": "/rest/items/09d3e87c-72bd-4527-aa53-05728bb288d9",
+  "metadata": null
+ }
+]

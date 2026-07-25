@@ -1,0 +1,134 @@
+{
+ "uuid": "fcb26014-5d7f-4ba3-a979-65fadeaa4251",
+ "name": "Database Principles and Technologies – Based on Huawei GaussDB",
+ "handle": "20.500.12657/59331",
+ "type": "item",
+ "lastModified": "2025-03-26 09:03:42.889",
+ "archived": "true",
+ "withdrawn": "false",
+ "link": "/rest/items/fcb26014-5d7f-4ba3-a979-65fadeaa4251",
+ "bitstreams": [
+  {
+   "uuid": "54d2e407-205e-48f0-aa4c-c4e38b0f22a7",
+   "name": "978-981-19-3032-4.pdf",
+   "mimeType": "application/pdf",
+   "sizeBytes": 7561501,
+   "bundleName": "ORIGINAL",
+   "retrieveLink": "/rest/bitstreams/54d2e407-205e-48f0-aa4c-c4e38b0f22a7/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "0ed33d1b-f654-4917-9e91-3edcaf21a999",
+   "name": "fcb26014-5d7f-4ba3-a979-65fadeaa4251.marc.xml",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 5954,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/0ed33d1b-f654-4917-9e91-3edcaf21a999/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "4931fc8c-6d25-4ac5-aae1-3f396a323ab8",
+   "name": "fcb26014-5d7f-4ba3-a979-65fadeaa4251.onix_3.0.xml",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 6024,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/4931fc8c-6d25-4ac5-aae1-3f396a323ab8/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "7247f666-60c9-4e9b-81b3-ddf4b6ffd5aa",
+   "name": "fcb26014-5d7f-4ba3-a979-65fadeaa4251.ris",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 1633,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/7247f666-60c9-4e9b-81b3-ddf4b6ffd5aa/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "0ce06b8c-5cc7-4e32-a4a4-d4df2c0ad567",
+   "name": "fcb26014-5d7f-4ba3-a979-65fadeaa4251.tsv",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 447,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/0ce06b8c-5cc7-4e32-a4a4-d4df2c0ad567/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "0b051780-1f50-4e04-aeb7-297d00f75cdf",
+   "name": "978-981-19-3032-4.pdf.txt",
+   "mimeType": "text/plain",
+   "sizeBytes": 589127,
+   "bundleName": "TEXT",
+   "retrieveLink": "/rest/bitstreams/0b051780-1f50-4e04-aeb7-297d00f75cdf/retrieve",
+   "description": "Extracted text"
+  },
+  {
+   "uuid": "60e1f4c5-9c7d-4f6e-9443-15a85f40f094",
+   "name": "978-981-19-3032-4.pdf.jpg",
+   "mimeType": "image/jpeg",
+   "sizeBytes": 5755,
+   "bundleName": "THUMBNAIL",
+   "retrieveLink": "/rest/bitstreams/60e1f4c5-9c7d-4f6e-9443-15a85f40f094/retrieve",
+   "description": "Generated Thumbnail"
+  }
+ ],
+ "metadata": [
+  {
+   "key": "dc.contributor.author",
+   "value": "Huawei Technologies Co., Ltd.",
+   "language": null,
+   "schema": "dc",
+   "element": "contributor",
+   "qualifier": "author"
+  },
+  {
+   "key": "dc.date.issued",
+   "value": "2023",
+   "language": null,
+   "schema": "dc",
+   "element": "date",
+   "qualifier": "issued"
+  },
+  {
+   "key": "dc.identifier.uri",
+   "value": "https://library.oapen.org/handle/20.500.12657/59331",
+   "language": null,
+   "schema": "dc",
+   "element": "identifier",
+   "qualifier": "uri"
+  },
+  {
+   "key": "dc.language",
+   "value": "English",
+   "language": null,
+   "code": "eng",
+   "schema": "dc",
+   "element": "language",
+   "qualifier": null
+  },
+  {
+   "key": "dc.title",
+   "value": "Database Principles and Technologies – Based on Huawei GaussDB",
+   "language": null,
+   "schema": "dc",
+   "element": "title",
+   "qualifier": null
+  },
+  {
+   "key": "dc.type",
+   "value": "book",
+   "language": "",
+   "schema": "dc",
+   "element": "type",
+   "qualifier": null
+  },
+  {
+   "key": "oapen.identifier.doi",
+   "value": "10.1007/978-981-19-3032-4",
+   "language": null,
+   "schema": "oapen",
+   "element": "identifier",
+   "qualifier": "doi"
+  }
+ ]
+}

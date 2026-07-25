@@ -1,0 +1,65 @@
+{
+ "created": 1784955036,
+ "d1": "ia600505.us.archive.org",
+ "d2": "ia800505.us.archive.org",
+ "dir": "/13/items/prideprejudicezo0000seth",
+ "files_count": 28,
+ "item_last_updated": 1753885482,
+ "item_size": 641861089,
+ "server": "ia800505.us.archive.org",
+ "uniq": 513153861,
+ "workable_servers": [
+  "ia800505.us.archive.org",
+  "ia600505.us.archive.org"
+ ],
+ "files": [
+  {
+   "name": "prideprejudicezo0000seth.epub",
+   "source": "derivative",
+   "format": "EPUB",
+   "size": "11950458",
+   "md5": "dfdb664dc6a2c2af188c369f88ed024f"
+  },
+  {
+   "name": "prideprejudicezo0000seth.pdf",
+   "source": "derivative",
+   "format": "Text PDF",
+   "size": "18326593",
+   "md5": "9e3dc0dda7c6cf7c9a456c00cf3efda5"
+  },
+  {
+   "name": "prideprejudicezo0000seth_djvu.txt",
+   "source": "derivative",
+   "format": "DjVuTXT",
+   "size": "680027",
+   "md5": "dd2d983fd2afbcba391f66b6314cff5c"
+  },
+  {
+   "name": "prideprejudicezo0000seth_encrypted.pdf",
+   "source": "derivative",
+   "format": "ACS Encrypted PDF",
+   "size": "18230055",
+   "md5": "ea2e11746316f1d28adc8e50e03ee2f4"
+  },
+  {
+   "name": "prideprejudicezo0000seth_lcp.epub",
+   "source": "derivative",
+   "format": "LCP Encrypted EPUB",
+   "size": "12007729",
+   "md5": "9c95792546a8920c38116a524e119ed4"
+  }
+ ],
+ "metadata": {
+  "identifier": "prideprejudicezo0000seth",
+  "title": "Pride & prejudice & zombies",
+  "creator": "Seth Grahame-Smith",
+  "mediatype": "texts",
+  "collection": [
+   "internetarchivebooks",
+   "inlibrary",
+   "printdisabled"
+  ],
+  "access-restricted-item": "true",
+  "publicdate": "2023-08-18 04:54:47"
+ }
+}

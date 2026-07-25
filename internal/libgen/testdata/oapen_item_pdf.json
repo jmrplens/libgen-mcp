@@ -1,0 +1,158 @@
+{
+ "uuid": "80819b46-86a6-42af-905d-d97d379c3fa9",
+ "name": "European firms and climate change 2020/2021",
+ "handle": "20.500.12657/50597",
+ "type": "item",
+ "lastModified": "2025-07-29 08:32:43.267",
+ "archived": "true",
+ "withdrawn": "false",
+ "link": "/rest/items/80819b46-86a6-42af-905d-d97d379c3fa9",
+ "bitstreams": [
+  {
+   "uuid": "2089ff58-0264-48bd-870e-93f02522cb7d",
+   "name": "80819b46-86a6-42af-905d-d97d379c3fa9.marc.xml",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 5705,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/2089ff58-0264-48bd-870e-93f02522cb7d/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "8743fc7f-5ffc-46bf-9d20-f71a89b429ea",
+   "name": "80819b46-86a6-42af-905d-d97d379c3fa9.onix_3.0.xml",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 5635,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/8743fc7f-5ffc-46bf-9d20-f71a89b429ea/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "e5a381f9-7f37-4c30-bda4-532ff52d3cf2",
+   "name": "80819b46-86a6-42af-905d-d97d379c3fa9.ris",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 1236,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/e5a381f9-7f37-4c30-bda4-532ff52d3cf2/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "6dd15a76-8473-426e-be13-28e1848a1794",
+   "name": "80819b46-86a6-42af-905d-d97d379c3fa9.tsv",
+   "mimeType": "application/octet-stream",
+   "sizeBytes": 501,
+   "bundleName": "EXPORT",
+   "retrieveLink": "/rest/bitstreams/6dd15a76-8473-426e-be13-28e1848a1794/retrieve",
+   "description": null
+  },
+  {
+   "uuid": "fa5e4801-f872-4845-bd63-fd7d72d14e12",
+   "name": "european firms and climate change 20202021-QHBT21001ENN.pdf",
+   "mimeType": "application/pdf",
+   "sizeBytes": 1850890,
+   "bundleName": "ORIGINAL",
+   "retrieveLink": "/rest/bitstreams/fa5e4801-f872-4845-bd63-fd7d72d14e12/retrieve",
+   "description": ""
+  },
+  {
+   "uuid": "70ed105a-6da9-4fc5-939d-0c098a98af46",
+   "name": "european firms and climate change 20202021-QHBT21001ENN.pdf.txt",
+   "mimeType": "text/plain",
+   "sizeBytes": 104466,
+   "bundleName": "TEXT",
+   "retrieveLink": "/rest/bitstreams/70ed105a-6da9-4fc5-939d-0c098a98af46/retrieve",
+   "description": "Extracted text"
+  },
+  {
+   "uuid": "5145b76f-76a5-4661-be85-a5b97b4426e4",
+   "name": "european firms and climate change 20202021-QHBT21001ENN.pdf.jpg",
+   "mimeType": "image/jpeg",
+   "sizeBytes": 7318,
+   "bundleName": "THUMBNAIL",
+   "retrieveLink": "/rest/bitstreams/5145b76f-76a5-4661-be85-a5b97b4426e4/retrieve",
+   "description": "Generated Thumbnail"
+  }
+ ],
+ "metadata": [
+  {
+   "key": "dc.contributor.author",
+   "value": "Kalantzis, Fotios",
+   "language": "",
+   "schema": "dc",
+   "element": "contributor",
+   "qualifier": "author"
+  },
+  {
+   "key": "dc.contributor.author",
+   "value": "Dominguez, Sofia",
+   "language": "",
+   "schema": "dc",
+   "element": "contributor",
+   "qualifier": "author"
+  },
+  {
+   "key": "dc.contributor.author",
+   "value": "Amati, Adriano",
+   "language": "",
+   "schema": "dc",
+   "element": "contributor",
+   "qualifier": "author"
+  },
+  {
+   "key": "dc.date.issued",
+   "value": "2021",
+   "language": "",
+   "schema": "dc",
+   "element": "date",
+   "qualifier": "issued"
+  },
+  {
+   "key": "dc.identifier.uri",
+   "value": "https://library.oapen.org/handle/20.500.12657/50597",
+   "language": "",
+   "schema": "dc",
+   "element": "identifier",
+   "qualifier": "uri"
+  },
+  {
+   "key": "dc.language",
+   "value": "English",
+   "language": "",
+   "code": "eng",
+   "schema": "dc",
+   "element": "language",
+   "qualifier": null
+  },
+  {
+   "key": "dc.title",
+   "value": "European firms and climate change 2020/2021",
+   "language": "",
+   "schema": "dc",
+   "element": "title",
+   "qualifier": null
+  },
+  {
+   "key": "dc.type",
+   "value": "book",
+   "language": "",
+   "schema": "dc",
+   "element": "type",
+   "qualifier": null
+  },
+  {
+   "key": "oapen.identifier.doi",
+   "value": "https://doi.org/10.2867/768526",
+   "language": "",
+   "schema": "oapen",
+   "element": "identifier",
+   "qualifier": "doi"
+  },
+  {
+   "key": "oapen.identifier.isbn",
+   "value": "9789286150616",
+   "language": "",
+   "schema": "oapen",
+   "element": "identifier",
+   "qualifier": "isbn"
+  }
+ ]
+}

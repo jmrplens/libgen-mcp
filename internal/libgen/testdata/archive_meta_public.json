@@ -1,0 +1,66 @@
+{
+ "created": 1784965169,
+ "d1": "ia600609.us.archive.org",
+ "d2": "ia800609.us.archive.org",
+ "dir": "/7/items/prideprejudice00aust",
+ "files_count": 27,
+ "item_last_updated": 1720604328,
+ "item_size": 2902949026,
+ "server": "ia800609.us.archive.org",
+ "uniq": 2029055681,
+ "workable_servers": [
+  "ia800609.us.archive.org",
+  "ia600609.us.archive.org"
+ ],
+ "files": [
+  {
+   "name": "prideprejudice00aust.epub",
+   "source": "derivative",
+   "format": "EPUB",
+   "size": "30238894",
+   "md5": "e383b6a30fe1cb493d63e603fd695d49"
+  },
+  {
+   "name": "prideprejudice00aust.gif",
+   "source": "derivative",
+   "format": "Animated GIF",
+   "size": "299850",
+   "md5": "abbd21c5f868e9af4e505e2f220e0524"
+  },
+  {
+   "name": "prideprejudice00aust.pdf",
+   "source": "derivative",
+   "format": "Text PDF",
+   "size": "29610052",
+   "md5": "776eeb2c7c56e06db0187be2522e35e0"
+  },
+  {
+   "name": "prideprejudice00aust_bw.pdf",
+   "source": "derivative",
+   "format": "Grayscale PDF",
+   "size": "24441039",
+   "md5": "645da2c201b594c39a58c6e46cfb1cdf"
+  },
+  {
+   "name": "prideprejudice00aust_djvu.txt",
+   "source": "derivative",
+   "format": "DjVuTXT",
+   "size": "874482",
+   "md5": "25c266b888fadef43f0464616b45da63"
+  }
+ ],
+ "metadata": {
+  "identifier": "prideprejudice00aust",
+  "title": "Pride and prejudice",
+  "creator": [
+   "Austen, Jane, 1775-1817",
+   "Thomson, Hugh, 1860-1920, ill"
+  ],
+  "mediatype": "texts",
+  "collection": [
+   "newyorkpubliclibrary",
+   "americana"
+  ],
+  "publicdate": "2007-07-26 11:49:20"
+ }
+}

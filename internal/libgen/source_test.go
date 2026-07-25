@@ -150,15 +150,25 @@ func TestEscapeDOIPath(t *testing.T) {
 	}
 }
 
-// TestPartialKey verifies the partial-file key derivation for all three item
-// shapes: md5-keyed (historical LibGen path), DOI-keyed, and URL-only (neither
-// md5 nor DOI), each yielding a stable, filesystem-safe token.
+// TestPartialKey verifies the partial-file key derivation for all four item
+// shapes: md5-keyed (historical LibGen path), DOI-keyed, ISBN-keyed, and URL-only
+// (no identifier at all), each yielding a stable, filesystem-safe token.
 func TestPartialKey(t *testing.T) {
 	if got := partialKey(Item{MD5: "abc"}, Resolved{}); got != "abc" {
 		t.Errorf("partialKey(md5) = %q, want %q", got, "abc")
 	}
 	if got := partialKey(Item{DOI: "10.1/x"}, Resolved{}); !strings.HasPrefix(got, "doi-") {
 		t.Errorf("partialKey(doi) = %q, want a doi- prefix", got)
+	}
+	// The ISBN must win over the resolved URL: an open-access book source picks
+	// among candidate copies, so keying on the URL would lose a resumable partial
+	// the moment a retry resolved a different candidate.
+	isbnKey := partialKey(Item{ISBN: "9789286150616"}, Resolved{FileURL: "https://cdn.example/a"})
+	if !strings.HasPrefix(isbnKey, "isbn-") {
+		t.Errorf("partialKey(isbn) = %q, want an isbn- prefix", isbnKey)
+	}
+	if other := partialKey(Item{ISBN: "9789286150616"}, Resolved{FileURL: "https://cdn.example/b"}); other != isbnKey {
+		t.Errorf("partialKey(isbn) changed with the resolved URL (%q vs %q); a resume would be lost", isbnKey, other)
 	}
 	got := partialKey(Item{}, Resolved{FileURL: "https://cdn.example/file"})
 	if !strings.HasPrefix(got, "url-") {
