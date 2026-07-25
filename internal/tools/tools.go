@@ -115,6 +115,8 @@ type DownloadInput struct {
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen, randombook or annas for books (md5); oapen or archive for books (isbn); unpaywall, europepmc, biorxiv, fatcat, core, oapen, scihub or scidb for articles (doi). unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY, so both are absent unless configured. Omit to try every compatible source in order with failover"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
+	//nolint:lll // one sentence per clause; splitting the tag would hurt the rendered schema.
+	SkipConfirmation bool `json:"skip_confirmation,omitempty" jsonschema:"when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all"`
 }
 
 // registerOptions holds the optional Register knobs.
@@ -167,7 +169,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Description: desc,
 		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article)),
 		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
-	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads)))
+	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read",
 		Title:       "Read file text",
@@ -1036,7 +1038,7 @@ func elicitAnnasKey(ctx context.Context, req *mcp.CallToolRequest, cfg *config.C
 	return strings.TrimSpace(key)
 }
 
-func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
+func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent *downloadConsent) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
 		ids, err := validateDownloadInput(in)
@@ -1070,7 +1072,7 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 		if remote || in.ResolveOnly {
 			return resolveDownload(ctx, c, item, in.Filename)
 		}
-		return localDownload(ctx, req, c, cfg, item, in)
+		return localDownload(ctx, req, c, cfg, consent, item, in)
 	}
 }
 
@@ -1080,14 +1082,14 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.Tool
 // no elicitation capability the confirmation block is skipped entirely — no prompt
 // AND no size probe — so the default/headless path is byte-identical to today. A
 // decline returns a non-error result carrying the resolved link, and writes nothing.
-func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
+func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, consent *downloadConsent, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 	var zero DownloadOutput
 	dir := in.Path
 	if dir == "" {
 		dir = cfg.DownloadDir
 	}
-	if elicitationSupported(req) {
-		proceed, declinedRes, declinedOut := confirmDownload(ctx, req, c, item, dir, in)
+	if confirmationWanted(cfg, consent, req, in) {
+		proceed, declinedRes, declinedOut := confirmDownload(ctx, req, consent, c, item, dir, in)
 		if !proceed {
 			return declinedRes, declinedOut, nil
 		}
@@ -1135,17 +1137,40 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 // returns proceed=false ONLY when the user explicitly declined, alongside a
 // non-error result (declinedRes/declinedOut) that carries the resolved link so the
 // caller can fetch it themselves; no file is written in that case.
-func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
+func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, consent *downloadConsent, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
 	name := resolveFilename(item, in.Filename, "")
 	message := confirmMessage(ctx, c, item, name, dir)
 	// An explicit decline or cancel aborts the disk write; only an unavailable
 	// elicitation (no capability or a transport error) falls back to proceeding.
-	if elicitConfirmDecision(ctx, req, message, "confirm",
-		"Confirm downloading and saving this file to the server") == confirmDeclined {
+	decision, remember := elicitConfirmRemember(ctx, req, message, "confirm",
+		"Confirm downloading and saving this file to the server", "dont_ask_again")
+	if decision == confirmDeclined {
 		res, out := declinedDownload(ctx, c, item, in.Filename)
 		return false, res, out
 	}
+	if remember && req != nil {
+		consent.remember(req.Session)
+	}
 	return true, nil, DownloadOutput{}
+}
+
+// confirmationWanted reports whether the download tool should ask before writing
+// this file to disk. It is the single place the three opt-outs meet, checked
+// cheapest first: the deployment-wide switch, the per-call argument, this
+// session's "stop asking" answer, and finally whether the client can be asked at
+// all. Any one of them being set skips the prompt — none of them can force one,
+// because a client that never advertised elicitation cannot be prompted.
+func confirmationWanted(cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
+	if cfg != nil && !cfg.ConfirmDownloads {
+		return false
+	}
+	if in.SkipConfirmation {
+		return false
+	}
+	if req != nil && consent.remembered(req.Session) {
+		return false
+	}
+	return elicitationSupported(req)
 }
 
 // confirmMessage builds the confirmation prompt: `Save "<name>"<size> to <dir>?`,
@@ -1389,6 +1414,12 @@ func stringField(m map[string]any, key string) string {
 // returns nil (a no-op) so no notifications are emitted. Emission errors are
 // ignored: progress is best-effort and must never fail the download.
 func progressNotifier(ctx context.Context, req *mcp.CallToolRequest) libgen.ProgressFunc {
+	// A nil request or session carries no token and no way to send one. Guarding
+	// here rather than at each call site keeps the callers free to pass whatever
+	// they were handed, the same way elicitationSupported does.
+	if req == nil || req.Params == nil || req.Session == nil {
+		return nil
+	}
 	token := req.Params.GetProgressToken()
 	if token == nil {
 		return nil

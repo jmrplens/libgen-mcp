@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,10 +69,10 @@ func TestReadReq_InvalidCursor(t *testing.T) {
 // before any file is resolved, so a nil client is safe.
 func TestReadBranches_InvalidCursor(t *testing.T) {
 	ctx := context.Background()
-	if _, err := readFind(ctx, nil, ReadInput{Find: "x", Cursor: "!!!"}); err == nil {
+	if _, err := readFind(ctx, nil, nil, ReadInput{Find: "x", Cursor: "!!!"}); err == nil {
 		t.Error("readFind with an invalid cursor should error")
 	}
-	if _, err := readSequential(ctx, nil, readTestCfg(), ReadInput{Path: "x", Cursor: "!!!"}); err == nil {
+	if _, err := readSequential(ctx, nil, nil, readTestCfg(), ReadInput{Path: "x", Cursor: "!!!"}); err == nil {
 		t.Error("readSequential with an invalid cursor should error")
 	}
 }
@@ -83,13 +84,13 @@ func TestReadBranches_ResolveError(t *testing.T) {
 	ctx := context.Background()
 	c := failingReadClient(t)
 	const md5 = "0123456789abcdef0123456789abcdef"
-	if _, err := readFind(ctx, c, ReadInput{MD5: md5, Find: "x"}); err == nil {
+	if _, err := readFind(ctx, nil, c, ReadInput{MD5: md5, Find: "x"}); err == nil {
 		t.Error("readFind should propagate a fetch failure")
 	}
-	if _, err := readOutline(ctx, c, ReadInput{MD5: md5}); err == nil {
+	if _, err := readOutline(ctx, nil, c, ReadInput{MD5: md5}); err == nil {
 		t.Error("readOutline should propagate a fetch failure")
 	}
-	if _, err := readSequential(ctx, c, readTestCfg(), ReadInput{MD5: md5}); err == nil {
+	if _, err := readSequential(ctx, nil, c, readTestCfg(), ReadInput{MD5: md5}); err == nil {
 		t.Error("readSequential should propagate a fetch failure")
 	}
 }
@@ -102,13 +103,13 @@ func TestReadBranches_ExtractError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	const p = "../extract/testdata/sample.pdf"
-	if _, err := readFind(ctx, nil, ReadInput{Path: p, Find: "x"}); err == nil {
+	if _, err := readFind(ctx, nil, nil, ReadInput{Path: p, Find: "x"}); err == nil {
 		t.Error("readFind should surface a canceled-context extractor error")
 	}
-	if _, err := readOutline(ctx, nil, ReadInput{Path: p}); err == nil {
+	if _, err := readOutline(ctx, nil, nil, ReadInput{Path: p}); err == nil {
 		t.Error("readOutline should surface a canceled-context extractor error")
 	}
-	if _, err := readSequential(ctx, nil, readTestCfg(), ReadInput{Path: p}); err == nil {
+	if _, err := readSequential(ctx, nil, nil, readTestCfg(), ReadInput{Path: p}); err == nil {
 		t.Error("readSequential should surface a canceled-context extractor error")
 	}
 }
@@ -616,5 +617,61 @@ func TestReadNextStepsForbidsInventingContent(t *testing.T) {
 		if !strings.Contains(joined, "did not receive") && !strings.Contains(joined, "were not returned") {
 			t.Errorf("%s: guidance must name the thing not to invent; got %q", name, joined)
 		}
+	}
+}
+
+// TestReadEmitsProgressNotifications pins the fix for a gap the download tool
+// never had: read fetches the entire file server-side before it can return a
+// single page, and that transfer used to run silently because readHandler
+// discarded the request and so had no progress token to report against.
+//
+// The assertion is on notifications actually delivered to the client, not on the
+// wiring, because the wiring is exactly what was wrong before.
+func TestReadEmitsProgressNotifications(t *testing.T) {
+	payload := []byte("%PDF-1.4\n" + strings.Repeat("progress payload ", 4096))
+	srv, _, _ := confirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	client := libgen.New(staticMirrors{srv.URL}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	var mu sync.Mutex
+	var got []float64
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
+			mu.Lock()
+			got = append(got, r.Params.Progress)
+			mu.Unlock()
+		},
+	})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	// A progress token is what opts the caller in; without one the server must
+	// stay silent, which is why it is set explicitly here.
+	params := &mcp.CallToolParams{Name: "read", Arguments: map[string]any{"md5": wantMD5}}
+	params.SetProgressToken("read-progress-1")
+	if _, cerr := session.CallTool(ctx, params); cerr != nil {
+		t.Fatalf("CallTool(read) transport error = %v", cerr)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) == 0 {
+		t.Fatal("read fetched the file without emitting a single progress notification")
+	}
+	if last := got[len(got)-1]; last != float64(len(payload)) {
+		t.Errorf("final progress = %v, want the full payload size %d", last, len(payload))
 	}
 }

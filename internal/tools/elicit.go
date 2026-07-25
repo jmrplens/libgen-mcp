@@ -65,35 +65,63 @@ const (
 // confirmProceed; a missing capability or any transport error yields
 // confirmUnavailable so the caller falls back. It never returns an error.
 func elicitConfirmDecision(ctx context.Context, req *mcp.CallToolRequest, message, fieldName, fieldDescription string) confirmDecision {
+	decision, _ := elicitConfirmRemember(ctx, req, message, fieldName, fieldDescription, "")
+	return decision
+}
+
+// rememberFieldDescription labels the opt-out checkbox that turns the
+// confirmation off for the rest of the session.
+const rememberFieldDescription = "Stop asking for the rest of this session and save future downloads without confirming"
+
+// elicitConfirmRemember is elicitConfirmDecision plus an optional second
+// checkbox. When rememberField is non-empty the form carries it as an OPTIONAL
+// boolean — optional because a required one would force the user to touch a field
+// they may not care about, and because "I did not tick it" is a meaningful answer
+// in its own right. remember is reported true only alongside confirmProceed: a
+// declined download must not also silence the prompt that let the user decline.
+func elicitConfirmRemember(ctx context.Context, req *mcp.CallToolRequest, message, fieldName, fieldDescription, rememberField string) (decision confirmDecision, remember bool) {
 	if !elicitationSupported(req) {
-		return confirmUnavailable
+		return confirmUnavailable, false
+	}
+	properties := map[string]any{
+		fieldName: map[string]any{"type": "boolean", "description": fieldDescription},
+	}
+	if rememberField != "" {
+		properties[rememberField] = map[string]any{
+			"type":        "boolean",
+			"description": rememberFieldDescription,
+		}
 	}
 	res, err := req.Session.Elicit(ctx, &mcp.ElicitParams{
 		Mode:    "form",
 		Message: message,
 		RequestedSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				fieldName: map[string]any{"type": "boolean", "description": fieldDescription},
-			},
+			"type":       "object",
+			"properties": properties,
+			// Only the confirmation itself is required; the opt-out is not.
 			"required": []string{fieldName},
 		},
 	})
 	if err != nil || res == nil {
-		return confirmUnavailable
+		return confirmUnavailable, false
 	}
 	// An explicit decline or cancel is the user saying no: honor it.
 	if res.Action == "decline" || res.Action == "cancel" {
-		return confirmDeclined
+		return confirmDeclined, false
 	}
 	if res.Action != "accept" {
-		return confirmUnavailable
+		return confirmUnavailable, false
 	}
 	// On accept, the boolean value decides; a missing/false value is a "no".
-	if b, ok := res.Content[fieldName].(bool); ok && b {
-		return confirmProceed
+	if b, ok := res.Content[fieldName].(bool); !ok || !b {
+		return confirmDeclined, false
 	}
-	return confirmDeclined
+	if rememberField != "" {
+		if b, ok := res.Content[rememberField].(bool); ok && b {
+			return confirmProceed, true
+		}
+	}
+	return confirmProceed, false
 }
 
 // stringSchema builds a 2020-12 JSON-schema object with a single required

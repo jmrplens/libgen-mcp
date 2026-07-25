@@ -24,6 +24,7 @@ type elicitProbeOutput struct {
 	Confirmed bool   `json:"confirmed"`
 	Supported bool   `json:"supported"`
 	Decision  int    `json:"decision"`
+	Remember  bool   `json:"remember"`
 }
 
 // newElicitSession wires an in-memory MCP server exposing a single "probe" tool
@@ -46,6 +47,9 @@ func newElicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitReq
 				out.Value, out.OK = elicitChoice(ctx, req, "pick one", "edition", "the chosen edition", in.Options)
 			case "confirmdecision":
 				out.Decision = int(elicitConfirmDecision(ctx, req, "proceed?", "confirm", "confirm the action"))
+			case "confirmremember":
+				d, r := elicitConfirmRemember(ctx, req, "proceed?", "confirm", "confirm the action", "dont_ask_again")
+				out.Decision, out.Remember = int(d), r
 			}
 			return nil, out, nil
 		})
@@ -333,5 +337,113 @@ func TestElicitConfirmDecision_UnexpectedAction(t *testing.T) {
 	out := callProbe(t, session, elicitProbeInput{Kind: "confirmdecision"})
 	if out.Decision != int(confirmUnavailable) {
 		t.Fatalf("an unexpected action should map to confirmUnavailable (%d); got %d", confirmUnavailable, out.Decision)
+	}
+}
+
+// TestElicitConfirmRemember_AcceptWithOptOut verifies that ticking the opt-out
+// box alongside the confirmation reports remember=true, which is what turns the
+// prompt off for the rest of the session.
+func TestElicitConfirmRemember_AcceptWithOptOut(t *testing.T) {
+	session := newElicitSession(t, acceptHandler(map[string]any{
+		"confirm": true, "dont_ask_again": true,
+	}))
+	out := callProbe(t, session, elicitProbeInput{Kind: "confirmremember"})
+	if confirmDecision(out.Decision) != confirmProceed {
+		t.Fatalf("decision = %v, want confirmProceed", confirmDecision(out.Decision))
+	}
+	if !out.Remember {
+		t.Fatal("remember should be true when the opt-out box is ticked")
+	}
+}
+
+// TestElicitConfirmRemember_AcceptWithoutOptOut is the ordinary case: the user
+// approves this one download and is asked again next time.
+func TestElicitConfirmRemember_AcceptWithoutOptOut(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content map[string]any
+	}{
+		{"box left unticked", map[string]any{"confirm": true, "dont_ask_again": false}},
+		{"box absent entirely", map[string]any{"confirm": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newElicitSession(t, acceptHandler(tc.content))
+			out := callProbe(t, session, elicitProbeInput{Kind: "confirmremember"})
+			if confirmDecision(out.Decision) != confirmProceed {
+				t.Fatalf("decision = %v, want confirmProceed", confirmDecision(out.Decision))
+			}
+			if out.Remember {
+				t.Fatal("remember should be false when the opt-out box is not ticked")
+			}
+		})
+	}
+}
+
+// TestElicitConfirmRemember_DeclineNeverRemembers guards the combination that
+// would be worst to get wrong: saying no to a download must not also silence the
+// prompt that made saying no possible.
+func TestElicitConfirmRemember_DeclineNeverRemembers(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		result  *mcp.ElicitResult
+		wantDec confirmDecision
+	}{
+		{"explicit decline", &mcp.ElicitResult{Action: "decline"}, confirmDeclined},
+		{"cancel", &mcp.ElicitResult{Action: "cancel"}, confirmDeclined},
+		{
+			"accepted the form but unticked confirm, while asking not to be asked again",
+			&mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false, "dont_ask_again": true}},
+			confirmDeclined,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := newElicitSession(t, func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+				return tc.result, nil
+			})
+			out := callProbe(t, session, elicitProbeInput{Kind: "confirmremember"})
+			if confirmDecision(out.Decision) != tc.wantDec {
+				t.Fatalf("decision = %v, want %v", confirmDecision(out.Decision), tc.wantDec)
+			}
+			if out.Remember {
+				t.Fatal("a declined download must never set remember")
+			}
+		})
+	}
+}
+
+// TestElicitConfirmRemember_OptOutIsOptional checks the schema the client is
+// shown: the confirmation is required, the opt-out is not. A required opt-out
+// would make the user answer a question they did not ask for.
+func TestElicitConfirmRemember_OptOutIsOptional(t *testing.T) {
+	var got *mcp.ElicitParams
+	session := newElicitSession(t, func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		got = req.Params
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	})
+	callProbe(t, session, elicitProbeInput{Kind: "confirmremember"})
+	if got == nil {
+		t.Fatal("the elicitation never reached the client")
+	}
+	schema, ok := got.RequestedSchema.(map[string]any)
+	if !ok {
+		t.Fatalf("RequestedSchema is %T, want map[string]any", got.RequestedSchema)
+	}
+	props, _ := schema["properties"].(map[string]any)
+	if _, present := props["dont_ask_again"]; !present {
+		t.Fatal("the opt-out field is missing from the form")
+	}
+	// Assert the positive case too: without it, a failed type assertion would
+	// leave required empty and the loop below would pass by doing nothing.
+	required, ok := schema["required"].([]any)
+	if !ok {
+		t.Fatalf("required is %T, want []any", schema["required"])
+	}
+	if len(required) != 1 || required[0] != "confirm" {
+		t.Fatalf("required = %v, want exactly [confirm]", required)
+	}
+	for _, r := range required {
+		if r == "dont_ask_again" {
+			t.Fatal("the opt-out must be optional, not required")
+		}
 	}
 }

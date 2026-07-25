@@ -82,6 +82,13 @@ type Config struct {
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
+	// ConfirmDownloads asks the user to approve each file the download tool is
+	// about to write to disk. LIBGEN_MCP_CONFIRM_DOWNLOADS, default true, and only
+	// ever consulted when the client advertised elicitation — a client that cannot
+	// be asked is never prompted whatever this says. Set it false to save without
+	// prompting, the deployment-wide form of the download tool's
+	// skip_confirmation argument and of the prompt's own "stop asking" checkbox.
+	ConfirmDownloads bool
 	// RetryEverySource gives every download source the full start-retry schedule
 	// instead of only the last one that can serve an item.
 	// LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE, a bool, default false.
@@ -193,6 +200,7 @@ func Load() (*Config, error) {
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
+		ConfirmDownloads:        true,
 		ExtraSources:            ExtraSourcesAuto,
 	}
 	loadStringVars(cfg)
@@ -297,6 +305,9 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
+		return err
+	}
+	if err := envBool("LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads); err != nil {
 		return err
 	}
 	if err := envBool("LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource); err != nil {

@@ -237,14 +237,17 @@ func readNextSteps(out ReadOutput) []string {
 // resolveReadPath returns the file to extract from. In local mode it uses the
 // caller's path directly with a no-op release; otherwise it fetches the item to a
 // server-side temp file, returning the caller-owned release func.
-func resolveReadPath(ctx context.Context, c *libgen.Client, in ReadInput) (path string, release func(), err error) {
+func resolveReadPath(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, in ReadInput) (path string, release func(), err error) {
 	if in.Path != "" {
 		// A caller-supplied local path owns no temp file, so its release is a no-op.
 		return in.Path, func() {
 			// Intentionally empty: nothing to release for a local path.
 		}, nil
 	}
-	return c.FetchToTemp(ctx, libgen.Item{MD5: in.MD5, DOI: in.DOI, Source: in.Source})
+	// read fetches the whole file before it can return a single page, so the
+	// transfer is reported the same way download reports its own.
+	return c.FetchToTemp(ctx, libgen.Item{MD5: in.MD5, DOI: in.DOI, Source: in.Source},
+		progressNotifier(ctx, mcpReq))
 }
 
 // readFind runs the find-mode branch: it decodes the incoming cursor to a
@@ -252,7 +255,7 @@ func resolveReadPath(ctx context.Context, c *libgen.Client, in ReadInput) (path 
 // searches it for in.Find, mapping the SearchResult to a ReadOutput. A
 // not-extractable file is a normal result (extractable=false with a reason), not
 // an error.
-func readFind(ctx context.Context, c *libgen.Client, in ReadInput) (ReadOutput, error) {
+func readFind(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, in ReadInput) (ReadOutput, error) {
 	startMatch := 0
 	if in.Cursor != "" {
 		cur, err := decodeCursor(in.Cursor)
@@ -261,7 +264,7 @@ func readFind(ctx context.Context, c *libgen.Client, in ReadInput) (ReadOutput, 
 		}
 		startMatch = cur.Match
 	}
-	path, release, err := resolveReadPath(ctx, c, in)
+	path, release, err := resolveReadPath(ctx, mcpReq, c, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
@@ -286,8 +289,8 @@ func readFind(ctx context.Context, c *libgen.Client, in ReadInput) (ReadOutput, 
 // result as a valid "no TOC" outline rather than a sequential read. A
 // not-extractable file is a normal result (extractable=false with a reason), not
 // an error.
-func readOutline(ctx context.Context, c *libgen.Client, in ReadInput) (ReadOutput, error) {
-	path, release, err := resolveReadPath(ctx, c, in)
+func readOutline(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, in ReadInput) (ReadOutput, error) {
+	path, release, err := resolveReadPath(ctx, mcpReq, c, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
@@ -311,12 +314,12 @@ func readOutline(ctx context.Context, c *libgen.Client, in ReadInput) (ReadOutpu
 // readSequential runs the default sequential-read branch: it builds the
 // extraction request (resolving the cursor's page/char), resolves the file, and
 // extracts one paginated chunk.
-func readSequential(ctx context.Context, c *libgen.Client, cfg *config.Config, in ReadInput) (ReadOutput, error) {
+func readSequential(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, in ReadInput) (ReadOutput, error) {
 	req, err := readReq(in, cfg)
 	if err != nil {
 		return ReadOutput{}, err
 	}
-	path, release, err := resolveReadPath(ctx, c, in)
+	path, release, err := resolveReadPath(ctx, mcpReq, c, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
@@ -340,7 +343,7 @@ func readSequential(ctx context.Context, c *libgen.Client, cfg *config.Config, i
 // an error. cfg supplies the default max_pages/max_chars applied when the caller
 // omits them.
 func readHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHandlerFor[ReadInput, ReadOutput] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, ReadOutput, error) {
+	return func(ctx context.Context, mcpReq *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, ReadOutput, error) {
 		var zero ReadOutput
 		if err := validateReadInput(in, remote); err != nil {
 			return nil, zero, err
@@ -351,11 +354,11 @@ func readHandler(c *libgen.Client, cfg *config.Config, remote bool) mcp.ToolHand
 		)
 		switch {
 		case in.Outline:
-			out, err = readOutline(ctx, c, in)
+			out, err = readOutline(ctx, mcpReq, c, in)
 		case strings.TrimSpace(in.Find) != "":
-			out, err = readFind(ctx, c, in)
+			out, err = readFind(ctx, mcpReq, c, in)
 		default:
-			out, err = readSequential(ctx, c, cfg, in)
+			out, err = readSequential(ctx, mcpReq, c, cfg, in)
 		}
 		if err != nil {
 			return nil, zero, err
