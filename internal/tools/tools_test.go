@@ -183,19 +183,19 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 		{
 			name:       "default without email or core key disables unpaywall and core",
 			mutate:     func(*config.Config) {},
-			wantEnum:   []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"europepmc", "biorxiv", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: []string{"unpaywall", "core"},
 		},
 		{
 			name:       "unpaywall enabled once an email is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
-			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: nil,
 		},
 		{
 			name:       "core joins the enum once its key is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com"; c.CoreKey = "k" },
-			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: nil,
 		},
 	}
@@ -781,6 +781,9 @@ func TestResolveHelpers(t *testing.T) {
 	if meta != "A - T-it-le (2020).epub" {
 		t.Errorf("meta filename: %q", meta)
 	}
+	if got := resolveFilename(libgen.Item{ISBN: "9789286150616"}, "", "pdf"); got != "9789286150616.pdf" {
+		t.Errorf("resolveFilename(isbn) = %q, want the ISBN as the name", got)
+	}
 	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", ""); got != "10.1-x.pdf" {
 		t.Errorf("doi fallback filename: %q", got)
 	}
@@ -1247,9 +1250,50 @@ func TestDownloadToolMD5Book(t *testing.T) {
 // carries an explicit caveat that downloaded content is untrusted third-party
 // data, never instructions to follow.
 func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
-	desc := downloadToolDescription([]string{"libgen"}, []string{"scihub"})
+	desc := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"})
 	if !strings.Contains(desc, "untrusted") {
 		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
+	}
+}
+
+// TestDownloadDescriptionNamesEachKeysChain verifies the prose keeps the three
+// identifier chains apart, so the model never pins an ISBN-only source for an md5
+// download (or the reverse), and mentions a key only when a source serves it.
+func TestDownloadDescriptionNamesEachKeysChain(t *testing.T) {
+	desc := downloadToolDescription([]string{"libgen", "annas"}, []string{"oapen", "archive"}, []string{"scihub"})
+	for _, want := range []string{
+		"md5 (book)", "isbn (book)", "doi (article)",
+		"by md5 against libgen then annas",
+		"by isbn against oapen then archive",
+		"by doi against scihub",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("description should contain %q; got:\n%s", want, desc)
+		}
+	}
+
+	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"})
+	if strings.Contains(noISBN, "isbn") {
+		t.Errorf("description should not mention isbn when no source serves it; got:\n%s", noISBN)
+	}
+}
+
+// TestValidateDownloadInputISBN verifies the isbn argument is normalized for the
+// sources (separators stripped) and that a value that is not an ISBN is rejected
+// with a message saying so, rather than being sent to a provider as a junk query.
+func TestValidateDownloadInputISBN(t *testing.T) {
+	ids, err := validateDownloadInput(DownloadInput{ISBN: "978-92-86-15061-6"})
+	if err != nil {
+		t.Fatalf("validateDownloadInput(isbn) error = %v", err)
+	}
+	if ids.isbn != "9789286150616" {
+		t.Errorf("isbn = %q, want the normalized 9789286150616", ids.isbn)
+	}
+	if _, badErr := validateDownloadInput(DownloadInput{ISBN: "12345"}); badErr == nil {
+		t.Error("a malformed isbn should be rejected")
+	}
+	if _, emptyErr := validateDownloadInput(DownloadInput{}); emptyErr == nil {
+		t.Error("a request with no identifier at all should be rejected")
 	}
 }
 
@@ -1284,7 +1328,7 @@ func TestDownloadInputSchemaInferenceError(t *testing.T) {
 // (the input schema's source enum rejects unknown values before the handler runs),
 // so it is exercised directly.
 func TestValidateDownloadInputUnknownSource(t *testing.T) {
-	_, _, _, err := validateDownloadInput(DownloadInput{
+	_, err := validateDownloadInput(DownloadInput{
 		MD5:    "87a4ebdaf21fa6cc70009a3dd63194ee",
 		Source: "definitelynotasource",
 	})

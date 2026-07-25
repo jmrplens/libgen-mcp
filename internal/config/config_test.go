@@ -717,13 +717,16 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 }
 
 // TestKnownSourcesOrder pins the canonical chain order the download pipeline
-// relies on: the article (DOI) sources lead with the legal open-access providers
-// (unpaywall, then europepmc, biorxiv, fatcat, core) before the shadow-library
-// fallbacks (scihub, then scidb, which covers Sci-Hub's indexing gap); the book
-// (md5) sources follow, with annas last as the final rescue after libgen and
-// randombook.
+// relies on: the legal open-access providers lead — unpaywall, europepmc, biorxiv,
+// fatcat and core for articles, then oapen and archive for books — before the
+// shadow-library fallbacks (scihub, then scidb, which covers Sci-Hub's indexing
+// gap); the md5-keyed book sources follow, with annas last as the final rescue
+// after libgen and randombook.
 func TestKnownSourcesOrder(t *testing.T) {
-	want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"}
+	want := []string{
+		"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "archive",
+		"scihub", "scidb", "libgen", "randombook", "annas",
+	}
 	if len(KnownSources) != len(want) {
 		t.Fatalf("KnownSources = %v, want %v", KnownSources, want)
 	}

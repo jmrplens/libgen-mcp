@@ -84,10 +84,14 @@ func isDuplicate(r DiscoveryResult, seenDOI, seenTitle, seenMD5 map[string]bool)
 }
 
 // DefaultProviders returns the standard keyless open-access providers in the order
-// arxiv, crossref, openlibrary. email is the Crossref polite-pool mailto contact
-// (typically cfg.UnpaywallEmail); pass "" to omit it.
+// arxiv, crossref, openlibrary, gutenberg. email is the Crossref polite-pool mailto
+// contact (typically cfg.UnpaywallEmail); pass "" to omit it.
+//
+// Gutenberg comes last of the four because its hits are public-domain classics
+// matched on title: valuable when they are what was asked for, noise next to a
+// precise identifier match, and dedup keeps whichever provider answered first.
 func DefaultProviders(email string) []Provider {
-	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary(email)}
+	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary(email), NewGutenberg()}
 }
 
 // ExtraProviders returns every searcher consulted beyond the Library Genesis

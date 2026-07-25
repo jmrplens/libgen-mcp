@@ -397,16 +397,20 @@ func baseChainConfig() *config.Config {
 // TestNewWiresSourceChainFromConfig verifies New assembles the full ordered chain
 // in config.KnownSources order (the keyless open-access sources are wired, core is
 // left out for want of a key) and that Supports filters it into the right per-item
-// order: articles get the doi sources, books get the md5 sources.
+// order: articles get the doi sources, md5 books the shadow libraries, and ISBN
+// books the open-access book sources.
 func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	c := New(staticMirrors{}, baseChainConfig())
 
-	wantChain := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb", "libgen", "randombook", "annas"}
+	wantChain := []string{
+		"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "archive",
+		"scihub", "scidb", "libgen", "randombook", "annas",
+	}
 	if got := sourceNames(c); !slices.Equal(got, wantChain) {
 		t.Fatalf("chain = %v, want %v", got, wantChain)
 	}
 
-	var book, article []string
+	var book, article, isbn []string
 	for _, s := range c.sources {
 		if s.Supports(Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}) {
 			book = append(book, s.Name())
@@ -416,12 +420,19 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		if s.Supports(Item{DOI: "10.1101/2020.01.01.000000"}) {
 			article = append(article, s.Name())
 		}
+		if s.Supports(Item{ISBN: "9789286150616"}) {
+			isbn = append(isbn, s.Name())
+		}
 	}
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book chain = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
+	// oapen claims monograph DOIs too, and sits ahead of the shadow libraries.
+	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article chain = %v, want %v", article, want)
+	}
+	if want := []string{"oapen", "archive"}; !slices.Equal(isbn, want) {
+		t.Errorf("isbn chain = %v, want %v", isbn, want)
 	}
 }
 
@@ -431,7 +442,7 @@ func TestNewWiresCoreWhenKeyed(t *testing.T) {
 	cfg := baseChainConfig()
 	cfg.CoreKey = "test-key"
 	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
-	want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb"}
+	want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "scihub", "scidb"}
 	if !slices.Equal(article, want) {
 		t.Errorf("article chain (keyed) = %v, want %v", article, want)
 	}
@@ -445,7 +456,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
 
@@ -455,8 +466,24 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book (no email) = %v, want %v", book, want)
 	}
-	if want := []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
+	}
+}
+
+// TestEnabledISBNSources verifies the ISBN-keyed sources are reported separately
+// and in chain order, and that disabling them empties the list rather than folding
+// them into the md5 book chain.
+func TestEnabledISBNSources(t *testing.T) {
+	got := New(staticMirrors{}, baseChainConfig()).EnabledISBNSources()
+	if want := []string{"oapen", "archive"}; !slices.Equal(got, want) {
+		t.Errorf("EnabledISBNSources() = %v, want %v", got, want)
+	}
+
+	md5Only := baseChainConfig()
+	md5Only.Sources = []string{"libgen"}
+	if none := New(staticMirrors{}, md5Only).EnabledISBNSources(); len(none) != 0 {
+		t.Errorf("EnabledISBNSources() with only libgen enabled = %v, want none", none)
 	}
 }
 

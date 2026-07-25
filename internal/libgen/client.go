@@ -327,8 +327,9 @@ func allowedByOperator(configured []string) func(string) bool {
 // config.KnownSources order; because Download filters each source by
 // Supports(item), this single ordered slice yields the right per-item order: an
 // article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
-// biorxiv, fatcat, core, scihub, scidb) and a book (md5-keyed) item to the md5
-// sources (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
+// biorxiv, fatcat, core, oapen, scihub, scidb), an ISBN-keyed book to the
+// open-access book sources (oapen, archive) and an md5-keyed book to the shadow
+// libraries (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
 // or gated off, like core without a key — are left out. Each non-LibGen source uses
 // the client's page HTTP client (with timeout) for its resolution lookups;
 // libgenSource holds c so it can reuse the mirror failover in ResolveGetURL.
@@ -347,6 +348,8 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
 		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
 		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
+		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
+		"archive":    func() DownloadSource { return archiveSource{http: c.http} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },
 		"scidb":      func() DownloadSource { return scidbSource{mirrors: annasLister(), http: c.http} },
 		"libgen":     func() DownloadSource { return libgenSource{c: c} },
@@ -388,6 +391,29 @@ func (c *Client) EnabledSourceNames() (book, article []string) {
 		}
 	}
 	return book, article
+}
+
+// isbnProbe is the well-formed ISBN offered to Supports to find the sources that
+// resolve a book by its publisher identifier. It must pass NormalizeISBN — the
+// ISBN sources reject a malformed one — so it is a real thirteen-digit Bookland
+// number rather than the "0" the md5 probe can get away with.
+const isbnProbe = "9780000000002"
+
+// EnabledISBNSources returns the names of the enabled download sources that resolve
+// a book by ISBN, in canonical chain order. It is separate from EnabledSourceNames
+// because ISBN is a third key alongside md5 and doi: the open-access book sources
+// (OAPEN, the Internet Archive) hold books by publisher identifier and know nothing
+// of LibGen digests, so advertising them under the md5 chain would invite the model
+// to pin a source that cannot serve an md5.
+func (c *Client) EnabledISBNSources() []string {
+	probe := Item{ISBN: isbnProbe}
+	var names []string
+	for _, s := range c.sources {
+		if s.Supports(probe) {
+			names = append(names, s.Name())
+		}
+	}
+	return names
 }
 
 // get tries path?q across the mirrors until it gets a 200. On a transient

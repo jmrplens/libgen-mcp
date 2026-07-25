@@ -42,7 +42,16 @@ AI assistant) make. There are no background connections. The destinations are:
   (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts),
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
-  `web.archive.org` for the file). Each request carries only the DOI.
+  `web.archive.org` for the file). A monograph DOI is also offered to
+  [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries
+  only the DOI.
+- **Open-access book sources (only when you request a book by ISBN).** A
+  `download` by `isbn` sends **only that ISBN** to [OAPEN](https://library.oapen.org)
+  (`library.oapen.org`) and to [OpenLibrary](https://openlibrary.org)
+  (`openlibrary.org`), which is asked which [Internet Archive](https://archive.org)
+  scans hold the book; the candidate scans are then confirmed and fetched from
+  `archive.org` (whose download URL redirects to one of its own CDN nodes). No
+  account, key or contact address is involved in any of these requests.
 - **CORE (only when you request an article by DOI and configure a key).**
   `LIBGEN_MCP_CORE_KEY` is empty by default, which leaves the `core` source out
   of the chain. When you set it, the DOI is sent to `api.core.ac.uk` with the key
@@ -54,7 +63,10 @@ AI assistant) make. There are no background connections. The destinations are:
 - **The extra searchers (when a search reaches beyond the catalog).** A `search`
   may send **your query text** to Anna's Archive (`annas-archive.gl` and its
   mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org),
-  [OpenLibrary](https://openlibrary.org), [dblp](https://dblp.org) (`dblp.org`),
+  [OpenLibrary](https://openlibrary.org), Project Gutenberg via the third-party
+  [Gutendex](https://gutendex.com) API (`gutendex.com`; the ebook files it links
+  to live on `gutenberg.org`, which is contacted only if you fetch one),
+  [dblp](https://dblp.org) (`dblp.org`),
   [PubMed](https://pubmed.ncbi.nlm.nih.gov)
   (`eutils.ncbi.nlm.nih.gov`) and [ERIC](https://eric.ed.gov)
   (`api.ies.ed.gov`). When this happens is under your

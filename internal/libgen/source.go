@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -77,6 +79,55 @@ func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bo
 	return bytes.HasPrefix(head, []byte("%PDF"))
 }
 
+// jsonFetch performs the bounded, correctly-classified JSON GET that a keyless
+// REST-backed source needs, so each such source states what it is calling rather
+// than repeating the same twenty lines of request/status/decode handling.
+//
+// It is a value carrying the per-source constants (which client, which error
+// prefix, how much body to read) with the per-call endpoint passed to get.
+type jsonFetch struct {
+	// client is the HTTP client to use; nil selects http.DefaultClient.
+	client *http.Client
+	// source is the source's name, used as the error-message prefix the e2e
+	// suite's failure classification anchors on.
+	source string
+	// subject names what is being looked up (an identifier, an item id), so a
+	// failure says which lookup broke.
+	subject string
+	// maxBody bounds how many bytes of the response are read.
+	maxBody int64
+}
+
+// get issues the GET and decodes the JSON body into out, classifying every failure
+// with the taxonomy in sourceerr.go: a transport error or a transient status is the
+// source being unavailable, while a decode failure stays untagged so a body we could
+// not read never reads as a verdict on the item.
+func (f jsonFetch) get(ctx context.Context, endpoint string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("%s: building request for %q: %w", f.source, f.subject, err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+	// Go sends no Accept header of its own, and a content-negotiating REST host can
+	// read that as a browser asking for a page; both APIs behind this helper answer
+	// HTML to such a request under some paths.
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := httpClientOr(f.client).Do(req)
+	if err != nil {
+		return unavailable(fmt.Errorf("%s: requesting %q: %w", f.source, f.subject, err))
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return unavailableStatus(resp.StatusCode,
+			fmt.Errorf("%s: %q returned HTTP %d", f.source, f.subject, resp.StatusCode))
+	}
+	if decErr := json.NewDecoder(io.LimitReader(resp.Body, f.maxBody)).Decode(out); decErr != nil {
+		return fmt.Errorf("%s: decoding response for %q: %w", f.source, f.subject, decErr)
+	}
+	return nil
+}
+
 // Item is a download request expressed independently of any particular source: a
 // file may be identified by its LibGen MD5, by a DOI, or by both, and carries
 // optional bibliographic metadata used to build a human-readable filename. At
@@ -89,6 +140,12 @@ type Item struct {
 	// DOI is the Digital Object Identifier, when the file is keyed by DOI (e.g.
 	// Unpaywall or Sci-Hub). Empty when unknown.
 	DOI string
+	// ISBN identifies a book, in either its ten- or thirteen-character form and in
+	// any spelling NormalizeISBN accepts. It is the key the open-access book
+	// sources use (OAPEN's monograph catalog, and the Internet Archive via
+	// OpenLibrary), which hold books by their publisher identifier rather than by a
+	// shadow-library digest. Empty for md5- or DOI-keyed items.
+	ISBN string
 	// Source, when set, restricts the download to that single named source (one
 	// of config.KnownSources). Empty means try the full configured source chain
 	// in order with transparent failover.
@@ -202,14 +259,21 @@ func (s libgenSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 // serialization lock, so an interrupted download can resume and concurrent
 // downloads of the same target never corrupt each other. It is keyed by md5 when
 // present (preserving the historical ".libgen-mcp-<md5>.part" path for LibGen),
-// else by a hash of the DOI, else by a hash of the resolved FileURL. Every branch
-// yields a filesystem-safe token.
+// else by a hash of the DOI, else by a hash of the ISBN, else by a hash of the
+// resolved FileURL. Every branch yields a filesystem-safe token.
+//
+// The ISBN branch is what makes an interrupted open-access book download resumable:
+// those sources pick among several candidate copies, so the resolved URL can differ
+// between attempts, and keying on it would strand the bytes already on disk under a
+// path the retry never looks at.
 func partialKey(it Item, r Resolved) string {
 	switch {
 	case it.MD5 != "":
 		return it.MD5
 	case it.DOI != "":
 		return "doi-" + shortHash(it.DOI)
+	case it.ISBN != "":
+		return "isbn-" + shortHash(it.ISBN)
 	default:
 		return "url-" + shortHash(r.FileURL)
 	}

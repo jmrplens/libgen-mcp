@@ -149,12 +149,20 @@ func defaultStartRetryWaits() []time.Duration {
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
 //
-// The article (DOI) sources lead with the legal open-access providers — unpaywall,
-// then Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar (fatcat) and CORE —
-// before the shadow-library fallbacks (scihub, scidb), so a freely licensed copy
-// is always preferred when one exists. The book (md5) sources keep their order:
-// libgen, randombook, annas.
-var KnownSources = []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb", "libgen", "randombook", "annas"}
+// The legal open-access providers lead: unpaywall, then Europe PMC,
+// bioRxiv/medRxiv, Internet Archive Scholar (fatcat) and CORE for articles, then
+// OAPEN and the Internet Archive for books. Only after them come the shadow
+// libraries — scihub and scidb for articles, libgen, randombook and annas for
+// md5-keyed books — so a freely licensed copy is always preferred when one exists.
+//
+// Ordering only matters between sources that claim the same item, so the single
+// list yields the right per-identifier chain: an ISBN tries oapen then archive; a
+// DOI tries the article providers, then oapen (which also holds monograph DOIs),
+// then Sci-Hub; an md5 tries libgen, randombook and annas as before.
+var KnownSources = []string{
+	"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "archive",
+	"scihub", "scidb", "libgen", "randombook", "annas",
+}
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
