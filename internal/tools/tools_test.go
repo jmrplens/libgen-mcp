@@ -1972,31 +1972,59 @@ const oaOpenLibraryDocs = `{"docs":[
    "first_publish_year":1843,"isbn":["9780000000001"],"key":"/works/OL1W"}
 ]}`
 
-// oaDiscoveryServers spins up three httptest servers standing in for arXiv,
-// Crossref and OpenLibrary, points the discovery package at them for the duration
-// of the test, and returns a counter of the total discovery requests observed so a
-// test can assert whether discovery was called at all.
+// oaDblpHits is a one-hit dblp search response used by the extra-source search
+// tests; it carries a distinct DOI so it is not deduped against the others.
+const oaDblpHits = `{"result":{"hits":{"@total":"1","hit":[{
+  "info":{"authors":{"author":{"text":"Edsger W. Dijkstra"}},
+  "title":"A Conference Paper.","venue":"DAC","year":"2018",
+  "doi":"10.3000/dblp-only","ee":"https://doi.org/10.3000/dblp-only"}}]}}}`
+
+// oaPubMedSearch is a one-PMID esearch response, and oaPubMedSummary the matching
+// esummary record, used by the extra-source search tests. The DOI is distinct so the
+// hit is not deduped against the others.
+const (
+	oaPubMedSearch  = `{"esearchresult":{"count":"1","idlist":["12345678"]}}`
+	oaPubMedSummary = `{"result":{"uids":["12345678"],
+  "12345678":{"uid":"12345678","title":"A Biomedical Paper.","pubdate":"2020 Mar 4",
+   "fulljournalname":"Journal of Tests","authors":[{"name":"Doudna JA"}],
+   "articleids":[{"idtype":"pubmed","value":"12345678"},
+                 {"idtype":"doi","value":"10.4000/pubmed-only"}]}}}`
+)
+
+// oaDiscoveryServers spins up an httptest server for every network-backed discovery
+// provider, points the discovery package at them for the duration of the test, and
+// returns a counter of the total discovery requests observed so a test can assert
+// whether discovery was called at all.
 func oaDiscoveryServers(t *testing.T) *int32 {
 	t.Helper()
 	var hits int32
-	arxiv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		_, _ = w.Write([]byte(oaArxivFeed))
-	}))
-	crossref := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		_, _ = w.Write([]byte(oaCrossrefWorks))
-	}))
-	openLibrary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
-		_, _ = w.Write([]byte(oaOpenLibraryDocs))
-	}))
-	restore := discovery.SetBasesForTest(arxiv.URL, crossref.URL, openLibrary.URL)
+	body := func(payload string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt32(&hits, 1)
+			_, _ = w.Write([]byte(payload))
+		}
+	}
+	arxiv := httptest.NewServer(body(oaArxivFeed))
+	crossref := httptest.NewServer(body(oaCrossrefWorks))
+	openLibrary := httptest.NewServer(body(oaOpenLibraryDocs))
+	dblp := httptest.NewServer(body(oaDblpHits))
+	// PubMed takes two hops against distinct paths on one host.
+	pubmedMux := http.NewServeMux()
+	pubmedMux.HandleFunc("/esearch.fcgi", body(oaPubMedSearch))
+	pubmedMux.HandleFunc("/esummary.fcgi", body(oaPubMedSummary))
+	pubmed := httptest.NewServer(pubmedMux)
+
+	restore := discovery.SetBasesForTest(discovery.ProviderBases{
+		Arxiv: arxiv.URL, Crossref: crossref.URL, OpenLibrary: openLibrary.URL,
+		DBLP: dblp.URL, PubMed: pubmed.URL,
+	})
 	t.Cleanup(func() {
 		restore()
 		arxiv.Close()
 		crossref.Close()
 		openLibrary.Close()
+		dblp.Close()
+		pubmed.Close()
 	})
 	return &hits
 }
@@ -2061,8 +2089,10 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 	for _, r := range oa {
 		origins[r.Origin] = true
 	}
-	if !origins["arxiv"] || !origins["crossref"] || !origins["openlibrary"] {
-		t.Errorf("expected hits labeled by all three origins, got %v", origins)
+	for _, want := range []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed"} {
+		if !origins[want] {
+			t.Errorf("expected a hit labeled %q, got origins %v", want, origins)
+		}
 	}
 
 	atomic.StoreInt32(hits, 0)
@@ -2215,7 +2245,10 @@ func TestForcedSearchQueriesExtrasConcurrently(t *testing.T) {
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(func() { arxiv.Close(); quiet.Close() })
-	restore := discovery.SetBasesForTest(arxiv.URL, quiet.URL, quiet.URL)
+	restore := discovery.SetBasesForTest(discovery.ProviderBases{
+		Arxiv: arxiv.URL, Crossref: quiet.URL, OpenLibrary: quiet.URL,
+		DBLP: quiet.URL, PubMed: quiet.URL,
+	})
 	t.Cleanup(restore)
 
 	cfg := &config.Config{
@@ -2627,7 +2660,7 @@ func TestDetailsByDOIFallsBackToEnrichment(t *testing.T) {
 			"title":["Hallmarks of Cancer"],"published":{"date-parts":[[2011]]}}}`))
 	}))
 	t.Cleanup(crossref.Close)
-	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	restore := discovery.SetBasesForTest(discovery.ProviderBases{Crossref: crossref.URL})
 	t.Cleanup(restore)
 
 	// The catalog answers every json.php lookup with an empty array: no record.
@@ -2662,7 +2695,7 @@ func TestEnrichKillSwitchCannotBeLifted(t *testing.T) {
 		_, _ = w.Write([]byte(`{"message":{"container-title":["Cell"],"is-referenced-by-count":1}}`))
 	}))
 	t.Cleanup(crossref.Close)
-	restore := discovery.SetBasesForTest("", crossref.URL, "")
+	restore := discovery.SetBasesForTest(discovery.ProviderBases{Crossref: crossref.URL})
 	t.Cleanup(restore)
 
 	mux := http.NewServeMux()

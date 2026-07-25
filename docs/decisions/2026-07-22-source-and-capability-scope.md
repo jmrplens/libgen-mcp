@@ -104,6 +104,29 @@ Sources evaluated:
 First wave: arXiv + Crossref search + OpenLibrary resolver. The MAYBE rows are gated behind
 demand. Federated results must dedup against libgen and be clearly labeled by origin.
 
+#### Amendment — 2026-07-25 (discovery beyond open access)
+
+**Added — dblp and PubMed.** Neither was evaluated above, because the table asked only which
+sources supply *open-access full text*. That framing left a gap: for a citation the caller needs
+to know a paper exists and how to cite it, which is a different question from whether anyone will
+hand over the PDF. Both new sources answer the first question and are explicitly silent on the
+second — their hits are never marked open access and never carry a `pdf_url`.
+
+- **dblp** (`dblp.org/search/publ/api`) — keyless, JSON, no documented rate limit (we still pace
+  ourselves to 1 rps; the service throttles bursts in practice). It is authoritative on computer
+  science venue, year and authorship, which arXiv and Crossref match poorly for conference
+  papers, and it supplies the `venue` field for those records.
+- **PubMed** (NCBI E-utilities) — keyless within a hard 3 requests/second allowance, so the
+  provider is paced to it and sends the `tool` attribution NCBI asks for (plus the contact email
+  only when one is already configured; none is ever invented). It covers the whole biomedical
+  literature, where the existing `europepmc` source covers only the downloadable open-access
+  slice — so PubMed answers for papers no free source carries at all.
+
+Consequence for the output shape: the `search` tool's `open_access` array is now a
+beyond-catalog array whose entries carry their own `open_access` flag. The field name is kept for
+compatibility, and the tool's description, its next-step guidance and the rendered table all say
+that only a flagged entry is known to be free to read.
+
 #### Correction — 2026-07-25 (article *download* sources)
 
 The table above evaluated candidates as **discovery** sources for `search`, and its verdicts

@@ -758,20 +758,64 @@ func TestE2EReadEPUB(t *testing.T) {
 	assertOutlineShape(t, outline)
 }
 
-// validOrigin reports whether an open-access hit's origin label is one of the
-// three keyless discovery providers.
+// validOrigin reports whether a beyond-catalog hit's origin label is one of the
+// keyless discovery providers: the three open-access ones plus the two bibliographic
+// indexes.
 func validOrigin(origin string) bool {
 	switch origin {
-	case "arxiv", "crossref", "openlibrary":
+	case "arxiv", "crossref", "openlibrary", "dblp", "pubmed":
 		return true
 	default:
 		return false
 	}
 }
 
+// bibliographicOrigins are the discovery providers that index the literature without
+// stating whether an item is free to read, so their hits must never claim to be open
+// access nor carry a PDF URL.
+var bibliographicOrigins = map[string]bool{"dblp": true, "pubmed": true}
+
+// assertBibliographicIndexesStayHonest asserts the two index providers keep their
+// contract against real data: a dblp or PubMed hit carries bibliographic fields (a
+// title, and a venue that is a citation string rather than an abstract) and never
+// claims open access or offers a pdf_url — nothing either source returns says the
+// paper is free to read. It logs how many hits each contributed so a run where a
+// provider went quiet is visible rather than silently passing.
+func assertBibliographicIndexesStayHonest(t *testing.T, hits []discovery.DiscoveryResult) {
+	t.Helper()
+	perOrigin := map[string]int{}
+	for i := range hits {
+		h := hits[i]
+		if !bibliographicOrigins[h.Origin] {
+			continue
+		}
+		perOrigin[h.Origin]++
+		if h.OpenAccess {
+			t.Errorf("%s hit %d claims open_access; the index states nothing about availability", h.Origin, i)
+		}
+		if h.PDFURL != "" {
+			t.Errorf("%s hit %d carries pdf_url %q; the index publishes no fetchable PDF", h.Origin, i, h.PDFURL)
+		}
+		if strings.TrimSpace(h.Title) == "" {
+			t.Errorf("%s hit %d has no title; a bibliographic record without one is useless", h.Origin, i)
+		}
+		if venue := strings.TrimSpace(h.Venue); len(venue) > 300 {
+			t.Errorf("%s hit %d has a %d-character venue; it is a citation string, not an abstract: %q",
+				h.Origin, i, len(venue), venue)
+		}
+	}
+	for _, origin := range []string{"dblp", "pubmed"} {
+		if perOrigin[origin] == 0 {
+			t.Logf("no %s hits this run; its invariants could not be graded", origin)
+			continue
+		}
+		t.Logf("%s contributed %d hits", origin, perOrigin[origin])
+	}
+}
+
 // TestE2ESearchOpenAccessIncluded drives the search tool with
 // extra_sources=always for a research-y query against the LIVE site (which
-// also hits arXiv/Crossref/OpenLibrary). It asserts the OpenAccess list is
+// also hits arXiv/Crossref/OpenLibrary/dblp/PubMed). It asserts the OpenAccess list is
 // populated, each hit is labeled by a known origin, no DOI is duplicated, and the
 // per-provider discovery fields hold up against real data. It gates on requireLive
 // and SKIPS when the open-access providers return nothing.
@@ -800,6 +844,7 @@ func TestE2ESearchOpenAccessIncluded(t *testing.T) {
 	assertArchiveLinksAreOpen(t, out.OpenAccess)
 	assertOpenAccessDiscriminates(t, out.OpenAccess)
 	assertArxivVenue(t, out.OpenAccess)
+	assertBibliographicIndexesStayHonest(t, out.OpenAccess)
 	pace()
 
 	// A second, book-shaped query so OpenLibrary actually contributes: a papers
@@ -830,7 +875,11 @@ func assertOriginsAndDedup(t *testing.T, hits []discovery.DiscoveryResult) {
 		}
 		seenDOI[doi] = true
 	}
-	t.Logf("open_access hits=%d unique_dois=%d", len(hits), len(seenDOI))
+	perOrigin := map[string]int{}
+	for i := range hits {
+		perOrigin[hits[i].Origin]++
+	}
+	t.Logf("open_access hits=%d unique_dois=%d per_origin=%v", len(hits), len(seenDOI), perOrigin)
 }
 
 // assertArchiveLinksAreOpen asserts the OpenLibrary archive link keeps its promise:

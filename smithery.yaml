@@ -19,7 +19,7 @@ startCommand:
       extraSources:
         type: string
         enum: [auto, always, never]
-        description: When search reaches beyond the Library Genesis catalog to Anna's Archive, arXiv, Crossref and OpenLibrary. auto (the default) consults them when the catalog returns nothing or fails, always on every search, never not at all.
+        description: When search reaches beyond the Library Genesis catalog to Anna's Archive, arXiv, Crossref, OpenLibrary, dblp and PubMed. auto (the default) consults them when the catalog returns nothing or fails, always on every search, never not at all.
       downloadDir:
         type: string
         description: Optional directory where downloaded files are saved (defaults to ~/Downloads).

@@ -20,7 +20,7 @@ Use get_details with a result md5 for full metadata, and download to fetch the f
 
 **Parameters:**
 
-- `extra_sources` (string): a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive and the open-access providers (arXiv, Crossref, OpenLibrary) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never
+- `extra_sources` (string): a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary) and the bibliographic indexes (dblp for computer science, PubMed for biomedicine) on this call - use it whenever the request mentions open access, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never
 - `order` (string): a single value (not an array) to sort by: id time_added title author year or size
 - `order_mode` (string): a single value (not an array): asc or desc
 - `page` (integer): result page number starting at 1 (default 1)
@@ -117,7 +117,7 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_READ_CACHE_BYTES` | 536870912 (512 MiB) | [1048576, 53687091200] | Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. |
 | `LIBGEN_MCP_READ_CACHE_TTL` | 10m | [1s, 24h] | How long an unreferenced read temp file lingers before eviction. |
 | `LIBGEN_MCP_ENRICH` | true | 1/true/0/false | Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely. |
-| `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
+| `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, dblp, PubMed) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
 
 ## Download sources
 

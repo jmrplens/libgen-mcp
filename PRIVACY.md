@@ -53,13 +53,17 @@ AI assistant) make. There are no background connections. The destinations are:
   `sci-hub.ee`), requesting `https://<host>/<doi>` until one serves the paper.
 - **The extra searchers (when a search reaches beyond the catalog).** A `search`
   may send **your query text** to Anna's Archive (`annas-archive.gl` and its
-  mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org) and
-  [OpenLibrary](https://openlibrary.org). When this happens is under your
+  mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org),
+  [OpenLibrary](https://openlibrary.org), [dblp](https://dblp.org) (`dblp.org`)
+  and [PubMed](https://pubmed.ncbi.nlm.nih.gov)
+  (`eutils.ncbi.nlm.nih.gov`). When this happens is under your
   control, via the `extra_sources` argument or `LIBGEN_MCP_EXTRA_SOURCES`: by
   default (`auto`) only when the Library Genesis catalog returns nothing or
   fails, with `always` on every search, and with `never` not at all. When — and
   only when — you have configured `LIBGEN_MCP_UNPAYWALL_EMAIL`, the Crossref
-  request carries that same address as its polite-pool contact. `get_details`
+  request carries that same address as its polite-pool contact, and the PubMed
+  requests carry it as the contact address NCBI's usage etiquette asks for; with
+  no address configured, none is sent and none is invented. `get_details`
   also queries
   Anna's Archive, sending **only the md5**, when the catalog has no record for it.
 - **Anna's Archive and IPFS gateways (only when you download through them).**

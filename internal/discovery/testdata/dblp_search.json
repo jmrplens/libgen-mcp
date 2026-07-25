@@ -1,0 +1,50 @@
+{
+"result":{
+"query":"attention* is all* you* need*",
+"status":{
+"@code":"200",
+"text":"OK"
+},
+"time":{
+"@unit":"msecs",
+"text":"61.65"
+},
+"completions":{
+"@total":"1",
+"@computed":"1",
+"@sent":"1",
+"c":{
+"@sc":"116",
+"@dc":"114",
+"@oc":"116",
+"@id":"70462667",
+"text":"need"
+}
+},
+"hits":{
+"@total":"114",
+"@computed":"100",
+"@sent":"3",
+"@first":"0",
+"hit":[{
+"@score":"9",
+"@id":"2744547",
+"info":{"authors":{"author":[{"@pid":"167/1261-9","text":"Xiaopeng Zhang 0009"},{"@pid":"17/8386","text":"Haoyu Yang"},{"@pid":"y/EFYYoung","text":"Evangeline F. Y. Young"}]},"title":"Attentional Transfer is All You Need: Technology-aware Layout Pattern Generation.","venue":"DAC","pages":"169-174","year":"2021","type":"Conference and Workshop Papers","access":"closed","key":"conf/dac/ZhangYY21","doi":"10.1109/DAC18074.2021.9586227","ee":"https://doi.org/10.1109/DAC18074.2021.9586227","url":"https://dblp.org/rec/conf/dac/ZhangYY21"},
+"url":"URL#2744547"
+},
+{
+"@score":"8",
+"@id":"1418256",
+"info":{"authors":{"author":[{"@pid":"375/1509","text":"Georgy Tyukin"},{"@pid":"342/2924","text":"Gbètondji J.-S. Dovonon"},{"@pid":"232/9592","text":"Jean Kaddour"},{"@pid":"58/10142","text":"Pasquale Minervini"}]},"title":"Attention Is All You Need But You Don&apos;t Need All Of It For Inference of Large Language Models.","venue":"CoRR","volume":"abs/2407.15516","year":"2024","type":"Informal and Other Publications","access":"open","key":"journals/corr/abs-2407-15516","doi":"10.48550/ARXIV.2407.15516","ee":"https://doi.org/10.48550/arXiv.2407.15516","url":"https://dblp.org/rec/journals/corr/abs-2407-15516"},
+"url":"URL#1418256"
+},
+{
+"@score":"7",
+"@id":"301187",
+"info":{"authors":{"author":[{"@pid":"377/4079","text":"Tarik Houichime"},{"@pid":"147/7108","text":"Younès El Amrani"}]},"title":"Context Is All You Need: A Hybrid Attention-Based Method for Detecting Code Design Patterns.","venue":"IEEE Access","volume":"13","pages":"9689-9707","year":"2025","type":"Journal Articles","access":"open","key":"journals/access/HouichimeA25","doi":"10.1109/ACCESS.2025.3525849","ee":"https://doi.org/10.1109/ACCESS.2025.3525849","url":"https://dblp.org/rec/journals/access/HouichimeA25"},
+"url":"URL#301187"
+}
+]
+}
+}
+}

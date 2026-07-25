@@ -33,6 +33,11 @@ call. Rather than hand back an empty result, the search can escalate and consult
   [OpenLibrary](https://openlibrary.org/) — open-access providers. Their hits are not
   md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI
   from Crossref, a direct `pdf_url` from arXiv, and an `isbn`/title from OpenLibrary.
+- [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic
+  indexes, for computer science and biomedicine respectively. They answer *what the paper is*
+  (venue, year, full author list, DOI) without claiming it is free to read, which is exactly
+  why they are worth asking: PubMed in particular covers the literature that has no
+  open-access copy at all. Their hits land in the same list, never marked open access.
 
 When this escalation happens is controlled by a single three-valued setting — the
 `extra_sources` argument on the call, falling back to the deployment's
@@ -88,6 +93,9 @@ argument to hand to `download`:
   catalog, not a repository, so use those to run a better-targeted `search` — unless the book
   is publicly readable, in which case it also carries an `archive_url` you can read directly on
   the Internet Archive.
+- **`dblp`** and **`pubmed`** — the result carries a DOI and a `venue`, and nothing is claimed
+  about availability. Cite it, or try `download`'s `doi` argument knowing it may find no free
+  copy.
 
 ```mermaid
 flowchart LR
@@ -97,6 +105,7 @@ flowchart LR
     O -->|crossref| P[has a DOI<br/>→ download by doi]
     O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
     O -->|openlibrary| S[has an isbn/title<br/>→ refine the search]
+    O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
 
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool
@@ -111,8 +120,10 @@ instruction for the next step — it tells you exactly which argument to pass.
 
 One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is
 a shadow library, not a publisher of freely-licensed material, so it is listed separately from
-the open-access providers (arXiv, Crossref, OpenLibrary). Do not infer anything about a
-result's licensing from the fact that a search found it.
+the open-access providers (arXiv, Crossref, OpenLibrary). Nor are the bibliographic indexes
+(dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing
+about it, so their hits are never marked open access. Do not infer anything about a result's
+licensing from the fact that a search found it.
 
 ## Why it works this way
 

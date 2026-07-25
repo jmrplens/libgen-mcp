@@ -197,8 +197,9 @@ success, while the searchers run concurrently and their answers are merged.
 
 A search always queries the Library Genesis catalog through the same failover client. Whether
 it also queries the **extra searchers** — Anna's Archive plus the keyless open-access
-providers (arXiv, Crossref, OpenLibrary) — is decided by `ExtraSourcesMode`, resolved per call
-from the `extra_sources` argument and falling back to `LIBGEN_MCP_EXTRA_SOURCES`:
+providers (arXiv, Crossref, OpenLibrary) and the bibliographic indexes (dblp, PubMed) — is
+decided by `ExtraSourcesMode`, resolved per call from the `extra_sources` argument and falling
+back to `LIBGEN_MCP_EXTRA_SOURCES`:
 
 | Mode     | When the extras run                            | Scheduling                                                              |
 | -------- | ---------------------------------------------- | ----------------------------------------------------------------------- |

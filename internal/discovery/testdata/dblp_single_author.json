@@ -1,0 +1,44 @@
+{
+"result":{
+"query":"go to statement* considered* harmful*",
+"status":{
+"@code":"200",
+"text":"OK"
+},
+"time":{
+"@unit":"msecs",
+"text":"347.65"
+},
+"completions":{
+"@total":"1",
+"@computed":"1",
+"@sent":"1",
+"c":{
+"@sc":"4",
+"@dc":"4",
+"@oc":"4",
+"@id":"69963450",
+"text":"harmful"
+}
+},
+"hits":{
+"@total":"4",
+"@computed":"4",
+"@sent":"2",
+"@first":"0",
+"hit":[{
+"@score":"6",
+"@id":"8657729",
+"info":{"authors":{"author":{"@pid":"d/WEDijkstra","text":"Edsger W. Dijkstra"}},"title":"Letters to the editor: go to statement considered harmful.","venue":"Commun. ACM","volume":"11","number":"3","pages":"147-148","year":"1968","type":"Journal Articles","access":"closed","key":"journals/cacm/Dijkstra68a","doi":"10.1145/362929.362947","ee":"https://doi.org/10.1145/362929.362947","url":"https://dblp.org/rec/journals/cacm/Dijkstra68a"},
+"url":"URL#8657729"
+},
+{
+"@score":"5",
+"@id":"2405379",
+"info":{"authors":{"author":{"@pid":"d/WEDijkstra","text":"Edsger W. Dijkstra"}},"title":"Go To Statement Considered Harmful.","venue":"Edsger Wybe Dijkstra","pages":"315-318","year":"2022","type":"Parts in Books or Collections","access":"closed","key":"books/mc/22/Dijkstra22e","doi":"10.1145/3544585.3544604","ee":"https://doi.org/10.1145/3544585.3544604","url":"https://dblp.org/rec/books/mc/22/Dijkstra22e"},
+"url":"URL#2405379"
+}
+]
+}
+}
+}
