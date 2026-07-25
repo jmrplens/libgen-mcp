@@ -89,6 +89,7 @@ Fija estas variables en el bloque `env` de tu cliente MCP (consulta [Primeros pa
 | `LIBGEN_MCP_READ_CACHE_BYTES`            | `536870912` (512 MiB)                                    | `[1048576, 53687091200]` (1 MiB–50 GiB), int                                                                                                                    | Límite de tamaño total de la caché de archivos temporales de `read`: los archivos de lectura descargados que superen este tamaño agregado se desalojan, los usados menos recientemente primero, nunca mientras una llamada a `read` mantiene una referencia.                                                                                                                                                                                                                                                                                      |
 | `LIBGEN_MCP_READ_CACHE_TTL`              | `10m`                                                    | `[1s, 24h]`, duración de Go                                                                                                                                     | Cuánto tiempo permanece un archivo temporal de `read` sin referenciar antes de desalojarse, de modo que las páginas sucesivas de una lectura reutilizan una sola obtención mientras los archivos inactivos se reclaman.                                                                                                                                                                                                                                                                                                                           |
 | `LIBGEN_MCP_ENRICH`                      | `true`                                                   | `1`/`true`/`0`/`false`, bool                                                                                                                                    | Interruptor de despliegue para los metadatos opt-in `enrich` de `get_details` (Crossref/OpenLibrary). El valor por defecto `true` significa que el enriquecimiento está _permitido_; fija `false` para _prohibirlo_ por completo, sin importar el flag `enrich` de cada llamada. Un valor no booleano hace fallar el arranque.                                                                                                                                                                                                                    |
+| `LIBGEN_MCP_CONFIRM_DOWNLOADS`           | `true`                                                   | `1`/`true`/`0`/`false`, bool                                                                                                                                    | Pide al usuario que apruebe cada archivo que `download` escribe en disco. Solo se consulta cuando el cliente anunció la capacidad de elicitación. Fija `false` para guardar sin preguntar: es la forma a nivel de despliegue del argumento `skip_confirmation` de `download` y de la casilla «dejar de preguntar durante esta sesión» del propio aviso. Un valor no booleano hace fallar el arranque.                                                                                                                                             |
 | `LIBGEN_MCP_EXTRA_SOURCES`               | `auto`                                                   | `auto`, `always`, `never`                                                                                                                                       | Cuándo se consultan los buscadores extra (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC). `auto`: solo cuando el catálogo de Library Genesis no devuelve nada o falla. `always`: en cada búsqueda, junto al catálogo. `never`: solo el catálogo, incluso si no hay resultados. Un argumento `extra_sources` por llamada prevalece sobre este valor por defecto en cualquier dirección — salvo `never`, que es un cierre que ninguna llamada puede levantar; un valor no reconocido hace fallar el arranque. |
 
 ## Notas sobre variables concretas
@@ -158,6 +159,26 @@ Estas dos variables acotan cuánto texto devuelve por defecto una sola llamada a
 ### `LIBGEN_MCP_READ_CACHE_BYTES` y `LIBGEN_MCP_READ_CACHE_TTL`
 
 `read` obtiene un archivo identificado por `md5`/`doi` a un archivo temporal en el servidor una sola vez, y luego sirve las páginas/fragmentos sucesivos de ese mismo archivo mientras el modelo pagina con `cursor` — sin esta caché, cada página volvería a descargar el archivo completo. `LIBGEN_MCP_READ_CACHE_TTL` es cuánto tiempo permanece un archivo temporal sin referenciar tras su último uso antes de desalojarse; `LIBGEN_MCP_READ_CACHE_BYTES` es el techo de tamaño total de la caché, por encima del cual se desalojan primero los archivos usados menos recientemente (un archivo que una llamada a `read` está usando activamente nunca se desaloja). Ninguna de las dos variables afecta a `download`, que siempre escribe directamente en `LIBGEN_MCP_DOWNLOAD_DIR` y no mantiene caché temporal en el servidor.
+
+### `LIBGEN_MCP_CONFIRM_DOWNLOADS`
+
+Controla si `download` pregunta antes de escribir un archivo en el disco del servidor. El valor
+por defecto `true` mantiene la confirmación; `false` guarda sin preguntar nunca.
+
+Solo se consulta cuando el cliente conectado anunció la capacidad de elicitación: a un cliente al
+que no se puede preguntar nunca se le pregunta, sea cual sea este valor.
+
+Este es el interruptor a nivel de despliegue. Junto a él hay dos exclusiones más concretas, y
+basta con cualquiera de ellas para omitir un aviso:
+
+- El argumento `skip_confirmation: true` de `download`, que suprime el aviso en una sola llamada.
+- La casilla **«dejar de preguntar durante el resto de esta sesión»** del propio aviso, que es la
+  forma de desactivarlo en caliente sin reiniciar el servidor. Su alcance es la sesión del
+  cliente, así que una conexión posterior vuelve a preguntar. Esta variable no es una forma
+  persistente de esa elección: fijarla a `false` desactiva el aviso para todos los clientes y
+  todas las sesiones, en lugar de recordar lo que marcó un usuario.
+
+Ninguna de las tres puede forzar la aparición de un aviso: solo lo quitan.
 
 ### `LIBGEN_MCP_ENRICH`
 

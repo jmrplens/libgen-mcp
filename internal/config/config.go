@@ -82,6 +82,13 @@ type Config struct {
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
+	// ConfirmDownloads asks the user to approve each file the download tool is
+	// about to write to disk. LIBGEN_MCP_CONFIRM_DOWNLOADS, default true, and only
+	// ever consulted when the client advertised elicitation — a client that cannot
+	// be asked is never prompted whatever this says. Set it false to save without
+	// prompting, the deployment-wide form of the download tool's
+	// skip_confirmation argument and of the prompt's own "stop asking" checkbox.
+	ConfirmDownloads bool
 	// RetryEverySource gives every download source the full start-retry schedule
 	// instead of only the last one that can serve an item.
 	// LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE, a bool, default false.
@@ -193,6 +200,7 @@ func Load() (*Config, error) {
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
+		ConfirmDownloads:        true,
 		ExtraSources:            ExtraSourcesAuto,
 	}
 	loadStringVars(cfg)
@@ -290,16 +298,31 @@ func parseDurations(v string) ([]time.Duration, error) {
 	return waits, nil
 }
 
+// loadBools fills the boolean scalar fields of cfg from the environment. It is
+// split out of loadNumeric so neither grows past the cognitive-complexity budget
+// as flags are added: each variable costs one more branch, and this file is where
+// every new LIBGEN_MCP_* setting lands.
+func loadBools(cfg *Config) error {
+	for _, b := range []struct {
+		key string
+		dst *bool
+	}{
+		{"LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads},
+		{"LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled},
+		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
+		{"LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
+	} {
+		if err := envBool(b.key, b.dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // loadNumeric fills the numeric and boolean scalar fields of cfg from the
 // environment.
 func loadNumeric(cfg *Config) error {
-	if err := envBool("LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads); err != nil {
-		return err
-	}
-	if err := envBool("LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled); err != nil {
-		return err
-	}
-	if err := envBool("LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource); err != nil {
+	if err := loadBools(cfg); err != nil {
 		return err
 	}
 	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {

@@ -824,3 +824,57 @@ func TestLoadExtraSources(t *testing.T) {
 		t.Fatal("an unknown mode must fail at startup, not fall back silently")
 	}
 }
+
+// TestLoadConfirmDownloads checks LIBGEN_MCP_CONFIRM_DOWNLOADS (envBool, default
+// true): unset keeps the confirmation prompt, an explicit false form turns it off
+// deployment-wide, and a non-boolean value fails the load rather than silently
+// picking a side. Defaulting matters more here than for most flags — a typo that
+// quietly resolved to false would remove a confirmation the operator believes is
+// still in place.
+func TestLoadConfirmDownloads(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir()) // keep Load() offline/valid
+
+	t.Run("default true", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_CONFIRM_DOWNLOADS", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !cfg.ConfirmDownloads {
+			t.Error("ConfirmDownloads = false, want true when unset")
+		}
+	})
+
+	for _, v := range []string{"false", "FALSE", "f", "0"} {
+		t.Run("false via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_CONFIRM_DOWNLOADS", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.ConfirmDownloads {
+				t.Errorf("ConfirmDownloads = true for %q, want false", v)
+			}
+		})
+	}
+
+	for _, v := range []string{"true", "TRUE", "t", "1"} {
+		t.Run("true via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_CONFIRM_DOWNLOADS", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !cfg.ConfirmDownloads {
+				t.Errorf("ConfirmDownloads = false for %q, want true", v)
+			}
+		})
+	}
+
+	t.Run("invalid errors", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_CONFIRM_DOWNLOADS", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() should reject a non-boolean LIBGEN_MCP_CONFIRM_DOWNLOADS")
+		}
+	})
+}

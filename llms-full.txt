@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.3.0 | 4 tools
+> Version 1.3.1 | 4 tools
 
 ## Tools
 
@@ -62,6 +62,7 @@ Download a file to a local directory.
 - `md5` (string): file md5 hash from a book search result; provide md5, isbn or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
 - `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
+- `skip_confirmation` (boolean): when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all
 - `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover
 
 Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
@@ -118,6 +119,7 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_READ_CACHE_BYTES` | 536870912 (512 MiB) | [1048576, 53687091200] | Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. |
 | `LIBGEN_MCP_READ_CACHE_TTL` | 10m | [1s, 24h] | How long an unreferenced read temp file lingers before eviction. |
 | `LIBGEN_MCP_ENRICH` | true | 1/true/0/false | Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely. |
+| `LIBGEN_MCP_CONFIRM_DOWNLOADS` | true | 1/true/0/false | Ask the user to approve each file that download writes to disk. Only ever consulted when the client advertised elicitation — one that cannot be asked is never prompted. Set false to save without prompting: the deployment-wide form of download's skip_confirmation argument and of the prompt's own "stop asking for this session" checkbox. |
 | `LIBGEN_MCP_EXTRA_SOURCES` | auto | auto, always, never | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss. |
 
 ## Download sources

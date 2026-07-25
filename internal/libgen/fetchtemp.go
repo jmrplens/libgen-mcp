@@ -24,7 +24,12 @@ func noopRelease() {
 // returned file is named with its correct extension (DownloadItem derives it), so
 // a paginated read can dispatch on the extension. On error the returned path is
 // empty and release is a no-op.
-func (c *Client) FetchToTemp(ctx context.Context, item Item) (path string, release func(), err error) {
+//
+// An optional progress callback reports the transfer the same way DownloadItem
+// does, for the read path that would otherwise fetch a large file in silence.
+// Only the first callback is used, and a cache hit reports nothing because
+// nothing is transferred.
+func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...ProgressFunc) (path string, release func(), err error) {
 	key := item.MD5
 	if key == "" {
 		key = item.DOI
@@ -46,7 +51,11 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item) (path string, relea
 	if err != nil {
 		return "", noopRelease, err
 	}
-	res, err := c.DownloadItem(ctx, item, tempDir, "")
+	// Progress is forwarded here for the same reason download reports it: a read
+	// of a large PDF fetches the whole file first, and without this the client
+	// waits on a silent multi-megabyte transfer. A cache hit returns above and
+	// reports nothing, which is correct — nothing is being transferred.
+	res, err := c.DownloadItem(ctx, item, tempDir, "", progress...)
 	if err != nil {
 		_ = os.RemoveAll(tempDir)
 		return "", noopRelease, err

@@ -1515,7 +1515,14 @@ func newConfirmSession(t *testing.T, cfg *config.Config, mirrors libgen.MirrorLi
 // confirmConfig returns a plain local-download config rooted at a fresh temp dir.
 func confirmConfig(t *testing.T) *config.Config {
 	t.Helper()
-	return &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	// ConfirmDownloads must be set explicitly: config.Load defaults it to true,
+	// but a struct literal like this one gets the false zero value, which reads
+	// as "the operator turned confirmations off" and skips the prompt entirely.
+	return &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second,
+		RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
+		ConfirmDownloads: true,
+	}
 }
 
 // TestDownloadTool_ConfirmAccepted verifies the confirm-and-save path: with an
@@ -2943,5 +2950,97 @@ func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
 	}
 	if !strings.Contains(joined, "not open access") {
 		t.Errorf("guidance never says the catalog results are not open access; got %q", joined)
+	}
+}
+
+// confirmWantedProbeOutput reports what confirmationWanted decided, so the
+// decision can be asserted through a real session that genuinely does (or does
+// not) advertise elicitation.
+type confirmWantedProbeOutput struct {
+	Wanted bool `json:"wanted"`
+}
+
+// runConfirmationWanted drives confirmationWanted inside a live MCP session.
+// elicit selects whether the client advertises the elicitation capability, which
+// is the one input that cannot be faked from outside a session.
+func runConfirmationWanted(t *testing.T, elicit bool, cfg *config.Config, consent *downloadConsent, in DownloadInput, preRemember bool) bool {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "1"}, nil)
+	mcp.AddTool(server, &mcp.Tool{Name: "probe", Description: "reports confirmationWanted for tests"},
+		func(_ context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, confirmWantedProbeOutput, error) {
+			if preRemember {
+				consent.remember(req.Session)
+			}
+			return nil, confirmWantedProbeOutput{Wanted: confirmationWanted(cfg, consent, req, in)}, nil
+		})
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	var copts mcp.ClientOptions
+	if elicit {
+		copts.ElicitationHandler = func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+		}
+	}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, &copts).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "probe", Arguments: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out confirmWantedProbeOutput
+	if uerr := json.Unmarshal(raw, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return out.Wanted
+}
+
+// TestConfirmationWanted covers every way the download prompt can be switched
+// off, and the one case where it must still appear. The three opt-outs are
+// independent: each alone is enough.
+func TestConfirmationWanted(t *testing.T) {
+	asking := &config.Config{ConfirmDownloads: true}
+	silent := &config.Config{ConfirmDownloads: false}
+
+	for _, tc := range []struct {
+		name        string
+		elicit      bool
+		cfg         *config.Config
+		in          DownloadInput
+		preRemember bool
+		want        bool
+	}{
+		{"default: a capable client is asked", true, asking, DownloadInput{}, false, true},
+		{"env var off silences it", true, silent, DownloadInput{}, false, false},
+		{"per-call skip_confirmation silences it", true, asking, DownloadInput{SkipConfirmation: true}, false, false},
+		{"this session already opted out", true, asking, DownloadInput{}, true, false},
+		{"a client that cannot be asked is never prompted", false, asking, DownloadInput{}, false, false},
+		{"opt-outs combine without conflicting", true, silent, DownloadInput{SkipConfirmation: true}, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runConfirmationWanted(t, tc.elicit, tc.cfg, &downloadConsent{}, tc.in, tc.preRemember)
+			if got != tc.want {
+				t.Fatalf("confirmationWanted = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConfirmationWanted_NilConfigStillAsks pins the defensive branch: a missing
+// config must not be read as "the operator disabled confirmations".
+func TestConfirmationWanted_NilConfigStillAsks(t *testing.T) {
+	if !runConfirmationWanted(t, true, nil, &downloadConsent{}, DownloadInput{}, false) {
+		t.Fatal("a nil config must fall back to asking, not to silence")
 	}
 }
