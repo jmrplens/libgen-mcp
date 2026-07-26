@@ -25,6 +25,13 @@ const links = [
 	},
 ];
 
+// The maintainer's project index. Gives a reader — and a crawler — a path from
+// this project to the whole portfolio, which is where every #software node in
+// the identity graph is listed together. Not `rel="me"`: it is a page, not an
+// identity profile.
+const projectsUrl = isES ? "https://jmrp.io/es/projects/" : "https://jmrp.io/projects/";
+const projectsText = isES ? "Todos los proyectos" : "All projects";
+
 const licenseUrl = "https://github.com/jmrplens/libgen-mcp/blob/main/LICENSE";
 // On-domain, so an engine judging this site can actually read the policy rather
 // than following a link off to GitHub.
@@ -67,6 +74,9 @@ const roleText = isES ? "Ingeniero de I+D" : "R&D Engineer";
 				</a>
 			))
 		}
+		<a href={projectsUrl} rel="noopener noreferrer" target="_blank">
+			{projectsText}
+		</a>
 	</span>
 </div>
 <div class="lgm-trust">

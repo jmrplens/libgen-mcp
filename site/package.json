@@ -16,6 +16,7 @@
     "check": "astro check",
     "i18n:check": "node scripts/check-i18n-parity.mjs",
     "privacy:check": "node scripts/sync-privacy.mjs --check",
+    "identity:sync": "node scripts/sync-identity.mjs",
     "eslint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
