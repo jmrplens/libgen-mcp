@@ -178,6 +178,26 @@ La instalación recomendada es el **binario precompilado**: un único ejecutable
 
 </Tabs>
 
+### Instalar desde un registro
+
+`libgen-mcp` se publica en los registros de MCP con el identificador
+`io.github.jmrplens/libgen-mcp`. Si tu cliente instala servidores desde alguno
+de ellos, puedes añadirlo desde ahí en lugar de escribir la configuración a
+mano:
+
+| Registro | Ficha |
+| --- | --- |
+| Registro oficial de MCP | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
+| Smithery | [smithery.ai/servers/@jmrp/libgen-mcp](https://smithery.ai/servers/@jmrp/libgen-mcp) |
+| mcp.so | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341) |
+| LobeHub | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp) |
+| Docker Hub | [jmrplens/libgen-mcp](https://hub.docker.com/r/jmrplens/libgen-mcp) |
+| Índice de paquetes Go | [pkg.go.dev/github.com/jmrplens/libgen-mcp](https://pkg.go.dev/github.com/jmrplens/libgen-mcp) |
+
+Una ficha de registro puede ir por detrás de la última publicación; la versión
+que describe esta documentación es siempre la de
+[`VERSION`](https://github.com/jmrplens/libgen-mcp/blob/main/VERSION).
+
 ## Configurar un cliente MCP
 
 Apunta tu cliente al binario. El comando es `libgen-mcp` (o la ruta absoluta al binario `server` si mantuviste el nombre por defecto de `go install`). Sobre stdio no hacen falta argumentos adicionales.
