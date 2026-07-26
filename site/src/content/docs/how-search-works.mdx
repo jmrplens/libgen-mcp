@@ -96,6 +96,8 @@ flowchart TD
     G --> H[return combined results]
 ```
 
+In prose: `never` queries the Library Genesis catalog and stops. `always` queries the catalog and every extra source concurrently. `auto`, the default, queries the catalog first and reaches for the extra sources only when it returned nothing or failed outright. Whenever extra sources run, their hits are merged with the catalog's, deduplicated, and labelled by `origin`.
+
 When the extras are consulted, every source is queried and the answers are merged. Duplicates are removed by **file digest** (the md5): the same file surfaced by two sources appears only once. When that same file appears in both the catalog and Anna's, **the catalog record wins**, because it carries richer metadata — publishers, languages, ISBNs, and the other fields the catalog invests in collecting. The Anna's copy is dropped rather than shown twice in a thinner form.
 
 ## What comes back: origins and downloads
@@ -121,6 +123,8 @@ flowchart LR
     O -->|gutenberg| G[has a full_text_url<br/>→ fetch the ebook directly]
     O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
+
+In prose: what to do with a result follows from its `origin`. A `libgen` or `annas` hit carries an md5 — download by md5. A `crossref` hit carries a DOI — download by doi. An `arxiv` or `eric` hit carries a `pdf_url` you fetch directly. An `openlibrary` hit carries an ISBN — download by isbn, or use it to refine the search. A `gutenberg` hit carries a `full_text_url` for the ebook itself. A `dblp` or `pubmed` hit is a bibliographic record with a DOI and a venue: cite it, or try a download by doi.
 
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool falls back to Anna's own metadata and labels the record `origin: "annas"`. That record is thinner than a catalog one, and most Anna's items publish no IPFS address — so a keyless download may still not be possible even when the metadata is.
 

@@ -138,6 +138,8 @@ flowchart TD
     Q --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
+In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
+
 ## Multi-source chain
 
 Download sources implement a common interface — `Name`, `Supports(item)`, and `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built from configuration in the fixed order `unpaywall → europepmc → biorxiv → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each source is offered only the items it supports:

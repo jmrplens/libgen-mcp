@@ -96,6 +96,8 @@ flowchart TD
     G --> H[devolver resultados combinados]
 ```
 
+En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados se fusionan con los del catálogo, se deduplican y se etiquetan por `origin`.
+
 Cuando se consultan las fuentes adicionales, se consulta a cada fuente y las respuestas se fusionan. Los duplicados se eliminan por **digest de archivo** (el md5): el mismo archivo que aparece en dos fuentes se muestra una sola vez. Cuando ese mismo archivo aparece tanto en el catálogo como en Anna's, **gana el registro del catálogo**, porque lleva metadatos más ricos — editoriales, idiomas, ISBNs y el resto de campos que el catálogo se esfuerza en recoger. La copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
 
 ## Qué vuelve: orígenes y descargas
@@ -121,6 +123,8 @@ flowchart LR
     O -->|gutenberg| G[tiene una full_text_url<br/>→ descargar el ebook directamente]
     O -->|dblp / pubmed| C[tiene DOI + venue<br/>→ citarlo, o probar download por doi]
 ```
+
+En prosa: qué hacer con un resultado se deduce de su `origin`. Un resultado de `libgen` o `annas` lleva un md5 — descarga por md5. Uno de `crossref` lleva un DOI — descarga por doi. Uno de `arxiv` o `eric` lleva un `pdf_url` que obtienes directamente. Uno de `openlibrary` lleva un ISBN — descarga por isbn, o úsalo para afinar la búsqueda. Uno de `gutenberg` lleva un `full_text_url` con el propio ebook. Uno de `dblp` o `pubmed` es un registro bibliográfico con DOI y venue: cítalo, o prueba una descarga por doi.
 
 Un resultado de Anna's también sirve para `get_details`: el catálogo no tiene registro de él, así que la herramienta recurre a los metadatos propios de Anna's y etiqueta el registro con `origin: "annas"`. Ese registro es más pobre que uno del catálogo, y la mayoría de ítems de Anna's no publica dirección IPFS, así que puede que la descarga sin clave siga sin ser posible aunque los metadatos sí lo sean.
 

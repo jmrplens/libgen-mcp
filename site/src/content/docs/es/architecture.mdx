@@ -138,6 +138,8 @@ flowchart TD
     Q --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
+En prosa: `download` construye la cadena de fuentes para el identificador recibido, salta las que estén en enfriamiento (salvo que lo estén todas) y prueba cada una por turno. Una fuente que no puede servir el ítem se omite; una que falla se enfría cinco minutos. Cuando una fuente resuelve una URL, la descarga toma un hueco de concurrencia y un cerrojo por parcial, reanuda desde un `.part` existente si el servidor respeta la petición `Range` y reinicia desde cero si no, y valida la respuesta — rechazando páginas HTML de error, ficheros que exceden el tope y disco insuficiente — antes de transmitir a `.part` calculando el MD5. Una lectura corta conserva el parcial para reanudar más tarde. Una discrepancia de MD5 lo borra y pasa a la siguiente fuente. Al terminar, el fichero se renombra atómicamente a su destino, se limpia el enfriamiento de la fuente y el resultado informa de path, size, source, `verified` y `resumed`.
+
 ## Cadena multi-fuente
 
 Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(item)` y `Resolve(ctx, item)` — de modo que la canalización compartida permanece agnóstica del proveedor. La cadena se construye desde la configuración en el orden fijo `unpaywall → europepmc → biorxiv → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, y a cada fuente solo se le ofrecen los elementos que admite:
