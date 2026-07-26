@@ -55,15 +55,94 @@
 }
 
 /*
- * Reserve height for Mermaid diagrams before their script runs.
+ * Mermaid diagrams.
  *
- * astro-mermaid injects its own stylesheet at runtime, so the `min-height` rule
- * meant to prevent layout shift only lands *after* first paint: the browser
- * paints the raw diagram source at its natural height, the injected CSS then
- * collapses it, and the rendered SVG expands it again — two unreserved shifts.
- * Declaring it here applies it at first paint instead, before any script runs.
+ * rehype-mermaid bakes each diagram to inline SVG at build time, so there is no
+ * script, no layout shift to reserve against, and the SVG has its own intrinsic
+ * size. What a build-time SVG cannot do is follow the theme toggle, so it is
+ * emitted in neutral light colours (see `mermaidConfig` in astro.config.mjs) and
+ * repainted here through variables. `!important` is required throughout: Mermaid
+ * writes its palette into inline `style` attributes and a `<style>` block inside
+ * the SVG, both of which outrank an ordinary rule.
  */
-pre.mermaid:not([data-processed]) {
-	min-height: 200px;
-	overflow: hidden;
+:root {
+	--lgm-mermaid-text: #171717;
+	--lgm-mermaid-node-bg: #f6f8fa;
+	--lgm-mermaid-node-border: #d0d7de;
+	--lgm-mermaid-line: #57606a;
+	--lgm-mermaid-label-bg: #ffffff;
+	--lgm-mermaid-cluster-bg: #ffffff;
+}
+
+:root[data-theme="dark"] {
+	--lgm-mermaid-text: #e6edf3;
+	--lgm-mermaid-node-bg: #161b22;
+	--lgm-mermaid-node-border: #30363d;
+	--lgm-mermaid-line: #8b949e;
+	--lgm-mermaid-label-bg: #0d1117;
+	--lgm-mermaid-cluster-bg: #0d1117;
+}
+
+/*
+ * rehype-mermaid emits the <svg> as a direct child of the content flow, with no
+ * wrapper to hang a scroll box on, so a wide flowchart is scaled down to fit
+ * rather than scrolled. That is the right trade here: all three diagrams are
+ * shallow, and the prose paragraph under each one carries the same information
+ * for anyone who cannot read the shrunk labels.
+ */
+.sl-markdown-content svg[id^="mermaid"] {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: 1.5rem auto;
+	background-color: transparent !important;
+}
+
+/*
+ * Labels are HTML inside <foreignObject>, not <text>, so `color` is what applies
+ * to them; `fill` is kept for the <text> nodes Mermaid still emits elsewhere.
+ */
+.sl-markdown-content svg[id^="mermaid"] text,
+.sl-markdown-content svg[id^="mermaid"] foreignObject div,
+.sl-markdown-content svg[id^="mermaid"] .nodeLabel,
+.sl-markdown-content svg[id^="mermaid"] .edgeLabel,
+.sl-markdown-content svg[id^="mermaid"] .nodeLabel p,
+.sl-markdown-content svg[id^="mermaid"] .edgeLabel p {
+	fill: var(--lgm-mermaid-text) !important;
+	color: var(--lgm-mermaid-text) !important;
+}
+
+.sl-markdown-content svg[id^="mermaid"] .node rect,
+.sl-markdown-content svg[id^="mermaid"] .node circle,
+.sl-markdown-content svg[id^="mermaid"] .node ellipse,
+.sl-markdown-content svg[id^="mermaid"] .node polygon,
+.sl-markdown-content svg[id^="mermaid"] .node path {
+	fill: var(--lgm-mermaid-node-bg) !important;
+	stroke: var(--lgm-mermaid-node-border) !important;
+}
+
+.sl-markdown-content svg[id^="mermaid"] .edgePaths path,
+.sl-markdown-content svg[id^="mermaid"] .flowchart-link,
+.sl-markdown-content svg[id^="mermaid"] marker path {
+	stroke: var(--lgm-mermaid-line) !important;
+}
+
+.sl-markdown-content svg[id^="mermaid"] marker path {
+	fill: var(--lgm-mermaid-line) !important;
+}
+
+/*
+ * Edge labels sit on top of the connector, so they need an opaque backing that
+ * matches the page rather than the node fill.
+ */
+.sl-markdown-content svg[id^="mermaid"] .edgeLabel,
+.sl-markdown-content svg[id^="mermaid"] .edgeLabel rect,
+.sl-markdown-content svg[id^="mermaid"] .labelBkg {
+	background-color: var(--lgm-mermaid-label-bg) !important;
+	fill: var(--lgm-mermaid-label-bg) !important;
+}
+
+.sl-markdown-content svg[id^="mermaid"] .cluster rect {
+	fill: var(--lgm-mermaid-cluster-bg) !important;
+	stroke: var(--lgm-mermaid-node-border) !important;
 }

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
-import mermaid from "astro-mermaid";
+import rehypeMermaid from "rehype-mermaid";
 
 const siteDescription =
 	"Open-source MCP server in Go for Library Genesis: four tools to search, read and download books, papers and more from your AI assistant — no account required.";
@@ -229,7 +229,9 @@ const jsonLd = JSON.stringify({
 				`${fullUrl}/`,
 				repositoryUrl,
 				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
-				"https://smithery.ai/server/@jmrp/libgen-mcp",
+				// /server/ 308-redirects to /servers/; sameAs should name the
+				// destination, not a hop.
+				"https://smithery.ai/servers/@jmrp/libgen-mcp",
 				"https://mcp.so/servers/libgen-mcp-d62341",
 				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
 				"https://pkg.go.dev/github.com/jmrplens/libgen-mcp",
@@ -257,8 +259,46 @@ const jsonLd = JSON.stringify({
 export default defineConfig({
 	site: "https://jmrplens.github.io",
 	base: "/libgen-mcp",
+	// Mermaid is rendered to inline SVG at build time. astro-mermaid did it in the
+	// browser, which cost ~199 KB gzip over ~35 requests on each of the four
+	// diagram pages, shipped ~2.7 MB of unreachable diagram types (cytoscape,
+	// katex, gantt, c4…) for two flowcharts, and left crawlers reading the raw
+	// DSL inside <pre class="mermaid"> instead of a picture or any text. Rendering
+	// here costs a headless Chromium at build time and nothing at all at runtime.
+	markdown: {
+		rehypePlugins: [
+			[
+				rehypeMermaid,
+				{
+					strategy: "inline-svg",
+					// The SVG is baked once, so it cannot follow the theme toggle on its
+					// own. Emit it in neutral light colours and let custom.css repaint it
+					// for dark mode through CSS variables — no JS, no second render, and
+					// the switch stays instant.
+					mermaidConfig: {
+						theme: "base",
+						themeVariables: {
+							background: "transparent",
+							textColor: "#171717",
+							primaryColor: "#f6f8fa",
+							primaryTextColor: "#171717",
+							primaryBorderColor: "#d0d7de",
+							lineColor: "#57606a",
+							secondaryColor: "#f6f8fa",
+							tertiaryColor: "#ffffff",
+							mainBkg: "#f6f8fa",
+							nodeBorder: "#d0d7de",
+							clusterBkg: "#ffffff",
+							clusterBorder: "#d0d7de",
+							edgeLabelBackground: "#ffffff",
+							fontSize: "15px",
+						},
+					},
+				},
+			],
+		],
+	},
 	integrations: [
-		mermaid({ theme: "default", autoTheme: true }),
 		starlight({
 			title: "LibGen MCP",
 			description: siteDescription,

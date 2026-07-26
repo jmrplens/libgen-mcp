@@ -52,6 +52,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: site
+      # rehype-mermaid renders each diagram to inline SVG at build time, which
+      # needs a real browser. Cached because the download is ~100 MB and the
+      # lockfile pins the Playwright version that decides which build is wanted.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('site/pnpm-lock.yaml') }}
+      - name: Install Chromium for Mermaid rendering
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: site
       - name: Build site
         run: pnpm run build
         working-directory: site
