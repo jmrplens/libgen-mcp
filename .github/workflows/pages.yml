@@ -82,3 +82,55 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  # Tell the IndexNow engines (Bing, Yandex, Seznam, Naver share one endpoint)
+  # that the pages changed, instead of waiting for them to re-crawl on their own
+  # schedule. GitHub Pages cannot host a key at the domain root — jmrplens.github.io
+  # is a shared user page — but the protocol allows a key in a subdirectory as long
+  # as the payload declares keyLocation and every submitted URL sits under it,
+  # which is exactly the /libgen-mcp/ case.
+  #
+  # The key is public by design: it is a token proving control of the path it is
+  # served from, not a secret, so it lives in site/public/ rather than in Actions
+  # secrets.
+  indexnow:
+    name: IndexNow
+    needs: deploy
+    runs-on: ubuntu-latest
+    # Never fail the pipeline over a search-engine ping: the deploy has already
+    # succeeded by this point and the pages get crawled either way.
+    continue-on-error: true
+    env:
+      INDEXNOW_KEY: d60ead3ca4a20806cd8836da6bc70b36
+      SITE: https://jmrplens.github.io
+      BASE: /libgen-mcp
+    steps:
+      - name: Submit sitemap URLs to IndexNow
+        run: |
+          set -euo pipefail
+          # Read the URL list from the sitemap that was just published, so this
+          # cannot drift from what the site actually contains.
+          curl -sSfL --retry 3 "${SITE}${BASE}/sitemap-0.xml" -o sitemap.xml
+          grep -o '<loc>[^<]*</loc>' sitemap.xml \
+            | sed 's/<[^>]*>//g' \
+            | sort -u > urls.txt
+          echo "submitting $(wc -l < urls.txt) URLs"
+          # Guard against a malformed sitemap silently submitting nothing.
+          test -s urls.txt
+          jq -n \
+            --arg host "jmrplens.github.io" \
+            --arg key "$INDEXNOW_KEY" \
+            --arg keyLocation "${SITE}${BASE}/${INDEXNOW_KEY}.txt" \
+            --rawfile urls urls.txt \
+            '{host: $host, key: $key, keyLocation: $keyLocation,
+              urlList: ($urls | split("\n") | map(select(length > 0)))}' \
+            > payload.json
+          code=$(curl -sS -o response.txt -w '%{http_code}' \
+            -X POST 'https://api.indexnow.org/IndexNow' \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            --data @payload.json)
+          echo "IndexNow responded HTTP $code"
+          cat response.txt || true
+          # 200 accepted, 202 accepted-pending-key-validation. Anything else is
+          # worth seeing in the log, but must not fail the run.
+          case "$code" in 200|202) ;; *) echo "::warning::IndexNow returned $code" ;; esac
