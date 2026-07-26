@@ -1,6 +1,92 @@
 ---
 title: LLM eval results
-description: "How libgen-mcp is tested against a real LLM: a gated harness drives Claude over MCP against the live site, grading tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation across 45 scenarios."
+description: "How libgen-mcp is tested: a gated harness drives a real LLM over MCP against the live site and grades what it does. Results of the latest full run."
+datePublished: "2026-07-21"
+head:
+  # Mirrors the "Frequently asked questions" section at the foot of this page
+  # verbatim; the two must be edited together.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/eval-results/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/eval-results/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How is libgen-mcp tested against a real LLM?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "A gated harness connects a real language model to a real libgen-mcp server over the MCP protocol and grades what the model actually does. For each scenario it builds a fresh in-process server with the four tools registered, sends the scenario's natural-language prompt plus the tool definitions, executes every tool call the model makes against the live Library Genesis site, and grades the transcript on the tool name, the argument shape and whether the real MCP response is well-formed. It never grades exact catalog content, which drifts."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does the evaluation run in CI?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No, deliberately. It sits behind the eval build tag and only runs with LIBGEN_EVAL=1 and an ANTHROPIC_API_KEY. It spends real API tokens, hits real mirrors and performs real downloads, so it is an on-demand quality check rather than a gate on every commit. The tables on this page are generated from a recorded run, and a separate CI job fails if they no longer match their sources."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does a SKIP mean in these results?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "That the model did the right thing but a live service was unavailable — a rotating Sci-Hub host, a fresh-mirror miss, a provider returning nothing at that moment. It is a network condition, never a model failure. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read."
+            }
+          }
+        ]
+      }
+  # Measurement results, so Dataset is the right type. No `distribution`: the
+  # numbers are generated into this page from the run report, and there is no
+  # machine-readable artifact to point at.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        "@id": "https://jmrplens.github.io/libgen-mcp/eval-results/#dataset",
+        "name": "libgen-mcp LLM evaluation results",
+        "description": "Results of a gated, LLM-driven evaluation harness that connects a real language model to a real libgen-mcp server over MCP and grades tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation, against the live Library Genesis site.",
+        "inLanguage": "en",
+        "url": "https://jmrplens.github.io/libgen-mcp/eval-results/",
+        "license": "https://opensource.org/licenses/MIT",
+        "isAccessibleForFree": true,
+        "creator": { "@id": "https://jmrp.io/#person" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "measurementTechnique": "Live end-to-end MCP session against a real language model, real mirrors and real downloads",
+        "variableMeasured": [
+          {
+            "@type": "PropertyValue",
+            "name": "Tool selection",
+            "description": "Whether the model reached for the correct MCP tool for the scenario."
+          },
+          {
+            "@type": "PropertyValue",
+            "name": "Argument correctness",
+            "description": "Whether the tool call carried well-formed, sufficient arguments."
+          },
+          {
+            "@type": "PropertyValue",
+            "name": "Failure recovery",
+            "description": "Whether the model retried sensibly after a mirror or source failure, and reported the failure honestly rather than fabricating success."
+          },
+          {
+            "@type": "PropertyValue",
+            "name": "Structured output handling",
+            "description": "Whether the model correctly consumed the structured tool result instead of echoing untrusted text."
+          }
+        ]
+      }
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -37,7 +123,14 @@ a fresh-mirror miss) — a network condition, never a model failure.
 
 ## Scenarios
 
-Forty-five scenarios (S1–S44 plus the S6b variant) cover search, details, downloads, source selection, error
+{/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
+
+{/* prettier-ignore */}
+The suite is **61 scenarios** (S1–S60 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
+
+{/* end generated */}
+
+They cover search, details, downloads, source selection, error
 recovery, progress, link resolution, reading and summarizing extracted text,
 open-access discovery, the escalation beyond the Library Genesis catalog, and —
 importantly — **unguided** prompts that give the model no hints, testing whether
@@ -139,10 +232,12 @@ transport, ten scenarios in all.
 
 ## Latest results
 
-The table below is a single live run of the full suite against `claude-haiku-4-5`
-(real Anthropic API, real mirrors, real downloads): **45 passed, 0 failed, 0
-skipped** — every scenario, including the 10 that run against a server in remote
-(`--http`) mode.
+{/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
+
+{/* prettier-ignore */}
+The table below is a single live run of the full suite against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **61 passed, 0 failed, 0 skipped** out of 61 — every scenario, including the 10 that run against a server in remote (`--http`) mode.
+
+{/* end generated */}
 
 A clean sweep is worth reading carefully rather than celebrating. It took removing
 the two things that were hiding trouble: scenarios that skipped whenever live data
@@ -245,3 +340,17 @@ LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… go run -tags eval ./cmd/eval --only S1,S9,S1
 The process exits non-zero if any scenario **fails** or **errors** (SKIPs and
 PASSes do not). See [`cmd/eval/README.md`](https://github.com/jmrplens/libgen-mcp/blob/main/cmd/eval/README.md)
 for the full harness documentation.
+
+## Frequently asked questions
+
+### How is libgen-mcp tested against a real LLM?
+
+A gated harness connects a real language model to a real libgen-mcp server over the MCP protocol and grades what the model actually does. For each scenario it builds a fresh in-process server with the four tools registered, sends the scenario's natural-language prompt plus the tool definitions, executes every tool call the model makes against the live Library Genesis site, and grades the transcript on the tool name, the argument shape and whether the real MCP response is well-formed. It never grades exact catalog content, which drifts.
+
+### Does the evaluation run in CI?
+
+No, deliberately. It sits behind the `eval` build tag and only runs with `LIBGEN_EVAL=1` and an `ANTHROPIC_API_KEY`. It spends real API tokens, hits real mirrors and performs real downloads, so it is an on-demand quality check rather than a gate on every commit. The tables on this page are generated from a recorded run, and a separate CI job fails if they no longer match their sources.
+
+### What does a SKIP mean in these results?
+
+That the model did the right thing but a live service was unavailable — a rotating Sci-Hub host, a fresh-mirror miss, a provider returning nothing at that moment. It is a network condition, never a model failure. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read.

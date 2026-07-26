@@ -9,12 +9,13 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "prebuild": "node scripts/copy-llms.mjs",
+    "prebuild": "node scripts/copy-llms.mjs && node scripts/sync-privacy.mjs",
     "build": "astro build",
     "postbuild": "node -e \"const fs=require('fs'),path=require('path');function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.isFile()&&e.name.endsWith('.html')){const c=fs.readFileSync(p,'utf8');const t=c.split('\\n').map(l=>l.replace(/[ \\t\\r]+$/,'')).join('\\n');if(t!==c)fs.writeFileSync(p,t);}}}walk('dist');\" && node scripts/add-sitemap-lastmod.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "i18n:check": "node scripts/check-i18n-parity.mjs",
+    "privacy:check": "node scripts/sync-privacy.mjs --check",
     "eslint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,7 +23,7 @@
     "htmlhint": "htmlhint 'dist/**/*.html'",
     "pa11y": "astro preview & sleep 3 && pa11y-ci; EXIT=$?; kill %1 2>/dev/null; exit $EXIT",
     "test:a11y": "pnpm run pa11y",
-    "lint": "pnpm run check && pnpm run i18n:check && pnpm run eslint && pnpm run format:check && pnpm run html-validate && pnpm run htmlhint",
+    "lint": "pnpm run check && pnpm run i18n:check && pnpm run privacy:check && pnpm run eslint && pnpm run format:check && pnpm run html-validate && pnpm run htmlhint",
     "analyze": "pnpm run build && pnpm run lint"
   },
   "dependencies": {

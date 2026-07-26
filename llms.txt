@@ -33,24 +33,31 @@ Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native 
 
 Configuration (environment variables, all optional):
 
-- LIBGEN_MIRROR: force a specific mirror base URL, e.g. `https://libgen.li` (default: auto-discovered)
-- LIBGEN_MCP_DOWNLOAD_DIR: download destination directory (default: `~/Downloads`)
-- LIBGEN_MCP_TIMEOUT: timeout per HTTP request, e.g. `30s` (default: 30s)
-- LIBGEN_MCP_LOG_LEVEL: log level — debug, info, warn or error (default: info)
-- LIBGEN_MCP_RATE_RPS: allowed requests per second (default: 1)
-- LIBGEN_MCP_RATE_BURST: maximum rate-limiter burst (default: 1)
-- LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes, 0 = no limit (default: 0)
-- LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads (default: 2)
-- LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)
-- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: staged waits between attempts to start a download — resolve/connect/first byte (default: `5s,5s,5s,10s,10s,10s,15s`, ~8 attempts over ~60s)
-- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)
-- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source
-- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)
-- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)
-- LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access article source; unset leaves core out of the chain
-- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas (empty = all; the chain order is fixed, so this only removes sources)
-- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)
-- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)
+- LIBGEN_MIRROR: Force a specific mirror base URL, e.g. https://libgen.li. (default: auto-discovered)
+- LIBGEN_MCP_DOWNLOAD_DIR: Download destination directory. (default: ~/Downloads)
+- LIBGEN_MCP_TIMEOUT: Timeout per HTTP request, as a Go duration string (e.g. 30s, 2m). (default: 30s)
+- LIBGEN_MCP_LOG_LEVEL: Logging verbosity. (default: info)
+- LIBGEN_MCP_RATE_RPS: Allowed outbound requests per second. (default: 1)
+- LIBGEN_MCP_RATE_BURST: Maximum rate-limiter burst. (default: 1)
+- LIBGEN_MCP_MAX_DOWNLOAD_BYTES: Maximum download size in bytes. (default: 0)
+- LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: Number of simultaneous downloads. (default: 2)
+- LIBGEN_MCP_RETRY_ATTEMPTS: Retries per request. (default: 3)
+- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default). (default: 5s,5s,5s,10s,10s,10s,15s)
+- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed. (default: 60s)
+- LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE: Give every download source the full start-retry schedule. (default: false)
+- LIBGEN_MCP_UNPAYWALL_EMAIL: Contact email for the Unpaywall API (article/DOI downloads). (default: empty (unpaywall disabled))
+- LIBGEN_MCP_SCIHUB_HOSTS: Ordered Sci-Hub mirror hosts, tried in order until one serves an article. (default: sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf)
+- LIBGEN_MCP_ANNAS_KEY: Optional Anna's Archive membership key enabling the member fast-download API for books. (default: empty (keyless IPFS))
+- LIBGEN_MCP_CORE_KEY: Optional API key (free registration) enabling the core open-access article source. (default: empty (core disabled))
+- LIBGEN_MCP_SOURCES: Which download sources take part. (default: empty (all enabled))
+- LIBGEN_MCP_REMOTE_DOWNLOADS: Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. (default: false)
+- LIBGEN_MCP_READ_MAX_CHARS: Characters the read tool returns per call when a call omits max_chars. (default: 6000)
+- LIBGEN_MCP_READ_DEFAULT_PAGES: PDF pages the read tool returns per call when a call omits max_pages. (default: 5)
+- LIBGEN_MCP_READ_CACHE_BYTES: Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. (default: 536870912 (512 MiB))
+- LIBGEN_MCP_READ_CACHE_TTL: How long an unreferenced read temp file lingers before eviction. (default: 10m)
+- LIBGEN_MCP_ENRICH: Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. (default: true)
+- LIBGEN_MCP_CONFIRM_DOWNLOADS: Ask the user to approve each file that download writes to disk. (default: true)
+- LIBGEN_MCP_EXTRA_SOURCES: When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. (default: auto)
 
 Tools:
 
@@ -65,11 +72,16 @@ Tools:
 - [Configuration](https://jmrplens.github.io/libgen-mcp/configuration/): Full environment-variable configuration reference
 - [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
+- [How search works](https://jmrplens.github.io/libgen-mcp/how-search-works/): Catalog-first search, and when and how it escalates to the extra sources
+- [LLM eval results](https://jmrplens.github.io/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
 - [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
-- [Privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md): No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes
+- [Responsible use](https://jmrplens.github.io/libgen-mcp/responsible-use/): Why the open-access providers are tried first, and what the server refuses to serve
+- [Privacy policy](https://jmrplens.github.io/libgen-mcp/privacy/): No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes
+- [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
 ## Optional
 
 - [Full LLM reference](https://jmrplens.github.io/libgen-mcp/llms-full.txt): Generated companion reference with full tool schemas
 - [Documentation site](https://jmrplens.github.io/libgen-mcp/): Rendered documentation site
+- [Documentación en español](https://jmrplens.github.io/libgen-mcp/es/): Full Spanish translation of every page above

@@ -11,6 +11,10 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      # astro.config.mjs reads the repo-root VERSION into the SoftwareApplication
+      # node, so a release bump must republish the site or the deployed schema,
+      # releaseNotes and llms.txt keep advertising the previous release.
+      - "VERSION"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

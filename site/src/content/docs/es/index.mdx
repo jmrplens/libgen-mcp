@@ -46,11 +46,19 @@ head:
               "@type": "Answer",
               "text": "Sí. libgen-mcp es software libre y de código abierto bajo la licencia MIT. El código fuente completo está en GitHub en https://github.com/jmrplens/libgen-mcp, y con cada release se publican binarios precompilados, una imagen de Docker y una extensión para Claude Desktop."
             }
+          },
+          {
+            "@type": "Question",
+            "name": "¿libgen-mcp prioriza las fuentes legales?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como un fallo de búsqueda, nunca se disfraza de archivo."
+            }
           }
         ]
       }
 hero:
-  tagline: Un servidor MCP en Go con cuatro herramientas — search, get_details, download, read — que permite a tu asistente de IA buscar en Library Genesis, resolver enlaces de descarga y leer/resumir texto en lenguaje natural. Sin cuenta ni clave de API.
+  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, descargado y leído en lenguaje natural. Doce fuentes de descarga con el acceso abierto primero, nueve proveedores de búsqueda más allá del catálogo de Library Genesis. Sin cuenta, sin clave de API, un solo binario estático.
   image:
     dark: ../../../assets/logo-dark.svg
     light: ../../../assets/logo-light.svg
@@ -63,6 +71,7 @@ hero:
       link: https://github.com/jmrplens/libgen-mcp
       icon: external
       variant: minimal
+datePublished: "2026-07-19"
 ---
 
 import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
@@ -86,6 +95,13 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 		artículos por DOI desde los proveedores de acceso abierto primero
 		(Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE,
 		OAPEN) y después Sci-Hub y SciDB.
+	</Card>
+	<Card title="Acceso abierto primero" icon="approve-check">
+		Los artículos se resuelven por Unpaywall, Europe PMC, bioRxiv/medRxiv,
+		Internet Archive Scholar, CORE y OAPEN antes de intentar cualquier fallback
+		de biblioteca en la sombra. Los libros por ISBN solo proceden de OAPEN y de
+		escaneos de dominio público de Internet Archive; las copias restringidas a
+		préstamo se rechazan.
 	</Card>
 	<Card title="Descubrimiento de fuentes extra" icon="magnifier">
 		`search` va más allá del catálogo hasta Anna's Archive, arXiv, Crossref,
@@ -116,6 +132,25 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 	href="/libgen-mcp/es/configuration/"
 />
 
+## Prompts de ejemplo
+
+Hablas con tu asistente, no con las herramientas — él elige la herramienta y los
+argumentos. Todos los prompts de abajo salen de la
+[suite de evaluación](/libgen-mcp/es/eval-results/), donde un modelo real se
+evalúa resolviéndolos contra el sitio en vivo:
+
+| Pídele a tu asistente                              | Qué hace libgen-mcp                                                                                         |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| «Quiero leer _Dune_, ¿puedes encontrarlo?»         | Construye la búsqueda en el catálogo sin ayuda, sin pistas de colección ni de campos                        |
+| «Descárgame _Clean Code_»                          | Busca, toma un md5 de los resultados y elige él mismo la fuente de descarga                                 |
+| «Consígueme un PDF de _Hallmarks of Cancer_»       | Deduce que los artículos se identifican por DOI y no por md5, y lo resuelve por la cadena de acceso abierto |
+| «Busca este artículo y resúmeme la primera página» | Llama a `read` en lugar de a `download`, y resume el texto extraído en vez de volcarlo                      |
+| «¿Qué dice este libro sobre punteros?»             | Llama a `read` con `find`, buscando dentro del documento sin traerse el fichero entero                      |
+| «Dame su índice»                                   | Llama a `read` con `outline=true`, y lo compila desde el texto cuando el fichero no lo incluye              |
+| «Consígueme este libro por su ISBN»                | Encamina a OAPEN y a escaneos de dominio público de Internet Archive — nunca a una biblioteca en la sombra  |
+| «Dame el enlace directo, no lo descargues»         | Fija `resolve_only` y devuelve una URL en vez de escribir un fichero                                        |
+| «Consulta también la literatura de acceso abierto» | Fija `extra_sources` a `always` y fusiona arXiv, Crossref, PubMed y el resto junto al catálogo              |
+
 ## Uso responsable
 
 <Aside type="caution">
@@ -124,6 +159,12 @@ Los mirrors se descubren automáticamente y se cachean, con failover transparent
 	intelectual que apliquen en tu lugar de residencia. Úsala solo para contenido
 	al que tengas derecho legal de acceder.
 </Aside>
+
+libgen-mcp prueba los proveedores legales de acceso abierto antes que cualquier
+fallback de biblioteca en la sombra, y rechaza el material que no puede
+redistribuir. [Uso responsable](/libgen-mcp/es/responsible-use/) explica qué
+significa eso en la práctica, qué se niega a hacer el servidor y cómo plantear
+una duda.
 
 ## Preguntas frecuentes
 
@@ -142,3 +183,7 @@ No. libgen-mcp no requiere ninguna cuenta de Library Genesis, ninguna clave de A
 ### ¿libgen-mcp es gratis y de código abierto?
 
 Sí. libgen-mcp es software libre y de código abierto bajo la licencia MIT. El código fuente completo está en GitHub en [github.com/jmrplens/libgen-mcp](https://github.com/jmrplens/libgen-mcp), y con cada release se publican binarios precompilados, una imagen de Docker y una extensión para Claude Desktop.
+
+### ¿libgen-mcp prioriza las fuentes legales?
+
+Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como un fallo de búsqueda, nunca se disfraza de archivo.

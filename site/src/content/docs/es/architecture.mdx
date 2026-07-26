@@ -1,6 +1,57 @@
 ---
 title: Arquitectura
 description: El cliente HTTP, la canalización de descarga y la cadena multi-fuente que dan vida a libgen-mcp.
+datePublished: "2026-07-19"
+head:
+  # Refleja literalmente la sección «Preguntas frecuentes» del pie de esta
+  # página. Un FAQ solo en el marcado es una violación de política y un riesgo
+  # de cita, así que ambos se editan juntos.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/architecture/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/architecture/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Los descubre, en lugar de fijar uno en el código. El servidor sondea los hosts conocidos, se queda con los que responden y cachea esa lista en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio no vuelve a sondear. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar LIBGEN_MIRROR ancla un host y se salta el descubrimiento por completo."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué cachea libgen-mcp, y dónde?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Dos cosas, ambas en la máquina que ejecuta el servidor y ninguna con nada sobre ti. Las listas de mirrors descubiertos se cachean 24 horas como mirrors.json y annas-mirrors.json bajo el directorio de caché del sistema — contienen solo URLs públicas. La herramienta read guarda una copia temporal de cada documento del que extrae texto, para que páginas sucesivas de un mismo documento reutilicen una única descarga; esos ficheros se desalojan por límite de tamaño y por TTL, ambos configurables. Borrar cualquiera de las dos cachés solo fuerza una descarga nueva en la siguiente llamada."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Por qué a veces una descarga tarda un minuto en arrancar?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Porque conseguir que la transferencia empiece se reintenta con una tanda escalonada antes de darla por perdida. Las esperas por defecto son 5s,5s,5s,10s,10s,10s,15s — ocho intentos en aproximadamente un minuto — y se gastan en resolver, conectar y recibir el primer byte. Una vez que los bytes fluyen se aplica otra regla: el flujo se corta solo tras 60 segundos sin datos nuevos, así que una transferencia lenta pero que progresa nunca se mata por ser lenta."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Puede un despliegue cambiar el orden en que se prueban las fuentes de descarga?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. LIBGEN_MCP_SOURCES puede quitar fuentes de la cadena, pero el orden está fijado en el código y sujeto por un test, así que los proveedores de acceso abierto se prueban siempre antes que las alternativas de biblioteca en la sombra. Un despliegue puede estrechar qué participa; no puede promover un fallback."
+            }
+          }
+        ]
+      }
 ---
 
 `libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Esta página describe las tres piezas que hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente**.
@@ -150,3 +201,21 @@ El servidor habla MCP sobre dos transportes:
 - **HTTP en streaming** — cuando se inicia con `--http host:port` (p. ej. `--http :8080`). En este modo el servidor expone además un endpoint `GET /health` que devuelve `200` cuando está sirviendo, útil para sondas de disponibilidad.
 
 Como un servidor HTTP es remoto y no puede escribir en el disco del cliente, en este modo la herramienta `download` devuelve siempre un enlace (la URL directa como `resource_link` más un objeto `resolved`) en lugar de guardar el archivo — no hace falta pasar `resolve_only`, queda implícito. Consulta [Herramientas](/libgen-mcp/es/tools/#download) para el detalle de ese comportamiento.
+
+## Preguntas frecuentes
+
+### ¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?
+
+Los descubre, en lugar de fijar uno en el código. El servidor sondea los hosts conocidos, se queda con los que responden y cachea esa lista en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio no vuelve a sondear. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar `LIBGEN_MIRROR` ancla un host y se salta el descubrimiento por completo.
+
+### ¿Qué cachea libgen-mcp, y dónde?
+
+Dos cosas, ambas en la máquina que ejecuta el servidor y ninguna con nada sobre ti. Las listas de mirrors descubiertos se cachean 24 horas como `mirrors.json` y `annas-mirrors.json` bajo el directorio de caché del sistema — contienen solo URLs públicas. La herramienta `read` guarda una copia temporal de cada documento del que extrae texto, para que páginas sucesivas de un mismo documento reutilicen una única descarga; esos ficheros se desalojan por límite de tamaño y por TTL, ambos configurables. Borrar cualquiera de las dos cachés solo fuerza una descarga nueva en la siguiente llamada.
+
+### ¿Por qué a veces una descarga tarda un minuto en arrancar?
+
+Porque conseguir que la transferencia empiece se reintenta con una tanda escalonada antes de darla por perdida. Las esperas por defecto son `5s,5s,5s,10s,10s,10s,15s` — ocho intentos en aproximadamente un minuto — y se gastan en resolver, conectar y recibir el primer byte. Una vez que los bytes fluyen se aplica otra regla: el flujo se corta solo tras 60 segundos sin datos nuevos, así que una transferencia lenta pero que progresa nunca se mata por ser lenta.
+
+### ¿Puede un despliegue cambiar el orden en que se prueban las fuentes de descarga?
+
+No. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena, pero el orden está fijado en el código y sujeto por un test, así que los proveedores de acceso abierto se prueban siempre antes que las alternativas de biblioteca en la sombra. Un despliegue puede estrechar qué participa; no puede promover un fallback.

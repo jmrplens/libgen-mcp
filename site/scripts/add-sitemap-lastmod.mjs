@@ -92,23 +92,47 @@ function lastmodFor(url) {
 	);
 }
 
-// Add <lastmod> to each <url> that lacks one. Matching the whole <url>…</url>
-// block (not just <loc>) keeps this idempotent: if an entry already carries a
-// <lastmod>, it is left untouched rather than getting a duplicate.
+// Add the x-default alternate @astrojs/sitemap omits. Every page declares
+// en/es/x-default in its <head>, but the sitemap emitted only en and es; Google
+// reconciles the two sources, so the disagreement weakened the signal. x-default
+// points at the English URL, matching what the pages say.
+function addXDefault(block) {
+	if (block.includes('hreflang="x-default"')) return block;
+	const en = /<xhtml:link[^>]*hreflang="en"[^>]*href="([^"]+)"[^>]*\/>/.exec(
+		block,
+	);
+	if (!en) return block;
+	return block.replace(
+		"</url>",
+		`<xhtml:link rel="alternate" hreflang="x-default" href="${en[1]}"/></url>`,
+	);
+}
+
+// Add <lastmod> to each <url> that lacks one, and the missing x-default
+// alternate. Matching the whole <url>…</url> block (not just <loc>) keeps this
+// idempotent: an entry that already carries either is left untouched rather than
+// getting a duplicate.
 function stampSitemap(file) {
 	const xml = readFileSync(file, "utf8");
 	let changed = 0;
+	let alternates = 0;
 	const out = xml.replace(/<url>[\s\S]*?<\/url>/g, (block) => {
-		if (block.includes("<lastmod>")) return block;
-		return block.replace(/<loc>([^<]+)<\/loc>/, (locMatch, loc) => {
-			changed++;
-			return `<loc>${loc}</loc><lastmod>${lastmodFor(loc)}</lastmod>`;
-		});
+		const before = block;
+		if (!block.includes("<lastmod>")) {
+			block = block.replace(/<loc>([^<]+)<\/loc>/, (locMatch, loc) => {
+				changed++;
+				return `<loc>${loc}</loc><lastmod>${lastmodFor(loc)}</lastmod>`;
+			});
+		}
+		block = addXDefault(block);
+		if (block !== before && block.includes('hreflang="x-default"'))
+			alternates++;
+		return block;
 	});
-	if (changed > 0) {
+	if (out !== xml) {
 		writeFileSync(file, out);
 		console.log(
-			`[sitemap-lastmod] stamped ${changed} URLs in ${file.replace(distDir, "dist")}`,
+			`[sitemap-lastmod] stamped ${changed} URLs (${alternates} x-default alternates) in ${file.replace(distDir, "dist")}`,
 		);
 	}
 }

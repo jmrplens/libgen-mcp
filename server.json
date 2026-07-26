@@ -4,6 +4,7 @@
   "title": "Library Genesis MCP Server",
   "description": "Search Library Genesis and open-access sources, get details, download, and read books and papers.",
   "version": "1.3.2",
+  "websiteUrl": "https://jmrplens.github.io/libgen-mcp/",
   "repository": {
     "url": "https://github.com/jmrplens/libgen-mcp",
     "source": "github",

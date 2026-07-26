@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -40,7 +41,12 @@ const (
 const (
 	scenariosBegin = "{/* generated:scenarios — run `make eval-pages`, do not edit by hand */}"
 	resultsBegin   = "{/* generated:results — run `make eval-pages`, do not edit by hand */}"
-	regionEnd      = "{/* end generated */}"
+	// The counts the prose quotes. They were written by hand and drifted: the
+	// pages claimed 45 scenarios long after the suite reached 61. Generating the
+	// sentences that carry a number keeps the prose honest by construction.
+	scenarioSummaryBegin = "{/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}"
+	resultsSummaryBegin  = "{/* generated:results-summary — run `make eval-pages`, do not edit by hand */}"
+	regionEnd            = "{/* end generated */}"
 )
 
 // scenarioRow is one row of the scenario table: the id and what it checks.
@@ -51,6 +57,69 @@ type resultRow struct{ ID, Mode, Status, Detail string }
 
 // tableRow matches a Markdown table row whose first cell is a scenario id.
 var tableRow = regexp.MustCompile(`^\|\s*(S[0-9b]+)\s*\|\s*(.*?)\s*\|$`)
+
+// modelLine matches the model banner a run writes above its results table.
+var modelLine = regexp.MustCompile("^Model:\\s*`([^`]+)`")
+
+// runSummary is what a results table adds up to: the tallies the prose quotes.
+type runSummary struct {
+	Model                   string
+	Total, Pass, Fail, Skip int
+	Remote                  int
+}
+
+// summarize counts a run's rows so no page has to state a total by hand.
+func summarize(model string, rows []resultRow) runSummary {
+	s := runSummary{Model: model, Total: len(rows)}
+	for _, r := range rows {
+		switch strings.ToUpper(r.Status) {
+		case "PASS":
+			s.Pass++
+		case "FAIL":
+			s.Fail++
+		case "SKIP":
+			s.Skip++
+		}
+		if strings.EqualFold(r.Mode, "remote") {
+			s.Remote++
+		}
+	}
+	return s
+}
+
+// idRange describes a scenario list the way the prose does: the numeric span,
+// plus any lettered variants called out by name.
+func idRange(rows []scenarioRow) (span string, variants []string) {
+	low, high := 0, 0
+	for _, r := range rows {
+		n, err := strconv.Atoi(strings.TrimPrefix(r.ID, "S"))
+		if err != nil {
+			variants = append(variants, r.ID)
+			continue
+		}
+		if low == 0 || n < low {
+			low = n
+		}
+		if n > high {
+			high = n
+		}
+	}
+	return fmt.Sprintf("S%d–S%d", low, high), variants
+}
+
+// variantSuffix renders the "plus the S6b variant" tail. The singular and plural
+// templates each take the joined ids, so a language that puts the noun before the
+// id ("más la variante S6b") reads correctly too.
+func variantSuffix(variants []string, singular, plural string) string {
+	if len(variants) == 0 {
+		return ""
+	}
+	tmpl := singular
+	if len(variants) > 1 {
+		tmpl = plural
+	}
+	return fmt.Sprintf(tmpl, strings.Join(variants, ", "))
+}
 
 func main() {
 	resultsDoc := flag.String("results-doc", resultsSource, "the run whose results the pages publish; a fresh one replaces the versioned copy")
@@ -89,29 +158,54 @@ func run(resultsDoc string, check bool) error {
 		}
 	}
 
-	for _, page := range []struct{ path, scenarios, results string }{
-		{pageEN, renderScenariosEN(scenarios), renderResultsEN(results)},
-		{pageES, renderScenariosES(scenarios), renderResultsES(results)},
+	model, merr := readModel(resultsDoc)
+	if merr != nil {
+		return merr
+	}
+	sum := summarize(model, results)
+
+	for _, page := range []struct {
+		path    string
+		regions []region
+	}{
+		{pageEN, []region{
+			{scenariosBegin, renderScenariosEN(scenarios)},
+			{scenarioSummaryBegin, renderScenarioSummaryEN(scenarios, sum)},
+			{resultsBegin, renderResultsEN(results)},
+			{resultsSummaryBegin, renderResultsSummaryEN(sum)},
+		}},
+		{pageES, []region{
+			{scenariosBegin, renderScenariosES(scenarios)},
+			{scenarioSummaryBegin, renderScenarioSummaryES(scenarios, sum)},
+			{resultsBegin, renderResultsES(results)},
+			{resultsSummaryBegin, renderResultsSummaryES(sum)},
+		}},
 	} {
-		if aerr := applyPage(page.path, page.scenarios, page.results, check); aerr != nil {
+		if aerr := applyPage(page.path, page.regions, check); aerr != nil {
 			return aerr
 		}
 	}
 	return nil
 }
 
+// region is one generated block: the marker that opens it and the body to put
+// between that marker and the next end marker.
+type region struct{ begin, body string }
+
 // applyPage replaces the generated regions of one page, or reports a difference.
-func applyPage(path, scenarios, results string, check bool) error {
+func applyPage(path string, regions []region, check bool) error {
 	original, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	updated, err := replaceRegion(string(original), scenariosBegin, scenarios)
-	if err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	if results != "" {
-		if updated, err = replaceRegion(updated, resultsBegin, results); err != nil {
+	updated := string(original)
+	for _, r := range regions {
+		// An empty body means there is nothing authoritative to write (no run),
+		// so the region is left as it stands rather than blanked.
+		if r.body == "" {
+			continue
+		}
+		if updated, err = replaceRegion(updated, r.begin, r.body); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 	}
@@ -122,6 +216,20 @@ func applyPage(path, scenarios, results string, check bool) error {
 		return fmt.Errorf("%s is out of date; run `make eval-pages`", path)
 	}
 	return os.WriteFile(path, []byte(updated), 0o600)
+}
+
+// readModel reads the model banner a run writes above its results table.
+func readModel(path string) (string, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	for line := range strings.SplitSeq(string(body), "\n") {
+		if m := modelLine.FindStringSubmatch(line); m != nil {
+			return m[1], nil
+		}
+	}
+	return "", fmt.Errorf("%s has no `Model:` line", path)
 }
 
 // replaceRegion swaps the content between a begin marker and the next end marker.
@@ -242,6 +350,40 @@ func renderScenariosES(rows []scenarioRow) string {
 		fmt.Fprintf(&b, "| %s | %s |\n", r.ID, scenariosES[r.ID])
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// renderScenarioSummaryEN renders the English scenario tally.
+func renderScenarioSummaryEN(rows []scenarioRow, sum runSummary) string {
+	span, variants := idRange(rows)
+	return fmt.Sprintf(
+		"The suite is **%d scenarios** (%s%s). %d of them drive a server in remote (`--http`) mode; the rest run it over stdio.",
+		len(rows), span, variantSuffix(variants, " plus the %s variant", " plus the %s variants"), sum.Remote)
+}
+
+// renderScenarioSummaryES renders the Spanish scenario tally.
+func renderScenarioSummaryES(rows []scenarioRow, sum runSummary) string {
+	span, variants := idRange(rows)
+	return fmt.Sprintf(scenarioSummaryES,
+		len(rows), span, variantSuffix(variants, variantSuffixES, variantSuffixPluralES), sum.Remote)
+}
+
+// renderResultsSummaryEN renders the English run tally.
+func renderResultsSummaryEN(sum runSummary) string {
+	if sum.Total == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"The table below is a single live run of the full suite against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** out of %d — every scenario, including the %d that run against a server in remote (`--http`) mode.",
+		sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote)
+}
+
+// renderResultsSummaryES renders the Spanish run tally.
+func renderResultsSummaryES(sum runSummary) string {
+	if sum.Total == 0 {
+		return ""
+	}
+	return fmt.Sprintf(resultsSummaryES,
+		sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote)
 }
 
 // renderResultsEN renders the English results table.

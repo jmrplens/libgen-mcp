@@ -26,19 +26,38 @@ const links = [
 ];
 
 const licenseUrl = "https://github.com/jmrplens/libgen-mcp/blob/main/LICENSE";
-const privacyUrl = "https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md";
+// On-domain, so an engine judging this site can actually read the policy rather
+// than following a link off to GitHub.
+const privacyUrl = isES ? `${BASE}/es/privacy/` : `${BASE}/privacy/`;
+const responsibleUrl = isES
+	? `${BASE}/es/responsible-use/`
+	: `${BASE}/responsible-use/`;
+const securityUrl =
+	"https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md";
 const licenseText = isES ? "Licencia MIT" : "MIT-licensed";
 const trustSuffix = isES
 	? " · sin telemetría · sin cuenta"
 	: " · no telemetry · no account required";
 const privacyText = isES ? "Privacidad" : "Privacy";
+const responsibleText = isES ? "Uso responsable" : "Responsible use";
+const securityText = isES ? "Seguridad" : "Security";
+// Rendered so the visible page states what the Person node in the site-wide
+// @graph asserts; structured data that nothing on the page corroborates is a
+// weaker signal than one that agrees with what a reader sees.
+const roleText = isES ? "Ingeniero de I+D" : "R&D Engineer";
 ---
 
 <Default />
 <div class="lgm-maintainer">
 	<span>
 		{label}{" "}
-		<a href="https://jmrp.io" rel="author">José Manuel Requena Plens</a>
+		<a href="https://jmrp.io" rel="author">José Manuel Requena Plens</a>, {
+			roleText
+		} (<a
+			href="https://orcid.org/0000-0003-1250-6212"
+			rel="me noopener noreferrer"
+			target="_blank">ORCID</a
+		>)
 	</span>
 	<span class="lgm-maintainer-links">
 		{
@@ -54,8 +73,10 @@ const privacyText = isES ? "Privacidad" : "Privacy";
 	<a href={licenseUrl} rel="noopener noreferrer" target="_blank">
 		{licenseText}
 	</a>{trustSuffix} ·{" "}
-	<a href={privacyUrl} rel="noopener noreferrer" target="_blank">
-		{privacyText}
+	<a href={privacyUrl}>{privacyText}</a> ·{" "}
+	<a href={responsibleUrl}>{responsibleText}</a> ·{" "}
+	<a href={securityUrl} rel="noopener noreferrer" target="_blank">
+		{securityText}
 	</a>
 </div>
 

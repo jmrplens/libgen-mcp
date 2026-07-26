@@ -1,0 +1,131 @@
+---
+title: Responsible use
+description: What libgen-mcp does to prefer legally free sources, what it refuses to serve, and how to raise a concern.
+datePublished: "2026-07-25"
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is libgen-mcp legal to use?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "That depends on what you ask it for and where you are. libgen-mcp is a client: it is MIT-licensed software that talks to search and download services on your behalf, and it hosts and redistributes nothing itself. Copyright law is territorial, and the same request can be lawful in one country and not in another, so the tool cannot make that judgement for you. There are uses that are uncontroversial almost everywhere — public-domain works, open-access papers published under a licence that permits redistribution, preprints the authors posted themselves, and works you already own a copy of. There are uses that are not, most obviously downloading in-copyright commercial books you have no right to. libgen-mcp is built so the first kind is the default path and the second kind requires you to ask for it deliberately."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does libgen-mcp do to prefer legally free sources?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does libgen-mcp refuse to do?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Three refusals are implemented in the sources themselves, and each one costs a result rather than gaining one. OAPEN's search is free text with no exact-identifier mode, so a request for an identifier OAPEN does not hold would otherwise return an unrelated monograph; libgen-mcp checks the item's own recorded DOI or ISBN against the identifier you asked for and serves nothing when they disagree. Internet Archive book items are often controlled-digital-lending copies that advertise ordinary PDF and EPUB files, so libgen-mcp requires an item to carry no access-restricted-item flag and to belong to neither the inlibrary nor the printdisabled collection before it will download it. Project Gutenberg hosts some in-copyright texts with the rightsholder's permission, which are not free for anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as public domain and drops the rest. In every case the outcome is reported as a miss. A refusal is never dressed up as a file."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does a search result tell me whether something is free to use?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No, and you should not read it that way. When search escalates beyond the Library Genesis catalog it merges results from several providers and labels each one by origin, but the origin label describes where the record was found, not what licence the underlying work carries. Anna's Archive in particular is a shadow library rather than a publisher of freely licensed material, and results with that origin should be treated accordingly. If the licence matters for what you intend to do, check the work itself rather than inferring anything from the fact that a search returned it."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does libgen-mcp send, and to whom?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I report a concern?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Open an issue at https://github.com/jmrplens/libgen-mcp/issues. libgen-mcp hosts no content and operates no mirror, so it cannot take anything down: a notice about a specific work belongs with whoever hosts it. What can be changed here is the software's behaviour, and reports that a source is being handled wrongly — a refusal that should fire and does not, a provider treated as open access that is not — are treated as bugs and are welcome."
+            }
+          }
+        ]
+      }
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+libgen-mcp reaches services that host material of very different legal status,
+from public-domain scans to shadow-library copies of in-copyright books. This
+page sets out what the software does about that: which sources it prefers, what
+it declines to serve, and where the line between the tool's responsibility and
+yours falls.
+
+<Aside type="caution">
+	This tool accesses third-party mirrors of Library Genesis. You are responsible
+	for respecting the copyright and intellectual-property laws that apply where
+	you live. Use it only for content you are legally entitled to access.
+</Aside>
+
+## Is libgen-mcp legal to use?
+
+That depends on what you ask it for and where you are. libgen-mcp is a client: it is MIT-licensed software that talks to search and download services on your behalf, and it hosts and redistributes nothing itself. Copyright law is territorial, and the same request can be lawful in one country and not in another, so the tool cannot make that judgement for you. There are uses that are uncontroversial almost everywhere — public-domain works, open-access papers published under a licence that permits redistribution, preprints the authors posted themselves, and works you already own a copy of. There are uses that are not, most obviously downloading in-copyright commercial books you have no right to. libgen-mcp is built so the first kind is the default path and the second kind requires you to ask for it deliberately.
+
+## What does libgen-mcp do to prefer legally free sources?
+
+It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship.
+
+The full chain, in order:
+
+| Position | Source       | Keyed by  | Status                                 |
+| -------- | ------------ | --------- | -------------------------------------- |
+| 1        | `unpaywall`  | DOI       | Open access                            |
+| 2        | `europepmc`  | DOI       | Open access                            |
+| 3        | `biorxiv`    | DOI       | Open access (preprints)                |
+| 4        | `fatcat`     | DOI       | Open access (Internet Archive Scholar) |
+| 5        | `core`       | DOI       | Open access (needs a free API key)     |
+| 6        | `oapen`      | DOI, ISBN | Openly licensed books                  |
+| 7        | `archive`    | ISBN      | Public-domain scans only               |
+| 8        | `scihub`     | DOI       | Shadow library                         |
+| 9        | `scidb`      | DOI       | Shadow library                         |
+| 10       | `libgen`     | md5       | Library Genesis catalog                |
+| 11       | `randombook` | md5       | Library Genesis mirror                 |
+| 12       | `annas`      | md5       | Shadow library                         |
+
+Positions 1–7 are exhausted before position 8 is tried. You can remove sources
+with `LIBGEN_MCP_SOURCES`, but you cannot reorder them — a deployment can narrow
+the chain, never promote a fallback above the open-access providers.
+
+## What does libgen-mcp refuse to do?
+
+Three refusals are implemented in the sources themselves, and each one costs a result rather than gaining one. OAPEN's search is free text with no exact-identifier mode, so a request for an identifier OAPEN does not hold would otherwise return an unrelated monograph; libgen-mcp checks the item's own recorded DOI or ISBN against the identifier you asked for and serves nothing when they disagree. Internet Archive book items are often controlled-digital-lending copies that advertise ordinary PDF and EPUB files, so libgen-mcp requires an item to carry no access-restricted-item flag and to belong to neither the `inlibrary` nor the `printdisabled` collection before it will download it. Project Gutenberg hosts some in-copyright texts with the rightsholder's permission, which are not free for anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as public domain and drops the rest. In every case the outcome is reported as a miss. A refusal is never dressed up as a file.
+
+These are checked by the [evaluation suite](/libgen-mcp/eval-results/) against
+the live services, not only by unit tests: scenario S53 asserts that OAPEN
+refuses an identifier it does not hold cleanly, and S55 that a lending-restricted
+Internet Archive book is refused rather than served.
+
+## Does a search result tell me whether something is free to use?
+
+No, and you should not read it that way. When search escalates beyond the Library Genesis catalog it merges results from several providers and labels each one by origin, but the origin label describes where the record was found, not what licence the underlying work carries. Anna's Archive in particular is a shadow library rather than a publisher of freely licensed material, and results with that origin should be treated accordingly. If the licence matters for what you intend to do, check the work itself rather than inferring anything from the fact that a search returned it.
+
+## What does libgen-mcp send, and to whom?
+
+Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md).
+
+## How do I report a concern?
+
+Open an issue at [github.com/jmrplens/libgen-mcp/issues](https://github.com/jmrplens/libgen-mcp/issues). libgen-mcp hosts no content and operates no mirror, so it cannot take anything down: a notice about a specific work belongs with whoever hosts it. What can be changed here is the software's behaviour, and reports that a source is being handled wrongly — a refusal that should fire and does not, a provider treated as open access that is not — are treated as bugs and are welcome.

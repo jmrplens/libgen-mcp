@@ -231,27 +231,14 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture: set `command` to `docker` and `args` to `[\"run\", \"-i\", \"--rm\", \"ghcr.io/jmrplens/libgen-mcp:latest\"]`.\n\n")
 	b.WriteString("Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).\n\n")
 
+	// Derived from configEnvVars — the same list llms-full.txt tabulates, and the
+	// one TestConfigEnvVarsCoversConfigGo holds against config.go. This summary
+	// used to be written by hand and had fallen seven variables behind.
 	b.WriteString("Configuration (environment variables, all optional):\n\n")
-	b.WriteString("- LIBGEN_MIRROR: force a specific mirror base URL, e.g. `https://libgen.li` (default: auto-discovered)\n")
-	b.WriteString("- LIBGEN_MCP_DOWNLOAD_DIR: download destination directory (default: `~/Downloads`)\n")
-	b.WriteString("- LIBGEN_MCP_TIMEOUT: timeout per HTTP request, e.g. `30s` (default: 30s)\n")
-	b.WriteString("- LIBGEN_MCP_LOG_LEVEL: log level — debug, info, warn or error (default: info)\n")
-	b.WriteString("- LIBGEN_MCP_RATE_RPS: allowed requests per second (default: 1)\n")
-	b.WriteString("- LIBGEN_MCP_RATE_BURST: maximum rate-limiter burst (default: 1)\n")
-	b.WriteString("- LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes, 0 = no limit (default: 0)\n")
-	b.WriteString("- LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads (default: 2)\n")
-	b.WriteString("- LIBGEN_MCP_RETRY_ATTEMPTS: retries per request (default: 3)\n")
-	b.WriteString("- LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: staged waits between attempts to start a download — resolve/connect/first byte (default: `5s,5s,5s,10s,10s,10s,15s`, ~8 attempts over ~60s)\n")
-	b.WriteString("- LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: abort a stream only after this long with no new bytes; a slow-but-progressing download is never cut (default: 60s)\n")
-	b.WriteString("- LIBGEN_MCP_UNPAYWALL_EMAIL: contact email for the Unpaywall API; unset disables the unpaywall source\n")
-	b.WriteString("- LIBGEN_MCP_SCIHUB_HOSTS: comma-separated ordered Sci-Hub mirror hosts (bare host, no scheme)\n")
-	b.WriteString("- LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive membership key for member fast-downloads; unset keeps the annas source keyless (IPFS only)\n")
-	b.WriteString("- LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access article source; unset leaves core out of the chain\n")
-	// Derived from config.KnownSources so this line cannot drift from the chain
-	// itself, or from the identical list written into llms-full.txt.
-	fmt.Fprintf(&b, "- LIBGEN_MCP_SOURCES: comma-separated enabled download sources — %s (empty = all; the chain order is fixed, so this only removes sources)\n", knownSourcesList())
-	b.WriteString("- LIBGEN_MCP_REMOTE_DOWNLOADS: set to 1/true to make `download` always return a link (a resource_link) instead of saving a file — for a hosted stdio deployment whose disk the client cannot reach (`--http` implies it) (default: false)\n")
-	b.WriteString("- LIBGEN_MCP_EXTRA_SOURCES: when to consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) — auto (default: only when the catalog returns nothing or fails), always (every search), never (catalog only, even on a miss)\n\n")
+	for _, v := range configEnvVars() {
+		fmt.Fprintf(&b, "- %s: %s (default: %s)\n", v.name, firstSentence(v.meaning), v.def)
+	}
+	b.WriteString("\n")
 
 	b.WriteString("Tools:\n\n")
 	for _, t := range toolList {
@@ -269,13 +256,21 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	writeLLMSLink(&b, "Configuration", docsSiteURL+"configuration/", "Full environment-variable configuration reference")
 	writeLLMSLink(&b, "Tools", docsSiteURL+"tools/", "Per-tool reference for "+toolNames(toolList))
 	writeLLMSLink(&b, "Architecture", docsSiteURL+"architecture/", "Internal architecture, mirror discovery and download sources")
+	writeLLMSLink(&b, "How search works", docsSiteURL+"how-search-works/", "Catalog-first search, and when and how it escalates to the extra sources")
+	writeLLMSLink(&b, "LLM eval results", docsSiteURL+"eval-results/", "Results of driving a real model over MCP against the live site, scenario by scenario")
 	writeLLMSLink(&b, "Troubleshooting", docsSiteURL+"troubleshooting/", "Common setup and runtime issues")
-	writeLLMSLink(&b, "Privacy policy", repoBlobURL+"PRIVACY.md", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes")
+	writeLLMSLink(&b, "Responsible use", docsSiteURL+"responsible-use/", "Why the open-access providers are tried first, and what the server refuses to serve")
+	writeLLMSLink(&b, "Privacy policy", docsSiteURL+"privacy/", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes")
+	writeLLMSLink(&b, "Security policy", repoBlobURL+"SECURITY.md", "Threat model and how to report a vulnerability privately")
 	writeLLMSLink(&b, "Headless install", repoBlobURL+"llms-install.md", "Machine-readable install guide for AI assistants")
 
 	b.WriteString("\n## Optional\n\n")
 	writeLLMSLink(&b, "Full LLM reference", docsSiteURL+llmsFullFileName, "Generated companion reference with full tool schemas")
 	writeLLMSLink(&b, "Documentation site", docsSiteURL, "Rendered documentation site")
+	// The Spanish docs are a full translation, not a stub, and nothing else in
+	// this file pointed at them — so an assistant reading llms.txt could not tell
+	// they existed.
+	writeLLMSLink(&b, "Documentación en español", docsSiteURL+"es/", "Full Spanish translation of every page above")
 
 	content := b.String()
 	if err := validateLLMSTxt(content); err != nil {

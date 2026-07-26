@@ -1,6 +1,105 @@
 ---
 title: Herramientas
 description: Las herramientas search, get_details, download y read — entradas, salidas y comportamiento ante errores.
+datePublished: "2026-07-19"
+head:
+  # La página que una IA lee para responder «¿qué puede hacer libgen-mcp?». El
+  # marcado no enumeraba las herramientas; ahora cada una tiene un enlace citable.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#tool-list",
+        "name": "Herramientas MCP de libgen-mcp",
+        "description": "Las cuatro herramientas MCP que expone libgen-mcp.",
+        "inLanguage": "es",
+        "itemListOrder": "https://schema.org/ItemListOrderAscending",
+        "numberOfItems": 4,
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "search",
+            "description": "Busca en el catálogo de Library Genesis libros, artículos, cómics, revistas y normas, devolviendo metadatos y hashes MD5 por resultado. Escala a Anna's Archive y a los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) según la política extra_sources. De solo lectura y de mundo abierto.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#search"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "get_details",
+            "description": "Obtiene los metadatos completos de un registro por md5, id de edición o fichero, o DOI, con enriquecimiento opcional sin clave desde Crossref y OpenLibrary, más citas BibTeX y RIS. De solo lectura y de mundo abierto.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#get_details"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "download",
+            "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de biblioteca en la sombra. Guarda en un directorio local, o devuelve un enlace cuando el servidor se ejecuta en remoto. No destructiva, idempotente y de mundo abierto.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#download"
+          },
+          {
+            "@type": "ListItem",
+            "position": 4,
+            "name": "read",
+            "description": "Extrae y pagina el texto de un PDF, EPUB o TXT sin descargar el fichero entero, busca dentro del documento y produce su índice. De solo lectura y de mundo abierto.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#read"
+          }
+        ]
+      }
+  # Refleja literalmente la sección «Preguntas frecuentes» del pie de esta
+  # página. Un FAQ solo en el marcado es una violación de política y un riesgo
+  # de cita, así que ambos se editan juntos.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Qué herramienta de libgen-mcp debo usar?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Depende de lo que tengas y de lo que quieras. Usa search cuando tengas un título, un autor o un tema y necesites encontrar el registro. Usa get_details cuando ya tengas un identificador y quieras los metadatos completos, una cita, o el enriquecimiento de Crossref y OpenLibrary. Usa download cuando quieras el fichero en disco. Usa read cuando quieras el texto pero no el fichero — extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Puede libgen-mcp leer un libro sin descargarlo?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí, y para eso está read. Trae el fichero a una caché temporal del servidor, extrae el texto en Go puro y devuelve una página cada vez, de modo que llamadas sucesivas sobre el mismo documento reutilizan una única descarga. Tiene además un modo find que busca dentro del documento y un modo outline que devuelve su tabla de contenidos. No se escribe nada en tu directorio de descargas."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Cómo descargo un artículo que no tiene MD5?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Con su DOI. Los libros del catálogo de Library Genesis se identifican por MD5, pero los artículos se identifican por DOI, y download acepta cualquiera de los dos — más isbn para un libro de las fuentes de acceso abierto. Pasar un DOI encamina la petición por la cadena de artículos, que prueba Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE y OAPEN antes que Sci-Hub o SciDB."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué pasa cuando falla una fuente de descarga?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "La cadena pasa a la siguiente fuente que pueda servir el ítem, y la herramienta te dice cuál lo consiguió. Una fuente que falla porque no está disponible — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante cinco minutos para que no entorpezca llamadas posteriores. Una fuente que responde correctamente que no tiene el ítem no se penaliza: eso es una respuesta normal sobre un ítem y no dice nada sobre la salud del proveedor."
+            }
+          }
+        ]
+      }
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -11,7 +110,7 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 
 ## search
 
-Busca en el catálogo de Library Genesis. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
+`search` es la herramienta que consulta el catálogo de Library Genesis y, cuando la política `extra_sources` lo permite, los nueve proveedores que hay más allá. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
 
 ### entrada de search
 
@@ -116,7 +215,7 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 
 ## get_details
 
-Metadatos completos de un registro vía la API JSON de LibGen — descripción, identificadores, DOI, portada y edición relacionada. Consulta por `md5`, por `id` o por `doi` — exactamente uno de los tres.
+`get_details` es la herramienta que obtiene los metadatos completos de un registro vía la API JSON de LibGen — descripción, identificadores, DOI, portada y edición relacionada. Consulta por `md5`, por `id` o por `doi` — exactamente uno de los tres.
 
 ### entrada de get_details
 
@@ -183,7 +282,7 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 	derecho legal de acceder.
 </Aside>
 
-Descarga un archivo a un directorio local. Proporciona `md5` o `isbn` para un libro **o** `doi` para un artículo; se requiere al menos uno. Devuelve la ruta guardada, el tamaño y la fuente que lo sirvió.
+`download` es la herramienta que resuelve un ítem por la cadena ordenada de fuentes y lo guarda en un directorio local. Proporciona `md5` o `isbn` para un libro **o** `doi` para un artículo; se requiere al menos uno. Devuelve la ruta guardada, el tamaño y la fuente que lo sirvió.
 
 ### entrada de download
 
@@ -267,7 +366,7 @@ Cuando el cliente MCP conectado admite **elicitation** (pedir información al us
 
 ## read
 
-Extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo sin descargar el archivo entero. Identifica el archivo por `md5` (un libro) o `doi` (un artículo) de una búsqueda previa, o por una ruta `path` absoluta a un archivo ya descargado (solo servidor local). La extracción es Go puro — PDF (solo capa de texto), EPUB y TXT — sin OCR.
+`read` es la herramienta que extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo sin descargar el archivo entero. Identifica el archivo por `md5` (un libro) o `doi` (un artículo) de una búsqueda previa, o por una ruta `path` absoluta a un archivo ya descargado (solo servidor local). La extracción es Go puro — PDF (solo capa de texto), EPUB y TXT — sin OCR.
 
 ### entrada de read
 
@@ -422,3 +521,21 @@ Diagnostica una descarga fallida o atascada y produce un plan de recuperación p
 | `error`   | no        | El mensaje de error que devolvió la herramienta `download`, si lo hay. |
 
 Todos los argumentos son opcionales. El árbol de decisión resultante solo nombra los proveedores de descarga que están realmente **habilitados** en este servidor (vía `LIBGEN_MCP_SOURCES`), sugiere volver a ejecutar `search` para descartar un identificador obsoleto, guía cómo fijar el parámetro `source` de `download` para aislar un proveedor que falla y —cuando se reconoce un mensaje de error conocido— añade consejos específicos (p. ej. un md5 malformado, una `LIBGEN_MCP_UNPAYWALL_EMAIL` sin fijar, una transferencia estancada o un fallo de verificación de integridad).
+
+## Preguntas frecuentes
+
+### ¿Qué herramienta de libgen-mcp debo usar?
+
+Depende de lo que tengas y de lo que quieras. Usa `search` cuando tengas un título, un autor o un tema y necesites encontrar el registro. Usa `get_details` cuando ya tengas un identificador y quieras los metadatos completos, una cita, o el enriquecimiento de Crossref y OpenLibrary. Usa `download` cuando quieras el fichero en disco. Usa `read` cuando quieras el texto pero no el fichero — extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero.
+
+### ¿Puede libgen-mcp leer un libro sin descargarlo?
+
+Sí, y para eso está `read`. Trae el fichero a una caché temporal del servidor, extrae el texto en Go puro y devuelve una página cada vez, de modo que llamadas sucesivas sobre el mismo documento reutilizan una única descarga. Tiene además un modo `find` que busca dentro del documento y un modo `outline` que devuelve su tabla de contenidos. No se escribe nada en tu directorio de descargas.
+
+### ¿Cómo descargo un artículo que no tiene MD5?
+
+Con su DOI. Los libros del catálogo de Library Genesis se identifican por MD5, pero los artículos se identifican por DOI, y `download` acepta cualquiera de los dos — más `isbn` para un libro de las fuentes de acceso abierto. Pasar un DOI encamina la petición por la cadena de artículos, que prueba Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE y OAPEN antes que Sci-Hub o SciDB.
+
+### ¿Qué pasa cuando falla una fuente de descarga?
+
+La cadena pasa a la siguiente fuente que pueda servir el ítem, y la herramienta te dice cuál lo consiguió. Una fuente que falla porque no está disponible — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante cinco minutos para que no entorpezca llamadas posteriores. Una fuente que responde correctamente que no tiene el ítem no se penaliza: eso es una respuesta normal sobre un ítem y no dice nada sobre la salud del proveedor.

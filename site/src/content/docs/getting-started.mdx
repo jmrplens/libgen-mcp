@@ -2,6 +2,59 @@
 title: Getting Started
 description: Install libgen-mcp, wire it into an MCP client, and run your first search.
 head:
+  # The one page on the site with a genuinely procedural shape.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "@id": "https://jmrplens.github.io/libgen-mcp/getting-started/#howto",
+        "name": "How to install libgen-mcp and connect it to an AI assistant",
+        "description": "Install the libgen-mcp server, register it with an MCP client such as Claude Code, Claude Desktop or VS Code, and run a first search. No account, API key or token is required at any step.",
+        "inLanguage": "en",
+        "totalTime": "PT5M",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/getting-started/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "supply": [],
+        "tool": [
+          {
+            "@type": "HowToTool",
+            "name": "An MCP-compatible client (Claude Code, Claude Desktop, Cursor, VS Code or your own agent)"
+          }
+        ],
+        "step": [
+          {
+            "@type": "HowToStep",
+            "position": 1,
+            "name": "Install the server",
+            "text": "Download the prebuilt static binary for your platform from the GitHub releases page, mark it executable and put it on your PATH. It is a single fully static executable with nothing else to install. Alternatively pull the multi-arch Docker image ghcr.io/jmrplens/libgen-mcp:latest, or build from source with go install if you have Go 1.26 or newer.",
+            "url": "https://jmrplens.github.io/libgen-mcp/getting-started/#install"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 2,
+            "name": "Register it with your MCP client",
+            "text": "Add the server to your client's MCP configuration. Claude Code, Claude Desktop and Cursor use an mcpServers key whose entry points command at the binary's absolute path; VS Code and GitHub Copilot use a servers key and also set type to stdio. For Claude Code the whole step is a single command: claude mcp add libgen -- /usr/local/bin/libgen-mcp.",
+            "url": "https://jmrplens.github.io/libgen-mcp/getting-started/#configure-an-mcp-client"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 3,
+            "name": "Run your first search",
+            "text": "Restart the client so it picks up the new server, then ask it in plain language to search Library Genesis for a title. The model calls the search tool, and the results come back with per-record metadata and MD5 hashes it can pass to get_details or download.",
+            "url": "https://jmrplens.github.io/libgen-mcp/getting-started/#your-first-search"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 4,
+            "name": "Read a document without downloading it",
+            "text": "Ask the assistant to read or summarize a result instead of downloading it. The read tool extracts and paginates the text of a PDF, EPUB or TXT, so the model can summarize a paper, search inside a book or produce its outline without pulling down the whole file.",
+            "url": "https://jmrplens.github.io/libgen-mcp/getting-started/#read-and-summarize"
+          }
+        ]
+      }
   - tag: script
     attrs:
       type: application/ld+json
@@ -47,6 +100,7 @@ head:
           }
         ]
       }
+datePublished: "2026-07-19"
 ---
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";

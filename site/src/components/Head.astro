@@ -16,10 +16,17 @@ const WEBSITE_ID = `${SITE}${BASE}/#website`;
 // Matches the SoftwareApplication @id in the site-wide @graph (astro.config.mjs),
 // so each page's TechArticle ties back to the product node.
 const SOFTWARE_ID = "https://github.com/jmrplens/libgen-mcp#software";
+// Google's Article family requires an image; the social card doubles as one.
+const OG_IMAGE = `${SITE}${BASE}/og.png`;
+// /tools/ documents four MCP tools' inputs, outputs and errors. APIReference is
+// the TechArticle subtype for exactly that.
+const API_REFERENCE_PAGES = ["/tools/", "/es/tools/"];
 
 // Minimal typed view of the Starlight route data we consume.
 interface RouteData {
-  entry?: { data?: { title?: string; description?: string } };
+  entry?: {
+    data?: { title?: string; description?: string; datePublished?: string };
+  };
   lastUpdated?: Date;
 }
 const route = (Astro.locals as { starlightRoute?: RouteData }).starlightRoute;
@@ -42,18 +49,26 @@ const techArticle = isHome
   ? null
   : {
       "@context": "https://schema.org",
-      "@type": "TechArticle",
+      "@type": API_REFERENCE_PAGES.includes(rel) ? "APIReference" : "TechArticle",
+      // Addressable, so a page's other nodes (FAQPage, ItemList, Dataset) can
+      // point at this one instead of standing beside it as a second document.
+      "@id": `${canonical}#article`,
       headline: title,
       ...(description ? { description } : {}),
       inLanguage: lang,
       url: canonical,
       mainEntityOfPage: canonical,
+      image: OG_IMAGE,
       // Point voice/AI assistants at the page title and lead paragraph.
       speakable: {
         "@type": "SpeakableSpecification",
         cssSelector: ["h1", ".sl-markdown-content > p:first-of-type"],
       },
-      ...(updated ? { datePublished: updated, dateModified: updated } : {}),
+      // Git only knows when a page last changed. Deriving `datePublished` from
+      // that same value claimed every page was first published on the day it was
+      // last edited, so first publication is opt-in per page via frontmatter.
+      ...(updated ? { dateModified: updated } : {}),
+      ...(data.datePublished ? { datePublished: data.datePublished } : {}),
       author: { "@id": PERSON_ID },
       publisher: { "@id": PERSON_ID },
       isPartOf: { "@id": WEBSITE_ID },
@@ -72,6 +87,8 @@ const SECTION_LABELS: Record<string, { en: string; es: string }> = {
   troubleshooting: { en: "Troubleshooting", es: "Solución de problemas" },
   tools: { en: "Tools", es: "Herramientas" },
   architecture: { en: "Architecture", es: "Arquitectura" },
+  "responsible-use": { en: "Responsible use", es: "Uso responsable" },
+  privacy: { en: "Privacy policy", es: "Política de privacidad" },
 };
 function segLabel(seg: string, locale: "en" | "es") {
   return SECTION_LABELS[seg]?.[locale] ?? titleCase(seg);

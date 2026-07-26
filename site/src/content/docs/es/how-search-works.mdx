@@ -1,9 +1,62 @@
 ---
 title: Cómo funciona la búsqueda
 description: Un recorrido conceptual sobre qué consulta una búsqueda, cuándo va más allá del catálogo de Library Genesis y cómo cada resultado indica de dónde proviene.
+datePublished: "2026-07-24"
+head:
+  # Refleja literalmente la sección «Preguntas frecuentes» del pie de esta
+  # página. Un FAQ solo en el marcado es una violación de política y un riesgo
+  # de cita, así que ambos se editan juntos.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/how-search-works/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/how-search-works/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Cuándo busca libgen-mcp más allá del catálogo de Library Genesis?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Con la política auto predeterminada, solo cuando el catálogo no devuelve nada o falla directamente. Una búsqueda ordinaria que el catálogo responde no consulta ningún otro servicio. Fijar extra_sources a always consulta las fuentes adicionales en cada búsqueda, de forma concurrente con el catálogo y no después, porque esa decisión no depende de lo que el catálogo responda. Fijarlo a never restringe cada búsqueda al catálogo incluso ante un fallo, y como valor de despliegue es un cierre y no una preferencia: un argumento por llamada no puede volver a habilitar las fuentes adicionales."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué fuentes consulta una búsqueda más allá del catálogo?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Cómo se tratan los resultados duplicados?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Un resultado de búsqueda me dice si una obra es libre de leer?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Solo donde la fuente lo afirma. Anna's Archive es una biblioteca en la sombra y no una editorial de material con licencia libre, así que sus resultados nunca se marcan como acceso abierto. Los índices bibliográficos dblp y PubMed indexan artículos con independencia de su licencia y no dicen nada sobre ella, así que los suyos tampoco. ERIC es las dos cosas a la vez — aloja el texto completo autorizado de una parte de lo que indexa y del resto solo da la ficha — así que sus resultados se marcan uno a uno. No infieras la licencia de una obra del hecho de que una búsqueda la haya devuelto."
+            }
+          }
+        ]
+      }
 ---
 
-Una `search` hace una sola pregunta, pero no siempre se la hace a un único lugar. Por defecto consulta el **catálogo de Library Genesis** y ahí se queda. Cuando ese catálogo no tiene nada — o falla directamente — la búsqueda busca más allá, de forma silenciosa, en Anna's Archive y los proveedores de acceso abierto, de modo que un "no encontrado" nunca se reporta como callejón sin haber mirado más allá. Esta página explica ese flujo en términos llanos: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
+**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a ocho proveedores de acceso abierto, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
+
+Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
 
 ## El comportamiento por defecto: el catálogo de Library Genesis
 
@@ -82,4 +135,22 @@ Los dos comportamientos anteriores son un equilibrio deliberado:
 - **Una búsqueda ordinaria se mantiene rápida y silenciosa.** Con `auto`, una búsqueda que el catálogo responde nunca contacta a un tercero. No hay latencia extra, no hay tráfico extra y no hay dependencia de proveedores que no necesitabas — la respuesta del catálogo es la respuesta.
 - **Un fallo nunca es un callejón sin salida.** En el momento en que el catálogo sale vacío o falla, la búsqueda ya ha mirado más allá. La misma llamada única que de otro modo devolvería "no encontrado" devuelve en cambio lo que halló en otros sitios, etiquetado para que sepas de dónde vino cada resultado y cómo obtenerlo.
 
-En resumen: el camino habitual es barato, y el respaldo es automático. Tienes velocidad cuando el catálogo la tiene, y alcance cuando no.
+**En modo `auto`, una búsqueda que el catálogo responde no contacta con ningún tercero**; solo un fallo o un error del catálogo desencadenan la escalada. Tienes velocidad cuando el catálogo la tiene, y alcance cuando no.
+
+## Preguntas frecuentes
+
+### ¿Cuándo busca libgen-mcp más allá del catálogo de Library Genesis?
+
+Con la política `auto` predeterminada, solo cuando el catálogo no devuelve nada o falla directamente. Una búsqueda ordinaria que el catálogo responde no consulta ningún otro servicio. Fijar `extra_sources` a `always` consulta las fuentes adicionales en cada búsqueda, de forma concurrente con el catálogo y no después, porque esa decisión no depende de lo que el catálogo responda. Fijarlo a `never` restringe cada búsqueda al catálogo incluso ante un fallo, y como valor de despliegue es un cierre y no una preferencia: un argumento por llamada no puede volver a habilitar las fuentes adicionales.
+
+### ¿Qué fuentes consulta una búsqueda más allá del catálogo?
+
+Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
+
+### ¿Cómo se tratan los resultados duplicados?
+
+Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
+
+### ¿Un resultado de búsqueda me dice si una obra es libre de leer?
+
+Solo donde la fuente lo afirma. Anna's Archive es una biblioteca en la sombra y no una editorial de material con licencia libre, así que sus resultados nunca se marcan como acceso abierto. Los índices bibliográficos dblp y PubMed indexan artículos con independencia de su licencia y no dicen nada sobre ella, así que los suyos tampoco. ERIC es las dos cosas a la vez — aloja el texto completo autorizado de una parte de lo que indexa y del resto solo da la ficha — así que sus resultados se marcan uno a uno. No infieras la licencia de una obra del hecho de que una búsqueda la haya devuelto.

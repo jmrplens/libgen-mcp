@@ -53,3 +53,17 @@
 		transform: none;
 	}
 }
+
+/*
+ * Reserve height for Mermaid diagrams before their script runs.
+ *
+ * astro-mermaid injects its own stylesheet at runtime, so the `min-height` rule
+ * meant to prevent layout shift only lands *after* first paint: the browser
+ * paints the raw diagram source at its natural height, the injected CSS then
+ * collapses it, and the rendered SVG expands it again — two unreserved shifts.
+ * Declaring it here applies it at first paint instead, before any script runs.
+ */
+pre.mermaid:not([data-processed]) {
+	min-height: 200px;
+	overflow: hidden;
+}

@@ -13,12 +13,20 @@
     "http://localhost:4321/libgen-mcp/configuration/",
     "http://localhost:4321/libgen-mcp/tools/",
     "http://localhost:4321/libgen-mcp/architecture/",
+    "http://localhost:4321/libgen-mcp/how-search-works/",
+    "http://localhost:4321/libgen-mcp/eval-results/",
     "http://localhost:4321/libgen-mcp/troubleshooting/",
+    "http://localhost:4321/libgen-mcp/responsible-use/",
+    "http://localhost:4321/libgen-mcp/privacy/",
     "http://localhost:4321/libgen-mcp/es/",
     "http://localhost:4321/libgen-mcp/es/getting-started/",
     "http://localhost:4321/libgen-mcp/es/configuration/",
     "http://localhost:4321/libgen-mcp/es/tools/",
     "http://localhost:4321/libgen-mcp/es/architecture/",
-    "http://localhost:4321/libgen-mcp/es/troubleshooting/"
+    "http://localhost:4321/libgen-mcp/es/how-search-works/",
+    "http://localhost:4321/libgen-mcp/es/eval-results/",
+    "http://localhost:4321/libgen-mcp/es/troubleshooting/",
+    "http://localhost:4321/libgen-mcp/es/responsible-use/",
+    "http://localhost:4321/libgen-mcp/es/privacy/"
   ]
 }
