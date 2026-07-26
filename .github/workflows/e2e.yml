@@ -46,6 +46,40 @@ jobs:
           # job with no diagnosis.
           gotestsum --junitfile test-results/e2e-junit.xml --format standard-verbose \
             -- -v -tags e2e -timeout 900s -count=1 ./test/e2e/
+      # A live suite reports two ways: red, and quietly not having run. Every
+      # per-source case skips when its upstream will not serve this network, and
+      # a runner's datacenter address is exactly what some of them decline —
+      # Internet Archive Scholar answers CI with a session challenge. Those skips
+      # are correct, but a green tick hides them, and coverage that lapses for
+      # weeks looks identical to coverage that passed. Surface them so the run
+      # says what it did NOT check.
+      - name: Report skipped coverage
+        if: always()
+        run: |
+          set -euo pipefail
+          f=test-results/e2e-junit.xml
+          [ -f "$f" ] || exit 0
+          python3 - "$f" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import re, sys, pathlib
+          xml = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+          cases = re.findall(r'<testcase\b[^>]*name="([^"]+)"[^>]*(?:/>|>(.*?)</testcase>)', xml, re.S)
+          skipped = []
+          for name, body in cases:
+              body = body or ""
+              if "<skipped" in body:
+                  why = re.search(r'<skipped[^>]*message="([^"]*)"', body)
+                  skipped.append((name, (why.group(1) if why else "").strip()[:160]))
+          total = len(cases)
+          print(f"### Live E2E: {total - len(skipped)} exercised, {len(skipped)} skipped\n")
+          if not skipped:
+              print("Every case ran — no upstream declined to serve this runner.")
+          else:
+              print("These cases did **not** exercise their upstream:\n")
+              print("| Case | Reason |")
+              print("| --- | --- |")
+              for name, why in sorted(skipped):
+                  print(f"| `{name}` | {why.replace('|', '\\|') or '—'} |")
+          PY
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
