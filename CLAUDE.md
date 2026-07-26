@@ -231,6 +231,12 @@ build tag **and** `LIBGEN_E2E=1`:
 LIBGEN_E2E=1 go test -tags e2e ./test/e2e/    # or: make test-e2e
 ```
 
+They are **run by hand while developing**, not on a schedule. Nothing in CI
+executes them: a suite pointed at live third-party mirrors reports their outages
+as much as our regressions, and triaging that daily costs more than it returns.
+`cmd/probe` is the quicker check that every route still works against the real
+mirrors; a genuine breakage otherwise surfaces from use.
+
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and
 downloads — never runs in ordinary CI):
