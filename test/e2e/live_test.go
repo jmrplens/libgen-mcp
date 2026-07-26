@@ -542,7 +542,12 @@ var fatcatFailures = []sourceFailure{
 	diagnosed("fatcat", `"[^"]*" is unknown to fatcat`, "fatcat has no release for the DOI"),
 	diagnosed("fatcat", `"[^"]*" has no preserved full text`, "release known but nothing preserved"),
 	diagnosed("fatcat", `no preserved copy of "[^"]*" currently serves a PDF`, "every preserved capture is dead today"),
-	diagnosed("fatcat", `returned no release page`, "a session challenge or a changed layout, not a miss"),
+	// The diagnosis sits after the DOI, as in source_fatcat.go: `fatcat: the
+	// lookup for %q returned no release page (…)`. Written without the leading
+	// fragment this pattern required "fatcat: returned no release page" and so
+	// could never match — a latent gap that only surfaced the day the frontend
+	// actually started answering with a session challenge.
+	diagnosed("fatcat", `the lookup for "[^"]*" returned no release page`, "a session challenge or a changed layout, not a miss"),
 	diagnosed("fatcat", `"[^"]*" returned HTTP \d+`, "the frontend answered an unexpected status"),
 	transportTo("fatcat", "requesting ", "scholar.archive.org"),
 	{

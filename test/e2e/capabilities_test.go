@@ -82,16 +82,24 @@ func newToolSession(t *testing.T, ctx context.Context, client *libgen.Client, cf
 // offlineConfig returns a plain local config rooted at a fresh temp dir with a
 // small, email-free source set, for the deterministic prompt cases that perform
 // no network I/O.
+// offlineConfig builds a config for the deterministic local-server cases.
+//
+// It starts from config.Load() rather than a bare struct literal so every
+// documented default is present, then overrides only what a test needs. Hand
+// listing the fields silently opted these tests out of any default added later:
+// ConfirmDownloads arrived defaulting to true, the literal left it at the zero
+// value, and the download-confirmation tests went green-to-red in the nightly
+// while asserting a prompt that the config had disabled.
 func offlineConfig(t *testing.T) *config.Config {
 	t.Helper()
-	return &config.Config{
-		DownloadDir:   t.TempDir(),
-		Timeout:       5 * time.Second,
-		RateRPS:       1000,
-		RateBurst:     100,
-		RetryAttempts: 1,
-		Sources:       []string{"libgen", "scihub"},
-	}
+	cfg := config.Defaults()
+	cfg.DownloadDir = t.TempDir()
+	cfg.Timeout = 5 * time.Second
+	cfg.RateRPS = 1000
+	cfg.RateBurst = 100
+	cfg.RetryAttempts = 1
+	cfg.Sources = []string{"libgen", "scihub"}
+	return cfg
 }
 
 // offlineClient builds a libgen client with no reachable mirrors, for the
