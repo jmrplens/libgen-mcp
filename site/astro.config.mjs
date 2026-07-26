@@ -78,9 +78,16 @@ const jsonLd = JSON.stringify({
 	"@graph": [
 		// This node shares its @id with the canonical Person published at
 		// https://jmrp.io/#person. Two nodes under one @id that disagree weaken
-		// the entity rather than reinforcing it, so jobTitle, description, image
-		// and sameAs are kept identical to the portfolio's — that site is the
-		// source of truth for the identity, this one only restates it.
+		// the entity rather than reinforcing it, so jobTitle, description and
+		// sameAs are kept identical to the portfolio's — that site is the source
+		// of truth for the identity, this one only restates it.
+		//
+		// `image` is deliberately not restated. It is functionally single-valued,
+		// the portfolio's is a content-hashed Astro asset whose URL changes on
+		// rebuild, and this site cannot track that — so any value here is a
+		// conflict an engine has to break arbitrarily. Leaving it out lets the
+		// portfolio stay authoritative. `knowsAbout` is multi-valued and merges,
+		// so the narrower set below reinforces rather than contradicts.
 		{
 			"@type": "Person",
 			"@id": authorId,
@@ -90,15 +97,8 @@ const jsonLd = JSON.stringify({
 			description:
 				"Firmware and software engineer in Valencia, Spain — industrial embedded systems, open-source tooling, and self-hosted infrastructure.",
 			url: authorUrl,
-			image: {
-				"@type": "ImageObject",
-				url: "https://github.com/jmrplens.png",
-				width: 460,
-				height: 460,
-			},
 			// Wikidata-linked rather than bare strings, so an engine resolves each
-			// topic to a known entity instead of guessing from a label. The Q-ids
-			// match the ones the portfolio already uses.
+			// topic to a known entity instead of guessing from a label.
 			knowsAbout: [
 				{
 					"@type": "Thing",
@@ -172,7 +172,12 @@ const jsonLd = JSON.stringify({
 			applicationCategory: "DeveloperApplication",
 			applicationSubCategory: "Search Tools",
 			operatingSystem: "Windows, macOS, Linux",
-			programmingLanguage: "Go",
+			// programmingLanguage and codeRepository are deliberately absent here:
+			// schema.org scopes both to SoftwareSourceCode, so on a
+			// SoftwareApplication they are domain errors on every page of the site.
+			// The SoftwareSourceCode node below carries them, and links back via
+			// targetProduct; `keywords` and `url` keep the Go/GitHub signal on this
+			// node without inventing a property that does not belong to it.
 			url: repositoryUrl,
 			downloadUrl: "https://github.com/jmrplens/libgen-mcp/releases/latest",
 			installUrl: "https://jmrplens.github.io/libgen-mcp/getting-started/",
@@ -180,7 +185,6 @@ const jsonLd = JSON.stringify({
 			releaseNotes: softwareVersion
 				? `https://github.com/jmrplens/libgen-mcp/releases/tag/v${softwareVersion}`
 				: "https://github.com/jmrplens/libgen-mcp/releases/latest",
-			codeRepository: repositoryUrl,
 			image: socialImage,
 			license: "https://opensource.org/licenses/MIT",
 			isAccessibleForFree: true,
@@ -207,10 +211,15 @@ const jsonLd = JSON.stringify({
 					"@id": "http://www.wikidata.org/entity/Q133436854",
 				},
 			],
+			// No aggregateRating or review: the SoftwareApplication rich result wants
+			// one, but there is no legitimate source for either here — GitHub stars
+			// are not ratings — so the result stays ineligible rather than invented.
 			offers: {
 				"@type": "Offer",
 				price: "0",
 				priceCurrency: "USD",
+				availability: "https://schema.org/InStock",
+				url: "https://github.com/jmrplens/libgen-mcp/releases/latest",
 			},
 			author: { "@id": authorId },
 			// Every listing that carries this server, so an engine resolving the
@@ -291,6 +300,31 @@ export default defineConfig({
 						type: "image/png",
 						href: "/libgen-mcp/favicon.png",
 						sizes: "any",
+					},
+				},
+				// GitHub Pages cannot send X-Robots-Tag, and without the meta
+				// equivalent both Google's AI surfaces and Bing fall back to a
+				// truncated snippet and a thumbnail-sized image. Everything here is
+				// public documentation, so grant the full length explicitly.
+				{
+					tag: "meta",
+					attrs: {
+						name: "robots",
+						content:
+							"index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1",
+					},
+				},
+				// llms.txt is discovered at the *origin* root, which this project does
+				// not own — jmrplens.github.io is a shared user page. Without a link
+				// from the pages themselves, /libgen-mcp/llms.txt is unreachable
+				// except by guessing the base-path variant.
+				{
+					tag: "link",
+					attrs: {
+						rel: "alternate",
+						type: "text/plain",
+						href: "/libgen-mcp/llms.txt",
+						title: "llms.txt",
 					},
 				},
 				{

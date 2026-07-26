@@ -43,9 +43,11 @@ head:
           }
         ]
       }
-  # Resultados de medición, así que Dataset es el tipo correcto. Sin
-  # `distribution`: las cifras se generan en esta página desde el informe de la
-  # ejecución y no hay ningún artefacto legible por máquina al que apuntar.
+  # Resultados de medición, así que Dataset es el tipo correcto. `distribution`
+  # apunta a la ejecución registrada de la que se genera esta página — el
+  # artefacto que un motor sí puede descargar. Sin `datePublished` ni
+  # `temporalCoverage`: el informe no lleva marca de tiempo, y una fecha
+  # inventada aquí sería peor que ninguna.
   - tag: script
     attrs:
       type: application/ld+json
@@ -63,7 +65,13 @@ head:
         "creator": { "@id": "https://jmrp.io/#person" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
-        "measurementTechnique": "Sesión MCP real de extremo a extremo contra un modelo de lenguaje real, mirrors reales y descargas reales",
+        "measurementTechnique": "Sesión MCP real de extremo a extremo contra un modelo de lenguaje real (claude-haiku-4-5-20251001), mirrors reales y descargas reales",
+        "distribution": {
+          "@type": "DataDownload",
+          "name": "Ejecución de evaluación registrada (tabla Markdown)",
+          "encodingFormat": "text/markdown",
+          "contentUrl": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/cmd/eval/testdata/latest-run.md"
+        },
         "variableMeasured": [
           {
             "@type": "PropertyValue",

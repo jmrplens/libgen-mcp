@@ -4,6 +4,16 @@ description: "Servidor MCP en Go de código abierto para Library Genesis: cuatro
 head:
   - tag: title
     content: "LibGen MCP — buscar libros y artículos en Library Genesis"
+  # Un splash de producto, no un artículo: esta página lleva un grafo
+  # WebSite + SoftwareApplication y ningún nodo TechArticle, así que el
+  # og:type=article por defecto de Starlight contradice sus propios datos
+  # estructurados. Se declara aquí y no en el override de Head porque
+  # Starlight deduplica <meta> por `property` dentro de la configuración de
+  # head, reemplazando el valor por defecto en lugar de duplicarlo.
+  - tag: meta
+    attrs:
+      property: og:type
+      content: website
   - tag: script
     attrs:
       type: application/ld+json

@@ -5,7 +5,7 @@ datePublished: "2026-07-25"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "8d1d93675b76c8d4"
+privacySource: "52bb22c1202630a6"
 ---
 
 **libgen-mcp** es un servidor Model Context Protocol (MCP) local. Se ejecuta
@@ -36,14 +36,18 @@ destinos son:
   (`randombook.org`) como alternativa.
 - **API de Unpaywall (solo cuando pides un artículo por DOI, y solo si la
   activas).** `LIBGEN_MCP_UNPAYWALL_EMAIL` está **vacía por defecto**, lo que
-  desactiva por completo la fuente `unpaywall` — no se hace ninguna petición y
-  **nunca se envía ninguna dirección de correo**, ni la del mantenedor ni la de
-  nadie. Si la fijas a tu propia dirección de contacto, resolver un `download` de
-  artículo por `doi` consulta la API de [Unpaywall](https://unpaywall.org)
-  (`api.unpaywall.org`) con esa dirección como parámetro, que es lo que su API
-  exige. Un cliente compatible con la elicitación de MCP puede en su lugar
-  ofrecerte pedir una dirección puntual por llamada; ese valor se usa para esa
-  única petición y nunca se almacena. No se envía ningún otro dato personal.
+  desactiva la fuente `unpaywall`: no se hace ninguna petición a Unpaywall, y
+  nunca se sustituye tu dirección por la del mantenedor ni por la de nadie.
+  Hay exactamente dos formas de que se envíe una dirección, y ambas las inicias
+  tú. Fija la variable a tu propia dirección de contacto y resolver un
+  `download` de artículo por `doi` consultará la API de
+  [Unpaywall](https://unpaywall.org) (`api.unpaywall.org`) con esa dirección
+  como parámetro, que es lo que su API exige. O déjala sin definir: un cliente
+  compatible con la elicitación de MCP puede entonces ofrecerte pedir una
+  dirección puntual para esa única llamada, que se usa solo para esa petición,
+  nunca se escribe en disco y nunca se reutiliza — y el aviso se omite por
+  completo cuando se ha fijado `source` de forma explícita. Si lo rechazas, la
+  petición continúa sin Unpaywall. No se envía ningún otro dato personal.
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
   DOI).** Antes de cualquier alternativa de biblioteca en la sombra, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con

@@ -3,7 +3,7 @@ title: Privacy policy
 description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
 datePublished: "2026-07-25"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "8d1d93675b76c8d4"
+privacySource: "52bb22c1202630a6"
 ---
 
 **libgen-mcp** is a local Model Context Protocol (MCP) server. It runs entirely
@@ -32,14 +32,18 @@ AI assistant) make. There are no background connections. The destinations are:
   fails, the `randombook` source (`randombook.org`) is tried as a fallback.
 - **Unpaywall API (only when you request an article by DOI, and only if you
   enable it).** `LIBGEN_MCP_UNPAYWALL_EMAIL` is **empty by default**, which
-  disables the `unpaywall` source entirely — no request is made and **no email
-  address is ever sent**, not the maintainer's and not anyone else's. If you set
-  it to your own contact address, resolving an article `download` by `doi`
-  queries the [Unpaywall](https://unpaywall.org) API (`api.unpaywall.org`) with
-  that address as a query parameter, which is what its API requires. A client
-  that supports MCP elicitation may instead offer to ask you for a one-off
-  address per call; that value is used for that single request and never stored.
-  No other personal data is sent.
+  disables the `unpaywall` source: no request is made to Unpaywall, and no
+  address of the maintainer's or anyone else's is ever substituted for yours.
+  There are exactly two ways an address is sent, both of which you initiate.
+  Set the variable to your own contact address, and resolving an article
+  `download` by `doi` queries the [Unpaywall](https://unpaywall.org) API
+  (`api.unpaywall.org`) with that address as a query parameter, which is what
+  its API requires. Or leave it unset: a client that supports MCP elicitation
+  may then offer to ask you for a one-off address for that single call, which
+  is used for that request only, is never written to disk, and is never
+  reused — and the prompt is skipped entirely when `source` was set
+  explicitly. Decline it and the request proceeds without Unpaywall. No other
+  personal data is sent.
 - **Keyless open-access providers (only when you request an article by DOI).**
   Before any shadow-library fallback, the article `download` chain asks the open
   repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
