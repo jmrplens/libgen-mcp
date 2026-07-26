@@ -73,77 +73,134 @@ const softwareRequirements =
 
 // Site-wide JSON-LD @graph: the stable Person / WebSite / SoftwareApplication /
 // SourceCode nodes that per-page TechArticle + BreadcrumbList nodes link into.
+// --- Canonical identity --------------------------------------------------
+// The `#person` entity is no longer restated here; it is fetched from its
+// single source of truth on jmrp.io and spliced into the graph verbatim. Every
+// property this site used to hand-copy (jobTitle, description, image, sameAs,
+// alternateName) had to be kept in sync by hand across five project sites, and
+// it drifted: two ended up publishing values that contradicted the canonical
+// node, one an avatar URL that had started returning 404.
+//
+// Fetched from raw.githubusercontent.com rather than https://jmrp.io on
+// purpose: this build runs on a CI runner, and jmrp.io sits behind Cloudflare,
+// CrowdSec and a MikroTik bouncer, where a blocked runner IP would silently
+// degrade this site to a stale snapshot. GitHub serves the same bytes and is
+// already a hard dependency of the build — the checkout comes from it.
+const CANONICAL_IDENTITY_URL =
+	"https://raw.githubusercontent.com/jmrplens/jmrp.io/main/public/identity/person.jsonld";
+
+// Committed fallback, only reached if the fetch fails — which, given the URL is
+// on the same host as the checkout, effectively means GitHub is down and there
+// is no build anyway. The warning is deliberately loud so a stale identity
+// never ships unnoticed. Refresh with `pnpm run identity:sync`.
+const identitySnapshot = JSON.parse(
+	readFileSync(
+		new URL("./identity/person.snapshot.json", import.meta.url),
+		"utf8",
+	),
+);
+
+// The live document. Falls back to the snapshot only on a fetch failure.
+const identityDocument = await fetch(CANONICAL_IDENTITY_URL, {
+	signal: AbortSignal.timeout(10_000),
+})
+	.then((response) =>
+		response.ok
+			? response.json()
+			: Promise.reject(new Error(`HTTP ${response.status}`)),
+	)
+	.catch((error) => {
+		console.warn(
+			`\n⚠ [identity] Could not fetch the canonical Person entity (${error.message}).\n` +
+				`  Falling back to the committed snapshot — this build may ship a stale identity.\n`,
+		);
+		return identitySnapshot;
+	});
+
+// `@context` is stripped: the document is standalone, but here it becomes one
+// node of a graph that already declares the context once. Filtered rather
+// than rest-destructured so no unused binding is left for linters to flag.
+const canonicalPerson = Object.fromEntries(
+	Object.entries(identityDocument).filter(([key]) => key !== "@context"),
+);
+
+/**
+ * Topics specific to this project, kept alongside the canonical expertise list
+ * rather than replacing it. `knowsAbout` is multi-valued, so the two sets merge
+ * instead of conflicting — which is why these may stay local while the
+ * single-valued properties above may not. The full original set is listed, not
+ * just the entries the canonical lacks, so this site keeps asserting its own
+ * topics even if the canonical list changes.
+ */
+const projectTopics = [
+	{
+		"@type": "Thing",
+		name: "Model Context Protocol",
+		"@id": "http://www.wikidata.org/entity/Q133436854",
+	},
+	{
+		"@type": "Thing",
+		name: "Go",
+		"@id": "http://www.wikidata.org/entity/Q37227",
+	},
+	{
+		"@type": "Thing",
+		name: "Library Genesis",
+		"@id": "http://www.wikidata.org/entity/Q22017206",
+	},
+	{
+		"@type": "Thing",
+		name: "Programming tool",
+		"@id": "http://www.wikidata.org/entity/Q1077784",
+	},
+	{
+		"@type": "Thing",
+		name: "Open access",
+		"@id": "http://www.wikidata.org/entity/Q232932",
+	},
+	{
+		"@type": "Thing",
+		name: "Digital library",
+		"@id": "http://www.wikidata.org/entity/Q212805",
+	},
+];
+
+/**
+ * Reads a `knowsAbout` entry's label, which may be a string or a Thing.
+ *
+ * @param {string | { name?: string }} topic - Entry from a `knowsAbout` array.
+ * @returns {string} The entry's label.
+ */
+const topicName = (topic) =>
+	typeof topic === "string" ? topic : (topic.name ?? "");
+
+/**
+ * Canonical topics first, then this project's own, de-duplicated by label
+ * (case-insensitively). Canonical entries win a collision because they carry a
+ * verified Wikidata `@id`.
+ */
+const personNode = (() => {
+	const canonical = /** @type {(string | { name?: string })[]} */ (
+		canonicalPerson.knowsAbout ?? []
+	);
+	const seen = new Set(canonical.map((t) => topicName(t).toLowerCase()));
+	return {
+		...canonicalPerson,
+		knowsAbout: [
+			...canonical,
+			...projectTopics.filter((t) => !seen.has(topicName(t).toLowerCase())),
+		],
+	};
+})();
+
 const jsonLd = JSON.stringify({
 	"@context": "https://schema.org",
 	"@graph": [
-		// This node shares its @id with the canonical Person published at
-		// https://jmrp.io/#person. Two nodes under one @id that disagree weaken
-		// the entity rather than reinforcing it, so jobTitle, description and
-		// sameAs are kept identical to the portfolio's — that site is the source
-		// of truth for the identity, this one only restates it.
-		//
-		// `image` is deliberately not restated. It is functionally single-valued,
-		// the portfolio's is a content-hashed Astro asset whose URL changes on
-		// rebuild, and this site cannot track that — so any value here is a
-		// conflict an engine has to break arbitrarily. Leaving it out lets the
-		// portfolio stay authoritative. `knowsAbout` is multi-valued and merges,
-		// so the narrower set below reinforces rather than contradicts.
-		{
-			"@type": "Person",
-			"@id": authorId,
-			name: "José Manuel Requena Plens",
-			alternateName: "jmrplens",
-			jobTitle: "R&D · Firmware & Software Engineer",
-			description:
-				"Firmware and software engineer in Valencia, Spain — industrial embedded systems, open-source tooling, and self-hosted infrastructure.",
-			url: authorUrl,
-			// Wikidata-linked rather than bare strings, so an engine resolves each
-			// topic to a known entity instead of guessing from a label.
-			knowsAbout: [
-				{
-					"@type": "Thing",
-					name: "Model Context Protocol",
-					"@id": "http://www.wikidata.org/entity/Q133436854",
-				},
-				{
-					"@type": "Thing",
-					name: "Go",
-					"@id": "http://www.wikidata.org/entity/Q37227",
-				},
-				{
-					"@type": "Thing",
-					name: "Library Genesis",
-					"@id": "http://www.wikidata.org/entity/Q22017206",
-				},
-				{
-					"@type": "Thing",
-					name: "Programming tool",
-					"@id": "http://www.wikidata.org/entity/Q1077784",
-				},
-				{
-					"@type": "Thing",
-					name: "Open access",
-					"@id": "http://www.wikidata.org/entity/Q232932",
-				},
-				{
-					"@type": "Thing",
-					name: "Digital library",
-					"@id": "http://www.wikidata.org/entity/Q212805",
-				},
-			],
-			sameAs: [
-				"https://github.com/jmrplens",
-				"https://www.linkedin.com/in/jmrplens",
-				"https://mstdn.jmrp.io/@jmrplens",
-				"https://bsky.app/profile/jmrp.io",
-				"https://scholar.google.com/citations?user=9b0kPaUAAAAJ",
-				"https://orcid.org/0000-0003-1250-6212",
-				"https://www.researchgate.net/profile/Jose-Requena-Plens-2",
-				"https://www.mathworks.com/matlabcentral/profile/authors/5890853",
-				"https://matrix.to/#/@jmrplens:matrix.jmrp.io",
-				"https://keyoxide.org/0A993B268654DBBA52B7E8D3FCF653391E2C91FC",
-			],
-		},
+		// The canonical Person entity, fetched at build time — see the
+		// "Canonical identity" block above. Spliced verbatim so this document
+		// and jmrp.io describe the same node with the same values, instead of
+		// two hand-maintained copies that drift.
+		personNode,
 		{
 			"@type": "WebSite",
 			"@id": websiteId,
@@ -230,6 +287,10 @@ const jsonLd = JSON.stringify({
 				url: "https://github.com/jmrplens/libgen-mcp/releases/latest",
 			},
 			author: { "@id": authorId },
+			// Same three agents jmrp.io/projects/ emits for this @id, so the merged
+			// node states one consistent set instead of a partial one per document.
+			creator: { "@id": authorId },
+			maintainer: { "@id": authorId },
 			// Every listing that carries this server, so an engine resolving the
 			// name lands on the same entity wherever it finds it. Note the
 			// Smithery namespace is `jmrp`, not `jmrplens`.
@@ -260,6 +321,10 @@ const jsonLd = JSON.stringify({
 			// The forward edge to the product; `isPartOf` alone only points back.
 			targetProduct: { "@id": softwareId },
 			author: { "@id": authorId },
+			// Same three agents jmrp.io/projects/ emits for this @id, so the merged
+			// node states one consistent set instead of a partial one per document.
+			creator: { "@id": authorId },
+			maintainer: { "@id": authorId },
 		},
 	],
 });
