@@ -427,11 +427,15 @@ func TestWriteLLMSTxt_And_Full(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listTools() error: %v", err)
 	}
+	promptList, err := listPrompts()
+	if err != nil {
+		t.Fatalf("listPrompts() error: %v", err)
+	}
 
-	if writeErr := writeLLMSTxt("2.3.4", toolList, false); writeErr != nil {
+	if writeErr := writeLLMSTxt("2.3.4", toolList, promptList, false); writeErr != nil {
 		t.Fatalf("writeLLMSTxt error: %v", writeErr)
 	}
-	if writeErr := writeLLMSFullTxt("2.3.4", toolList, false); writeErr != nil {
+	if writeErr := writeLLMSFullTxt("2.3.4", toolList, promptList, false); writeErr != nil {
 		t.Fatalf("writeLLMSFullTxt error: %v", writeErr)
 	}
 	for _, name := range []string{llmsFileName, llmsFullFileName} {
@@ -573,10 +577,18 @@ func TestWriteAnnotations(t *testing.T) {
 		t.Fatalf("explicit annotations = %q", got)
 	}
 
+	// A hint the server never set must be omitted, not published at its Go zero
+	// value: destructiveHint and idempotentHint are pointers precisely so "not
+	// stated" stays distinguishable from "stated false". openWorld keeps its
+	// documented default of true, which is a real default rather than a zero value.
 	var defaults strings.Builder
 	writeAnnotations(&defaults, &mcp.ToolAnnotations{})
-	if got := defaults.String(); !strings.Contains(got, "destructive=false") || !strings.Contains(got, "openWorld=true") {
-		t.Fatalf("default annotations = %q", got)
+	got := defaults.String()
+	if strings.Contains(got, "destructive=") || strings.Contains(got, "idempotent=") {
+		t.Errorf("unset hints were published as facts: %q", got)
+	}
+	if !strings.Contains(got, "readOnly=false") || !strings.Contains(got, "openWorld=true") {
+		t.Errorf("default annotations = %q", got)
 	}
 }
 

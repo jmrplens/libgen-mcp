@@ -31,7 +31,7 @@ head:
             "name": "Which sources does a search consult beyond the catalog?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an origin label naming the searcher that produced it, which is what tells you which identifier to pass to download."
+              "text": "Eight: Anna's Archive, and the seven open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an origin label naming the searcher that produced it, which is what tells you which identifier to pass to download."
             }
           },
           {
@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and eight open-access providers, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
+**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven further providers — five open-access repositories plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
 
 This page explains that flow: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
 
@@ -62,7 +62,7 @@ This page explains that flow: what a search does by default, when and why it rea
 
 An ordinary search asks the Library Genesis catalog and only the catalog. It sends no traffic to any third party, because it does not need to: the catalog holds millions of books, papers, comics, magazines, and standards, and it answers in a single fast round-trip. Whatever the catalog returns — the result page, the match counts, the per-file metadata — is what you get back.
 
-This is the path almost every search takes. It stays fast, it stays predictable, and it touches no one the search did not need to touch.
+Catalog-only is the path almost every `libgen-mcp` search takes: a single round-trip, no third-party traffic, and a predictable latency budget.
 
 ## Reaching beyond the catalog
 
@@ -96,6 +96,8 @@ flowchart TD
     G --> H[return combined results]
 ```
 
+In prose: `never` queries the Library Genesis catalog and stops. `always` queries the catalog and every extra source concurrently. `auto`, the default, queries the catalog first and reaches for the extra sources only when it returned nothing or failed outright. Whenever extra sources run, their hits come back on two channels: Anna's Archive is keyed by md5, so its files are deduplicated against the catalog and join the main `results` list; the other seven land in a separate `open_access` array. Both are labelled by `origin`.
+
 When the extras are consulted, every source is queried and the answers are merged. Duplicates are removed by **file digest** (the md5): the same file surfaced by two sources appears only once. When that same file appears in both the catalog and Anna's, **the catalog record wins**, because it carries richer metadata — publishers, languages, ISBNs, and the other fields the catalog invests in collecting. The Anna's copy is dropped rather than shown twice in a thinner form.
 
 ## What comes back: origins and downloads
@@ -122,6 +124,8 @@ flowchart LR
     O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
 
+In prose: what to do with a result follows from its `origin`. A `libgen` or `annas` hit carries an md5 — download by md5. A `crossref` hit carries a DOI — download by doi. An `arxiv` or `eric` hit carries a `pdf_url` you fetch directly. An `openlibrary` hit carries an ISBN — download by isbn, or use it to refine the search. A `gutenberg` hit carries a `full_text_url` for the ebook itself. A `dblp` or `pubmed` hit is a bibliographic record with a DOI and a venue: cite it, or try a download by doi.
+
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool falls back to Anna's own metadata and labels the record `origin: "annas"`. That record is thinner than a catalog one, and most Anna's items publish no IPFS address — so a keyless download may still not be possible even when the metadata is.
 
 This split is why Anna's hits merge into the main results list alongside the catalog hits, while the open-access hits appear in a separate list: the two groups are keyed differently, and `download` reads the key to know where to fetch from. Treat the `origin` as the instruction for the next step — it tells you exactly which argument to pass.
@@ -130,7 +134,7 @@ One distinction worth stating plainly: **Anna's Archive is not an open-access so
 
 ## Why it works this way
 
-The two behaviors above are a deliberate trade-off:
+Catalog-first search and escalation-on-miss are a deliberate trade-off:
 
 - **An ordinary search stays fast and quiet.** Under `auto`, a search that the catalog answers never contacts a third party. There is no extra latency, no extra traffic, and no dependency on providers you did not need — the catalog answer is the answer.
 - **A miss is never a dead end.** The moment the catalog comes up empty or fails, the search has already looked further. The same single call that would otherwise return "not found" instead returns what it found elsewhere, labeled so you know where each result came from and how to fetch it.
@@ -145,7 +149,7 @@ Under the default `auto` policy, only when the catalog returns nothing or fails 
 
 ### Which sources does a search consult beyond the catalog?
 
-Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an `origin` label naming the searcher that produced it, which is what tells you which identifier to pass to `download`.
+Eight: Anna's Archive, and the seven open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an `origin` label naming the searcher that produced it, which is what tells you which identifier to pass to `download`.
 
 ### How are duplicate results handled?
 

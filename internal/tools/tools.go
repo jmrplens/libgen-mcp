@@ -42,14 +42,14 @@ Use get_details with a result md5 for full metadata, download to fetch the file,
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN)"`
 	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
 	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
 	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set it to always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -93,7 +93,7 @@ type DetailsOutput struct {
 // client's machine — the client (or an agent's own fetch tool) retrieves the URL.
 type ResolvedLink struct {
 	URL       string            `json:"url" jsonschema:"the direct URL to download the file from"`
-	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook or annas for books; unpaywall, europepmc, biorxiv, fatcat, core, scihub or scidb for articles"`
+	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook or annas for books by md5; oapen or archive for books by isbn; unpaywall, europepmc, biorxiv, fatcat, core, oapen, scihub or scidb for articles by doi"`
 	Filename  string            `json:"filename,omitempty" jsonschema:"a suggested filename for the saved file"`
 	MIMEType  string            `json:"mime_type,omitempty" jsonschema:"the likely content type of the file"`
 	Headers   map[string]string `json:"headers,omitempty" jsonschema:"request headers to set when fetching the URL (e.g. Referer for sci-hub); absent when the URL is fetchable as-is"`
@@ -117,7 +117,7 @@ type DownloadInput struct {
 	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5, isbn or doi"`
 	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi"`
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
-	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: a clean name from the record metadata or the name the mirror announces)"`
+	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: the name the mirror announces in Content-Disposition, else a clean name built from the record metadata, else the md5)"`
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen, randombook or annas for books (md5); oapen or archive for books (isbn); unpaywall, europepmc, biorxiv, fatcat, core, oapen, scihub or scidb for articles (doi). unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY, so both are absent unless configured. Omit to try every compatible source in order with failover"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
@@ -155,6 +155,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Name:        "search",
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
+		InputSchema: searchInputSchema(),
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
@@ -227,6 +228,69 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 			". Omit to try every compatible source in order with failover"
 	}
 	return schema
+}
+
+// searchSchemaFor is a seam for tests to exercise the schema-inference error
+// guard in searchInputSchema; it defaults to the real jsonschema.For.
+var searchSchemaFor = jsonschema.For[SearchInput]
+
+// searchInputSchema infers the search tool's input schema from SearchInput and
+// pins a real enum onto every parameter whose accepted values are a closed set.
+//
+// The values come from internal/libgen, which is where Validate checks them, so
+// the schema and the validator cannot disagree. Describing a closed set in prose
+// alone — as these parameters used to — leaves the model free to invent a value
+// and only learn it was wrong from an error, and leaves clients with nothing to
+// validate against. A nil result makes AddTool fall back to the inferred schema,
+// which only happens if inference of the static struct ever fails.
+func searchInputSchema() *jsonschema.Schema {
+	schema, err := searchSchemaFor(nil)
+	if err != nil {
+		return nil
+	}
+	setStringEnum(schema, "extra_sources", []string{
+		string(config.ExtraSourcesAuto),
+		string(config.ExtraSourcesAlways),
+		string(config.ExtraSourcesNever),
+	})
+	setStringEnum(schema, "order", libgen.OrderNames())
+	setStringEnum(schema, "order_mode", libgen.OrderModeNames())
+	setItemsStringEnum(schema, "topics", libgen.TopicNames())
+	setItemsStringEnum(schema, "search_in", libgen.SearchFieldNames())
+	if rpp := schema.Properties["results_per_page"]; rpp != nil {
+		values := libgen.ResultsPerPageValues()
+		rpp.Enum = make([]any, len(values))
+		for i, v := range values {
+			rpp.Enum[i] = v
+		}
+	}
+	return schema
+}
+
+// setStringEnum pins an enum onto a scalar string property, leaving the property
+// untouched when the schema does not carry it.
+func setStringEnum(schema *jsonschema.Schema, name string, values []string) {
+	prop := schema.Properties[name]
+	if prop == nil {
+		return
+	}
+	prop.Enum = make([]any, len(values))
+	for i, v := range values {
+		prop.Enum[i] = v
+	}
+}
+
+// setItemsStringEnum pins an enum onto an array property's items, so the
+// constraint lands on each element rather than on the array itself.
+func setItemsStringEnum(schema *jsonschema.Schema, name string, values []string) {
+	prop := schema.Properties[name]
+	if prop == nil || prop.Items == nil {
+		return
+	}
+	prop.Items.Enum = make([]any, len(values))
+	for i, v := range values {
+		prop.Items.Enum[i] = v
+	}
 }
 
 // sourceChainSep joins ordered source names in the download tool's prose, so the

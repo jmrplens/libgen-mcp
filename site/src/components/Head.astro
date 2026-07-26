@@ -39,13 +39,47 @@ const canonical = new URL(pathname, SITE).href;
 const rel = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname; // /getting-started/
 const lang = rel.startsWith("/es/") || rel === "/es" ? "es" : "en";
 const isHome = rel === "/" || rel === "" || rel === "/es/" || rel === "/es";
+// The 404 route is not a document. Article markup on an error page is a
+// structured-data guideline violation, and its breadcrumb advertises a
+// navigation path to a URL that answers 404.
+const isError = /^\/(es\/)?404\/?$/.test(rel);
 
 // Git-derived last-updated date (Starlight `lastUpdated: true`).
 const updated =
   route?.lastUpdated instanceof Date ? route.lastUpdated.toISOString() : undefined;
 
-// TechArticle for every content page (not the splash home).
-const techArticle = isHome
+// One addressable node per URL. It owns what belongs to the page rather than to
+// the document — the breadcrumb, the speakable regions, the primary image — so
+// the splash homepages are no longer the only URLs on the site with nothing for
+// their own FAQPage to point at.
+const webPage = {
+  "@context": "https://schema.org",
+  "@type": isHome ? "CollectionPage" : "WebPage",
+  "@id": canonical,
+  url: canonical,
+  name: title,
+  ...(description ? { description } : {}),
+  inLanguage: lang,
+  isPartOf: { "@id": WEBSITE_ID },
+  about: { "@id": SOFTWARE_ID },
+  primaryImageOfPage: {
+    "@type": "ImageObject",
+    url: OG_IMAGE,
+    width: 1200,
+    height: 630,
+  },
+  speakable: {
+    "@type": "SpeakableSpecification",
+    cssSelector: ["h1", ".sl-markdown-content > p:first-of-type"],
+  },
+  ...(updated ? { dateModified: updated } : {}),
+  ...(data.datePublished ? { datePublished: data.datePublished } : {}),
+  ...(isHome ? {} : { breadcrumb: { "@id": `${canonical}#breadcrumb` } }),
+};
+
+// TechArticle for every content page (not the splash home, not the 404).
+const techArticle =
+  isHome || isError
   ? null
   : {
       "@context": "https://schema.org",
@@ -57,13 +91,38 @@ const techArticle = isHome
       ...(description ? { description } : {}),
       inLanguage: lang,
       url: canonical,
-      mainEntityOfPage: canonical,
-      image: OG_IMAGE,
+      mainEntityOfPage: { "@id": canonical },
+      image: {
+        "@type": "ImageObject",
+        url: OG_IMAGE,
+        width: 1200,
+        height: 630,
+      },
       // Point voice/AI assistants at the page title and lead paragraph.
       speakable: {
         "@type": "SpeakableSpecification",
         cssSelector: ["h1", ".sl-markdown-content > p:first-of-type"],
       },
+      // The domain entities this page discusses, resolved to Wikidata. Without
+      // them a page is topically anonymous: only the site-wide graph carried
+      // Q-ids, so an engine could place the project but not the page.
+      mentions: [
+        {
+          "@type": "Thing",
+          name: "Model Context Protocol",
+          "@id": "http://www.wikidata.org/entity/Q133436854",
+        },
+        {
+          "@type": "Thing",
+          name: "Library Genesis",
+          "@id": "http://www.wikidata.org/entity/Q22017206",
+        },
+        {
+          "@type": "Thing",
+          name: "Open access",
+          "@id": "http://www.wikidata.org/entity/Q232932",
+        },
+      ],
       // Git only knows when a page last changed. Deriving `datePublished` from
       // that same value claimed every page was first published on the day it was
       // last edited, so first publication is opt-in per page via frontmatter.
@@ -94,7 +153,7 @@ function segLabel(seg: string, locale: "en" | "es") {
   return SECTION_LABELS[seg]?.[locale] ?? titleCase(seg);
 }
 let breadcrumb = null;
-if (!isHome) {
+if (!isHome && !isError) {
   const homeUrl = lang === "es" ? `${SITE}${BASE}/es/` : `${SITE}${BASE}/`;
   const homeName = lang === "es" ? "Inicio" : "Home";
   const items = [{ "@type": "ListItem", position: 1, name: homeName, item: homeUrl }];
@@ -113,13 +172,25 @@ if (!isHome) {
   breadcrumb = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
+    "@id": `${canonical}#breadcrumb`,
     itemListElement: items,
   };
 }
+
+// Starlight emits og:locale but no alternate, so a bilingual page never names
+// its counterpart. Only the alternate is added here: Starlight dedupes <meta>
+// by `property` inside its own head pipeline, but a tag rendered after
+// <Default /> bypasses that and would simply duplicate og:locale. The value
+// matches the bare form Starlight uses, so the pair stays consistent.
+// og:type is corrected the other way, via frontmatter `head` on the two splash
+// pages, where the dedupe does apply.
+const ogLocaleAlt = lang === "es" ? "en" : "es";
 ---
 
 <Default />
 
+<meta property="og:locale:alternate" content={ogLocaleAlt} />
+{!isError && <script type="application/ld+json" is:inline set:html={JSON.stringify(webPage)} />}
 {techArticle && <script type="application/ld+json" is:inline set:html={JSON.stringify(techArticle)} />}
 {breadcrumb && <script type="application/ld+json" is:inline set:html={JSON.stringify(breadcrumb)} />}
 <meta name="twitter:title" content={title} />

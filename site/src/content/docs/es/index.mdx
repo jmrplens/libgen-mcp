@@ -1,9 +1,19 @@
 ---
 title: LibGen MCP
-description: "Servidor MCP en Go de código abierto para Library Genesis: cuatro herramientas para buscar, descargar y leer libros, artículos y más desde tu asistente de IA — sin cuenta."
+description: "Servidor MCP en Go de código abierto para Library Genesis: cuatro herramientas para buscar, descargar y leer libros y artículos desde tu IA. Sin cuenta."
 head:
   - tag: title
     content: "LibGen MCP — buscar libros y artículos en Library Genesis"
+  # Un splash de producto, no un artículo: esta página lleva un grafo
+  # WebSite + SoftwareApplication y ningún nodo TechArticle, así que el
+  # og:type=article por defecto de Starlight contradice sus propios datos
+  # estructurados. Se declara aquí y no en el override de Head porque
+  # Starlight deduplica <meta> por `property` dentro de la configuración de
+  # head, reemplazando el valor por defecto en lugar de duplicarlo.
+  - tag: meta
+    attrs:
+      property: og:type
+      content: website
   - tag: script
     attrs:
       type: application/ld+json
@@ -58,7 +68,7 @@ head:
         ]
       }
 hero:
-  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, descargado y leído en lenguaje natural. Doce fuentes de descarga con el acceso abierto primero, nueve proveedores de búsqueda más allá del catálogo de Library Genesis. Sin cuenta, sin clave de API, un solo binario estático.
+  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, descargado y leído en lenguaje natural. Doce fuentes de descarga con el acceso abierto primero, ocho proveedores de búsqueda más allá del catálogo de Library Genesis. Sin cuenta, sin clave de API, un solo binario estático.
   image:
     dark: ../../../assets/logo-dark.svg
     light: ../../../assets/logo-light.svg
@@ -79,6 +89,39 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 **LibGen MCP** es un servidor [MCP](https://modelcontextprotocol.io), escrito en Go, para buscar y descargar desde **Library Genesis** (la familia de mirrors `libgen.li`). Expone cuatro herramientas — `search`, `get_details`, `download` y `read` — a cualquier cliente compatible con MCP como Claude Code, Claude Desktop o tu propio agente.
 
 Los mirrors se descubren automáticamente y se cachean, con failover transparente, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan. Los libros con licencia abierta pueden obtenerse por ISBN desde OAPEN e Internet Archive, y los artículos por DOI, pasando primero por los proveedores de acceso abierto (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE, OAPEN) y después por Sci-Hub y SciDB. `search` consulta además fuentes extra sin clave — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC — fusionadas, deduplicadas y etiquetadas por origen junto a los resultados habituales de Library Genesis; el valor por defecto `auto` recurre a ellas automáticamente siempre que el catálogo no devuelve nada.
+
+## Instalación en una línea
+
+```sh
+claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+O apunta tu cliente a un binario precompilado — sin cuenta, sin clave de API y
+sin token en ningún paso. Las instrucciones completas, incluido el JSON de
+`mcpServers` para Claude Desktop, Cursor y VS Code, están en
+[Primeros pasos](/libgen-mcp/es/getting-started/).
+
+## ¿Cuál de los libgen-mcp es este?
+
+Varios proyectos sin relación comparten el nombre. Este es
+`jmrplens/libgen-mcp`, registrado como `io.github.jmrplens/libgen-mcp`:
+
+|                     | Este proyecto                                                   |
+| ------------------- | --------------------------------------------------------------- |
+| Repositorio         | [`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp) |
+| Lenguaje            | Go — un único binario estático, sin runtime que instalar        |
+| Herramientas        | Cuatro: `search`, `get_details`, `download`, `read`             |
+| Fuentes de descarga | Doce, en una cadena fija, con el acceso abierto primero         |
+| Id de registro      | `io.github.jmrplens/libgen-mcp`                                 |
+
+Lo que lo distingue: la cadena de descarga está ordenada para agotar los
+proveedores de acceso abierto antes de consultar ninguna biblioteca en la
+sombra, y esos proveedores rechazan lo que no pueden entregar — un identificador
+de OAPEN se confirma en vez de suponerse, los escaneos del Internet Archive
+restringidos a préstamo se omiten y los registros de Gutenberg alojados por
+permiso se descartan. Además, su superficie de herramientas se comprueba contra
+una [evaluación con LLM](/libgen-mcp/es/eval-results/) real y calificada, en
+lugar de darse por supuesta.
 
 <CardGrid>
 	<Card title="Cuatro herramientas" icon="puzzle">

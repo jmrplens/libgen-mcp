@@ -12,6 +12,10 @@ run:
   go: "1.26"
   timeout: 15m
   tests: true
+  # Cap the worker pool instead of taking every core. The default (GOMAXPROCS)
+  # saturates the machine for the whole run, which makes an interactive session
+  # unusable alongside it and starves anything else sharing the box.
+  concurrency: 4
   build-tags:
     - e2e
 

@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Esta página describe las tres piezas que hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente**.
+`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de doce proveedores de descarga probados en un orden fijo.
 
 ## Cliente HTTP
 
@@ -137,6 +137,8 @@ flowchart TD
     O -- correcto / no requerido --> Q[Renombrado atómico al destino]
     Q --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, source, verified, resumed]
 ```
+
+En prosa: `download` construye la cadena de fuentes para el identificador recibido, salta las que estén en enfriamiento (salvo que lo estén todas) y prueba cada una por turno. Una fuente que no puede servir el ítem se omite; una que falla se enfría cinco minutos. Cuando una fuente resuelve una URL, la descarga toma un hueco de concurrencia y un cerrojo por parcial, reanuda desde un `.part` existente si el servidor respeta la petición `Range` y reinicia desde cero si no, y valida la respuesta — rechazando páginas HTML de error, ficheros que exceden el tope y disco insuficiente — antes de transmitir a `.part` calculando el MD5. Una lectura corta conserva el parcial para reanudar más tarde. Una discrepancia de MD5 lo borra y pasa a la siguiente fuente. Al terminar, el fichero se renombra atómicamente a su destino, se limpia el enfriamiento de la fuente y el resultado informa de path, size, source, `verified` y `resumed`.
 
 ## Cadena multi-fuente
 

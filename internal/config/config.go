@@ -176,14 +176,21 @@ var KnownSources = []string{
 // the list until one serves an article page.
 var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci-hub.ru", "sci-hub.wf"}
 
-// Load builds the configuration from environment variables.
+// Defaults returns the configuration that every LIBGEN_MCP_* variable falls
+// back to when it is unset. Load starts from this and applies the environment
+// on top.
 //
-// Every new variable is optional; an empty string uses the default value. A
-// numeric value that is present but invalid produces an error instead of
-// silently falling back to the default.
-func Load() (*Config, error) {
-	cfg := &Config{
-		Mirror:                  strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/"),
+// It is exported so a test needing a realistic config can start from the real
+// defaults instead of a struct literal. A literal silently opts out of every
+// default added afterwards: ConfirmDownloads arrived defaulting to true, the
+// end-to-end helper's literal left it at the zero value, and the
+// download-confirmation tests began asserting a prompt their own config had
+// switched off.
+//
+// DownloadDir is not set here — it resolves against the user's home directory,
+// which is Load's job and an error path this cannot express.
+func Defaults() *Config {
+	return &Config{
 		Timeout:                 30 * time.Second,
 		LogLevel:                slog.LevelInfo,
 		RateRPS:                 1,
@@ -203,6 +210,17 @@ func Load() (*Config, error) {
 		ConfirmDownloads:        true,
 		ExtraSources:            ExtraSourcesAuto,
 	}
+}
+
+// Load builds the configuration from environment variables, starting from
+// Defaults.
+//
+// Every new variable is optional; an empty string uses the default value. A
+// numeric value that is present but invalid produces an error instead of
+// silently falling back to the default.
+func Load() (*Config, error) {
+	cfg := Defaults()
+	cfg.Mirror = strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/")
 	loadStringVars(cfg)
 	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir

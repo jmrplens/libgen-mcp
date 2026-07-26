@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family, plus a set of pluggable download sources. This page describes the three pieces that do the work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic rename), and the **multi-source chain**.
+`libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family, plus a set of pluggable download sources. Three pieces do the work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic rename), and the **multi-source chain** of twelve download providers tried in a fixed order.
 
 ## HTTP client
 
@@ -137,6 +137,8 @@ flowchart TD
     O -- ok / not required --> Q[Atomic rename to destination]
     Q --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
 ```
+
+In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
 
 ## Multi-source chain
 

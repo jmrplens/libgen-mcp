@@ -193,10 +193,15 @@ func probeStatus(url string, timeout time.Duration) (int, error) {
 // a 200.
 //
 // It exists because a blackholed upstream otherwise burns the test's entire
-// timeout budget proving nothing: api.fatcat.wiki does not answer from every
-// network, and the fatcat case spent 90 s — 27% of a 335 s suite — reaching that
-// conclusion. Reachability is a PRECONDITION only: once the host answers, the
-// test's failure classification stays strict.
+// timeout budget proving nothing. Reachability is a PRECONDITION only: once the
+// host answers, the test's failure classification stays strict.
+//
+// The leniency is deliberate, not an oversight: the core probe answers 404 by
+// design (api.core.ac.uk/v3/ has no root handler), so a stricter status gate
+// would skip that source permanently. It does mean this gate cannot speak for an
+// upstream that stays up while refusing to serve — one answering 200 with an
+// anti-bot interstitial passes it — so a source with that failure mode needs a
+// precondition that inspects the body, not this one.
 func requireUpstream(t *testing.T, name, probeURL string) {
 	t.Helper()
 	if _, err := probeStatus(probeURL, upstreamProbeTimeout); err != nil {

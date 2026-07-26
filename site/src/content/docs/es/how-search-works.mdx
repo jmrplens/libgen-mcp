@@ -31,7 +31,7 @@ head:
             "name": "¿Qué fuentes consulta una búsqueda más allá del catálogo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
+              "text": "Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
             }
           },
           {
@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a ocho proveedores de acceso abierto, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
+**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a otros siete proveedores — cinco repositorios de acceso abierto más los índices bibliográficos dblp y PubMed, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
 
 Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
 
@@ -62,7 +62,7 @@ Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y p
 
 Una búsqueda ordinaria consulta el catálogo de Library Genesis y solo el catálogo. No envía tráfico a ningún tercero, porque no lo necesita: el catálogo alberga millones de libros, artículos, cómics, revistas y normas, y responde en una sola vuelta rápida. Lo que el catálogo devuelva — la página de resultados, los conteos de coincidencias, los metadatos de cada archivo — es lo que recibes.
 
-Este es el camino que toma casi todas las búsquedas. Se mantiene rápida, se mantiene predecible y no toca a nadie que la búsqueda no necesitara tocar.
+Solo-catálogo es el camino que toma casi toda búsqueda de `libgen-mcp`: una única ida y vuelta, sin tráfico a terceros y con un presupuesto de latencia predecible.
 
 ## Más allá del catálogo
 
@@ -96,6 +96,8 @@ flowchart TD
     G --> H[devolver resultados combinados]
 ```
 
+En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados vuelven por dos canales: Anna's Archive se identifica por md5, así que sus ficheros se deduplican contra el catálogo y se unen a la lista principal `results`; los otros siete caen en un array aparte, `open_access`. Ambos se etiquetan por `origin`.
+
 Cuando se consultan las fuentes adicionales, se consulta a cada fuente y las respuestas se fusionan. Los duplicados se eliminan por **digest de archivo** (el md5): el mismo archivo que aparece en dos fuentes se muestra una sola vez. Cuando ese mismo archivo aparece tanto en el catálogo como en Anna's, **gana el registro del catálogo**, porque lleva metadatos más ricos — editoriales, idiomas, ISBNs y el resto de campos que el catálogo se esfuerza en recoger. La copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
 
 ## Qué vuelve: orígenes y descargas
@@ -122,6 +124,8 @@ flowchart LR
     O -->|dblp / pubmed| C[tiene DOI + venue<br/>→ citarlo, o probar download por doi]
 ```
 
+En prosa: qué hacer con un resultado se deduce de su `origin`. Un resultado de `libgen` o `annas` lleva un md5 — descarga por md5. Uno de `crossref` lleva un DOI — descarga por doi. Uno de `arxiv` o `eric` lleva un `pdf_url` que obtienes directamente. Uno de `openlibrary` lleva un ISBN — descarga por isbn, o úsalo para afinar la búsqueda. Uno de `gutenberg` lleva un `full_text_url` con el propio ebook. Uno de `dblp` o `pubmed` es un registro bibliográfico con DOI y venue: cítalo, o prueba una descarga por doi.
+
 Un resultado de Anna's también sirve para `get_details`: el catálogo no tiene registro de él, así que la herramienta recurre a los metadatos propios de Anna's y etiqueta el registro con `origin: "annas"`. Ese registro es más pobre que uno del catálogo, y la mayoría de ítems de Anna's no publica dirección IPFS, así que puede que la descarga sin clave siga sin ser posible aunque los metadatos sí lo sean.
 
 Esta división es la razón por la que los resultados de Anna's se fusionan en la lista principal junto a los del catálogo, mientras que los de acceso abierto aparecen en una lista aparte: los dos grupos se identifican de forma distinta, y `download` lee la clave para saber de dónde obtener el archivo. Considera el `origin` como la instrucción para el siguiente paso — te dice exactamente qué argumento pasar.
@@ -130,7 +134,7 @@ Una distinción que vale la pena afirmar con claridad: **Anna's Archive no es un
 
 ## Por qué funciona así
 
-Los dos comportamientos anteriores son un equilibrio deliberado:
+Consultar primero el catálogo y escalar solo al fallar son un equilibrio deliberado:
 
 - **Una búsqueda ordinaria se mantiene rápida y silenciosa.** Con `auto`, una búsqueda que el catálogo responde nunca contacta a un tercero. No hay latencia extra, no hay tráfico extra y no hay dependencia de proveedores que no necesitabas — la respuesta del catálogo es la respuesta.
 - **Un fallo nunca es un callejón sin salida.** En el momento en que el catálogo sale vacío o falla, la búsqueda ya ha mirado más allá. La misma llamada única que de otro modo devolvería "no encontrado" devuelve en cambio lo que halló en otros sitios, etiquetado para que sepas de dónde vino cada resultado y cómo obtenerlo.
@@ -145,7 +149,7 @@ Con la política `auto` predeterminada, solo cuando el catálogo no devuelve nad
 
 ### ¿Qué fuentes consulta una búsqueda más allá del catálogo?
 
-Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
+Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
 
 ### ¿Cómo se tratan los resultados duplicados?
 

@@ -61,10 +61,17 @@ Configuration (environment variables, all optional):
 
 Tools:
 
-- search: Search for books, papers, comics, magazines and standards, returning catalog results with metadata, md5 hash and downloa...
+- search: Search for books, papers, comics, magazines and standards, returning catalog results with metadata, md5 hash and download options.
 - get_details: Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API.
 - download: Download a file to a local directory.
 - read: Extract and paginate the text of a book or paper so you can read it without downloading the whole file.
+
+Prompts (guided workflows a client can offer by name):
+
+- acquire_book: Search Library Genesis for a book and generate step-by-step instructions to confirm and download the best matching edition.
+- download_troubleshoot: Diagnose a failed or stuck download and produce a step-by-step recovery plan tailored to the identifier, the enabled providers, and any error message.
+- get_paper: Resolve a specific paper by DOI or by a free-text citation and generate instructions to download it.
+- research_topic: Search Library Genesis for papers and books on a topic and build a reading list with instructions to download and produce an annotated bibliography.
 
 ## Documentation
 
@@ -80,8 +87,19 @@ Tools:
 - [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
+## Documentación (Español)
+
+- [Primeros pasos](https://jmrplens.github.io/libgen-mcp/es/getting-started/): Guía de instalación y primera ejecución
+- [Configuración](https://jmrplens.github.io/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
+- [Herramientas](https://jmrplens.github.io/libgen-mcp/es/tools/): Referencia por herramienta de search, get_details, download, read
+- [Arquitectura](https://jmrplens.github.io/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
+- [Cómo funciona la búsqueda](https://jmrplens.github.io/libgen-mcp/es/how-search-works/): Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra
+- [Resultados de la evaluación con LLM](https://jmrplens.github.io/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
+- [Solución de problemas](https://jmrplens.github.io/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
+- [Uso responsable](https://jmrplens.github.io/libgen-mcp/es/responsible-use/): Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor
+- [Política de privacidad](https://jmrplens.github.io/libgen-mcp/es/privacy/): Sin telemetría; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada
+
 ## Optional
 
 - [Full LLM reference](https://jmrplens.github.io/libgen-mcp/llms-full.txt): Generated companion reference with full tool schemas
 - [Documentation site](https://jmrplens.github.io/libgen-mcp/): Rendered documentation site
-- [Documentación en español](https://jmrplens.github.io/libgen-mcp/es/): Full Spanish translation of every page above

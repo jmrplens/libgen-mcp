@@ -75,7 +75,7 @@ open-access providers first, then the shadow-library fallbacks:
 6. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
    journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
    chain advances.
-7. **`sci-hub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+7. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
    article page with an extractable PDF.
 8. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
    covers papers published after Sci-Hub stopped indexing.

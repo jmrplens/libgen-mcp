@@ -43,9 +43,10 @@ head:
           }
         ]
       }
-  # Measurement results, so Dataset is the right type. No `distribution`: the
-  # numbers are generated into this page from the run report, and there is no
-  # machine-readable artifact to point at.
+  # Measurement results, so Dataset is the right type. `distribution` points at
+  # the recorded run this page is generated from — the artifact an engine can
+  # actually fetch. No `datePublished`/`temporalCoverage`: the run report
+  # carries no timestamp, and a date invented here would be worse than none.
   - tag: script
     attrs:
       type: application/ld+json
@@ -63,7 +64,13 @@ head:
         "creator": { "@id": "https://jmrp.io/#person" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
-        "measurementTechnique": "Live end-to-end MCP session against a real language model, real mirrors and real downloads",
+        "measurementTechnique": "Live end-to-end MCP session against a real language model (claude-haiku-4-5-20251001), real mirrors and real downloads",
+        "distribution": {
+          "@type": "DataDownload",
+          "name": "Recorded evaluation run (Markdown table)",
+          "encodingFormat": "text/markdown",
+          "contentUrl": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/cmd/eval/testdata/latest-run.md"
+        },
         "variableMeasured": [
           {
             "@type": "PropertyValue",
@@ -239,16 +246,18 @@ The table below is a single live run of the full suite against `claude-haiku-4-5
 
 {/* end generated */}
 
-A clean sweep is worth reading carefully rather than celebrating. It took removing
-the two things that were hiding trouble: scenarios that skipped whenever live data
+`libgen-mcp` reaches a clean sweep only after two sources of false confidence
+were removed from the harness: scenarios that skipped whenever live data
 misbehaved, and assertions that graded one arbitrary attempt instead of what the
 model achieved. A skip that recurs is not a passing test, it is an unasked
 question — and the first one this suite stopped skipping turned out to be a model
 inventing a table of contents for a file it could not read.
 
-The two errored tool calls in the table are deliberate: one scenario pins a dead
-host to prove the retry schedule surfaces an actionable error, and another
-restricts the deployment to the catalog to prove the restriction holds.
+Two scenarios in the table are deliberate negatives rather than happy paths. S9
+pins a dead Sci-Hub host, so the staged retry schedule must exhaust and surface
+an actionable error instead of a fabricated success. S38 fixes the deployment to
+`extra_sources: never` against a known catalog miss, so the correct outcome is an
+honest "not found" with the extras staying out. Both pass by behaving that way.
 
 {/* generated:results — run `make eval-pages`, do not edit by hand */}
 

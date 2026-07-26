@@ -1,6 +1,6 @@
 ---
 title: Resultados del eval con LLM
-description: "Cómo se prueba libgen-mcp: un arnés controlado conduce a un LLM real sobre MCP contra el sitio en vivo y evalúa lo que hace. Resultados de la última ejecución completa."
+description: "Cómo se prueba libgen-mcp: un arnés conduce a un LLM real sobre MCP contra el sitio en vivo y evalúa lo que hace. Resultados de la última ejecución."
 datePublished: "2026-07-21"
 head:
   # Refleja literalmente la sección «Preguntas frecuentes» del pie de esta
@@ -43,9 +43,11 @@ head:
           }
         ]
       }
-  # Resultados de medición, así que Dataset es el tipo correcto. Sin
-  # `distribution`: las cifras se generan en esta página desde el informe de la
-  # ejecución y no hay ningún artefacto legible por máquina al que apuntar.
+  # Resultados de medición, así que Dataset es el tipo correcto. `distribution`
+  # apunta a la ejecución registrada de la que se genera esta página — el
+  # artefacto que un motor sí puede descargar. Sin `datePublished` ni
+  # `temporalCoverage`: el informe no lleva marca de tiempo, y una fecha
+  # inventada aquí sería peor que ninguna.
   - tag: script
     attrs:
       type: application/ld+json
@@ -63,7 +65,13 @@ head:
         "creator": { "@id": "https://jmrp.io/#person" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
-        "measurementTechnique": "Sesión MCP real de extremo a extremo contra un modelo de lenguaje real, mirrors reales y descargas reales",
+        "measurementTechnique": "Sesión MCP real de extremo a extremo contra un modelo de lenguaje real (claude-haiku-4-5-20251001), mirrors reales y descargas reales",
+        "distribution": {
+          "@type": "DataDownload",
+          "name": "Ejecución de evaluación registrada (tabla Markdown)",
+          "encodingFormat": "text/markdown",
+          "contentUrl": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/cmd/eval/testdata/latest-run.md"
+        },
         "variableMeasured": [
           {
             "@type": "PropertyValue",
@@ -248,18 +256,20 @@ La tabla siguiente es una única ejecución en vivo de la suite completa contra 
 
 {/* end generated */}
 
-Un pleno merece leerse con cuidado más que celebrarse. Ha hecho falta quitar las
-dos cosas que tapaban problemas: escenarios que se saltaban ante cualquier
+`libgen-mcp` solo llega a un pleno tras quitar las dos fuentes de falsa
+confianza que había en el arnés: escenarios que se saltaban ante cualquier
 condición de datos en vivo, y aserciones que juzgaban un intento cualquiera en
 lugar de lo que el modelo llegó a conseguir. Un SKIP que se repite no es una
 prueba que pasa, es una pregunta sin hacer — y la primera que esta suite dejó de
 saltarse resultó ser un modelo inventándose un índice para un fichero que no había
 podido leer.
 
-Las dos llamadas con error de la tabla son deliberadas: un escenario fija un host
-muerto para comprobar que el calendario de reintentos devuelve un error accionable,
-y otro restringe el despliegue al catálogo para comprobar que la restricción
-aguanta.
+Dos escenarios de la tabla son negativos deliberados, no caminos felices. S9 fija
+un host de Sci-Hub muerto, así que el calendario de reintentos debe agotarse y
+devolver un error accionable en lugar de un éxito inventado. S38 fija el
+despliegue a `extra_sources: never` contra un fallo conocido del catálogo, así que
+el resultado correcto es un «no encontrado» honesto con las fuentes extra fuera.
+Ambos pasan justamente por comportarse así.
 
 {/* generated:results — run `make eval-pages`, do not edit by hand */}
 

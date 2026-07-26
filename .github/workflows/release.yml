@@ -52,7 +52,27 @@ jobs:
           gh release upload "v${VERSION}" dist/libgen-mcp.mcpb --clobber
 
       - name: Pin server.json version and SHA256 hashes
-        run: bash scripts/update-server-json-sha.sh dist/checksums.txt "${GITHUB_REF#refs/tags/v}"
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
+          # Prove the pin landed before anything is published. mcp-publisher reads
+          # server.json, so a pin that silently no-opped would publish the previous
+          # version — and the duplicate-version guard below would then report that
+          # as "already published" and let the release go green with the registry
+          # never advancing. Fail here, where the cause is still obvious.
+          PINNED=$(jq -r '.version' server.json)
+          if [ "${PINNED}" != "${VERSION}" ]; then
+            echo "::error::server.json says ${PINNED} but the tag is ${VERSION}; refusing to publish"
+            exit 1
+          fi
+          STALE=$(jq -r --arg v "${VERSION}" \
+            '[.packages[] | select((.version // $v) != $v)] | length' server.json)
+          if [ "${STALE}" -ne 0 ]; then
+            echo "::error::${STALE} of server.json's package entries are not at ${VERSION}"
+            exit 1
+          fi
+          echo "server.json pinned to ${VERSION} (top level and all packages)"
 
       # Publishing to the public MCP Registry only makes sense once the repo and
       # its release assets are public. This step auto-skips while the repo is
@@ -77,17 +97,30 @@ jobs:
             "${TARBALL}"
           tar xzf "${TARBALL}" mcp-publisher
           ./mcp-publisher login github-oidc
+          VERSION="${GITHUB_REF#refs/tags/v}"
           set +e
           ./mcp-publisher publish 2>&1 | tee mcp-publisher-publish.log
           STATUS=${PIPESTATUS[0]}
           set -e
           if [ "${STATUS}" -ne 0 ]; then
+            # A duplicate here can only be a duplicate of this tag: the pin step
+            # above refuses to continue unless server.json carries ${VERSION}, so
+            # there is no longer a path where a stale manifest re-offers an older
+            # version and hides behind this branch. Matching the registry's error
+            # text alone therefore keeps re-runs idempotent without reopening that
+            # hole — the guard that closes it is the assertion, not this grep.
             if grep -q "invalid version: cannot publish duplicate version" mcp-publisher-publish.log; then
-              echo "::notice::MCP Registry version already published; continuing"
+              echo "::notice::MCP Registry already has ${VERSION}; this is a re-run, continuing"
             else
               exit "${STATUS}"
             fi
+          elif ! grep -qF "version ${VERSION}" mcp-publisher-publish.log; then
+            # A zero exit is not on its own proof that the intended version went out.
+            echo "::error::mcp-publisher succeeded but did not report version ${VERSION}"
+            cat mcp-publisher-publish.log
+            exit 1
           fi
+          echo "::notice::MCP Registry now serves ${VERSION} as the latest version"
 
       - name: Commit pinned server.json back to main
         if: ${{ github.event.repository.private == false }}

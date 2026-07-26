@@ -77,6 +77,33 @@ function buildGitDateMap() {
 	}
 	return map;
 }
+
+// A shallow clone exposes one commit, so every page resolves to the same date and
+// the mtime fallback quietly returns checkout time — the failure looks exactly
+// like a working build. Refuse to stamp rather than publish 20 identical dates
+// that then re-stamp on every unrelated push.
+function assertFullHistory() {
+	let shallow = "false";
+	try {
+		shallow = execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
+			cwd: repoRoot,
+			encoding: "utf8",
+		}).trim();
+	} catch {
+		// Not a git checkout at all (e.g. a source tarball); the mtime fallback is
+		// the best available answer and is not misleading here.
+		return;
+	}
+	if (shallow === "true") {
+		console.error(
+			"[sitemap-lastmod] shallow git clone: per-page dates would all collapse " +
+				"to the checkout commit. Set `fetch-depth: 0` on actions/checkout.",
+		);
+		process.exit(1);
+	}
+}
+assertFullHistory();
+
 const gitDates = buildGitDateMap();
 
 // Last commit date (YYYY-MM-DD) for a file, or null if unavailable.
@@ -112,6 +139,8 @@ function addXDefault(block) {
 // alternate. Matching the whole <url>…</url> block (not just <loc>) keeps this
 // idempotent: an entry that already carries either is left untouched rather than
 // getting a duplicate.
+// Returns every date present in the file after stamping, so the caller can give
+// the sitemap index the newest of them.
 function stampSitemap(file) {
 	const xml = readFileSync(file, "utf8");
 	let changed = 0;
@@ -135,6 +164,7 @@ function stampSitemap(file) {
 			`[sitemap-lastmod] stamped ${changed} URLs (${alternates} x-default alternates) in ${file.replace(distDir, "dist")}`,
 		);
 	}
+	return [...out.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].map((m) => m[1]);
 }
 
 if (!existsSync(distDir)) {
@@ -150,4 +180,36 @@ if (sitemaps.length === 0) {
 	console.warn("[sitemap-lastmod] no child sitemap found — skipping");
 	process.exit(0);
 }
-for (const f of sitemaps) stampSitemap(join(distDir, f));
+// Newest date per child sitemap, keyed by filename.
+const newestByChild = new Map();
+for (const f of sitemaps) {
+	const dates = stampSitemap(join(distDir, f));
+	if (dates.length > 0) newestByChild.set(f, dates.sort().at(-1));
+}
+
+// Stamp each index entry with its OWN child's newest date. A crawler reads the
+// index first and uses <lastmod> to decide whether to fetch that child at all,
+// so an index without one makes the per-page dates below it moot — but a single
+// date shared across entries is its own lie, telling a crawler that every
+// sibling changed when one did.
+const indexPath = join(distDir, "sitemap-index.xml");
+if (newestByChild.size > 0 && existsSync(indexPath)) {
+	const xml = readFileSync(indexPath, "utf8");
+	let stamped = 0;
+	const out = xml.replace(
+		/<sitemap>\s*<loc>([^<]*)<\/loc>(\s*<lastmod>[^<]*<\/lastmod>)?/g,
+		(block, loc) => {
+			const child = loc.split("/").pop();
+			const date = newestByChild.get(child);
+			if (!date) return block;
+			stamped++;
+			return `<sitemap><loc>${loc}</loc><lastmod>${date}</lastmod>`;
+		},
+	);
+	if (out !== xml) {
+		writeFileSync(indexPath, out);
+		console.log(
+			`[sitemap-lastmod] stamped ${stamped} index entr${stamped === 1 ? "y" : "ies"}`,
+		);
+	}
+}

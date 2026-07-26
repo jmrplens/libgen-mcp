@@ -94,17 +94,29 @@ Tools are registered in `internal/tools/tools.go` inside `Register` via
 `mcp.AddTool`. Each tool needs:
 
 1. An input struct and an output struct. **Every** JSON field carries a
-   `jsonschema:"…"` description; optional fields use `,omitempty`; constrained
-   fields use `enum=…`. Required fields use the `required` tag.
+   `jsonschema:"…"` description, and optional fields use `,omitempty` in the
+   **json** tag — that is also what makes a field optional, since jsonschema-go
+   derives `required` from the absence of `omitempty`, not from anything in the
+   jsonschema tag.
 2. A `Name` (see naming below), a `Title`, a `Description`, and `Annotations`
    (`ReadOnlyHint` for read-only tools, `DestructiveHint`/`IdempotentHint` for
    writes, `OpenWorldHint` when it reaches the network).
 3. A handler wrapped with `withRecovery("<name>", handler)` so panics become
    `IsError` tool results and every call is metered.
 
+**The jsonschema tag is a description, not a DSL.** `jsonschema-go` assigns the
+entire tag string to the property's `description` and parses no directives out
+of it — a trailing `,enum=a,enum=b` or `,required` constrains nothing and ships
+as literal text to every client and model. A constrained field needs an explicit
+`InputSchema`: infer the struct's schema, then pin the enum on it, as
+`searchInputSchema` and `downloadInputSchema` do. Source the values from
+wherever they are validated (`internal/libgen`, `internal/config`) rather than
+restating them, so the schema and the validator cannot disagree.
+
 `make audit-surface-quality` enforces points 1–2 over a real `tools/list`
-round-trip: it fails if any field lacks a description, any enum is empty, or a
-tool is missing its Title/Annotations/description.
+round-trip: it fails if any field lacks a description, any enum is empty, any
+description carries an unparsed struct-tag directive, or a tool is missing its
+Title/Annotations/description.
 
 ### Tool naming convention
 

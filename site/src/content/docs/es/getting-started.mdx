@@ -17,7 +17,6 @@ head:
         "totalTime": "PT5M",
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
-        "supply": [],
         "tool": [
           {
             "@type": "HowToTool",
@@ -105,7 +104,7 @@ datePublished: "2026-07-19"
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
-Esta página te guía para instalar `libgen-mcp`, conectarlo a un cliente MCP y ejecutar tu primera búsqueda.
+`libgen-mcp` se instala de tres formas: un binario estático precompilado desde la página de releases de GitHub, una imagen Docker (`ghcr.io/jmrplens/libgen-mcp`) o `go install`. No necesita cuenta, clave de API ni token. En cuanto queda registrado en un cliente MCP — Claude Code, Claude Desktop, Cursor o VS Code — sus cuatro herramientas (`search`, `get_details`, `download`, `read`) están disponibles de inmediato.
 
 ## Instalación
 
@@ -178,6 +177,29 @@ La instalación recomendada es el **binario precompilado**: un único ejecutable
     </TabItem>
 
 </Tabs>
+
+### Instalar desde un registro
+
+`libgen-mcp` se publica en los registros de MCP con el identificador
+`io.github.jmrplens/libgen-mcp`. Si tu cliente instala servidores desde alguno
+de ellos, puedes añadirlo desde ahí en lugar de escribir la configuración a
+mano:
+
+| Registro MCP            | Ficha                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Registro oficial de MCP | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
+| Smithery                | [smithery.ai/servers/@jmrp/libgen-mcp](https://smithery.ai/servers/@jmrp/libgen-mcp)                                        |
+| mcp.so                  | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
+| LobeHub                 | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
+
+La imagen y el módulo Go también se publican, pero son canales de distribución
+y no fichas de MCP — instálalos por las vías descritas arriba:
+[Docker Hub](https://hub.docker.com/r/jmrplens/libgen-mcp) y
+[pkg.go.dev](https://pkg.go.dev/github.com/jmrplens/libgen-mcp).
+
+Una ficha de registro puede ir por detrás de la última publicación; la versión
+que describe esta documentación es siempre la de
+[`VERSION`](https://github.com/jmrplens/libgen-mcp/blob/main/VERSION).
 
 ## Configurar un cliente MCP
 

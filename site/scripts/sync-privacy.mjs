@@ -37,18 +37,79 @@ const body = source
 	.trim();
 
 // The description carries a colon, so it has to be quoted to stay valid YAML.
+// `extra` is appended inside the frontmatter block, so a caller can add
+// structured YAML keys (e.g. a `head:` entry) rather than body content.
 const frontmatter = (title, description, extra = "") => `---
 title: ${title}
 description: "${description}"
 datePublished: "${lastUpdated}"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
 privacySource: "${digest}"
----
-${extra}`;
+${extra}---
+`;
+
+// FAQPage for the "Frequently asked questions" section of PRIVACY.md. The
+// answers are the visible prose verbatim, as everywhere else on the site — an
+// answer that exists only in markup is a guideline violation, and this page in
+// particular is the one an assistant consults before recommending the tool.
+// Derived from the source so the two cannot drift: a question renamed in
+// PRIVACY.md renames it here too.
+function faqSchema(sectionHeading, inLanguage, pageUrl) {
+	const section = source.split(`## ${sectionHeading}`)[1]?.split("\n## ")[0];
+	if (!section) return "";
+	// Split on the H3s rather than matching them: an `$` under /m matches at the
+	// blank line that follows every question, so a lookahead-terminated capture
+	// silently yields an empty answer for each one.
+	const entries = [];
+	for (const chunk of section.split(/^### /m).slice(1)) {
+		const nl = chunk.indexOf("\n");
+		if (nl < 0) continue;
+		const question = chunk.slice(0, nl).trim();
+		const answer = chunk
+			.slice(nl)
+			.trim()
+			.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links → their text
+			.replace(/[`*]/g, "")
+			.replace(/\s*\n\s*/g, " ");
+		if (question && answer) entries.push({ q: question, a: answer });
+	}
+	if (entries.length === 0) return "";
+	const json = JSON.stringify(
+		{
+			"@context": "https://schema.org",
+			"@type": "FAQPage",
+			"@id": `${pageUrl}#faq`,
+			inLanguage,
+			isPartOf: { "@id": pageUrl },
+			mainEntity: entries.map(({ q, a }) => ({
+				"@type": "Question",
+				name: q,
+				acceptedAnswer: { "@type": "Answer", text: a },
+			})),
+		},
+		null,
+		2,
+	);
+	return `head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+${json
+	.split("\n")
+	.map((l) => `      ${l}`)
+	.join("\n")}
+`;
+}
 
 const enPage = `${frontmatter(
 	"Privacy policy",
 	"What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool.",
+	faqSchema(
+		"Frequently asked questions",
+		"en",
+		"https://jmrplens.github.io/libgen-mcp/privacy/",
+	),
 )}
 ${body}
 `;

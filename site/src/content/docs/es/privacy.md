@@ -5,7 +5,55 @@ datePublished: "2026-07-25"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "8d1d93675b76c8d4"
+privacySource: "2c0da46466882194"
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/privacy/#faq",
+        "inLanguage": "es",
+        "isPartOf": {
+          "@id": "https://jmrplens.github.io/libgen-mcp/es/privacy/"
+        },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Recoge libgen-mcp telemetría o analíticas?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. El servidor no tiene telemetría, ni analíticas, ni informes de fallos, ni backend propio. No crea ninguna base de datos ni ningún fichero de telemetría, y registra únicamente en la salida de error estándar, donde tu cliente MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus descargas ni ninguna información de uso."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué datos salen de mi máquina, y quién los recibe?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Solo los identificadores que pides, y solo al servicio al que se pregunta. Una búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una descarga por DOI envía ese DOI a las fuentes de artículos de la cadena; una descarga por ISBN envía ese ISBN a OAPEN y al Internet Archive. Todos los destinos están listados en Flujos de datos. No se envía nada al mantenedor, y no hay conexiones en segundo plano: cada petición es consecuencia directa de una llamada a una herramienta."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Almacena libgen-mcp mis credenciales?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No se requiere ninguna credencial, y ninguna se persiste. Las dos opcionales — una clave de membresía de Anna's Archive y una clave gratuita de la API de CORE — se leen del entorno y se envían solo al único servicio al que corresponden. Una credencial proporcionada por llamada mediante la elicitación de tu cliente se usa para esa única petición y nunca se escribe en disco."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Los archivos descargados se quedan en mi máquina?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí. Las descargas se escriben únicamente en el directorio de destino local (LIBGEN_MCP_DOWNLOAD_DIR, por defecto ~/Downloads, o el argumento path por llamada) y no se sube nada a ningún sitio. La herramienta read extrae texto en local de un archivo que ya tienes."
+            }
+          }
+        ]
+      }
 ---
 
 **libgen-mcp** es un servidor Model Context Protocol (MCP) local. Se ejecuta
@@ -36,14 +84,18 @@ destinos son:
   (`randombook.org`) como alternativa.
 - **API de Unpaywall (solo cuando pides un artículo por DOI, y solo si la
   activas).** `LIBGEN_MCP_UNPAYWALL_EMAIL` está **vacía por defecto**, lo que
-  desactiva por completo la fuente `unpaywall` — no se hace ninguna petición y
-  **nunca se envía ninguna dirección de correo**, ni la del mantenedor ni la de
-  nadie. Si la fijas a tu propia dirección de contacto, resolver un `download` de
-  artículo por `doi` consulta la API de [Unpaywall](https://unpaywall.org)
-  (`api.unpaywall.org`) con esa dirección como parámetro, que es lo que su API
-  exige. Un cliente compatible con la elicitación de MCP puede en su lugar
-  ofrecerte pedir una dirección puntual por llamada; ese valor se usa para esa
-  única petición y nunca se almacena. No se envía ningún otro dato personal.
+  desactiva la fuente `unpaywall`: no se hace ninguna petición a Unpaywall, y
+  nunca se sustituye tu dirección por la del mantenedor ni por la de nadie.
+  Hay exactamente dos formas de que se envíe una dirección, y ambas las inicias
+  tú. Fija la variable a tu propia dirección de contacto y resolver un
+  `download` de artículo por `doi` consultará la API de
+  [Unpaywall](https://unpaywall.org) (`api.unpaywall.org`) con esa dirección
+  como parámetro, que es lo que su API exige. O déjala sin definir: un cliente
+  compatible con la elicitación de MCP puede entonces ofrecerte pedir una
+  dirección puntual para esa única llamada, que se usa solo para esa petición,
+  nunca se escribe en disco y nunca se reutiliza — y el aviso se omite por
+  completo cuando se ha fijado `source` de forma explícita. Si lo rechazas, la
+  petición continúa sin Unpaywall. No se envía ningún otro dato personal.
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
   DOI).** Antes de cualquier alternativa de biblioteca en la sombra, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con
@@ -174,6 +226,41 @@ Esta herramienta accede a mirrors de terceros de Library Genesis. Eres
 responsable de respetar las leyes de derechos de autor y de propiedad intelectual
 que apliquen en tu lugar de residencia. Úsala solo para contenido al que tengas
 derecho legal de acceder.
+
+## Preguntas frecuentes
+
+### ¿Recoge libgen-mcp telemetría o analíticas?
+
+No. El servidor no tiene telemetría, ni analíticas, ni informes de fallos, ni
+backend propio. No crea ninguna base de datos ni ningún fichero de telemetría, y
+registra únicamente en la salida de error estándar, donde tu cliente MCP los
+recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus
+descargas ni ninguna información de uso.
+
+### ¿Qué datos salen de mi máquina, y quién los recibe?
+
+Solo los identificadores que pides, y solo al servicio al que se pregunta. Una
+búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una
+descarga por DOI envía ese DOI a las fuentes de artículos de la cadena; una
+descarga por ISBN envía ese ISBN a OAPEN y al Internet Archive. Todos los
+destinos están listados en [Flujos de datos](#flujos-de-datos). No se envía nada
+al mantenedor, y no hay conexiones en segundo plano: cada petición es
+consecuencia directa de una llamada a una herramienta.
+
+### ¿Almacena libgen-mcp mis credenciales?
+
+No se requiere ninguna credencial, y ninguna se persiste. Las dos opcionales —
+una clave de membresía de Anna's Archive y una clave gratuita de la API de CORE
+— se leen del entorno y se envían solo al único servicio al que corresponden.
+Una credencial proporcionada por llamada mediante la elicitación de tu cliente
+se usa para esa única petición y nunca se escribe en disco.
+
+### ¿Los archivos descargados se quedan en mi máquina?
+
+Sí. Las descargas se escriben únicamente en el directorio de destino local
+(`LIBGEN_MCP_DOWNLOAD_DIR`, por defecto `~/Downloads`, o el argumento `path` por
+llamada) y no se sube nada a ningún sitio. La herramienta `read` extrae texto en
+local de un archivo que ya tienes.
 
 ## Cambios
 
