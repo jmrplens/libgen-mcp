@@ -115,7 +115,7 @@ abierto.
 
 Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca `access-restricted-item` y que no pertenezca ni a la colección `inlibrary` ni a `printdisabled` antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como un fallo de búsqueda. Un rechazo nunca se disfraza de archivo.
 
-Esto lo comprueba la [suite de evaluación](/libgen-mcp/es/eval-results/) contra
+Los tres rechazos los comprueba la [suite de evaluación](/libgen-mcp/es/eval-results/) contra
 los servicios en vivo, no solo los tests unitarios: el escenario S53 verifica que
 OAPEN rechaza limpiamente un identificador que no posee, y el S55 que un libro de
 Internet Archive restringido a préstamo se rechaza en lugar de servirse.

@@ -90,6 +90,37 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 Los mirrors se descubren automáticamente y se cachean, con failover transparente, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan. Los libros con licencia abierta pueden obtenerse por ISBN desde OAPEN e Internet Archive, y los artículos por DOI, pasando primero por los proveedores de acceso abierto (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE, OAPEN) y después por Sci-Hub y SciDB. `search` consulta además fuentes extra sin clave — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC — fusionadas, deduplicadas y etiquetadas por origen junto a los resultados habituales de Library Genesis; el valor por defecto `auto` recurre a ellas automáticamente siempre que el catálogo no devuelve nada.
 
+## Instalación en una línea
+
+```sh
+claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+O apunta tu cliente a un binario precompilado — sin cuenta, sin clave de API y
+sin token en ningún paso. Las instrucciones completas, incluido el JSON de
+`mcpServers` para Claude Desktop, Cursor y VS Code, están en
+[Primeros pasos](/libgen-mcp/es/getting-started/).
+
+## ¿Cuál de los libgen-mcp es este?
+
+Varios proyectos sin relación comparten el nombre. Este es
+`jmrplens/libgen-mcp`, registrado como `io.github.jmrplens/libgen-mcp`:
+
+| | Este proyecto |
+| --- | --- |
+| Repositorio | [`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp) |
+| Lenguaje | Go — un único binario estático, sin runtime que instalar |
+| Herramientas | Cuatro: `search`, `get_details`, `download`, `read` |
+| Fuentes de descarga | Doce, en una cadena fija, con el acceso abierto primero |
+| Id de registro | `io.github.jmrplens/libgen-mcp` |
+
+Lo que lo distingue: la cadena de descarga está ordenada para agotar los
+proveedores de acceso abierto antes de consultar ninguna biblioteca en la
+sombra, rechaza el material que no puede redistribuir, y su superficie de
+herramientas se comprueba contra una
+[evaluación con LLM](/libgen-mcp/es/eval-results/) real y calificada, en lugar
+de darse por supuesta.
+
 <CardGrid>
 	<Card title="Cuatro herramientas" icon="puzzle">
 		`search`, `get_details`, `download` y `read` — búsqueda, metadatos y

@@ -62,7 +62,7 @@ This page explains that flow: what a search does by default, when and why it rea
 
 An ordinary search asks the Library Genesis catalog and only the catalog. It sends no traffic to any third party, because it does not need to: the catalog holds millions of books, papers, comics, magazines, and standards, and it answers in a single fast round-trip. Whatever the catalog returns — the result page, the match counts, the per-file metadata — is what you get back.
 
-This is the path almost every search takes. It stays fast, it stays predictable, and it touches no one the search did not need to touch.
+Catalog-only is the path almost every `libgen-mcp` search takes: a single round-trip, no third-party traffic, and a predictable latency budget.
 
 ## Reaching beyond the catalog
 
@@ -130,7 +130,7 @@ One distinction worth stating plainly: **Anna's Archive is not an open-access so
 
 ## Why it works this way
 
-The two behaviors above are a deliberate trade-off:
+Catalog-first search and escalation-on-miss are a deliberate trade-off:
 
 - **An ordinary search stays fast and quiet.** Under `auto`, a search that the catalog answers never contacts a third party. There is no extra latency, no extra traffic, and no dependency on providers you did not need — the catalog answer is the answer.
 - **A miss is never a dead end.** The moment the catalog comes up empty or fails, the search has already looked further. The same single call that would otherwise return "not found" instead returns what it found elsewhere, labeled so you know where each result came from and how to fetch it.

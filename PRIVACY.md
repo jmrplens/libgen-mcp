@@ -156,6 +156,40 @@ This tool accesses third-party mirrors of Library Genesis. You are responsible
 for respecting the copyright and intellectual-property laws that apply where you
 live. Use it only for content you are legally entitled to access.
 
+## Frequently asked questions
+
+### Does libgen-mcp collect any telemetry or analytics?
+
+No. The server has no telemetry, no analytics, no crash reporting and no backend
+of its own. It creates no database and no telemetry file, and logs only to
+standard error, where your MCP client collects them if it collects them at all.
+The maintainer never receives your queries, your downloads or any usage
+information.
+
+### What data leaves my machine, and who receives it?
+
+Only the identifiers you ask for, and only to the service being asked. A search
+sends your query text to a Library Genesis mirror; a download by DOI sends that
+DOI to the article sources in the chain; a download by ISBN sends that ISBN to
+OAPEN and the Internet Archive. Every destination is listed under
+[Data flows](#data-flows). Nothing is sent to the maintainer, and there are no
+background connections — every request is a direct consequence of a tool call.
+
+### Does libgen-mcp store my credentials?
+
+No credentials are required, and none are persisted. The two optional ones — an
+Anna's Archive membership key and a free CORE API key — are read from the
+environment and sent only to the single service each belongs to. A credential
+supplied per call through your client's elicitation prompt is used for that one
+request and never written to disk.
+
+### Do the downloaded files stay on my machine?
+
+Yes. Downloads are written only to the local destination directory
+(`LIBGEN_MCP_DOWNLOAD_DIR`, default `~/Downloads`, or the per-call `path`
+argument) and nothing is uploaded anywhere. The `read` tool extracts text
+locally from a file you already have.
+
 ## Changes
 
 Changes to this policy are published in this file and noted in release

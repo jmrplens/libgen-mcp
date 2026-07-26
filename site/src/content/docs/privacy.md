@@ -3,7 +3,55 @@ title: Privacy policy
 description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
 datePublished: "2026-07-25"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "52bb22c1202630a6"
+privacySource: "2c0da46466882194"
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/privacy/#faq",
+        "inLanguage": "en",
+        "isPartOf": {
+          "@id": "https://jmrplens.github.io/libgen-mcp/privacy/"
+        },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Does libgen-mcp collect any telemetry or analytics?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. The server has no telemetry, no analytics, no crash reporting and no backend of its own. It creates no database and no telemetry file, and logs only to standard error, where your MCP client collects them if it collects them at all. The maintainer never receives your queries, your downloads or any usage information."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What data leaves my machine, and who receives it?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Only the identifiers you ask for, and only to the service being asked. A search sends your query text to a Library Genesis mirror; a download by DOI sends that DOI to the article sources in the chain; a download by ISBN sends that ISBN to OAPEN and the Internet Archive. Every destination is listed under Data flows. Nothing is sent to the maintainer, and there are no background connections — every request is a direct consequence of a tool call."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does libgen-mcp store my credentials?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No credentials are required, and none are persisted. The two optional ones — an Anna's Archive membership key and a free CORE API key — are read from the environment and sent only to the single service each belongs to. A credential supplied per call through your client's elicitation prompt is used for that one request and never written to disk."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do the downloaded files stay on my machine?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Downloads are written only to the local destination directory (LIBGEN_MCP_DOWNLOAD_DIR, default ~/Downloads, or the per-call path argument) and nothing is uploaded anywhere. The read tool extracts text locally from a file you already have."
+            }
+          }
+        ]
+      }
 ---
 
 **libgen-mcp** is a local Model Context Protocol (MCP) server. It runs entirely
@@ -159,6 +207,40 @@ download sources you invoke.
 This tool accesses third-party mirrors of Library Genesis. You are responsible
 for respecting the copyright and intellectual-property laws that apply where you
 live. Use it only for content you are legally entitled to access.
+
+## Frequently asked questions
+
+### Does libgen-mcp collect any telemetry or analytics?
+
+No. The server has no telemetry, no analytics, no crash reporting and no backend
+of its own. It creates no database and no telemetry file, and logs only to
+standard error, where your MCP client collects them if it collects them at all.
+The maintainer never receives your queries, your downloads or any usage
+information.
+
+### What data leaves my machine, and who receives it?
+
+Only the identifiers you ask for, and only to the service being asked. A search
+sends your query text to a Library Genesis mirror; a download by DOI sends that
+DOI to the article sources in the chain; a download by ISBN sends that ISBN to
+OAPEN and the Internet Archive. Every destination is listed under
+[Data flows](#data-flows). Nothing is sent to the maintainer, and there are no
+background connections — every request is a direct consequence of a tool call.
+
+### Does libgen-mcp store my credentials?
+
+No credentials are required, and none are persisted. The two optional ones — an
+Anna's Archive membership key and a free CORE API key — are read from the
+environment and sent only to the single service each belongs to. A credential
+supplied per call through your client's elicitation prompt is used for that one
+request and never written to disk.
+
+### Do the downloaded files stay on my machine?
+
+Yes. Downloads are written only to the local destination directory
+(`LIBGEN_MCP_DOWNLOAD_DIR`, default `~/Downloads`, or the per-call `path`
+argument) and nothing is uploaded anywhere. The `read` tool extracts text
+locally from a file you already have.
 
 ## Changes
 

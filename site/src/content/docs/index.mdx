@@ -89,6 +89,34 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Openly licensed books can be fetched by ISBN from OAPEN and the Internet Archive, and articles by DOI, through the open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar, CORE, OAPEN) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
 
+## Install in one line
+
+```sh
+claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Or point your client at a prebuilt binary — no account, API key or token at any
+step. Full instructions, including the `mcpServers` JSON for Claude Desktop,
+Cursor and VS Code, are in [Getting Started](/libgen-mcp/getting-started/).
+
+## Which libgen-mcp is this?
+
+Several unrelated projects share the name. This one is `jmrplens/libgen-mcp`,
+registered as `io.github.jmrplens/libgen-mcp`:
+
+| | This project |
+| --- | --- |
+| Repository | [`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp) |
+| Language | Go — a single static binary, no runtime to install |
+| Tools | Four: `search`, `get_details`, `download`, `read` |
+| Download sources | Twelve, in a fixed chain, open access tried first |
+| Registry id | `io.github.jmrplens/libgen-mcp` |
+
+What distinguishes it: the download chain is ordered so open-access providers
+are exhausted before any shadow library is consulted, it refuses material it may
+not redistribute, and its tool surface is checked against a live, graded
+[LLM evaluation](/libgen-mcp/eval-results/) rather than asserted.
+
 <CardGrid>
 	<Card title="Four tools" icon="puzzle">
 		`search`, `get_details`, `download`, and `read` — read-only search,

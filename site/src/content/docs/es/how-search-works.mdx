@@ -62,7 +62,7 @@ Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y p
 
 Una búsqueda ordinaria consulta el catálogo de Library Genesis y solo el catálogo. No envía tráfico a ningún tercero, porque no lo necesita: el catálogo alberga millones de libros, artículos, cómics, revistas y normas, y responde en una sola vuelta rápida. Lo que el catálogo devuelva — la página de resultados, los conteos de coincidencias, los metadatos de cada archivo — es lo que recibes.
 
-Este es el camino que toma casi todas las búsquedas. Se mantiene rápida, se mantiene predecible y no toca a nadie que la búsqueda no necesitara tocar.
+Solo-catálogo es el camino que toma casi toda búsqueda de `libgen-mcp`: una única ida y vuelta, sin tráfico a terceros y con un presupuesto de latencia predecible.
 
 ## Más allá del catálogo
 
@@ -130,7 +130,7 @@ Una distinción que vale la pena afirmar con claridad: **Anna's Archive no es un
 
 ## Por qué funciona así
 
-Los dos comportamientos anteriores son un equilibrio deliberado:
+Consultar primero el catálogo y escalar solo al fallar son un equilibrio deliberado:
 
 - **Una búsqueda ordinaria se mantiene rápida y silenciosa.** Con `auto`, una búsqueda que el catálogo responde nunca contacta a un tercero. No hay latencia extra, no hay tráfico extra y no hay dependencia de proveedores que no necesitabas — la respuesta del catálogo es la respuesta.
 - **Un fallo nunca es un callejón sin salida.** En el momento en que el catálogo sale vacío o falla, la búsqueda ya ha mirado más allá. La misma llamada única que de otro modo devolvería "no encontrado" devuelve en cambio lo que halló en otros sitios, etiquetado para que sepas de dónde vino cada resultado y cómo obtenerlo.

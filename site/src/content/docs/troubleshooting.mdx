@@ -50,7 +50,7 @@ head:
 datePublished: "2026-07-19"
 ---
 
-This page collects the failures you are most likely to hit and how to resolve them. When in doubt, raise the log level (see [below](#raising-the-log-level)) and re-run — most errors carry an explanatory message.
+The four failures you are most likely to hit with `libgen-mcp` are unreachable Library Genesis mirrors, an MD5 mismatch on a book download, a DOI with no open-access copy anywhere in the chain, and an ISBN that matches only lending-restricted Internet Archive scans. Every error carries an explanatory message, and `LIBGEN_MCP_LOG_LEVEL=debug` traces each mirror attempt, cooldown and failover (see [below](#raising-the-log-level)).
 
 ## All mirrors unreachable
 

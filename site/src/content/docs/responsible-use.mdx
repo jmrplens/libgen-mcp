@@ -113,7 +113,7 @@ the chain, never promote a fallback above the open-access providers.
 
 Three refusals are implemented in the sources themselves, and each one costs a result rather than gaining one. OAPEN's search is free text with no exact-identifier mode, so a request for an identifier OAPEN does not hold would otherwise return an unrelated monograph; libgen-mcp checks the item's own recorded DOI or ISBN against the identifier you asked for and serves nothing when they disagree. Internet Archive book items are often controlled-digital-lending copies that advertise ordinary PDF and EPUB files, so libgen-mcp requires an item to carry no access-restricted-item flag and to belong to neither the `inlibrary` nor the `printdisabled` collection before it will download it. Project Gutenberg hosts some in-copyright texts with the rightsholder's permission, which are not free for anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as public domain and drops the rest. In every case the outcome is reported as a miss. A refusal is never dressed up as a file.
 
-These are checked by the [evaluation suite](/libgen-mcp/eval-results/) against
+All three refusals are checked by the [evaluation suite](/libgen-mcp/eval-results/) against
 the live services, not only by unit tests: scenario S53 asserts that OAPEN
 refuses an identifier it does not hold cleanly, and S55 that a lending-restricted
 Internet Archive book is refused rather than served.

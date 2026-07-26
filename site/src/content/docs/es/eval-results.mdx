@@ -256,8 +256,8 @@ La tabla siguiente es una única ejecución en vivo de la suite completa contra 
 
 {/* end generated */}
 
-Un pleno merece leerse con cuidado más que celebrarse. Ha hecho falta quitar las
-dos cosas que tapaban problemas: escenarios que se saltaban ante cualquier
+`libgen-mcp` solo llega a un pleno tras quitar las dos fuentes de falsa
+confianza que había en el arnés: escenarios que se saltaban ante cualquier
 condición de datos en vivo, y aserciones que juzgaban un intento cualquiera en
 lugar de lo que el modelo llegó a conseguir. Un SKIP que se repite no es una
 prueba que pasa, es una pregunta sin hacer — y la primera que esta suite dejó de
@@ -265,9 +265,9 @@ saltarse resultó ser un modelo inventándose un índice para un fichero que no 
 podido leer.
 
 Las dos llamadas con error de la tabla son deliberadas: un escenario fija un host
-muerto para comprobar que el calendario de reintentos devuelve un error accionable,
-y otro restringe el despliegue al catálogo para comprobar que la restricción
-aguanta.
+de Sci-Hub muerto para comprobar que el calendario de reintentos devuelve un error
+accionable, y otro restringe el despliegue al catálogo para comprobar que
+`extra_sources: never` aguanta.
 
 {/* generated:results — run `make eval-pages`, do not edit by hand */}
 

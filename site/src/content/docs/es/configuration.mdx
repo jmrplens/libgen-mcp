@@ -105,7 +105,7 @@ Al arrancar, el directorio se crea (con modo `0750`) si no existe y se escribe y
 
 ### `LIBGEN_MCP_UNPAYWALL_EMAIL`
 
-Solo la usa la fuente `unpaywall` (DOIs de artículos). Está **sin definir por defecto**, lo que **desactiva la fuente `unpaywall`**: la API de Unpaywall exige un email de contacto en cada consulta y rechaza las peticiones sin él. Fija tu propia dirección de contacto para activarla. Un valor vacío es válido (desactivado); un valor no vacío se comprueba superficialmente (debe contener `@` y un dominio con punto) pero no se verifica su entregabilidad.
+`LIBGEN_MCP_UNPAYWALL_EMAIL` solo la usa la fuente `unpaywall` (DOIs de artículos). Está **sin definir por defecto**, lo que **desactiva la fuente `unpaywall`**: la API de Unpaywall exige un email de contacto en cada consulta y rechaza las peticiones sin él. Fija tu propia dirección de contacto para activarla. Un valor vacío es válido (desactivado); un valor no vacío se comprueba superficialmente (debe contener `@` y un dominio con punto) pero no se verifica su entregabilidad.
 
 <Aside type="tip">
 	Cuando está sin definir y una llamada a `download` pide un artículo por `doi`
@@ -169,7 +169,7 @@ por defecto `true` mantiene la confirmación; `false` guarda sin preguntar nunca
 Solo se consulta cuando el cliente conectado anunció la capacidad de elicitación: a un cliente al
 que no se puede preguntar nunca se le pregunta, sea cual sea este valor.
 
-Este es el interruptor a nivel de despliegue. Junto a él hay dos exclusiones más concretas, y
+`LIBGEN_MCP_CONFIRM_DOWNLOADS` es el interruptor a nivel de despliegue. Junto a él hay dos exclusiones más concretas, y
 basta con cualquiera de ellas para omitir un aviso:
 
 - El argumento `skip_confirmation: true` de `download`, que suprime el aviso en una sola llamada.
