@@ -87,10 +87,10 @@ kill_timeout = 10
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  # Cold starts cost a first request, and stopping a machine also throws away
-  # the read cache above. Raise to 1 to keep one machine warm — that is a cost
-  # decision, not a technical one, so it stays at 0 until someone chooses.
-  min_machines_running = 0
+  # One machine stays warm. A cold start costs the first request, and stopping a
+  # machine also discards the read cache above — which is what makes a 3 GiB
+  # cache worth having in the first place.
+  min_machines_running = 1
 
   [[http_service.checks]]
     interval = "30s"
