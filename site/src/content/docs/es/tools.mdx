@@ -37,7 +37,7 @@ head:
             "@type": "ListItem",
             "position": 3,
             "name": "download",
-            "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de biblioteca en la sombra. Guarda en un directorio local, o devuelve un enlace cuando el servidor se ejecuta en remoto. No destructiva, idempotente y de mundo abierto.",
+            "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de biblioteca en la sombra. Guarda en un directorio local, o devuelve un resource_link cuando el servidor se ejecuta en remoto. No destructiva, idempotente y de mundo abierto.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#download"
           },
           {
@@ -225,8 +225,8 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 | `object`  | string | no        | Se usa con `id`: `edition` (por defecto) o `file`.                                                                                                                              |
 | `enrich`  | bool   | no        | Cuando es `true`, aumenta el registro con metadatos sin clave de Crossref (por DOI) y OpenLibrary (por ISBN). Best-effort y desactivado por defecto.                            |
 
-<Aside>
-	Proporciona exactamente uno de `md5`, `id` o `doi`. Aportar varios, ninguno,
+<Aside type="note">
+	Proporciona exactamente uno de `md5`, `id` o `doi` — **nunca más de uno**. Aportar varios, ninguno,
 	un `md5` que no sea de 32 caracteres hex, o un `object` distinto de
 	`edition`/`file` devuelve un error de entrada.
 </Aside>
@@ -260,7 +260,7 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 - **[Crossref](https://www.crossref.org/)**, por el DOI del registro: `container_title` (título de la revista/libro), `issn`, `volume`, `issue`, `publisher`, `published_year`, `reference_count`, `citation_count` (el `is-referenced-by-count` de Crossref) y `subjects`.
 - **[OpenLibrary](https://openlibrary.org/)**, por el ISBN del registro: `subjects`, `description`, `cover_url` y `open_library_url`.
 
-<Aside>
+<Aside type="note">
 	El enriquecimiento es **opt-in por llamada** (`enrich` es `false` por defecto)
 	y además puede **prohibirse a nivel de despliegue** con
 	`LIBGEN_MCP_ENRICH=false` (por defecto `true`, es decir, permitido — ver
@@ -315,7 +315,7 @@ Gana la primera fuente que resuelve y transmite un archivo válido; el campo `so
 
 | Campo               | Tipo   | Descripción                                                                                                                                                                                                                                                                                                                              |
 | ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next_steps`        | array  | Confirma que el archivo se guardó y está listo para abrir o leer. Presente para guiar al modelo; se puede ignorar.                                                                                                                                                                                                                       |
+| `next_steps`        | array  | Llamadas de seguimiento sugeridas para este resultado — confirma que el archivo se guardó y está listo para abrir o leer. Presente para guiar al modelo; se puede ignorar.                                                                                                                                                                                                                       |
 | `path`              | string | Ruta del archivo guardado. Absoluta cuando lo es el directorio de destino (el `LIBGEN_MCP_DOWNLOAD_DIR` por defecto siempre lo es); un argumento `path` relativo produce una ruta relativa.                                                                                                                                                                                                                                                                                                      |
 | `size_bytes`        | int    | Tamaño final del archivo en bytes.                                                                                                                                                                                                                                                                                                       |
 | `original_filename` | string | El nombre que anunció el mirror/CDN (desde `Content-Disposition`), si lo hay.                                                                                                                                                                                                                                                            |
@@ -347,7 +347,7 @@ Si todas las fuentes aplicables fallan, la herramienta devuelve los errores por 
 
 ### Dónde acaba el archivo: local vs. remoto
 
-Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servidor**. Con un servidor **local** por stdio o Docker esa máquina es la tuya, así que los archivos quedan en tu directorio de descargas — ideal para agentes locales autónomos.
+Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servidor**. Con un servidor **local** por stdio o Docker esa máquina es la tuya, así que los archivos quedan en tu directorio de descargas (`LIBGEN_MCP_DOWNLOAD_DIR`, o `~/Downloads`) — ideal para agentes locales autónomos.
 
 Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio. Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
 
@@ -387,7 +387,7 @@ Cuando el cliente MCP conectado admite **elicitation** (pedir información al us
 | `max_matches` | int    | no        | Coincidencias máximas a devolver por llamada cuando `find` está fijado. Por defecto 10 si se omite o no es positivo.                                                                                                                                              |
 | `outline`     | bool   | no        | Devuelve el índice del documento (capítulos/secciones con página o nivel de anidamiento) en lugar de su texto. Úsalo para decidir qué leer a continuación.                                                                                                        |
 
-<Aside>
+<Aside type="note">
 	Proporciona `md5`, `doi` o `path` (al menos uno). El `path` tiene prioridad:
 	el archivo se lee directamente del disco y no se descarga nada. Sin él, el
 	`md5`/`doi` pasa por la misma cadena de descarga que usa `download`, donde las
