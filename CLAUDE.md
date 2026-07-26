@@ -237,6 +237,15 @@ as much as our regressions, and triaging that daily costs more than it returns.
 `cmd/probe` is the quicker check that every route still works against the real
 mirrors; a genuine breakage otherwise surfaces from use.
 
+The suite loads the repo-root `.env` itself, so either invocation above — and an
+IDE running a single test — picks up `LIBGEN_MCP_UNPAYWALL_EMAIL`,
+`LIBGEN_MCP_CORE_KEY` and `LIBGEN_MCP_ANNAS_KEY`. Anything already exported wins
+over the file. It prints which of them it found before the first test, because a
+missing credential turns real coverage into a skip and a partial run otherwise
+looks exactly like a full one: without the CORE key that source is out of the
+chain entirely, and without the Anna's key its case exercises keyless IPFS
+instead of the member fast-download.
+
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and
 downloads — never runs in ordinary CI):
