@@ -35,6 +35,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Starlight's `lastUpdated` and add-sitemap-lastmod.mjs both derive a
+          # page's date from its own git history. A shallow clone exposes one
+          # commit, so every page — and every sitemap <lastmod> — was stamped
+          # with the deploy commit's timestamp and re-stamped on each unrelated
+          # push, which is worse than no freshness signal.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: site/package.json

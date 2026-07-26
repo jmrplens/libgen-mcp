@@ -31,7 +31,7 @@ head:
             "name": "¿Qué fuentes consulta una búsqueda más allá del catálogo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
+              "text": "Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
             }
           },
           {
@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a ocho proveedores de acceso abierto, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
+**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a siete proveedores de acceso abierto, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
 
 Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
 
@@ -145,7 +145,7 @@ Con la política `auto` predeterminada, solo cuando el catálogo no devuelve nad
 
 ### ¿Qué fuentes consulta una búsqueda más allá del catálogo?
 
-Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
+Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
 
 ### ¿Cómo se tratan los resultados duplicados?
 

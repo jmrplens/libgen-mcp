@@ -77,6 +77,33 @@ function buildGitDateMap() {
 	}
 	return map;
 }
+
+// A shallow clone exposes one commit, so every page resolves to the same date and
+// the mtime fallback quietly returns checkout time — the failure looks exactly
+// like a working build. Refuse to stamp rather than publish 20 identical dates
+// that then re-stamp on every unrelated push.
+function assertFullHistory() {
+	let shallow = "false";
+	try {
+		shallow = execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
+			cwd: repoRoot,
+			encoding: "utf8",
+		}).trim();
+	} catch {
+		// Not a git checkout at all (e.g. a source tarball); the mtime fallback is
+		// the best available answer and is not misleading here.
+		return;
+	}
+	if (shallow === "true") {
+		console.error(
+			"[sitemap-lastmod] shallow git clone: per-page dates would all collapse " +
+				"to the checkout commit. Set `fetch-depth: 0` on actions/checkout.",
+		);
+		process.exit(1);
+	}
+}
+assertFullHistory();
+
 const gitDates = buildGitDateMap();
 
 // Last commit date (YYYY-MM-DD) for a file, or null if unavailable.

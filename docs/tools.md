@@ -8,8 +8,9 @@ never as a crash of the session.
 
 Every result is returned on **two channels**: the structured JSON output (fields documented
 below) and a human-readable Markdown rendering in the text content — for `search`, a results
-table that includes each result's clickable download links. Both channels lead with a
-`next_steps` guidance list; the search guidance tells the model to include the download links
+table that includes each result's clickable download links. The structured output leads with a
+`next_steps` guidance list; the Markdown rendering closes with the same guidance under a
+*Next steps* heading. The search guidance tells the model to include the download links
 when it presents the results to the user.
 
 ## search
@@ -188,17 +189,17 @@ reported.
 
 ### get_details output
 
-| Field        | Type   | Description                                                                                                                                                                                                                     |
-| ------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `next_steps` | array  | Model-facing follow-up suggestion, e.g. a `download` call using this record's `md5` (book) or `doi` (article).                                                                                                                  |
-| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                                                                                                                                           |
-| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).                                                                                                                   |
-| `citations`  | object | `{"bibtex": ..., "ris": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata. Omitted when the record has no title (the minimum needed for a usable citation); ISBN is never fabricated when absent. |
-| `enrichment` | object | Best-effort external metadata (Crossref/OpenLibrary), present only when `enrich` was requested and something was found. See [Metadata enrichment](#metadata-enrichment).                                                        |
+| Field        | Type   | Description                                                                                                                                                                                                                                                                                         |
+| ------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `next_steps` | array  | Model-facing follow-up suggestion, e.g. a `download` call using this record's `md5` (book) or `doi` (article).                                                                                                                                                                                      |
+| `file`       | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                                                                                                                                                                                                               |
+| `edition`    | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).                                                                                                                                                                                       |
+| `citations`  | object | `{"bibtex": ..., "ris": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata. Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all. |
+| `enrichment` | object | Best-effort external metadata (Crossref/OpenLibrary), present when `enrich` was requested and something was found — and on the Crossref fallback below, which returns it whether or not you asked. See [Metadata enrichment](#metadata-enrichment).                                                 |
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
 returns whichever object was requested. A lookup that matches nothing returns a
-"no record" error.
+"no record" error, unless one of the fallbacks below answers first.
 
 ### Records the catalog does not carry
 
@@ -215,7 +216,17 @@ keyless IPFS download route is unavailable for them — a member key or another 
 needed to fetch those. `author` is Anna's own field and is occasionally a PDF producer
 string rather than a person.
 
-Only when neither index has the md5 does the tool return the catalog's own miss error.
+A **DOI** the catalog does not carry is handled the same way through a different
+route. When enrichment is enabled (`LIBGEN_MCP_ENRICH`, on by default),
+`get_details` falls back to Crossref and returns a synthetic record — `file.origin`
+is `crossref` and `file.doi` is the DOI you asked for — with the Crossref metadata
+in `enrichment`. That block is present here **even if you did not set `enrich`**,
+because the fallback has nothing else to return. Like the Anna's record it is
+thinner than a catalog record: it carries no md5, so pass the DOI itself to
+`download`.
+
+Only when no index has the identifier does the tool return the catalog's own miss
+error.
 
 ### Metadata enrichment
 
@@ -249,7 +260,7 @@ article; at least one is required. Returns the saved path, size, and the source 
 | `md5`               | string | one of   | File MD5 hash from a book search result. Must be a 32-character hex string.                                                                                                                                                                                                                                                                                                                                        |
 | `isbn`              | string | one of   | ISBN of a book, in its 10- or 13-character form; hyphens and spaces are optional. Fetched from the open-access book sources. A value that is not shaped like an ISBN is rejected before any request.                                                                                                                                                                                                               |
 | `doi`               | string | one of   | DOI from an article search result. Articles are fetched by DOI.                                                                                                                                                                                                                                                                                                                                                    |
-| `path`              | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`).                                                                                                                                                                                                                                                                                                                                   |
+| `path`              | string | no       | Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or `~/Downloads`). Ignored when `resolve_only` is true.                                                                                                                                                                                                                                                                                              |
 | `filename`          | string | no       | Destination filename. Defaults to the name the CDN announces (`Content-Disposition`), else a clean name built from the record metadata, else the MD5.                                                                                                                                                                                                                                                              |
 | `source`            | string | no       | Restrict the download to a single source: `libgen`/`randombook`/`annas` (books, `md5`), `oapen`/`archive` (books, `isbn`) or `unpaywall`/`europepmc`/`biorxiv`/`fatcat`/`core`/`oapen`/`scihub`/`scidb` (articles, `doi`). `unpaywall` is only selectable when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, and `core` only when `LIBGEN_MCP_CORE_KEY` is set. Omit to try every compatible source in order with failover. |
 | `annas_member`      | bool   | no       | Opt in to Anna's Archive member (fast) downloads for this book (`md5`). Only meaningful when the server has no `LIBGEN_MCP_ANNAS_KEY` configured: an elicitation-capable client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave `false` to download over IPFS keylessly. Default `false`.                                                            |
@@ -287,12 +298,12 @@ result names it. See [Architecture](architecture.md) for the full chain.
 | Field               | Type   | Description                                                                                                                                                                                                                                                                                                              |
 | ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `next_steps`        | array  | Model-facing follow-up suggestion — confirms the file was saved and is ready to open or read.                                                                                                                                                                                                                            |
-| `path`              | string | Absolute path of the saved file.                                                                                                                                                                                                                                                                                         |
+| `path`              | string | Path of the saved file. Absolute when the destination directory is (the default `LIBGEN_MCP_DOWNLOAD_DIR` always is); a relative `path` argument yields a relative result.                                                                                                                                               |
 | `size_bytes`        | int    | Final file size in bytes.                                                                                                                                                                                                                                                                                                |
 | `original_filename` | string | The name the mirror/CDN announced (from `Content-Disposition`), if any.                                                                                                                                                                                                                                                  |
 | `mirror`            | string | The `scheme://host` origin that served the bytes.                                                                                                                                                                                                                                                                        |
 | `source`            | string | The source that succeeded: `libgen`, `randombook`, `annas` (books by md5), `oapen`, `archive` (books by isbn) or `unpaywall`, `europepmc`, `biorxiv`, `fatcat`, `core`, `oapen`, `scihub`, `scidb` (articles).                                                                                                           |
-| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5` (book downloads). `false` for DOI-keyed sources, which carry no LibGen digest.                                                                                                                                                                         |
+| `verified`          | bool   | `true` when the downloaded bytes' MD5 matched the requested `md5`. `false` whenever there is no digest to check against — every `doi` download and every `isbn` download.                                                                                                                                                |
 | `resumed`           | bool   | `true` when the download continued from a pre-existing partial via an HTTP `Range` request rather than starting from zero.                                                                                                                                                                                               |
 | `account`           | object | Present only when an account served the file (today: an Anna's Archive member fast-download). Reports the remaining metered allowance as `source`, `downloads_left`, `downloads_per_day`, `downloads_done_today`. Read the ceiling as per rolling window — Anna's own field names say "day", but the window is 18 hours. |
 
@@ -414,7 +425,7 @@ client's filesystem.
 | Field         | Type   | Description                                                                                                                                                                                                                                                                               |
 | ------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `next_steps`  | array  | Leads with the UNTRUSTED-content warning, then either how to page on with `cursor`, a nudge on a no-match `find`, or, when not extractable, how to fall back to `download`.                                                                                                               |
-| `text`        | string | The extracted text for this chunk (sequential reads only — omitted for `find` reads). **UNTRUSTED external content** — see below.                                                                                                                                                         |
+| `text`        | string | The extracted text for this chunk (sequential reads only — an empty string on `find` reads, not omitted). **UNTRUSTED external content** — see below.                                                                                                                                     |
 | `format`      | string | Detected format: `pdf`, `epub`, or `txt`.                                                                                                                                                                                                                                                 |
 | `extractable` | bool   | `true` when text could be extracted; `false` for scanned/unsupported files (see `reason`).                                                                                                                                                                                                |
 | `reason`      | string | Why extraction was not possible, when `extractable` is `false`.                                                                                                                                                                                                                           |
@@ -534,7 +545,7 @@ download each and produce an annotated bibliography.
 | -------- | -------- | ----------------------------------------------------------------------------- |
 | `topic`  | yes      | Topic to research.                                                            |
 | `kind`   | no       | Which record types to search: `articles`, `books`, or `both`. Default `both`. |
-| `limit`  | no       | Maximum rows per section. Default `10`.                                       |
+| `limit`  | no       | Maximum rows per section. Default `10`, capped at `50`.                       |
 
 Returns a two-section Markdown reading list — Papers (identified by DOI) and Books
 (identified by md5) — followed by a plan to download each item and produce an annotated

@@ -125,7 +125,8 @@ type Client struct {
 	// config by buildSourceChain in config.KnownSources order, then filtered per
 	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
 	// articles try the doi sources (unpaywall, europepmc, biorxiv, fatcat, core,
-	// scihub, scidb).
+	// oapen, scihub, scidb) — oapen supports a DOI as well as an ISBN, since
+	// monographs carry one.
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
 	// same md5 into the same dir), keyed by the absolute .part path. The .part
