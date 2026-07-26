@@ -264,10 +264,12 @@ prueba que pasa, es una pregunta sin hacer — y la primera que esta suite dejó
 saltarse resultó ser un modelo inventándose un índice para un fichero que no había
 podido leer.
 
-Las dos llamadas con error de la tabla son deliberadas: un escenario fija un host
-de Sci-Hub muerto para comprobar que el calendario de reintentos devuelve un error
-accionable, y otro restringe el despliegue al catálogo para comprobar que
-`extra_sources: never` aguanta.
+Dos escenarios de la tabla son negativos deliberados, no caminos felices. S9 fija
+un host de Sci-Hub muerto, así que el calendario de reintentos debe agotarse y
+devolver un error accionable en lugar de un éxito inventado. S38 fija el
+despliegue a `extra_sources: never` contra un fallo conocido del catálogo, así que
+el resultado correcto es un «no encontrado» honesto con las fuentes extra fuera.
+Ambos pasan justamente por comportarse así.
 
 {/* generated:results — run `make eval-pages`, do not edit by hand */}
 

@@ -253,10 +253,11 @@ model achieved. A skip that recurs is not a passing test, it is an unasked
 question — and the first one this suite stopped skipping turned out to be a model
 inventing a table of contents for a file it could not read.
 
-The two errored tool calls in the table are deliberate: one scenario pins a dead
-Sci-Hub host to prove the retry schedule surfaces an actionable error, and
-another restricts the deployment to the catalog to prove `extra_sources: never`
-holds.
+Two scenarios in the table are deliberate negatives rather than happy paths. S9
+pins a dead Sci-Hub host, so the staged retry schedule must exhaust and surface
+an actionable error instead of a fabricated success. S38 fixes the deployment to
+`extra_sources: never` against a known catalog miss, so the correct outcome is an
+honest "not found" with the extras staying out. Both pass by behaving that way.
 
 {/* generated:results — run `make eval-pages`, do not edit by hand */}
 

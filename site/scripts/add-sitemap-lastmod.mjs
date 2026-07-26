@@ -180,22 +180,36 @@ if (sitemaps.length === 0) {
 	console.warn("[sitemap-lastmod] no child sitemap found — skipping");
 	process.exit(0);
 }
-const stampedDates = [];
-for (const f of sitemaps) stampedDates.push(...stampSitemap(join(distDir, f)));
+// Newest date per child sitemap, keyed by filename.
+const newestByChild = new Map();
+for (const f of sitemaps) {
+	const dates = stampSitemap(join(distDir, f));
+	if (dates.length > 0) newestByChild.set(f, dates.sort().at(-1));
+}
 
-// Stamp the index with the newest date any child carries. A crawler reads the
-// index first and uses its <lastmod> to decide whether to fetch the child at
-// all, so an index without one makes the per-page dates below it moot.
+// Stamp each index entry with its OWN child's newest date. A crawler reads the
+// index first and uses <lastmod> to decide whether to fetch that child at all,
+// so an index without one makes the per-page dates below it moot — but a single
+// date shared across entries is its own lie, telling a crawler that every
+// sibling changed when one did.
 const indexPath = join(distDir, "sitemap-index.xml");
-if (stampedDates.length > 0 && existsSync(indexPath)) {
-	const newest = stampedDates.sort().at(-1);
+if (newestByChild.size > 0 && existsSync(indexPath)) {
 	const xml = readFileSync(indexPath, "utf8");
+	let stamped = 0;
 	const out = xml.replace(
-		/(<sitemap>\s*<loc>[^<]*<\/loc>)(\s*<lastmod>[^<]*<\/lastmod>)?/g,
-		`$1<lastmod>${newest}</lastmod>`,
+		/<sitemap>\s*<loc>([^<]*)<\/loc>(\s*<lastmod>[^<]*<\/lastmod>)?/g,
+		(block, loc) => {
+			const child = loc.split("/").pop();
+			const date = newestByChild.get(child);
+			if (!date) return block;
+			stamped++;
+			return `<sitemap><loc>${loc}</loc><lastmod>${date}</lastmod>`;
+		},
 	);
 	if (out !== xml) {
 		writeFileSync(indexPath, out);
-		console.log(`[sitemap-lastmod] stamped the index with ${newest}`);
+		console.log(
+			`[sitemap-lastmod] stamped ${stamped} index entr${stamped === 1 ? "y" : "ies"}`,
+		);
 	}
 }

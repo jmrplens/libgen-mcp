@@ -58,10 +58,52 @@ function prose(path) {
 	return text.replace(/```[\s\S]*?```/g, "");
 }
 
-// Tokens that must survive translation: environment variables, and the tool and
-// source identifiers. A translated sentence that drops one is describing
-// different behaviour from the English page, which is the drift worth failing on.
-const IDENTIFIER = /\b(LIBGEN_[A-Z0-9_]+)\b/g;
+// Tokens that must survive translation. A translated sentence that drops one is
+// describing different behaviour from the English page, which is the drift worth
+// failing on.
+//
+// Environment variables are matched by shape. Tool and source names cannot be —
+// `read`, `search` and `core` are ordinary English words a sentence may use
+// incidentally — so they are matched only inside backticks, where they are
+// unambiguously the identifier rather than the word.
+const ENV_VAR = /\b(LIBGEN_[A-Z0-9_]+)\b/g;
+const CODE_IDENTIFIER = new RegExp(
+	"`(" +
+		[
+			"search",
+			"get_details",
+			"download",
+			"read",
+			"unpaywall",
+			"europepmc",
+			"biorxiv",
+			"fatcat",
+			"core",
+			"oapen",
+			"archive",
+			"scihub",
+			"scidb",
+			"libgen",
+			"randombook",
+			"annas",
+			"arxiv",
+			"crossref",
+			"openlibrary",
+			"gutenberg",
+			"dblp",
+			"pubmed",
+			"eric",
+		].join("|") +
+		")`",
+	"g",
+);
+
+// Every tracked token in a page, normalized so the two sides compare equal.
+function identifiers(text) {
+	const found = new Set(text.match(ENV_VAR) ?? []);
+	for (const m of text.matchAll(CODE_IDENTIFIER)) found.add("`" + m[1] + "`");
+	return found;
+}
 
 function headingCount(text) {
 	return (text.match(/^#{2,6} /gm) ?? []).length;
@@ -80,8 +122,9 @@ for (const page of enPages) {
 		);
 	}
 
-	const missing = [...new Set(en.match(IDENTIFIER) ?? [])]
-		.filter((token) => !es.includes(token))
+	const esTokens = identifiers(es);
+	const missing = [...identifiers(en)]
+		.filter((token) => !esTokens.has(token))
 		.sort();
 	if (missing.length > 0) {
 		contentProblems.push(

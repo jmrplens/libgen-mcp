@@ -34,6 +34,16 @@ var (
 	orderCodes  = map[string]string{"id": "f_id", "time_added": "time_added", "title": "title", "author": "author", "year": "year", "size": "filesize"}
 )
 
+// joinInts renders an int set the way allowed renders a map's keys, so both
+// validation messages read the same.
+func joinInts(values []int) string {
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = strconv.Itoa(v)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func allowed[V any](m map[string]V) string {
 	return strings.Join(sortedKeys(m), ", ")
 }
@@ -57,14 +67,22 @@ func OrderNames() []string {
 	return sortedKeys(orderCodes)
 }
 
-// OrderModeNames returns the two recognized order_mode values.
+// orderModes and resultsPerPageValues are the closed sets Validate enforces and
+// the schema advertises. They live here, as the maps above do, so the validator
+// and the tool schema cannot drift: a value added to one is added to both.
+var (
+	orderModes           = []string{"asc", "desc"}
+	resultsPerPageValues = []int{25, 50, 100}
+)
+
+// OrderModeNames returns the recognized order_mode values.
 func OrderModeNames() []string {
-	return []string{"asc", "desc"}
+	return slices.Clone(orderModes)
 }
 
 // ResultsPerPageValues returns the page sizes the catalog accepts.
 func ResultsPerPageValues() []int {
-	return []int{25, 50, 100}
+	return slices.Clone(resultsPerPageValues)
 }
 
 // sortedKeys returns a map's keys in sorted order.
@@ -104,16 +122,16 @@ func (p SearchParams) Validate() error {
 			return fmt.Errorf("unknown search_in %q (allowed: %s)", c, allowed(columnCodes))
 		}
 	}
-	if p.ResultsPerPage != 0 && p.ResultsPerPage != 25 && p.ResultsPerPage != 50 && p.ResultsPerPage != 100 {
-		return errors.New("results_per_page must be 25, 50 or 100")
+	if p.ResultsPerPage != 0 && !slices.Contains(resultsPerPageValues, p.ResultsPerPage) {
+		return fmt.Errorf("results_per_page must be one of %s", joinInts(resultsPerPageValues))
 	}
 	if p.Order != "" {
 		if _, ok := orderCodes[p.Order]; !ok {
 			return fmt.Errorf("unknown order %q (allowed: %s)", p.Order, allowed(orderCodes))
 		}
 	}
-	if p.OrderMode != "" && p.OrderMode != "asc" && p.OrderMode != "desc" {
-		return errors.New("order_mode must be asc or desc")
+	if p.OrderMode != "" && !slices.Contains(orderModes, p.OrderMode) {
+		return fmt.Errorf("order_mode must be one of %s", strings.Join(orderModes, ", "))
 	}
 	return nil
 }

@@ -69,7 +69,7 @@ jobs:
           STALE=$(jq -r --arg v "${VERSION}" \
             '[.packages[] | select((.version // $v) != $v)] | length' server.json)
           if [ "${STALE}" -ne 0 ]; then
-            echo "::error::${STALE} package entr(y|ies) in server.json are not at ${VERSION}"
+            echo "::error::${STALE} of server.json's package entries are not at ${VERSION}"
             exit 1
           fi
           echo "server.json pinned to ${VERSION} (top level and all packages)"
@@ -103,11 +103,13 @@ jobs:
           STATUS=${PIPESTATUS[0]}
           set -e
           if [ "${STATUS}" -ne 0 ]; then
-            # Only a duplicate of THIS tag is benign — that is a re-run of the same
-            # release. A duplicate of any other version means server.json was not
-            # carrying the tag, which is the one failure this guard must not hide.
-            if grep -q "invalid version: cannot publish duplicate version" mcp-publisher-publish.log &&
-               grep -qF "${VERSION}" mcp-publisher-publish.log; then
+            # A duplicate here can only be a duplicate of this tag: the pin step
+            # above refuses to continue unless server.json carries ${VERSION}, so
+            # there is no longer a path where a stale manifest re-offers an older
+            # version and hides behind this branch. Matching the registry's error
+            # text alone therefore keeps re-runs idempotent without reopening that
+            # hole — the guard that closes it is the assertion, not this grep.
+            if grep -q "invalid version: cannot publish duplicate version" mcp-publisher-publish.log; then
               echo "::notice::MCP Registry already has ${VERSION}; this is a re-run, continuing"
             else
               exit "${STATUS}"

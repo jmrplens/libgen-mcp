@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a siete proveedores de acceso abierto, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
+**libgen-mcp consulta primero el catálogo de Library Genesis y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a otros siete proveedores — cinco repositorios de acceso abierto más los índices bibliográficos dblp y PubMed, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
 
 Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
 
@@ -96,7 +96,7 @@ flowchart TD
     G --> H[devolver resultados combinados]
 ```
 
-En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados se fusionan con los del catálogo, se deduplican y se etiquetan por `origin`.
+En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados vuelven por dos canales: Anna's Archive se identifica por md5, así que sus ficheros se deduplican contra el catálogo y se unen a la lista principal `results`; los otros siete caen en un array aparte, `open_access`. Ambos se etiquetan por `origin`.
 
 Cuando se consultan las fuentes adicionales, se consulta a cada fuente y las respuestas se fusionan. Los duplicados se eliminan por **digest de archivo** (el md5): el mismo archivo que aparece en dos fuentes se muestra una sola vez. Cuando ese mismo archivo aparece tanto en el catálogo como en Anna's, **gana el registro del catálogo**, porque lleva metadatos más ricos — editoriales, idiomas, ISBNs y el resto de campos que el catálogo se esfuerza en recoger. La copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
 

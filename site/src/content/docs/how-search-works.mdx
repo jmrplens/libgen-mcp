@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven open-access providers, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
+**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven further providers — five open-access repositories plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
 
 This page explains that flow: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
 
@@ -96,7 +96,7 @@ flowchart TD
     G --> H[return combined results]
 ```
 
-In prose: `never` queries the Library Genesis catalog and stops. `always` queries the catalog and every extra source concurrently. `auto`, the default, queries the catalog first and reaches for the extra sources only when it returned nothing or failed outright. Whenever extra sources run, their hits are merged with the catalog's, deduplicated, and labelled by `origin`.
+In prose: `never` queries the Library Genesis catalog and stops. `always` queries the catalog and every extra source concurrently. `auto`, the default, queries the catalog first and reaches for the extra sources only when it returned nothing or failed outright. Whenever extra sources run, their hits come back on two channels: Anna's Archive is keyed by md5, so its files are deduplicated against the catalog and join the main `results` list; the other seven land in a separate `open_access` array. Both are labelled by `origin`.
 
 When the extras are consulted, every source is queried and the answers are merged. Duplicates are removed by **file digest** (the md5): the same file surfaced by two sources appears only once. When that same file appears in both the catalog and Anna's, **the catalog record wins**, because it carries richer metadata — publishers, languages, ISBNs, and the other fields the catalog invests in collecting. The Anna's copy is dropped rather than shown twice in a thinner form.
 
