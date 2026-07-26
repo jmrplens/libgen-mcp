@@ -43,7 +43,7 @@ Use get_details with a result md5 for full metadata, download to fetch the file,
 - `total_files` (string): total matches the mirror reports (may be a capped indicator such as 1000+)
 - `truncated` (boolean) (required): true when total_files exceeds reachable, i.e. some matches cannot be paged to
 
-Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
+Annotations: readOnly=true, openWorld=true
 
 ### get_details
 
@@ -67,7 +67,7 @@ Full metadata for a Library Genesis record (description, identifiers, DOI, cover
 - `file` (object): the file record (present for an md5 lookup, or an id lookup with object=file)
 - `next_steps` (array of strings): suggested follow-up (e.g. download this record by its md5 or doi)
 
-Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
+Annotations: readOnly=true, openWorld=true
 
 ### download
 
@@ -143,7 +143,7 @@ Extract and paginate the text of a book or paper so you can read it without down
 - `total_pages` (integer): total pages in the document (PDF)
 - `truncated` (boolean): true when this chunk was cut off at max_chars
 
-Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
+Annotations: readOnly=true, openWorld=true
 
 ## Prompts
 

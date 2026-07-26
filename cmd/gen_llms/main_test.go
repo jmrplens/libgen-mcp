@@ -577,10 +577,18 @@ func TestWriteAnnotations(t *testing.T) {
 		t.Fatalf("explicit annotations = %q", got)
 	}
 
+	// A hint the server never set must be omitted, not published at its Go zero
+	// value: destructiveHint and idempotentHint are pointers precisely so "not
+	// stated" stays distinguishable from "stated false". openWorld keeps its
+	// documented default of true, which is a real default rather than a zero value.
 	var defaults strings.Builder
 	writeAnnotations(&defaults, &mcp.ToolAnnotations{})
-	if got := defaults.String(); !strings.Contains(got, "destructive=false") || !strings.Contains(got, "openWorld=true") {
-		t.Fatalf("default annotations = %q", got)
+	got := defaults.String()
+	if strings.Contains(got, "destructive=") || strings.Contains(got, "idempotent=") {
+		t.Errorf("unset hints were published as facts: %q", got)
+	}
+	if !strings.Contains(got, "readOnly=false") || !strings.Contains(got, "openWorld=true") {
+		t.Errorf("default annotations = %q", got)
 	}
 }
 

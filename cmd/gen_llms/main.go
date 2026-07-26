@@ -298,25 +298,23 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 	// location (…/libgen-mcp/llms.txt), not just from the repo root. Doc pages point
 	// at the rendered site; repo-only files point at their GitHub blob.
 	b.WriteString("## Documentation\n\n")
-	writeLLMSLink(&b, "Getting started", docsSiteURL+"getting-started/", "Installation and first-run guide")
-	writeLLMSLink(&b, "Configuration", docsSiteURL+"configuration/", "Full environment-variable configuration reference")
-	writeLLMSLink(&b, "Tools", docsSiteURL+"tools/", "Per-tool reference for "+toolNames(toolList))
-	writeLLMSLink(&b, "Architecture", docsSiteURL+"architecture/", "Internal architecture, mirror discovery and download sources")
-	writeLLMSLink(&b, "How search works", docsSiteURL+"how-search-works/", "Catalog-first search, and when and how it escalates to the extra sources")
-	writeLLMSLink(&b, "LLM eval results", docsSiteURL+"eval-results/", "Results of driving a real model over MCP against the live site, scenario by scenario")
-	writeLLMSLink(&b, "Troubleshooting", docsSiteURL+"troubleshooting/", "Common setup and runtime issues")
-	writeLLMSLink(&b, "Responsible use", docsSiteURL+"responsible-use/", "Why the open-access providers are tried first, and what the server refuses to serve")
-	writeLLMSLink(&b, "Privacy policy", docsSiteURL+"privacy/", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes")
+	for _, p := range docPages(toolNames(toolList)) {
+		writeLLMSLink(&b, p.enTitle, docsSiteURL+p.slug, p.enDesc)
+	}
 	writeLLMSLink(&b, "Security policy", repoBlobURL+"SECURITY.md", "Threat model and how to report a vulnerability privately")
 	writeLLMSLink(&b, "Headless install", repoBlobURL+"llms-install.md", "Machine-readable install guide for AI assistants")
+
+	// Half the site's URLs are Spanish. A single aggregate link to /es/ left them
+	// invisible to anything consuming this file, which then had nine of nineteen
+	// pages to work from and no way to know the rest existed.
+	b.WriteString("\n## Documentación (Español)\n\n")
+	for _, p := range docPages(toolNames(toolList)) {
+		writeLLMSLink(&b, p.esTitle, docsSiteURL+"es/"+p.slug, p.esDesc)
+	}
 
 	b.WriteString("\n## Optional\n\n")
 	writeLLMSLink(&b, "Full LLM reference", docsSiteURL+llmsFullFileName, "Generated companion reference with full tool schemas")
 	writeLLMSLink(&b, "Documentation site", docsSiteURL, "Rendered documentation site")
-	// The Spanish docs are a full translation, not a stub, and nothing else in
-	// this file pointed at them — so an assistant reading llms.txt could not tell
-	// they existed.
-	writeLLMSLink(&b, "Documentación en español", docsSiteURL+"es/", "Full Spanish translation of every page above")
 
 	content := b.String()
 	if err := validateLLMSTxt(content); err != nil {
@@ -465,6 +463,64 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Pr
 		return fmt.Errorf("write llms-full.txt: %w", err)
 	}
 	return nil
+}
+
+// docPage is one documentation page as llms.txt lists it, in both languages. The
+// slug is shared: the site keeps English slugs across locales, so the ES URL is
+// the EN one under /es/.
+type docPage struct {
+	slug    string
+	enTitle string
+	enDesc  string
+	esTitle string
+	esDesc  string
+}
+
+// docPages returns the documented pages in reading order. Both language sections
+// are generated from this one list so a page cannot be added to one and forgotten
+// in the other. toolNameList carries the tool names into the Tools description,
+// which is derived from the live tool set rather than hardcoded.
+//
+//nolint:misspell // The es* fields are Spanish; misspell reads them as English.
+func docPages(toolNameList string) []docPage {
+	return []docPage{
+		{
+			"getting-started/", "Getting started", "Installation and first-run guide",
+			"Primeros pasos", "Guía de instalación y primera ejecución",
+		},
+		{
+			"configuration/", "Configuration", "Full environment-variable configuration reference",
+			"Configuración", "Referencia completa de configuración por variables de entorno",
+		},
+		{
+			"tools/", "Tools", "Per-tool reference for " + toolNameList,
+			"Herramientas", "Referencia por herramienta de " + toolNameList,
+		},
+		{
+			"architecture/", "Architecture", "Internal architecture, mirror discovery and download sources",
+			"Arquitectura", "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga",
+		},
+		{
+			"how-search-works/", "How search works", "Catalog-first search, and when and how it escalates to the extra sources",
+			"Cómo funciona la búsqueda", "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra",
+		},
+		{
+			"eval-results/", "LLM eval results", "Results of driving a real model over MCP against the live site, scenario by scenario",
+			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
+		},
+		{
+			"troubleshooting/", "Troubleshooting", "Common setup and runtime issues",
+			"Solución de problemas", "Problemas habituales de configuración y ejecución",
+		},
+		{
+			"responsible-use/", "Responsible use", "Why the open-access providers are tried first, and what the server refuses to serve",
+			"Uso responsable", "Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor",
+		},
+		{
+			"privacy/", "Privacy policy", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes",
+			"Política de privacidad", "Sin telemetría; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada",
+		},
+	}
 }
 
 // writePromptSummary writes the one-line prompt index for llms.txt. Prompts are
@@ -688,21 +744,31 @@ func compactToolDescription(description string) string {
 	return truncateRunes(desc, maxFullDescRunes)
 }
 
-// writeAnnotations writes tool annotation hints to the builder.
+// writeAnnotations writes the tool annotation hints the server actually declares.
+//
+// A hint the server left unset is omitted rather than printed at its Go zero
+// value. destructiveHint and idempotentHint are pointers precisely so "not
+// stated" is distinguishable from "stated false", and search, get_details and
+// read set neither — publishing "destructive=false, idempotent=false" for them
+// turned an absent declaration into an asserted fact in the file written for
+// models to read.
 func writeAnnotations(b *strings.Builder, ann *mcp.ToolAnnotations) {
 	if ann == nil {
 		return
 	}
-	dest := false
+	parts := []string{fmt.Sprintf("readOnly=%v", ann.ReadOnlyHint)}
 	if ann.DestructiveHint != nil {
-		dest = *ann.DestructiveHint
+		parts = append(parts, fmt.Sprintf("destructive=%v", *ann.DestructiveHint))
+	}
+	if ann.IdempotentHint {
+		parts = append(parts, "idempotent=true")
 	}
 	openWorld := true
 	if ann.OpenWorldHint != nil {
 		openWorld = *ann.OpenWorldHint
 	}
-	fmt.Fprintf(b, "Annotations: readOnly=%v, destructive=%v, idempotent=%v, openWorld=%v\n",
-		ann.ReadOnlyHint, dest, ann.IdempotentHint, openWorld)
+	parts = append(parts, fmt.Sprintf("openWorld=%v", openWorld))
+	fmt.Fprintf(b, "Annotations: %s\n", strings.Join(parts, ", "))
 }
 
 // writeInputSchema writes a compact representation of the tool's input schema.

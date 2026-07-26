@@ -166,7 +166,15 @@ const jsonLd = JSON.stringify({
 			// Three other GitHub projects are also called "libgen-mcp". The registry
 			// id is the only globally unique handle this server has, so it is
 			// declared alongside the names an engine is likely to see.
-			alternateName: ["LibGen MCP", "libgen-mcp (Go)"],
+			// "Library Genesis MCP Server" is the title the MCP registry publishes
+			// this server under. Declaring it here is what lets an engine following
+			// sameAs to that listing reconcile it with this entity instead of
+			// treating it as a different project.
+			alternateName: [
+				"LibGen MCP",
+				"libgen-mcp (Go)",
+				"Library Genesis MCP Server",
+			],
 			identifier: "io.github.jmrplens/libgen-mcp",
 			...(softwareVersion ? { softwareVersion } : {}),
 			applicationCategory: "DeveloperApplication",

@@ -139,6 +139,8 @@ function addXDefault(block) {
 // alternate. Matching the whole <url>…</url> block (not just <loc>) keeps this
 // idempotent: an entry that already carries either is left untouched rather than
 // getting a duplicate.
+// Returns every date present in the file after stamping, so the caller can give
+// the sitemap index the newest of them.
 function stampSitemap(file) {
 	const xml = readFileSync(file, "utf8");
 	let changed = 0;
@@ -162,6 +164,7 @@ function stampSitemap(file) {
 			`[sitemap-lastmod] stamped ${changed} URLs (${alternates} x-default alternates) in ${file.replace(distDir, "dist")}`,
 		);
 	}
+	return [...out.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].map((m) => m[1]);
 }
 
 if (!existsSync(distDir)) {
@@ -177,4 +180,22 @@ if (sitemaps.length === 0) {
 	console.warn("[sitemap-lastmod] no child sitemap found — skipping");
 	process.exit(0);
 }
-for (const f of sitemaps) stampSitemap(join(distDir, f));
+const stampedDates = [];
+for (const f of sitemaps) stampedDates.push(...stampSitemap(join(distDir, f)));
+
+// Stamp the index with the newest date any child carries. A crawler reads the
+// index first and uses its <lastmod> to decide whether to fetch the child at
+// all, so an index without one makes the per-page dates below it moot.
+const indexPath = join(distDir, "sitemap-index.xml");
+if (stampedDates.length > 0 && existsSync(indexPath)) {
+	const newest = stampedDates.sort().at(-1);
+	const xml = readFileSync(indexPath, "utf8");
+	const out = xml.replace(
+		/(<sitemap>\s*<loc>[^<]*<\/loc>)(\s*<lastmod>[^<]*<\/lastmod>)?/g,
+		`$1<lastmod>${newest}</lastmod>`,
+	);
+	if (out !== xml) {
+		writeFileSync(indexPath, out);
+		console.log(`[sitemap-lastmod] stamped the index with ${newest}`);
+	}
+}

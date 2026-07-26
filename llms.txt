@@ -87,8 +87,19 @@ Prompts (guided workflows a client can offer by name):
 - [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
+## Documentación (Español)
+
+- [Primeros pasos](https://jmrplens.github.io/libgen-mcp/es/getting-started/): Guía de instalación y primera ejecución
+- [Configuración](https://jmrplens.github.io/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
+- [Herramientas](https://jmrplens.github.io/libgen-mcp/es/tools/): Referencia por herramienta de search, get_details, download, read
+- [Arquitectura](https://jmrplens.github.io/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
+- [Cómo funciona la búsqueda](https://jmrplens.github.io/libgen-mcp/es/how-search-works/): Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra
+- [Resultados de la evaluación con LLM](https://jmrplens.github.io/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
+- [Solución de problemas](https://jmrplens.github.io/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
+- [Uso responsable](https://jmrplens.github.io/libgen-mcp/es/responsible-use/): Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor
+- [Política de privacidad](https://jmrplens.github.io/libgen-mcp/es/privacy/): Sin telemetría; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada
+
 ## Optional
 
 - [Full LLM reference](https://jmrplens.github.io/libgen-mcp/llms-full.txt): Generated companion reference with full tool schemas
 - [Documentation site](https://jmrplens.github.io/libgen-mcp/): Rendered documentation site
-- [Documentación en español](https://jmrplens.github.io/libgen-mcp/es/): Full Spanish translation of every page above
