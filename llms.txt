@@ -61,10 +61,17 @@ Configuration (environment variables, all optional):
 
 Tools:
 
-- search: Search for books, papers, comics, magazines and standards, returning catalog results with metadata, md5 hash and downloa...
+- search: Search for books, papers, comics, magazines and standards, returning catalog results with metadata, md5 hash and download options.
 - get_details: Full metadata for a Library Genesis record (description, identifiers, DOI, cover, related edition) via its JSON API.
 - download: Download a file to a local directory.
 - read: Extract and paginate the text of a book or paper so you can read it without downloading the whole file.
+
+Prompts (guided workflows a client can offer by name):
+
+- acquire_book: Search Library Genesis for a book and generate step-by-step instructions to confirm and download the best matching edition.
+- download_troubleshoot: Diagnose a failed or stuck download and produce a step-by-step recovery plan tailored to the identifier, the enabled providers, and any error message.
+- get_paper: Resolve a specific paper by DOI or by a free-text citation and generate instructions to download it.
+- research_topic: Search Library Genesis for papers and books on a topic and build a reading list with instructions to download and produce an annotated bibliography.
 
 ## Documentation
 

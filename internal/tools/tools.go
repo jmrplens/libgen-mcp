@@ -42,14 +42,14 @@ Use get_details with a result md5 for full metadata, download to fetch the file,
 
 // SearchInput holds the parameters for the search tool.
 type SearchInput struct {
-	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN),required"`
+	Query          string   `json:"query" jsonschema:"search text (e.g. a title, author, or ISBN)"`
 	Topics         []string `json:"topics,omitempty" jsonschema:"array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers"`
 	SearchIn       []string `json:"search_in,omitempty" jsonschema:"array of fields to match: title author series year publisher isbn (omit to match all fields)"`
 	ResultsPerPage int      `json:"results_per_page,omitempty" jsonschema:"a single number: 25 50 or 100 (default 25)"`
 	Page           int      `json:"page,omitempty" jsonschema:"result page number starting at 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value (not an array) to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value (not an array): asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
@@ -155,6 +155,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Name:        "search",
 		Title:       "Search Library Genesis",
 		Description: searchDescription,
+		InputSchema: searchInputSchema(),
 		Annotations: &mcp.ToolAnnotations{Title: "Search Library Genesis", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
@@ -227,6 +228,69 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 			". Omit to try every compatible source in order with failover"
 	}
 	return schema
+}
+
+// searchSchemaFor is a seam for tests to exercise the schema-inference error
+// guard in searchInputSchema; it defaults to the real jsonschema.For.
+var searchSchemaFor = jsonschema.For[SearchInput]
+
+// searchInputSchema infers the search tool's input schema from SearchInput and
+// pins a real enum onto every parameter whose accepted values are a closed set.
+//
+// The values come from internal/libgen, which is where Validate checks them, so
+// the schema and the validator cannot disagree. Describing a closed set in prose
+// alone — as these parameters used to — leaves the model free to invent a value
+// and only learn it was wrong from an error, and leaves clients with nothing to
+// validate against. A nil result makes AddTool fall back to the inferred schema,
+// which only happens if inference of the static struct ever fails.
+func searchInputSchema() *jsonschema.Schema {
+	schema, err := searchSchemaFor(nil)
+	if err != nil {
+		return nil
+	}
+	setStringEnum(schema, "extra_sources", []string{
+		string(config.ExtraSourcesAuto),
+		string(config.ExtraSourcesAlways),
+		string(config.ExtraSourcesNever),
+	})
+	setStringEnum(schema, "order", libgen.OrderNames())
+	setStringEnum(schema, "order_mode", libgen.OrderModeNames())
+	setItemsStringEnum(schema, "topics", libgen.TopicNames())
+	setItemsStringEnum(schema, "search_in", libgen.SearchFieldNames())
+	if rpp := schema.Properties["results_per_page"]; rpp != nil {
+		values := libgen.ResultsPerPageValues()
+		rpp.Enum = make([]any, len(values))
+		for i, v := range values {
+			rpp.Enum[i] = v
+		}
+	}
+	return schema
+}
+
+// setStringEnum pins an enum onto a scalar string property, leaving the property
+// untouched when the schema does not carry it.
+func setStringEnum(schema *jsonschema.Schema, name string, values []string) {
+	prop := schema.Properties[name]
+	if prop == nil {
+		return
+	}
+	prop.Enum = make([]any, len(values))
+	for i, v := range values {
+		prop.Enum[i] = v
+	}
+}
+
+// setItemsStringEnum pins an enum onto an array property's items, so the
+// constraint lands on each element rather than on the array itself.
+func setItemsStringEnum(schema *jsonschema.Schema, name string, values []string) {
+	prop := schema.Properties[name]
+	if prop == nil || prop.Items == nil {
+		return
+	}
+	prop.Items.Enum = make([]any, len(values))
+	for i, v := range values {
+		prop.Items.Enum[i] = v
+	}
 }
 
 // sourceChainSep joins ordered source names in the download tool's prose, so the

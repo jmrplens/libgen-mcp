@@ -427,11 +427,15 @@ func TestWriteLLMSTxt_And_Full(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listTools() error: %v", err)
 	}
+	promptList, err := listPrompts()
+	if err != nil {
+		t.Fatalf("listPrompts() error: %v", err)
+	}
 
-	if writeErr := writeLLMSTxt("2.3.4", toolList, false); writeErr != nil {
+	if writeErr := writeLLMSTxt("2.3.4", toolList, promptList, false); writeErr != nil {
 		t.Fatalf("writeLLMSTxt error: %v", writeErr)
 	}
-	if writeErr := writeLLMSFullTxt("2.3.4", toolList, false); writeErr != nil {
+	if writeErr := writeLLMSFullTxt("2.3.4", toolList, promptList, false); writeErr != nil {
 		t.Fatalf("writeLLMSFullTxt error: %v", writeErr)
 	}
 	for _, name := range []string{llmsFileName, llmsFullFileName} {

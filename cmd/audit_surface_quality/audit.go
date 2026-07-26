@@ -105,6 +105,7 @@ func auditSchema(toolName, kind string, raw any) []violation {
 // called once per finding with the violation category and detail.
 func walkSchema(node map[string]any, kind string, report func(category, detail string)) {
 	checkEnum(node, kind, report)
+	checkTagDirectiveLeak(node, kind, report)
 	walkProperties(node, kind, report)
 	walkNamedChildren(node, kind, report, "$defs", "definitions")
 	walkNamedChildren(node, kind, report, "allOf", "anyOf", "oneOf")
@@ -120,6 +121,28 @@ func checkEnum(node map[string]any, kind string, report func(category, detail st
 	}
 	if list, isList := enum.([]any); !isList || len(list) == 0 {
 		report("empty-enum", kind+" enum constrains no values")
+	}
+}
+
+// tagDirectives are struct-tag suffixes that read like schema directives but are
+// not: the jsonschema tag is assigned wholesale to the description, so anything
+// of this shape ends up as literal text in front of every model instead of
+// constraining anything. Checking the rendered description catches the mistake
+// no matter which field grew it.
+var tagDirectives = []string{"enum=", ",required"}
+
+// checkTagDirectiveLeak reports a description carrying an unparsed struct-tag
+// directive. An empty enum is only half the failure mode — a directive the tag
+// parser never reads produces no enum at all, so checkEnum has nothing to flag
+// and the constraint silently ships as prose.
+func checkTagDirectiveLeak(node map[string]any, kind string, report func(category, detail string)) {
+	desc, _ := node["description"].(string)
+	for _, directive := range tagDirectives {
+		if strings.Contains(desc, directive) {
+			report("tag-directive-leak",
+				fmt.Sprintf("%s description contains the unparsed struct-tag directive %q; "+
+					"set the constraint on the schema instead", kind, directive))
+		}
 	}
 }
 

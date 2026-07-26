@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.3.2 | 4 tools
+> Version 1.3.2 | 4 tools | 4 prompts
 
 ## Tools
 
@@ -20,14 +20,14 @@ Use get_details with a result md5 for full metadata, download to fetch the file,
 
 **Parameters:**
 
-- `extra_sources` (string): a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely,enum=auto,enum=always,enum=never
-- `order` (string): a single value (not an array) to sort by: id time_added title author year or size
-- `order_mode` (string): a single value (not an array): asc or desc
+- `extra_sources` (string): a single value (not an array): when to search beyond the Library Genesis catalog. Set always to also search Anna's Archive, the open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg for public-domain books), the bibliographic indexes (dblp for computer science, PubMed for biomedicine) and ERIC (education reports, theses and other grey literature) on this call - use it whenever the request mentions open access, public-domain books, grey literature or education research, or asks for the widest possible search. auto (the default) reaches them only when the catalog finds nothing or fails. never restricts the search to the catalog. Omit to use the server default; a server configured to never ignores this argument entirely. Allowed values: auto, always, never
+- `order` (string): a single value (not an array) to sort by: id time_added title author year or size. Allowed values: author, id, size, time_added, title, year
+- `order_mode` (string): a single value (not an array): asc or desc. Allowed values: asc, desc
 - `page` (integer): result page number starting at 1 (default 1)
 - `query` (string) (required): search text (e.g. a title, author, or ISBN)
-- `results_per_page` (integer): a single number: 25 50 or 100 (default 25)
-- `search_in` (array of strings): array of fields to match: title author series year publisher isbn (omit to match all fields)
-- `topics` (array of strings): array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers
+- `results_per_page` (integer): a single number: 25 50 or 100 (default 25). Allowed values: 25, 50, 100
+- `search_in` (array of strings): array of fields to match: title author series year publisher isbn (omit to match all fields). Allowed values: author, isbn, publisher, series, title, year
+- `topics` (array of strings): array of collections to search: nonfiction fiction articles magazines comics standards fiction_rus (omit for all). Use fiction for novels comics for graphic novels articles for research papers. Allowed values: nonfiction, fiction, articles, magazines, comics, standards, fiction_rus
 
 **Returns:**
 
@@ -85,7 +85,7 @@ Download a file to a local directory. Provide md5 (book), isbn (book), doi (arti
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
 - `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
 - `skip_confirmation` (boolean): when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all
-- `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover
+- `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover. Allowed values: unpaywall, europepmc, biorxiv, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas
 
 **Returns:**
 
@@ -144,6 +144,58 @@ Extract and paginate the text of a book or paper so you can read it without down
 - `truncated` (boolean): true when this chunk was cut off at max_chars
 
 Annotations: readOnly=true, destructive=false, idempotent=false, openWorld=true
+
+## Prompts
+
+libgen-mcp registers 4 prompts. Each is a guided workflow over the tools above; a client surfaces them by name.
+
+### acquire_book
+
+**Acquire a Book**
+
+Search Library Genesis for a book and generate step-by-step instructions to confirm and download the best matching edition.
+
+Arguments:
+
+- `title` (required): Book title to search for (required).
+- `author`: Author name to narrow the search (optional).
+- `format`: Preferred file format, e.g. pdf or epub (optional).
+- `language`: Preferred language (optional).
+
+### download_troubleshoot
+
+**Troubleshoot a Download**
+
+Diagnose a failed or stuck download and produce a step-by-step recovery plan tailored to the identifier, the enabled providers, and any error message.
+
+Arguments:
+
+- `md5`: md5 of the book download that failed (optional).
+- `doi`: DOI of the article download that failed (optional).
+- `error`: The error message the download tool returned, if any (optional).
+
+### get_paper
+
+**Get a Paper**
+
+Resolve a specific paper by DOI or by a free-text citation and generate instructions to download it.
+
+Arguments:
+
+- `doi`: DOI of the paper to fetch directly (mutually exclusive with citation).
+- `citation`: Free-text citation or reference to search for (mutually exclusive with doi).
+
+### research_topic
+
+**Research a Topic**
+
+Search Library Genesis for papers and books on a topic and build a reading list with instructions to download and produce an annotated bibliography.
+
+Arguments:
+
+- `topic` (required): Topic to research (required).
+- `kind`: Which record types to search: articles, books, or both (default: both).
+- `limit`: Maximum rows per section (default: 10).
 
 ## Configuration
 

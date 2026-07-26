@@ -35,18 +35,46 @@ var (
 )
 
 func allowed[V any](m map[string]V) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return strings.Join(keys, ", ")
+	return strings.Join(sortedKeys(m), ", ")
 }
 
 // TopicNames returns the recognized search topic names in a stable order, for
 // surfacing the collection choices to callers (e.g. in no-result guidance).
 func TopicNames() []string {
 	return []string{"nonfiction", "fiction", "articles", "magazines", "comics", "standards", "fiction_rus"}
+}
+
+// SearchFieldNames returns the recognized search_in field names, sorted. It reads
+// the same map Validate checks against, so a schema enum built from it cannot
+// drift away from what the validator will actually accept.
+func SearchFieldNames() []string {
+	return sortedKeys(columnCodes)
+}
+
+// OrderNames returns the recognized order names, sorted. Like SearchFieldNames it
+// reads the validator's own map rather than restating the set.
+func OrderNames() []string {
+	return sortedKeys(orderCodes)
+}
+
+// OrderModeNames returns the two recognized order_mode values.
+func OrderModeNames() []string {
+	return []string{"asc", "desc"}
+}
+
+// ResultsPerPageValues returns the page sizes the catalog accepts.
+func ResultsPerPageValues() []int {
+	return []int{25, 50, 100}
+}
+
+// sortedKeys returns a map's keys in sorted order.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 // SearchParams holds the parameters of a catalog search.

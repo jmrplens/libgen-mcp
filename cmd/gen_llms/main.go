@@ -28,6 +28,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
@@ -43,7 +44,12 @@ const (
 	// untrusted-content warning. Four tools do not need protecting from their own
 	// documentation; the cap exists to catch a runaway description, so it only has
 	// to stay ahead of the real ones.
-	maxFullDescRunes      = 1600
+	maxFullDescRunes = 1600
+	// maxSummaryDescRunes caps the one-line tool summaries in llms.txt. It is sized
+	// to fit the first sentence of every current tool description whole: at 120 the
+	// flagship search entry was published as "...md5 hash and downloa...", cut
+	// mid-word in the index a model reads first.
+	maxSummaryDescRunes   = 200
 	llmsFileName          = "llms.txt"
 	llmsFullFileName      = "llms-full.txt"
 	llmsSummaryItemFormat = "- %s: %s\n"
@@ -75,11 +81,15 @@ func run(checkOnly bool) error {
 	if err != nil {
 		return err
 	}
+	promptList, err := listPrompts()
+	if err != nil {
+		return err
+	}
 
-	if writeErr := writeLLMSTxt(version, toolList, checkOnly); writeErr != nil {
+	if writeErr := writeLLMSTxt(version, toolList, promptList, checkOnly); writeErr != nil {
 		return writeErr
 	}
-	if writeErr := writeLLMSFullTxt(version, toolList, checkOnly); writeErr != nil {
+	if writeErr := writeLLMSFullTxt(version, toolList, promptList, checkOnly); writeErr != nil {
 		return writeErr
 	}
 
@@ -87,7 +97,7 @@ func run(checkOnly bool) error {
 		fmt.Printf("Validated llms.txt and llms-full.txt\n")
 		return nil
 	}
-	fmt.Printf("Generated llms.txt and llms-full.txt (%d tools)\n", len(toolList))
+	fmt.Printf("Generated llms.txt and llms-full.txt (%d tools, %d prompts)\n", len(toolList), len(promptList))
 	return nil
 }
 
@@ -184,6 +194,40 @@ func listTools() ([]*mcp.Tool, error) {
 	return result.Tools, nil
 }
 
+// listPrompts builds the same offline server and returns its registered prompts
+// via a real prompts/list round-trip. The prompts are half of what a client sees
+// on connect, and describing them by hand here would drift the way the tool list
+// used to; reading them from the server keeps the generated file honest.
+func listPrompts() ([]*mcp.Prompt, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = &config.Config{}
+	}
+	mgr, err := mirrors.NewManager(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create mirror manager: %w", err)
+	}
+	client := libgen.New(mgr, cfg)
+
+	session, cleanup, err := newSession(func(server *mcp.Server) error {
+		prompts.Register(server, client, cfg)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	result, err := session.ListPrompts(context.Background(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("list prompts: %w", err)
+	}
+	sort.SliceStable(result.Prompts, func(i, j int) bool {
+		return result.Prompts[i].Name < result.Prompts[j].Name
+	})
+	return result.Prompts, nil
+}
+
 // toolOrder returns a stable ordinal so tools always print in the natural
 // workflow order (search, then get_details, then download) regardless of the
 // order the SDK lists them.
@@ -211,7 +255,7 @@ func toolNames(toolList []*mcp.Tool) string {
 }
 
 // writeLLMSTxt generates the concise llms.txt overview.
-func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
+func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt, checkOnly bool) error {
 	var b strings.Builder
 
 	b.WriteString("# libgen-mcp\n\n")
@@ -243,10 +287,12 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
 	b.WriteString("Tools:\n\n")
 	for _, t := range toolList {
 		desc := firstSentence(t.Description)
-		desc = truncateRunes(desc, 120)
+		desc = truncateRunes(desc, maxSummaryDescRunes)
 		fmt.Fprintf(&b, llmsSummaryItemFormat, t.Name, desc)
 	}
 	b.WriteString("\n")
+
+	writePromptSummary(&b, promptList)
 
 	// Absolute URLs so the links resolve when llms.txt is fetched from its served
 	// location (…/libgen-mcp/llms.txt), not just from the repo root. Doc pages point
@@ -393,11 +439,11 @@ func validateLLMSFullTxt(content string) error {
 }
 
 // writeLLMSFullTxt generates the detailed llms-full.txt with tool schemas.
-func writeLLMSFullTxt(version string, toolList []*mcp.Tool, checkOnly bool) error {
+func writeLLMSFullTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt, checkOnly bool) error {
 	var b strings.Builder
 
 	b.WriteString("# libgen-mcp — Full Reference\n\n")
-	fmt.Fprintf(&b, "> Version %s | %d tools\n\n", version, len(toolList))
+	fmt.Fprintf(&b, "> Version %s | %d tools | %d prompts\n\n", version, len(toolList), len(promptList))
 
 	b.WriteString("## Tools\n\n")
 	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the libgen.li family of mirrors. No account or token is required.\n\n", len(toolList))
@@ -405,6 +451,7 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, checkOnly bool) erro
 		writeLLMSFullTool(&b, tool)
 	}
 
+	writeLLMSFullPrompts(&b, promptList)
 	writeLLMSFullConfiguration(&b)
 	writeLLMSFullDownloadSources(&b)
 	writeLLMSFullTransports(&b)
@@ -418,6 +465,64 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, checkOnly bool) erro
 		return fmt.Errorf("write llms-full.txt: %w", err)
 	}
 	return nil
+}
+
+// writePromptSummary writes the one-line prompt index for llms.txt. Prompts are
+// the other half of what a client sees on connect, and a file that lists only the
+// tools understates the surface by four entries.
+func writePromptSummary(b *strings.Builder, promptList []*mcp.Prompt) {
+	if len(promptList) == 0 {
+		return
+	}
+	b.WriteString("Prompts (guided workflows a client can offer by name):\n\n")
+	for _, p := range promptList {
+		desc := truncateRunes(firstSentence(p.Description), maxSummaryDescRunes)
+		fmt.Fprintf(b, llmsSummaryItemFormat, p.Name, desc)
+	}
+	b.WriteString("\n")
+}
+
+// writeLLMSFullPrompts writes the full prompt reference, including each prompt's
+// arguments, so a client can invoke one without a round-trip to prompts/list.
+func writeLLMSFullPrompts(b *strings.Builder, promptList []*mcp.Prompt) {
+	if len(promptList) == 0 {
+		return
+	}
+	b.WriteString("## Prompts\n\n")
+	fmt.Fprintf(b, "libgen-mcp registers %d prompts. Each is a guided workflow over the tools above; a client surfaces them by name.\n\n", len(promptList))
+	for _, p := range promptList {
+		fmt.Fprintf(b, "### %s\n\n", p.Name)
+		if title := strings.TrimSpace(p.Title); title != "" {
+			fmt.Fprintf(b, llmsBoldTitleFormat, title)
+		}
+		if desc := strings.TrimSpace(p.Description); desc != "" {
+			b.WriteString(compactToolDescription(desc))
+			b.WriteString("\n\n")
+		}
+		writePromptArguments(b, p.Arguments)
+	}
+}
+
+// writePromptArguments writes one bullet per prompt argument, marking the
+// required ones.
+func writePromptArguments(b *strings.Builder, args []*mcp.PromptArgument) {
+	if len(args) == 0 {
+		b.WriteString("Arguments: none\n\n")
+		return
+	}
+	b.WriteString("Arguments:\n\n")
+	for _, a := range args {
+		req := ""
+		if a.Required {
+			req = " (required)"
+		}
+		if desc := strings.TrimSpace(a.Description); desc != "" {
+			fmt.Fprintf(b, "- `%s`%s: %s\n", a.Name, req, desc)
+		} else {
+			fmt.Fprintf(b, "- `%s`%s\n", a.Name, req)
+		}
+	}
+	b.WriteString("\n")
 }
 
 // envVarDoc documents a single environment variable for the Configuration
@@ -672,6 +777,9 @@ func writeSchemaProperty(b *strings.Builder, name string, prop map[string]any, r
 	typ := schemaTypeLabel(prop)
 	desc, _ := prop["description"].(string)
 	desc = strings.TrimSuffix(desc, ",required")
+	if allowed := schemaEnumLabel(prop); allowed != "" {
+		desc = strings.TrimRight(strings.TrimSpace(desc), ".") + ". Allowed values: " + allowed
+	}
 	req := ""
 	if required {
 		req = " (required)"
@@ -681,6 +789,26 @@ func writeSchemaProperty(b *strings.Builder, name string, prop map[string]any, r
 	} else {
 		fmt.Fprintf(b, "- `%s` (%s)%s\n", name, typ, req)
 	}
+}
+
+// schemaEnumLabel renders a property's allowed values, reading an array
+// property's constraint off its items. It returns "" when the property is
+// unconstrained. Sourcing the list from the emitted schema rather than from the
+// description means the generated reference states exactly what the server will
+// accept, and cannot drift from it.
+func schemaEnumLabel(prop map[string]any) string {
+	enum, ok := prop["enum"].([]any)
+	if !ok || len(enum) == 0 {
+		if items, isMap := prop["items"].(map[string]any); isMap {
+			return schemaEnumLabel(items)
+		}
+		return ""
+	}
+	parts := make([]string, len(enum))
+	for i, v := range enum {
+		parts[i] = fmt.Sprintf("%v", v)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func schemaTypeLabel(schema map[string]any) string {
@@ -761,6 +889,10 @@ func pluralSchemaType(typ string) string {
 }
 
 // truncateRunes truncates s to at most maxRunes runes, appending "..." if truncated.
+// It backs up to the last space so the cut lands between words: the summary line
+// is the first thing a model reads about a tool, and "md5 hash and downloa..."
+// reads as a broken file rather than an abbreviated one. A run of maxRunes with no
+// space in it is cut where it falls, since there is no better boundary to find.
 func truncateRunes(s string, maxRunes int) string {
 	if utf8.RuneCountInString(s) <= maxRunes {
 		return s
@@ -770,7 +902,11 @@ func truncateRunes(s string, maxRunes int) string {
 		_, w := utf8.DecodeRuneInString(s[size:])
 		size += w
 	}
-	return s[:size] + "..."
+	cut := s[:size]
+	if i := strings.LastIndexByte(cut, ' '); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,;:") + "..."
 }
 
 // firstParagraph returns text up to the first blank-line paragraph break (\n\n).
