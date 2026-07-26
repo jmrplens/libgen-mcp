@@ -336,6 +336,26 @@ export default defineConfig({
 					tag: "meta",
 					attrs: { name: "author", content: "José Manuel Requena Plens" },
 				},
+				// Search Console and Bing Webmaster ownership. Verifying the host
+				// root at jmrplens.github.io covers this sub-path, but a sub-path
+				// registered as a property in its own right — which is what lets you
+				// see this project's queries and sitemap status separately — has to
+				// carry the tag itself. Same tokens as the hub and the sibling docs
+				// sites, so all three verify against one account.
+				{
+					tag: "meta",
+					attrs: {
+						name: "google-site-verification",
+						content: "4Hx_PJ1seU_BgKfWpo_FA7_Hkh7GeYVNrvnvzqCjF0Q",
+					},
+				},
+				{
+					tag: "meta",
+					attrs: {
+						name: "msvalidate.01",
+						content: "7574EB3B44624C239F14920DBC34EE25",
+					},
+				},
 				// GitHub Pages cannot set response headers, so the policies that do
 				// have a <meta> equivalent are declared here. X-Frame-Options,
 				// X-Content-Type-Options and Permissions-Policy are header-only and
