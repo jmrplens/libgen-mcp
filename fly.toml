@@ -28,14 +28,68 @@ kill_timeout = 10
 [experimental]
   cmd = ["--http", "0.0.0.0:8080"]
 
+# Replace one machine at a time. With two machines "immediate" swaps both at
+# once, so every in-flight MCP session drops together.
+[deploy]
+  strategy = "rolling"
+
+# Tuning for the deployed guest (see [[vm]] below). The stock defaults are sized
+# for a laptop running one user's sessions; this endpoint is shared, so the
+# limits that matter are raised deliberately and the one that must NOT be are
+# left alone.
 [env]
   LIBGEN_MCP_LOG_LEVEL = "info"
+
+  # `read` fetches a file to a temp file before extracting text, and successive
+  # pages of one read reuse that fetch. The cache is DISK, not memory — no
+  # volume is mounted, so it lives on the machine's ephemeral rootfs (~8 GB,
+  # shared with the OS and image). 3 GiB leaves comfortable headroom while being
+  # 6× the 512 MiB default.
+  #
+  # This is the highest-value setting here, and not because of spare capacity:
+  # every cache hit is an outbound request to a Library Genesis mirror that does
+  # not happen. Given the rate limit below, avoiding a fetch is worth more than
+  # being able to run more of them.
+  LIBGEN_MCP_READ_CACHE_BYTES = "3221225472"
+  # Long enough that a client paging through a book keeps hitting the same
+  # fetch, short enough that idle files are reclaimed well before the disk fills.
+  LIBGEN_MCP_READ_CACHE_TTL = "30m"
+
+  # Simultaneous fetches. The default of 2 serializes a shared endpoint behind
+  # two slots; 8 matches the vCPU count and stays well under the hard cap of 16.
+  LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS = "8"
+
+  # DELIBERATELY MODEST, and the one value not governed by machine size.
+  #
+  # This limiter is process-global and points at third-party public mirrors, so
+  # every user of this endpoint shares it and every request leaves from one Fly
+  # IP. Raising it does not consume our capacity — it consumes someone else's,
+  # and the failure mode is that IP getting blocked, which takes the endpoint
+  # down for everyone rather than making it slower. Two machines each run their
+  # own limiter, so the values below are ~4 rps in aggregate.
+  #
+  # The hard ceiling is 20 rps; treat anything near it as a decision about the
+  # mirrors' tolerance, not about the hardware.
+  LIBGEN_MCP_RATE_RPS = "2"
+  LIBGEN_MCP_RATE_BURST = "4"
+
+# Declared here so the deployed guest is reproducible from the repository. The
+# running machines were resized out of band, which meant a recreated machine —
+# or a new region — would have come up at the default guest instead.
+[[vm]]
+  size = "shared-cpu-8x"
+  cpu_kind = "shared"
+  cpus = 8
+  memory = "10gb"
 
 [http_service]
   internal_port = 8080
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
+  # Cold starts cost a first request, and stopping a machine also throws away
+  # the read cache above. Raise to 1 to keep one machine warm — that is a cost
+  # decision, not a technical one, so it stays at 0 until someone chooses.
   min_machines_running = 0
 
   [[http_service.checks]]
