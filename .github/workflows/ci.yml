@@ -291,7 +291,22 @@ jobs:
         working-directory: site
         env:
           # The lint job does not run pa11y, so skip puppeteer's Chromium download.
+          # Playwright's browser is a separate install, handled below — Mermaid
+          # needs it and puppeteer's copy would not satisfy that.
           PUPPETEER_SKIP_DOWNLOAD: "true"
+      # rehype-mermaid renders each diagram to inline SVG during the build, which
+      # needs a real browser. Same cache key as the Pages workflow, so the two
+      # jobs share one download.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('site/pnpm-lock.yaml') }}
+      - name: Install Chromium for Mermaid rendering
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: site
       - name: Build the site
         run: pnpm run build
         working-directory: site
