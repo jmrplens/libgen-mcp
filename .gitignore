@@ -3,6 +3,7 @@
 /server
 /eval
 /gen_llms
+/gen_lhm_manifest
 /godoc_tool
 /audit_tokens
 /format_md_tables

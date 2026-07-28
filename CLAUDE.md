@@ -341,8 +341,9 @@ into it, so re-running the publish after a partial failure is safe.
   (`cfg.Sources = nil`, plus a placeholder for every credential-gated source —
   Unpaywall email and CORE key) so their output is deterministic regardless of
   the ambient environment. A new credential-gated source must add its placeholder
-  to **all three** of `cmd/gen_llms`, `cmd/audit_tokens` and
-  `cmd/gen_lhm_manifest` (see each one's `docsConfig`/`listTools`), or the
-  committed llms files, the token figure and `lhm.plugin.json` will differ
-  between a machine that holds the credential and one that does not, and
-  `make check-llms` / `make check-lhm-manifest` will pass or fail by accident.
+  to **all three** of `cmd/internal/mcpsurface` (`DocsConfig`, shared by
+  `gen_llms` and `gen_lhm_manifest`), `cmd/audit_tokens` and
+  `cmd/audit_surface_quality`, or the committed llms files, `lhm.plugin.json` and
+  the token figure will differ between a machine that holds the credential and
+  one that does not, and `make check-llms` / `make check-lhm-manifest` will pass
+  or fail by accident.
