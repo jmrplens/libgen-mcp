@@ -145,32 +145,3 @@ func TestManifestPrompts_SortedByName(t *testing.T) {
 		}
 	}
 }
-
-// TestDocsConfig_ForcesFullSurface checks the placeholder credentials are
-// applied, since a missing one would make the generated schema depend on the
-// ambient environment and the --check gate pass or fail by accident.
-func TestDocsConfig_ForcesFullSurface(t *testing.T) {
-	t.Setenv("LIBGEN_MCP_SOURCES", "libgen")
-	t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", "")
-	t.Setenv("LIBGEN_MCP_CORE_KEY", "")
-
-	cfg := docsConfig()
-	if cfg.Sources != nil {
-		t.Errorf("Sources should be cleared to advertise every source, got %v", cfg.Sources)
-	}
-	if cfg.UnpaywallEmail == "" || cfg.CoreKey == "" {
-		t.Errorf("credential placeholders missing: email=%q core=%q", cfg.UnpaywallEmail, cfg.CoreKey)
-	}
-}
-
-// TestFindProjectRoot locates the repository root from the package directory and
-// confirms the manifest this command maintains actually lives there.
-func TestFindProjectRoot(t *testing.T) {
-	root, err := findProjectRoot()
-	if err != nil {
-		t.Fatalf("findProjectRoot: %v", err)
-	}
-	if root == "" {
-		t.Fatal("findProjectRoot returned an empty path")
-	}
-}

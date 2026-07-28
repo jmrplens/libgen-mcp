@@ -21,9 +21,7 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -32,11 +30,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/prompts"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 )
 
 // manifestFileName is the LobeHub manifest read by `lhm plugin publish`.
@@ -103,7 +97,7 @@ func main() {
 // surface, or, in check mode, reports whether the committed file already
 // matches it.
 func run(checkOnly bool) error {
-	rootDir, err := findProjectRoot()
+	rootDir, err := mcpsurface.ProjectRoot()
 	if err != nil {
 		return err
 	}
@@ -145,11 +139,12 @@ func generate(current []byte) (out []byte, toolCount, promptCount int, err error
 		return nil, 0, 0, fmt.Errorf("parse %s: %w", manifestFileName, err)
 	}
 
-	toolList, err := listTools()
+	cfg := mcpsurface.DocsConfig()
+	toolList, err := mcpsurface.Tools(cfg)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	promptList, err := listPrompts()
+	promptList, err := mcpsurface.Prompts(cfg)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -214,124 +209,5 @@ func toolOrder(name string) int {
 		return 2
 	default:
 		return 3
-	}
-}
-
-// newSession creates an in-memory MCP server+client session with a page size
-// high enough that the whole surface arrives in one response.
-func newSession(setupServer func(*mcp.Server)) (session *mcp.ClientSession, cleanup func(), err error) {
-	opts := &mcp.ServerOptions{PageSize: 2000}
-	server := mcp.NewServer(&mcp.Implementation{Name: "gen-lhm-manifest", Version: "0.0.1"}, opts)
-	setupServer(server)
-
-	st, ct := mcp.NewInMemoryTransports()
-	ctx := context.Background()
-
-	serverSession, err := server.Connect(ctx, st, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("server connect: %w", err)
-	}
-
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "gen-lhm-manifest-client", Version: "0.0.1"}, nil)
-	session, err = mcpClient.Connect(ctx, ct, nil)
-	if err != nil {
-		_ = serverSession.Close()
-		_ = serverSession.Wait()
-		return nil, nil, fmt.Errorf("client connect: %w", err)
-	}
-
-	return session, func() {
-		_ = session.Close()
-		_ = serverSession.Wait()
-	}, nil
-}
-
-// docsConfig builds the configuration the generated manifest must describe: the
-// full capability set, not whatever the ambient environment happens to enable.
-// Every credential-gated source needs a placeholder here — without one, the
-// download tool's schema would differ between a machine that holds the
-// credential and one that does not, and the --check gate would pass or fail by
-// accident. cmd/gen_llms and cmd/audit_tokens carry the same list.
-func docsConfig() *config.Config {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = &config.Config{}
-	}
-	cfg.Sources = nil
-	if cfg.UnpaywallEmail == "" {
-		cfg.UnpaywallEmail = "docs@example.com"
-	}
-	if cfg.CoreKey == "" {
-		cfg.CoreKey = "docs-placeholder-key"
-	}
-	return cfg
-}
-
-// listTools returns the registered tools via a real tools/list round-trip.
-// Construction is offline-safe: config.Load and mirrors.NewManager perform no
-// network I/O, and the client is never asked to make a request.
-func listTools() ([]*mcp.Tool, error) {
-	cfg := docsConfig()
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	session, cleanup, err := newSession(func(server *mcp.Server) {
-		tools.Register(server, client, cfg)
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	result, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("list tools: %w", err)
-	}
-	return result.Tools, nil
-}
-
-// listPrompts returns the registered prompts via a real prompts/list round-trip.
-func listPrompts() ([]*mcp.Prompt, error) {
-	cfg := docsConfig()
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	session, cleanup, err := newSession(func(server *mcp.Server) {
-		prompts.Register(server, client, cfg)
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	result, err := session.ListPrompts(context.Background(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("list prompts: %w", err)
-	}
-	return result.Prompts, nil
-}
-
-// findProjectRoot walks up from the working directory to the directory holding
-// go.mod, so the command works from anywhere in the repository.
-func findProjectRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("get working directory: %w", err)
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", errors.New("go.mod not found in any parent directory")
-		}
-		dir = parent
 	}
 }
