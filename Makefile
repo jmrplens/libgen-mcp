@@ -8,7 +8,8 @@
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
-        gen-llms check-llms eval-pages check-eval-pages audit-tokens audit-surface-quality \
+        gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
+        eval-pages check-eval-pages audit-tokens audit-surface-quality \
         install-tools release-check check-manifests \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -174,6 +175,12 @@ gen-llms: ## Generate llms.txt and llms-full.txt from the registered tools
 check-llms: ## Fail if llms.txt/llms-full.txt are stale or structurally invalid (CI mode)
 	go run ./cmd/gen_llms/ --check
 
+gen-lhm-manifest: ## Regenerate the tools/prompts arrays in lhm.plugin.json from the registered surface
+	go run ./cmd/gen_lhm_manifest/
+
+check-lhm-manifest: ## Fail if lhm.plugin.json no longer matches the registered surface (CI mode)
+	go run ./cmd/gen_lhm_manifest/ --check
+
 eval-pages: ## Regenerate the evaluator results pages (pass DOC=path to also refresh the run table)
 	go run ./cmd/gen_eval_pages/ $(if $(DOC),--results-doc $(DOC))
 
@@ -236,7 +243,9 @@ publish-lobehub:
 	MVER=$$(jq -r '.version' lhm.plugin.json); \
 	if [ "$$VER" != "$$MVER" ]; then \
 		echo "ERROR: VERSION ($$VER) != lhm.plugin.json version ($$MVER); run a release stamp first"; exit 1; \
-	fi; \
+	fi
+	@$(MAKE) --no-print-directory check-lhm-manifest
+	@VER=$$(tr -d '[:space:]' < VERSION); \
 	echo "Publishing jmrplens-libgen-mcp v$$VER to LobeHub..."; \
 	npx -y @lobehub/market-cli plugin publish --dir "$(CURDIR)"
 
