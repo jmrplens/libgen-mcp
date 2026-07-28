@@ -38,6 +38,7 @@ cmd/
   godoc_tool/           # Go doc-comment auditor + fixer (audit | fix)
   format_md_tables/     # Normalizes Markdown pipe tables (--check in CI)
   gen_llms/             # Generates llms.txt / llms-full.txt (--check in CI)
+  gen_lhm_manifest/     # Fills lhm.plugin.json's tools/prompts (--check in CI)
   gen_eval_pages/       # Regenerates the evaluator results docs (--check in CI)
   eval/                 # Live LLM-driven eval harness (build tag: eval, gated)
 internal/
@@ -190,6 +191,7 @@ go test -race ./...                                        # race detector
 make cover-check                                           # internal/ >= 85%
 make check-md-tables                                       # Markdown tables normalized
 make check-llms                                            # llms.txt fresh + valid
+make check-lhm-manifest                                    # lhm.plugin.json matches the surface
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
 ```
@@ -217,6 +219,9 @@ Docs are **bilingual and kept in parity**:
 - `llms.txt` / `llms-full.txt` are generated from the registered tools by
   `go run ./cmd/gen_llms/`; regenerate them whenever the tool surface changes
   (`make check-llms` verifies freshness).
+- The `tools` and `prompts` arrays in `lhm.plugin.json` are generated the same
+  way by `go run ./cmd/gen_lhm_manifest/` (`make check-lhm-manifest` verifies).
+  See the LobeHub section under Release Process for why they exist at all.
 - Architecture Decision Records live in `docs/decisions/`.
 
 ## Testing
@@ -291,6 +296,33 @@ The version lives in `VERSION` and is mirrored into four JSON manifests plus the
 The `server.json` CI job is named for a required status check in the branch
 ruleset, not for its scope — do not rename it without updating the ruleset too.
 
+### Publishing to the LobeHub Marketplace
+
+LobeHub is the one listing that is **not** part of the tagged release, and it
+needs a manual step after the tag:
+
+```bash
+make publish-lobehub    # npx -y @lobehub/market-cli plugin publish
+```
+
+It cannot be automated. LobeHub's publish endpoint authenticates over OIDC PKCE
+with a one-time interactive `lhm login` + `lhm github connect`; its own
+documentation states there is no token-only, non-interactive path, and the
+machine-to-machine credentials it does offer carry no publish permission. The
+release workflow therefore only *stamps* the version into `lhm.plugin.json`
+(step 5 of `scripts/update-server-json-sha.sh`, committed back to main); the
+actual publish is a human running the target above.
+
+The manifest also carries the full `tools` and `prompts` arrays, and it has to:
+LobeHub derives a listing's capability badges from those arrays, because its
+crawler cannot introspect a server that ships as a Go binary or a Docker image.
+Without them the marketplace advertises **zero tools and zero prompts** no matter
+what the server registers — which is exactly what the listing showed until
+v1.3.3. Never hand-edit them; `make gen-lhm-manifest` regenerates them from a
+real `tools/list` + `prompts/list` round-trip and `make check-lhm-manifest` fails
+CI when they drift. Re-publishing the same version merges the supplied fields
+into it, so re-running the publish after a partial failure is safe.
+
 ## Commit & PR Conventions
 
 - Conventional Commits in a plain **developer voice** describing the change
@@ -309,6 +341,9 @@ ruleset, not for its scope — do not rename it without updating the ruleset too
   (`cfg.Sources = nil`, plus a placeholder for every credential-gated source —
   Unpaywall email and CORE key) so their output is deterministic regardless of
   the ambient environment. A new credential-gated source must add its placeholder
-  to **both** `cmd/gen_llms` and `cmd/audit_tokens`, or the committed llms files
-  and the token figure will differ between a machine that holds the credential
-  and one that does not, and `make check-llms` will pass or fail by accident.
+  to **all three** of `cmd/internal/mcpsurface` (`DocsConfig`, shared by
+  `gen_llms` and `gen_lhm_manifest`), `cmd/audit_tokens` and
+  `cmd/audit_surface_quality`, or the committed llms files, `lhm.plugin.json` and
+  the token figure will differ between a machine that holds the credential and
+  one that does not, and `make check-llms` / `make check-lhm-manifest` will pass
+  or fail by accident.

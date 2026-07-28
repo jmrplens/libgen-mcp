@@ -12,12 +12,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -25,11 +23,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/prompts"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
 
 const (
@@ -116,116 +111,38 @@ func readVersion(rootDir string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// newSession creates an in-memory MCP server+client session with high page size.
+// newSession creates an in-memory MCP server+client session. It delegates to
+// mcpsurface so this command and gen_lhm_manifest introspect the server exactly
+// the same way.
 func newSession(setupServer func(*mcp.Server) error) (session *mcp.ClientSession, cleanup func(), err error) {
-	opts := &mcp.ServerOptions{PageSize: 2000}
-	server := mcp.NewServer(&mcp.Implementation{Name: "gen-llms", Version: "0.0.1"}, opts)
-	if setupErr := setupServer(server); setupErr != nil {
-		return nil, nil, setupErr
-	}
-
-	st, ct := mcp.NewInMemoryTransports()
-	ctx := context.Background()
-
-	serverSession, err := server.Connect(ctx, st, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("server connect: %w", err)
-	}
-
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "gen-llms-client", Version: "0.0.1"}, nil)
-	session, err = mcpClient.Connect(ctx, ct, nil)
-	if err != nil {
-		_ = serverSession.Close()
-		_ = serverSession.Wait()
-		return nil, nil, fmt.Errorf("client connect: %w", err)
-	}
-
-	return session, func() {
-		_ = session.Close()
-		_ = serverSession.Wait()
-	}, nil
+	return mcpsurface.Session(setupServer)
 }
 
-// listTools builds an in-memory libgen-mcp server and returns its registered
-// tools via a real MCP tools/list round-trip. Construction is offline-safe:
-// config.Load and mirrors.NewManager perform no network I/O, and the client is
-// never asked to make a request here.
+// listTools returns the registered tools via a real tools/list round-trip,
+// sorted into the natural workflow order the generated files present.
 func listTools() ([]*mcp.Tool, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = &config.Config{}
-	}
-	// The download tool advertises only the sources enabled in the ambient config
-	// (unpaywall is off without a contact email, core is off without an API key, and
-	// LIBGEN_MCP_SOURCES can trim the chain), but the generated docs must describe
-	// the full capability set — so enable every source for documentation regardless
-	// of the environment. Every credential-gated source needs a placeholder here, or
-	// the committed output would differ between a machine that has the credential
-	// and one that does not, making the --check gate depend on whoever ran it.
-	cfg.Sources = nil
-	if cfg.UnpaywallEmail == "" {
-		cfg.UnpaywallEmail = "docs@example.com"
-	}
-	if cfg.CoreKey == "" {
-		cfg.CoreKey = "docs-placeholder-key"
-	}
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	session, cleanup, err := newSession(func(server *mcp.Server) error {
-		tools.Register(server, client, cfg)
-		return nil
-	})
+	result, err := mcpsurface.Tools(mcpsurface.DocsConfig())
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
-
-	result, err := session.ListTools(context.Background(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("list tools: %w", err)
-	}
-	sort.SliceStable(result.Tools, func(i, j int) bool {
-		return toolOrder(result.Tools[i].Name) < toolOrder(result.Tools[j].Name)
+	sort.SliceStable(result, func(i, j int) bool {
+		return toolOrder(result[i].Name) < toolOrder(result[j].Name)
 	})
-	return result.Tools, nil
+	return result, nil
 }
 
-// listPrompts builds the same offline server and returns its registered prompts
-// via a real prompts/list round-trip. The prompts are half of what a client sees
-// on connect, and describing them by hand here would drift the way the tool list
-// used to; reading them from the server keeps the generated file honest.
+// listPrompts returns the registered prompts via a real prompts/list round-trip,
+// sorted by name. The prompts are half of what a client sees on connect, and
+// describing them by hand here would drift the way the tool list used to.
 func listPrompts() ([]*mcp.Prompt, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = &config.Config{}
-	}
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	session, cleanup, err := newSession(func(server *mcp.Server) error {
-		prompts.Register(server, client, cfg)
-		return nil
-	})
+	result, err := mcpsurface.Prompts(mcpsurface.DocsConfig())
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
-
-	result, err := session.ListPrompts(context.Background(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("list prompts: %w", err)
-	}
-	sort.SliceStable(result.Prompts, func(i, j int) bool {
-		return result.Prompts[i].Name < result.Prompts[j].Name
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
 	})
-	return result.Prompts, nil
+	return result, nil
 }
 
 // toolOrder returns a stable ordinal so tools always print in the natural
@@ -1066,20 +983,8 @@ func isGeneratedLLMSFile(name string) bool {
 	}
 }
 
-// findProjectRoot walks up from cwd looking for go.mod.
+// findProjectRoot walks up to the directory holding go.mod, so the command works
+// from anywhere in the repository.
 func findProjectRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", errors.New("could not find project root (no go.mod found)")
-		}
-		dir = parent
-	}
+	return mcpsurface.ProjectRoot()
 }

@@ -217,6 +217,11 @@ jobs:
         run: make check-eval-pages
       - name: llms.txt and llms-full.txt match the registered tools
         run: make check-llms
+      # LobeHub reads the capability arrays straight out of lhm.plugin.json — its
+      # crawler cannot introspect a Go binary — so a stale manifest publishes the
+      # previous release's tool surface to the marketplace with no warning.
+      - name: lhm.plugin.json matches the registered tools and prompts
+        run: make check-lhm-manifest
       - name: Markdown tables are normalized
         run: make check-md-tables
 
