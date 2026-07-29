@@ -1127,49 +1127,78 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 		if err != nil {
 			return nil, zero, err
 		}
-		item := libgen.Item{MD5: ids.md5, DOI: ids.doi, ISBN: ids.isbn, Source: ids.source}
+		call := &downloadCall{
+			client:  c,
+			cfg:     cfg,
+			consent: consent,
+			round:   newInputRound(req),
+			in:      in,
+			item:    libgen.Item{MD5: ids.md5, DOI: ids.doi, ISBN: ids.isbn, Source: ids.source},
+		}
 		// Everything this download needs to ask the user is collected in one round,
 		// so a call that needs both a credential and a confirmation costs a single
 		// trip to the client instead of one per question.
-		round := newInputRound(req)
-		// On-demand Unpaywall email: for a DOI download against a server with no
-		// contact email configured, ask the client (when it supports elicitation) for
-		// one to use for THIS request only. A declined/absent/invalid answer leaves
-		// item.Email empty, so the deterministic fallback (unpaywall stays out, scihub
-		// is tried) runs unchanged. Applies to both the resolve_only and download paths.
-		if email := elicitUnpaywallEmail(round, cfg, in); email != "" {
-			item.Email = email
-		}
-		// On-demand Anna's key: same shape as the Unpaywall email above, for a book
-		// download against a server with no account key configured. A declined or
-		// empty answer leaves item.AnnasKey empty, so the annas source stays keyless.
-		if key := elicitAnnasKey(round, cfg, in); key != "" {
-			item.AnnasKey = key
-		}
-		// For a book with no explicit name, fill bibliographic metadata so the file
-		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details
-		// lookup failure must not fail the request. It runs before the confirmation
-		// is composed, which names the file it is about to save.
-		if ids.md5 != "" && in.Filename == "" {
-			item.Meta = bookMeta(ctx, c, ids.md5)
-		}
-		// The disk-writing path may also want a confirmation. It is registered here,
-		// before anything is fetched, so every question travels together.
-		confirm := wantConfirmation(remote, cfg, consent, req, in)
-		if confirm {
-			askDownloadConfirm(ctx, round, c, item, downloadDir(cfg, in), in)
-		}
-		if pending := round.needsInput(); pending != nil {
+		if pending := call.prepare(ctx, req, remote); pending != nil {
 			return pending, zero, nil
 		}
-
 		// A remote server cannot write to the client's disk, so it always resolves
 		// a link; a local server honors resolve_only per call.
 		if remote || in.ResolveOnly {
-			return resolveDownload(ctx, c, item, in.Filename)
+			return resolveDownload(ctx, c, call.item, in.Filename)
 		}
-		return localDownload(ctx, req, c, cfg, consent, round, confirm, item, in)
+		return localDownload(ctx, req, call)
 	}
+}
+
+// downloadCall carries one download request through the handler: the collaborators
+// it needs, the item being fetched, and the round of questions it may have to put
+// to the user before it can run.
+type downloadCall struct {
+	client  *libgen.Client
+	cfg     *config.Config
+	consent *downloadConsent
+	round   *inputRound
+	in      DownloadInput
+	item    libgen.Item
+	// confirm records whether this call asked the user to approve the disk write,
+	// so the answer is only read where a question was actually put.
+	confirm bool
+}
+
+// prepare fills in everything that has to be settled before the download runs:
+// the per-call credentials the user may supply, the bibliographic metadata that
+// names the file, and the save confirmation. It returns the result that puts the
+// outstanding questions to the client, or nil when there are none — on the call
+// that comes back with the answers, it runs again and finds them.
+func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, remote bool) *mcp.CallToolResult {
+	// On-demand Unpaywall email: for a DOI download against a server with no
+	// contact email configured, ask the client (when it supports elicitation) for
+	// one to use for THIS request only. A declined/absent/invalid answer leaves
+	// item.Email empty, so the deterministic fallback (unpaywall stays out, scihub
+	// is tried) runs unchanged. Applies to both the resolve_only and download paths.
+	if email := elicitUnpaywallEmail(d.round, d.cfg, d.in); email != "" {
+		d.item.Email = email
+	}
+	// On-demand Anna's key: same shape as the Unpaywall email above, for a book
+	// download against a server with no account key configured. A declined or
+	// empty answer leaves item.AnnasKey empty, so the annas source stays keyless.
+	if key := elicitAnnasKey(d.round, d.cfg, d.in); key != "" {
+		d.item.AnnasKey = key
+	}
+	// For a book with no explicit name, fill bibliographic metadata so the file
+	// gets a clean "Author - Title (Year).ext" name. Best-effort: a details lookup
+	// failure must not fail the request. It runs before the confirmation is
+	// composed, which names the file it is about to save.
+	if d.item.MD5 != "" && d.in.Filename == "" {
+		d.item.Meta = bookMeta(ctx, d.client, d.item.MD5)
+	}
+	// The disk-writing path may also want a confirmation. It is registered here,
+	// before anything is fetched, so every question travels together.
+	d.confirm = wantConfirmation(remote, d.cfg, d.consent, req, d.in)
+	if d.confirm {
+		askDownloadConfirm(ctx, d.round, d.client, d.item, downloadDir(d.cfg, d.in), d.in)
+	}
+	return d.round.needsInput()
 }
 
 // downloadDir returns the directory a download writes to: the per-call path when
@@ -1187,16 +1216,16 @@ func downloadDir(cfg *config.Config, in DownloadInput) string {
 // no elicitation capability the confirmation block is skipped entirely — no prompt
 // AND no size probe — so the default/headless path is byte-identical to today. A
 // decline returns a non-error result carrying the resolved link, and writes nothing.
-func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, consent *downloadConsent, round *inputRound, confirm bool, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
+func localDownload(ctx context.Context, req *mcp.CallToolRequest, d *downloadCall) (*mcp.CallToolResult, DownloadOutput, error) {
 	var zero DownloadOutput
-	dir := downloadDir(cfg, in)
-	if confirm {
-		proceed, declinedRes, declinedOut := readDownloadConfirm(ctx, req, consent, round, c, item, in)
+	dir := downloadDir(d.cfg, d.in)
+	if d.confirm {
+		proceed, declinedRes, declinedOut := readDownloadConfirm(ctx, req, d)
 		if !proceed {
 			return declinedRes, declinedOut, nil
 		}
 	}
-	res, err := c.DownloadItem(ctx, item, dir, in.Filename, progressNotifier(ctx, req))
+	res, err := d.client.DownloadItem(ctx, d.item, dir, d.in.Filename, progressNotifier(ctx, req))
 	if err != nil {
 		return nil, zero, err
 	}
@@ -1251,17 +1280,17 @@ func askDownloadConfirm(ctx context.Context, round *inputRound, c *libgen.Client
 // returns proceed=false ONLY when the user explicitly declined, alongside a
 // non-error result (declinedRes/declinedOut) that carries the resolved link so the
 // caller can fetch it themselves; no file is written in that case.
-func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, consent *downloadConsent, round *inputRound, c *libgen.Client, item libgen.Item, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
+func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, d *downloadCall) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
 	// An explicit decline or cancel aborts the disk write; an unanswered question
 	// (no capability, or a client that dropped it) falls back to proceeding.
-	decision, remember := round.askConfirmRemember(downloadConfirmID, "", "confirm",
+	decision, remember := d.round.askConfirmRemember(downloadConfirmID, "", "confirm",
 		"Confirm downloading and saving this file to the server", "dont_ask_again")
 	if decision == confirmDeclined {
-		res, out := declinedDownload(ctx, c, item, in.Filename)
+		res, out := declinedDownload(ctx, d.client, d.item, d.in.Filename)
 		return false, res, out
 	}
 	if remember && req != nil {
-		consent.remember(req.Session)
+		d.consent.remember(req.Session)
 	}
 	return true, nil, DownloadOutput{}
 }
