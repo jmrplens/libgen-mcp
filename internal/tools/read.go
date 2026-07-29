@@ -39,7 +39,7 @@ type ReadInput struct {
 	MaxChars  int    `json:"max_chars,omitempty" jsonschema:"max characters to return this call"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous read's response to fetch the next chunk (sequential) or the next matches (find); overrides start_page/offset"`
 
-	Find       string `json:"find,omitempty" jsonschema:"search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet"`
+	Find       string `json:"find,omitempty" jsonschema:"search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet. Matching ignores whitespace, so a phrase is still found when the file's text layer dropped or added spaces between words"`
 	MaxMatches int    `json:"max_matches,omitempty" jsonschema:"max matches to return per call when find is set"`
 
 	Outline bool `json:"outline,omitempty" jsonschema:"return the document's table of contents (chapters/sections with page or level) instead of its text; use it to decide what to read next"`
