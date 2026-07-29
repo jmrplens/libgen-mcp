@@ -1071,11 +1071,83 @@ func TestDownloadNoCrossSourceResumeContamination(t *testing.T) {
 	if bSawRange.Load() {
 		t.Error("source B received a Range request: it resumed from A's partial (.part not distinct)")
 	}
-	// A's partial must still exist under A's own distinct, source-keyed path.
+	// A wrote to its own distinct, source-keyed path — proven above by B never
+	// receiving a Range request — and that abandoned partial is swept once B
+	// delivers the file (see TestDownloadSweepsPartialsOfFailedLegs).
 	item := Item{DOI: "10.1234/cross.source"}
 	aPart := filepath.Join(dir, ".libgen-mcp-srca-"+partialKey(item, Resolved{})+".part")
-	if _, statErr := os.Stat(aPart); statErr != nil {
-		t.Errorf("A's distinct .part missing at %s: %v", aPart, statErr)
+	if _, statErr := os.Stat(aPart); !os.IsNotExist(statErr) {
+		t.Errorf("A's abandoned .part still at %s (stat err = %v), want it swept", aPart, statErr)
+	}
+}
+
+// TestDownloadSweepsPartialsOfFailedLegs verifies that once any source completes
+// the download, the partials left behind by the legs that failed before it are
+// removed. A partial is kept while the item is still unresolved, because the next
+// call can resume from it; once the item is on disk it is dead weight the caller
+// has to clean up by hand, in the directory they asked the file to land in.
+func TestDownloadSweepsPartialsOfFailedLegs(t *testing.T) {
+	contentA := []byte("%PDF-1.4 SOURCE-A " + strings.Repeat("aaaa", 512))
+	contentB := []byte("%PDF-1.7 SOURCE-B " + strings.Repeat("bbbb", 300))
+
+	srvA := partialFailCDN(t, contentA)
+	defer srvA.Close()
+	var bSawRange atomic.Bool
+	srvB := rangeAwareCDN(t, contentB, &bSawRange)
+	defer srvB.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srvA.URL + "/file"}},
+		stubSource{name: "srcb", supports: true, resolved: Resolved{FileURL: srvB.URL + "/file"}},
+	}
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/sweep"}, dir, "out.pdf")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if res.Source != "srcb" {
+		t.Fatalf("Source = %q, want srcb (A fails, B serves)", res.Source)
+	}
+	entries, rerr := os.ReadDir(dir)
+	if rerr != nil {
+		t.Fatalf("reading download dir: %v", rerr)
+	}
+	var leftovers []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".part") {
+			leftovers = append(leftovers, e.Name())
+		}
+	}
+	if len(leftovers) != 0 {
+		t.Errorf("partials left behind after a successful download: %v", leftovers)
+	}
+	if len(entries) != 1 {
+		t.Errorf("dir has %d entries, want 1 (the downloaded file)", len(entries))
+	}
+}
+
+// TestDownloadKeepsPartialsWhenEveryLegFails verifies the other half of the sweep
+// rule: while the item is still unresolved, every leg's partial survives so a
+// later call can resume from it.
+func TestDownloadKeepsPartialsWhenEveryLegFails(t *testing.T) {
+	content := []byte("%PDF-1.4 SOURCE-A " + strings.Repeat("aaaa", 512))
+	srv := partialFailCDN(t, content)
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srv.URL + "/file"}},
+	}
+	dir := t.TempDir()
+
+	if _, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/keep"}, dir, "out.pdf"); err == nil {
+		t.Fatal("DownloadItem() error = nil, want a failure (the only source truncates)")
+	}
+	part := filepath.Join(dir, ".libgen-mcp-srca-"+partialKey(Item{DOI: "10.1234/keep"}, Resolved{})+".part")
+	if _, statErr := os.Stat(part); statErr != nil {
+		t.Errorf("partial missing at %s: %v (an unresolved item must stay resumable)", part, statErr)
 	}
 }
 

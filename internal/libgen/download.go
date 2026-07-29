@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -529,7 +530,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	sources = c.withPerCallUnpaywall(item, sources)
 	sources = c.withPerCallAnnas(item, sources)
 
-	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
+	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress, partials: &attemptedPartials{}}
 	// Try each supporting source in order: a source that fails to resolve or whose
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to
 	// the next. The first success returns; if all fail, the joined errors surface.
@@ -546,6 +547,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
 			c.clearSourceCooldown(src.Name())
+			req.partials.sweep()
 			return res, nil
 		}
 		c.noteSourceFailure(ctx, src.Name(), err)
@@ -598,6 +600,37 @@ type downloadReq struct {
 	dir        string
 	filename   string
 	onProgress ProgressFunc
+	partials   *attemptedPartials
+}
+
+// attemptedPartials records the .part paths a single download call opened, one
+// per source it tried, so the ones left by the legs that failed can be swept once
+// another leg delivers the file.
+type attemptedPartials struct {
+	mu    sync.Mutex
+	paths []string
+}
+
+// add records a partial path this call is about to write to.
+func (a *attemptedPartials) add(path string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.paths = append(a.paths, path)
+}
+
+// sweep removes every partial this call opened. It runs only once the item is on
+// disk: until then a partial is worth keeping, because the next call resumes from
+// it. The successful leg's own partial was renamed into place, so removing it is
+// a no-op, and errors are ignored throughout — a partial another download is
+// still streaming to is either kept open (POSIX) or refused (Windows), and either
+// way the file the caller asked for is already delivered.
+func (a *attemptedPartials) sweep() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, p := range a.paths {
+		_ = os.Remove(p)
+	}
+	a.paths = nil
 }
 
 // downloadFrom runs a single source under the staged start-retry schedule: it
@@ -683,6 +716,7 @@ func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downl
 	release := c.acquirePartialLock(partPath)
 	defer release()
 
+	req.partials.add(partPath)
 	return c.streamResolved(ctx, src, req, resolved, partPath)
 }
 
