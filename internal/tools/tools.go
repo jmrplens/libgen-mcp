@@ -1054,8 +1054,8 @@ type downloadIDs struct {
 // is tried). It NEVER errors: an absent capability, a decline, an empty answer, or an
 // implausible address all collapse to "" so the caller falls back. The email is used
 // only for the call and is never persisted.
-func elicitUnpaywallEmail(ctx context.Context, req *mcp.CallToolRequest, cfg *config.Config, in DownloadInput) string {
-	if strings.TrimSpace(in.DOI) == "" || strings.TrimSpace(cfg.UnpaywallEmail) != "" || !elicitationSupported(req) {
+func elicitUnpaywallEmail(round *inputRound, cfg *config.Config, in DownloadInput) string {
+	if strings.TrimSpace(in.DOI) == "" || strings.TrimSpace(cfg.UnpaywallEmail) != "" {
 		return ""
 	}
 	// The per-call Unpaywall prepend only fires for an unnamed source, so an
@@ -1064,7 +1064,7 @@ func elicitUnpaywallEmail(ctx context.Context, req *mcp.CallToolRequest, cfg *co
 	if strings.TrimSpace(in.Source) != "" {
 		return ""
 	}
-	email, ok := elicitText(ctx, req,
+	email, ok := round.askText("unpaywall_email",
 		"This server has no Unpaywall contact email configured. Enter an email to look up an open-access copy of this article via Unpaywall (used only for this request, not stored):",
 		"email",
 		"A contact email for the Unpaywall API (e.g. you@example.com)")
@@ -1101,8 +1101,8 @@ func looksLikeEmail(s string) bool {
 // keyless, resolving over IPFS). It NEVER errors: an absent capability, a decline
 // or an empty answer all collapse to "" so the caller falls back. The key is used
 // only for the call and is never persisted.
-func elicitAnnasKey(ctx context.Context, req *mcp.CallToolRequest, cfg *config.Config, in DownloadInput) string {
-	if !in.AnnasMember || strings.TrimSpace(in.MD5) == "" || strings.TrimSpace(cfg.AnnasKey) != "" || !elicitationSupported(req) {
+func elicitAnnasKey(round *inputRound, cfg *config.Config, in DownloadInput) string {
+	if !in.AnnasMember || strings.TrimSpace(in.MD5) == "" || strings.TrimSpace(cfg.AnnasKey) != "" {
 		return ""
 	}
 	// The per-call key only takes effect for an unnamed source or an explicit
@@ -1110,7 +1110,7 @@ func elicitAnnasKey(ctx context.Context, req *mcp.CallToolRequest, cfg *config.C
 	if src := strings.TrimSpace(in.Source); src != "" && !strings.EqualFold(src, "annas") {
 		return ""
 	}
-	key, ok := elicitText(ctx, req,
+	key, ok := round.askText("annas_key",
 		"This server has no Anna's Archive account key configured. Enter one to use the faster member download tier for this book (used only for this request, not stored). Leave empty to download over IPFS instead:",
 		"key",
 		"An Anna's Archive account secret key (requires an active paid membership)")
@@ -1128,25 +1128,39 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 			return nil, zero, err
 		}
 		item := libgen.Item{MD5: ids.md5, DOI: ids.doi, ISBN: ids.isbn, Source: ids.source}
+		// Everything this download needs to ask the user is collected in one round,
+		// so a call that needs both a credential and a confirmation costs a single
+		// trip to the client instead of one per question.
+		round := newInputRound(req)
 		// On-demand Unpaywall email: for a DOI download against a server with no
 		// contact email configured, ask the client (when it supports elicitation) for
 		// one to use for THIS request only. A declined/absent/invalid answer leaves
 		// item.Email empty, so the deterministic fallback (unpaywall stays out, scihub
 		// is tried) runs unchanged. Applies to both the resolve_only and download paths.
-		if email := elicitUnpaywallEmail(ctx, req, cfg, in); email != "" {
+		if email := elicitUnpaywallEmail(round, cfg, in); email != "" {
 			item.Email = email
 		}
 		// On-demand Anna's key: same shape as the Unpaywall email above, for a book
 		// download against a server with no account key configured. A declined or
 		// empty answer leaves item.AnnasKey empty, so the annas source stays keyless.
-		if key := elicitAnnasKey(ctx, req, cfg, in); key != "" {
+		if key := elicitAnnasKey(round, cfg, in); key != "" {
 			item.AnnasKey = key
 		}
 		// For a book with no explicit name, fill bibliographic metadata so the file
 		// gets a clean "Author - Title (Year).ext" name. Best-effort: a details
-		// lookup failure must not fail the request.
+		// lookup failure must not fail the request. It runs before the confirmation
+		// is composed, which names the file it is about to save.
 		if ids.md5 != "" && in.Filename == "" {
 			item.Meta = bookMeta(ctx, c, ids.md5)
+		}
+		// The disk-writing path may also want a confirmation. It is registered here,
+		// before anything is fetched, so every question travels together.
+		confirm := wantConfirmation(remote, cfg, consent, req, in)
+		if confirm {
+			askDownloadConfirm(ctx, round, c, item, downloadDir(cfg, in), in)
+		}
+		if pending := round.needsInput(); pending != nil {
+			return pending, zero, nil
 		}
 
 		// A remote server cannot write to the client's disk, so it always resolves
@@ -1154,8 +1168,17 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 		if remote || in.ResolveOnly {
 			return resolveDownload(ctx, c, item, in.Filename)
 		}
-		return localDownload(ctx, req, c, cfg, consent, item, in)
+		return localDownload(ctx, req, c, cfg, consent, round, confirm, item, in)
 	}
+}
+
+// downloadDir returns the directory a download writes to: the per-call path when
+// given, else the server's configured one.
+func downloadDir(cfg *config.Config, in DownloadInput) string {
+	if in.Path != "" {
+		return in.Path
+	}
+	return cfg.DownloadDir
 }
 
 // localDownload runs the disk-writing download path: it resolves the destination
@@ -1164,14 +1187,11 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 // no elicitation capability the confirmation block is skipped entirely — no prompt
 // AND no size probe — so the default/headless path is byte-identical to today. A
 // decline returns a non-error result carrying the resolved link, and writes nothing.
-func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, consent *downloadConsent, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
+func localDownload(ctx context.Context, req *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, consent *downloadConsent, round *inputRound, confirm bool, item libgen.Item, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 	var zero DownloadOutput
-	dir := in.Path
-	if dir == "" {
-		dir = cfg.DownloadDir
-	}
-	if confirmationWanted(cfg, consent, req, in) {
-		proceed, declinedRes, declinedOut := confirmDownload(ctx, req, consent, c, item, dir, in)
+	dir := downloadDir(cfg, in)
+	if confirm {
+		proceed, declinedRes, declinedOut := readDownloadConfirm(ctx, req, consent, round, c, item, in)
 		if !proceed {
 			return declinedRes, declinedOut, nil
 		}
@@ -1210,21 +1230,31 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 	return res, out, nil
 }
 
-// confirmDownload runs the opt-in, capability-gated download confirmation. It is
-// only called when the client advertised elicitation and the disk-writing path is
-// about to run. It builds a human prompt naming the file (and, best-effort, its
-// size) and asks the user to confirm. It returns proceed=true to go ahead with the
-// download in two cases: the user confirmed, OR elicitation did not actually run
-// (ok=false: canceled/errored) — the latter falls back to today's behavior. It
+// downloadConfirmID names the confirmation question inside a download call's
+// input round, so the answer can be matched to it when the client calls back.
+const downloadConfirmID = "download_confirm"
+
+// askDownloadConfirm registers the download confirmation. It builds a human
+// prompt naming the file (and, best-effort, its size) and puts it to the client.
+// It runs before anything is fetched, alongside any credential question, so the
+// user answers everything in one exchange.
+func askDownloadConfirm(ctx context.Context, round *inputRound, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) {
+	name := resolveFilename(item, in.Filename, "")
+	round.askConfirmRemember(downloadConfirmID, confirmMessage(ctx, c, item, name, dir), "confirm",
+		"Confirm downloading and saving this file to the server", "dont_ask_again")
+}
+
+// readDownloadConfirm reads the answer to the confirmation registered by
+// askDownloadConfirm. It returns proceed=true to go ahead with the download in
+// two cases: the user confirmed, OR no answer came back at all (canceled, or a
+// client that could not be asked) — the latter falls back to today's behavior. It
 // returns proceed=false ONLY when the user explicitly declined, alongside a
 // non-error result (declinedRes/declinedOut) that carries the resolved link so the
 // caller can fetch it themselves; no file is written in that case.
-func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, consent *downloadConsent, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
-	name := resolveFilename(item, in.Filename, "")
-	message := confirmMessage(ctx, c, item, name, dir)
-	// An explicit decline or cancel aborts the disk write; only an unavailable
-	// elicitation (no capability or a transport error) falls back to proceeding.
-	decision, remember := elicitConfirmRemember(ctx, req, message, "confirm",
+func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, consent *downloadConsent, round *inputRound, c *libgen.Client, item libgen.Item, in DownloadInput) (proceed bool, declinedRes *mcp.CallToolResult, declinedOut DownloadOutput) {
+	// An explicit decline or cancel aborts the disk write; an unanswered question
+	// (no capability, or a client that dropped it) falls back to proceeding.
+	decision, remember := round.askConfirmRemember(downloadConfirmID, "", "confirm",
 		"Confirm downloading and saving this file to the server", "dont_ask_again")
 	if decision == confirmDeclined {
 		res, out := declinedDownload(ctx, c, item, in.Filename)
@@ -1236,13 +1266,18 @@ func confirmDownload(ctx context.Context, req *mcp.CallToolRequest, consent *dow
 	return true, nil, DownloadOutput{}
 }
 
-// confirmationWanted reports whether the download tool should ask before writing
-// this file to disk. It is the single place the three opt-outs meet, checked
-// cheapest first: the deployment-wide switch, the per-call argument, this
-// session's "stop asking" answer, and finally whether the client can be asked at
-// all. Any one of them being set skips the prompt — none of them can force one,
-// because a client that never advertised elicitation cannot be prompted.
-func confirmationWanted(cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
+// wantConfirmation reports whether the download tool should ask before writing
+// this file to disk. It is the single place the opt-outs meet, checked cheapest
+// first: a remote server (which never writes to the client's disk) or a
+// resolve-only call has nothing to confirm, then the deployment-wide switch, the
+// per-call argument, this session's "stop asking" answer, and finally whether the
+// client can be asked at all. Any one of them being set skips the prompt — none
+// of them can force one, because a client that never advertised elicitation
+// cannot be prompted.
+func wantConfirmation(remote bool, cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
+	if remote || in.ResolveOnly {
+		return false
+	}
 	if cfg != nil && !cfg.ConfirmDownloads {
 		return false
 	}
