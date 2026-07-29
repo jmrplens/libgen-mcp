@@ -324,33 +324,12 @@ const (
 // only identity.
 func parseIdentifiers(cell *html.Node, r *Result) {
 	var titleParts []string
-	for _, a := range elements(cell, "a") {
-		href := attr(a, "href")
-		if !strings.Contains(href, "edition.php?id=") {
-			continue
-		}
+	for _, a := range editionLinks(cell) {
 		if r.EditionID == "" {
-			r.EditionID = queryParam(href, "id")
+			r.EditionID = queryParam(attr(a, "href"), "id")
 		}
-		text := strings.TrimSpace(nodeText(a))
-		switch classifyEditionLink(a, text) {
-		case linkTitle:
-			title, edition := splitEditionMarker(text, italicText(a))
-			if title != "" {
-				titleParts = append(titleParts, title)
-			}
-			if r.Edition == "" {
-				r.Edition = edition
-			}
-		case linkIssue:
-			if r.Issue == "" {
-				r.Issue = text
-			}
-		case linkIdentifiers:
-			if r.ISBNs == nil {
-				r.ISBNs = splitISBNs(text)
-			}
-		case linkIgnore:
+		if part := absorbEditionLink(a, r); part != "" {
+			titleParts = append(titleParts, part)
 		}
 	}
 	r.Title = strings.Join(titleParts, " ")
@@ -360,6 +339,43 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 	if t := badgeType(cell); t != "" {
 		r.Type = t
 	}
+}
+
+// editionLinks returns the cell's edition.php links in document order.
+func editionLinks(cell *html.Node) []*html.Node {
+	var out []*html.Node
+	for _, a := range elements(cell, "a") {
+		if strings.Contains(attr(a, "href"), "edition.php?id=") {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// absorbEditionLink files one edition.php link into r — its issue designator or
+// its identifiers — and returns the part of the title it holds, if any. The
+// first link of each kind wins, since libgen repeats a row's identity across the
+// cell's links.
+func absorbEditionLink(a *html.Node, r *Result) string {
+	text := strings.TrimSpace(nodeText(a))
+	switch classifyEditionLink(a, text) {
+	case linkTitle:
+		title, edition := splitEditionMarker(text, italicText(a))
+		if r.Edition == "" {
+			r.Edition = edition
+		}
+		return title
+	case linkIssue:
+		if r.Issue == "" {
+			r.Issue = text
+		}
+	case linkIdentifiers:
+		if r.ISBNs == nil {
+			r.ISBNs = splitISBNs(text)
+		}
+	case linkIgnore:
+	}
+	return ""
 }
 
 // classifyEditionLink labels one edition.php link by its markup. The identifier
