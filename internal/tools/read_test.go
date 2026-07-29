@@ -523,6 +523,49 @@ func TestReadTool_OutlinePDF(t *testing.T) {
 	}
 }
 
+// TestReadTool_DamagedTextLayerIsFlagged verifies that a sequential read of a
+// file whose text layer extracts to nonsense reports it: extractable stays true
+// (the text really was extracted) but text_quality_note explains what is wrong
+// and next_steps warns the model not to summarize it as if it were the book.
+func TestReadTool_DamagedTextLayerIsFlagged(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broken.txt")
+	if err := os.WriteFile(path, []byte(strings.Repeat("qwrtp lkjhg zxcvbnm ffgghh mnbvcxz ", 20)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: path})
+	if err != nil {
+		t.Fatalf("readHandler returned an error: %v", err)
+	}
+	if !out.Extractable {
+		t.Fatalf("Extractable = false: the text was extracted, only its quality is in doubt (%+v)", out)
+	}
+	if out.TextQualityNote == "" {
+		t.Fatalf("TextQualityNote is empty for a damaged text layer: %+v", out)
+	}
+	steps := strings.Join(out.NextSteps, "\n")
+	if !strings.Contains(steps, "text layer") {
+		t.Errorf("next_steps should warn about the text layer, got %q", steps)
+	}
+	if md := textContent(res); !strings.Contains(md, "text layer") {
+		t.Errorf("Markdown should carry the warning, got %q", md)
+	}
+
+	// A healthy file says nothing about quality.
+	healthy := filepath.Join(t.TempDir(), "ok.txt")
+	body := strings.Repeat("The propagation of sound in a room is governed by the geometry of its boundaries. ", 8)
+	if err := os.WriteFile(healthy, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, ok, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: healthy})
+	if err != nil {
+		t.Fatalf("readHandler returned an error: %v", err)
+	}
+	if ok.TextQualityNote != "" {
+		t.Errorf("TextQualityNote = %q, want empty for healthy text", ok.TextQualityNote)
+	}
+}
+
 // TestLimitOutlineDepth covers the depth filter used by outline mode: max_depth
 // counts levels to keep (1 = top-level only), a non-positive value keeps the
 // whole tree, and the reported total always counts every entry the document has.
