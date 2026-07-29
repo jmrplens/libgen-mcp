@@ -322,6 +322,47 @@ func TestParseSearchBookIdentifiersStayISBNs(t *testing.T) {
 	}
 }
 
+// TestParseSearchEditionMarkerLeavesTheTitle verifies that the edition marker
+// libgen prints in italics at the end of a title link is parsed into its own
+// field rather than concatenated onto the title, which produced titles like
+// "Building Acoustics 1" that match nothing when compared against a real one.
+func TestParseSearchEditionMarkerLeavesTheTitle(t *testing.T) {
+	cases := []struct {
+		name        string
+		fixture     string
+		wantTitle   string
+		wantEdition string
+	}{
+		{"numeric marker", "search_books.html", "Domain-Driven Design with Golang: Use Golang to create simple, maintainable systems to solve complex business problems", "1"},
+		{"spelled-out marker", "search_fiction.html", "Sisterhood of Dune: Dune novels. Schools of Dune bk. 1", "1st ed"},
+		{"marker on the second title part", "search_standards.html", "ISO 8359:1996 Oxygen concentrators for medical use - Safety requirements", "2"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			page := parseFixture(t, tc.fixture)
+			// The fixtures carry several rows per work, only some of which name an
+			// edition, so the assertion is that the marked one parses correctly —
+			// not that every row with this title carries the marker.
+			titled, marked := 0, 0
+			for _, r := range page.Results {
+				if r.Title != tc.wantTitle {
+					continue
+				}
+				titled++
+				if r.Edition == tc.wantEdition {
+					marked++
+				}
+			}
+			if titled == 0 {
+				t.Fatalf("no result titled %q; the edition marker is still part of the title", tc.wantTitle)
+			}
+			if marked == 0 {
+				t.Errorf("no result titled %q carries Edition %q", tc.wantTitle, tc.wantEdition)
+			}
+		})
+	}
+}
+
 // TestParseSearchEmpty verifies ParseSearchEmpty.
 func TestParseSearchEmpty(t *testing.T) {
 	page := parseFixture(t, "search_empty.html")

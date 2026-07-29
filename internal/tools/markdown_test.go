@@ -172,6 +172,31 @@ func TestSearchTitleCarriesTheIssue(t *testing.T) {
 	}
 }
 
+// TestSearchTitleCarriesTheEdition verifies that the edition marker, which is
+// parsed out of the title so titles compare cleanly, still reaches the reader:
+// two printings of one book must not render as the same row. A bare ordinal is
+// labeled, one that already says "ed" is shown as it stands.
+func TestSearchTitleCarriesTheEdition(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{
+			{Title: "Building Acoustics", Edition: "1"},
+			{Title: "Sisterhood of Dune", Edition: "1st ed"},
+			{Title: "A Paper", Issue: "vol. 26 iss. 2", Edition: "2"},
+		},
+	}
+	md := renderSearchMarkdown(out)
+	for _, want := range []string{
+		"Building Acoustics (ed. 1)",
+		"Sisterhood of Dune (1st ed)",
+		"A Paper (vol. 26 iss. 2, ed. 2)",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("table should contain %q; got:\n%s", want, md)
+		}
+	}
+}
+
 // TestRenderMarkdownEdgeCases covers the empty-search, doi-only details, and
 // resumed-download rendering branches.
 func TestRenderMarkdownEdgeCases(t *testing.T) {

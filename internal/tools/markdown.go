@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
@@ -61,14 +62,32 @@ func longestBacktickRun(s string) int {
 }
 
 // resultTitle returns the title to show for a result, with its volume/issue
-// designator appended when it has one. A journal article, a magazine and a comic
-// each carry that designator separately from the title, and without it two rows
-// of the same serial are indistinguishable in the table.
+// designator and edition marker appended when it has them. Both are parsed out
+// of the title so the title itself compares cleanly, but without them two rows
+// of the same serial — or two printings of one book — are indistinguishable in
+// the table.
 func resultTitle(r libgen.Result) string {
-	if r.Issue == "" {
+	var qualifiers []string
+	if r.Issue != "" {
+		qualifiers = append(qualifiers, r.Issue)
+	}
+	if r.Edition != "" {
+		qualifiers = append(qualifiers, editionLabel(r.Edition))
+	}
+	if len(qualifiers) == 0 {
 		return r.Title
 	}
-	return r.Title + " (" + r.Issue + ")"
+	return r.Title + " (" + strings.Join(qualifiers, ", ") + ")"
+}
+
+// editionLabel renders an edition marker for a reader: a bare ordinal ("1") is
+// labeled, while one that already names itself ("1st ed", "First edition") is
+// left as libgen printed it.
+func editionLabel(edition string) string {
+	if strings.ContainsFunc(edition, unicode.IsLetter) {
+		return edition
+	}
+	return "ed. " + edition
 }
 
 // resultIdentifier returns the pivot identifier for a result: its md5 (books) or

@@ -175,6 +175,7 @@ type Result struct {
 	DOI       string   `json:"doi,omitempty" jsonschema:"article DOI; pass to download to fetch this article"`
 	Title     string   `json:"title" jsonschema:"record title"`
 	Issue     string   `json:"issue,omitempty" jsonschema:"volume/issue designator for a journal, magazine or comic record (e.g. vol. 26 iss. 2); absent for books"`
+	Edition   string   `json:"edition,omitempty" jsonschema:"edition marker for this record (e.g. 1, 1st ed), kept out of the title so the title compares cleanly"`
 	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs for this record, if any; absent for articles, whose identifier is the doi field"`
 	Authors   string   `json:"authors,omitempty" jsonschema:"authors"`
 	Publisher string   `json:"publisher,omitempty" jsonschema:"publisher"`
@@ -334,7 +335,13 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 		text := strings.TrimSpace(nodeText(a))
 		switch classifyEditionLink(a, text) {
 		case linkTitle:
-			titleParts = append(titleParts, text)
+			title, edition := splitEditionMarker(text, italicText(a))
+			if title != "" {
+				titleParts = append(titleParts, title)
+			}
+			if r.Edition == "" {
+				r.Edition = edition
+			}
 		case linkIssue:
 			if r.Issue == "" {
 				r.Issue = text
@@ -375,6 +382,17 @@ func classifyEditionLink(a *html.Node, text string) editionLinkKind {
 		return linkIssue
 	}
 	return linkTitle
+}
+
+// splitEditionMarker separates a title link's trailing edition marker — the
+// italic run libgen closes a title with, "1" or "1st ed" — from the title
+// itself, so a title compares cleanly against a real one instead of carrying a
+// stray ordinal. A link with no marker returns its text unchanged.
+func splitEditionMarker(text, italic string) (title, edition string) {
+	if italic == "" || !strings.HasSuffix(text, italic) {
+		return text, ""
+	}
+	return strings.TrimSpace(strings.TrimSuffix(text, italic)), italic
 }
 
 // isGreen reports whether n contains a font element libgen colored green, the
