@@ -554,8 +554,8 @@ func TestReadTool_DamagedTextLayerIsFlagged(t *testing.T) {
 	// A healthy file says nothing about quality.
 	healthy := filepath.Join(t.TempDir(), "ok.txt")
 	body := strings.Repeat("The propagation of sound in a room is governed by the geometry of its boundaries. ", 8)
-	if err := os.WriteFile(healthy, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
+	if werr := os.WriteFile(healthy, []byte(body), 0o600); werr != nil {
+		t.Fatal(werr)
 	}
 	_, ok, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: healthy})
 	if err != nil {

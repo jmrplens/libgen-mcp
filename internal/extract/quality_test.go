@@ -89,8 +89,8 @@ func TestExtract_ReportsADamagedTextLayer(t *testing.T) {
 	}
 
 	healthy := filepath.Join(dir, "healthy.txt")
-	if err := os.WriteFile(healthy, []byte(englishSample), 0o600); err != nil {
-		t.Fatal(err)
+	if werr := os.WriteFile(healthy, []byte(englishSample), 0o600); werr != nil {
+		t.Fatal(werr)
 	}
 	c, err = Extract(context.Background(), healthy, Req{})
 	if err != nil {

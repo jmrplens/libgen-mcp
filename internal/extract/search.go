@@ -255,9 +255,9 @@ func findMatches(text, query string, caseSensitive bool, page, snippetChars int)
 // form can be mapped back onto the original text. The index list is int32 because
 // extraction is capped well below two billion runes and a document's worth of
 // int64 indices is a needless doubling of the search's peak memory.
-func compactRunes(rs []rune, fold bool) ([]rune, []int32) {
-	out := make([]rune, 0, len(rs))
-	at := make([]int32, 0, len(rs))
+func compactRunes(rs []rune, fold bool) (compacted []rune, at []int32) {
+	compacted = make([]rune, 0, len(rs))
+	at = make([]int32, 0, len(rs))
 	for i, r := range rs {
 		if unicode.IsSpace(r) {
 			continue
@@ -265,10 +265,10 @@ func compactRunes(rs []rune, fold bool) ([]rune, []int32) {
 		if fold {
 			r = unicode.ToLower(r)
 		}
-		out = append(out, r)
+		compacted = append(compacted, r)
 		at = append(at, int32(i))
 	}
-	return out, at
+	return compacted, at
 }
 
 // matchAt reports whether the run of runes starting at hay matches needle. The
