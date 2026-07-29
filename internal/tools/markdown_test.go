@@ -151,6 +151,27 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 	}
 }
 
+// TestSearchTitleCarriesTheIssue verifies that a record with a volume/issue
+// designator (a journal article, a magazine or a comic) shows it beside the title
+// in the results table, so the human-readable output identifies which issue a row
+// belongs to without a follow-up get_details call.
+func TestSearchTitleCarriesTheIssue(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{
+			{Title: "A Paper", Issue: "vol. 26 iss. 2", DOI: "10.1/x"},
+			{Title: "A Book", MD5: "0123456789abcdef0123456789abcdef"},
+		},
+	}
+	md := renderSearchMarkdown(out)
+	if !strings.Contains(md, "A Paper (vol. 26 iss. 2)") {
+		t.Errorf("table should show the issue beside the title; got:\n%s", md)
+	}
+	if !strings.Contains(md, "| A Book |") {
+		t.Errorf("a record without an issue should render its title alone; got:\n%s", md)
+	}
+}
+
 // TestRenderMarkdownEdgeCases covers the empty-search, doi-only details, and
 // resumed-download rendering branches.
 func TestRenderMarkdownEdgeCases(t *testing.T) {

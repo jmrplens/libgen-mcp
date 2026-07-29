@@ -174,7 +174,8 @@ type Result struct {
 	MD5       string   `json:"md5" jsonschema:"file MD5 hash (32 hex chars); pass to get_details or download to fetch this book"`
 	DOI       string   `json:"doi,omitempty" jsonschema:"article DOI; pass to download to fetch this article"`
 	Title     string   `json:"title" jsonschema:"record title"`
-	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs for this record, if any"`
+	Issue     string   `json:"issue,omitempty" jsonschema:"volume/issue designator for a journal, magazine or comic record (e.g. vol. 26 iss. 2); absent for books"`
+	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs for this record, if any; absent for articles, whose identifier is the doi field"`
 	Authors   string   `json:"authors,omitempty" jsonschema:"authors"`
 	Publisher string   `json:"publisher,omitempty" jsonschema:"publisher"`
 	Year      string   `json:"year,omitempty" jsonschema:"publication year"`
@@ -300,8 +301,28 @@ func parseRow(cells []*html.Node, base string) *Result {
 	return &r
 }
 
-// parseIdentifiers extracts title, edition, ISBNs and type from the first cell.
+// editionLinkKind labels what an edition.php link in the first cell holds. The
+// cell carries between one and three of them and their order is not stable across
+// topics — a book leads with its title, an article or a comic leads with its
+// issue designator — so each link is classified by its markup instead of by its
+// position.
+type editionLinkKind int
+
+const (
+	linkIgnore      editionLinkKind = iota // empty text, or a DOI already parsed from the cell
+	linkTitle                              // part of the record's title
+	linkIssue                              // a volume/issue designator, rendered wholly in italics
+	linkIdentifiers                        // the green identifier list (ISBNs)
+)
+
+// parseIdentifiers extracts title, edition id, issue designator, ISBNs and type
+// from the first cell. Title parts are joined in document order because a
+// standards row splits its title across two links (the standard number and its
+// subject); a row whose only designator is an issue (a magazine issue with no
+// article title) keeps that designator as its title, since it is the record's
+// only identity.
 func parseIdentifiers(cell *html.Node, r *Result) {
+	var titleParts []string
 	for _, a := range elements(cell, "a") {
 		href := attr(a, "href")
 		if !strings.Contains(href, "edition.php?id=") {
@@ -309,16 +330,74 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 		}
 		if r.EditionID == "" {
 			r.EditionID = queryParam(href, "id")
-			r.Title = strings.TrimSpace(nodeText(a))
-			continue
 		}
-		if r.ISBNs == nil { // second edition.php link: identifiers
-			r.ISBNs = splitISBNs(nodeText(a))
+		text := strings.TrimSpace(nodeText(a))
+		switch classifyEditionLink(a, text) {
+		case linkTitle:
+			titleParts = append(titleParts, text)
+		case linkIssue:
+			if r.Issue == "" {
+				r.Issue = text
+			}
+		case linkIdentifiers:
+			if r.ISBNs == nil {
+				r.ISBNs = splitISBNs(text)
+			}
+		case linkIgnore:
 		}
+	}
+	r.Title = strings.Join(titleParts, " ")
+	if r.Title == "" {
+		r.Title, r.Issue = r.Issue, ""
 	}
 	if t := badgeType(cell); t != "" {
 		r.Type = t
 	}
+}
+
+// classifyEditionLink labels one edition.php link by its markup. The identifier
+// link is the one libgen prints in green: it holds ISBNs for a book and the DOI
+// for an article, and the DOI is already parsed from the cell as a whole, so it
+// is ignored here rather than filed under ISBNs. An issue designator is rendered
+// wholly in italics ("vol. 26 iss. 2", "#1966"), which is what distinguishes it
+// from a title link that merely ends with an italic edition marker.
+func classifyEditionLink(a *html.Node, text string) editionLinkKind {
+	if text == "" {
+		return linkIgnore
+	}
+	if isGreen(a) {
+		if strings.HasPrefix(strings.ToUpper(text), "DOI:") {
+			return linkIgnore
+		}
+		return linkIdentifiers
+	}
+	if italicText(a) == text {
+		return linkIssue
+	}
+	return linkTitle
+}
+
+// isGreen reports whether n contains a font element libgen colored green, the
+// marker it uses for a row's identifier list.
+func isGreen(n *html.Node) bool {
+	for _, f := range elements(n, "font") {
+		if strings.EqualFold(strings.TrimSpace(attr(f, "color")), "green") {
+			return true
+		}
+	}
+	return false
+}
+
+// italicText returns the whitespace-collapsed text of every italic element under
+// n, joined in document order.
+func italicText(n *html.Node) string {
+	var parts []string
+	for _, i := range elements(n, "i") {
+		if t := strings.TrimSpace(nodeText(i)); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // splitISBNs splits a semicolon-separated identifier string into its non-empty,

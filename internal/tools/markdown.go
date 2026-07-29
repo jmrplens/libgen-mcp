@@ -60,6 +60,17 @@ func longestBacktickRun(s string) int {
 	return longest
 }
 
+// resultTitle returns the title to show for a result, with its volume/issue
+// designator appended when it has one. A journal article, a magazine and a comic
+// each carry that designator separately from the title, and without it two rows
+// of the same serial are indistinguishable in the table.
+func resultTitle(r libgen.Result) string {
+	if r.Issue == "" {
+		return r.Title
+	}
+	return r.Title + " (" + r.Issue + ")"
+}
+
 // resultIdentifier returns the pivot identifier for a result: its md5 (books) or
 // doi (articles), labeled so the reader knows which key it is.
 func resultIdentifier(r libgen.Result) string {
@@ -109,7 +120,7 @@ func renderSearchMarkdown(out SearchOutput) string {
 	b.WriteString("| - | ----- | ------- | ---- | --- | ---- | ---------- | -------------- |\n")
 	for i, r := range out.Results {
 		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s | %s |\n",
-			i+1, mdCell(r.Title), mdCell(r.Authors), mdCell(r.Year),
+			i+1, mdCell(resultTitle(r)), mdCell(r.Authors), mdCell(r.Year),
 			mdCell(r.Extension), mdCell(r.Size), mdCell(resultIdentifier(r)), resultLinks(r))
 	}
 	if out.Truncated && out.Hint != "" {

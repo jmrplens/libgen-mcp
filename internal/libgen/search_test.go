@@ -222,6 +222,106 @@ func TestParseSearchArticlesDOI(t *testing.T) {
 	}
 }
 
+// TestParseSearchArticleTitleIsTheArticleTitle guards the row-parsing bug where an
+// article's title cell was read positionally: the first edition.php link of an
+// article row is the journal issue designator, not the title, so Title carried
+// "vol. 26 iss. 2" while the real title was filed under ISBNs. The identifier link
+// of an article row carries a DOI, never an ISBN, so ISBNs must stay empty.
+func TestParseSearchArticleTitleIsTheArticleTitle(t *testing.T) {
+	page := parseFixture(t, "search_articles.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the articles fixture")
+	}
+	got := page.Results[0]
+	const wantTitle = "ASSESSMENT OF PARKINSON'S DISEASE PROGRESSION USING NEURAL NETWORK AND ANFIS MODELS"
+	if got.Title != wantTitle {
+		t.Errorf("Title = %q, want %q", got.Title, wantTitle)
+	}
+	if got.Issue != "vol. 26 iss. 2" {
+		t.Errorf("Issue = %q, want %q", got.Issue, "vol. 26 iss. 2")
+	}
+	if len(got.ISBNs) != 0 {
+		t.Errorf("ISBNs = %q, want none (an article row carries a DOI, not ISBNs)", got.ISBNs)
+	}
+}
+
+// TestParseSearchComicTitleIsTheStoryTitle verifies the same positional fix for a
+// comic row, whose first link is the issue number and whose second is the story.
+func TestParseSearchComicTitleIsTheStoryTitle(t *testing.T) {
+	page := parseFixture(t, "search_comics.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the comics fixture")
+	}
+	got := page.Results[0]
+	const wantTitle = "Batman featuring The Case of Batman II"
+	if got.Title != wantTitle {
+		t.Errorf("Title = %q, want %q", got.Title, wantTitle)
+	}
+	if got.Issue != "#1966" {
+		t.Errorf("Issue = %q, want %q", got.Issue, "#1966")
+	}
+	if len(got.ISBNs) != 0 {
+		t.Errorf("ISBNs = %q, want none", got.ISBNs)
+	}
+}
+
+// TestParseSearchMagazineWithoutTitleKeepsTheIssue verifies that a row whose only
+// identifier link is the issue designator (a magazine issue with no article title)
+// keeps that designator as its Title rather than parsing to an empty one.
+func TestParseSearchMagazineWithoutTitleKeepsTheIssue(t *testing.T) {
+	page := parseFixture(t, "search_magazines.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the magazines fixture")
+	}
+	got := page.Results[0]
+	const wantTitle = "#5755 2005-50 2005-dec 16 vol. 310"
+	if got.Title != wantTitle {
+		t.Errorf("Title = %q, want %q", got.Title, wantTitle)
+	}
+	if got.Issue != "" {
+		t.Errorf("Issue = %q, want empty (the designator was promoted to Title)", got.Issue)
+	}
+}
+
+// TestParseSearchStandardJoinsBothTitleParts verifies that a standards row, which
+// splits its title across two links (the standard number and its subject), keeps
+// both in Title instead of filing the subject under ISBNs.
+func TestParseSearchStandardJoinsBothTitleParts(t *testing.T) {
+	page := parseFixture(t, "search_standards.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the standards fixture")
+	}
+	got := page.Results[0]
+	for _, want := range []string{"ISO 8359:1996", "Oxygen concentrators for medical use"} {
+		if !strings.Contains(got.Title, want) {
+			t.Errorf("Title = %q, want it to contain %q", got.Title, want)
+		}
+	}
+	if len(got.ISBNs) != 0 {
+		t.Errorf("ISBNs = %q, want none", got.ISBNs)
+	}
+}
+
+// TestParseSearchBookIdentifiersStayISBNs is the regression guard for the other
+// side of the article/comic fix: a book row's identifier link really does carry
+// ISBNs, and its single title link must stay the Title.
+func TestParseSearchBookIdentifiersStayISBNs(t *testing.T) {
+	page := parseFixture(t, "search_books.html")
+	if len(page.Results) == 0 {
+		t.Fatal("0 results in the books fixture")
+	}
+	got := page.Results[0]
+	if !strings.HasPrefix(got.Title, "Hands-On Software Architecture with Golang") {
+		t.Errorf("Title = %q", got.Title)
+	}
+	if want := []string{"9781788625104", "1788625102"}; !slices.Equal(got.ISBNs, want) {
+		t.Errorf("ISBNs = %q, want %q", got.ISBNs, want)
+	}
+	if got.Issue != "" {
+		t.Errorf("Issue = %q, want empty for a book row", got.Issue)
+	}
+}
+
 // TestParseSearchEmpty verifies ParseSearchEmpty.
 func TestParseSearchEmpty(t *testing.T) {
 	page := parseFixture(t, "search_empty.html")
@@ -513,10 +613,12 @@ func TestParseSearchRowWithoutMD5OrTitle(t *testing.T) {
 
 // TestParseSearchRowISBNsAndType covers splitISBNs (trimming, and skipping empty
 // segments) and badgeType's non-empty branch, driven through a full results row.
+// The identifier link carries the green font libgen prints it in, which is what
+// marks it as identifiers rather than a second part of the title.
 func TestParseSearchRowISBNsAndType(t *testing.T) {
 	const doc = `<html><body><table id="tablelibgen"><tr>` +
 		`<td><a href="edition.php?id=42">The Title</a>` +
-		`<a href="edition.php?id=42"> 978-1; 978-2 ; ; 978-3 </a>` +
+		`<a href="edition.php?id=42"><font color="green"> 978-1; 978-2 ; ; 978-3 </font></a>` +
 		`<span class="badge badge-primary">book</span></td>` +
 		`<td>Author</td><td>Pub</td><td>2020</td><td>en</td><td>300</td>` +
 		`<td></td><td>pdf</td>` +
