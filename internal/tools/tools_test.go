@@ -3114,3 +3114,65 @@ func TestSearchTool_RejectsAnUnknownExtraSourcesMode(t *testing.T) {
 		t.Fatalf("an unknown extra_sources mode must be rejected, got res=%+v err=%v", res, err)
 	}
 }
+
+// TestDownloadToolAsksForTheEmailItLacks is the guard for the failure that made
+// the SDK upgrade dangerous. Every helper here collapses "could not ask" into
+// its fall-back answer, so a server that has lost the ability to ask the user
+// anything still builds, still passes its tests, and still downloads — it just
+// silently stops asking, and nobody finds out until a user notices a prompt that
+// never appears. This drives the REAL download tool and asserts the question
+// reaches the client: a DOI download against a server with no contact email
+// configured must come back asking for one.
+func TestDownloadToolAsksForTheEmailItLacks(t *testing.T) {
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second,
+		RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
+		// No contact email, and no save confirmation: the email is then the only
+		// question this call has to ask, and nothing touches the network before it.
+		UnpaywallEmail: "", ConfirmDownloads: false,
+		// unpaywall is the only enabled source, and without a contact email it is
+		// not in the chain at all — so a server that has stopped asking fails here
+		// offline and fast, instead of quietly downloading the article from
+		// somewhere else and leaving the lost prompt invisible.
+		Sources: []string{"unpaywall"},
+	}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	ctx := context.Background()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	// The client advertises elicitation (so the server may ask) but answers no
+	// round trip automatically, so the question itself is observable.
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, &mcp.ClientOptions{
+		ElicitationHandler: acceptHandler(map[string]any{"email": "reader@example.com"}),
+		MultiRoundTrip:     &mcp.MultiRoundTripOptions{Disabled: true},
+	})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pmed.0020124"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.NeedsInput() {
+		t.Fatalf("download must ask for the contact email it has none of; got %+v", res)
+	}
+	if _, ok := res.InputRequests["unpaywall_email"]; !ok {
+		t.Errorf("the question is not the contact email: %+v", res.InputRequests)
+	}
+
+	// The answered call is deliberately not driven here: fulfilling it would run
+	// a real DOI download, and this suite stays offline. That the answer reaches
+	// the handler is covered by TestInputRound_AsksThroughTheResult, and end to
+	// end by the gated e2e and eval suites.
+}
