@@ -2470,9 +2470,13 @@ func newUnpaywallProbeSession(t *testing.T, handler func(context.Context, *mcp.E
 	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "uprobe", Description: "exercises elicitUnpaywallEmail for tests"},
-		func(ctx context.Context, req *mcp.CallToolRequest, in unpaywallProbeInput) (*mcp.CallToolResult, unpaywallProbeOutput, error) {
+		func(_ context.Context, req *mcp.CallToolRequest, in unpaywallProbeInput) (*mcp.CallToolResult, unpaywallProbeOutput, error) {
 			cfg := &config.Config{UnpaywallEmail: in.ConfiguredEmail}
-			email := elicitUnpaywallEmail(ctx, req, cfg, DownloadInput{DOI: in.DOI, Source: in.Source})
+			round := newInputRound(req)
+			email := elicitUnpaywallEmail(round, cfg, DownloadInput{DOI: in.DOI, Source: in.Source})
+			if pending := round.needsInput(); pending != nil {
+				return pending, unpaywallProbeOutput{}, nil
+			}
 			return nil, unpaywallProbeOutput{Email: email}, nil
 		})
 
@@ -2571,11 +2575,15 @@ func newAnnasProbeSession(t *testing.T, handler func(context.Context, *mcp.Elici
 	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "aprobe", Description: "exercises elicitAnnasKey for tests"},
-		func(ctx context.Context, req *mcp.CallToolRequest, in annasProbeInput) (*mcp.CallToolResult, annasProbeOutput, error) {
+		func(_ context.Context, req *mcp.CallToolRequest, in annasProbeInput) (*mcp.CallToolResult, annasProbeOutput, error) {
 			cfg := &config.Config{AnnasKey: in.ConfiguredKey}
-			key := elicitAnnasKey(ctx, req, cfg, DownloadInput{
+			round := newInputRound(req)
+			key := elicitAnnasKey(round, cfg, DownloadInput{
 				MD5: in.MD5, Source: in.Source, AnnasMember: in.AnnasMember,
 			})
+			if pending := round.needsInput(); pending != nil {
+				return pending, annasProbeOutput{}, nil
+			}
 			return nil, annasProbeOutput{Key: key}, nil
 		})
 
@@ -2953,25 +2961,25 @@ func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
 	}
 }
 
-// confirmWantedProbeOutput reports what confirmationWanted decided, so the
+// confirmWantedProbeOutput reports what wantConfirmation decided, so the
 // decision can be asserted through a real session that genuinely does (or does
 // not) advertise elicitation.
 type confirmWantedProbeOutput struct {
 	Wanted bool `json:"wanted"`
 }
 
-// runConfirmationWanted drives confirmationWanted inside a live MCP session.
+// runConfirmationWanted drives wantConfirmation inside a live MCP session.
 // elicit selects whether the client advertises the elicitation capability, which
 // is the one input that cannot be faked from outside a session.
 func runConfirmationWanted(t *testing.T, elicit bool, cfg *config.Config, consent *downloadConsent, in DownloadInput, preRemember bool) bool {
 	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "t", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "probe", Description: "reports confirmationWanted for tests"},
+	mcp.AddTool(server, &mcp.Tool{Name: "probe", Description: "reports wantConfirmation for tests"},
 		func(_ context.Context, req *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, confirmWantedProbeOutput, error) {
 			if preRemember {
 				consent.remember(req.Session)
 			}
-			return nil, confirmWantedProbeOutput{Wanted: confirmationWanted(cfg, consent, req, in)}, nil
+			return nil, confirmWantedProbeOutput{Wanted: wantConfirmation(false, cfg, consent, req, in)}, nil
 		})
 
 	st, ct := mcp.NewInMemoryTransports()
@@ -3031,7 +3039,7 @@ func TestConfirmationWanted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := runConfirmationWanted(t, tc.elicit, tc.cfg, &downloadConsent{}, tc.in, tc.preRemember)
 			if got != tc.want {
-				t.Fatalf("confirmationWanted = %v, want %v", got, tc.want)
+				t.Fatalf("wantConfirmation = %v, want %v", got, tc.want)
 			}
 		})
 	}

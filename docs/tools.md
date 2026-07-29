@@ -338,9 +338,10 @@ link is the only way a remote server can deliver a multi-megabyte file. See
 
 ### Interactive prompts (elicitation)
 
-When the connected MCP client supports **elicitation** (asking you for input mid-call),
-`download` may pause to ask up to three things — all purely opt-in, and all no-ops on a client
-that doesn't advertise the capability:
+When the connected MCP client supports **elicitation** (asking you for input), `download`
+may ask up to three things — all purely opt-in, and all no-ops on a client that doesn't
+advertise the capability. A call that needs more than one of them asks for them together, in
+a single exchange:
 
 - **Unpaywall email on demand.** If you download an article by `doi` and the server has no
   `LIBGEN_MCP_UNPAYWALL_EMAIL` configured, an elicitation-capable client is asked for a
@@ -366,8 +367,16 @@ that doesn't advertise the capability:
   none of them can make a prompt appear where the client cannot be asked.
 
 None of these prompts is ever required: elicitation is entirely opt-in and capability-gated. A
-client with no elicitation capability (e.g. a headless or CI client) sees exactly today's
-behavior — no prompt, and no size probe.
+client with no elicitation capability (e.g. a headless or CI client) sees no prompt and no
+size probe.
+
+Under the hood, a question travels back on the tool result and the client answers it by
+calling `download` again with the answer (multi round-trip requests, SEP-2322): protocol
+version 2026-07-28 no longer lets a server open a prompt while it is serving a call. Clients
+on older protocol versions are unaffected — the MCP SDK answers their prompts the previous
+way. One consequence is worth knowing: if the client's own prompt handler fails, the whole
+`download` call now fails with it, where before the server saw the failure and carried on
+with its default.
 
 ### Behavior and errors
 

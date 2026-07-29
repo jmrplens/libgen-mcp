@@ -34,22 +34,43 @@ type elicitProbeOutput struct {
 // live client session ready for CallTool.
 func newElicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
 	t.Helper()
+	return elicitSession(t, handler, false)
+}
+
+// newRawElicitSession is newElicitSession with the client's automatic
+// round-trip middleware switched off, so a test can observe the input-required
+// result itself and drive the retry by hand.
+func newRawElicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
+	t.Helper()
+	return elicitSession(t, handler, true)
+}
+
+// elicitSession wires the in-memory server and client behind both constructors.
+func elicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error), rawRoundTrips bool) *mcp.ClientSession {
+	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "probe", Description: "exercises the elicit helpers for tests"},
-		func(ctx context.Context, req *mcp.CallToolRequest, in elicitProbeInput) (*mcp.CallToolResult, elicitProbeOutput, error) {
+		func(_ context.Context, req *mcp.CallToolRequest, in elicitProbeInput) (*mcp.CallToolResult, elicitProbeOutput, error) {
 			out := elicitProbeOutput{Supported: elicitationSupported(req)}
+			round := newInputRound(req)
 			switch in.Kind {
 			case "text":
-				out.Value, out.OK = elicitText(ctx, req, "your name?", "name", "the user's name")
+				out.Value, out.OK = round.askText("name", "your name?", "name", "the user's name")
 			case "confirm":
-				out.Confirmed, out.OK = elicitConfirm(ctx, req, "proceed?", "proceed", "confirm the action")
+				out.Confirmed, out.OK = round.askConfirm("proceed", "proceed?", "proceed", "confirm the action")
 			case "choice":
-				out.Value, out.OK = elicitChoice(ctx, req, "pick one", "edition", "the chosen edition", in.Options)
+				out.Value, out.OK = round.askChoice("edition", "pick one", "edition", "the chosen edition", in.Options)
 			case "confirmdecision":
-				out.Decision = int(elicitConfirmDecision(ctx, req, "proceed?", "confirm", "confirm the action"))
+				out.Decision = int(round.askConfirmDecision("confirm", "proceed?", "confirm", "confirm the action"))
+			case "textandconfirm":
+				out.Value, out.OK = round.askText("name", "your name?", "name", "the user's name")
+				out.Confirmed, _ = round.askConfirm("proceed", "proceed?", "proceed", "confirm the action")
 			case "confirmremember":
-				d, r := elicitConfirmRemember(ctx, req, "proceed?", "confirm", "confirm the action", "dont_ask_again")
+				d, r := round.askConfirmRemember("confirm", "proceed?", "confirm", "confirm the action", "dont_ask_again")
 				out.Decision, out.Remember = int(d), r
+			}
+			if pending := round.needsInput(); pending != nil {
+				return pending, elicitProbeOutput{}, nil
 			}
 			return nil, out, nil
 		})
@@ -59,8 +80,11 @@ func newElicitSession(t *testing.T, handler func(context.Context, *mcp.ElicitReq
 	if _, err := server.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
 	}
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"},
-		&mcp.ClientOptions{ElicitationHandler: handler})
+	opts := &mcp.ClientOptions{ElicitationHandler: handler}
+	if rawRoundTrips {
+		opts.MultiRoundTrip = &mcp.MultiRoundTripOptions{Disabled: true}
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, opts)
 	session, err := mcpClient.Connect(ctx, ct, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -85,6 +109,12 @@ func callProbe(t *testing.T, session *mcp.ClientSession, in elicitProbeInput) el
 	if res.IsError {
 		t.Fatalf("probe returned an error result: %+v", res.Content)
 	}
+	return decodeProbe(t, res)
+}
+
+// decodeProbe decodes the probe tool's structured output from a tool result.
+func decodeProbe(t *testing.T, res *mcp.CallToolResult) elicitProbeOutput {
+	t.Helper()
 	raw, err := json.Marshal(res.StructuredContent)
 	if err != nil {
 		t.Fatalf("marshaling probe output: %v", err)
@@ -101,6 +131,81 @@ func callProbe(t *testing.T, session *mcp.ClientSession, in elicitProbeInput) el
 func acceptHandler(content map[string]any) func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 	return func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 		return &mcp.ElicitResult{Action: "accept", Content: content}, nil
+	}
+}
+
+// TestInputRound_AsksThroughTheResult verifies HOW a question now reaches the
+// client. Protocol version 2026-07-28 forbids a server from opening an
+// elicitation while it is serving a request; the question travels back on the
+// tool result instead, and the client fulfills it and calls again (SEP-2322).
+// The client here has the automatic round-trip middleware switched off, so the
+// input-required result is observable rather than being answered behind the
+// scenes.
+func TestInputRound_AsksThroughTheResult(t *testing.T) {
+	session := newRawElicitSession(t, acceptHandler(map[string]any{"name": "Ada"}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "probe", Arguments: map[string]any{"kind": "text"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if !res.NeedsInput() {
+		t.Fatalf("result should ask for input, got %+v", res)
+	}
+	params, ok := res.InputRequests["name"].(*mcp.ElicitParams)
+	if !ok {
+		t.Fatalf("input request \"name\" should be an elicitation, got %T", res.InputRequests["name"])
+	}
+	if params.Message == "" {
+		t.Error("the elicitation carries no message for the user")
+	}
+	if res.StructuredContent != nil || len(res.Content) > 0 {
+		t.Error("an input-required result must carry no content: the tool has not run yet")
+	}
+
+	// Answering it and calling again completes the tool call.
+	done, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "probe",
+		Arguments: map[string]any{"kind": "text"},
+		InputResponses: mcp.InputResponseMap{
+			"name": &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": "Ada"}},
+		},
+		RequestState: res.RequestState,
+	})
+	if err != nil {
+		t.Fatalf("retry failed: %v", err)
+	}
+	if done.NeedsInput() {
+		t.Fatal("the answered call asked again instead of completing")
+	}
+	out := decodeProbe(t, done)
+	if !out.OK || out.Value != "Ada" {
+		t.Fatalf("want (\"Ada\", true); got (%q, %v)", out.Value, out.OK)
+	}
+}
+
+// TestInputRound_UnansweredOnRetryFallsBack verifies the loop guard: a retry that
+// comes back without an answer for a question is treated as unanswered, not as a
+// reason to ask again. A client that drops one request would otherwise bounce the
+// call between server and client until the SDK's retry cap stopped it.
+func TestInputRound_UnansweredOnRetryFallsBack(t *testing.T) {
+	session := newRawElicitSession(t, acceptHandler(map[string]any{"name": "Ada"}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "probe",
+		Arguments: map[string]any{"kind": "text"},
+		InputResponses: mcp.InputResponseMap{
+			"unrelated": &mcp.ElicitResult{Action: "accept", Content: map[string]any{"x": "y"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
+	}
+	if res.NeedsInput() {
+		t.Fatal("a retry missing its answer must not ask again")
+	}
+	out := decodeProbe(t, res)
+	if out.OK || out.Value != "" {
+		t.Fatalf("an unanswered question should fall back to (\"\", false); got (%q, %v)", out.Value, out.OK)
 	}
 }
 
@@ -193,16 +298,6 @@ func TestElicitChoice_Accept(t *testing.T) {
 	}
 }
 
-// TestElicitChoice_NotAnOption verifies elicitChoice falls back to ("", false)
-// when the accepted value is not among the offered options.
-func TestElicitChoice_NotAnOption(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"edition": "z"}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"a", "b", "c"}})
-	if out.OK || out.Value != "" {
-		t.Fatalf("out-of-set value should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
-	}
-}
-
 // TestElicitationSupported_NilCases exercises the guard arm of elicitationSupported
 // directly (no session round-trip): both a nil request and a request with a nil
 // Session must report the capability as absent, so callers take the fallback path.
@@ -215,45 +310,17 @@ func TestElicitationSupported_NilCases(t *testing.T) {
 	}
 }
 
-// TestElicitText_FieldMissing verifies runFormElicit's missing-field arm: when the
-// client accepts but its Content map omits the requested field, elicitText falls
-// back to ("", false) rather than reading a zero value.
-func TestElicitText_FieldMissing(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"other": "x"}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "text"})
-	if out.OK || out.Value != "" {
-		t.Fatalf("a missing field should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
-	}
-}
-
-// TestElicitConfirm_AcceptNonBool verifies elicitConfirm's type-guard arm: an
-// accept whose field carries a non-boolean value (a string here) is not a usable
-// answer, so it reports (false, false) and the caller falls back.
-func TestElicitConfirm_AcceptNonBool(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"proceed": "yes"}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "confirm"})
-	if out.OK || out.Confirmed {
-		t.Fatalf("a non-boolean accept should yield (false, false); got (%v, %v)", out.Confirmed, out.OK)
-	}
-}
-
-// TestElicitChoice_AcceptNonString verifies elicitChoice's type-guard arm: an
-// accept whose field carries a non-string value (a number here) is not a usable
-// choice, so it falls back to ("", false).
-func TestElicitChoice_AcceptNonString(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"edition": 5}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"a", "b"}})
-	if out.OK || out.Value != "" {
-		t.Fatalf("a non-string accept should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
-	}
-}
-
-// TestElicitConfirmDecision_UnavailableNilReq exercises elicitConfirmDecision's
-// no-capability arm directly: with a nil request there is no session, so it returns
-// confirmUnavailable and the caller falls back to its default behavior.
-func TestElicitConfirmDecision_UnavailableNilReq(t *testing.T) {
-	if got := elicitConfirmDecision(context.Background(), nil, "proceed?", "confirm", "d"); got != confirmUnavailable {
+// TestAskConfirmDecision_UnavailableNilReq exercises the no-capability arm
+// directly: with a nil request there is no session to ask, so the decision is
+// confirmUnavailable, nothing is recorded as a question, and the caller falls
+// back to its default behavior.
+func TestAskConfirmDecision_UnavailableNilReq(t *testing.T) {
+	round := newInputRound(nil)
+	if got := round.askConfirmDecision("confirm", "proceed?", "confirm", "d"); got != confirmUnavailable {
 		t.Errorf("nil-request decision = %v, want confirmUnavailable", got)
+	}
+	if pending := round.needsInput(); pending != nil {
+		t.Errorf("a client that cannot be asked must produce no input request, got %+v", pending.InputRequests)
 	}
 }
 
@@ -271,58 +338,43 @@ func TestElicitConfirmDecision_Declined(t *testing.T) {
 	}
 }
 
-// TestElicitConfirmDecision_HandlerError verifies the transport-error arm: when the
-// elicitation round-trip fails, elicitConfirmDecision cannot ask, so it returns
-// confirmUnavailable (fall back), never confirmDeclined (which would wrongly abort).
-func TestElicitConfirmDecision_HandlerError(t *testing.T) {
+// TestAskConfirm_ClientHandlerErrorFailsTheCall pins a change the 2026-07-28
+// protocol brings with it. The round trip that answers a question is now the
+// client's to make, so a client whose elicitation handler fails takes the whole
+// tool call down with it; the server never sees the failure and cannot fall back
+// the way it did when it made the call itself. Worth pinning because it is the
+// one behavior the migration could not preserve.
+func TestAskConfirm_ClientHandlerErrorFailsTheCall(t *testing.T) {
 	handler := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 		return nil, errors.New("boom")
 	}
 	session := newElicitSession(t, handler)
-	out := callProbe(t, session, elicitProbeInput{Kind: "confirmdecision"})
-	if out.Decision != int(confirmUnavailable) {
-		t.Errorf("handler-error decision = %d, want %d (confirmUnavailable)", out.Decision, int(confirmUnavailable))
+	_, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "probe", Arguments: map[string]any{"kind": "confirmdecision"},
+	})
+	if err == nil {
+		t.Fatal("a failing client elicitation handler should fail the tool call")
 	}
 }
 
-// TestElicitConfirm_NonBoolContent verifies elicitConfirm reports ok=false when
-// the accepted content carries a non-boolean value for the confirm field (the
-// type-assertion guard), rather than treating it as confirmed.
-func TestElicitConfirm_NonBoolContent(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"proceed": "yes"}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "confirm"})
-	if out.OK || out.Confirmed {
-		t.Fatalf("non-boolean confirm content should yield (confirmed=false, ok=false); got (%v, %v)", out.Confirmed, out.OK)
+// TestAskConfirm_UnansweredIsUnavailable verifies the server-side half of the
+// same story: when a question comes back unanswered, the decision is
+// confirmUnavailable — never confirmDeclined, which would wrongly abort a
+// side-effecting action nobody refused.
+func TestAskConfirm_UnansweredIsUnavailable(t *testing.T) {
+	session := newRawElicitSession(t, acceptHandler(map[string]any{"confirm": true}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "probe",
+		Arguments: map[string]any{"kind": "confirmdecision"},
+		InputResponses: mcp.InputResponseMap{
+			"unrelated": &mcp.ElicitResult{Action: "accept"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool failed: %v", err)
 	}
-}
-
-// TestElicitChoice_NotInOptions verifies elicitChoice reports ok=false when the
-// accepted value is not one of the offered options.
-func TestElicitChoice_NotInOptions(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"edition": "third"}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"first", "second"}})
-	if out.OK || out.Value != "" {
-		t.Fatalf("a value outside options should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
-	}
-}
-
-// TestElicitChoice_NonStringContent verifies elicitChoice reports ok=false when
-// the accepted content for the enum field is not a string.
-func TestElicitChoice_NonStringContent(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{"edition": 42}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "choice", Options: []string{"first", "second"}})
-	if out.OK || out.Value != "" {
-		t.Fatalf("non-string choice content should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
-	}
-}
-
-// TestElicit_AcceptMissingField verifies runFormElicit reports ok=false when the
-// user accepts but the content map lacks the requested field.
-func TestElicit_AcceptMissingField(t *testing.T) {
-	session := newElicitSession(t, acceptHandler(map[string]any{}))
-	out := callProbe(t, session, elicitProbeInput{Kind: "text"})
-	if out.OK || out.Value != "" {
-		t.Fatalf("accept with a missing field should yield (\"\", false); got (%q, %v)", out.Value, out.OK)
+	if got := decodeProbe(t, res).Decision; got != int(confirmUnavailable) {
+		t.Errorf("unanswered decision = %d, want %d (confirmUnavailable)", got, int(confirmUnavailable))
 	}
 }
 
@@ -445,5 +497,122 @@ func TestElicitConfirmRemember_OptOutIsOptional(t *testing.T) {
 		if r == "dont_ask_again" {
 			t.Fatal("the opt-out must be optional, not required")
 		}
+	}
+}
+
+// The four tests below cover what the server does with an answer that does not
+// fit the question it asked. An SDK client validates the content against the
+// schema we sent and never forwards these, but nothing obliges a client to, so
+// the guards are checked directly rather than through a round-trip the SDK would
+// refuse to make.
+
+// TestTextAnswer covers the free-text guard.
+func TestTextAnswer(t *testing.T) {
+	cases := []struct {
+		name string
+		res  *mcp.ElicitResult
+		want string
+		ok   bool
+	}{
+		{"accepted", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": "Ada"}}, "Ada", true},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
+		{"no result", nil, "", false},
+		{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"other": "x"}}, "", false},
+		{"empty value", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": ""}}, "", false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": 42}}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := textAnswer(tc.res, "name")
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("textAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+// TestChoiceAnswer covers the one-of-these guard, which holds an answer to the
+// options this server actually offered.
+func TestChoiceAnswer(t *testing.T) {
+	options := []string{"first", "second"}
+	cases := []struct {
+		name string
+		res  *mcp.ElicitResult
+		want string
+		ok   bool
+	}{
+		{"an offered option", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "second"}}, "second", true},
+		{"outside the options", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "third"}}, "", false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": 42}}, "", false},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
+		{"no result", nil, "", false},
+		{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := choiceAnswer(tc.res, "edition", options)
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("choiceAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+// TestBoolAnswer covers the plain yes/no guard behind askConfirm. An accept whose
+// field is missing or of the wrong type is NOT an answer: a caller that defaults
+// to proceeding must not read it as a refusal.
+func TestBoolAnswer(t *testing.T) {
+	cases := []struct {
+		name  string
+		res   *mcp.ElicitResult
+		value bool
+		ok    bool
+	}{
+		{"accepted true", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": true}}, true, true},
+		{"accepted false", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": false}}, false, true},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, false, false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, false, false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": "yes"}}, false, false},
+		{"no result", nil, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, ok := boolAnswer(tc.res, "proceed")
+			if value != tc.value || ok != tc.ok {
+				t.Errorf("boolAnswer = (%v, %v), want (%v, %v)", value, ok, tc.value, tc.ok)
+			}
+		})
+	}
+}
+
+// TestConfirmAnswer covers the tri-state confirmation guard, which has to tell an
+// explicit "no" from an answer it cannot read at all.
+func TestConfirmAnswer(t *testing.T) {
+	cases := []struct {
+		name     string
+		res      *mcp.ElicitResult
+		decision confirmDecision
+		remember bool
+	}{
+		{"confirmed", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, confirmProceed, false},
+		{"confirmed and remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true, "dont_ask_again": true}}, confirmProceed, true},
+		{"accepted with false", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false}}, confirmDeclined, false},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, confirmDeclined, false},
+		{"canceled", &mcp.ElicitResult{Action: "cancel"}, confirmDeclined, false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, confirmDeclined, false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": "yes"}}, confirmDeclined, false},
+		{"unknown action", &mcp.ElicitResult{Action: "sideways"}, confirmUnavailable, false},
+		{"no result", nil, confirmUnavailable, false},
+		// A declined download must not also silence the prompt that let the user decline.
+		{"declined but remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false, "dont_ask_again": true}}, confirmDeclined, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, remember := confirmAnswer(tc.res, "confirm", "dont_ask_again")
+			if decision != tc.decision || remember != tc.remember {
+				t.Errorf("confirmAnswer = (%v, %v), want (%v, %v)", decision, remember, tc.decision, tc.remember)
+			}
+		})
 	}
 }

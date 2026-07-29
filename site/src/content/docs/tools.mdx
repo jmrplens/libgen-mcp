@@ -349,7 +349,7 @@ A server flips into **remote download mode** when it is started with `--http`, *
 
 ### Interactive prompts (elicitation)
 
-When the connected MCP client supports **elicitation** (asking you for input mid-call), `download` may pause to ask up to three things — all purely opt-in, and all no-ops on a client that doesn't advertise the capability:
+When the connected MCP client supports **elicitation** (asking you for input), `download` may ask up to three things — all purely opt-in, and all no-ops on a client that doesn't advertise the capability. A call that needs more than one of them asks for them together, in a single exchange:
 
 - **Unpaywall email on demand.** If you download an article by `doi` and the server has no `LIBGEN_MCP_UNPAYWALL_EMAIL` configured, an elicitation-capable client is asked for a contact email to look up an open-access copy via Unpaywall for _that request only_ — it is never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out of the chain and the rest of it — the keyless open-access sources, then `scihub`/`scidb` — is tried instead, exactly as today.
 - **Anna's Archive member key on demand.** If you download a book by `md5` with `annas_member: true` and the server has no `LIBGEN_MCP_ANNAS_KEY` configured, an elicitation-capable client is asked for an account key to use the faster member download tier for _that request only_ — it is never stored, and the prompt is skipped when a `source` other than `annas` was pinned. Declining or an empty answer leaves the request unchanged: the `annas` source stays keyless and resolves over IPFS.
@@ -358,8 +358,10 @@ When the connected MCP client supports **elicitation** (asking you for input mid
 <Aside type="note">
 	None of these prompts is ever required: elicitation is entirely opt-in and
 	capability-gated. A client with no elicitation capability (e.g. a headless or
-	CI client) sees exactly today's behavior — no prompt, and no size probe.
+	CI client) sees no prompt and no size probe.
 </Aside>
+
+Under the hood, a question travels back on the tool result and the client answers it by calling `download` again with the answer (multi round-trip requests, SEP-2322): protocol version 2026-07-28 no longer lets a server open a prompt while it is serving a call. Clients on older protocol versions are unaffected — the MCP SDK answers their prompts the previous way. One consequence is worth knowing: if the client's own prompt handler fails, the whole `download` call now fails with it, where before the server saw the failure and carried on with its default.
 
 ## read
 

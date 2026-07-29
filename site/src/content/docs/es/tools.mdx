@@ -353,7 +353,7 @@ Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, *
 
 ### Peticiones interactivas (elicitation)
 
-Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario a mitad de una llamada), `download` puede detenerse a preguntar hasta tres cosas — todas puramente opt-in, y todas no-ops en un cliente que no anuncia la capacidad:
+Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario), `download` puede preguntar hasta tres cosas — todas puramente opt-in, y todas no-ops en un cliente que no anuncia la capacidad. Una llamada que necesita más de una las pregunta juntas, en un solo intercambio:
 
 - **Email de Unpaywall bajo demanda.** Si descargas un artículo por `doi` y el servidor no tiene configurado `LIBGEN_MCP_UNPAYWALL_EMAIL`, a un cliente compatible con elicitation se le pide un email de contacto para buscar una copia de acceso abierto vía Unpaywall solo para _esa petición_ — nunca se almacena, y la pregunta se omite siempre que se haya fijado explícitamente `source`. Rechazar, dejar la respuesta vacía o dar una dirección inverosímil deja la petición sin cambios: `unpaywall` queda fuera de la cadena y se prueba el resto de ella — las fuentes de acceso abierto sin clave y después `scihub`/`scidb` — exactamente como hoy.
 - **Clave de miembro de Anna's Archive bajo demanda.** Si descargas un libro por `md5` con `annas_member: true` y el servidor no tiene configurado `LIBGEN_MCP_ANNAS_KEY`, a un cliente compatible con elicitation se le pide una clave de cuenta para usar el nivel de descarga rápida de miembros solo para _esa petición_ — nunca se almacena, y la pregunta se omite cuando se ha fijado un `source` distinto de `annas`. Rechazar o dejar la respuesta vacía deja la petición sin cambios: la fuente `annas` sigue sin clave y resuelve por IPFS.
@@ -362,9 +362,11 @@ Cuando el cliente MCP conectado admite **elicitation** (pedir información al us
 <Aside type="note">
 	Ninguna de estas peticiones es nunca obligatoria: elicitation es totalmente
 	opt-in y depende de la capacidad del cliente. Un cliente sin capacidad de
-	elicitation (p. ej. un cliente headless o de CI) ve exactamente el
-	comportamiento actual — sin petición, y sin sondeo de tamaño.
+	elicitation (p. ej. un cliente headless o de CI) no ve ninguna petición ni
+	sondeo de tamaño.
 </Aside>
+
+Por dentro, la pregunta viaja de vuelta en el resultado de la herramienta y el cliente la responde llamando otra vez a `download` con la respuesta (peticiones multi round-trip, SEP-2322): la versión de protocolo 2026-07-28 ya no permite que un servidor abra una petición mientras atiende una llamada. Los clientes en versiones de protocolo anteriores no se ven afectados — el SDK de MCP responde sus peticiones como antes. Hay una consecuencia que conviene conocer: si el propio manejador de peticiones del cliente falla, ahora la llamada a `download` falla con él, mientras que antes el servidor veía el fallo y continuaba con su comportamiento por defecto.
 
 ## read
 
