@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
 
@@ -517,6 +521,142 @@ func TestReadTool_OutlinePDF(t *testing.T) {
 	if len(out.NextSteps) == 0 || !strings.Contains(strings.ToUpper(out.NextSteps[0]), "UNTRUSTED") {
 		t.Errorf("next_steps[0] should carry the UNTRUSTED warning, got %v", out.NextSteps)
 	}
+}
+
+// TestLimitOutlineDepth covers the depth filter used by outline mode: max_depth
+// counts levels to keep (1 = top-level only), a non-positive value keeps the
+// whole tree, and the reported total always counts every entry the document has.
+func TestLimitOutlineDepth(t *testing.T) {
+	all := []extract.OutlineEntry{
+		{Title: "Part I", Level: 0},
+		{Title: "Chapter 1", Level: 1},
+		{Title: "Section 1.1", Level: 2},
+		{Title: "Part II", Level: 0},
+	}
+	cases := []struct {
+		name     string
+		maxDepth int
+		want     []string
+	}{
+		{"top level only", 1, []string{"Part I", "Part II"}},
+		{"two levels", 2, []string{"Part I", "Chapter 1", "Part II"}},
+		{"deeper than the tree", 9, []string{"Part I", "Chapter 1", "Section 1.1", "Part II"}},
+		{"unset keeps everything", 0, []string{"Part I", "Chapter 1", "Section 1.1", "Part II"}},
+		{"negative keeps everything", -3, []string{"Part I", "Chapter 1", "Section 1.1", "Part II"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := limitOutlineDepth(all, tc.maxDepth)
+			var titles []string
+			for _, e := range got {
+				titles = append(titles, e.Title)
+			}
+			if !slices.Equal(titles, tc.want) {
+				t.Errorf("limitOutlineDepth(_, %d) = %v, want %v", tc.maxDepth, titles, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadTool_OutlineMaxDepth verifies that a read with outline and max_depth
+// returns only the levels asked for, reports how many entries the full table of
+// contents has, and says in next_steps that it was trimmed — a deep Springer ToC
+// runs to hundreds of entries, which is not something a caller wants in full just
+// to find a chapter.
+func TestReadTool_OutlineMaxDepth(t *testing.T) {
+	path := writeNestedEPUB(t)
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path: path, Outline: true, MaxDepth: 1,
+	})
+	if err != nil {
+		t.Fatalf("readHandler(outline) returned an error: %v", err)
+	}
+	if len(out.Outline) != 2 {
+		t.Fatalf("len(Outline) = %d, want 2 (the top-level entries): %+v", len(out.Outline), out.Outline)
+	}
+	if out.OutlineTotal != 3 {
+		t.Errorf("OutlineTotal = %d, want 3 (every entry in the document)", out.OutlineTotal)
+	}
+	steps := strings.Join(out.NextSteps, "\n")
+	if !strings.Contains(steps, "max_depth") {
+		t.Errorf("next_steps should say the outline was trimmed by max_depth, got %q", steps)
+	}
+	md := textContent(res)
+	if strings.Contains(md, "Section 1.1") {
+		t.Errorf("Markdown should not list the trimmed level, got %q", md)
+	}
+	if !strings.Contains(md, "2 of 3 entries") {
+		t.Errorf("Markdown should say how much of the table of contents it shows, got %q", md)
+	}
+
+	// Without max_depth the whole tree comes back and nothing is reported as trimmed.
+	_, full, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: path, Outline: true})
+	if err != nil {
+		t.Fatalf("readHandler(outline, no max_depth) returned an error: %v", err)
+	}
+	if len(full.Outline) != 3 {
+		t.Errorf("len(Outline) = %d, want 3 without max_depth", len(full.Outline))
+	}
+	if strings.Contains(strings.Join(full.NextSteps, "\n"), "max_depth") {
+		t.Errorf("an untrimmed outline should not mention max_depth, got %v", full.NextSteps)
+	}
+}
+
+// writeNestedEPUB writes a minimal EPUB whose table of contents has two
+// top-level entries, the first with one nested child, and returns its path.
+func writeNestedEPUB(t *testing.T) string {
+	t.Helper()
+	files := map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>`,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="c1"/></spine>
+</package>`,
+		"OEBPS/nav.xhtml": `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>TOC</title></head>
+<body><nav epub:type="toc"><ol>
+  <li><a href="chapter1.xhtml">Chapter One</a><ol><li><a href="chapter1.xhtml#s1">Section 1.1</a></li></ol></li>
+  <li><a href="chapter1.xhtml#c2">Chapter Two</a></li>
+</ol></nav></body></html>`,
+		"OEBPS/chapter1.xhtml": `<html><body><p>one</p></body></html>`,
+	}
+	fp := filepath.Join(t.TempDir(), "nested.epub")
+	f, err := os.Create(fp)
+	if err != nil {
+		t.Fatalf("create epub: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	zw := zip.NewWriter(f)
+	mw, err := zw.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
+	if err != nil {
+		t.Fatalf("create mimetype: %v", err)
+	}
+	if _, err = mw.Write([]byte("application/epub+zip")); err != nil {
+		t.Fatalf("write mimetype: %v", err)
+	}
+	for name, content := range files {
+		w, cerr := zw.Create(name)
+		if cerr != nil {
+			t.Fatalf("create %s: %v", name, cerr)
+		}
+		if _, werr := w.Write([]byte(content)); werr != nil {
+			t.Fatalf("write %s: %v", name, werr)
+		}
+	}
+	if err = zw.Close(); err != nil {
+		t.Fatalf("close epub: %v", err)
+	}
+	return fp
 }
 
 // TestReadTool_OutlineNoToc verifies that requesting the outline of a supported

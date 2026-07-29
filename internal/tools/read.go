@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -42,7 +43,8 @@ type ReadInput struct {
 	Find       string `json:"find,omitempty" jsonschema:"search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet. Matching ignores whitespace, so a phrase is still found when the file's text layer dropped or added spaces between words"`
 	MaxMatches int    `json:"max_matches,omitempty" jsonschema:"max matches to return per call when find is set"`
 
-	Outline bool `json:"outline,omitempty" jsonschema:"return the document's table of contents (chapters/sections with page or level) instead of its text; use it to decide what to read next"`
+	Outline  bool `json:"outline,omitempty" jsonschema:"return the document's table of contents (chapters/sections with page or level) instead of its text; use it to decide what to read next"`
+	MaxDepth int  `json:"max_depth,omitempty" jsonschema:"how many outline levels to return when outline is set: 1 for top-level entries only, 2 to add their subsections, and so on; omit for the whole tree, which runs to hundreds of entries in a deeply nested book"`
 }
 
 // ReadOutput holds one extracted chunk plus pagination metadata. NextSteps leads
@@ -66,7 +68,8 @@ type ReadOutput struct {
 	MatchCount int             `json:"match_count,omitempty" jsonschema:"total number of matches in the document"`
 	Query      string          `json:"query,omitempty" jsonschema:"the find query this result answers (present only for find-mode reads)"`
 
-	Outline []extract.OutlineEntry `json:"outline,omitempty" jsonschema:"the document's table of contents: each entry has a title, nesting level, and (PDF) page — jump there with start_page"`
+	Outline      []extract.OutlineEntry `json:"outline,omitempty" jsonschema:"the document's table of contents: each entry has a title, nesting level, and (PDF) page — jump there with start_page"`
+	OutlineTotal int                    `json:"outline_total,omitempty" jsonschema:"how many entries the full table of contents has; larger than the returned list when max_depth trimmed it"`
 	// OutlineRequested marks an outline-mode result so the renderer never has to
 	// guess: an outline with zero entries (a valid document with no embedded TOC)
 	// must still render as an outline, not fall through to a sequential read. It
@@ -218,6 +221,11 @@ func readNextSteps(out ReadOutput) []string {
 			"No text was returned. Tell the user the file could not be read; do not describe, summarize or list contents you did not receive.")
 	case out.OutlineRequested && len(out.Outline) > 0:
 		steps = append(steps, "Jump to a section by calling read again with start_page set to an entry's page (PDF) — or read sequentially.")
+		if out.OutlineTotal > len(out.Outline) {
+			steps = append(steps, fmt.Sprintf(
+				"Showing %d of %d entries: max_depth hid the deeper levels. Raise max_depth or omit it for the full table of contents.",
+				len(out.Outline), out.OutlineTotal))
+		}
 	case out.OutlineRequested:
 		steps = append(steps,
 			"This document has no embedded table of contents; read it sequentially or use find.",
@@ -304,11 +312,28 @@ func readOutline(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Cli
 		Format:           res.Format,
 		Extractable:      res.Extractable,
 		Reason:           res.Reason,
-		Outline:          res.Entries,
+		Outline:          limitOutlineDepth(res.Entries, in.MaxDepth),
+		OutlineTotal:     len(res.Entries),
 		OutlineRequested: true,
 	}
 	out.NextSteps = readNextSteps(out)
 	return out, nil
+}
+
+// limitOutlineDepth keeps the first maxDepth levels of a table of contents, where
+// 1 is the top level. A non-positive maxDepth (the caller omitted it) keeps the
+// whole tree.
+func limitOutlineDepth(entries []extract.OutlineEntry, maxDepth int) []extract.OutlineEntry {
+	if maxDepth <= 0 {
+		return entries
+	}
+	kept := make([]extract.OutlineEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.Level < maxDepth {
+			kept = append(kept, e)
+		}
+	}
+	return kept
 }
 
 // readSequential runs the default sequential-read branch: it builds the
