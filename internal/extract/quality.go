@@ -53,7 +53,7 @@ func qualityNote(text string) string {
 			"unmapped glyphs, so the extracted text is not what the page shows (a broken font "+
 			"encoding in the file itself; another edition may be readable)", share*100)
 	}
-	words, vowelless := countLatinWords(runes)
+	words, vowelless := countLatinWords(text)
 	if words < qualityMinWords {
 		return ""
 	}
@@ -85,8 +85,8 @@ func isUnmappedGlyph(r rune) bool {
 // and how many of them contain no vowel. A word is measurable when it is at least
 // four letters long and is not an all-caps acronym, both of which a healthy text
 // produces without vowels often enough to matter (HTML, DSP, IEC).
-func countLatinWords(runes []rune) (words, vowelless int) {
-	for field := range strings.FieldsSeq(string(runes)) {
+func countLatinWords(text string) (words, vowelless int) {
+	for field := range strings.FieldsSeq(text) {
 		w := strings.Trim(field, ".,;:!?()[]{}\"'`“”‘’—–-")
 		if !isMeasurableLatinWord(w) {
 			continue

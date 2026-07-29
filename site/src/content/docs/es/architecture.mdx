@@ -103,7 +103,7 @@ Para un elemento dado, la canalización:
 5. **Valida** la respuesta — rechaza páginas HTML de error (por `Content-Type` e inspeccionando los primeros 512 bytes), aplica el límite de tamaño contra el tamaño total esperado y comprueba el espacio libre en disco.
 6. **Transmite** el cuerpo al archivo `.part` mientras calcula su MD5 e informa el progreso de forma regulada, bajo el guardián de estancamiento que se reinicia con el progreso. En reanudación, vuelve a calcular el hash de los bytes ya en disco para que el digest final cubra todo el archivo.
 7. **Verifica** (para fuentes con clave MD5) el digest contra el MD5 solicitado. Una discrepancia o una transferencia sobredimensionada elimina el parcial; una lectura corta transitoria lo conserva para que una llamada posterior pueda reanudar.
-8. **Renombra atómicamente** el `.part` completado a su destino final y, después, **barre** los parciales que las patas fallidas de esta llamada dejaron atrás: un parcial solo merece conservarse mientras el ítem sigue sin resolver, y en cuanto una fuente entrega el archivo el resto son basura en el directorio de descargas de quien llama.
+8. **Renombra atómicamente** el `.part` completado a su destino final y, después, **barre** los parciales que las patas fallidas de esta llamada dejaron atrás: un parcial solo merece conservarse mientras el ítem sigue sin resolver, y en cuanto una fuente entrega el archivo el resto son basura en el directorio de descargas de quien llama. Cada borrado toma el cerrojo de esa ruta y omite el parcial si otra descarga lo tiene tomado, para no desvincular un archivo que otra transferencia está escribiendo.
 
 El nombre de archivo elegido es, por orden de prioridad: un `filename` explícito, el nombre `Content-Disposition` anunciado por el CDN, un `Author - Title (Year).ext` limpio construido a partir de los metadatos, o el MD5 — siempre saneado, con una extensión aportada por la fuente añadida cuando el nombre no tiene ninguna.
 
@@ -135,7 +135,8 @@ flowchart TD
     M --> O{¿Verificar MD5?}
     O -- libro: no coincide --> P[Borrar el .part] --> C
     O -- correcto / no requerido --> Q[Renombrado atómico al destino]
-    Q --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, source, verified, resumed]
+    Q --> S[Barrer los .part de las patas fallidas<br/>omitiendo los que otra descarga tenga tomados]
+    S --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
 En prosa: `download` construye la cadena de fuentes para el identificador recibido, salta las que estén en enfriamiento (salvo que lo estén todas) y prueba cada una por turno. Una fuente que no puede servir el ítem se omite; una que falla se enfría cinco minutos. Cuando una fuente resuelve una URL, la descarga toma un hueco de concurrencia y un cerrojo por parcial, reanuda desde un `.part` existente si el servidor respeta la petición `Range` y reinicia desde cero si no, y valida la respuesta — rechazando páginas HTML de error, ficheros que exceden el tope y disco insuficiente — antes de transmitir a `.part` calculando el MD5. Una lectura corta conserva el parcial para reanudar más tarde. Una discrepancia de MD5 lo borra y pasa a la siguiente fuente. Al terminar, el fichero se renombra atómicamente a su destino, se eliminan los parciales que dejaron las patas que fallaron antes, se limpia el enfriamiento de la fuente y el resultado informa de path, size, source, `verified` y `resumed`.

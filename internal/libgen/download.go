@@ -547,7 +547,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
 			c.clearSourceCooldown(src.Name())
-			req.partials.sweep()
+			c.sweepPartials(req.partials)
 			return res, nil
 		}
 		c.noteSourceFailure(ctx, src.Name(), err)
@@ -618,19 +618,36 @@ func (a *attemptedPartials) add(path string) {
 	a.paths = append(a.paths, path)
 }
 
-// sweep removes every partial this call opened. It runs only once the item is on
-// disk: until then a partial is worth keeping, because the next call resumes from
-// it. The successful leg's own partial was renamed into place, so removing it is
-// a no-op, and errors are ignored throughout — a partial another download is
-// still streaming to is either kept open (POSIX) or refused (Windows), and either
-// way the file the caller asked for is already delivered.
-func (a *attemptedPartials) sweep() {
+// take returns the partial paths recorded so far and clears the list, so a
+// caller can act on them exactly once.
+func (a *attemptedPartials) take() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, p := range a.paths {
-		_ = os.Remove(p)
-	}
+	paths := a.paths
 	a.paths = nil
+	return paths
+}
+
+// sweepPartials removes the partials a finished download call opened. It runs
+// only once the item is on disk: until then a partial is worth keeping, because
+// the next call resumes from it. The successful leg's own partial was renamed
+// into place, so removing it is a no-op.
+//
+// Each removal takes the path's own lock and skips the partial when another
+// download holds it. The path is deterministic, so a concurrent call for the
+// same item in the same directory can be resuming from the very file this one is
+// about to discard; unlinking it there would fail that transfer's final rename
+// and throw away its resume state. Skipping costs nothing — the next call that
+// resolves the item sweeps it instead.
+func (c *Client) sweepPartials(a *attemptedPartials) {
+	for _, p := range a.take() {
+		release, ok := c.tryAcquirePartialLock(p)
+		if !ok {
+			continue
+		}
+		_ = os.Remove(p)
+		release()
+	}
 }
 
 // downloadFrom runs a single source under the staged start-retry schedule: it

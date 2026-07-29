@@ -190,13 +190,47 @@ func (c *Client) acquirePartialLock(key string) func() {
 	entry.mu.Lock()
 	return func() {
 		entry.mu.Unlock()
-		c.partialMu.Lock()
-		entry.refs--
-		if entry.refs == 0 {
-			delete(c.partialLocks, key)
-		}
-		c.partialMu.Unlock()
+		c.releasePartialRef(key, entry)
 	}
+}
+
+// tryAcquirePartialLock is acquirePartialLock for a caller that has something
+// better to do than wait: it returns the release closure and true when the key
+// was free, or (nil, false) immediately when another caller holds it. The sweep
+// uses it so a partial another download is actively streaming to is left alone
+// rather than unlinked from under it.
+func (c *Client) tryAcquirePartialLock(key string) (func(), bool) {
+	c.partialMu.Lock()
+	if c.partialLocks == nil {
+		c.partialLocks = make(map[string]*refLock)
+	}
+	entry, ok := c.partialLocks[key]
+	if !ok {
+		entry = &refLock{}
+		c.partialLocks[key] = entry
+	}
+	entry.refs++
+	c.partialMu.Unlock()
+
+	if !entry.mu.TryLock() {
+		c.releasePartialRef(key, entry)
+		return nil, false
+	}
+	return func() {
+		entry.mu.Unlock()
+		c.releasePartialRef(key, entry)
+	}, true
+}
+
+// releasePartialRef drops one reference to key's lock entry, deleting the entry
+// when the last holder lets go so the map never accumulates keys.
+func (c *Client) releasePartialRef(key string, entry *refLock) {
+	c.partialMu.Lock()
+	entry.refs--
+	if entry.refs == 0 {
+		delete(c.partialLocks, key)
+	}
+	c.partialMu.Unlock()
 }
 
 // partialLockCount reports the number of live partial-lock entries. It exists for
