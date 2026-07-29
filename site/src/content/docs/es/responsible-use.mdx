@@ -96,17 +96,19 @@ La cadena completa, en orden:
 | 1        | `unpaywall`  | DOI       | Acceso abierto                            |
 | 2        | `europepmc`  | DOI       | Acceso abierto                            |
 | 3        | `biorxiv`    | DOI       | Acceso abierto (preprints)                |
-| 4        | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
-| 5        | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
-| 6        | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
-| 7        | `archive`    | ISBN      | Solo escaneos de dominio público          |
-| 8        | `scihub`     | DOI       | Biblioteca en la sombra                   |
-| 9        | `scidb`      | DOI       | Biblioteca en la sombra                   |
-| 10       | `libgen`     | md5       | Catálogo de Library Genesis               |
-| 11       | `randombook` | md5       | Mirror de Library Genesis                 |
-| 12       | `annas`      | md5       | Biblioteca en la sombra                   |
+| 4        | `rfc`        | DOI       | Normas abiertas (RFC Editor)              |
+| 5        | `nist`       | DOI       | Normas abiertas (NIST)                    |
+| 6        | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
+| 7        | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
+| 8        | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
+| 9        | `archive`    | ISBN      | Solo escaneos de dominio público          |
+| 10       | `scihub`     | DOI       | Biblioteca en la sombra                   |
+| 11       | `scidb`      | DOI       | Biblioteca en la sombra                   |
+| 12       | `libgen`     | md5       | Catálogo de Library Genesis               |
+| 13       | `randombook` | md5       | Mirror de Library Genesis                 |
+| 14       | `annas`      | md5       | Biblioteca en la sombra                   |
 
-Las posiciones 1–7 se agotan antes de intentar la 8. Puedes quitar fuentes con
+Las posiciones 1–9 se agotan antes de intentar la 10. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
 la cadena, nunca promover un fallback por encima de los proveedores de acceso
 abierto.

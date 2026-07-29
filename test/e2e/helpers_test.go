@@ -519,6 +519,31 @@ func assertSourcePDF(t *testing.T, source string, res *libgen.DownloadResult) {
 	t.Logf("%s served a real PDF: bytes=%d", source, res.SizeBytes)
 }
 
+// assertSourceText is assertSourcePDF's counterpart for a source that serves plain
+// text rather than a PDF (the RFC Editor is the only one today). It makes the same
+// "the restricted source really answered" checks, then asserts the file opens with
+// wantPrefix — a marker specific enough that an error page or an interstitial
+// served with a 200 fails here instead of passing as a download.
+func assertSourceText(t *testing.T, source string, res *libgen.DownloadResult, wantPrefix string) {
+	t.Helper()
+	if res.SizeBytes <= 0 {
+		t.Fatalf("%s reported a download of %d bytes", source, res.SizeBytes)
+	}
+	if res.Source != source {
+		t.Errorf("Source = %q, want %q — another source answered a restricted download", res.Source, source)
+	}
+	body, err := os.ReadFile(res.Path)
+	if err != nil {
+		t.Fatalf("open %s: %v", res.Path, err)
+	}
+	// The RFC Editor's .txt files open with a UTF-8 BOM, so the marker is looked for
+	// near the start rather than strictly at offset zero.
+	if head := body[:min(len(body), 512)]; !bytes.Contains(head, []byte(wantPrefix)) {
+		t.Errorf("expected text opening with %q, got %q", wantPrefix, head)
+	}
+	t.Logf("%s served real text: bytes=%d", source, res.SizeBytes)
+}
+
 // assertFileMD5 asserts that the file at path exists, is non-empty, and hashes to
 // wantMD5 (independent confirmation of an end-to-end integrity match).
 func assertFileMD5(t *testing.T, path, wantMD5 string) {

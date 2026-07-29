@@ -381,6 +381,8 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
 		"europepmc":  func() DownloadSource { return europePMCSource{http: c.http} },
 		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
+		"rfc":        func() DownloadSource { return rfcSource{} },
+		"nist":       func() DownloadSource { return nistSource{} },
 		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
 		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
 		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
@@ -409,23 +411,41 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 // callers advertise only usable sources (e.g. in the download tool's schema)
 // without duplicating the book/article categorization.
 //
-// The article probe DOI carries the bioRxiv/medRxiv preprint prefix (10.1101) so
-// prefix-restricted sources like biorxiv are still counted as article sources and
-// advertised: a preprint DOI is a valid DOI that the general article sources also
-// accept, so this probe matches the full "can serve some article" set rather than
-// only the prefix-agnostic ones.
+// A source is counted as an article source when it supports ANY of articleProbes,
+// so the prefix-restricted ones are advertised alongside the prefix-agnostic ones.
 func (c *Client) EnabledSourceNames() (book, article []string) {
 	bookProbe := Item{MD5: "0"}
-	articleProbe := Item{DOI: biorxivDOIPrefix + "0"}
 	for _, s := range c.sources {
 		if s.Supports(bookProbe) {
 			book = append(book, s.Name())
 		}
-		if s.Supports(articleProbe) {
+		if supportsSomeArticle(s) {
 			article = append(article, s.Name())
 		}
 	}
 	return book, article
+}
+
+// articleProbes are the DOIs offered to Supports to find the sources that resolve
+// an article. One probe is not enough: several sources claim only their own
+// registrant prefix, and a probe carrying one of them makes every other
+// prefix-restricted source look unusable. There is therefore one probe per
+// restricted prefix in the chain — bioRxiv/medRxiv preprints, the RFC Editor and
+// NIST — and each is a valid DOI that the prefix-agnostic sources accept too, so
+// the union is the full "can serve some article" set.
+//
+// A source added with a new prefix restriction must add its probe here, or it will
+// resolve correctly but never be advertised in the download tool's schema.
+var articleProbes = []Item{
+	{DOI: biorxivDOIPrefix + "0"},
+	{DOI: rfcDOIPrefix + rfcDOIToken + "1"},
+	{DOI: nistDOIPrefix + "0"},
+}
+
+// supportsSomeArticle reports whether the source resolves at least one of the
+// probe DOIs, i.e. whether it can serve some article.
+func supportsSomeArticle(s DownloadSource) bool {
+	return slices.ContainsFunc(articleProbes, s.Supports)
 }
 
 // isbnProbe is the well-formed ISBN offered to Supports to find the sources that

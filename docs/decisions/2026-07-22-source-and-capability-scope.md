@@ -248,6 +248,99 @@ libraries, mirroring what §3 decided for articles, so a legally free copy is al
 one exists. Ordering only matters between sources that claim the same item, so the md5 book chain
 is untouched.
 
+#### Amendment — 2026-07-30 (technical standards)
+
+Standards were never evaluated: every table above asked about scholarly literature, and a
+standard is neither an article nor a monograph. The gap turned out to be narrower than expected
+and the fix cheaper, so both the measurements and the rejections are recorded here.
+
+**Measured first — the catalog already covers standards well.** The `standards` collection
+returns 76,709 files and carries ISO/IEC and BS in depth (`ISO/IEC 27001:2022`, `ISO 8601:2004`,
+`ISO/IEC 14496-10:2022`, `BS EN ISO 140-8:1998`). It is **not** a blind spot in general. What it
+holds nothing of is specific bodies: `JIS A 1418` and `JIS Japanese Industrial Standard` both
+return zero.
+
+**Measured — Crossref already returns standards today, unasked.** A federated search for
+"measurement of sound insulation in buildings standard" came back with `10.3403/30269187` and
+`10.3403/00596975` (BSI, `origin: crossref`, `open_access: false`). Crossref's `type:standard`
+holds **416,633** records and accepts `query.bibliographic`, so multi-body standards *discovery*
+needs no new provider at all — only that the existing Crossref provider pass `filter=type:standard`
+when the caller's intent is standards, and carry publisher and year on those hits (today they
+arrive as DOI + title alone, so BSI is indistinguishable from IEEE and the edition is invisible).
+Recorded as a GO but deliberately **not implemented in this pass**: it adds no files, and the two
+sources below do.
+
+##### Two new download sources, both DOI-keyed — GO
+
+Both claim only their own registrant prefix, so they compete with nothing else in the chain and
+need **no new identifier on `Item` and no new argument on `download`/`read`**. That is what
+separates them from the ERIC decision above, whose accession number was a third key space:
+
+- **`rfc`** — the RFC Editor. RFC DOIs exist and are registered (`10.17487/RFC9110` → "HTTP
+  Semantics", publisher RFC Editor), and **all seven DOI sources fail on one today**: unpaywall
+  reports not open access, europepmc not indexed, fatcat no preserved full text, core absent,
+  oapen no entry, scihub and scidb no PDF — while `rfc-editor.org/rfc/rfc9110.txt` answers 200.
+  A document free since 1969 that the chain could not serve.
+- **`nist`** — NIST's own repository, reached through the DOI resolver.
+
+##### Measured — the two format traps
+
+Neither shape was the obvious one, and each was found only by fetching:
+
+- **RFCs resolve to `.txt`, not `.pdf`.** PDF coverage is irregular: `rfc9110.pdf`,
+  `rfc2616.pdf`, `rfc9000.pdf` and `rfc9457.pdf` serve real bytes, but `rfc1.pdf`, `rfc791.pdf`
+  and `rfc8446.pdf` all 404. `.txt` answered 200 for every RFC sampled from 1 (1969) through 9457,
+  `extract` reads it, and it is the canonical RFC format — so the source resolves to `.txt` and
+  the file is small. Preferring PDF with a fallback would cost an extra request per download and
+  make the returned format unpredictable across RFCs.
+- **A NIST DOI redirects straight to the PDF.** `https://doi.org/10.6028/NIST.SP.800-53r5` ends at
+  `nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf` with
+  `content-type: application/pdf`, and the same holds for FIPS, IR, TN, CSWP and even *jres*
+  journal articles. So `Resolve` hands over the `doi.org` URL and the pipeline's redirect
+  following does the rest — **no series→path map and no year lookup**. That matters because the
+  path is otherwise not derivable: the IR series is partitioned by year
+  (`/nistpubs/ir/2020/NIST.IR.8259.pdf` is 200, the same file under `2019/` is 404), and the DOI
+  does not carry the year. The whole `10.6028` prefix is claimed rather than just the `NIST.`
+  suffixes, because *jres* articles resolve to a PDF the same way.
+- **HEAD is not used to pre-check either one.** nvlpubs answers **404 to HEAD** on a URL whose GET
+  serves the file, so a HEAD pre-check would report every NIST publication as missing. The
+  download's own GET is the check.
+
+##### Rejected, with the measurement (so these are not re-litigated)
+
+- **kikakurui.com (JIS) — NO-GO.** The originally proposed source. Its `robots.txt` is empty and
+  its HTML carries the real normative text, but it has **no search interface at all** (the `/a1/`
+  index has 257 links and zero `<form>`/`<input>`), so "search" would mean crawling and caching
+  per-prefix indexes — a stateful crawler inside a stateless binary. Titles are Japanese-only, so
+  matching only works for a caller who already knows the JIS number and can build the URL
+  unaided. The pages are HTML, which `extract` does not read, and carry figures as images (13
+  `<img>`, 0 `<table>` in the sampled page) — precisely the quantitative content of a measurement
+  standard. It is also a single unauthorized republication of a catalog JSA actively sells, with
+  no redundancy behind it.
+- **IEEE 802 (GET program) — NO-GO.** `stampPDF` answers HTTP 202 with **0 bytes**: a bot gate no
+  pure-Go client passes.
+- **ETSI — NO-GO for now.** Free PDFs are real (2,334,396 bytes for TS 136 211) and the initial
+  403 was only the bare `curl` User-Agent — an honest `libgen-mcp/<version> (+URL)` gets 200, so
+  no browser spoofing is involved. It stays out because the deliver path needs a version *and* a
+  directory range that only its search can supply, and its `robots.txt` disallows `/search/`.
+- **ITU-T — MAYBE, deferred.** Free PDFs confirmed (H.264 16,426,192 bytes; X.509 3,581,573;
+  G.711 196,237), but the download id embeds the publication date
+  (`T-REC-X.509-201910-I!!PDF-E`), which no caller holds, so it needs a per-recommendation
+  landing-page lookup and a new key space — the ERIC objection, for a corpus of a few thousand.
+- **W3C — discovery only at best.** `api.w3.org/specifications` is keyless and lists 1,706 specs,
+  but they are HTML, which `extract` does not read.
+- **ECMA — NO-GO.** The PDF is free (4,799,672 bytes for ECMA-262) but the filename encodes the
+  edition and month (`ECMA-262_15th_edition_june_2024.pdf`), so nothing is derivable from the
+  standard's number.
+- **3GPP — NO-GO.** Specs ship as `.zip` of `.doc`; `extract` reads neither.
+- **NASA, DoD ASSIST, OGC — deferred.** HTML portals with no JSON query endpoint found; each
+  would need its own scraper.
+
+**Chain placement.** `config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist →
+fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`. Both new sources
+join the publisher-direct group ahead of the shadow libraries, per §3, and being prefix-gated they
+change nothing for any other identifier.
+
 ### 4. Deepen the read loop — GO (pure-Go)
 
 - **`search_in_document`** — search the already-extracted text and return snippet + page/offset
@@ -292,6 +385,10 @@ clients and the no-friction promise must keep working unchanged.
   source ships as an opt-in `core` download source behind `LIBGEN_MCP_CORE_KEY`, off by
   default. ~~Internet Archive (noisy, deferred).~~ Also corrected — it ships as the keyless
   `fatcat` download source, resolving a DOI through Internet Archive Scholar.
+- Standards sources that cannot work like the rest — kikakurui.com (JIS), IEEE 802's GET program,
+  ETSI, ECMA, 3GPP, W3C as a download source. **Measured and rejected 2026-07-30 — see the
+  standards amendment under §3** for each one's blocking measurement; ITU-T is deferred rather
+  than rejected.
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
 - Resource subscriptions, sampling, MCP logging (no fit; logging also deprecated in the RC).
