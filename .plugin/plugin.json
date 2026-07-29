@@ -1,7 +1,7 @@
 {
   "$schema": "./plugin.schema.json",
   "name": "libgen-mcp",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "MCP server in Go to search, download and read books, papers, comics and more from Library Genesis — plus open-access discovery (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) whenever the catalog comes up empty, and article downloads from Unpaywall, Europe PMC, bioRxiv/medRxiv, CORE and OAPEN. Four focused tools (search, get_details, download, read), one static binary, no account required.",
   "author": {
     "name": "José Manuel Requena Plens",
