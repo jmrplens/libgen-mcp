@@ -33,7 +33,10 @@ var allTopics = []struct {
 }{
 	{"nonfiction", "linux"},
 	{"fiction", "tolkien"},
-	{"articles", "cancer"},
+	// "cancer" advertises 1.4M matches on the articles tab and returns no rows for
+	// any of them, so the collection whose row layout differs most from a book's
+	// was graded on an empty page. This query returns a full one.
+	{"articles", "neural network"},
 	{"magazines", "national geographic"},
 	{"comics", "batman"},
 	{"standards", "iso"},
@@ -60,6 +63,12 @@ func TestE2ESearchAllTopics(t *testing.T) {
 			t.Logf("topic=%s mirror=%s results=%d total=%q", tc.topic, mirror, len(page.Results), page.TotalFiles)
 			if len(page.Results) == 0 && (page.TotalFiles == "" || page.TotalFiles == "0") {
 				t.Fatalf("topic %s: no results and empty total_files (layout changed or blocked)", tc.topic)
+			}
+			if len(page.Results) == 0 {
+				// Not a failure — the site answers some queries with a counter and no
+				// page — but nothing below runs, so say so instead of reporting a pass
+				// that graded nothing.
+				t.Logf("topic %s: %s matches advertised but no rows returned; no row shape graded", tc.topic, page.TotalFiles)
 			}
 			for i := range page.Results {
 				assertResultStructure(t, page.Results[i])
@@ -119,11 +128,13 @@ func TestE2EDownloadSmall(t *testing.T) {
 	t.Logf("download target md5=%s size=%q title=%q", target.MD5, target.Size, target.Title)
 	pace()
 
-	res, err := client.Download(ctx, target.MD5, t.TempDir(), "", nil)
+	dir := t.TempDir()
+	res, err := client.Download(ctx, target.MD5, dir, "", nil)
 	if err != nil {
 		proveChainResolves(t, ctx, client, target.MD5)
 		return
 	}
+	assertNoPartialsLeft(t, dir)
 	if !res.Verified {
 		t.Errorf("download not integrity-verified: %+v", res)
 	}
