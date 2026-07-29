@@ -194,28 +194,50 @@ const (
 // confirmation off for the rest of the session.
 const rememberFieldDescription = "Stop asking for the rest of this session and save future downloads without confirming"
 
-// askConfirm puts a yes/no question to the user. confirmed is true only once the
-// client accepted AND set the boolean; ok reports whether an answer was actually
-// received (so a caller that defaults to "proceed" can tell "the user said no"
-// from "nobody could be asked").
+// askConfirm puts a yes/no question to the user and reads the boolean back.
+// ok is true only when the client accepted the form with a usable boolean value:
+// a decline, a cancel, a missing field or one of the wrong type all mean no
+// answer was given, so the caller falls back rather than reading confirmed=false
+// as a refusal. Callers that must tell an explicit "no" from "nobody answered"
+// want askConfirmDecision instead.
 func (r *inputRound) askConfirm(id, message, fieldName, fieldDescription string) (confirmed, ok bool) {
-	decision, _ := r.askConfirmRemember(id, message, fieldName, fieldDescription, "")
-	switch decision {
-	case confirmProceed:
-		return true, true
-	case confirmDeclined:
-		return false, r.answeredAccept(id)
-	case confirmUnavailable:
+	res, answered := r.confirmForm(id, message, fieldName, fieldDescription, "")
+	if !answered {
 		return false, false
 	}
-	return false, false
+	return boolAnswer(res, fieldName)
 }
 
-// answeredAccept reports whether the answer to id was an accept, which is what
-// separates "the user answered no" from "the user declined to answer".
-func (r *inputRound) answeredAccept(id string) bool {
+// boolAnswer reads a boolean out of an accepted elicitation result. Anything that
+// is not an accept carrying a boolean under fieldName is not an answer.
+func boolAnswer(res *mcp.ElicitResult, fieldName string) (value, ok bool) {
+	if res == nil || res.Action != "accept" || res.Content == nil {
+		return false, false
+	}
+	b, isBool := res.Content[fieldName].(bool)
+	if !isBool {
+		return false, false
+	}
+	return b, true
+}
+
+// confirmForm is the ask-or-fetch step the confirmation helpers share: it returns
+// the client's answer when this call carries one, and otherwise records the
+// question and reports that there is nothing to read yet.
+func (r *inputRound) confirmForm(id, message, fieldName, fieldDescription, rememberField string) (*mcp.ElicitResult, bool) {
+	if !r.supported {
+		return nil, false
+	}
 	res, answered := r.answer(id)
-	return answered && res != nil && res.Action == "accept"
+	if !answered {
+		r.ask(id, &mcp.ElicitParams{
+			Mode:            "form",
+			Message:         message,
+			RequestedSchema: confirmSchema(fieldName, fieldDescription, rememberField),
+		})
+		return nil, false
+	}
+	return res, true
 }
 
 // askConfirmDecision puts a yes/no question to the user and returns the
@@ -232,16 +254,8 @@ func (r *inputRound) askConfirmDecision(id, message, fieldName, fieldDescription
 // own right. remember is reported true only alongside confirmProceed: a declined
 // download must not also silence the prompt that let the user decline.
 func (r *inputRound) askConfirmRemember(id, message, fieldName, fieldDescription, rememberField string) (decision confirmDecision, remember bool) {
-	if !r.supported {
-		return confirmUnavailable, false
-	}
-	res, answered := r.answer(id)
+	res, answered := r.confirmForm(id, message, fieldName, fieldDescription, rememberField)
 	if !answered {
-		r.ask(id, &mcp.ElicitParams{
-			Mode:            "form",
-			Message:         message,
-			RequestedSchema: confirmSchema(fieldName, fieldDescription, rememberField),
-		})
 		return confirmUnavailable, false
 	}
 	return confirmAnswer(res, fieldName, rememberField)

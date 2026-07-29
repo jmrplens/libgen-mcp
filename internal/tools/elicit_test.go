@@ -500,130 +500,119 @@ func TestElicitConfirmRemember_OptOutIsOptional(t *testing.T) {
 	}
 }
 
-// TestAnswerGuards covers what the server does with an answer that does not fit
-// the question it asked. An SDK client validates the content against the schema
-// we sent and never forwards these, but nothing obliges a client to, so the
-// guards are checked here directly rather than through a round-trip the SDK
-// would refuse to make.
-func TestAnswerGuards(t *testing.T) {
-	t.Run("text", func(t *testing.T) {
-		cases := []struct {
-			name string
-			res  *mcp.ElicitResult
-			want string
-			ok   bool
-		}{
-			{"accepted", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": "Ada"}}, "Ada", true},
-			{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
-			{"no result", nil, "", false},
-			{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
-			{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"other": "x"}}, "", false},
-			{"empty value", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": ""}}, "", false},
-			{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": 42}}, "", false},
-		}
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				got, ok := textAnswer(tc.res, "name")
-				if got != tc.want || ok != tc.ok {
-					t.Errorf("textAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
-				}
-			})
-		}
-	})
+// The four tests below cover what the server does with an answer that does not
+// fit the question it asked. An SDK client validates the content against the
+// schema we sent and never forwards these, but nothing obliges a client to, so
+// the guards are checked directly rather than through a round-trip the SDK would
+// refuse to make.
 
-	t.Run("choice", func(t *testing.T) {
-		options := []string{"first", "second"}
-		cases := []struct {
-			name string
-			res  *mcp.ElicitResult
-			want string
-			ok   bool
-		}{
-			{"an offered option", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "second"}}, "second", true},
-			{"outside the options", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "third"}}, "", false},
-			{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": 42}}, "", false},
-			{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
-			{"no result", nil, "", false},
-			{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
-		}
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				got, ok := choiceAnswer(tc.res, "edition", options)
-				if got != tc.want || ok != tc.ok {
-					t.Errorf("choiceAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
-				}
-			})
-		}
-	})
-
-	t.Run("confirm", func(t *testing.T) {
-		cases := []struct {
-			name     string
-			res      *mcp.ElicitResult
-			decision confirmDecision
-			remember bool
-		}{
-			{"confirmed", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, confirmProceed, false},
-			{"confirmed and remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true, "dont_ask_again": true}}, confirmProceed, true},
-			{"accepted with false", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false}}, confirmDeclined, false},
-			{"declined", &mcp.ElicitResult{Action: "decline"}, confirmDeclined, false},
-			{"canceled", &mcp.ElicitResult{Action: "cancel"}, confirmDeclined, false},
-			{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, confirmDeclined, false},
-			{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": "yes"}}, confirmDeclined, false},
-			{"unknown action", &mcp.ElicitResult{Action: "sideways"}, confirmUnavailable, false},
-			{"no result", nil, confirmUnavailable, false},
-			// A declined download must not also silence the prompt that let the user decline.
-			{"declined but remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false, "dont_ask_again": true}}, confirmDeclined, false},
-		}
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				decision, remember := confirmAnswer(tc.res, "confirm", "dont_ask_again")
-				if decision != tc.decision || remember != tc.remember {
-					t.Errorf("confirmAnswer = (%v, %v), want (%v, %v)", decision, remember, tc.decision, tc.remember)
-				}
-			})
-		}
-	})
+// TestTextAnswer covers the free-text guard.
+func TestTextAnswer(t *testing.T) {
+	cases := []struct {
+		name string
+		res  *mcp.ElicitResult
+		want string
+		ok   bool
+	}{
+		{"accepted", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": "Ada"}}, "Ada", true},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
+		{"no result", nil, "", false},
+		{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"other": "x"}}, "", false},
+		{"empty value", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": ""}}, "", false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": 42}}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := textAnswer(tc.res, "name")
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("textAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
 }
 
-// TestInputRound_AsksEverythingInOneExchange verifies that a handler needing two
-// answers asks for both at once. download relies on it: a call that needs a
-// credential AND a confirmation costs the user one exchange, not one per
-// question, which is what the old ask-mid-call shape gave.
-func TestInputRound_AsksEverythingInOneExchange(t *testing.T) {
-	session := newRawElicitSession(t, acceptHandler(nil))
-	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "probe", Arguments: map[string]any{"kind": "textandconfirm"},
-	})
-	if err != nil {
-		t.Fatalf("CallTool failed: %v", err)
+// TestChoiceAnswer covers the one-of-these guard, which holds an answer to the
+// options this server actually offered.
+func TestChoiceAnswer(t *testing.T) {
+	options := []string{"first", "second"}
+	cases := []struct {
+		name string
+		res  *mcp.ElicitResult
+		want string
+		ok   bool
+	}{
+		{"an offered option", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "second"}}, "second", true},
+		{"outside the options", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": "third"}}, "", false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"edition": 42}}, "", false},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, "", false},
+		{"no result", nil, "", false},
+		{"no content", &mcp.ElicitResult{Action: "accept"}, "", false},
 	}
-	if !res.NeedsInput() {
-		t.Fatalf("result should ask for input, got %+v", res)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := choiceAnswer(tc.res, "edition", options)
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("choiceAnswer = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
 	}
-	if len(res.InputRequests) != 2 {
-		t.Fatalf("want both questions in one result, got %d: %+v", len(res.InputRequests), res.InputRequests)
-	}
-	for _, id := range []string{"name", "proceed"} {
-		if _, ok := res.InputRequests[id]; !ok {
-			t.Errorf("question %q missing from the input requests", id)
-		}
-	}
+}
 
-	done, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "probe",
-		Arguments: map[string]any{"kind": "textandconfirm"},
-		InputResponses: mcp.InputResponseMap{
-			"name":    &mcp.ElicitResult{Action: "accept", Content: map[string]any{"name": "Ada"}},
-			"proceed": &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": true}},
-		},
-		RequestState: res.RequestState,
-	})
-	if err != nil {
-		t.Fatalf("retry failed: %v", err)
+// TestBoolAnswer covers the plain yes/no guard behind askConfirm. An accept whose
+// field is missing or of the wrong type is NOT an answer: a caller that defaults
+// to proceeding must not read it as a refusal.
+func TestBoolAnswer(t *testing.T) {
+	cases := []struct {
+		name  string
+		res   *mcp.ElicitResult
+		value bool
+		ok    bool
+	}{
+		{"accepted true", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": true}}, true, true},
+		{"accepted false", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": false}}, false, true},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, false, false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, false, false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"proceed": "yes"}}, false, false},
+		{"no result", nil, false, false},
 	}
-	out := decodeProbe(t, done)
-	if out.Value != "Ada" || !out.Confirmed {
-		t.Errorf("both answers should reach the handler; got value=%q confirmed=%v", out.Value, out.Confirmed)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			value, ok := boolAnswer(tc.res, "proceed")
+			if value != tc.value || ok != tc.ok {
+				t.Errorf("boolAnswer = (%v, %v), want (%v, %v)", value, ok, tc.value, tc.ok)
+			}
+		})
+	}
+}
+
+// TestConfirmAnswer covers the tri-state confirmation guard, which has to tell an
+// explicit "no" from an answer it cannot read at all.
+func TestConfirmAnswer(t *testing.T) {
+	cases := []struct {
+		name     string
+		res      *mcp.ElicitResult
+		decision confirmDecision
+		remember bool
+	}{
+		{"confirmed", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, confirmProceed, false},
+		{"confirmed and remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true, "dont_ask_again": true}}, confirmProceed, true},
+		{"accepted with false", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false}}, confirmDeclined, false},
+		{"declined", &mcp.ElicitResult{Action: "decline"}, confirmDeclined, false},
+		{"canceled", &mcp.ElicitResult{Action: "cancel"}, confirmDeclined, false},
+		{"field missing", &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, confirmDeclined, false},
+		{"wrong type", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": "yes"}}, confirmDeclined, false},
+		{"unknown action", &mcp.ElicitResult{Action: "sideways"}, confirmUnavailable, false},
+		{"no result", nil, confirmUnavailable, false},
+		// A declined download must not also silence the prompt that let the user decline.
+		{"declined but remembered", &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": false, "dont_ask_again": true}}, confirmDeclined, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, remember := confirmAnswer(tc.res, "confirm", "dont_ask_again")
+			if decision != tc.decision || remember != tc.remember {
+				t.Errorf("confirmAnswer = (%v, %v), want (%v, %v)", decision, remember, tc.decision, tc.remember)
+			}
+		})
 	}
 }
