@@ -56,6 +56,34 @@ func TestQualityNote_UnmappedGlyphsAreFlagged(t *testing.T) {
 	}
 }
 
+// TestQualityNote_CountsEveryKindOfUnmappedGlyph covers the three characters a
+// font with no usable character map extracts to — the replacement character, a
+// private-use code point and a bare control character — since a document that
+// trips only the last of them is as unreadable as one that trips the first.
+func TestQualityNote_CountsEveryKindOfUnmappedGlyph(t *testing.T) {
+	cases := map[string]string{
+		"replacement character": "�",
+		"private use area":      "",
+		"control character":     "\x01",
+	}
+	for name, glyph := range cases {
+		t.Run(name, func(t *testing.T) {
+			note := qualityNote(englishSample + strings.Repeat(" "+glyph, 40))
+			if note == "" {
+				t.Fatalf("qualityNote did not flag a text layer full of %s", name)
+			}
+			if !strings.Contains(note, "unmapped glyphs") {
+				t.Errorf("note should name what it measured, got %q", note)
+			}
+		})
+	}
+	// Whitespace is not a control character for this purpose: a page full of line
+	// breaks and tabs is ordinary layout, not a broken encoding.
+	if note := qualityNote(englishSample + strings.Repeat("\n\t\r\v\f", 40)); note != "" {
+		t.Errorf("qualityNote flagged ordinary whitespace: %q", note)
+	}
+}
+
 // TestQualityNote_ConsonantSoupIsFlagged verifies the other failure mode: a font
 // whose glyphs map to arbitrary letters extracts words that no language could
 // produce, with no vowel in sight.

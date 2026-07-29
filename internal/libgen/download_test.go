@@ -1158,6 +1158,27 @@ func TestDownloadKeepsPartialsWhenEveryLegFails(t *testing.T) {
 	}
 }
 
+// TestSweepPartialsOnAClientThatNeverLocked verifies the sweep works on a client
+// whose partial-lock table has never been touched — the ordinary case for a
+// download whose first leg succeeds, where nothing else has taken a lock yet.
+func TestSweepPartialsOnAClientThatNeverLocked(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	part := filepath.Join(t.TempDir(), ".libgen-mcp-srca-fresh.part")
+	if err := os.WriteFile(part, []byte("partial bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := &attemptedPartials{}
+	a.add(part)
+
+	c.sweepPartials(a)
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Errorf("partial still present after the sweep (stat err = %v)", err)
+	}
+	if got := c.partialLockCount(); got != 0 {
+		t.Errorf("partialLockCount = %d, want 0 (the sweep leaked a lock entry)", got)
+	}
+}
+
 // TestSweepPartialsLeavesOneAnotherDownloadHolds verifies that the sweep never
 // unlinks a partial another download is streaming to. The partial path is
 // deterministic, so a second call for the same item in the same directory can be
