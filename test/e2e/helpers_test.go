@@ -228,6 +228,58 @@ func assertResultStructure(t *testing.T, r libgen.Result) {
 	if len(r.Downloads) == 0 {
 		t.Errorf("result %q (md5=%s) has no download options", r.Title, r.MD5)
 	}
+	assertFieldsHoldTheirOwnContent(t, r)
+}
+
+// maxIdentifierRunes is the longest an entry of the ISBNs list can plausibly be.
+// A real identifier is compact; anything of essay length is a title that landed in
+// the wrong field.
+const maxIdentifierRunes = 40
+
+// assertFieldsHoldTheirOwnContent asserts that a row's fields carry what they are
+// named for. The first cell of a libgen row holds between one and three links
+// whose order changes by collection, and reading them positionally used to put an
+// article's or a standard's title into the ISBNs list and its issue designator
+// into the title — a search for a book returned rows titled "vol. 26 iss. 2" with
+// isbns=["ASSESSMENT OF PARKINSON'S ..."]. Three invariants catch that: an
+// identifier stays identifier-shaped, an article (which is keyed by DOI) carries
+// no ISBNs at all, and the title never merely repeats the issue designator.
+//
+// A serial issue with no article title of its own legitimately keeps its
+// designator AS the title, with the issue field left empty, so a designator-shaped
+// title is only wrong when a designator was parsed alongside it.
+func assertFieldsHoldTheirOwnContent(t *testing.T, r libgen.Result) {
+	t.Helper()
+	for _, id := range r.ISBNs {
+		if len([]rune(id)) > maxIdentifierRunes || len(strings.Fields(id)) > 3 {
+			t.Errorf("isbns entry is prose, not an identifier: %q (title %q, type %q)", id, r.Title, r.Type)
+		}
+	}
+	if r.Type == "a" && len(r.ISBNs) > 0 {
+		t.Errorf("article row carries isbns=%q; an article is identified by its doi (%q)", r.ISBNs, r.DOI)
+	}
+	if r.Issue != "" && strings.EqualFold(strings.TrimSpace(r.Title), r.Issue) {
+		t.Errorf("title and issue are the same string %q; the title link was read as the designator (md5=%s)",
+			r.Issue, r.MD5)
+	}
+}
+
+// assertNoPartialsLeft asserts that a completed download left no .part file in
+// the destination directory. A leg that fails after writing bytes keeps its
+// partial so a later call can resume from it, but once any source delivers the
+// file those partials are litter in a directory the caller chose — and a live
+// chain that fails over is exactly where they used to pile up.
+func assertNoPartialsLeft(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading download dir %s: %v", dir, err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".part") {
+			t.Errorf("partial left behind after a successful download: %s", e.Name())
+		}
+	}
 }
 
 // hasNonEmptyField reports whether the details record carries at least one
@@ -305,7 +357,34 @@ var readableExts = []string{"pdf", "epub"}
 // qualifying target, which is a live-data condition rather than a code fault.
 func findLiveTarget(t *testing.T, ctx context.Context, c *libgen.Client, spec liveTarget) libgen.Result {
 	t.Helper()
-	for p := 1; p <= targetSearchPages; p++ {
+	target, ok := lookForLiveTarget(t, ctx, c, spec)
+	if !ok {
+		t.Skipf("no %s target for %q between %d and %d bytes (exts %v) across %d pages; skipping to stay polite",
+			spec.topic, spec.query, spec.floor(), maxE2EDownloadBytes, spec.exts, targetSearchPages)
+	}
+	return target
+}
+
+// lookForLiveTarget is findLiveTarget without the skip: it reports whether a
+// qualifying target was found, for a caller that has another search to try before
+// giving up.
+func lookForLiveTarget(t *testing.T, ctx context.Context, c *libgen.Client, spec liveTarget) (libgen.Result, bool) {
+	t.Helper()
+	found := lookForLiveTargets(t, ctx, c, spec, 1)
+	if len(found) == 0 {
+		return libgen.Result{}, false
+	}
+	return found[0], true
+}
+
+// lookForLiveTargets collects up to limit qualifying targets in size-ascending
+// order. It exists for a case that cannot tell from the search page whether a
+// target suits it — an outline needs a document that actually carries a table of
+// contents — and so has to try several.
+func lookForLiveTargets(t *testing.T, ctx context.Context, c *libgen.Client, spec liveTarget, limit int) []libgen.Result {
+	t.Helper()
+	var found []libgen.Result
+	for p := 1; p <= targetSearchPages && len(found) < limit; p++ {
 		page, _, err := c.Search(ctx, libgen.SearchParams{
 			Query: spec.query, Topics: []string{spec.topic},
 			Order: "size", OrderMode: "asc",
@@ -314,33 +393,30 @@ func findLiveTarget(t *testing.T, ctx context.Context, c *libgen.Client, spec li
 		if err != nil {
 			t.Fatalf("Search(%q, page %d) error: %v", spec.query, p, err)
 		}
-		if target := qualifyingTarget(page.Results, spec); target.MD5 != "" {
-			return target
+		for i := range page.Results {
+			if qualifies(page.Results[i], spec) {
+				found = append(found, page.Results[i])
+				if len(found) == limit {
+					break
+				}
+			}
 		}
 		if len(page.Results) < targetPageSize {
 			break
 		}
 	}
-	t.Skipf("no %s target for %q between %d and %d bytes (exts %v) across %d pages; skipping to stay polite",
-		spec.topic, spec.query, spec.floor(), maxE2EDownloadBytes, spec.exts, targetSearchPages)
-	return libgen.Result{}
+	return found
 }
 
-// qualifyingTarget returns the first result on a size-ascending page that carries
-// a canonical md5, has one of the wanted extensions (any, when exts is empty) and
-// a parseable size inside [spec.floor(), maxE2EDownloadBytes]. It returns a zero
-// Result when the page holds none.
-func qualifyingTarget(results []libgen.Result, spec liveTarget) libgen.Result {
-	for i := range results {
-		r := results[i]
-		if !md5Re.MatchString(r.MD5) || !hasExtension(r, spec.exts) {
-			continue
-		}
-		if n, ok := parseSize(r.Size); ok && n >= spec.floor() && n <= maxE2EDownloadBytes {
-			return r
-		}
+// qualifies reports whether one result meets spec: a canonical md5, one of the
+// wanted extensions (any, when spec.exts is empty) and a parseable size inside
+// [spec.floor(), maxE2EDownloadBytes].
+func qualifies(r libgen.Result, spec liveTarget) bool {
+	if !md5Re.MatchString(r.MD5) || !hasExtension(r, spec.exts) {
+		return false
 	}
-	return libgen.Result{}
+	n, ok := parseSize(r.Size)
+	return ok && n >= spec.floor() && n <= maxE2EDownloadBytes
 }
 
 // hasExtension reports whether r's extension is one of want (case-insensitive).

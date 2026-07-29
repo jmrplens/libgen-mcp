@@ -151,6 +151,52 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 	}
 }
 
+// TestSearchTitleCarriesTheIssue verifies that a record with a volume/issue
+// designator (a journal article, a magazine or a comic) shows it beside the title
+// in the results table, so the human-readable output identifies which issue a row
+// belongs to without a follow-up get_details call.
+func TestSearchTitleCarriesTheIssue(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{
+			{Title: "A Paper", Issue: "vol. 26 iss. 2", DOI: "10.1/x"},
+			{Title: "A Book", MD5: "0123456789abcdef0123456789abcdef"},
+		},
+	}
+	md := renderSearchMarkdown(out)
+	if !strings.Contains(md, "A Paper (vol. 26 iss. 2)") {
+		t.Errorf("table should show the issue beside the title; got:\n%s", md)
+	}
+	if !strings.Contains(md, "| A Book |") {
+		t.Errorf("a record without an issue should render its title alone; got:\n%s", md)
+	}
+}
+
+// TestSearchTitleCarriesTheEdition verifies that the edition marker, which is
+// parsed out of the title so titles compare cleanly, still reaches the reader:
+// two printings of one book must not render as the same row. A bare ordinal is
+// labeled, one that already says "ed" is shown as it stands.
+func TestSearchTitleCarriesTheEdition(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{
+			{Title: "Building Acoustics", Edition: "1"},
+			{Title: "Sisterhood of Dune", Edition: "1st ed"},
+			{Title: "A Paper", Issue: "vol. 26 iss. 2", Edition: "2"},
+		},
+	}
+	md := renderSearchMarkdown(out)
+	for _, want := range []string{
+		"Building Acoustics (ed. 1)",
+		"Sisterhood of Dune (1st ed)",
+		"A Paper (vol. 26 iss. 2, ed. 2)",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("table should contain %q; got:\n%s", want, md)
+		}
+	}
+}
+
 // TestRenderMarkdownEdgeCases covers the empty-search, doi-only details, and
 // resumed-download rendering branches.
 func TestRenderMarkdownEdgeCases(t *testing.T) {

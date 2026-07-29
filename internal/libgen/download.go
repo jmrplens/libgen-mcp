@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -529,7 +530,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	sources = c.withPerCallUnpaywall(item, sources)
 	sources = c.withPerCallAnnas(item, sources)
 
-	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress}
+	req := downloadReq{item: item, dir: dir, filename: filename, onProgress: onProgress, partials: &attemptedPartials{}}
 	// Try each supporting source in order: a source that fails to resolve or whose
 	// stream is rejected (HTML page / integrity mismatch / short read) advances to
 	// the next. The first success returns; if all fail, the joined errors surface.
@@ -546,6 +547,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		logging.SourceAttempt(src.Name(), started, err)
 		if err == nil {
 			c.clearSourceCooldown(src.Name())
+			c.sweepPartials(req.partials)
 			return res, nil
 		}
 		c.noteSourceFailure(ctx, src.Name(), err)
@@ -598,6 +600,54 @@ type downloadReq struct {
 	dir        string
 	filename   string
 	onProgress ProgressFunc
+	partials   *attemptedPartials
+}
+
+// attemptedPartials records the .part paths a single download call opened, one
+// per source it tried, so the ones left by the legs that failed can be swept once
+// another leg delivers the file.
+type attemptedPartials struct {
+	mu    sync.Mutex
+	paths []string
+}
+
+// add records a partial path this call is about to write to.
+func (a *attemptedPartials) add(path string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.paths = append(a.paths, path)
+}
+
+// take returns the partial paths recorded so far and clears the list, so a
+// caller can act on them exactly once.
+func (a *attemptedPartials) take() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	paths := a.paths
+	a.paths = nil
+	return paths
+}
+
+// sweepPartials removes the partials a finished download call opened. It runs
+// only once the item is on disk: until then a partial is worth keeping, because
+// the next call resumes from it. The successful leg's own partial was renamed
+// into place, so removing it is a no-op.
+//
+// Each removal takes the path's own lock and skips the partial when another
+// download holds it. The path is deterministic, so a concurrent call for the
+// same item in the same directory can be resuming from the very file this one is
+// about to discard; unlinking it there would fail that transfer's final rename
+// and throw away its resume state. Skipping costs nothing — the next call that
+// resolves the item sweeps it instead.
+func (c *Client) sweepPartials(a *attemptedPartials) {
+	for _, p := range a.take() {
+		release, ok := c.tryAcquirePartialLock(p)
+		if !ok {
+			continue
+		}
+		_ = os.Remove(p)
+		release()
+	}
 }
 
 // downloadFrom runs a single source under the staged start-retry schedule: it
@@ -683,6 +733,7 @@ func (c *Client) startAttempt(ctx context.Context, src DownloadSource, req downl
 	release := c.acquirePartialLock(partPath)
 	defer release()
 
+	req.partials.add(partPath)
 	return c.streamResolved(ctx, src, req, resolved, partPath)
 }
 

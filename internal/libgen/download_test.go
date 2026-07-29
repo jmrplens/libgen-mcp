@@ -1071,11 +1071,144 @@ func TestDownloadNoCrossSourceResumeContamination(t *testing.T) {
 	if bSawRange.Load() {
 		t.Error("source B received a Range request: it resumed from A's partial (.part not distinct)")
 	}
-	// A's partial must still exist under A's own distinct, source-keyed path.
+	// A wrote to its own distinct, source-keyed path — proven above by B never
+	// receiving a Range request — and that abandoned partial is swept once B
+	// delivers the file (see TestDownloadSweepsPartialsOfFailedLegs).
 	item := Item{DOI: "10.1234/cross.source"}
 	aPart := filepath.Join(dir, ".libgen-mcp-srca-"+partialKey(item, Resolved{})+".part")
-	if _, statErr := os.Stat(aPart); statErr != nil {
-		t.Errorf("A's distinct .part missing at %s: %v", aPart, statErr)
+	if _, statErr := os.Stat(aPart); !os.IsNotExist(statErr) {
+		t.Errorf("A's abandoned .part still at %s (stat err = %v), want it swept", aPart, statErr)
+	}
+}
+
+// TestDownloadSweepsPartialsOfFailedLegs verifies that once any source completes
+// the download, the partials left behind by the legs that failed before it are
+// removed. A partial is kept while the item is still unresolved, because the next
+// call can resume from it; once the item is on disk it is dead weight the caller
+// has to clean up by hand, in the directory they asked the file to land in.
+func TestDownloadSweepsPartialsOfFailedLegs(t *testing.T) {
+	contentA := []byte("%PDF-1.4 SOURCE-A " + strings.Repeat("aaaa", 512))
+	contentB := []byte("%PDF-1.7 SOURCE-B " + strings.Repeat("bbbb", 300))
+
+	srvA := partialFailCDN(t, contentA)
+	defer srvA.Close()
+	var bSawRange atomic.Bool
+	srvB := rangeAwareCDN(t, contentB, &bSawRange)
+	defer srvB.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srvA.URL + "/file"}},
+		stubSource{name: "srcb", supports: true, resolved: Resolved{FileURL: srvB.URL + "/file"}},
+	}
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/sweep"}, dir, "out.pdf")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if res.Source != "srcb" {
+		t.Fatalf("Source = %q, want srcb (A fails, B serves)", res.Source)
+	}
+	entries, rerr := os.ReadDir(dir)
+	if rerr != nil {
+		t.Fatalf("reading download dir: %v", rerr)
+	}
+	var leftovers []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".part") {
+			leftovers = append(leftovers, e.Name())
+		}
+	}
+	if len(leftovers) != 0 {
+		t.Errorf("partials left behind after a successful download: %v", leftovers)
+	}
+	if len(entries) != 1 {
+		t.Errorf("dir has %d entries, want 1 (the downloaded file)", len(entries))
+	}
+}
+
+// TestDownloadKeepsPartialsWhenEveryLegFails verifies the other half of the sweep
+// rule: while the item is still unresolved, every leg's partial survives so a
+// later call can resume from it.
+func TestDownloadKeepsPartialsWhenEveryLegFails(t *testing.T) {
+	srvA := partialFailCDN(t, []byte("%PDF-1.4 SOURCE-A "+strings.Repeat("aaaa", 512)))
+	defer srvA.Close()
+	srvB := partialFailCDN(t, []byte("%PDF-1.7 SOURCE-B "+strings.Repeat("bbbb", 512)))
+	defer srvB.Close()
+
+	c := newTestClient(staticMirrors{})
+	c.sources = []DownloadSource{
+		stubSource{name: "srca", supports: true, resolved: Resolved{FileURL: srvA.URL + "/file"}},
+		stubSource{name: "srcb", supports: true, resolved: Resolved{FileURL: srvB.URL + "/file"}},
+	}
+	dir := t.TempDir()
+
+	item := Item{DOI: "10.1234/keep"}
+	if _, err := c.DownloadItem(context.Background(), item, dir, "out.pdf"); err == nil {
+		t.Fatal("DownloadItem() error = nil, want a failure (every source truncates)")
+	}
+	// Each source owns its own partial, and both must survive: either one can be
+	// the offset a later call resumes from.
+	for _, name := range []string{"srca", "srcb"} {
+		part := filepath.Join(dir, ".libgen-mcp-"+name+"-"+partialKey(item, Resolved{})+".part")
+		if _, statErr := os.Stat(part); statErr != nil {
+			t.Errorf("%s's partial missing at %s: %v (an unresolved item must stay resumable)", name, part, statErr)
+		}
+	}
+}
+
+// TestSweepPartialsOnAClientThatNeverLocked verifies the sweep works on a client
+// whose partial-lock table has never been touched — the ordinary case for a
+// download whose first leg succeeds, where nothing else has taken a lock yet.
+func TestSweepPartialsOnAClientThatNeverLocked(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	part := filepath.Join(t.TempDir(), ".libgen-mcp-srca-fresh.part")
+	if err := os.WriteFile(part, []byte("partial bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := &attemptedPartials{}
+	a.add(part)
+
+	c.sweepPartials(a)
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Errorf("partial still present after the sweep (stat err = %v)", err)
+	}
+	if got := c.partialLockCount(); got != 0 {
+		t.Errorf("partialLockCount = %d, want 0 (the sweep leaked a lock entry)", got)
+	}
+}
+
+// TestSweepPartialsLeavesOneAnotherDownloadHolds verifies that the sweep never
+// unlinks a partial another download is streaming to. The partial path is
+// deterministic, so a second call for the same item in the same directory can be
+// resuming from the very file this call is about to discard; removing it under
+// that download would fail its final rename and throw away its resume state. A
+// partial whose lock is held is left alone, and swept on a later call.
+func TestSweepPartialsLeavesOneAnotherDownloadHolds(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	part := filepath.Join(t.TempDir(), ".libgen-mcp-srca-held.part")
+	if err := os.WriteFile(part, []byte("partial bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	release := c.acquirePartialLock(part) // stand in for the download that owns it
+	held := &attemptedPartials{}
+	held.add(part)
+	c.sweepPartials(held)
+	if _, err := os.Stat(part); err != nil {
+		t.Fatalf("swept a partial another download holds: %v", err)
+	}
+	release()
+
+	free := &attemptedPartials{}
+	free.add(part)
+	c.sweepPartials(free)
+	if _, err := os.Stat(part); !os.IsNotExist(err) {
+		t.Errorf("partial still present after its holder released (stat err = %v)", err)
+	}
+	if got := c.partialLockCount(); got != 0 {
+		t.Errorf("partialLockCount = %d, want 0 (the sweep leaked a lock entry)", got)
 	}
 }
 

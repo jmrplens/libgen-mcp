@@ -144,6 +144,65 @@ func TestSearch_TXT(t *testing.T) {
 	}
 }
 
+// TestSearch_IgnoresWhitespaceDifferences verifies that a multi-word query
+// matches text whose whitespace does not line up with it. PDF text layers
+// routinely drop the space between two words or split one across a line break,
+// which made a phrase search silently return zero matches while each word on its
+// own returned many. The reported offset and snippet still point into the
+// original text.
+func TestSearch_IgnoresWhitespaceDifferences(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string // the run of original text the match must cover
+	}{
+		{"space dropped by the extractor", "the OverseasHarriette Kane papers", "OverseasHarriette"},
+		{"split across a line break", "the Overseas\nHarriette Kane papers", "Overseas\nHarriette"},
+		{"padded with extra spaces", "the Overseas   Harriette Kane papers", "Overseas   Harriette"},
+		{"spaces inside a word", "the Over seas Harriette Kane papers", "Over seas Harriette"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "doc.txt")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			res, err := Search(context.Background(), path, "Overseas Harriette", SearchOpts{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.TotalMatches != 1 {
+				t.Fatalf("TotalMatches = %d, want 1 (%+v)", res.TotalMatches, res)
+			}
+			got := res.Matches[0]
+			wantOffset := len([]rune(tc.body[:strings.Index(tc.body, tc.want)]))
+			if got.CharOffset != wantOffset {
+				t.Errorf("CharOffset = %d, want %d (the offset of %q)", got.CharOffset, wantOffset, tc.want)
+			}
+			if !strings.Contains(got.Snippet, "Kane") {
+				t.Errorf("snippet should show the surrounding text, got %q", got.Snippet)
+			}
+		})
+	}
+}
+
+// TestSearch_WhitespaceInsensitiveMatchIsNotSubstringNoise verifies the flexible
+// matching stays anchored to the query's non-whitespace runes: a phrase whose
+// letters are not all present still finds nothing.
+func TestSearch_WhitespaceInsensitiveMatchIsNotSubstringNoise(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "doc.txt")
+	if err := os.WriteFile(path, []byte("the OverseasHarriette Kane papers"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Search(context.Background(), path, "Overseas Harold", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TotalMatches != 0 {
+		t.Errorf("TotalMatches = %d, want 0 (%+v)", res.TotalMatches, res)
+	}
+}
+
 // TestSearch_ScannedPDFNoText verifies that a PDF with no text layer is reported
 // as not extractable with a reason mentioning the missing text layer, and never
 // panics.

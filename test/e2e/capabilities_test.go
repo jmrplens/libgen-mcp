@@ -15,11 +15,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
@@ -514,6 +516,220 @@ func TestE2EReadModes(t *testing.T) {
 	outline := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "outline": true})
 	assertUntrustedFirst(t, outline)
 	assertOutlineShape(t, outline)
+	assertQualityNoteConsistent(t, seq)
+}
+
+// assertQualityNoteConsistent grades the text-layer quality signal on a real
+// document. The suite cannot know whether a live file's fonts are sound, so it
+// asserts the pairing rather than the verdict: when read reports a damaged text
+// layer it must also tell the model not to present that text as the document's
+// content. A note on an ordinary book is worth seeing in the log, since a false
+// positive here is the failure mode that costs a caller a usable file.
+func assertQualityNoteConsistent(t *testing.T, out tools.ReadOutput) {
+	t.Helper()
+	if out.TextQualityNote == "" {
+		return
+	}
+	t.Logf("text_quality_note on a live document: %s", out.TextQualityNote)
+	joined := strings.Join(out.NextSteps, "\n")
+	if !strings.Contains(joined, "text layer") {
+		t.Errorf("a damaged text layer must be called out in next_steps; got %q", joined)
+	}
+}
+
+// TestE2EReadFindIgnoresWhitespaceLive proves against a real document that a
+// multi-word find still matches when the whitespace does not line up. It takes a
+// phrase out of the document's own extracted text, then searches for it with the
+// space doubled and with the space removed — the shapes a PDF text layer produces
+// when it pads or drops the space between two words. All three must find it.
+func TestE2EReadFindIgnoresWhitespaceLive(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	client, session := newReadSession(t, ctx)
+	target := readableTargetIn(t, ctx, client, "nonfiction", "python")
+	pace()
+
+	seq := callRead(t, ctx, session, map[string]any{"md5": target.MD5})
+	if !seq.Extractable {
+		t.Skipf("target %s is not extractable (%s)", target.MD5, seq.Reason)
+	}
+	phrase, ok := twoAdjacentWords(seq.Text)
+	if !ok {
+		t.Skipf("no two adjacent words long enough to search for in %q", target.Title)
+	}
+	t.Logf("phrase from the document's own text: %q", phrase)
+
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{"as printed", phrase},
+		{"space doubled", strings.ReplaceAll(phrase, " ", "  ")},
+		{"space dropped", strings.ReplaceAll(phrase, " ", "")},
+	} {
+		pace()
+		got := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "find": tc.query, "max_matches": 3})
+		if got.MatchCount == 0 {
+			t.Errorf("%s: find %q reported no matches in a document that contains the phrase", tc.name, tc.query)
+			continue
+		}
+		if len(got.Matches) == 0 || strings.TrimSpace(got.Matches[0].Snippet) == "" {
+			t.Errorf("%s: find %q reported %d matches but returned no usable snippet", tc.name, tc.query, got.MatchCount)
+		}
+	}
+}
+
+// twoAdjacentWords returns a two-word phrase taken from text, both words at least
+// four letters long, so it is long enough to be a meaningful search and short
+// enough to appear verbatim. It reports false when the text has no such pair.
+func twoAdjacentWords(text string) (string, bool) {
+	var prev string
+	for field := range strings.FieldsSeq(text) {
+		w := strings.Trim(field, ".,;:!?()[]{}\"'")
+		if len([]rune(w)) < 4 || !isAllLetters(w) {
+			prev = ""
+			continue
+		}
+		if prev != "" {
+			return prev + " " + w, true
+		}
+		prev = w
+	}
+	return "", false
+}
+
+// isAllLetters reports whether every rune of s is a letter.
+func isAllLetters(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// outlineProbes are the searches the max_depth case tries in turn, looking for a
+// live document that actually carries a table of contents. Nothing on the search
+// page says whether a file has one — a scanned PDF carries no bookmarks and a
+// hastily built EPUB no nav document — so the case walks candidates until one
+// does. EPUB comes first because its navigation is part of the format.
+var outlineProbes = []struct {
+	topic, query string
+	exts         []string
+}{
+	{"nonfiction", "python", []string{"epub"}},
+	{"nonfiction", "handbook", []string{"epub"}},
+	{"nonfiction", "python", []string{"pdf"}},
+}
+
+// outlineCandidatesPerProbe bounds how many documents each probe fetches before
+// moving on, so a run that finds no table of contents anywhere still costs a
+// bounded number of downloads.
+const outlineCandidatesPerProbe = 3
+
+// TestE2EReadOutlineMaxDepthLive proves max_depth against a real table of
+// contents: the trimmed call returns only top-level entries, it never returns
+// more than the full outline, and the response says how much of the outline it is
+// showing.
+func TestE2EReadOutlineMaxDepthLive(t *testing.T) {
+	requireLive(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	client, session := newReadSession(t, ctx)
+
+	md5, full, ok := findOutlinedDocument(t, ctx, client, session)
+	if !ok {
+		t.Skipf("no live document with an embedded table of contents among %d probes", len(outlineProbes))
+	}
+	pace()
+	assertMaxDepthTrims(t, ctx, session, md5, full)
+}
+
+// findOutlinedDocument walks the probes for a live document whose table of
+// contents max_depth can be graded on, preferring a NESTED outline: a flat one
+// exercises only the pass-through, since trimming it to one level removes
+// nothing. It falls back to a flat outline when no nested one turns up, so the
+// case still asserts what it can, and reports which it found.
+func findOutlinedDocument(t *testing.T, ctx context.Context, client *libgen.Client, session *mcp.ClientSession) (string, tools.ReadOutput, bool) {
+	t.Helper()
+	var flatMD5 string
+	var flatOutline tools.ReadOutput
+	for _, probe := range outlineProbes {
+		spec := liveTarget{topic: probe.topic, query: probe.query, exts: probe.exts}
+		for _, target := range lookForLiveTargets(t, ctx, client, spec, outlineCandidatesPerProbe) {
+			pace()
+			full := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "outline": true})
+			if !full.Extractable || len(full.Outline) == 0 {
+				t.Logf("%q (%s, %s) carries no table of contents", target.Title, target.MD5, target.Extension)
+				continue
+			}
+			if isNestedOutline(full.Outline) {
+				t.Logf("nested outline target md5=%s ext=%q title=%q", target.MD5, target.Extension, target.Title)
+				return target.MD5, full, true
+			}
+			if flatMD5 == "" {
+				flatMD5, flatOutline = target.MD5, full
+			}
+			t.Logf("%q has a flat outline (%d entries); still looking for a nested one",
+				target.Title, len(full.Outline))
+		}
+	}
+	if flatMD5 != "" {
+		t.Logf("no nested outline found; grading max_depth on a flat one (md5=%s)", flatMD5)
+		return flatMD5, flatOutline, true
+	}
+	return "", tools.ReadOutput{}, false
+}
+
+// isNestedOutline reports whether a table of contents has any entry below the top
+// level, i.e. whether max_depth has anything to trim.
+func isNestedOutline(entries []extract.OutlineEntry) bool {
+	for _, e := range entries {
+		if e.Level > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// assertMaxDepthTrims asserts the trimmed outline against the full one already
+// read from the same document: it holds top-level entries only, never more than
+// the full outline, reports the full entry count, and says so when it hid levels.
+func assertMaxDepthTrims(t *testing.T, ctx context.Context, session *mcp.ClientSession, md5 string, full tools.ReadOutput) {
+	t.Helper()
+	shallow := callRead(t, ctx, session, map[string]any{"md5": md5, "outline": true, "max_depth": 1})
+	if shallow.OutlineTotal != len(full.Outline) {
+		t.Errorf("outline_total = %d, want %d (every entry the document has)", shallow.OutlineTotal, len(full.Outline))
+	}
+	if len(shallow.Outline) > len(full.Outline) {
+		t.Fatalf("max_depth=1 returned %d entries, more than the full outline's %d",
+			len(shallow.Outline), len(full.Outline))
+	}
+	for i, e := range shallow.Outline {
+		if e.Level != 0 {
+			t.Errorf("entry %d is at level %d; max_depth=1 must return top-level entries only: %+v", i, e.Level, e)
+		}
+	}
+	joined := strings.Join(shallow.NextSteps, "\n")
+	switch {
+	case isNestedOutline(full.Outline):
+		// A nested outline MUST come back shorter, and the response must say so.
+		if len(shallow.Outline) >= len(full.Outline) {
+			t.Errorf("max_depth=1 returned %d of %d entries; a nested outline must lose its deeper levels",
+				len(shallow.Outline), len(full.Outline))
+		}
+		if !strings.Contains(joined, "max_depth") {
+			t.Errorf("a trimmed outline must say so in next_steps; got %q", joined)
+		}
+	default:
+		// A flat outline has nothing below the top level, so trimming is a no-op.
+		if len(shallow.Outline) != len(full.Outline) {
+			t.Errorf("max_depth=1 dropped %d of %d entries from a flat outline",
+				len(full.Outline)-len(shallow.Outline), len(full.Outline))
+		}
+	}
+	t.Logf("outline: %d entries in full, %d at max_depth=1", len(full.Outline), len(shallow.Outline))
 }
 
 // assertFindShape asserts a find over a real document behaved: every returned

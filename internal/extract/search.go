@@ -211,20 +211,23 @@ func searchEPUB(ctx context.Context, path, query string, o SearchOpts) (SearchRe
 // hit, tagged with the given page. Matching is case-insensitive unless
 // caseSensitive is set. An empty query yields no matches. Offsets are rune
 // indices into text.
+//
+// Whitespace is ignored on both sides of the comparison: a PDF text layer often
+// drops the space between two words ("OverseasHarriette"), splits one across a
+// line break, or pads a word with spaces its glyphs never had, and matching those
+// runs literally made a phrase search report zero hits on a document that plainly
+// contains the phrase. Only the non-whitespace runes have to line up; the
+// reported offset and snippet still point into the original text.
 func findMatches(text, query string, caseSensitive bool, page, snippetChars int) []Match {
 	runes := []rune(text)
-	needle := []rune(query)
 	// A query that is empty or only whitespace matches nothing, matching the
 	// documented behavior (a run of spaces is not a meaningful search term).
 	if strings.TrimSpace(query) == "" {
 		return nil
 	}
-	hay := runes
-	nd := needle
-	if !caseSensitive {
-		hay = lowerRunes(runes)
-		nd = lowerRunes(needle)
-	}
+	fold := !caseSensitive
+	hay, at := compactRunes(runes, fold)
+	nd, _ := compactRunes([]rune(query), fold)
 
 	var matches []Match
 	m := len(nd)
@@ -232,14 +235,40 @@ func findMatches(text, query string, caseSensitive bool, page, snippetChars int)
 		if !matchAt(hay[i:], nd) {
 			continue
 		}
+		// Map the hit back onto the original text: it starts at the first matched
+		// rune and ends just past the last, so any whitespace the extractor left
+		// inside the phrase is part of the reported span.
+		start := int(at[i])
+		end := int(at[i+m-1]) + 1
 		matches = append(matches, Match{
 			Page:       page,
-			CharOffset: i,
-			Snippet:    buildSnippet(runes, i, m, snippetChars),
+			CharOffset: start,
+			Snippet:    buildSnippet(runes, start, end-start, snippetChars),
 		})
 		i += m - 1
 	}
 	return matches
+}
+
+// compactRunes returns rs without its whitespace (lowercased when fold is set),
+// plus the index each surviving rune had in rs, so a match found in the compacted
+// form can be mapped back onto the original text. The index list is int32 because
+// extraction is capped well below two billion runes and a document's worth of
+// int64 indices is a needless doubling of the search's peak memory.
+func compactRunes(rs []rune, fold bool) (compacted []rune, at []int32) {
+	compacted = make([]rune, 0, len(rs))
+	at = make([]int32, 0, len(rs))
+	for i, r := range rs {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		if fold {
+			r = unicode.ToLower(r)
+		}
+		compacted = append(compacted, r)
+		at = append(at, int32(i))
+	}
+	return compacted, at
 }
 
 // matchAt reports whether the run of runes starting at hay matches needle. The
@@ -251,16 +280,6 @@ func matchAt(hay, needle []rune) bool {
 		}
 	}
 	return true
-}
-
-// lowerRunes returns a lowercased copy of rs, preserving a one-to-one rune
-// mapping so offsets stay aligned with the original.
-func lowerRunes(rs []rune) []rune {
-	out := make([]rune, len(rs))
-	for i, r := range rs {
-		out[i] = unicode.ToLower(r)
-	}
-	return out
 }
 
 // buildSnippet returns a one-line context window of roughly snippetChars runes

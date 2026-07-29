@@ -101,7 +101,11 @@ For a given item the pipeline:
 7. **Verifies** (for MD5-keyed sources) the digest against the requested MD5. A mismatch or
    an oversized transfer deletes the partial; a transient short read keeps it so a later call
    can resume.
-8. **Atomically renames** the completed `.part` to the final destination.
+8. **Atomically renames** the completed `.part` to the final destination, then **sweeps** the
+   partials the failed legs of this call left behind: a partial is only worth keeping while the
+   item is still unresolved, and once a source delivers the file the rest are litter in the
+   caller's download directory. Each removal takes that path's lock and skips the partial when
+   another download holds it, so a concurrent transfer is never unlinked from under.
 
 The chosen filename is, in priority order: an explicit `filename`, the CDN-announced
 `Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the
@@ -135,7 +139,8 @@ flowchart TD
     M --> O{Verify MD5?}
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
-    Q --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
+    Q --> S[Sweep the failed legs' .part files<br/>skipping any another download holds]
+    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
 ## Multi-source chain

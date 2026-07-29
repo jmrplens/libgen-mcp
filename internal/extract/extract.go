@@ -40,12 +40,14 @@ type Req struct {
 // fields for EPUB/TXT. HasMore reports whether more content remains and
 // NextCursor points at the resume position for the next call. Truncated is true
 // only when this chunk was cut short mid-content by max_chars; a clean
-// max_pages/offset boundary sets HasMore, not Truncated.
+// max_pages/offset boundary sets HasMore, not Truncated. QualityNote is set when
+// the extracted text looks damaged rather than absent — see qualityNote.
 type Chunk struct {
 	Text        string
 	Format      string
 	Extractable bool
 	Reason      string
+	QualityNote string
 	PageStart   int
 	PageEnd     int
 	TotalPages  int
@@ -123,7 +125,23 @@ func appendNote(reason, note string) string {
 // on the lowercased file extension: PDF, EPUB and TXT are extracted; DjVu,
 // comic archives and proprietary e-book formats are reported as unsupported.
 // A canceled ctx yields the context error.
+//
+// An extracted chunk is also checked for the one failure the rest of the
+// pipeline cannot see: a file whose fonts carry no usable character map extracts
+// text successfully, but the characters are not the ones printed on the page.
+// When the text looks like that, QualityNote says so.
 func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
+	chunk, err := extractByFormat(ctx, path, r)
+	if err != nil || !chunk.Extractable {
+		return chunk, err
+	}
+	chunk.QualityNote = qualityNote(chunk.Text)
+	return chunk, nil
+}
+
+// extractByFormat is Extract's dispatcher: it routes path to the extractor for
+// its format, identifying an extensionless file by its bytes.
+func extractByFormat(ctx context.Context, path string, r Req) (Chunk, error) {
 	if err := ctx.Err(); err != nil {
 		return Chunk{}, err
 	}
