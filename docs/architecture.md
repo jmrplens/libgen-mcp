@@ -101,7 +101,10 @@ For a given item the pipeline:
 7. **Verifies** (for MD5-keyed sources) the digest against the requested MD5. A mismatch or
    an oversized transfer deletes the partial; a transient short read keeps it so a later call
    can resume.
-8. **Atomically renames** the completed `.part` to the final destination.
+8. **Atomically renames** the completed `.part` to the final destination, then **sweeps** the
+   partials the failed legs of this call left behind: a partial is only worth keeping while the
+   item is still unresolved, and once a source delivers the file the rest are litter in the
+   caller's download directory.
 
 The chosen filename is, in priority order: an explicit `filename`, the CDN-announced
 `Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the

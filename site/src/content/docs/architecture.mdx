@@ -103,7 +103,7 @@ For a given item the pipeline:
 5. **Validates** the response — rejects HTML error pages (by `Content-Type` and by sniffing the first 512 bytes), enforces the size cap against the full expected size, and checks free disk space.
 6. **Streams** the body into the `.part` file while computing its MD5 and reporting throttled progress, under the progress-resetting stall guard. On resume it re-hashes the bytes already on disk so the final digest covers the whole file.
 7. **Verifies** (for MD5-keyed sources) the digest against the requested MD5. A mismatch or an oversized transfer deletes the partial; a transient short read keeps it so a later call can resume.
-8. **Atomically renames** the completed `.part` to the final destination.
+8. **Atomically renames** the completed `.part` to the final destination, then **sweeps** the partials the failed legs of this call left behind: a partial is only worth keeping while the item is still unresolved, and once a source delivers the file the rest are litter in the caller's download directory.
 
 The chosen filename is, in priority order: an explicit `filename`, the CDN-announced `Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the MD5 — always sanitized, with a source-provided extension appended when the name has none.
 
@@ -138,7 +138,7 @@ flowchart TD
     Q --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
 ```
 
-In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
+In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the partials left by the legs that failed first are removed, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
 
 ## Multi-source chain
 

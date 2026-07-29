@@ -246,11 +246,15 @@
             "type": "string"
           },
           "find": {
-            "description": "search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet",
+            "description": "search the document for this text instead of reading sequentially; returns matching passages with page/offset and a snippet. Matching ignores whitespace, so a phrase is still found when the file's text layer dropped or added spaces between words",
             "type": "string"
           },
           "max_chars": {
             "description": "max characters to return this call",
+            "type": "integer"
+          },
+          "max_depth": {
+            "description": "how many outline levels to return when outline is set: 1 for top-level entries only, 2 to add their subsections, and so on; omit for the whole tree, which runs to hundreds of entries in a deeply nested book",
             "type": "integer"
           },
           "max_matches": {

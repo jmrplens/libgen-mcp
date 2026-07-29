@@ -224,7 +224,9 @@ disk.
 - Free space on the target volume, or point `LIBGEN_MCP_DOWNLOAD_DIR` (or the per-call
   `path`) at a volume with more room.
 - Remove stale `.part` files left by interrupted downloads if you do not intend to resume
-  them (they live in the download directory, named `.libgen-mcp-*.part`).
+  them (they live in the download directory, named `.libgen-mcp-*.part`). A download that
+  eventually succeeds cleans up after itself, including the partials of the sources that
+  failed first; only a download where *every* source failed leaves one behind, on purpose.
 - Under Docker, make sure the mounted download volume is large enough and writable by UID
   `10001`.
 
