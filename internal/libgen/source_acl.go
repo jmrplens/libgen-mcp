@@ -114,7 +114,10 @@ func aclAnthologyID(doi string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	id := strings.TrimPrefix(suffix, aclVersionSegment)
+	// Sliced rather than TrimPrefix'd: aclDOISuffix matched the segment without
+	// regard to case, so a TrimPrefix keyed on the lower-case spelling would leave
+	// a "V1/" in front of the id.
+	id := suffix[len(aclVersionSegment):]
 	if id == "" || !aclWellFormedID(id) {
 		return "", false
 	}
@@ -132,7 +135,11 @@ func aclDOISuffix(doi string) (string, bool) {
 			continue
 		}
 		suffix := strings.TrimPrefix(doi, prefix)
-		if strings.HasPrefix(suffix, aclVersionSegment) {
+		// The segment is compared case-insensitively for the same reason the id is:
+		// a DOI is case-insensitive by specification, so 10.18653/V1/N19-1423 names
+		// the same paper as the lower-case spelling and must not be refused.
+		if len(suffix) >= len(aclVersionSegment) &&
+			strings.EqualFold(suffix[:len(aclVersionSegment)], aclVersionSegment) {
 			return suffix, true
 		}
 	}

@@ -1324,13 +1324,38 @@ func publisherDirectScenarios() []scenario {
 // left unpinned and dagstuhl must be what served the file, which can only happen if
 // the document page still advertises a PDF.
 func assertS66DagstuhlChain(tr transcript) (pass bool, detail string) {
+	if ok, why := requireDOI(tr, dagstuhlDOI); !ok {
+		return false, why
+	}
 	return assertChainServedBy(tr, "dagstuhl")
 }
 
 // assertS67ACLSourced grades the model mapping the Anthology's prose name onto
 // source=acl, and with it the uppercasing of a volume-lettered identifier.
 func assertS67ACLSourced(tr transcript) (pass bool, detail string) {
+	if ok, why := requireDOI(tr, aclDOI); !ok {
+		return false, why
+	}
 	return assertSourcedDownload(tr, "acl", "doi")
+}
+
+// requireDOI checks that the download call carried the DOI the scenario is about.
+//
+// Without it these assertions grade only "the named source served something": a
+// model that substituted a different DOI the same source can serve would pass
+// while leaving the behavior under test — the DROPS document-page parse, the
+// lettered Anthology identifier — unexercised. The comparison is case-insensitive
+// because a DOI is case-insensitive by specification and Crossref lower-cases them.
+func requireDOI(tr transcript, want string) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if got := strings.TrimSpace(stringField(call.Input, "doi")); !strings.EqualFold(got, want) {
+		return false, "model called download with doi=" + got + ", not " + want +
+			", the DOI the scenario is about"
+	}
+	return true, ""
 }
 
 // assertS68ZenodoConceptDOI grades the concept-DOI hop. It additionally requires the

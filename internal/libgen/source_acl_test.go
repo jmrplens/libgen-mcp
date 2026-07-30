@@ -21,6 +21,9 @@ func TestACLSupports(t *testing.T) {
 		{name: "volume-lettered id", item: Item{DOI: "10.18653/v1/N19-1423"}, want: true},
 		{name: "legacy prefix with v1", item: Item{DOI: "10.3115/v1/P14-1001"}, want: true},
 		{name: "lowercase volume letter", item: Item{DOI: "10.18653/v1/n19-1423"}, want: true},
+		// A DOI is case-insensitive by specification, so the version segment must be
+		// matched without regard to case too — not only the identifier after it.
+		{name: "uppercase version segment", item: Item{DOI: "10.18653/V1/N19-1423"}, want: true},
 		{name: "numeric acm form", item: Item{DOI: "10.3115/1072228.1072256"}, want: false},
 		{name: "no version segment", item: Item{DOI: "10.18653/N19-1423"}, want: false},
 		{name: "version segment only", item: Item{DOI: "10.18653/v1/"}, want: false},
@@ -53,6 +56,11 @@ func TestACLResolveCaseRule(t *testing.T) {
 		{
 			name: "volume-lettered id is uppercased",
 			doi:  "10.18653/v1/n19-1423",
+			want: "https://example.test/N19-1423.pdf",
+		},
+		{
+			name: "uppercase version segment resolves to the same file",
+			doi:  "10.18653/V1/N19-1423",
 			want: "https://example.test/N19-1423.pdf",
 		},
 		{

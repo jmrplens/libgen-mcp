@@ -348,7 +348,7 @@ prefix, competes with nothing, and needs no new identifier on `Item` and no new 
 `download`/`read`. Three more publishers fit it. Each was re-measured from scratch before
 being accepted — including, in every case, whether the chain already reached it.
 
-##### Measured — none of the three is reachable today
+##### Measured — none of the three is reachable by the default, keyless chain
 
 The gap is the reason each ships, so it was checked against every source in the chain rather
 than assumed:
