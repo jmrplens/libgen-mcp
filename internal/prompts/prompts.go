@@ -448,7 +448,7 @@ func doiText(doi string) string {
 	b.WriteString("\"}` to fetch the article — add `\"resolve_only\": true` if this server runs remotely and cannot write to your disk.\n\n")
 	b.WriteString("2. For the record rather than the file — publisher, year, journal and a ready-made BibTeX or RIS citation — call `get_details` with `{\"doi\": \"")
 	b.WriteString(doi)
-	b.WriteString("\"}`. It is the only route that produces a citation; `download` returns the file alone.\n\n")
+	b.WriteString("\"}`. It is the only route that produces a citation; `download` retrieves the article itself — as a saved file, or as a link when this server runs remotely — and nothing more.\n\n")
 	b.WriteString(untrustedCaveat)
 	return b.String()
 }
