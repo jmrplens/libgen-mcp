@@ -1570,7 +1570,9 @@ func TestE2EDownloadEmitsProgress(t *testing.T) {
 	params := &mcp.CallToolParams{
 		Name: "download",
 		Arguments: map[string]any{
-			"doi": rfcLiveDOI, "source": "rfc", "path": t.TempDir(), "skip_confirmation": true,
+			// No save-confirmation waiver is passed, and none is needed: this harness
+			// connects without advertising elicitation, so the prompt cannot fire.
+			"doi": rfcLiveDOI, "source": "rfc", "path": t.TempDir(),
 		},
 	}
 	params.SetProgressToken(e2eProgressToken)

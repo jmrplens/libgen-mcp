@@ -122,7 +122,6 @@ type DownloadInput struct {
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 	//nolint:lll // one sentence per clause; splitting the tag would hurt the rendered schema.
-	SkipConfirmation bool `json:"skip_confirmation,omitempty" jsonschema:"when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all"`
 }
 
 // registerOptions holds the optional Register knobs.
@@ -146,7 +145,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	for _, opt := range opts {
 		opt(&o)
 	}
-	truthy, falsy := true, false
+	truthy := true
 	// One lister for both tools, so a single discovery and a single cache serve
 	// the search escalation and the get_details fallback instead of each building
 	// its own manager.
@@ -175,7 +174,16 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Download file",
 		Description: desc,
 		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article)),
-		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
+		// Destructive when it writes: the saved file is moved into place with
+		// os.Rename, which replaces any file of that name in the download directory
+		// without warning and without renaming around it. A remote server returns a
+		// link and writes nothing, so there it is honestly not destructive. Clients
+		// that gate destructive tools are the second safeguard behind the save
+		// confirmation, and unlike that one the model cannot waive it.
+		Annotations: &mcp.ToolAnnotations{
+			Title: "Download file", DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
+			IdempotentHint: true, OpenWorldHint: &truthy,
+		},
 	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read",
@@ -214,6 +222,13 @@ func readInputSchema(enabled []string) *jsonschema.Schema {
 			". Omit to try every compatible source in order with failover"
 	}
 	return schema
+}
+
+// destructiveWhenWriting reports the download tool's destructiveHint: true for a
+// server that saves files, false for one that only returns links.
+func destructiveWhenWriting(remote bool) *bool {
+	destructive := !remote
+	return &destructive
 }
 
 // orderedEnabledSources merges the enabled per-key source lists (md5 books, isbn
@@ -1329,19 +1344,23 @@ func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, d *downl
 // wantConfirmation reports whether the download tool should ask before writing
 // this file to disk. It is the single place the opt-outs meet, checked cheapest
 // first: a remote server (which never writes to the client's disk) or a
-// resolve-only call has nothing to confirm, then the deployment-wide switch, the
-// per-call argument, this session's "stop asking" answer, and finally whether the
-// client can be asked at all. Any one of them being set skips the prompt — none
-// of them can force one, because a client that never advertised elicitation
-// cannot be prompted.
+// resolve-only call has nothing to confirm, then the deployment-wide switch, this
+// session's "stop asking" answer, and finally whether the client can be asked at
+// all. Any one of them being set skips the prompt — none of them can force one,
+// because a client that never advertised elicitation cannot be prompted.
+//
+// There is deliberately no per-call argument here. There used to be
+// skip_confirmation, and a live eval caught the model setting it unprompted on a
+// plain "find it and download it", waiving the user's last chance to stop a write
+// on its own reading of their intent — against explicit guidance in the argument's
+// own description. Every waiver that remains is asserted by someone who can
+// actually consent: the operator through configuration, or the user through the
+// prompt's own "stop asking" answer.
 func wantConfirmation(remote bool, cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
 	if remote || in.ResolveOnly {
 		return false
 	}
 	if cfg != nil && !cfg.ConfirmDownloads {
-		return false
-	}
-	if in.SkipConfirmation {
 		return false
 	}
 	if req != nil && consent.remembered(req.Session) {

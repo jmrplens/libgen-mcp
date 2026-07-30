@@ -107,7 +107,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof |
 | S71 | **Unpaywall by name** — the head of the article chain, and the one source no scenario had ever pinned: S7 reads as its coverage but grades whichever open-access provider won the race, so any run since Europe PMC arrived could have been served by something else without saying so |
 | S72 | **SciDB** — the only entry in `config.KnownSources` no scenario reached. It appears in half a dozen source lists as the thing that must _not_ win, and a source graded only as a loser is indistinguishable from one that cannot run at all |
-| S73 | **The save confirmation waived** — the prompt says the download is already approved, so the model must discover `skip_confirmation`; the host counts every confirmation it answers, so "none was raised" is hard evidence rather than an inference. It is the one argument whose whole effect is to remove a safeguard, and S26 only ever proved the safeguard fires |
+| S73 | **The save confirmation cannot be waived** — the prompt says the download is already approved and asks not to be prompted, which is exactly the request that used to talk the model into setting the removed `skip_confirmation`; the confirmation must fire anyway, and the host counts every one it answers |
 | S74 | **Reading on past the first chunk** — every other read scenario takes one chunk and stops. The model must continue from the cursor `read` handed it and receive different text; text identical to the first chunk is the failure, because that is what re-running the same call produces and the answer it feeds looks exactly like a continuation |
 | S75 | **A keyed source is advertised** — S48 read the other way: with a CORE key configured, `core` must appear in `download`'s `source` enum. S48 alone is satisfied by a gate stuck shut, which looks identical to a gate working; the pair says the enum tracks the deployment. Touches no third party |
 
@@ -208,9 +208,9 @@ model behaves the same while the server's delivery mechanism differs.
 
 **S71–S75 came from reading the suite against the surface rather than against a
 bug.** Four of them cover something that had no scenario at all — `unpaywall` and
-`scidb`, the two ends of the article chain; `skip_confirmation`, the one argument
-whose effect is to remove a safeguard; and `read`'s continuation, without which the
-tool is a preview and nothing more. The fifth is the missing half of a pair: S48
+`scidb`, the two ends of the article chain; the save confirmation, which a model
+turned out to be able to waive on its own initiative; and `read`'s continuation,
+without which the tool is a preview and nothing more. The fifth is the missing half of a pair: S48
 asserts an unkeyed source stays hidden, which a gate stuck shut satisfies forever,
 so S75 configures a key and asserts the source appears.
 

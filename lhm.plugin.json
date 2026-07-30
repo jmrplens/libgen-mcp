@@ -1,7 +1,7 @@
 {
   "identifier": "jmrplens-libgen-mcp",
   "name": "Library Genesis MCP Server",
-  "version": "1.3.4",
+  "version": "1.4.0",
   "description": "Model Context Protocol server that lets your AI assistant search, download and read books, research papers, comics, magazines and standards from Library Genesis — and, when the catalog comes up empty, discover open-access literature from arXiv, Crossref and OpenLibrary, public-domain books from Project Gutenberg, plus bibliographic records from dblp and PubMed and education grey literature from ERIC. Four focused tools (search, get_details, download, read); one static Go binary; stdio or streamable-HTTP transport; multi-source downloads with automatic mirror discovery and failover. No account, API key or token required.",
   "author": "José M. Requena Plens",
   "authorUrl": "https://github.com/jmrplens",
@@ -200,10 +200,6 @@
             "description": "when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)",
             "type": "boolean"
           },
-          "skip_confirmation": {
-            "description": "when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all",
-            "type": "boolean"
-          },
           "source": {
             "description": "restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover",
             "enum": [
@@ -233,7 +229,7 @@
         "type": "object"
       },
       "annotations": {
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true,
         "readOnlyHint": false,

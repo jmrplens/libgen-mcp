@@ -310,33 +310,37 @@ func TestAssertReadContinuationRejectsARepeatedChunk(t *testing.T) {
 	}
 }
 
-// TestAssertSkipConfirmationNeedsBothHalves checks the opt-out is graded on the
-// argument AND on the confirmation not firing: either alone is satisfied by the
-// other half being broken.
-func TestAssertSkipConfirmationNeedsBothHalves(t *testing.T) {
+// TestAssertConfirmationCannotBeWaivedGradesTheProof checks the scenario is graded
+// on the confirmation actually firing, not merely on a file arriving — the whole
+// point is that a caller asking to skip the prompt does not get to.
+func TestAssertConfirmationCannotBeWaivedGradesTheProof(t *testing.T) {
 	const md5 = "0123456789abcdef0123456789abcdef"
 	search := okCall("search", map[string]any{"query": "sicp"},
 		tools.SearchOutput{Results: []libgen.Result{{MD5: md5}}})
 	saved := libgen.DownloadResult{Path: "/tmp/sicp.pdf", SizeBytes: 42, Source: "libgen"}
+	download := okCall("download", map[string]any{"md5": md5}, saved)
 
-	waived := transcript{Calls: []toolCall{
-		search,
-		okCall("download", map[string]any{"md5": md5, "skip_confirmation": true}, saved),
-	}}
-	if pass, why := assertSkipConfirmation(waived); !pass {
-		t.Fatalf("the opt-out taking effect must pass: %s", why)
+	fired := transcript{Calls: []toolCall{search, download}, ConfirmElicits: 1}
+	if pass, why := assertConfirmationCannotBeWaived(fired); !pass {
+		t.Fatalf("a confirmation that fired and a file that arrived must pass: %s", why)
 	}
 
-	ignored := waived
-	ignored.ConfirmElicits = 1
-	pass, why := assertSkipConfirmation(ignored)
+	// The regression this guards: the prompt becoming waivable again, which looks
+	// exactly like a successful download with no confirmation behind it.
+	silent := transcript{Calls: []toolCall{search, download}}
+	pass, why := assertConfirmationCannotBeWaived(silent)
 	if pass || !strings.Contains(why, functionalPrefix) {
-		t.Fatalf("a confirmation raised anyway is our bug, got pass=%v %q", pass, why)
+		t.Fatalf("a download with no confirmation is our bug, got pass=%v %q", pass, why)
 	}
 
-	never := transcript{Calls: []toolCall{search, okCall("download", map[string]any{"md5": md5}, saved)}}
-	pass, why = assertSkipConfirmation(never)
-	if pass || !strings.Contains(why, "SURFACE GAP") {
-		t.Fatalf("never setting the argument is a surface gap, got pass=%v %q", pass, why)
+	// A model that still reaches for the removed argument is noted but not failed,
+	// so long as the confirmation fired and a file arrived.
+	tried := transcript{
+		Calls:          []toolCall{search, okCall("download", map[string]any{"md5": md5, "skip_confirmation": true}, saved)},
+		ConfirmElicits: 1,
+	}
+	pass, why = assertConfirmationCannotBeWaived(tried)
+	if !pass || !strings.Contains(why, "still tried skip_confirmation") {
+		t.Fatalf("a rejected attempt should be noted, not failed, got pass=%v %q", pass, why)
 	}
 }
