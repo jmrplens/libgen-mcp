@@ -200,7 +200,19 @@ make check-llms                                            # llms.txt fresh + va
 make check-lhm-manifest                                    # lhm.plugin.json matches the surface
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
+cd site && pnpm run lint                                   # the docs site, if you touched it
 ```
+
+**`make` does not cover the docs site.** `site/` has its own gate chain —
+`astro check`, i18n parity, the PRIVACY.md sync check, eslint, prettier,
+html-validate and htmlhint — run by the `Docs Site` job and by `pnpm run lint`
+in `site/`. Two of its checks fail on changes that every Go and Markdown gate
+above passes happily: **prettier** rewrites a Markdown table's separator widths
+when a row grows, and **`privacy:check`** fails whenever `PRIVACY.md` changes
+without its digest being re-stamped (run `node scripts/sync-privacy.mjs`, then
+review the Spanish page and copy the new digest into its `privacySource`).
+Because the chain is `&&`-joined, the first failure hides the rest — so re-run
+it to completion after fixing one.
 
 A plain `golangci-lint run` skips every tagged file, which is how the whole
 `cmd/eval` harness went unanalyzed until 2026-07-30. `make lint` passes

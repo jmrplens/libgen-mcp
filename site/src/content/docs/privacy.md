@@ -3,7 +3,7 @@ title: Privacy policy
 description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
 datePublished: "2026-07-25"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "2c0da46466882194"
+privacySource: "526286567bb4ecbe"
 head:
   - tag: script
     attrs:

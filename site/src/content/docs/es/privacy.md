@@ -5,7 +5,7 @@ datePublished: "2026-07-25"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "2c0da46466882194"
+privacySource: "526286567bb4ecbe"
 head:
   - tag: script
     attrs:
