@@ -116,7 +116,7 @@ user asks for the behavior:
 | Variable                     | Default        | Purpose                                                                   |
 | ---------------------------- | -------------- | ------------------------------------------------------------------------- |
 | `LIBGEN_MCP_DOWNLOAD_DIR`    | `~/Downloads`  | Destination directory for `download`.                                     |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | empty (unset)  | Contact email for the Unpaywall API. Unset by default, which disables the Unpaywall source; the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable it. |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | empty (unset)  | Contact email for the Unpaywall API. Unset by default, which disables the Unpaywall source; the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable it. |
 | `LIBGEN_MCP_CORE_KEY`        | empty (unset)  | API key (free registration at core.ac.uk) enabling the `core` open-access article source. Unset leaves `core` out of the chain. |
 | `LIBGEN_MIRROR`              | auto-discovery | Pin a specific Library Genesis mirror, e.g. `https://libgen.li`.          |
 | `LIBGEN_MCP_LOG_LEVEL`       | `info`         | `debug`, `info`, `warn`, or `error`.                                      |

@@ -129,7 +129,7 @@ is also hidden from the download tool's `source` schema when unset. S7 sets the
 email via its per-scenario environment to exercise the open-access path.
 
 **The article chain is ordered, and S45–S49 test the order.** Articles resolve
-through `unpaywall → europepmc → biorxiv → fatcat → core → scihub → scidb`
+through `unpaywall → europepmc → biorxiv → rfc → nist → fatcat → core → oapen → scihub → scidb`
 (`config.KnownSources`): the legal open-access providers lead, the shadow libraries
 are the fallback. S45–S47 each pin one of the new providers by name; S46 and S49
 pin nothing and grade which source the chain reached, which is the only way the
@@ -313,7 +313,8 @@ appearing on the Spanish page in English; add it to `scenariosES` in
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
 - **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall,
-  Europe PMC, bioRxiv, fatcat, Sci-Hub, OAPEN, OpenLibrary and the Internet Archive,
+  Europe PMC, bioRxiv, the RFC Editor, NIST, fatcat, Sci-Hub, OAPEN, OpenLibrary and
+  the Internet Archive,
   and the discovery providers behind Gutenberg, ERIC, dblp and PubMed. These are flaky
   and rate-limited; results
   vary run to run. A download scenario that selected the tool and source correctly
