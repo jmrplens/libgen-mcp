@@ -52,6 +52,10 @@ AI assistant) make. There are no background connections. The destinations are:
   `10.4230` DOI, the [ACL Anthology](https://aclanthology.org)
   (`aclanthology.org`) for a `10.18653`/`10.3115` DOI,
   [Zenodo](https://zenodo.org) (`zenodo.org`) for a `10.5281/zenodo` DOI,
+  [SciELO](https://www.scielo.br) for a `10.1590` DOI (the request goes to
+  `doi.org`, whose redirect leads to `www.scielo.br`), the
+  [FAO Knowledge Repository](https://openknowledge.fao.org)
+  (`openknowledge.fao.org`) for a `10.4060` DOI,
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
   `web.archive.org` for the file). A monograph DOI is also offered to
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries

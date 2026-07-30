@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de diecisiete proveedores de descarga probados en un orden fijo.
+`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de diecinueve proveedores de descarga probados en un orden fijo.
 
 ## Cliente HTTP
 
@@ -143,31 +143,33 @@ En prosa: `download` construye la cadena de fuentes para el identificador recibi
 
 ## Cadena multi-fuente
 
-Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(item)` y `Resolve(ctx, item)` — de modo que la canalización compartida permanece agnóstica del proveedor. La cadena se construye desde la configuración en el orden fijo `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, y a cada fuente solo se le ofrecen los elementos que admite:
+Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(item)` y `Resolve(ctx, item)` — de modo que la canalización compartida permanece agnóstica del proveedor. La cadena se construye desde la configuración en el orden fijo `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, y a cada fuente solo se le ofrecen los elementos que admite:
 
-| Fuente       | Identificado por               | Rol                           | En una línea                                                                            |
-| ------------ | ------------------------------ | ----------------------------- | --------------------------------------------------------------------------------------- |
-| `unpaywall`  | DOI                            | Artículos de acceso abierto   | El mejor enlace a PDF de acceso abierto que la API de Unpaywall conoce para un DOI.     |
-| `europepmc`  | DOI                            | Artículos de acceso abierto   | El texto completo de acceso abierto de PubMed Central, vía la API de Europe PMC.        |
-| `biorxiv`    | DOI `10.1101`                  | Preprints de acceso abierto   | El `.full.pdf` de la última versión en bioRxiv o medRxiv.                               |
-| `rfc`        | DOI `10.17487`                 | Estándares de internet        | El `.txt` canónico del RFC Editor, construido a partir del número de RFC.               |
-| `nist`       | DOI `10.6028`                  | Normas del NIST               | La redirección del resolutor de DOI, que acaba en el PDF de `nvlpubs.nist.gov`.         |
-| `dagstuhl`   | DOI `10.4230`                  | Actas de acceso abierto       | LIPIcs, OASIcs, DARTS y los Dagstuhl Reports, desde la página de documento de DROPS.    |
-| `acl`        | DOI `10.18653/v1`/`10.3115/v1` | Actas de acceso abierto       | `aclanthology.org/<id>.pdf`, construido con el identificador que el DOI ya contiene.    |
-| `zenodo`     | DOI `10.5281/zenodo`           | Depósitos de acceso abierto   | El mejor fichero del registro, listado por la única ruta `/api` que permite robots.txt. |
-| `fatcat`     | DOI                            | Texto completo preservado     | Las copias preservadas de Internet Archive Scholar, sondeadas antes de usarlas.         |
-| `core`       | DOI                            | Artículos de acceso abierto   | La URL de descarga de CORE, devuelta solo cuando aún sirve una copia viva.              |
-| `oapen`      | DOI/ISBN                       | Libros de acceso abierto      | Una monografía con licencia abierta, tras confirmar el identificador en el registro.    |
-| `archive`    | ISBN                           | Libros de dominio público     | Un escaneo de Internet Archive, solo si es público y no está restringido por préstamo.  |
-| `scihub`     | DOI                            | Reserva de artículos          | El PDF que incrusta el primer mirror de Sci-Hub que sirva una página de artículo.       |
-| `scidb`      | DOI                            | Reserva de artículos          | El PDF incrustado en el visor SciDB de Anna's Archive.                                  |
-| `libgen`     | MD5                            | Proveedor principal de libros | La cadena de enlaces de LibGen (`ads.php` → `get.php` → CDN), con verificación MD5.     |
-| `randombook` | MD5                            | Reserva de libros             | Mirrors frescos de la familia libgen descubiertos por la API de randombook.org.         |
-| `annas`      | MD5                            | Reserva de libros             | Anna's Archive por pasarelas IPFS públicas, o la API de miembros si hay clave.          |
+| Fuente       | Identificado por               | Rol                             | En una línea                                                                                             |
+| ------------ | ------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `unpaywall`  | DOI                            | Artículos de acceso abierto     | El mejor enlace a PDF de acceso abierto que la API de Unpaywall conoce para un DOI.                      |
+| `europepmc`  | DOI                            | Artículos de acceso abierto     | El texto completo de acceso abierto de PubMed Central, vía la API de Europe PMC.                         |
+| `biorxiv`    | DOI `10.1101`                  | Preprints de acceso abierto     | El `.full.pdf` de la última versión en bioRxiv o medRxiv.                                                |
+| `rfc`        | DOI `10.17487`                 | Estándares de internet          | El `.txt` canónico del RFC Editor, construido a partir del número de RFC.                                |
+| `nist`       | DOI `10.6028`                  | Normas del NIST                 | La redirección del resolutor de DOI, que acaba en el PDF de `nvlpubs.nist.gov`.                          |
+| `dagstuhl`   | DOI `10.4230`                  | Actas de acceso abierto         | LIPIcs, OASIcs, DARTS y los Dagstuhl Reports, desde la página de documento de DROPS.                     |
+| `acl`        | DOI `10.18653/v1`/`10.3115/v1` | Actas de acceso abierto         | `aclanthology.org/<id>.pdf`, construido con el identificador que el DOI ya contiene.                     |
+| `zenodo`     | DOI `10.5281/zenodo`           | Depósitos de acceso abierto     | El mejor fichero del registro, listado por la única ruta `/api` que permite robots.txt.                  |
+| `scielo`     | DOI `10.1590`                  | Artículos de acceso abierto     | El PDF propio de SciELO Brasil, tomado de la página del artículo a la que resuelve el DOI.               |
+| `fao`        | DOI `10.4060`                  | Documentos de agencia de la ONU | El bitstream del ítem en el FAO Knowledge Repository, por el único endpoint REST que permite robots.txt. |
+| `fatcat`     | DOI                            | Texto completo preservado       | Las copias preservadas de Internet Archive Scholar, sondeadas antes de usarlas.                          |
+| `core`       | DOI                            | Artículos de acceso abierto     | La URL de descarga de CORE, devuelta solo cuando aún sirve una copia viva.                               |
+| `oapen`      | DOI/ISBN                       | Libros de acceso abierto        | Una monografía con licencia abierta, tras confirmar el identificador en el registro.                     |
+| `archive`    | ISBN                           | Libros de dominio público       | Un escaneo de Internet Archive, solo si es público y no está restringido por préstamo.                   |
+| `scihub`     | DOI                            | Reserva de artículos            | El PDF que incrusta el primer mirror de Sci-Hub que sirva una página de artículo.                        |
+| `scidb`      | DOI                            | Reserva de artículos            | El PDF incrustado en el visor SciDB de Anna's Archive.                                                   |
+| `libgen`     | MD5                            | Proveedor principal de libros   | La cadena de enlaces de LibGen (`ads.php` → `get.php` → CDN), con verificación MD5.                      |
+| `randombook` | MD5                            | Reserva de libros               | Mirrors frescos de la familia libgen descubiertos por la API de randombook.org.                          |
+| `annas`      | MD5                            | Reserva de libros               | Anna's Archive por pasarelas IPFS públicas, o la API de miembros si hay clave.                           |
 
 Dos de ellas están apagadas por defecto: `unpaywall` necesita `LIBGEN_MCP_UNPAYWALL_EMAIL` y `core` necesita `LIBGEN_MCP_CORE_KEY`, y sin ellas un despliegue sin configurar no las tiene en la cadena en absoluto. Para saber qué alcanza cada fuente, cómo resuelve un identificador, las trampas medidas en ella y las reglas de rastreo que respeta, ver [Fuentes de descarga](/libgen-mcp/es/sources/) — esta tabla es solo el índice.
 
-Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro identificado por md5 se le ofrece `[libgen, randombook, annas]`, a uno identificado por ISBN `[oapen, archive]`, a un artículo `[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb]`, y a uno que lleva md5 y DOI se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
+Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro identificado por md5 se le ofrece `[libgen, randombook, annas]`, a uno identificado por ISBN `[oapen, archive]`, a un artículo `[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb]`, y a uno que lleva md5 y DOI se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
 
 ### Enfriamiento por fuente
 

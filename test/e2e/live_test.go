@@ -740,6 +740,107 @@ func TestE2EZenodoClassifiedOutcome(t *testing.T) {
 	classifyOrFail(t, "zenodo", err, zenodoFailures)
 }
 
+// scieloLiveDOI is the DOI of "Peeling and physicochemical characterization of
+// tomato fruits", a 2025 Ciência e Agrotecnologia article whose PDF scielo.br served
+// as 737,104 bytes on 2026-07-30. It is deliberately one of the SciELO articles the
+// rest of the chain cannot reach: Unpaywall reports is_oa true with no url_for_pdf on
+// any oa_location, and scholar.archive.org answers 404 to the fatcat lookup, so this
+// case measures new reach rather than a duplicate route.
+const scieloLiveDOI = "10.1590/1413-7054202549009425"
+
+// scieloResolverProbe is the DOI resolver URL the source follows to the article page,
+// so a network that cannot reach it skips instead of burning the timeout budget.
+const scieloResolverProbe = "https://doi.org/" + scieloLiveDOI
+
+// scieloFailures are the KNOWN, diagnosed ways the scielo source can fail live. The
+// transport class pins doi.org because that is the host the source itself requests;
+// the redirect to scielo.br is the HTTP client's, and a failure there arrives inside
+// the same wrapper.
+var scieloFailures = []sourceFailure{
+	diagnosed("scielo", `"[^"]*" is not a SciELO DOI`, "the DOI is not one the source claims"),
+	diagnosed("scielo", `"[^"]*" is not a registered SciELO article`,
+		"the resolver no longer knows that DOI"),
+	diagnosed("scielo", `"[^"]*" advertises no full-text PDF`,
+		"the article page stopped advertising a PDF (SciELO's oldest records are HTML-only)"),
+	diagnosed("scielo", `"[^"]*" resolved to "[^"]*", not a SciELO article`,
+		"the DOI now resolves off scielo.br"),
+	diagnosed("scielo", `the page for "[^"]*" is not an article page`,
+		"SciELO served a challenge page or changed its layout"),
+	transportTo("scielo", "", "doi.org"),
+}
+
+// TestE2EScieloClassifiedOutcome exercises the scielo source end to end, restricted
+// to source=scielo. It proves the two things the source cannot derive: that the DOI
+// still resolves onto scielo.br, and that the article page's citation_pdf_url tag is
+// still there — the address it names embeds a per-article key that appears in no
+// identifier the caller holds, so a layout change would silently remove the whole
+// corpus from reach.
+func TestE2EScieloClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "scielo", scieloResolverProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, scieloLiveDOI, "scielo")
+	if err == nil {
+		assertSourcePDF(t, "scielo", res)
+		return
+	}
+	classifyOrFail(t, "scielo", err, scieloFailures)
+}
+
+// faoLiveDOI is the DOI of the FAO/WHO "Compendium of food additive specifications",
+// whose PDF the FAO Knowledge Repository served as 2,929,735 bytes on 2026-07-30. It
+// is one of the eight sampled FAO DOIs no source in the chain reaches: Unpaywall
+// reports is_oa false (FAO deposits no OA location with Crossref), Europe PMC returns
+// nothing, and fatcat holds no preserved full text.
+const faoLiveDOI = "10.4060/cc7949en"
+
+// faoReachProbe is the upstream reachability check, so a network that cannot reach
+// the repository skips instead of burning the timeout budget.
+//
+// It is robots.txt rather than the item page the source actually fetches, which is
+// the usual choice everywhere else in this file, because the item page is
+// server-rendered Angular and a cold render is slow: measured at 5.4 s against
+// upstreamProbeTimeout's 3 s budget, while the same page answers in 0.5 s once warm.
+// Probing it would turn a perfectly live source into a spurious skip. robots.txt is
+// static, answers in under half a second, and still proves the host is reachable —
+// and it is the file that decides which two paths this source may use at all.
+const faoReachProbe = "https://openknowledge.fao.org/robots.txt"
+
+// faoFailures are the KNOWN, diagnosed ways the fao source can fail live. There is
+// no "handle not found" class because DSpace does not report one: an unheld handle
+// arrives as HTTP 200 with the ordinary shell, so it surfaces as the
+// no-full-text-PDF class below.
+var faoFailures = []sourceFailure{
+	diagnosed("fao", `"[^"]*" is not an FAO DOI`, "the DOI is not one the source claims"),
+	diagnosed("fao", `"[^"]*" advertises no full-text PDF`,
+		"the repository no longer holds that item, or holds it without a PDF"),
+	diagnosed("fao", `the page for "[^"]*" is not a repository page`,
+		"the repository served a challenge page or changed its layout"),
+	transportTo("fao", "", "openknowledge.fao.org"),
+}
+
+// TestE2EFAOClassifiedOutcome exercises the fao source end to end, restricted to
+// source=fao. Its real job is to guard the URL rewrite: the item page advertises the
+// Angular frontend route /bitstreams/<uuid>/download, which answers a plain HTTP
+// client with 200 text/html and the application shell, so the source rewrites it to
+// the backend /server/api/core/bitstreams/<uuid>/content endpoint. assertSourcePDF
+// fails on the shell, which is exactly the regression this catches.
+func TestE2EFAOClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "fao", faoReachProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, faoLiveDOI, "fao")
+	if err == nil {
+		assertSourcePDF(t, "fao", res)
+		return
+	}
+	classifyOrFail(t, "fao", err, faoFailures)
+}
+
 // fatcatScholarProbe is the DOI lookup on fatcat's own web frontend, which is what
 // the source now drives: the JSON API it used to call (api.fatcat.wiki) resolves in
 // DNS but never completes a TCP handshake, from any network or client tried, with no

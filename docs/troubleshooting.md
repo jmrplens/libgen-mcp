@@ -81,17 +81,26 @@ open-access providers first, then the shadow-library fallbacks:
 8. **`zenodo`** — only for `10.5281/zenodo.<id>` DOIs; lists the record's files and serves the
    best one (a PDF, EPUB or text file if the record holds one, else its largest file). A
    restricted record and a metadata-only deposit both report a clean miss.
-9. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar's release page
-   advertises one that still serves a PDF; it distinguishes a DOI the catalog does not hold, a
-   release with nothing preserved, and a release whose preserved captures have all gone bad.
-10. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
+9. **`scielo`** — only for `10.1590` DOIs; follows the DOI to its article page on scielo.br and
+   takes the PDF that page advertises. Recent SciELO articles are the ones the rest of the chain
+   misses: Unpaywall marks them open access without supplying a PDF link, and Internet Archive
+   Scholar has not ingested them yet.
+10. **`fao`** — only for `10.4060` DOIs; derives the item page in the FAO Knowledge Repository
+    from the DOI's own suffix, which is also the item's handle. FAO deposits no open-access
+    location with Crossref, so Unpaywall reports its documents as closed however openly they are
+    licensed, and nothing else in the chain holds them.
+11. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar's release
+    page advertises one that still serves a PDF; it distinguishes a DOI the catalog does not
+    hold, a release with nothing preserved, and a release whose preserved captures have all
+    gone bad.
+12. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
     download URL when CORE hosts a live copy.
-11. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
+13. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
     journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
     chain advances.
-12. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+14. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
     article page with an extractable PDF.
-13. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
+15. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
     covers papers published after Sci-Hub stopped indexing.
 
 **Fixes.**

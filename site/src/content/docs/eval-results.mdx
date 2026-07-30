@@ -133,7 +133,7 @@ a fresh-mirror miss) — a network condition, never a model failure.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-The suite is **69 scenarios** (S1–S68 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
+The suite is **71 scenarios** (S1–S70 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
 
 {/* end generated */}
 
@@ -229,6 +229,8 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 | S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere |
 | S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased |
 | S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
+| S69 | **SciELO on a recent article** — a 2025 paper Unpaywall marks open access without supplying a PDF link and fatcat has not ingested, so nothing else in the chain can produce bytes; what is graded is the resolver landing, since no identifier the caller holds predicts the article page's address and the PDF URL comes from that page's own `citation_pdf_url` |
+| S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof |
 
 {/* end generated */}
 
@@ -250,7 +252,7 @@ transport, ten scenarios in all.
 {/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-The table below is assembled from live runs between 2026-07-25 and 2026-07-30 against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **69 passed, 0 failed, 0 skipped** out of 69 — every scenario, including the 10 that run against a server in remote (`--http`) mode. Each row carries the date it was last measured: a partial run refreshes only the scenarios it executed.
+The table below is assembled from live runs between 2026-07-25 and 2026-07-30 against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **71 passed, 0 failed, 0 skipped** out of 71 — every scenario, including the 10 that run against a server in remote (`--http`) mode. Each row carries the date it was last measured: a partial run refreshes only the scenarios it executed.
 
 {/* end generated */}
 
@@ -341,6 +343,8 @@ honest "not found" with the extras staying out. Both pass by behaving that way.
 | S66 | local | ✅ PASS | 2026-07-30 | downloaded 339463 bytes via dagstuhl |
 | S67 | local | ✅ PASS | 2026-07-30 | downloaded 786279 bytes via acl |
 | S68 | local | ✅ PASS | 2026-07-30 | downloaded 173300 bytes via zenodo |
+| S69 | local | ✅ PASS | 2026-07-30 | downloaded 737104 bytes via scielo |
+| S70 | local | ✅ PASS | 2026-07-30 | downloaded 2929735 bytes via fao |
 
 {/* end generated */}
 

@@ -209,7 +209,14 @@ make check-lhm-manifest                                    # lhm.plugin.json mat
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
 cd site && pnpm run lint                                   # the docs site, if you touched it
+npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 ```
+
+**`make` does not cover everything CI runs.** Two gates have no `make` target and
+so pass locally by not being run: `markdownlint-cli2` over every `*.md` (the
+`Analyze Markdown` job — MD024 forbids two headings with the same text in one
+file, which an ADR accumulating amendments trips easily), and the docs site's
+own chain.
 
 **`make` does not cover the docs site.** `site/` has its own gate chain —
 `astro check`, i18n parity, the PRIVACY.md sync check, eslint, prettier,

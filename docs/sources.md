@@ -1,6 +1,6 @@
 # Download sources
 
-`download` resolves an item through an ordered chain of seventeen sources.
+`download` resolves an item through an ordered chain of nineteen sources.
 [Architecture](architecture.md#multi-source-chain) describes the chain — how it is built,
 how failover works, and how a source that proves unreachable is cooled down. This page
 describes the sources themselves, one section each, in chain order: what each one reaches,
@@ -254,6 +254,102 @@ Zenodo is CERN's general-purpose open repository.
   crawling. Because the metadata endpoint is deliberately never called, the source cannot see
   the deposit's title or authors, which is why a Zenodo download is named from the file key
   rather than from bibliographic metadata.
+
+### `scielo`
+
+SciELO is the open-access publishing platform of Latin American science; this source serves
+its Brazilian collection.
+
+- **Keyed by** a DOI carrying the `10.1590` registrant prefix, matched case-insensitively.
+  That is FapUNIFESP's prefix and every DOI under it is a SciELO Brazil article.
+- **Corpus** roughly half a million articles across the health, agricultural, social and human
+  sciences, much of it published in Portuguese and Spanish. Everything SciELO carries is free
+  to read, served without an account, and Creative Commons licensed.
+- **How it resolves** `GET https://doi.org/<doi>` with redirects followed, then the
+  `citation_pdf_url` meta tag on the article page it lands on.
+- **Why the resolver hop cannot be skipped** the URL SciELO registers is the legacy form
+  `scielo.php?script=sci_arttext&pid=<PID>`, and that PID is embedded only in the older DOIs
+  (`10.1590/s0104-6632…`), not in the modern ones (`10.1590/1982-2553202568745`). It then
+  redirects on to a `/j/<journal>/a/<key>/` address whose key appears in no identifier the
+  caller holds. SciELO's own ArticleMeta API does map a DOI to its PID, but its 88 KB legacy
+  record carries no `/j/…/a/…` key either, so it would cost a request and still leave the
+  article page to fetch.
+- **The landing check** the source scans the page only when the resolver actually arrived on
+  `scielo.br` (or a subdomain of it, matched on a label boundary). All fourteen sampled DOIs
+  did; one that leads anywhere else is reported as a clean miss rather than scraped for a meta
+  tag it was never meant to carry.
+- **The entity trap** the advertised address is query-driven (`…/?lang=en&format=pdf`) and the
+  markup writes its separator as `&amp;`, so the tag's value is HTML-unescaped before use.
+  Requesting it literally would ask for a parameter named `amp;format` and receive HTML.
+- **Why it is not a duplicate route** over fourteen real DOIs sampled from 1998 to 2025,
+  Unpaywall reported `is_oa: true` for all fourteen but supplied a downloadable `url_for_pdf`
+  for only eight — and for none of the four sampled from 2025, leaving its best OA location
+  pointing at the HTML article page, which `read` cannot extract. Internet Archive Scholar
+  advertised a preserved copy for ten and answered 404 for the most recent ones, its ingest
+  lagging publication as an archive's must. Three of the fourteen were reachable from no source
+  in the chain at all, keys or no keys, while scielo.br served them at 1,542,793, 737,104 and
+  610,410 bytes. The gap is systematic on recent material, which is the material a research
+  tool is usually asked for.
+- **What it does not cover** SciELO's oldest records are HTML-only. The 1998 article
+  `10.1590/s0104-66321998000100007` carries no `citation_pdf_url` and answers a request for one
+  with "PDF do Artigo não encontrado", so the source declines rather than handing the pipeline
+  a 404 — and no other source reaches it either. Other SciELO national collections (Chile,
+  Mexico, Spain, Colombia) register under different prefixes and are out of scope.
+- **Keys** keyless.
+- **Politeness** `www.scielo.br`'s `robots.txt` disallows only `/admin`; both paths used here
+  are permitted. A resolve is one request plus the download.
+
+### `fao`
+
+The FAO Knowledge Repository is the Food and Agriculture Organization of the United Nations'
+DSpace 7 instance.
+
+- **Keyed by** a DOI carrying the `10.4060` registrant prefix, matched case-insensitively,
+  whose suffix could be a handle's local part (ASCII letters, digits, dots and hyphens, at
+  least one alphanumeric, no `..` run).
+- **Corpus** about 9,500 documents: the flagship reports (*The State of Food Security and
+  Nutrition in the World*, *The State of the World's Forests*), technical guidance, country
+  humanitarian response plans, standards work and statistical yearbooks, published under
+  Creative Commons licenses in all six UN languages and served without an account.
+- **How it resolves** `GET /handle/20.500.14283/<doi suffix>`, then the item page's
+  `citation_pdf_url` meta tag, rewritten as described below.
+- **Why the doi.org hop is skipped** the DOI's suffix is also the item's handle, so the page's
+  address follows from the identifier with no lookup — verified on eight of eight sampled DOIs,
+  including several the DOI resolver sends to `www.fao.org/documents/card/…` instead. That
+  matters for more than a saved request: `www.fao.org` answered HTTP 504 for five of the eight
+  while the repository served all eight.
+- **The frontend/backend trap** the `citation_pdf_url` tag names `/bitstreams/<uuid>/download`,
+  an Angular *frontend* route. A browser gets the file from it; a plain HTTP client gets HTTP
+  200, `text/html` and 372,862 bytes of application shell. The source therefore lifts the UUID
+  out of the advertised URL and requests the *backend* endpoint
+  `/server/api/core/bitstreams/<uuid>/content`, which returned `application/pdf` at 2,929,735,
+  12,549,068 and 8,677,202 bytes for three sampled items whose frontend URLs all served the
+  shell.
+- **Why there is no "not found" status** DSpace answers an unknown handle with HTTP **200** and
+  its ordinary shell carrying "No item found for the identifier", not a 404. The status line
+  therefore cannot distinguish an unheld DOI from a held one, and the absence of the full-text
+  tag reports both. That conflates an unknown item with a metadata-only one — a dataset
+  component such as `10.4060/cc2212en-fig07` is a figure with no PDF — which costs nothing,
+  since both are final, correct answers that this source cannot serve the item. A response
+  missing the repository's own `<ds-root` element is a different matter and is reported as the
+  source being unavailable.
+- **Why it is not a duplicate route** across eight sampled DOIs spanning 2019 to 2024,
+  Unpaywall reported `is_oa: false` for every one — FAO deposits no open-access location with
+  Crossref, so the corpus is invisible to a metadata-driven resolver however open its licenses
+  are — Europe PMC returned zero hits, and Internet Archive Scholar either held a release page
+  advertising no preserved full text or answered 404. The LibGen catalog carries a handful of
+  the flagship titles and none of the rest: a search for "FAO humanitarian response plan"
+  returns nothing. All eight resolved here.
+- **Keys** keyless.
+- **Politeness** the repository's `robots.txt` cuts the REST API down to exactly one usable
+  endpoint — `Allow: /server/api/core/bitstreams` and `Allow: /server/api/core/mapping` above
+  `Disallow: /server/api/*` — so the bitstream content endpoint this source uses is explicitly
+  permitted while everything else under `/server/api` is not, including the DSpace discovery
+  search `/server/api/discover/search/objects`, which is therefore never called. The item page
+  path `/handle/<prefix>/<id>` carries no `Disallow` at all; `/search`, `/browse`,
+  `/entities/*`, `/items/*/full`, `/statistics` and the login and submission routes do.
+  `Crawl-delay: 10` is set; a resolve makes one page request and then the download, rather than
+  crawling.
 
 ## Aggregators and preservation
 
@@ -520,7 +616,32 @@ book and call it success" failure the OAPEN identifier check exists to prevent; 
 a `full_text_url` instead.
 
 A longer list of candidates was measured and rejected: kikakurui.com (JIS), the IEEE 802 GET
-program, ETSI, ECMA, 3GPP, W3C, ITU-T (deferred rather than rejected), and Anna's Archive's
-own DDoS-Guard-gated slow-download route. Each carries its blocking measurement in
+program, ETSI, ECMA, 3GPP, W3C, ITU-T (deferred rather than rejected), Anna's Archive's own
+DDoS-Guard-gated slow-download route, and — measured on 2026-07-30 — Project Euclid, DLA
+ASSIST and EverySpec. The last three are worth a line here because two of them work:
+
+- **Project Euclid** serves IMS and statistics journals, and
+  `journalArticle/Download?urlId=<doi>` did return real PDFs to an honest User-Agent. It is
+  rejected on both counts of the bar. Unpaywall already supplies a PDF link for six of eight
+  sampled DOIs, and that link points at projecteuclid.org itself — so for a configured
+  deployment this is a second route to the same file. And the endpoint is Imperva-gated: after
+  a handful of requests it began answering HTTP 200 with a 6,183-byte "Pardon Our Interruption"
+  interstitial for every subsequent request, including ones spaced 45 seconds apart, and within
+  half an hour the block had spread to the plain article pages.
+- **DLA ASSIST** is the official DoD channel for MIL-STD/MIL-SPEC, a corpus the catalog holds
+  nothing of, and it can be driven: the search postback returns the right document and the
+  `WMX/Default.aspx?token=` route served a 24,788,992-byte MIL-STD-810H. It is rejected on
+  cost. MIL-STDs carry no DOI, so only the ERIC middle path — a discovery provider whose hits
+  carry `pdf_url` — is available, and filling that field means an ASP.NET WebForms session (a
+  1,708-character encrypted `__VIEWSTATE` plus a 1,048-character `__EVENTVALIDATION`, round-
+  tripped with a cookie) *plus* one detail-page fetch per result.
+- **EverySpec** mirrors the same military-standards corpus behind a stateless search and
+  derivable download URLs, which would have made it the cheaper of the two. It is rejected
+  because the mirror is years stale: ASSIST holds MIL-STD-882E Change 1 (2023),
+  MIL-STD-464D (2020) and MIL-STD-2073-1E Change 4 (2024) where EverySpec's newest entries are
+  882E (2012), 464C (2010) and 2073-1C. On MIL-STD-810 the two hold 21 revisions each and
+  EverySpec is missing the current one.
+
+Each carries its full measurement in
 [the source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md),
 so none of them is re-litigated here.
