@@ -487,17 +487,27 @@ func transportTo(source, wrapper, host string) sourceFailure {
 	}
 }
 
+// matchFailure returns the reason of the first class whose pattern matches msg,
+// or "" when none does. It is the pure half of classifyOrFail, so a test can ask
+// which class an error text falls into without skipping or failing — the only way
+// to prove a pattern is alive when the live upstream is behaving.
+func matchFailure(msg string, classes []sourceFailure) string {
+	for _, c := range classes {
+		if c.re.MatchString(msg) {
+			return c.why
+		}
+	}
+	return ""
+}
+
 // classifyOrFail requires a live source failure to match one of the KNOWN,
 // diagnosed classes and SKIPs with that class's reason. An error outside the set
 // FAILS: a new, unrecognized failure mode must surface here rather than be
 // tolerated as flakiness and discovered by chance later.
 func classifyOrFail(t *testing.T, source string, err error, classes []sourceFailure) {
 	t.Helper()
-	msg := err.Error()
-	for _, c := range classes {
-		if c.re.MatchString(msg) {
-			t.Skipf("%s unavailable in a known way (%s): %v", source, c.why, err)
-		}
+	if why := matchFailure(err.Error(), classes); why != "" {
+		t.Skipf("%s unavailable in a known way (%s): %v", source, why, err)
 	}
 	t.Fatalf("%s failed in an undiagnosed way — update this test's classification only if this is a legitimate new outcome, not if we are calling the upstream wrong: %v", source, err)
 }

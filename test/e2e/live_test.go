@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,6 +146,138 @@ func TestE2EDownloadSmall(t *testing.T) {
 	}
 	assertFileMD5(t, res.Path, target.MD5)
 	t.Logf("downloaded md5=%s bytes=%d source=%s path=%s", target.MD5, res.SizeBytes, res.Source, res.Path)
+}
+
+// libgenFailures are the KNOWN, diagnosed ways the libgen source can fail live.
+//
+// They cannot be built with diagnosed(): every other source prefixes its own
+// errors with "<name>: ", but libgenSource.Resolve returns the client's mirror
+// errors verbatim, so the only "libgen" token in the text is the chain's own
+// "source libgen: " wrapper. Each pattern therefore anchors on that wrapper and
+// names the specific diagnosis after it.
+//
+// ErrLayoutChanged is deliberately ABSENT. "libgen page layout not recognized"
+// means ads.php answered but carried no get.php key link — the catalog moved and
+// we can no longer read it, which is the single most consequential regression
+// this source can suffer. It must fail here, not skip. TestE2EDownloadSmall
+// swallows exactly that case today: its fallback calls ResolveGetURL and SKIPS on
+// any error, layout changes included.
+var libgenFailures = []sourceFailure{
+	{
+		re:  regexp.MustCompile(`source libgen: .*all libgen mirrors unreachable`),
+		why: "every mirror was unreachable (network block or a bad day for the ecosystem)",
+	},
+	{
+		re:  regexp.MustCompile(`source libgen: .*request rejected by all mirrors`),
+		why: "every mirror answered a permanent rejection for this md5",
+	},
+	{
+		re:  regexp.MustCompile(`source libgen: .*HTML page instead of the file`),
+		why: "the download key expired or the CDN blocked the transfer",
+	},
+	{
+		re:  regexp.MustCompile(`source libgen: .*download failed: status \d+`),
+		why: "the CDN answered an unexpected status for a freshly-keyed link",
+	},
+}
+
+// TestE2ELibgenClassifiedOutcome exercises the libgen source end to end,
+// restricted to source=libgen so neither randombook nor annas can answer in its
+// place. It was the one md5 source with no source-restricted case: every md5
+// download in the suite goes through the whole book chain, so a libgen that had
+// stopped resolving would pass unnoticed for as long as a fallback covered it.
+//
+// The success path asserts what only this source promises — VerifyMD5 — by
+// hashing the saved file against the digest the catalog keyed it by.
+func TestE2ELibgenClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	target := smallBookTarget(t, ctx, client, "python")
+	t.Logf("libgen target md5=%s size=%q title=%q", target.MD5, target.Size, target.Title)
+	pace()
+
+	dir := t.TempDir()
+	res, err := client.DownloadItem(ctx, libgen.Item{MD5: target.MD5, Source: "libgen"}, dir, "")
+	if err != nil {
+		classifyOrFail(t, "libgen", err, libgenFailures)
+		return
+	}
+	if res.Source != "libgen" {
+		t.Errorf("Source = %q, want libgen — another source answered a restricted download", res.Source)
+	}
+	if !res.Verified {
+		t.Error("a libgen download must be MD5-verified; the source sets VerifyMD5")
+	}
+	assertNoPartialsLeft(t, dir)
+	assertFileMD5(t, res.Path, target.MD5)
+	t.Logf("libgen served a verified download: md5=%s bytes=%d", target.MD5, res.SizeBytes)
+}
+
+// unpaywallLiveDOI is Ioannidis 2005, "Why Most Published Research Findings Are
+// False" (PLOS Medicine). Verified on 2026-07-30: Unpaywall reports is_oa true and
+// its best_oa_location carries NO url_for_pdf, so the record only yields a file
+// through the oa_locations scan — the branch bestPDFURL exists for — and the
+// address that scan names served 255,629 bytes of application/pdf.
+const unpaywallLiveDOI = "10.1371/journal.pmed.0020124"
+
+// unpaywallProbe is the API lookup the source performs, contact email included
+// because the v2 API rejects a request without one.
+const unpaywallProbe = "https://api.unpaywall.org/v2/" + unpaywallLiveDOI + "?email=" + e2eUnpaywallEmail
+
+// unpaywallFailures are the KNOWN, diagnosed ways the unpaywall source can fail
+// live. The no-email class is listed because a deployment without a contact
+// address legitimately keeps the source out of the chain — but loadLiveConfig
+// always supplies one, so seeing it in a skip means the config path broke.
+var unpaywallFailures = []sourceFailure{
+	diagnosed("unpaywall", `no contact email`, "no contact address, so the source declined to call the API"),
+	diagnosed("unpaywall", `"[^"]*" is not open access`, "Unpaywall knows the DOI and reports it paywalled"),
+	diagnosed("unpaywall", `no open-access PDF for `, "open access, but no location exposes a fetchable file"),
+	diagnosed("unpaywall", `"[^"]*" returned HTTP \d+`, "the API answered an unexpected status"),
+	diagnosed("unpaywall", `decoding response for `, "the API answered something that is not its v2 record"),
+	transportTo("unpaywall", "requesting ", "api.unpaywall.org"),
+	{
+		re:  regexp.MustCompile(`source unpaywall: .*HTML page instead of the file`),
+		why: "the publisher served a landing page in place of the PDF",
+	},
+	{
+		re:  regexp.MustCompile(`source unpaywall: .*download failed: status \d+`),
+		why: "the address Unpaywall named no longer serves the file",
+	},
+}
+
+// TestE2EUnpaywallClassifiedOutcome exercises the unpaywall source end to end,
+// restricted to source=unpaywall. It was the one DOI source with no
+// source-restricted case: TestE2EArticleByDOI runs the whole article chain and
+// skips on ANY error, so fifteen other sources could cover for a broken Unpaywall
+// and the run would still look healthy.
+//
+// The target is chosen so the case grades the part of the source that can
+// actually break: this DOI's best_oa_location carries no url_for_pdf, so a
+// regression in the oa_locations scan or in the published-version preference
+// would leave the source with only a landing page to hand over, and
+// assertSourcePDF would catch it.
+func TestE2EUnpaywallClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "unpaywall", unpaywallProbe)
+	cfg := loadLiveConfig(t)
+	if strings.TrimSpace(cfg.UnpaywallEmail) == "" {
+		t.Fatal("expected a contact email; loadLiveConfig should always supply one")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, unpaywallLiveDOI, "unpaywall")
+	if err == nil {
+		assertSourcePDF(t, "unpaywall", res)
+		return
+	}
+	classifyOrFail(t, "unpaywall", err, unpaywallFailures)
 }
 
 // TestE2EArticleByDOI resolves a known open-access DOI through the
@@ -309,6 +443,187 @@ func hasDownloadLink(results []libgen.Result) bool {
 	return false
 }
 
+// startWrap is the text the chain puts between "source <name>: " and a source's
+// own resolve error when that error was retryable, reproduced verbatim from
+// errDownloadCouldNotStart and errStartFailed in internal/libgen/download.go. A
+// class written against the bare source message alone would not match a real
+// failure that arrived this way, which is the shape most of them arrive in.
+const startWrap = "download could not be started after the retry schedule " +
+	"(resolve/connect/first-byte kept failing); you can retry now, retry later once the mirror " +
+	"recovers, or ask the user how they want to proceed: could not begin the download: "
+
+// classificationCase is one representative error text and the verdict it must
+// receive from a list of diagnosed classes.
+type classificationCase struct {
+	// name identifies the subtest.
+	name string
+	// source is the source the text came from, for the failure message.
+	source string
+	// msg is the error text as the download chain would produce it.
+	msg string
+	// classes is the list under test.
+	classes []sourceFailure
+	// wantMatch is true when some class must diagnose the text (so the case would
+	// SKIP), and false for a failure that must stay undiagnosed (so it FAILS).
+	wantMatch bool
+}
+
+// TestE2EDiagnosedClassesMatchSourceErrorText proves every diagnosed class this
+// suite added or rewrote can actually fire, and that the failures which must
+// never be tolerated still cannot.
+//
+// It exists because a dead pattern is invisible: a class that can never match
+// costs nothing until the day the upstream produces that failure, at which point
+// the case fails with "undiagnosed" and the diagnosis it needed was sitting in
+// the list all along, misspelled. That happened once already — fatcatFailures
+// carried a release-page class written without the leading fragment, so it could
+// not match, and nobody knew until the frontend started serving challenges.
+//
+// The texts below are assembled from the exact fmt.Errorf formats in
+// internal/libgen, wrapped the way the download chain wraps them, so a class that
+// matches here matches the real thing. It is DETERMINISTIC: no network, no gate.
+func TestE2EDiagnosedClassesMatchSourceErrorText(t *testing.T) {
+	for _, tc := range diagnosedClassCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			why := matchFailure(tc.msg, tc.classes)
+			switch {
+			case tc.wantMatch && why == "":
+				t.Errorf("no class matches a real %s failure; the diagnosis is unreachable:\n%s", tc.source, tc.msg)
+			case !tc.wantMatch && why != "":
+				t.Errorf("a %s failure that must FAIL the suite was classified as %q and would SKIP:\n%s", tc.source, why, tc.msg)
+			}
+		})
+	}
+}
+
+// diagnosedClassCases lists the representative error texts: the lists this sweep
+// added or rewrote, plus the fatcat class whose misspelling is the reason this
+// test exists. Each string is what the chain produces for one real outcome; see
+// startWrap for the wrapping.
+func diagnosedClassCases() []classificationCase {
+	cases := append(append(
+		libgenClassCases(), unpaywallClassCases()...),
+		shadowLibraryClassCases()...)
+	// The historical case, kept as a regression guard: this class was once written
+	// without the leading "the lookup for" fragment and so could never match.
+	return append(cases, classificationCase{
+		name: "fatcat/session-challenge", source: "fatcat",
+		msg: "source fatcat: " + startWrap +
+			`fatcat: the lookup for "10.1/x" returned no release page (session challenge or changed layout)`,
+		classes: fatcatFailures, wantMatch: true,
+	})
+}
+
+// libgenClassCases covers libgenFailures, including the layout change that must
+// stay undiagnosed.
+func libgenClassCases() []classificationCase {
+	const src = "libgen"
+	return []classificationCase{
+		{"libgen/mirrors-unreachable", src, "source libgen: " + startWrap +
+			"all libgen mirrors unreachable (network block? try a VPN or different DNS): " +
+			`Get "https://libgen.li/ads.php?md5=abc": dial tcp: i/o timeout`, libgenFailures, true},
+		{"libgen/rejected", src, "source libgen: " + startWrap +
+			"request rejected by all mirrors: mirror https://libgen.li returned HTTP 404", libgenFailures, true},
+		// No startWrap: an HTML body arrives once the stream is already running, so
+		// the chain returns it unwrapped rather than putting it on the retry schedule.
+		{
+			"libgen/html", src,
+			"source libgen: mirror returned an HTML page instead of the file (key expired or download blocked)",
+			libgenFailures, true,
+		},
+		{"libgen/status", src, "source libgen: " + startWrap +
+			"download failed: status 503 from https://libgen.li", libgenFailures, true},
+		// The two that must never be tolerated: we can no longer read the page, and
+		// the bytes did not match the digest.
+		{
+			"libgen/layout-changed-must-fail", src, "source libgen: " + startWrap +
+				"libgen page layout not recognized (site may have changed): no get.php key link in ads page",
+			libgenFailures, false,
+		},
+		{"libgen/integrity-must-fail", src, "source libgen: integrity check failed: MD5 mismatch", libgenFailures, false},
+	}
+}
+
+// unpaywallClassCases covers unpaywallFailures.
+func unpaywallClassCases() []classificationCase {
+	const src = "unpaywall"
+	return []classificationCase{
+		{"unpaywall/paywalled", src, `source unpaywall: unpaywall: "10.1/x" is not open access`, unpaywallFailures, true},
+		{"unpaywall/no-pdf", src, `source unpaywall: unpaywall: no open-access PDF for "10.1/x"`, unpaywallFailures, true},
+		{"unpaywall/status", src, "source unpaywall: " + startWrap +
+			`unpaywall: "10.1/x" returned HTTP 422`, unpaywallFailures, true},
+		{
+			"unpaywall/transport", src, "source unpaywall: " + startWrap +
+				`unpaywall: requesting "10.1/x": Get "https://api.unpaywall.org/v2/10.1/x?email=a%40b.c": dial tcp: i/o timeout`,
+			unpaywallFailures, true,
+		},
+		{"unpaywall/no-email", src, "source unpaywall: " + startWrap +
+			"unpaywall: no contact email (set LIBGEN_MCP_UNPAYWALL_EMAIL or supply one)", unpaywallFailures, true},
+		{"unpaywall/integrity-must-fail", src, "source unpaywall: integrity check failed: MD5 mismatch", unpaywallFailures, false},
+	}
+}
+
+// shadowLibraryClassCases covers the three rewritten lists — scidb, randombook
+// and annas — whose old bare-substring form is what this test guards against
+// returning.
+func shadowLibraryClassCases() []classificationCase {
+	return []classificationCase{
+		{
+			"scidb/no-pdf", "scidb",
+			`source scidb: scidb: no mirror resolved "10.1/x": scidb: mirror "https://annas-archive.gl" embedded no PDF for "10.1/x"`,
+			scidbFailures, true,
+		},
+		{"scidb/transport", "scidb", "source scidb: " + startWrap +
+			`scidb: no mirror resolved "10.1/x": scidb: requesting "https://annas-archive.gl": ` +
+			`Get "https://annas-archive.gl/scidb/10.1/x": context deadline exceeded`, scidbFailures, true},
+		{"scidb/no-mirrors", "scidb", "source scidb: " + startWrap +
+			`scidb: no mirrors available for "10.1/x"`, scidbFailures, true},
+		{"scidb/integrity-must-fail", "scidb", "source scidb: integrity check failed: MD5 mismatch", scidbFailures, false},
+
+		{
+			"randombook/not-indexed", "randombook",
+			`source randombook: randombook: md5 "abc" not indexed`, randombookFailures, true,
+		},
+		{"randombook/no-family-mirror", "randombook", "source randombook: " + startWrap +
+			`randombook: no usable mirrors discovered for md5 "abc"`, randombookFailures, true},
+		{
+			"randombook/mirror-status", "randombook", "source randombook: " + startWrap +
+				`randombook: no discovered mirror resolved md5 "abc": randombook: mirror "https://libgen.li" returned HTTP 503`,
+			randombookFailures, true,
+		},
+		{"randombook/mirror-transport", "randombook", "source randombook: " + startWrap +
+			`randombook: no discovered mirror resolved md5 "abc": randombook: probing "https://libgen.li": ` +
+			`Get "https://libgen.li/api/download?id=1": dial tcp: i/o timeout`, randombookFailures, true},
+		{"randombook/api-transport", "randombook", "source randombook: " + startWrap +
+			`randombook: requesting "https://randombook.org/api/by-md5?md5=abc": ` +
+			`Get "https://randombook.org/api/by-md5?md5=abc": dial tcp: i/o timeout`, randombookFailures, true},
+		{"randombook/api-status", "randombook", "source randombook: " + startWrap +
+			`randombook: "https://randombook.org/api/by-md5?md5=abc" returned HTTP 502`, randombookFailures, true},
+		{
+			"randombook/layout-changed-must-fail", "randombook", "source randombook: " + startWrap +
+				"libgen page layout not recognized (site may have changed): randombook by-id result carries no id",
+			randombookFailures, false,
+		},
+
+		{
+			"annas/no-cid", "annas", "source annas: " + startWrap +
+				`annas: no mirror resolved "abc": annas: mirror "https://annas-archive.gl" embedded no IPFS CID for "abc"`,
+			annasFailures, true,
+		},
+		{"annas/no-gateway", "annas", "source annas: " + startWrap +
+			`annas: no mirror resolved "abc": annas: no IPFS gateway served "bafybeigd"`, annasFailures, true},
+		{"annas/member-rejected", "annas", "source annas: " + startWrap +
+			`annas: no mirror resolved "abc": annas: no IPFS gateway served "bafybeigd" ` +
+			`(member API: annas: member API rejected the key: Not a member)`, annasFailures, true},
+		{"annas/mirror-transport", "annas", "source annas: " + startWrap +
+			`annas: no mirror resolved "abc": annas: requesting "https://annas-archive.gl": ` +
+			`Get "https://annas-archive.gl/md5/abc": dial tcp: i/o timeout`, annasFailures, true},
+		{"annas/no-mirrors", "annas", "source annas: " + startWrap +
+			`annas: no mirrors available for "abc"`, annasFailures, true},
+		{"annas/integrity-must-fail", "annas", "source annas: integrity check failed: MD5 mismatch", annasFailures, false},
+	}
+}
+
 // randombookProbeQueries are search queries likely to surface distinct real
 // books, tried in order until one yields an md5 to probe randombook with —
 // making the test robust to randombook.org's per-book coverage gaps rather
@@ -414,6 +729,38 @@ func assertRandombookDownloadOK(t *testing.T, md5 string, res *libgen.DownloadRe
 	t.Logf("randombook served a real download: md5=%s bytes=%d", md5, res.SizeBytes)
 }
 
+// randombookFailures are the KNOWN, diagnosed ways the randombook source can fail
+// live.
+//
+// The last two entries replace a pair of bare substrings — "requesting" and
+// "returned HTTP" — that appear in nearly every download failure the whole
+// package can produce, including a source repointed at the wrong host: matching
+// on them classified "we are calling it wrong" as "the upstream is down today",
+// which is precisely what this case exists to prevent. Both now pin the host the
+// source is supposed to be calling.
+//
+// ErrLayoutChanged is deliberately ABSENT. The by-id and links-by-id responses
+// losing their shape means randombook.org changed its API on us, which must fail
+// here rather than skip.
+var randombookFailures = []sourceFailure{
+	diagnosed("randombook", `md5 "[^"]*" not indexed`, "a normal per-book miss; the catalog does not cover everything"),
+	diagnosed("randombook", `no usable mirrors discovered for `,
+		"every candidate fell outside the libgen.<tld> family, so nothing was attempted"),
+	diagnosed("randombook", `by-id API reported an error for md5 `, "the by-id API answered with its own error flag"),
+	diagnosed("randombook", `links-by-id API reported an error for id `, "the links-by-id API answered with its own error flag"),
+	diagnosed("randombook", `no mirror hostnames for id `, "the API knows the book but lists no mirror for it"),
+	diagnosed("randombook", `mirror "[^"]*" serves no download API \(HTTP \d+\)`, "the discovered mirror has no download API"),
+	diagnosed("randombook", `no discovered mirror resolved md5 "[^"]*": randombook: mirror "[^"]*" returned HTTP \d+`,
+		"every discovered mirror answered an unexpected status"),
+	diagnosed("randombook", `no discovered mirror resolved md5 "[^"]*": randombook: (requesting|probing) "https://`,
+		"every discovered mirror was unreachable"),
+	transportTo("randombook", "requesting ", "randombook.org"),
+	{
+		re:  regexp.MustCompile(`randombook: "https://randombook\.org[^"]*" returned HTTP \d+`),
+		why: "the randombook.org API answered an unexpected status",
+	},
+}
+
 // skipRandombookDiagnosedError classifies a randombook download failure into
 // one of the known, diagnosed outcome classes and SKIPs with a clear reason.
 // An error outside that set is NOT a recognized live-data condition: it FAILS
@@ -421,33 +768,14 @@ func assertRandombookDownloadOK(t *testing.T, md5 string, res *libgen.DownloadRe
 // discovered by chance later (see the package doc comment above this test).
 func skipRandombookDiagnosedError(t *testing.T, md5 string, err error) {
 	t.Helper()
-	switch {
-	case strings.Contains(err.Error(), "not indexed"):
-		// A normal, expected miss for this particular book: randombook's
-		// catalog does not cover everything.
-		t.Skipf("md5 %s not indexed by randombook.org (normal per-book miss): %v", md5, err)
-	case strings.Contains(err.Error(), "no usable mirrors discovered"):
-		// Every discovered candidate was outside the libgen.<tld> family (see
-		// filterLibgenFamily in internal/libgen), so nothing was even
-		// attempted — a diagnosed, expected outcome given randombook.org's
-		// current candidate mix.
-		t.Skipf("randombook discovered no libgen-family mirror candidates for md5 %s: %v", md5, err)
-	case errors.Is(err, libgen.ErrMirrorClientRendered):
-		// A libgen-family host answered, but with its client-rendered SPA
-		// shell instead of the classic ads.php page — diagnosed and
-		// monitorable (see ErrMirrorClientRendered's doc comment).
-		t.Skipf("randombook's only libgen-family mirror candidate has migrated to a client-rendered frontend: %v", err)
-	case strings.Contains(err.Error(), "requesting") || strings.Contains(err.Error(), "returned HTTP"):
-		// A transport-level failure reaching randombook.org itself or a
-		// discovered mirror (network flakiness), consistent with the suite's
-		// SKIP-not-fail philosophy.
-		t.Skipf("randombook.org API or a discovered mirror was unreachable live: %v", err)
-	default:
-		// Anything else is an UNRECOGNIZED failure class: fail loudly rather
-		// than silently tolerating it, so a future regression of this kind is
-		// caught here instead of by chance in an unrelated eval run.
-		t.Fatalf("randombook download failed with an unclassified error (update this test's classification if this is a legitimate new outcome): %v", err)
+	// A libgen-family host answered, but with its client-rendered SPA shell
+	// instead of the classic ads.php page — diagnosed and monitorable (see
+	// ErrMirrorClientRendered's doc comment). It is matched on the sentinel rather
+	// than on text because that is what the source tags it with.
+	if errors.Is(err, libgen.ErrMirrorClientRendered) {
+		t.Skipf("randombook's only libgen-family mirror candidate has migrated to a client-rendered frontend (md5 %s): %v", md5, err)
 	}
+	classifyOrFail(t, "randombook", err, randombookFailures)
 }
 
 // europePMCLiveDOI is a reliably open-access PLOS Biology article whose full text
@@ -542,6 +870,11 @@ func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
 // this is the most stable live target in the suite.
 const rfcLiveDOI = "10.17487/RFC9110"
 
+// rfcTextProbe is the plain-text document the rfc source fetches, used as the
+// reachability precondition by every case that goes through it. It served 502,941
+// bytes of text/plain on 2026-07-30.
+const rfcTextProbe = "https://www.rfc-editor.org/rfc/rfc9110.txt"
+
 // rfcFailures are the KNOWN, diagnosed ways the rfc source can fail live. The list
 // is short because Resolve issues no request: it derives the URL from the DOI, so
 // every remaining failure arrives from the download stream. The transport class
@@ -562,7 +895,7 @@ var rfcFailures = []sourceFailure{
 // header line, since a 200-with-an-error-page would otherwise pass as a download.
 func TestE2ERFCClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "rfc", "https://www.rfc-editor.org/rfc/rfc9110.txt")
+	requireUpstream(t, "rfc", rfcTextProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -975,11 +1308,41 @@ func TestE2ECoreClassifiedOutcome(t *testing.T) {
 // SciDB on 2026-07-23, which keeps this live check deterministic.
 const scidbLiveDOI = "10.1016/j.cell.2011.02.013"
 
+// scidbFailures are the KNOWN, diagnosed ways the scidb source can fail live.
+//
+// They replace a list of four bare substrings — "embedded no PDF", "no mirror
+// resolved", "no mirrors available" and "context deadline" — that between them
+// would have skipped on almost anything: "no mirror resolved" is the outer
+// wrapper of EVERY scidb failure, so it alone matched any diagnosis whatsoever,
+// and "context deadline" matched a timeout from any layer, including a source
+// repointed at a host that blackholes. Each class below pins the outer wrapper
+// AND the specific inner diagnosis, and the transport class pins the
+// annas-archive host family, exactly as scihubFailures does.
+var scidbFailures = []sourceFailure{
+	diagnosed("scidb", `no mirror resolved "[^"]*": scidb: mirror "[^"]*" embedded no PDF`,
+		"mirrors reachable, article absent from SciDB"),
+	diagnosed("scidb", `no mirror resolved "[^"]*": scidb: mirror "[^"]*" returned HTTP \d+`,
+		"every mirror answered an unexpected status"),
+	diagnosed("scidb", `no mirror resolved "[^"]*": scidb: requesting "https://annas-archive\.`,
+		"every Anna's mirror was unreachable"),
+	diagnosed("scidb", `no mirror resolved "[^"]*": scidb: reading "https://annas-archive\.`,
+		"a mirror closed the connection mid-response"),
+	diagnosed("scidb", `no mirrors available for `, "mirror discovery yielded nothing"),
+	{
+		re:  regexp.MustCompile(`source scidb: .*HTML page instead of the file`),
+		why: "the mirror served an interstitial, not the PDF",
+	},
+}
+
 // TestE2ESciDBClassifiedOutcome exercises the scidb source end to end against the
 // live Anna's Archive mirrors, restricting the download to source=scidb so no
 // other source in the chain can mask its behavior. On error the failure must be
 // one of the known, diagnosed classes; anything else fails the test, so a new
 // unrecognized failure mode surfaces here instead of hiding as flakiness.
+//
+// The success path asserts a real PDF rather than merely a non-zero byte count:
+// SciDB embeds the file in a viewer page, so a layout change that had the source
+// save the page itself would have satisfied the old size-only check.
 func TestE2ESciDBClassifiedOutcome(t *testing.T) {
 	env := requireLive(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -987,24 +1350,10 @@ func TestE2ESciDBClassifiedOutcome(t *testing.T) {
 
 	res, err := env.client.DownloadItem(ctx, libgen.Item{DOI: scidbLiveDOI, Source: "scidb"}, t.TempDir(), "")
 	if err == nil {
-		if res.SizeBytes <= 0 {
-			t.Fatalf("scidb reported a download of %d bytes", res.SizeBytes)
-		}
-		t.Logf("scidb served a real download: bytes=%d", res.SizeBytes)
+		assertSourcePDF(t, "scidb", res)
 		return
 	}
-	known := []string{
-		"embedded no PDF",      // mirror reachable, article absent from SciDB
-		"no mirror resolved",   // every mirror down or serving no PDF
-		"no mirrors available", // discovery yielded nothing
-		"context deadline",     // a slow mirror inside the timeout budget
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("scidb unavailable in a known way: %v", err)
-		}
-	}
-	t.Fatalf("scidb failed in an undiagnosed way: %v", err)
+	classifyOrFail(t, "scidb", err, scidbFailures)
 }
 
 // TestE2EAnnasClassifiedOutcome exercises the annas book source end to end,
@@ -1025,8 +1374,7 @@ func TestE2EAnnasClassifiedOutcome(t *testing.T) {
 		t.Logf("annas served a real download: md5=%s bytes=%d verified=%v", md5, res.SizeBytes, res.Verified)
 		return
 	}
-	skipIfAnnasUnavailable(t, err)
-	t.Fatalf("annas failed in an undiagnosed way: %v", err)
+	classifyAnnasFailure(t, err)
 }
 
 // TestE2EDownloadToolHonorsSourceArgument proves the `source` argument works where
@@ -1056,8 +1404,8 @@ func TestE2EDownloadToolHonorsSourceArgument(t *testing.T) {
 	if res.IsError {
 		// A live Anna's outage is tolerated; a rejected argument is not, so the
 		// error text has to name a known unavailability rather than a bad input.
-		skipIfAnnasUnavailable(t, errors.New(textOf(res)))
-		t.Fatalf("download with source=annas failed in an undiagnosed way: %v", res.Content)
+		classifyAnnasFailure(t, errors.New(textOf(res)))
+		return
 	}
 	var out tools.DownloadOutput
 	decodeStructured(t, res, &out)
@@ -1068,6 +1416,208 @@ func TestE2EDownloadToolHonorsSourceArgument(t *testing.T) {
 		t.Errorf("resolved.source = %q, want annas — the source argument did not pin the chain", out.Resolved.Source)
 	}
 	t.Logf("tool-layer source argument honored: resolved via %s", out.Resolved.Source)
+}
+
+// TestE2EDownloadToolAcceptsISBN proves the download tool's third identifier works
+// where a model would use it. `isbn` is the only one of md5/doi/isbn with no live
+// tool-layer coverage: both ISBN cases in this suite build a libgen.Item{ISBN: …}
+// directly, which skips validateDownloadInput and its NormalizeISBN pass entirely.
+// A hyphenated ISBN is passed on purpose — that is the shape a user pastes and the
+// shape OpenLibrary prints — so the normalization is graded rather than assumed.
+//
+// resolve_only keeps it cheap: the question is whether the argument reaches a
+// source and resolves, not whether the monograph downloads again.
+func TestE2EDownloadToolAcceptsISBN(t *testing.T) {
+	env := requireLive(t)
+	requireUpstream(t, "oapen", oapenSearchProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, env.client, env.cfg)
+	session := connectInMemory(t, ctx, server, nil)
+
+	res, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "download",
+		Arguments: map[string]any{
+			"isbn": hyphenatedOapenISBN, "source": "oapen", "resolve_only": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download isbn=%s) transport error: %v", hyphenatedOapenISBN, err)
+	}
+	if res.IsError {
+		// A live OAPEN outage is tolerated; a rejected argument is not, so the error
+		// text has to name a diagnosed source failure rather than a validation
+		// complaint about the ISBN itself.
+		classifyOrFail(t, "oapen", errors.New(textOf(res)), oapenFailures)
+		return
+	}
+	var out tools.DownloadOutput
+	decodeStructured(t, res, &out)
+	if out.Resolved == nil {
+		t.Fatalf("resolve_only with an isbn returned no link: %+v", out)
+	}
+	if out.Resolved.Source != "oapen" {
+		t.Errorf("resolved.source = %q, want oapen", out.Resolved.Source)
+	}
+	if out.Path != "" {
+		t.Errorf("resolve_only must not save a file, but Path=%q", out.Path)
+	}
+	t.Logf("tool-layer isbn argument honored: %s resolved via %s to %s",
+		hyphenatedOapenISBN, out.Resolved.Source, out.Resolved.URL)
+}
+
+// e2eProgressToken is the progress token the download-progress case attaches to
+// its tool call. A client that sends none gets no notifications at all, which is
+// exactly the state every other case in this suite is in.
+const e2eProgressToken = "libgen-mcp-e2e-download-progress"
+
+// progressSink collects the notifications/progress a session receives. The SDK
+// dispatches them on its own goroutine, so the slice is guarded.
+type progressSink struct {
+	mu     sync.Mutex
+	events []mcp.ProgressNotificationParams
+}
+
+// add records one notification.
+func (p *progressSink) add(e *mcp.ProgressNotificationParams) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.events = append(p.events, *e)
+}
+
+// snapshot returns a copy of the notifications seen so far.
+func (p *progressSink) snapshot() []mcp.ProgressNotificationParams {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.events)
+}
+
+// connectWithProgress connects an in-memory client that records progress
+// notifications, and returns the session alongside the sink. connectInMemory
+// cannot be reused: it wires only the elicitation handler, so a session built
+// with it drops every notification the server sends.
+func connectWithProgress(t *testing.T, ctx context.Context, server *mcp.Server) (*mcp.ClientSession, *progressSink) {
+	t.Helper()
+	sink := &progressSink{}
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(ctx, st, nil); err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "test"},
+		&mcp.ClientOptions{
+			ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
+				sink.add(req.Params)
+			},
+		})
+	session, err := mcpClient.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	return session, sink
+}
+
+// progressSettleBudget bounds how long the download-progress case waits for the
+// last notification after the tool result has already come back. The two travel
+// the same transport but are dispatched separately, so the final one can land
+// just after the result; a fixed sleep would be either flaky or wasteful.
+const progressSettleBudget = 5 * time.Second
+
+// awaitFinalProgress polls the sink until its most recent notification reports
+// want bytes, and returns everything it collected. It gives up after
+// progressSettleBudget and returns what it has, so the caller reports what was
+// actually observed instead of hanging.
+func awaitFinalProgress(sink *progressSink, want float64) []mcp.ProgressNotificationParams {
+	deadline := time.Now().Add(progressSettleBudget)
+	for {
+		seen := sink.snapshot()
+		if n := len(seen); n > 0 && seen[n-1].Progress == want {
+			return seen
+		}
+		if time.Now().After(deadline) {
+			return seen
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestE2EDownloadEmitsProgress proves the download tool reports progress to a
+// client that asked for it. progressNotifier had no e2e coverage at all: no case
+// in this suite ever set a progress token, so the server's only observable
+// behavior for a long download — the notifications that tell a user it is moving
+// rather than hung — was exercised solely by the gated eval harness.
+//
+// The RFC Editor is the target because it is the suite's most stable upstream and
+// it serves the file in one plain GET, with no mirror lottery to make the byte
+// count vary between runs. The assertion is the one that matters: the FINAL
+// notification must report exactly the number of bytes that landed on disk, which
+// is emitFinal's contract and the only figure a client can render as "done".
+func TestE2EDownloadEmitsProgress(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "rfc", rfcTextProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	cfg := loadLiveConfig(t)
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, client, cfg)
+	session, sink := connectWithProgress(t, ctx, server)
+
+	params := &mcp.CallToolParams{
+		Name: "download",
+		Arguments: map[string]any{
+			"doi": rfcLiveDOI, "source": "rfc", "path": t.TempDir(), "skip_confirmation": true,
+		},
+	}
+	params.SetProgressToken(e2eProgressToken)
+	res, err := session.CallTool(ctx, params)
+	if err != nil {
+		t.Fatalf("CallTool(download doi=%s) transport error: %v", rfcLiveDOI, err)
+	}
+	if res.IsError {
+		classifyOrFail(t, "rfc", errors.New(textOf(res)), rfcFailures)
+		return
+	}
+	var out tools.DownloadOutput
+	decodeStructured(t, res, &out)
+	if out.SizeBytes <= 0 {
+		t.Fatalf("download reported %d bytes; there was nothing to report progress on", out.SizeBytes)
+	}
+	assertProgressReported(t, awaitFinalProgress(sink, float64(out.SizeBytes)), out.SizeBytes)
+}
+
+// assertProgressReported grades the notifications a download produced: at least
+// one arrived, every one carried the token the client supplied, none claimed more
+// bytes than were saved, and the last reports the finished size.
+func assertProgressReported(t *testing.T, events []mcp.ProgressNotificationParams, size int64) {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatalf("a download of %d bytes emitted no progress notifications; the token was ignored", size)
+	}
+	for i, e := range events {
+		if got := fmt.Sprint(e.ProgressToken); got != e2eProgressToken {
+			t.Errorf("notification %d carried token %q, want %q", i, got, e2eProgressToken)
+		}
+		if e.Progress > float64(size) {
+			t.Errorf("notification %d reports %.0f bytes done, more than the %d saved", i, e.Progress, size)
+		}
+	}
+	last := events[len(events)-1]
+	// A total of -1 or 0 means the upstream announced no Content-Length, which is
+	// honest; any positive total must be the real size.
+	if last.Total > 0 && last.Total != float64(size) {
+		t.Errorf("the final notification reports a total of %.0f for a %d-byte file", last.Total, size)
+	}
+	if last.Progress != float64(size) {
+		t.Errorf("the final notification reports %.0f of %.0f bytes; a client can never render this download as finished (saved %d)",
+			last.Progress, last.Total, size)
+	}
+	t.Logf("download emitted %d progress notification(s); final %.0f/%.0f for a %d-byte file",
+		len(events), last.Progress, last.Total, size)
 }
 
 // TestE2EDownloadToolAdvertisesEveryEnabledSource proves the download tool's
@@ -1357,8 +1907,8 @@ func TestE2EEscalatedDownloadKeepsItsFileType(t *testing.T) {
 
 	res, err := env.client.DownloadItem(ctx, libgen.Item{MD5: item.MD5, Source: "annas"}, t.TempDir(), "")
 	if err != nil {
-		skipIfAnnasUnavailable(t, err)
-		t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+		classifyAnnasFailure(t, err)
+		return
 	}
 	if ext := strings.ToLower(filepath.Ext(res.Path)); ext == "" {
 		t.Fatalf("saved %q with no extension; read cannot choose an extractor for it", res.Path)
@@ -1518,24 +2068,48 @@ func TestE2EExtensionlessFileStillReads(t *testing.T) {
 	}
 }
 
-// skipIfAnnasUnavailable skips on the known ways Anna's and the public IPFS
-// gateways fail live, and returns otherwise so the caller can fail on anything
-// undiagnosed rather than tolerating a new failure mode silently.
-func skipIfAnnasUnavailable(t *testing.T, err error) {
+// annasFailures are the KNOWN, diagnosed ways the annas source and the public
+// IPFS gateways can fail live.
+//
+// They replace a list of six bare substrings, two of which swallowed far too
+// much: "no mirror resolved" is the outer wrapper of every per-mirror annas
+// failure, so it matched any inner diagnosis at all, and "context deadline"
+// matched a timeout raised anywhere, by any source, including one pointed at a
+// host that never answers. Each class below pins the inner diagnosis, the
+// transport class pins the annas-archive host family, and the slow-IPFS class is
+// pinned to the annas leg of the chain.
+var annasFailures = []sourceFailure{
+	diagnosed("annas", `no mirrors available for `, "mirror discovery yielded nothing"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: mirror "[^"]*" embedded no IPFS CID`,
+		"the record is not pinned to IPFS"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: no IPFS gateway served `,
+		"every public gateway is down or lacks the block"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: mirror "[^"]*" returned HTTP \d+`,
+		"every mirror answered an unexpected status"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: requesting "https://annas-archive\.`,
+		"every Anna's mirror was unreachable"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: reading "https://annas-archive\.`,
+		"a mirror closed the connection mid-response"),
+	diagnosed("annas", `member API rejected the key`, "the membership key is absent, expired or not a member tier"),
+	diagnosed("annas", `member API returned no URL`, "the member API answered without a download URL"),
+	diagnosed("annas", `member URL from "[^"]*" is unreachable`, "the file host the member API named does not answer"),
+	{
+		re:  regexp.MustCompile(`source annas: .*context deadline exceeded`),
+		why: "IPFS retrieval did not finish inside the budget",
+	},
+	{
+		re:  regexp.MustCompile(`source annas: .*HTML page instead of the file`),
+		why: "a gateway served an interstitial, not the file",
+	},
+}
+
+// classifyAnnasFailure requires an Anna's failure to be one of the known,
+// diagnosed classes and SKIPs with that reason; anything else FAILS. It replaces
+// a helper that skipped on a substring match and left the caller to fail
+// afterwards, which is the same contract classifyOrFail already implements.
+func classifyAnnasFailure(t *testing.T, err error) {
 	t.Helper()
-	known := []string{
-		"embedded no IPFS CID",   // item not pinned to IPFS
-		"no IPFS gateway served", // every gateway down or lacking the block
-		"no mirror resolved",     // every Anna's mirror down
-		"no mirrors available",   // discovery yielded nothing
-		"member API rejected",    // key absent or expired AND IPFS also failed
-		"context deadline",       // IPFS retrieval is legitimately slow
-	}
-	for _, k := range known {
-		if strings.Contains(err.Error(), k) {
-			t.Skipf("annas unavailable in a known way: %v", err)
-		}
-	}
+	classifyOrFail(t, "annas", err, annasFailures)
 }
 
 // TestE2EGetDetailsFallsBackToAnnas verifies the follow-up a search suggests works
@@ -1605,8 +2179,7 @@ func TestE2ESearchEscalatedResultIsDownloadable(t *testing.T) {
 		t.Logf("escalated item downloaded: bytes=%d verified=%v", res.SizeBytes, res.Verified)
 		return
 	}
-	skipIfAnnasUnavailable(t, err)
-	t.Fatalf("escalated item failed to download in an undiagnosed way: %v", err)
+	classifyAnnasFailure(t, err)
 }
 
 // oapenLiveDOI and oapenLiveISBN identify the SAME OAPEN monograph — the European
@@ -1618,6 +2191,16 @@ const (
 	oapenLiveDOI  = "10.2867/768526"
 	oapenLiveISBN = "9789286150616"
 )
+
+// hyphenatedOapenISBN is oapenLiveISBN in the shape a person pastes it. It exists
+// so the tool-layer case proves NormalizeISBN runs on the argument: OAPEN's
+// free-text search does not hold the hyphenated spelling, so an unnormalized value
+// resolves nothing.
+const hyphenatedOapenISBN = "978-92-861-5061-6"
+
+// oapenSearchProbe is the REST search the oapen source calls, used as the
+// reachability precondition by every oapen case.
+const oapenSearchProbe = "https://library.oapen.org/rest/search?query=" + oapenLiveISBN
 
 // archiveLiveISBN is a Penguin edition of Pride and Prejudice: OpenLibrary reports
 // the work as ebook_access "public" and lists Internet Archive scans of it, so the
@@ -1677,7 +2260,7 @@ var oapenFailures = []sourceFailure{
 // diagnosed classes; anything else fails the test.
 func TestE2EOapenByDOIClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	requireUpstream(t, "oapen", oapenSearchProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -1695,7 +2278,7 @@ func TestE2EOapenByDOIClassifiedOutcome(t *testing.T) {
 // untested even though every OA monograph has an ISBN and many have no DOI.
 func TestE2EOapenByISBNClassifiedOutcome(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	requireUpstream(t, "oapen", oapenSearchProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -1718,7 +2301,7 @@ func TestE2EOapenByISBNClassifiedOutcome(t *testing.T) {
 // downloaded file.
 func TestE2EOapenRejectsUnheldIdentifier(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	requireUpstream(t, "oapen", oapenSearchProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -1748,7 +2331,7 @@ const cleanRefusalBudget = 30 * time.Second
 // TestE2EOapenRejectsUnheldIdentifier alone passed throughout.
 func TestE2ECleanRefusalIsPrompt(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "oapen", "https://library.oapen.org/rest/search?query="+oapenLiveISBN)
+	requireUpstream(t, "oapen", oapenSearchProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
