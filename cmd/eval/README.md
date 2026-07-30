@@ -292,7 +292,7 @@ that run file and regenerates the pages in the same step, and CI fails on a page
 that no longer matches — which is what stops a hand edit from drifting.
 
 **A partial run publishes too.** Writing to a results doc **merges** into it rather
-than replacing it, so re-measuring one source does not cost a full suite — 69
+than replacing it, so re-measuring one source does not cost a full suite — 71
 scenarios against a real API, real mirrors and real downloads:
 
 ```bash

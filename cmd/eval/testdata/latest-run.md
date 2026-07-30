@@ -73,3 +73,5 @@ Model: `claude-haiku-4-5-20251001`
 | S66 | local | PASS | 2026-07-30 | downloaded 339463 bytes via dagstuhl |
 | S67 | local | PASS | 2026-07-30 | downloaded 786279 bytes via acl |
 | S68 | local | PASS | 2026-07-30 | downloaded 173300 bytes via zenodo |
+| S69 | local | PASS | 2026-07-30 | downloaded 737104 bytes via scielo |
+| S70 | local | PASS | 2026-07-30 | downloaded 2929735 bytes via fao |
