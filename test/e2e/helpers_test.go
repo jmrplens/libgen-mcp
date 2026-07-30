@@ -61,10 +61,15 @@ const (
 	// megabyte scans, so it needs a lower bar than the rest of the suite: enough to
 	// be a genuine archive with no text layer, which is all that case has to prove.
 	minComicBytes = 32 << 10 // 32 KiB
-	// upstreamProbeTimeout bounds a source's reachability precondition. It is
-	// deliberately short: a host that blackholes connections must cost seconds, not
-	// the test's whole timeout budget.
-	upstreamProbeTimeout = 3 * time.Second
+	// upstreamProbeTimeout bounds a source's reachability precondition. It stays
+	// short — a host that blackholes connections must cost seconds, not the test's
+	// whole timeout budget — but 3s turned out to be short enough to skip healthy
+	// hosts. Three measurements pushed it up: FAO's cold DSpace render took 5.4s,
+	// Europe PMC answered in 4.0s on a cold DNS and TLS handshake, and archive.org
+	// missed the 3s bar during a full-suite run while answering in 0.9s a minute
+	// later on its own. A probe exists to tell an outage from a bug in our code, and
+	// a host slowed by our own sequential load is neither.
+	upstreamProbeTimeout = 8 * time.Second
 )
 
 // md5Re matches a canonical lowercase LibGen md5 digest.

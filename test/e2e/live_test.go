@@ -756,6 +756,16 @@ var randombookFailures = []sourceFailure{
 		"every discovered mirror was unreachable"),
 	transportTo("randombook", "requesting ", "randombook.org"),
 	{
+		// randombook is a Library Genesis frontend, so it serves the same expiring
+		// download keys libgen does and fails the same way when one lapses: a 200
+		// carrying an interstitial instead of the file. libgen, unpaywall, biorxiv,
+		// nist, fatcat, scidb and annas all carry this class; randombook was the only
+		// source that could produce it and could not name it, so a routine key
+		// expiry failed the suite as an unrecognized outcome.
+		re:  regexp.MustCompile(`source randombook: .*HTML page instead of the file`),
+		why: "the mirror served an interstitial, not the file (an expired download key)",
+	},
+	{
 		re:  regexp.MustCompile(`randombook: "https://randombook\.org[^"]*" returned HTTP \d+`),
 		why: "the randombook.org API answered an unexpected status",
 	},

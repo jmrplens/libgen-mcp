@@ -597,7 +597,8 @@ Anna's Archive, as an md5-keyed rescue route.
 ## Politeness and identification
 
 - Every outbound request carries an honest User-Agent naming the project and its repository —
-  `libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)`. No browser User-Agent is ever
+  `libgen-mcp/<version> (+https://github.com/jmrplens/libgen-mcp)`, where the version is the one
+  compiled in from the repository's `VERSION` file. No browser User-Agent is ever
   spoofed; none was needed for any source here, and none was used for any measurement on this
   page.
 - The LibGen mirror requests and every file stream pass through one shared token-bucket rate

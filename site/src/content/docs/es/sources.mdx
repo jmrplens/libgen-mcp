@@ -630,7 +630,8 @@ Anna's Archive, como ruta de rescate identificada por md5.
 ## Cortesía e identificación
 
 - Toda petición saliente lleva un User-Agent honesto que nombra el proyecto y su repositorio —
-  `libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)`. Nunca se suplanta el User-Agent
+  `libgen-mcp/<versión> (+https://github.com/jmrplens/libgen-mcp)`, donde la versión es la que
+  se compila desde el fichero `VERSION` del repositorio. Nunca se suplanta el User-Agent
   de un navegador; ninguna fuente de aquí lo necesitó, y ninguna medición de esta página lo usó.
 - Las peticiones a los mirrors de LibGen y todos los flujos de fichero pasan por un único
   limitador de tasa de cubo de tokens dimensionado por `LIBGEN_MCP_RATE_RPS` y
