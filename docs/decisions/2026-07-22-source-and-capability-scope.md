@@ -684,7 +684,7 @@ because a superseded MIL-STD looks exactly like a current one.
   WAF challenge — but the signature is recorded here so the next person recognizes a 202/0-byte
   response instead of re-measuring it.
 
-##### Chain placement
+##### Chain placement — scielo before fatcat
 
 `config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl →
 zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook →
