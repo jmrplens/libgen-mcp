@@ -341,6 +341,144 @@ fatcat → core → oapen → archive → scihub → scidb → libgen → random
 join the publisher-direct group ahead of the shadow libraries, per §3, and being prefix-gated they
 change nothing for any other identifier.
 
+#### Amendment — 2026-07-30 (three more publisher-direct DOI sources)
+
+The standards amendment above established the shape: a source that claims one DOI registrant
+prefix, competes with nothing, and needs no new identifier on `Item` and no new argument on
+`download`/`read`. Three more publishers fit it. Each was re-measured from scratch before
+being accepted — including, in every case, whether the chain already reached it.
+
+##### Measured — none of the three is reachable by the default, keyless chain
+
+The gap is the reason each ships, so it was checked against every source in the chain rather
+than assumed:
+
+| Candidate                | Unpaywall                             | Crossref | Europe PMC | fatcat                             | Sci-Hub           |
+| ------------------------ | ------------------------------------- | -------- | ---------- | ---------------------------------- | ----------------- |
+| Dagstuhl `10.4230`       | 404                                   | **404**  | 0 hits     | release page, **0** full-text tags | 2 KB stub, no PDF |
+| ACL Anthology `10.18653` | is_oa in 12 of 13 sampled — see below | 200      | 0 hits     | 404                                | 2 KB stub, no PDF |
+| Zenodo `10.5281/zenodo`  | n/a (DataCite)                        | n/a      | 0 hits     | 404                                | 2 KB stub, no PDF |
+
+**Dagstuhl is the cleanest case.** It registers with DataCite rather than Crossref, so
+`api.crossref.org` answers **404** for a Dagstuhl DOI and Unpaywall — which is built on
+Crossref — answers 404 in turn. Confirmed on `10.4230/LIPIcs.ICALP.2023.1`,
+`10.4230/LIPIcs.STACS.2015.1` and `10.4230/DagRep.9.1.1`. fatcat is the near miss: it *does*
+hold a release page for the ICALP paper, but the page advertises zero `citation_pdf_url` tags,
+so the `fatcat` source correctly reports no preserved full text. Six documents spanning
+2015–2023 and three series (LIPIcs, OASIcs, DagRep) all served real PDF bytes, 339 KB to 8.4 MB.
+
+**ACL is the honest one, and the caveat is recorded rather than glossed.** Of thirteen *real*
+Anthology DOIs sampled, **twelve** carry a usable `url_for_pdf` in their Unpaywall record. So
+this is not new corpus for a deployment that has configured Unpaywall. It is new corpus for
+every deployment that has not — which is the default, since `unpaywall` is gated on
+`LIBGEN_MCP_UNPAYWALL_EMAIL` and is absent from the chain without it. Given the keyless ethos
+(§Architecture Decisions), "reachable only with a credential" is the same as "not reachable",
+and that is what decided it. The thirteenth DOI is the sharper argument:
+`10.18653/v1/N19-1423` — BERT, the most-cited paper in the field — is reported `is_oa: true`
+by Unpaywall with **zero** `url_for_pdf` across every `oa_location`, so even a configured
+Unpaywall cannot serve it, while `aclanthology.org/N19-1423.pdf` returns 786,279 bytes.
+
+*A methodological note, because it nearly produced a wrong number.* An initial sample put
+Unpaywall's coverage at 8 of 13. Five of those "misses" were DOIs that do not exist —
+`10.18653/v1/D14-1162`, `10.3115/v1/W04-1013` and three others all answer 404 at `doi.org`
+itself. Coverage over a set that includes fabricated identifiers measures nothing. Every DOI
+was resolved at `doi.org` first, and the corrected figure is 12 of 13.
+
+##### Measured — the three format traps
+
+Each was found by fetching, and each is the reason its source is not a one-liner:
+
+- **Dagstuhl needs the landing page; the PDF URL is not derivable.** DROPS storage paths embed
+  the volume the paper appeared in, which the DOI does not carry:
+  `10.4230/LIPIcs.ICALP.2023.1` is served from `/storage/00lipics/lipics-vol261-icalp2023/…`,
+  `10.4230/LIPIcs.STACS.2015.1` from `lipics-vol030-stacs2015/…`, and `10.4230/DagRep.9.1.1`
+  from a different scheme again (`/storage/04dagstuhl-reports/volume09/issue01/19021/…`).
+  Nothing in the identifier predicts `vol261` or `19021`. The document page carries exactly one
+  `citation_pdf_url` tag and that is the only route to the file. The **doi.org hop is skipped**:
+  the resolver redirects to `drops.dagstuhl.de/entities/document/<doi>`, so the source builds
+  that URL itself — one request instead of two. An unheld DOI answers 404 there.
+- **ACL's identifier case is load-bearing, and conditionally so.** The DOI suffix after `/v1/`
+  *is* the Anthology identifier and the identifier *is* the filename, so no request is needed at
+  all — but the filename is case-sensitive in opposite directions for the two id generations.
+  `N19-1423.pdf` is 200 (786,279 bytes) and `n19-1423.pdf` is 404; `2024.emnlp-main.856.pdf` is
+  200 (1,068,216 bytes) and `2024.EMNLP-MAIN.856.pdf` is 404. Uppercasing unconditionally would
+  break every paper since 2020 and lowercasing unconditionally every paper before it, so the
+  case is normalized on the one bit that separates them: an identifier opening with a letter is
+  uppercased, one opening with a digit is left alone. Separately, only the `/v1/` shape maps —
+  the pre-2014 numeric `10.3115/1072228.1072256` resolves to `portal.acm.org` and embeds no
+  Anthology identifier, so it is declined rather than guessed at.
+- **Zenodo must trust the file extension, never the mimetype.** Two independent measurements
+  say so. In the listing, Zenodo reports formats it does not recognize as
+  `application/octet-stream` — observed for `.md` and `.xlsx`. On the wire it is worse: the file
+  endpoint serves **everything** as `application/octet-stream`, including three PDFs whose first
+  bytes were `%PDF` and a `.zip`. The file's name is the only field that says what it is.
+
+##### Measured — the Zenodo concept DOI, which nearly shipped broken
+
+Zenodo mints **two** DOIs per deposit: one naming the specific version and one naming the
+deposit across all its versions. The concept DOI is what its own "cite all versions" affordance
+hands out, and it has **no file listing** — `/api/records/<concept>/files` answers 404. Sampling
+DataCite for Zenodo DOIs returned concept and version DOIs in roughly equal numbers, so
+treating that 404 as "no such record" would have silently lost about half of all Zenodo DOIs.
+
+The fix is one extra request on the miss path: `HEAD /records/<id>` answers **302** to the
+version for a concept id, **200** for a version id and **404** for neither — measured on all
+three. HEAD is used because the page body is ~100 KB of markup, and unlike NIST's repository
+(which 404s to HEAD on a URL whose GET serves the file) Zenodo answers HEAD faithfully. Nor is
+the version id derivable: it is usually the concept id plus one (21698240 → 21698241) but not
+always (19978417 → **21676215**).
+
+##### Measured — robots.txt permits every path used
+
+- **Dagstuhl** disallows `/api/*`, `/metadata/*/*` and `/entities/*/metadata/*`. The source
+  touches `/entities/document/…` and `/storage/…`, neither of which is disallowed.
+- **Zenodo** disallows `/api` wholesale and then allows one path back out:
+  `Allow: /api/records/*/files`, with `Disallow: /api/records/*/files-archive` re-excluded. So
+  the file listing is explicitly permitted while the record-*metadata* endpoint
+  (`/api/records/<id>`) is not — which is why the version hop goes through the human-facing
+  `/records/<id>` page (carrying no Disallow; only `/records/*/preview` does) rather than
+  through `/api/records/<id>/versions/latest`. `Crawl-delay: 10` is also set; a resolve makes
+  at most two requests for one caller-initiated download rather than crawling.
+- **ACL Anthology** serves no `robots.txt` at all (404), so nothing is disallowed.
+
+Every measurement above was taken with an honest `libgen-mcp/<version> (+URL)` User-Agent. No
+browser User-Agent was spoofed for any of the three, and none was needed.
+
+##### File selection, the one judgement call
+
+A Zenodo record is a deposit rather than a document: it can hold one file or fourteen, and the
+caller named the record, not a file. The source prefers a format `extract` can read — PDF, then
+EPUB, then plain text — and failing that takes the record's largest file, on the reasoning that
+a deposit's payload is its biggest file and the rest are READMEs, checksums and manifests. A
+sampled 14-file record bears this out: the deposit is a 270 MB `.zip` and the other thirteen
+entries are a `README.md`, a `CHANGELOG.md`, a manifest script and CSV templates. Dagstuhl and
+ACL need no such rule — both serve exactly one PDF per DOI.
+
+##### Chain placement
+
+`config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl →
+zenodo → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`. All
+three join the publisher-direct group ahead of the shadow libraries, per §3, and being
+prefix-gated they change nothing for any other identifier. Each also adds a probe to
+`articleProbes`, without which a prefix-gated source runs in the chain while being absent from
+the download tool's `source` enum — and the probe has to satisfy the source's own
+well-formedness check, not merely carry the right prefix, since `acl` declines a DOI without
+the `/v1/` segment and `zenodo` one whose suffix is not a record number.
+
+##### Not done, and why
+
+- **Crossref `filter=type:standard` for standards discovery** — still a recorded GO from the
+  2026-07-30 standards amendment, still not implemented. Unchanged by this pass.
+- **A Dagstuhl, ACL or Zenodo *discovery* provider** — none added. All three are DOI-keyed
+  download sources only. Dagstuhl and Zenodo have search interfaces, but `search` already
+  federates Crossref, which indexes ACL and would index the others were they Crossref
+  registrants; adding three narrow providers for corpora the existing federation partly covers
+  is the "many narrow tools" this project rejects.
+- **Zenodo's `/api/records/<id>` metadata endpoint** — deliberately never called, because its
+  robots.txt disallows it. Record titles and authors are therefore not available to the source,
+  which is why a Zenodo download is named from the file key rather than from the deposit's
+  bibliographic metadata.
+
 ### 4. Deepen the read loop — GO (pure-Go)
 
 - **`search_in_document`** — search the already-extracted text and return snippet + page/offset
@@ -389,6 +527,9 @@ clients and the no-friction promise must keep working unchanged.
   ETSI, ECMA, 3GPP, W3C as a download source. **Measured and rejected 2026-07-30 — see the
   standards amendment under §3** for each one's blocking measurement; ITU-T is deferred rather
   than rejected.
+- Discovery providers for Dagstuhl, the ACL Anthology and Zenodo, and any use of Zenodo's
+  robots-disallowed `/api/records/<id>` metadata endpoint. **Decided 2026-07-30 — see the
+  publisher-direct amendment under §3.** All three ship as DOI-keyed download sources only.
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
 - Resource subscriptions, sampling, MCP logging (no fit; logging also deprecated in the RC).

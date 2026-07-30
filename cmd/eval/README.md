@@ -100,6 +100,9 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route |
 | S64 | **Reading an RFC as text** — every other DOI-keyed source yields a PDF; this is the only path where a DOI reaches `extract` as plain text and paginates by character offset, and the model must quote the document rather than merely call the tool |
 | S65 | **The standards sources are advertised** — touches no third party: a prefix-gated source can run in the chain while being absent from the enum the model is shown, which makes it reachable by the server and invisible to the caller |
+| S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere |
+| S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased |
+| S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -129,7 +132,8 @@ is also hidden from the download tool's `source` schema when unset. S7 sets the
 email via its per-scenario environment to exercise the open-access path.
 
 **The article chain is ordered, and S45–S49 test the order.** Articles resolve
-through `unpaywall → europepmc → biorxiv → rfc → nist → fatcat → core → oapen → scihub → scidb`
+through `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → fatcat → core →
+oapen → scihub → scidb`
 (`config.KnownSources`): the legal open-access providers lead, the shadow libraries
 are the fallback. S45–S47 each pin one of the new providers by name; S46 and S49
 pin nothing and grade which source the chain reached, which is the only way the
@@ -286,7 +290,7 @@ that run file and regenerates the pages in the same step, and CI fails on a page
 that no longer matches — which is what stops a hand edit from drifting.
 
 **A partial run publishes too.** Writing to a results doc **merges** into it rather
-than replacing it, so re-measuring one source does not cost a full suite — 66
+than replacing it, so re-measuring one source does not cost a full suite — 69
 scenarios against a real API, real mirrors and real downloads:
 
 ```bash
@@ -313,8 +317,8 @@ appearing on the Spanish page in English; add it to `scenariosES` in
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
 - **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall,
-  Europe PMC, bioRxiv, the RFC Editor, NIST, fatcat, Sci-Hub, OAPEN, OpenLibrary and
-  the Internet Archive,
+  Europe PMC, bioRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology,
+  Zenodo, fatcat, Sci-Hub, OAPEN, OpenLibrary and the Internet Archive,
   and the discovery providers behind Gutenberg, ERIC, dblp and PubMed. These are flaky
   and rate-limited; results
   vary run to run. A download scenario that selected the tool and source correctly

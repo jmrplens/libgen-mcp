@@ -616,6 +616,130 @@ func TestE2ENISTClassifiedOutcome(t *testing.T) {
 	classifyOrFail(t, "nist", err, nistFailures)
 }
 
+// dagstuhlLiveDOI is the DOI of the ICALP 2023 invited talk "A (Slightly) Improved
+// Approximation Algorithm for the Metric Traveling Salesperson Problem", whose
+// document page advertised a 339,463-byte PDF in DROPS storage on 2026-07-30. It is
+// also the case that justifies the source existing at all: api.crossref.org answers
+// 404 for this DOI (Dagstuhl registers with DataCite), so Unpaywall does too, and
+// fatcat holds a release page for it with no preserved full text.
+const dagstuhlLiveDOI = "10.4230/LIPIcs.ICALP.2023.1"
+
+// dagstuhlDocumentProbe is the document page the source fetches, so a network that
+// cannot reach DROPS skips instead of burning the timeout budget.
+const dagstuhlDocumentProbe = "https://drops.dagstuhl.de/entities/document/" + dagstuhlLiveDOI
+
+// dagstuhlFailures are the KNOWN, diagnosed ways the dagstuhl source can fail live.
+// The transport class pins drops.dagstuhl.de, so a source repointed at another host
+// fails the test instead of skipping as an upstream outage.
+var dagstuhlFailures = []sourceFailure{
+	diagnosed("dagstuhl", `"[^"]*" is not a Dagstuhl DOI`, "the DOI is not one the source claims"),
+	diagnosed("dagstuhl", `"[^"]*" is not held by DROPS`, "DROPS no longer holds that document"),
+	diagnosed("dagstuhl", `"[^"]*" advertises no full-text PDF`,
+		"the document page stopped advertising a PDF"),
+	diagnosed("dagstuhl", `the page for "[^"]*" is not a document page`,
+		"DROPS served a challenge page or changed its layout"),
+	transportTo("dagstuhl", "", "drops.dagstuhl.de"),
+}
+
+// TestE2EDagstuhlClassifiedOutcome exercises the dagstuhl source end to end,
+// restricted to source=dagstuhl. It is the case that proves the landing-page parse
+// still works: the storage path embeds a volume number the DOI does not carry, so
+// the citation_pdf_url meta tag is the only route to the file and a layout change
+// would silently remove every LIPIcs paper from reach.
+func TestE2EDagstuhlClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "dagstuhl", dagstuhlDocumentProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, dagstuhlLiveDOI, "dagstuhl")
+	if err == nil {
+		assertSourcePDF(t, "dagstuhl", res)
+		return
+	}
+	classifyOrFail(t, "dagstuhl", err, dagstuhlFailures)
+}
+
+// aclLiveDOI is the DOI of "BERT: Pre-training of Deep Bidirectional Transformers
+// for Language Understanding", whose PDF the Anthology served as 786,279 bytes on
+// 2026-07-30. It is deliberately the one Anthology paper Unpaywall cannot serve —
+// it reports is_oa true with no url_for_pdf on any oa_location — so this case
+// measures reach the rest of the chain does not have rather than a duplicate route.
+const aclLiveDOI = "10.18653/v1/N19-1423"
+
+// aclFailures are the KNOWN, diagnosed ways the acl source can fail live. The list
+// is short because Resolve issues no request: the DOI suffix is the Anthology
+// identifier and the identifier is the filename, so every remaining failure arrives
+// from the download stream.
+var aclFailures = []sourceFailure{
+	diagnosed("acl", `"[^"]*" is not an ACL Anthology DOI`, "the DOI is not one the source claims"),
+	transportTo("acl", "", "aclanthology.org"),
+	{
+		re:  regexp.MustCompile(`source acl: .*status 404`),
+		why: "the Anthology no longer serves that paper under that identifier",
+	},
+}
+
+// TestE2EACLClassifiedOutcome exercises the acl source end to end, restricted to
+// source=acl. Its real job is to guard the case rule: this DOI's identifier is
+// volume-lettered, so the source must uppercase it — aclanthology.org answers 404
+// to the lowercase spelling, which is exactly the 404 class below and would turn a
+// broken rule into a skip if the rule were not also unit-tested.
+func TestE2EACLClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "acl", "https://aclanthology.org/N19-1423.pdf")
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, aclLiveDOI, "acl")
+	if err == nil {
+		assertSourcePDF(t, "acl", res)
+		return
+	}
+	classifyOrFail(t, "acl", err, aclFailures)
+}
+
+// zenodoLiveDOI is the DOI of a Zenodo record whose single file was a 271,574-byte
+// PDF on 2026-07-30. A record with exactly one PDF is chosen so the case asserts the
+// file listing and the download rather than the multi-file preference order, which
+// the unit tests pin exhaustively.
+const zenodoLiveDOI = "10.5281/zenodo.21698070"
+
+// zenodoFilesProbe is the robots-permitted file-listing endpoint the source calls.
+// Zenodo's robots.txt disallows /api wholesale and allows /api/records/*/files back
+// out, so this URL is both what the source uses and the only /api path it may touch.
+const zenodoFilesProbe = "https://zenodo.org/api/records/21698070/files"
+
+// zenodoFailures are the KNOWN, diagnosed ways the zenodo source can fail live.
+// Both hosts it contacts are zenodo.org, so one transport class covers the listing
+// and the concept-DOI version hop.
+var zenodoFailures = []sourceFailure{
+	diagnosed("zenodo", `"[^"]*" is not a Zenodo DOI`, "the DOI is not one the source claims"),
+	diagnosed("zenodo", `record \d+ does not exist`, "Zenodo no longer holds that record"),
+	diagnosed("zenodo", `the files of record \d+ are restricted`, "the record's files became restricted"),
+	diagnosed("zenodo", `record \d+ holds no downloadable file`, "the record's files were withdrawn"),
+	transportTo("zenodo", "", "zenodo.org"),
+}
+
+// TestE2EZenodoClassifiedOutcome exercises the zenodo source end to end, restricted
+// to source=zenodo. It proves the one path the source cannot derive: the file
+// listing names the download URL, and its bytes are a PDF despite Zenodo serving
+// every file as application/octet-stream — which is why the source reads the
+// format off the file's name and never off its mimetype.
+func TestE2EZenodoClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "zenodo", zenodoFilesProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, zenodoLiveDOI, "zenodo")
+	if err == nil {
+		assertSourcePDF(t, "zenodo", res)
+		return
+	}
+	classifyOrFail(t, "zenodo", err, zenodoFailures)
+}
+
 // fatcatScholarProbe is the DOI lookup on fatcat's own web frontend, which is what
 // the source now drives: the JSON API it used to call (api.fatcat.wiki) resolves in
 // DNS but never completes a TCP handshake, from any network or client tried, with no

@@ -418,6 +418,10 @@ func docPages(toolNameList string) []docPage {
 			"Arquitectura", "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga",
 		},
 		{
+			"sources/", "Download sources", "Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys",
+			"Fuentes de descarga", "Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves",
+		},
+		{
 			"how-search-works/", "How search works", "Catalog-first search, and when and how it escalates to the extra sources",
 			"Cómo funciona la búsqueda", "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra",
 		},
@@ -574,7 +578,7 @@ func writeLLMSFullDownloadSources(b *strings.Builder) {
 	b.WriteString("The `download` tool resolves a file through an ordered chain of sources. Which branch runs depends on the identifier supplied:\n\n")
 	b.WriteString("- **Books (by `md5`):** tried against `libgen` (resolve the ads.php download key, then fetch from the CDN), then `randombook`, then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set) as fallbacks.\n")
 	b.WriteString("- **Books (by `isbn`):** the open-access book sources — `oapen` (openly licensed scholarly monographs) then `archive` (public-domain Internet Archive scans, found via OpenLibrary and served only when both OpenLibrary and archive.org report the scan as freely downloadable rather than lending-restricted).\n")
-	b.WriteString("- **Articles (by `doi`):** the open-access providers first — `unpaywall` (requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `europepmc` (Europe PMC open-access full text), then `biorxiv` (`10.1101` preprints), then `rfc` (`10.17487` RFCs, served as text by the RFC Editor), then `nist` (`10.6028` NIST publications), then `fatcat` (Internet Archive Scholar), then `core` (requires `LIBGEN_MCP_CORE_KEY`), then `oapen` (monograph DOIs) — then the shadow-library fallbacks `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`) and `scidb` (Anna's Archive SciDB viewer).\n")
+	b.WriteString("- **Articles (by `doi`):** the open-access providers first — `unpaywall` (requires `LIBGEN_MCP_UNPAYWALL_EMAIL`), then `europepmc` (Europe PMC open-access full text), then `biorxiv` (`10.1101` preprints), then `rfc` (`10.17487` RFCs, served as text by the RFC Editor), then `nist` (`10.6028` NIST publications), then `dagstuhl` (`10.4230` LIPIcs/OASIcs proceedings and Dagstuhl Reports), then `acl` (`10.18653/v1`/`10.3115/v1` ACL Anthology papers), then `zenodo` (`10.5281/zenodo` deposits), then `fatcat` (Internet Archive Scholar), then `core` (requires `LIBGEN_MCP_CORE_KEY`), then `oapen` (monograph DOIs) — then the shadow-library fallbacks `scihub` (`LIBGEN_MCP_SCIHUB_HOSTS`) and `scidb` (Anna's Archive SciDB viewer).\n")
 	b.WriteString("- **Both `md5` and `doi` given:** article sources are tried first, then the book sources.\n\n")
 	// The recognized names come from config.KnownSources rather than a literal, so
 	// this reference cannot drift when a source is added or the chain is reordered.

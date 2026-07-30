@@ -412,6 +412,34 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 		s, _ := coreLiveSource(t)
 		assertDeclaresExt(t, s, Item{DOI: doi})
 	})
+
+	t.Run("rfc", func(t *testing.T) {
+		assertDeclaresExt(t, rfcSource{}, Item{DOI: "10.17487/RFC9110"})
+	})
+
+	t.Run("nist", func(t *testing.T) {
+		assertDeclaresExt(t, nistSource{}, Item{DOI: "10.6028/NIST.SP.800-53r5"})
+	})
+
+	t.Run("dagstuhl", func(t *testing.T) {
+		stub := startDagstuhlStub(t)
+		assertDeclaresExt(t, stub.source(), Item{DOI: "10.4230/LIPIcs.ICALP.2023.1"})
+	})
+
+	t.Run("acl", func(t *testing.T) {
+		assertDeclaresExt(t, aclSource{}, Item{DOI: "10.18653/v1/N19-1423"})
+	})
+
+	t.Run("zenodo", func(t *testing.T) {
+		// Zenodo is the one source whose extension varies per record, so the entry it
+		// picks is what supplies it — and it must come from the file's name, since the
+		// mimetype the listing reports is octet-stream for anything Zenodo does not
+		// recognize and the file endpoint serves everything as octet-stream regardless.
+		stub := startZenodoStub(t)
+		stub.listings["3233986"] = zenodoListing(
+			zenodoFile("paper.pdf", 10, "https://example.invalid/paper.pdf"))
+		assertDeclaresExt(t, stub.source(), Item{DOI: "10.5281/zenodo.3233986"})
+	})
 }
 
 // assertDeclaresExt resolves an item and fails when the source announced no type.

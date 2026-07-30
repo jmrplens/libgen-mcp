@@ -138,7 +138,7 @@ condición de red, nunca un fallo del modelo.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La suite son **66 escenarios** (S1–S65 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
+La suite son **69 escenarios** (S1–S68 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
 
 {/* end generated */}
 
@@ -234,6 +234,9 @@ Varios se repiten contra un servidor en modo **remoto** (`--http`).
 | S63 | **El RFC Editor por su nombre** — el mismo documento pedido «desde la fuente RFC Editor», de modo que el modelo mapea el nombre en prosa a `source:"rfc"` en lugar de dejar que enrute la cadena |
 | S64 | **Leer un RFC como texto** — las demás fuentes por DOI entregan PDF; esta es la única vía en la que un DOI llega a `extract` como texto plano y pagina por desplazamiento de caracteres, y el modelo debe citar el documento en vez de limitarse a llamar a la herramienta |
 | S65 | **Las fuentes de normas se anuncian** — no toca a ningún tercero: una fuente con compuerta de prefijo puede correr en la cadena y faltar en el enum que se muestra al modelo, lo que la hace alcanzable por el servidor e invisible para quien llama |
+| S66 | **Dagstuhl por DOI** — el DOI se da hecho, así que lo que se evalúa es el análisis de la página de aterrizaje que la fuente no puede evitar: los ficheros de DROPS viven bajo una ruta de almacenamiento que incluye el número de volumen, que el DOI no lleva, de modo que la URL del PDF sale del propio `citation_pdf_url` de la página o no sale de ninguna parte |
+| S67 | **La ACL Anthology por su nombre, sobre un identificador con letra de volumen** — el nombre en prosa mapeado a `source:"acl"` y, detrás, la regla de mayúsculas: el identificador de este DOI lleva letra de volumen, la Anthology responde 404 a la grafía en minúsculas, así que la llegada del fichero es la única prueba de que el sufijo se pasó a mayúsculas |
+| S68 | **Un DOI de concepto de Zenodo** — el identificador que Zenodo entrega para citar todas las versiones de un depósito no tiene listado de ficheros propio y responde 404, de modo que aprobar significa que la fuente lo detectó y preguntó a la página del registro qué versión servir; sin ese salto, cerca de la mitad de los DOI de Zenodo no resuelven a nada |
 
 {/* end generated */}
 
@@ -257,7 +260,7 @@ escenarios en total.
 {/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La tabla siguiente es un conjunto de ejecuciones en vivo entre el 2026-07-25 y el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **66 pasaron, 0 fallaron, 0 en SKIP** de 66 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`). Cada fila lleva la fecha en que se midió por última vez: una ejecución parcial solo refresca los escenarios que ejecutó.
+La tabla siguiente es un conjunto de ejecuciones en vivo entre el 2026-07-25 y el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **69 pasaron, 0 fallaron, 0 en SKIP** de 69 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`). Cada fila lleva la fecha en que se midió por última vez: una ejecución parcial solo refresca los escenarios que ejecutó.
 
 {/* end generated */}
 
@@ -347,6 +350,9 @@ Ambos pasan justamente por comportarse así.
 | S63 | local | ✅ PASS | 2026-07-30 | downloaded 502941 bytes via rfc |
 | S64 | local | ✅ PASS | 2026-07-30 | read opened RFC 9110 as text (6002 chars extracted) |
 | S65 | local | ✅ PASS | 2026-07-30 | the download source enum advertises rfc and nist; enum = unpaywall, europepmc, biorxiv, rfc, nist, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas |
+| S66 | local | ✅ PASS | 2026-07-30 | downloaded 339463 bytes via dagstuhl |
+| S67 | local | ✅ PASS | 2026-07-30 | downloaded 786279 bytes via acl |
+| S68 | local | ✅ PASS | 2026-07-30 | downloaded 173300 bytes via zenodo |
 
 {/* end generated */}
 

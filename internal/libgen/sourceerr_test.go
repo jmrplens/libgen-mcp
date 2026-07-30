@@ -11,9 +11,24 @@ import (
 	"testing"
 )
 
-// taxonomyDOI carries the bioRxiv preprint prefix so every DOI source — including
-// the prefix-restricted biorxiv one — claims the item under test.
+// taxonomyDOI carries the bioRxiv preprint prefix so every prefix-agnostic DOI
+// source — plus the prefix-restricted biorxiv one — claims the item under test.
 const taxonomyDOI = "10.1101/2020.12.30.424878"
+
+// taxonomyDOIFor returns the DOI to offer a named source, which is taxonomyDOI for
+// every source that claims any DOI and the source's own registrant otherwise. A
+// prefix-restricted source declines taxonomyDOI outright, so offering it one would
+// test the prefix check rather than the error taxonomy the suite is about.
+func taxonomyDOIFor(name string) string {
+	switch name {
+	case "dagstuhl":
+		return "10.4230/LIPIcs.ICALP.2023.1"
+	case "zenodo":
+		return "10.5281/zenodo.3233986"
+	default:
+		return taxonomyDOI
+	}
+}
 
 // doiSourceFor builds the named DOI source with every upstream it talks to pointed
 // at srv, so one local server decides the whole outcome of a Resolve. It fails the
@@ -28,6 +43,10 @@ func doiSourceFor(t *testing.T, name string, srv *httptest.Server) DownloadSourc
 		return europePMCSource{http: cl, searchBase: srv.URL, renderBase: srv.URL}
 	case "biorxiv":
 		return biorxivSource{http: cl, apiBase: srv.URL, contentBase: srv.URL}
+	case "dagstuhl":
+		return dagstuhlSource{http: cl, baseURL: srv.URL}
+	case "zenodo":
+		return zenodoSource{http: cl, baseURL: srv.URL}
 	case "fatcat":
 		return fatcatSource{http: cl, baseURL: srv.URL}
 	case "core":
@@ -51,9 +70,16 @@ func fixedResponse(status int, body string) *httptest.Server {
 	}))
 }
 
-// doiSourceNames lists every DOI source in chain order, so the taxonomy tests
-// cover the whole article chain rather than a sample of it.
-var doiSourceNames = []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "scihub", "scidb"}
+// doiSourceNames lists every DOI source that talks to an upstream, in chain order,
+// so the taxonomy tests cover the whole article chain rather than a sample of it.
+//
+// rfc, nist and acl are deliberately absent: each derives its file URL from the DOI
+// by string manipulation and issues no request at all, so there is no upstream whose
+// failure could be misclassified. Their "not my registrant" refusal is covered in
+// their own tests.
+var doiSourceNames = []string{
+	"unpaywall", "europepmc", "biorxiv", "dagstuhl", "zenodo", "fatcat", "core", "scihub", "scidb",
+}
 
 // TestUnavailableUpstreamIsDiagnosedAsSuch verifies every DOI source reports a
 // server that answers 503 as ErrSourceUnavailable: the failure says nothing about
@@ -64,7 +90,8 @@ func TestUnavailableUpstreamIsDiagnosedAsSuch(t *testing.T) {
 			srv := fixedResponse(http.StatusServiceUnavailable, "down")
 			defer srv.Close()
 
-			_, err := doiSourceFor(t, name, srv).Resolve(context.Background(), Item{DOI: taxonomyDOI})
+			item := Item{DOI: taxonomyDOIFor(name)}
+			_, err := doiSourceFor(t, name, srv).Resolve(context.Background(), item)
 			if err == nil {
 				t.Fatal("Resolve should fail against a 503 upstream")
 			}
@@ -86,6 +113,8 @@ func TestCleanMissIsNotDiagnosedAsUnavailability(t *testing.T) {
 		"unpaywall": `{"is_oa":false}`,
 		"europepmc": `{"hitCount":0,"resultList":{"result":[]}}`,
 		"biorxiv":   `{"collection":[]}`,
+		"dagstuhl":  "<html>not found</html>",
+		"zenodo":    "",
 		"fatcat":    "",
 		"core":      `{"results":[]}`,
 		"scihub":    "<html><body>article not found</body></html>",
@@ -94,13 +123,19 @@ func TestCleanMissIsNotDiagnosedAsUnavailability(t *testing.T) {
 	for _, name := range doiSourceNames {
 		t.Run(name, func(t *testing.T) {
 			status := http.StatusOK
-			if name == "fatcat" {
-				status = http.StatusNotFound // fatcat's clean miss is a 404
+			switch name {
+			case "fatcat", "dagstuhl":
+				status = http.StatusNotFound // their clean miss is a 404 on the lookup
+			case "zenodo":
+				// The file listing 404s and so does the record page the version hop
+				// then asks, which together mean the record does not exist.
+				status = http.StatusNotFound
 			}
 			srv := fixedResponse(status, misses[name])
 			defer srv.Close()
 
-			_, err := doiSourceFor(t, name, srv).Resolve(context.Background(), Item{DOI: taxonomyDOI})
+			item := Item{DOI: taxonomyDOIFor(name)}
+			_, err := doiSourceFor(t, name, srv).Resolve(context.Background(), item)
 			if err == nil {
 				t.Fatal("Resolve should fail when the source does not hold the item")
 			}

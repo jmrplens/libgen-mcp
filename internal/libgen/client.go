@@ -124,9 +124,9 @@ type Client struct {
 	// advancing to the next when one fails to resolve or stream. It is built from
 	// config by buildSourceChain in config.KnownSources order, then filtered per
 	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
-	// articles try the doi sources (unpaywall, europepmc, biorxiv, fatcat, core,
-	// oapen, scihub, scidb) — oapen supports a DOI as well as an ISBN, since
-	// monographs carry one.
+	// articles try the doi sources (unpaywall, europepmc, biorxiv, rfc, nist,
+	// dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb) — oapen supports a
+	// DOI as well as an ISBN, since monographs carry one.
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
 	// same md5 into the same dir), keyed by the absolute .part path. The .part
@@ -362,7 +362,8 @@ func allowedByOperator(configured []string) func(string) bool {
 // config.KnownSources order; because Download filters each source by
 // Supports(item), this single ordered slice yields the right per-item order: an
 // article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
-// biorxiv, fatcat, core, oapen, scihub, scidb), an ISBN-keyed book to the
+// biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb),
+// an ISBN-keyed book to the
 // open-access book sources (oapen, archive) and an md5-keyed book to the shadow
 // libraries (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
 // or gated off, like core without a key — are left out. Each non-LibGen source uses
@@ -383,6 +384,9 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
 		"rfc":        func() DownloadSource { return rfcSource{} },
 		"nist":       func() DownloadSource { return nistSource{} },
+		"dagstuhl":   func() DownloadSource { return dagstuhlSource{http: c.http} },
+		"acl":        func() DownloadSource { return aclSource{} },
+		"zenodo":     func() DownloadSource { return zenodoSource{http: c.http} },
 		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
 		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
 		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
@@ -430,9 +434,15 @@ func (c *Client) EnabledSourceNames() (book, article []string) {
 // an article. One probe is not enough: several sources claim only their own
 // registrant prefix, and a probe carrying one of them makes every other
 // prefix-restricted source look unusable. There is therefore one probe per
-// restricted prefix in the chain — bioRxiv/medRxiv preprints, the RFC Editor and
-// NIST — and each is a valid DOI that the prefix-agnostic sources accept too, so
-// the union is the full "can serve some article" set.
+// restricted prefix in the chain — bioRxiv/medRxiv preprints, the RFC Editor,
+// NIST, Schloss Dagstuhl, the ACL Anthology and Zenodo — and each is a valid DOI
+// that the prefix-agnostic sources accept too, so the union is the full "can serve
+// some article" set.
+//
+// Each probe has to satisfy its source's own well-formedness check, not merely
+// carry the right prefix: acl declines a DOI without the "/v1/" segment and zenodo
+// one whose suffix is not a record number, so a bare-prefix probe would leave
+// either absent from the schema exactly as having no probe at all would.
 //
 // A source added with a new prefix restriction must add its probe here, or it will
 // resolve correctly but never be advertised in the download tool's schema.
@@ -440,6 +450,9 @@ var articleProbes = []Item{
 	{DOI: biorxivDOIPrefix + "0"},
 	{DOI: rfcDOIPrefix + rfcDOIToken + "1"},
 	{DOI: nistDOIPrefix + "0"},
+	{DOI: dagstuhlDOIPrefix + "0"},
+	{DOI: aclDOIPrefixes[0] + aclVersionSegment + "P00-0000"},
+	{DOI: zenodoDOIPrefix + "1"},
 }
 
 // supportsSomeArticle reports whether the source resolves at least one of the

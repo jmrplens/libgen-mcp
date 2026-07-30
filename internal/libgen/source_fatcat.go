@@ -197,10 +197,4 @@ func fatcatFulltextURLs(page []byte) []string {
 // output rather than a judgement about the host: a layout change that put a relative
 // path or a javascript: URL in the tag would otherwise be handed downstream as a file
 // location.
-func fatcatFetchableURL(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return false
-	}
-	return u.Scheme == "http" || u.Scheme == "https"
-}
+func fatcatFetchableURL(raw string) bool { return absoluteHTTPURL(raw) }

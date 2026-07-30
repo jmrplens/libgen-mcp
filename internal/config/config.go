@@ -157,21 +157,24 @@ func defaultStartRetryWaits() []time.Duration {
 // authority both for validating the configured list and for building the chain.
 //
 // The legal open-access providers lead: unpaywall, then Europe PMC,
-// bioRxiv/medRxiv, the RFC Editor and NIST, Internet Archive Scholar (fatcat) and
-// CORE for articles, then OAPEN and the Internet Archive for books. rfc and nist
-// are publisher-direct and claim only their own DOI registrant prefix (10.17487
-// and 10.6028), so they resolve their own documents authoritatively and are
-// invisible to every other identifier. Only after them come the shadow
-// libraries — scihub and scidb for articles, libgen, randombook and annas for
-// md5-keyed books — so a freely licensed copy is always preferred when one exists.
+// bioRxiv/medRxiv, the publisher-direct group (the RFC Editor, NIST, Schloss
+// Dagstuhl, the ACL Anthology and Zenodo), Internet Archive Scholar (fatcat) and
+// CORE for articles, then OAPEN and the Internet Archive for books. The
+// publisher-direct sources each claim only their own DOI registrant prefix —
+// 10.17487, 10.6028, 10.4230, 10.18653/10.3115 and 10.5281/zenodo respectively —
+// so they resolve their own documents authoritatively and are invisible to every
+// other identifier. Only after them come the shadow libraries — scihub and scidb
+// for articles, libgen, randombook and annas for md5-keyed books — so a freely
+// licensed copy is always preferred when one exists.
 //
 // Ordering only matters between sources that claim the same item, so the single
 // list yields the right per-identifier chain: an ISBN tries oapen then archive; a
 // DOI tries the article providers, then oapen (which also holds monograph DOIs),
 // then Sci-Hub; an md5 tries libgen, randombook and annas as before.
 var KnownSources = []string{
-	"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "core", "oapen",
-	"archive", "scihub", "scidb", "libgen", "randombook", "annas",
+	"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+	"fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook",
+	"annas",
 }
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when

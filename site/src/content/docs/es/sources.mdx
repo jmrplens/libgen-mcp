@@ -1,0 +1,560 @@
+---
+title: Fuentes de descarga
+description: Referencia fuente a fuente de las diecisiete fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
+datePublished: "2026-07-30"
+---
+
+`download` resuelve un elemento a través de una cadena ordenada de diecisiete fuentes.
+[Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena — cómo se
+construye, cómo funciona el failover y cómo se enfría una fuente que demuestra estar
+inalcanzable. Esta página describe las fuentes en sí, una sección para cada una y en el orden
+de la cadena: qué alcanza cada una, cómo convierte un identificador en una URL de fichero, qué
+_no_ cubre y si necesita alguna credencial.
+
+Tres cosas valen para todas las fuentes y no se repiten más abajo. Cada una implementa `Name`,
+`Supports(item)` y `Resolve(ctx, item)`, así que la cadena solo le ofrece los elementos que
+admite. Cada una devuelve un error, y nunca un resultado parcial, cuando no puede servir un
+elemento, y ese error se etiqueta como «no indexado» (una respuesta correcta sobre un elemento
+concreto — la cadena avanza) o «no disponible» (una afirmación sobre el proveedor — la fuente
+queda apartada cinco minutos). Y la verificación MD5 solo se activa para elementos
+identificados por md5, porque un elemento identificado por DOI o ISBN no lleva ningún digest de
+LibGen contra el que comprobar los bytes transmitidos.
+
+El orden viene de `config.KnownSources` y está fijado en el código: los proveedores legales de
+acceso abierto van delante, y a las bibliotecas en la sombra solo se llega cuando todos ellos
+han declinado. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena; no puede reordenarla.
+
+## Resolutores de artículos de acceso abierto
+
+### `unpaywall`
+
+Unpaywall, de OurResearch, registra si existe en algún sitio una copia legalmente gratuita de
+un DOI inscrito en Crossref, y dónde está.
+
+- **Identificado por** cualquier DOI — sin restricción de prefijo.
+- **Corpus** todos los DOI de Crossref para los que Unpaywall conoce una ubicación de acceso
+  abierto: copias del editor, depósitos en repositorios, manuscritos aceptados.
+- **Cómo resuelve** un GET a `api.unpaywall.org/v2/<doi>?email=…`. Las barras del DOI se
+  mantienen literales en la ruta (esa es la forma documentada); el resto de caracteres inseguros
+  para una URL se codifican en porcentaje. Del registro toma `best_oa_location.url_for_pdf`, y
+  si no la primera `oa_location` que sea la versión publicada o del editor y lleve
+  `url_for_pdf`, y si no el `url_for_pdf` de cualquier ubicación; solo como último recurso, la
+  URL de destino de la mejor ubicación.
+- **Qué no cubre** nada inscrito en DataCite en vez de en Crossref, porque Unpaywall está
+  construido sobre Crossref: un DOI `10.4230` de Dagstuhl y uno `10.5281` de Zenodo responden
+  ambos 404. `is_oa: true` tampoco implica que haya fichero descargable —
+  `10.18653/v1/N19-1423` (BERT) figura como acceso abierto con **cero** `url_for_pdf` en todas
+  sus ubicaciones. Un DOI de pago y un DOI de acceso abierto sin ubicación descargable se
+  reportan como dos fallos distintos, de modo que el log de la cadena dice cuál ocurrió.
+- **Claves** depende de `LIBGEN_MCP_UNPAYWALL_EMAIL`. Sin fijarla, la fuente está ausente de la
+  cadena por completo y oculta del enum `source` de `download`. Quien llama puede aportar la
+  dirección por llamada; una dirección por llamada se usa solo para esa petición y nunca se
+  almacena.
+- **Cortesía** el email de contacto es una exigencia de la propia API — identifica a quien llama
+  en cada consulta, y por eso aquí no hay camino sin clave al que recurrir.
+
+### `europepmc`
+
+Europe PMC es el espejo del EMBL-EBI de PubMed Central y del contenido de sus socios europeos.
+
+- **Identificado por** cualquier DOI.
+- **Corpus** el subconjunto de acceso abierto de PubMed Central — la literatura biomédica y de
+  ciencias de la vida cuyo texto completo Europe PMC conserva y puede redistribuir.
+- **Cómo resuelve** una petición de búsqueda a
+  `www.ebi.ac.uk/europepmc/webservices/rest/search` con el DOI entrecomillado como
+  `DOI:"<doi>"`, para que case con el índice de identificadores y no con texto libre. El primer
+  resultado debe llevar un PMCID **y** `inEPMC=Y` **y** `isOpenAccess=Y`. El fichero sale
+  entonces del backend de renderizado de PMC
+  (`/backend/ptpmcrender.fcgi?accid=<pmcid>&blobtype=pdf`), con `/articles/<pmcid>?pdf=render`
+  como reserva; el que se use se confirma antes con un GET por rango de unos pocos bytes, porque
+  el backend puede resultar inalcanzable desde una red concreta mientras la ruta de artículo
+  sigue en pie.
+- **Qué no cubre** nada fuera de PubMed Central: los DOI de Dagstuhl, ACL y Zenodo devuelven
+  cero resultados. Ninguna de las tres condiciones es redundante — Europe PMC indexa mucho más
+  de lo que conserva, y conserva texto completo que no siempre puede redistribuir, así que
+  `isOpenAccess` es una comprobación de licencia y no una repetición de `inEPMC`. Que fallen los
+  dos endpoints de renderizado se trata como servicio inalcanzable, nunca como artículo
+  ausente.
+- **Claves** sin clave.
+
+### `biorxiv`
+
+bioRxiv y medRxiv son los servidores de preprints del Cold Spring Harbor Laboratory.
+
+- **Identificado por** un DOI bajo el prefijo de registrante `10.1101`, y solo ese prefijo.
+- **Corpus** preprints de biología (bioRxiv) y de ciencias de la salud (medRxiv), con licencia
+  abierta.
+- **Cómo resuelve** `api.biorxiv.org/details/<server>/<doi>/na/json`, primero bioRxiv y luego
+  medRxiv — un DOI `10.1101` pertenece exactamente a uno de los dos y el otro simplemente falla.
+  Se toma el número de versión más alto de la respuesta y la URL se construye como
+  `<host>/content/<doi>v<n>.full.pdf` en el host de contenido correspondiente, de modo que una
+  descarga siempre es la revisión más reciente.
+- **Qué no cubre** el artículo publicado: un DOI de preprint resuelve al preprint. Solo cuando
+  _ambos_ servidores responden con normalidad y sin registro se declara ausente el DOI; si
+  alguna de las dos consultas se rompió, se informa de ese fallo, porque «no está en bioRxiv ni
+  en medRxiv» es una afirmación que una petición fallida no puede sostener.
+- **Claves** sin clave; ni cuenta ni cuota.
+
+## Fuentes directas de editor
+
+Las cinco fuentes de este grupo reclaman uno o más prefijos de registrante DOI declarados
+expresamente — `acl` reclama dos, las demás uno cada una. Eso
+es lo que las hace baratas: no compiten con nada más en la cadena, son invisibles para cualquier
+otro identificador y ninguna necesitó un nuevo espacio de identificadores en `Item` ni un
+argumento nuevo en `download` y `read`.
+
+### `rfc`
+
+El RFC Editor publica y archiva la serie de estándares de internet del IETF.
+
+- **Identificado por** un DOI bajo `10.17487` cuyo sufijo sea `rfc<número>`, comparado sin
+  distinguir mayúsculas porque un DOI es insensible a mayúsculas por especificación. Un DOI
+  `10.17487` que nombre otra cosa se rechaza en vez de convertirse en una URL que no puede
+  existir.
+- **Corpus** todos los RFC publicados, desde el RFC 1 (1969) en adelante. Libres de leer y
+  redistribuir desde su publicación.
+- **Cómo resuelve** sin petición propia — la URL del documento se deduce del sufijo del DOI. El
+  número se parsea en vez de copiarse tal cual, así que una grafía con ceros por delante
+  (`10.17487/RFC0791`) también aterriza en `rfc791.txt`.
+- **Qué no cubre** el PDF. El fichero servido es `.txt`, y a propósito: la cobertura en PDF del
+  RFC Editor es irregular — `rfc9110.pdf`, `rfc2616.pdf`, `rfc9000.pdf` y `rfc9457.pdf` sirven
+  bytes reales mientras que `rfc1.pdf`, `rfc791.pdf` y `rfc8446.pdf` responden 404 — mientras
+  que `.txt` respondió 200 para todos los RFC muestreados del 1 al 9457. Es además el formato
+  canónico del RFC, `read` lo extrae y es el fichero más pequeño; sondear primero el PDF con
+  reserva a texto añadiría una petición a cada descarga y dejaría el formato que recibe quien
+  llama variando de un RFC a otro.
+- **Por qué existe** todas las demás fuentes por DOI fallan con un RFC: `unpaywall` lo declara
+  no abierto, `europepmc` no lo indexa, `fatcat` no tiene copia preservada, `core` y `oapen` no
+  guardan nada, y ni `scihub` ni `scidb` incrustan un PDF — mientras el RFC Editor lleva
+  sirviendo el documento desde su publicación.
+- **Claves** sin clave.
+
+### `nist`
+
+El National Institute of Standards and Technology de Estados Unidos publica en su propio
+repositorio, `nvlpubs.nist.gov`.
+
+- **Identificado por** un DOI bajo `10.6028`. Se reclama el prefijo entero y no solo los sufijos
+  `NIST.`, porque el Journal of Research del NIST lo comparte y resuelve igual
+  (`10.6028/jres.121.004` termina en `nvlpubs.nist.gov/nistpubs/jres/121/jres.121.004.pdf`).
+- **Corpus** la serie Special Publication, incluidos los estándares de seguridad SP 800, los
+  FIPS, los Internal/Interagency Reports, las Technical Notes, los Cybersecurity White Papers y
+  el Journal of Research — obras del gobierno de EE. UU. servidas sin cuenta.
+- **Cómo resuelve** entrega a la canalización `https://doi.org/<doi>` y deja correr la cadena de
+  redirecciones. `https://doi.org/10.6028/NIST.SP.800-53r5` termina en
+  `nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf` sirviendo
+  `application/pdf`. No hay tabla serie→ruta ni consulta de año, y por eso también la fuente
+  sigue funcionando cuando el NIST reorganiza el repositorio.
+- **Qué no cubre** un DOI `10.6028` que el NIST no tenga, que falla en el propio GET de la
+  descarga y no al resolver — como ninguna otra fuente reclama este prefijo, eso no cuesta nada.
+  **Nunca se usa HEAD para comprobar antes**: nvlpubs responde **404 a un HEAD sobre una URL
+  cuyo GET sirve el fichero**, así que una comprobación previa con HEAD daría por ausente toda
+  publicación del NIST.
+- **Por qué la redirección y no una ruta construida** la ruta del repositorio no se deduce del
+  DOI. La serie IR está particionada por año de publicación —
+  `/nistpubs/ir/2020/NIST.IR.8259.pdf` se sirve y el mismo nombre bajo `2019/` no — y el DOI no
+  lleva el año.
+- **Claves** sin clave.
+
+### `dagstuhl`
+
+Schloss Dagstuhl gestiona DROPS, el servidor de publicaciones de sus series de actas de acceso
+abierto.
+
+- **Identificado por** un DOI bajo `10.4230`. Se reclama el prefijo entero, porque todas las
+  series se sirven desde el mismo servidor y anuncian su PDF de la misma forma.
+- **Corpus** LIPIcs (las actas de ICALP, STACS, ESA, SoCG, CPM, ECOOP, ITCS y de casi todos los
+  congresos punteros de informática teórica), OASIcs, DARTS y los Dagstuhl Reports — todo con
+  licencia Creative Commons y servido sin cuenta. Se midieron seis documentos de 2015 a 2023 en
+  tres series sirviendo bytes reales de PDF, de 339 KB a 8,4 MB.
+- **Cómo resuelve** un GET a `drops.dagstuhl.de/entities/document/<doi>`, que es exactamente
+  adonde redirige el resolutor público de DOI, así que el salto por `doi.org` se ahorra y
+  resolver cuesta una petición en vez de dos. El fichero sale de la única metaetiqueta
+  `citation_pdf_url` de la página, con las entidades HTML deshechas y exigiendo que sea una URL
+  `http(s)` absoluta. Las páginas de documento reales rondan los 88 KB.
+- **Qué no cubre** nada fuera del prefijo. La trampa está en el otro lado: la URL del PDF **no
+  se puede deducir**, así que hay que leer la página del documento. Las rutas de almacenamiento
+  de DROPS incluyen el volumen en el que apareció el artículo, que el DOI no lleva —
+  `10.4230/LIPIcs.ICALP.2023.1` se sirve desde `/storage/00lipics/lipics-vol261-icalp2023/…`,
+  `10.4230/LIPIcs.STACS.2015.1` desde `lipics-vol030-stacs2015/…` y `10.4230/DagRep.9.1.1` desde
+  otro esquema distinto (`/storage/04dagstuhl-reports/volume09/issue01/19021/…`). Nada en el
+  identificador predice `vol261` ni `19021`. Un 200 que no sea una página de documento (sin
+  metaetiqueta `citation_title`) se reporta como fuente no disponible — un sitio que ha cambiado
+  — y no como DOI ausente.
+- **Por qué existe** nada más en la cadena llega a Dagstuhl. Inscribe sus DOI en DataCite, así
+  que `api.crossref.org` responde 404 y Unpaywall responde 404 a su vez; Europe PMC devuelve
+  cero resultados; Sci-Hub sirve un stub de 2 KB sin PDF; y fatcat sí tiene una página de
+  release para el artículo de ICALP, pero anuncia cero metaetiquetas `citation_pdf_url` en ella.
+- **Claves** sin clave.
+- **Cortesía** el `robots.txt` de DROPS prohíbe `/api/*`, `/metadata/*/*` y
+  `/entities/*/metadata/*`. Esta fuente toca `/entities/document/…` y `/storage/…`, y ninguna de
+  las dos está prohibida.
+
+### `acl`
+
+La ACL Anthology es el archivo abierto de la Association for Computational Linguistics con sus
+propias actas.
+
+- **Identificado por** un DOI bajo `10.18653` o `10.3115` que lleve el segmento `/v1/`.
+  `10.18653` cubre de 2015 en adelante más los congresos antiguos inscritos con retroactividad;
+  `10.3115` es el prefijo original de la ACL, reutilizado para la Anthology con la misma forma.
+- **Corpus** ACL, EMNLP, NAACL, EACL, COLING, CoNLL, TACL y las actas de los talleres — la
+  literatura primaria de la lingüística computacional. CC BY desde 2016 y CC BY-NC-SA antes,
+  servido sin cuenta.
+- **Cómo resuelve** sin petición propia, lo que la convierte en la fuente más barata de la
+  cadena: el sufijo del DOI tras `/v1/` _es_ el identificador de la Anthology y el identificador
+  _es_ el nombre del fichero, así que el fichero es `aclanthology.org/<id>.pdf`.
+- **Qué no cubre** la forma numérica anterior a 2014. `10.3115/1072228.1072256` resuelve a
+  `portal.acm.org` y su sufijo es un número de artículo de la ACM que no nombra ningún documento
+  de la Anthology, así que un DOI sin el segmento `/v1/` se rechaza en vez de adivinarse.
+- **La trampa de las mayúsculas** las mayúsculas del identificador son determinantes, y en
+  sentidos opuestos para las dos generaciones de identificadores. `N19-1423.pdf` es 200 (786 279
+  bytes) y `n19-1423.pdf` es 404; `2024.emnlp-main.856.pdf` es 200 (1 068 216 bytes) y
+  `2024.EMNLP-MAIN.856.pdf` es 404. Pasar todo a mayúsculas rompería todos los artículos desde
+  2020 y pasar todo a minúsculas todos los anteriores, así que se normaliza por el único bit que
+  los separa: un identificador que empieza por letra se pasa a mayúsculas y uno que empieza por
+  dígito se deja exactamente como llega. También se comprueba que el identificador solo lleve
+  letras ASCII, dígitos, puntos y guiones — esta es la única fuente que construye una URL de
+  fichero a partir de la entrada de quien llama sin ninguna consulta intermedia, así que nada
+  puede escapar de la raíz de documentos.
+- **Solapamiento, con honestidad** de trece DOI reales de la Anthology muestreados, doce llevaban
+  un `url_for_pdf` utilizable en su registro de Unpaywall. La ganancia es, por tanto, alcance sin
+  clave por defecto — `unpaywall` está ausente de una cadena de serie — más el decimotercer
+  caso: Unpaywall declara `10.18653/v1/N19-1423` como `is_oa: true` sin ningún `url_for_pdf` en
+  ninguna parte, mientras que `aclanthology.org/N19-1423.pdf` devuelve 786 279 bytes.
+- **Claves** sin clave.
+- **Cortesía** la Anthology no sirve ningún `robots.txt` (404), así que nada está prohibido.
+
+### `zenodo`
+
+Zenodo es el repositorio abierto de propósito general del CERN.
+
+- **Identificado por** un DOI que case con `10.5281/zenodo.<dígitos>`, sin distinguir
+  mayúsculas. Eso es más estrecho que el prefijo de registrante `10.5281` a secas, que es del
+  CERN y lleva más cosas que registros de Zenodo.
+- **Corpus** preprints, artículos publicados, conjuntos de datos, versiones de software, tesis y
+  material de congresos, todo servido sin cuenta.
+- **Cómo resuelve** `GET /api/records/<id>/files` y después la URL de contenido de la entrada
+  elegida.
+- **Cómo se elige el fichero** un registro es un depósito y no un documento — puede tener un
+  fichero o catorce — y quien llama nombró el registro, no un fichero. La fuente prefiere un
+  formato del que `read` pueda extraer texto: PDF, luego EPUB, luego texto plano, y gana la
+  primera coincidencia. Si no hay ninguno, toma el fichero más grande del registro, con el
+  razonamiento de que la carga útil de un depósito es su fichero más grande y el resto son
+  READMEs, sumas de verificación y manifiestos. Un registro muestreado de catorce ficheros lo
+  confirma: el depósito es un `.zip` de 270 MB y las otras trece entradas son un `README.md`, un
+  `CHANGELOG.md`, un script de manifiesto y plantillas CSV.
+- **La trampa del DOI de concepto** Zenodo acuña **dos** DOI por depósito: uno que nombra la
+  versión concreta y otro que nombra el depósito a través de todas sus versiones. El DOI de
+  concepto es el que reparte la propia función «citar todas las versiones» de Zenodo, y no tiene
+  listado de ficheros — `/api/records/<concept>/files` responde 404. Un muestreo de DataCite
+  devolvió DOI de concepto y de versión en proporciones parecidas, así que tratar ese 404 como
+  «no existe el registro» habría perdido en silencio cerca de la mitad de todos los DOI de
+  Zenodo. En el camino del fallo la fuente lanza por tanto `HEAD /records/<id>`, que responde 302
+  hacia la versión para un id de concepto, 200 para un id de versión y 404 para ninguno de los
+  dos. El id de versión tampoco se deduce: suele ser el de concepto más uno (21698240 →
+  21698241), pero no siempre (19978417 → 21676215).
+- **La trampa del mimetype** la extensión se lee del nombre del fichero y nunca de su mimetype.
+  En el listado, Zenodo declara los formatos que no reconoce como `application/octet-stream`
+  (observado con `.md` y `.xlsx`); por el cable es peor, porque el endpoint de fichero sirve
+  _todo_ como `application/octet-stream` — tres PDF cuyos primeros bytes eran `%PDF` llegaron
+  así, y un `.zip` también.
+- **Qué no cubre** un registro restringido: un 403 del endpoint de ficheros significa que Zenodo
+  tiene el registro pero no va a servir sus ficheros, lo cual es una respuesta final y correcta
+  sobre ese elemento y no un fallo. Un depósito solo con metadatos y sin ficheros es la misma
+  clase de fallo.
+- **Claves** sin clave.
+- **Cortesía** el `robots.txt` de Zenodo prohíbe `/api` en bloque y luego abre una excepción —
+  `Allow: /api/records/*/files`, con `Disallow: /api/records/*/files-archive` vuelto a excluir —
+  de modo que el listado de ficheros está permitido explícitamente mientras que el endpoint de
+  _metadatos_ del registro, `/api/records/<id>`, no lo está. Por eso el salto de versión pasa
+  por la página `/records/<id>` orientada a humanos, que no lleva ningún `Disallow` (solo lo
+  lleva `/records/*/preview`), y no por `/api/records/<id>/versions/latest`. También hay fijado
+  un `Crawl-delay: 10`; resolver hace como mucho dos peticiones para una descarga iniciada por
+  quien llama, en lugar de rastrear. Como el endpoint de metadatos no se llama nunca a
+  propósito, la fuente no puede ver el título ni los autores del depósito, y por eso una descarga
+  de Zenodo se nombra a partir de la clave del fichero y no de los metadatos bibliográficos.
+
+## Agregadores y preservación
+
+### `fatcat`
+
+fatcat es el catálogo que hay detrás de Internet Archive Scholar.
+
+- **Identificado por** cualquier DOI.
+- **Corpus** los releases para los que Internet Archive ha preservado un texto completo —
+  capturas de la Wayback Machine del PDF del propio editor, que es lo que hace legal esta fuente.
+- **Cómo resuelve** `scholar.archive.org/fatcat/release/lookup?doi=<doi>` (en minúsculas, ya que
+  fatcat normaliza los DOI) responde 302 a `/fatcat/release/<uuid>` para un DOI conocido y 404
+  para uno que el catálogo no tiene. Las metaetiquetas `citation_pdf_url` de la página del
+  release nombran las copias preservadas, en el orden de la página; a cada valor se le deshacen
+  las entidades HTML, porque la captura de un endpoint de PDF con parámetros lleva su separador
+  como `&amp;` y pedir eso literalmente da 404. Cada candidata se sondea antes de que la cadena
+  se comprometa, ya que una captura preservada puede dejar de servir mientras el catálogo la
+  sigue listando. La descarga lleva `Accept: */*`: la Wayback Machine negocia contenido, y una
+  petición sin Accept de un PDF archivado — lo que Go envía por defecto — recibe la página HTML
+  con la barra de herramientas que envuelve la captura para lectores humanos, que la
+  canalización rechaza acertadamente como página de error.
+- **Qué no cubre** un release que tiene pero para el que no ha preservado nada. Una página de
+  release con cero metaetiquetas `citation_pdf_url` es un fallo limpio, y es exactamente el caso
+  que impide a fatcat llegar a Dagstuhl. Un 200 que no sea una página de release (sin
+  metaetiqueta `citation_title`) es el intersticial de «Session Verification» que el host sirve
+  a los clientes que quiere verificar, y se reporta como indisponibilidad y no como cobertura
+  vacía.
+- **Nota sobre el transporte** la API JSON `api.fatcat.wiki` que esta fuente usaba en origen dejó
+  de responder — el DNS resuelve, el TCP nunca completa — sin aviso de obsolescencia, así que
+  ahora conduce el frontend web del propio fatcat. La decisión no cambia; solo el transporte.
+- **Claves** sin clave.
+- **Cortesía** se sondean como mucho cuatro copias preservadas por release. Un artículo muy
+  preservado puede listar nueve capturas o más, y sondearlas todas convertiría un solo resolve en
+  una ráfaga de peticiones contra un sitio orientado a humanos; las primeras capturas que lista
+  fatcat son las que considera canónicas.
+
+### `core`
+
+CORE, del Knowledge Media Institute de la Open University, agrega artículos de acceso abierto de
+repositorios de todo el mundo.
+
+- **Identificado por** cualquier DOI.
+- **Corpus** texto completo de acceso abierto depositado en repositorios.
+- **Cómo resuelve** un GET autenticado por Bearer a
+  `api.core.ac.uk/v3/search/works/?q=doi:"<doi>"&limit=1`. La barra final se pide directamente
+  porque si no CORE responde 301 hacia la forma con barra, y el DOI va entrecomillado para que la
+  consulta case con el identificador exacto. Se devuelve el `downloadUrl` del primer resultado.
+- **Qué no cubre** un DOI que CORE tiene sin copia viva. Las URL de descarga de CORE caducan a
+  menudo — redirigen a un servidor de ficheros que da 404 — así que la URL se sondea y solo se
+  devuelve cuando realmente sirve un PDF, y la cadena avanza al resolver en lugar de gastar un
+  intento de descarga en una URL muerta. Una clave rechazada, un DOI que CORE no tiene y un DOI
+  que tiene sin texto completo vivo son tres errores distintos; una clave rechazada es
+  independiente del elemento, así que aparta la fuente en vez de dar el elemento por ausente.
+- **Claves** depende de `LIBGEN_MCP_CORE_KEY` (el registro es gratuito). Sin fijarla, la fuente
+  está ausente de la cadena por completo y oculta del enum `source` de `download`. La clave se
+  envía solo a `api.core.ac.uk` y nunca viaja con la URL de fichero resuelta ni sondeada.
+
+## Libros de acceso abierto y de dominio público
+
+### `oapen`
+
+OAPEN es la plataforma de alojamiento del Directory of Open Access Books, donde las editoriales
+académicas depositan el texto completo de monografías con licencia abierta.
+
+- **Identificado por** DOI **o** ISBN — la única fuente que sirve a las dos ramas de la cadena.
+  No reclama ningún elemento identificado por md5: OAPEN indexa libros por identificador de
+  editor y no sabe nada de los digests de LibGen. Cuando un elemento lleva ambos, se consulta por
+  el DOI, que es la afirmación más específica.
+- **Corpus** monografías académicas con licencia abierta.
+- **Cómo resuelve** el identificador va a la búsqueda REST DSpace de OAPEN (`/rest/search`); se
+  inspeccionan como mucho tres resultados, cada uno obtenido como `/rest/items/<uuid>` expandido
+  con sus bitstreams y metadatos. El fichero es el PDF del paquete `ORIGINAL` — frente a `EXPORT`
+  (registros MARC/ONIX/RIS), `TEXT` (texto plano extraído) y `THUMBNAIL` (imágenes de portada) —
+  y el bitstream se sondea antes de devolverlo.
+- **La trampa del texto libre** `/rest/search` no tiene modo de identificador exacto, así que un
+  identificador que OAPEN no tiene devuelve igualmente una página de monografías ajenas: un DOI
+  inexistente devolvió 13 resultados cuando se midió. Por eso un candidato solo se sirve después
+  de que el propio `oapen.identifier.doi` / `oapen.identifier.isbn` del registro declare el
+  identificador pedido. Sin esa comprobación, la fuente devolvería de vez en cuando _otro libro_
+  informando de éxito, que es peor que cualquier modo de fallo que la cadena ya tenga. El tope de
+  tres candidatos sale de la misma propiedad: la lista de resultados es una conjetura ordenada,
+  el registro buscado es el primero cuando OAPEN lo tiene, y cada candidato extra cuesta una
+  petición de item.
+- **Qué no cubre** una búsqueda que no devuelve nada, una lista en la que ningún registro declara
+  el identificador y un registro confirmado que no lleva PDF son todos fallos limpios — OAPEN
+  respondió correctamente y sencillamente no tiene copia descargable.
+- **Claves** sin clave.
+
+### `archive`
+
+Los escaneos de libros de Internet Archive, alcanzados a través de OpenLibrary.
+
+- **Identificado por** ISBN, y nada más: la vía de entrada es una consulta de ISBN a OpenLibrary,
+  así que un elemento identificado por md5 o por DOI no tiene forma de direccionar un escaneo.
+- **Corpus** escaneos que OpenLibrary declara libremente legibles al completo.
+- **Cómo resuelve** dos saltos. Se consulta a OpenLibrary con una consulta por campo
+  `isbn:<valor>` — para que case con el índice de identificadores y no con texto libre — pidiendo
+  el nivel `ebook_access` de la obra y sus identificadores `ia`. Después se confirma cada uno de
+  hasta cuatro candidatos contra `archive.org/metadata/<id>`, y el fichero se descarga de la URL
+  estable `/download/<id>/<file>` del Archive, que redirige al nodo de CDN que tenga el elemento
+  en ese momento. El fichero preferido es el PDF de texto a resolución completa, luego el
+  derivado en escala de grises y luego el EPUB; los escaneos de página, el texto DjVu y las
+  imágenes de portada no se eligen nunca.
+- **Qué rechaza** los escaneos restringidos por préstamo, y la comprobación es doble porque
+  ninguna mitad basta por sí sola. Buena parte de los elementos de libro del Archive son copias
+  de préstamo digital controlado que anuncian ficheros `.pdf` y `.epub` normales igual que un
+  escaneo de dominio público, pero descargar una de ellas o falla o entrega un fichero cifrado
+  con DRM e inservible — un desenlace que _parece_ un éxito. Así que la obra debe ser
+  `ebook_access: public` para OpenLibrary **y** el elemento concreto no debe llevar la marca
+  `access-restricted-item` ni pertenecer a las colecciones `inlibrary` o `printdisabled`, porque
+  una obra puede ser públicamente legible mientras un escaneo suyo concreto está restringido. La
+  comprobación es deliberadamente conservadora: cualquier valor de `access-restricted-item` que
+  no sea un false explícito cuenta como restringido, los nombres de fichero marcados con
+  `_encrypted.` o `_lcp.` no son nunca candidatos, y un candidato debe estar archivado bajo el
+  mediatype `texts`. Saltarse un libro descargable le cuesta a quien llama la siguiente fuente de
+  la cadena; descargar uno restringido le cuesta un fichero que parece correcto y no lo es.
+- **Qué no cubre** un libro que OpenLibrary no conoce, uno que solo tiene en préstamo y uno cuyos
+  candidatos están todos restringidos. Una consulta de metadatos que se _rompió_ en cualquiera de
+  los dos saltos se reporta como indisponibilidad y nunca como «no existe copia libre».
+- **Claves** sin clave.
+
+## Reservas de biblioteca en la sombra
+
+A todo lo que sigue solo se llega cuando todas las fuentes anteriores han declinado, que es el
+sentido entero del orden de la cadena: siempre se prefiere una copia con licencia libre cuando
+existe, y el orden está fijado en el código y sujeto por un test, no dejado a la configuración.
+
+### `scihub`
+
+Sci-Hub.
+
+- **Identificado por** cualquier DOI.
+- **Corpus** los artículos que Sci-Hub indexó. Dejó de incorporar material nuevo, así que los
+  artículos recientes suelen faltar — el hueco que llena `scidb`, y por eso `scidb` va detrás en
+  lugar de sustituirla.
+- **Cómo resuelve** `https://<host>/<doi>` en cada host configurado por turno, con el DOI en
+  crudo en la ruta. La URL del PDF se extrae de la primera página que sirva un artículo: el `src`
+  del elemento `id="pdf"`, o un enlace de descarga `location.href='….pdf'` como reserva. El valor
+  en bruto se normaliza — se deshacen los escapes de barra invertida de JavaScript, una
+  referencia relativa al protocolo `//host/…` se promociona a https y se descarta cualquier
+  fragmento `#viewer` — y nunca se reconstruye a partir del DOI, porque la ruta del CDN es opaca.
+  La descarga lleva un `Referer` que nombra al mirror ganador.
+- **Qué no cubre** un host que responde con una página de desafío, con una de no encontrado o con
+  un error de transporte se omite; cuando ningún host da un PDF, la cadena avanza. Los mirrors
+  rotan, y por eso la lista de hosts es configurable con `LIBGEN_MCP_SCIHUB_HOSTS` (por defecto
+  `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf`).
+- **Claves** sin clave.
+
+### `scidb`
+
+El visor de artículos SciDB de Anna's Archive.
+
+- **Identificado por** cualquier DOI.
+- **Corpus** artículos; DOI muestreados de 2011, 2016, 2021 y 2024 resolvieron todos, así que
+  también alcanza artículos publicados después de que Sci-Hub dejara de indexar.
+- **Cómo resuelve** `<mirror>/scidb/<doi>` en cada mirror descubierto de Anna's por turno. La URL
+  del PDF se toma del parámetro `file` codificado en porcentaje del iframe del visor pdf.js — la
+  marca más fiable de la página, presente siempre que el artículo se sirve de verdad — con la
+  primera URL `.pdf` absoluta suelta del cuerpo como reserva. Se toma de la página y nunca se
+  reconstruye a partir del DOI, porque la ruta del CDN es opaca. La descarga lleva un `Referer`
+  que nombra al mirror ganador.
+- **Qué no cubre** un mirror que da error, responde algo distinto de 200 o no incrusta ningún PDF
+  se omite; cuando ninguno da un PDF, la cadena avanza.
+- **Claves** sin clave en sentido fuerte: no hubo cuenta, ni clave de API, ni CAPTCHA, ni desafío
+  JS cuando se verificó esta ruta.
+
+### `libgen`
+
+Library Genesis en sí, a través de la familia de mirrors `libgen.li` — el proveedor principal de
+libros del servidor.
+
+- **Identificado por** MD5.
+- **Corpus** el catálogo de LibGen: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`,
+  `standards` y `fiction_rus`. Su cobertura de normas es mejor de lo que suele reconocerse — la
+  colección `standards` devuelve 76 709 ficheros y lleva ISO/IEC y BS en profundidad.
+- **Cómo resuelve** la cadena de enlaces clásica de LibGen: `ads.php?md5=…` da un enlace
+  `get.php?…&key=…`, que redirige al CDN. Corre a través del cliente de failover de mirrors, así
+  que el descubrimiento de mirrors, el enfriamiento por mirror y los reintentos se aplican — ver
+  [Arquitectura](/libgen-mcp/es/architecture/#cliente-http).
+- **Qué no cubre** cualquier cosa no identificada por un md5 que el catálogo tenga. Aquí la
+  verificación MD5 es obligatoria: los bytes transmitidos se hashean y se comparan con el digest
+  pedido, y una discrepancia borra el fichero parcial en vez de devolver el libro equivocado.
+- **Claves** sin clave.
+
+### `randombook`
+
+randombook.org, un frontend de Library Genesis que se anuncia como `libgen.pw`. Es una reserva de
+descubrimiento de mirrors, no un proveedor principal de ficheros.
+
+- **Identificado por** MD5.
+- **Corpus** ninguno propio. Lo que aporta es _alcanzabilidad_ — nombres de host frescos de la
+  familia libgen que pueden rescatar una descarga cuando la familia de mirrors principal está
+  caída.
+- **Cómo resuelve** dos llamadas a la API, by-id (md5 → id numérico) y luego links-by-id (id →
+  una lista de nombres de host de mirrors), y después, por mirror, la ruta `/api/download?id=<id>`
+  del propio sitio, con reserva a la cadena de enlaces clásica `ads.php` en ese host. La ruta de
+  descarga se confirma antes con un HEAD barato; el endpoint es solo GET, así que un 405 ya
+  demuestra que el host está vivo y la implementa, mientras que un 404 significa que es un host
+  libgen clásico más antiguo y se aplica la reserva de `ads.php`.
+- **Qué no cubre** buena parte de lo que devuelve su propia API. La «list» con la que responde no
+  garantiza contener hosts genuinos de la familia libgen.li — se la ha observado devolviendo de
+  forma consistente `libgen.net`, `libgen.me` y `libgen.xyz` (aplicaciones de página única
+  renderizadas en cliente, sin ruta `ads.php` en servidor) además de `annas-archive.gl` (un
+  esquema `/md5/` sin relación) — así que solo se intentan hosts `libgen.<tld>` a secas y el
+  resto se descarta sin petición. Un host libgen que responde con una cáscara de aplicación Nuxt
+  en vez de la página clásica recibe su propio error diagnosticable, de modo que una migración de
+  frontend en todo el sitio no parece un enlace suelto que falta. El array hermano `links` se
+  ignora: sus entradas son tokens opacos por petición hacia páginas de destino, y esa ruta
+  devuelve HTTP 400 incluso desde dentro de una sesión real de navegador con cookies auténticas.
+  Como la API no está documentada y es privada, un fallo de parseo se etiqueta como cambio de
+  maquetado en lugar de leerse como un fallo de cobertura.
+- **Frontera de confianza** los nombres de host de mirrors vienen de la API de randombook y luego
+  se piden, así que esta fuente lanza peticiones a los hosts que devuelva esa API. Es una
+  dependencia de confianza deliberada — la API es todo el sentido de la reserva — y está
+  documentada en vez de mitigada.
+- **Claves** sin clave.
+
+### `annas`
+
+Anna's Archive, como ruta de rescate identificada por md5.
+
+- **Identificado por** MD5.
+- **Corpus** en su mayor parte la misma familia libgen que este servidor ya alcanza: los enlaces
+  externos de Anna's que no son IPFS apuntan sobre todo de vuelta a ella. Lo que aporta es
+  _fiabilidad_ de descarga — una ruta independiente — y no corpus nuevo.
+- **Cómo resuelve** sin clave por defecto. `<mirror>/md5/<md5>` se sirve de forma anónima, sin
+  CAPTCHA ni desafío JS, y publica el CID de IPFS del elemento (se prefiere un `bafy…` v1 al
+  `Qm…` heredado en base58, porque las pasarelas modernas lo resuelven con más fiabilidad) junto
+  con la ruta almacenada de la que sale la extensión. La fuente transmite entonces desde la
+  primera pasarela pública que sirva de verdad ese contenido, probando `dweb.link`, `w3s.link`,
+  `ipfs.io` y `gateway.pinata.cloud` en ese orden. Con `LIBGEN_MCP_ANNAS_KEY` fijada, se prueba
+  primero la API de descarga rápida de miembros — solo en el primer mirror — e IPFS sigue siendo
+  la reserva.
+- **Qué no cubre** el nivel anónimo de «descarga lenta», y a propósito: está detrás de un desafío
+  JS de DDoS-Guard (HTTP 403, «Checking your browser») que ningún cliente HTTP en Go puro puede
+  superar. La disponibilidad de las pasarelas IPFS públicas también varía lo bastante como para
+  que esto sea una reserva de verdad y no un camino rápido — un elemento cualquiera puede ir muy
+  lento o agotar el tiempo.
+- **Claves** opcional. `LIBGEN_MCP_ANNAS_KEY` exige una _membresía de pago activa_; una cuenta
+  gratuita se rechaza. Una clave sin fijar, caducada o rechazada cuesta una petición y cae a la
+  ruta IPFS sin clave, así que la clave solo puede mejorar la fuente, nunca empeorarla. Quien
+  llama también puede aportarla por llamada, usándose una vez y sin almacenarse. La API de
+  miembros se llama como mucho una vez por descarga, porque cada llamada consume el cupo medido
+  de la cuenta sea cual sea el mirror que respondió. El cupo que informa usa nombres de campo que
+  dicen «por día», pero el sitio describe el mismo contador como descargas rápidas usadas en las
+  últimas 18 horas — léelo como una ventana deslizante.
+- **Verificación MD5** activa en ambas rutas, ya que el elemento está identificado por el digest
+  de LibGen.
+
+## Cortesía e identificación
+
+- Toda petición saliente lleva un User-Agent honesto que nombra el proyecto y su repositorio —
+  `libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)`. Nunca se suplanta el User-Agent
+  de un navegador; ninguna fuente de aquí lo necesitó, y ninguna medición de esta página lo usó.
+- Todas las peticiones, tanto de página como de flujo de fichero, pasan por un único limitador de
+  tasa de cubo de tokens dimensionado por `LIBGEN_MCP_RATE_RPS` y `LIBGEN_MCP_RATE_BURST` (ambos
+  con valor 1 por defecto).
+- Cada fuente recibe `LIBGEN_MCP_TIMEOUT` como presupuesto entero para resolver, así que una
+  fuente que hace varias consultas no puede retener la cadena durante varios timeouts antes de
+  que se pruebe la siguiente.
+- Donde un sitio publica reglas de rastreo, la fuente se mantiene dentro de ellas — ver las notas
+  de `dagstuhl` y `zenodo`. Un resolve son como mucho un par de peticiones al servicio de una
+  descarga iniciada por quien llama; aquí nada rastrea.
+- Los cuerpos de respuesta se leen bajo un tope de bytes por fuente, de modo que una respuesta
+  hostil o inesperadamente grande no puede cargarse entera en memoria.
+
+## Qué no es una fuente de descarga, a propósito
+
+Dos proveedores llegan a quien llama a través de `search` y no tienen fuente de descarga alguna,
+por decisión y no por olvido. La literatura gris educativa de **ERIC** está identificada por un
+número de registro — un tercer espacio de identificadores junto al md5 y el ISBN — y de todos
+modos no habría nada que resolver, ya que ERIC sirve todo texto completo que aloja desde una URL
+derivada de ese número; sus resultados llegan con `pdf_url` ya rellenado. El catálogo de
+**Project Gutenberg** está identificado por un id interno de libro, y sus textos no llevan DOI ni
+ISBN fiable, así que la única forma de basar en él una fuente de descarga sería casar título y
+autor — justo el fallo de «servir otro libro y llamarlo éxito» que existe para evitar la
+comprobación de identificador de OAPEN; sus resultados llevan en su lugar un `full_text_url`.
+
+Se midió y rechazó una lista más larga de candidatas: kikakurui.com (JIS), el programa GET de
+IEEE 802, ETSI, ECMA, 3GPP, W3C, ITU-T (aplazada en vez de rechazada) y la propia ruta de
+descarga lenta de Anna's Archive, cerrada por DDoS-Guard. Cada una lleva su medición
+bloqueante en
+[el ADR de alcance de fuentes y capacidades](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-source-and-capability-scope.md),
+así que ninguna se vuelve a litigar aquí.
