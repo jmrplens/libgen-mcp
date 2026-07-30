@@ -70,7 +70,7 @@ func (s scidbSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 			continue
 		}
 		if pdfURL == "" {
-			lastErr = notIndexed(fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI))
+			lastErr = strongerError(lastErr, notIndexed(fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI)))
 			continue
 		}
 		return Resolved{

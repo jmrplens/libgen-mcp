@@ -256,3 +256,48 @@ func TestCooldownWorthy(t *testing.T) {
 		})
 	}
 }
+
+// TestStrongerErrorPrefersTheOpenQuestion pins the precedence a multi-host source
+// depends on: unavailable beats untagged beats a clean miss.
+//
+// The order matters because the chain acts on the verdict. startAttempt returns a
+// clean miss unwrapped and skips the start-retry schedule, so letting one mirror's
+// 404 outrank another mirror's outage would spend the item's retry budget on the
+// one classification that says retrying is pointless. A source has only proved an
+// item absent when every host it asked said so.
+func TestStrongerErrorPrefersTheOpenQuestion(t *testing.T) {
+	miss := notIndexed(errors.New("no record"))
+	down := unavailable(errors.New("connection refused"))
+	plain := errors.New("a challenge page nobody can classify")
+
+	for _, tc := range []struct {
+		name     string
+		a, b     error
+		wantIs   error
+		wantHave bool
+	}{
+		{name: "outage beats miss, either way round", a: miss, b: down, wantIs: ErrSourceUnavailable, wantHave: true},
+		{name: "outage beats miss, reversed", a: down, b: miss, wantIs: ErrSourceUnavailable, wantHave: true},
+		{name: "untagged beats miss", a: miss, b: plain, wantIs: ErrNotIndexed, wantHave: false},
+		{name: "untagged beats miss, reversed", a: plain, b: miss, wantIs: ErrNotIndexed, wantHave: false},
+		{name: "outage beats untagged", a: plain, b: down, wantIs: ErrSourceUnavailable, wantHave: true},
+		{name: "two misses stay a miss", a: miss, b: miss, wantIs: ErrNotIndexed, wantHave: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strongerError(tc.a, tc.b)
+			if errors.Is(got, tc.wantIs) != tc.wantHave {
+				t.Fatalf("strongerError(%v, %v) = %v; errors.Is(_, %v) = %v, want %v",
+					tc.a, tc.b, got, tc.wantIs, errors.Is(got, tc.wantIs), tc.wantHave)
+			}
+		})
+	}
+
+	t.Run("a nil operand is ignored", func(t *testing.T) {
+		if got := strongerError(nil, miss); !errors.Is(got, ErrNotIndexed) {
+			t.Errorf("strongerError(nil, miss) = %v, want the miss", got)
+		}
+		if got := strongerError(down, nil); !errors.Is(got, ErrSourceUnavailable) {
+			t.Errorf("strongerError(down, nil) = %v, want the outage", got)
+		}
+	})
+}
