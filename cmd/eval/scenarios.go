@@ -2714,7 +2714,7 @@ func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
 		return false, "model set order=" + strconv.Quote(order) + " for a list sorted by year; want one of " +
 			strings.Join(recencyOrders, " or ")
 	}
-	if mode := stringField(call.Input, "order_mode"); mode == "asc" {
+	if stringField(call.Input, "order_mode") == "asc" {
 		return false, "model set order_mode=asc although the prompt asked for newest first"
 	}
 	if len(out.Results) < 25 {
