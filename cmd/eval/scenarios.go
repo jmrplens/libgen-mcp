@@ -420,7 +420,27 @@ func doiInSearchResults(tr transcript, doi string) bool {
 // cases for each).
 
 // scenarios returns the ordered list of live scenarios.
+// scenarios returns the whole suite, in run order.
+//
+// It is assembled from themed groups rather than written as one literal. As a
+// single function the slice was large enough to dominate every maintainability
+// measure of the file on its own (maintidx), which buried any real complexity
+// signal the rest of the file might raise. Order is part of the suite's behavior,
+// so the groups are concatenated in the order they run.
 func scenarios() []scenario {
+	return slices.Concat(
+		coreSurfaceScenarios(),
+		escalationAndRemoteScenarios(),
+		sourceScenarios(),
+		standardsSourceScenarios(),
+	)
+}
+
+// coreSurfaceScenarios are the scenarios over the four tools' own paths: searching
+// each collection, get_details, downloading by md5 and by DOI, reading and
+// summarizing, progress, links, and the first remote-mode variants. They run first
+// because everything after them assumes these work.
+func coreSurfaceScenarios() []scenario {
 	return []scenario{
 		{
 			ID:     "S1",
@@ -618,6 +638,15 @@ func scenarios() []scenario {
 			// search) rather than downloading the whole file or reading sequentially.
 			Assert: assertReadFind,
 		},
+	}
+}
+
+// escalationAndRemoteScenarios cover what the server does beyond a single happy
+// path: elicitation, the remote-mode counterparts of the local cases, search
+// escalation beyond the catalog, the extra_sources policy in its never and always
+// settings, and pagination.
+func escalationAndRemoteScenarios() []scenario {
+	return []scenario{
 		{
 			ID: "S24",
 			Prompt: `Find a PDF of "The C Programming Language" by Kernighan and Ritchie and ` +
@@ -800,6 +829,15 @@ func scenarios() []scenario {
 		// the promise had none either: an assertion that named the sources it expected
 		// was the only thing standing in for it, and it went stale the moment the
 		// chain grew.
+	}
+}
+
+// sourceScenarios exercise the download chain one provider at a time — Europe PMC,
+// bioRxiv, fatcat, OAPEN, the Internet Archive, dblp, PubMed — plus the promises the
+// chain itself makes: open access before the shadow libraries, an unkeyed source
+// hidden from the enum, and the per-source cooldown.
+func sourceScenarios() []scenario {
+	return []scenario{
 		{
 			ID:     "S45",
 			Prompt: fmt.Sprintf("Download the open-access article with DOI %s from Europe PMC.", openAccessDOI),
@@ -1037,6 +1075,15 @@ func scenarios() []scenario {
 			},
 			Assert: assertSourceCooldown,
 		},
+	}
+}
+
+// standardsSourceScenarios cover the standards bodies reached directly, and the ways
+// a model can get to them: the chain routing on a DOI registrant prefix, the source
+// named in prose, the one path that returns text rather than a PDF, and the enum that
+// has to advertise them for any of it to be reachable.
+func standardsSourceScenarios() []scenario {
+	return []scenario{
 		{
 			ID: "S61",
 			Prompt: fmt.Sprintf("Download the full text of RFC %s, the HTTP Semantics specification. "+
@@ -1263,7 +1310,7 @@ func assertPubMedDiscovery(tr transcript) (pass bool, detail string) {
 // as one, because the isbn field's description is the only thing that could have told
 // it otherwise.
 func assertISBNDownload(tr transcript) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findDownloadBy(tr, func(c toolCall) bool { return isISBN(stringField(c.Input, "isbn")) })
@@ -1299,7 +1346,7 @@ func assertISBNDownload(tr transcript) (pass bool, detail string) {
 // honesty matter: a refusal it does not pass on leaves the user thinking a download is
 // on its way.
 func assertSourceRefuses(tr transcript, want, key, why string) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findSourcedCall(tr, want)
@@ -3000,7 +3047,7 @@ func downloadKeyOK(call toolCall, key string) (ok bool, detail string) {
 // failure is graded on honesty, since the model behavior under test (source
 // selection) was still correct.
 func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findSourcedCall(tr, want)

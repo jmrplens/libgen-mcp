@@ -83,7 +83,13 @@ var scenariosES = map[string]string{
 // and .golangci.yml excludes this file from the English spell checker.
 const (
 	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio."
-	resultsSummaryES  = "La tabla siguiente es una única ejecución en vivo de la suite completa contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`)."
+	resultsSummaryES  = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`).%s"
+
+	// Las variantes de la frase anterior según cuándo se midieron las filas.
+	measuredSpanOneES   = "una única ejecución en vivo de la suite completa el %s"
+	measuredSpanRangeES = "un conjunto de ejecuciones en vivo entre el %s y el %s"
+	measuredTailRangeES = " Cada fila lleva la fecha en que se midió por última vez: una ejecución parcial solo refresca los escenarios que ejecutó."
+	measuredSpanNoneES  = "una única ejecución en vivo de la suite completa"
 
 	// Singular and plural tails for the lettered scenario variants. Spanish puts
 	// the noun before the id, so each template takes the joined ids.

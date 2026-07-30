@@ -285,6 +285,21 @@ the tables on both language versions from `cmd/eval/README.md` (the scenarios) a
 that run file and regenerates the pages in the same step, and CI fails on a page
 that no longer matches — which is what stops a hand edit from drifting.
 
+**A partial run publishes too.** Writing to a results doc **merges** into it rather
+than replacing it, so re-measuring one source does not cost a full suite — 66
+scenarios against a real API, real mirrors and real downloads:
+
+```bash
+make eval-only ONLY=S61,S62      # re-runs those two, merges them, regenerates the pages
+```
+
+Every row carries the date it was measured, and the published prose stops calling
+itself a single sweep once the dates differ. Two guards keep a merged table
+honest: a run whose model differs from the recorded one is refused, because one
+pass rate built from two models invites a comparison it cannot support; and a
+recorded row whose scenario no longer exists is dropped rather than carried
+forward.
+
 Both were maintained by hand before, and both drifted: a stale scenario count,
 malformed rows, an evidence string quoting a message the code no longer emitted,
 and a live download key published in a results row.
