@@ -169,6 +169,46 @@ func TestTaggedErrorKeepsItsMessage(t *testing.T) {
 	}
 }
 
+// TestUnavailableStatusLeavesNonTransientErrorsUntouched verifies the pass-through
+// branch returns the SAME error value, not a copy and not a rewrapping.
+//
+// Every other test observes that branch only through cooldownWorthy reporting
+// false, which a wrapped error would also satisfy. The doc comment promises the
+// error is "returned untouched", and sources rely on it: a 4xx error is matched by
+// message and by sentinel further up (randombook's ErrLayoutChanged, the tools
+// layer's catalog wording), so quietly wrapping it here would change text that is
+// asserted several layers away.
+func TestUnavailableStatusLeavesNonTransientErrorsUntouched(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, 451, 499} {
+		in := errors.New("source: some diagnosis")
+		got := unavailableStatus(status, in)
+		if got != in { //nolint:errorlint // identity is exactly what is being asserted
+			t.Errorf("unavailableStatus(%d) returned %v, want the original error value unchanged", status, got)
+		}
+	}
+}
+
+// TestNotIndexedKeepsItsMessage is the counterpart of TestTaggedErrorKeepsItsMessage
+// for the other tag. Both go through the same taggedError, but the doc comment makes
+// the message-preservation promise for each, and a clean miss's wording is what the
+// download tool shows the user when no source holds an item.
+func TestNotIndexedKeepsItsMessage(t *testing.T) {
+	inner := errors.New(`zenodo: record 123 has no files`)
+	tagged := notIndexed(inner)
+	if tagged.Error() != inner.Error() {
+		t.Errorf("tagged message = %q, want the original %q", tagged.Error(), inner.Error())
+	}
+	if !errors.Is(tagged, inner) {
+		t.Error("the tagged error should still unwrap to the source's own error")
+	}
+	if !errors.Is(tagged, ErrNotIndexed) {
+		t.Error("the tagged error should carry ErrNotIndexed")
+	}
+	if errors.Is(tagged, ErrSourceUnavailable) {
+		t.Error("a clean miss must not also read as the source being unavailable")
+	}
+}
+
 // TestCooldownWorthy pins the classification that decides whether a failure sets a
 // source aside. It is the heart of the feature: an unreachable source must be
 // remembered, and a correct "I do not have this" must not be.
@@ -193,6 +233,12 @@ func TestCooldownWorthy(t *testing.T) {
 		{name: "transient status", ctx: context.Background(), err: unavailableStatus(http.StatusTooManyRequests, errors.New("rate limited")), want: true},
 		{name: "server error status", ctx: context.Background(), err: unavailableStatus(http.StatusBadGateway, errors.New("bad gateway")), want: true},
 		{name: "client error status", ctx: context.Background(), err: unavailableStatus(http.StatusNotFound, errors.New("missing"))},
+		// 500 itself and the status immediately below the 5xx range. Without this
+		// pair the >= comparison in unavailableStatus can be weakened to > and every
+		// other row still passes, because 502 and 503 satisfy both.
+		{name: "the first server error status", ctx: context.Background(), err: unavailableStatus(http.StatusInternalServerError, errors.New("boom")), want: true},
+		{name: "the status just below the server range", ctx: context.Background(), err: unavailableStatus(499, errors.New("client closed request"))},
+		{name: "the status just below the rate limit", ctx: context.Background(), err: unavailableStatus(428, errors.New("precondition required"))},
 		{name: "unclassified failure", ctx: context.Background(), err: errors.New("something else")},
 		{name: "caller canceled the download", ctx: canceled, err: unavailable(errors.New("dial tcp"))},
 		{

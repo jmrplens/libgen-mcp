@@ -504,8 +504,15 @@ func TestDownloadSizeCapContentLength(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 100
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
+	_, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil)
+	if err == nil {
 		t.Fatal("Content-Length above cap should fail")
+	}
+	// The sentinel, not just "an error": a cap breach and an out-of-disk-space
+	// failure both leave an empty directory, and only the sentinel tells the caller
+	// which one happened.
+	if !errors.Is(err, errDownloadTooLarge) {
+		t.Errorf("err = %v, want errDownloadTooLarge", err)
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
@@ -523,8 +530,15 @@ func TestDownloadSizeCapStream(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	c.maxDownloadBytes = 100
 	dir := t.TempDir()
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil); err == nil {
+	_, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil)
+	if err == nil {
 		t.Fatal("streamed body above cap should fail")
+	}
+	// The streaming cap is enforced by a different branch from the Content-Length
+	// one, and it is the branch that also has to delete the .part it had begun
+	// writing; assert the sentinel so the two paths cannot diverge unnoticed.
+	if !errors.Is(err, errDownloadTooLarge) {
+		t.Errorf("err = %v, want errDownloadTooLarge", err)
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
@@ -732,8 +746,22 @@ func TestDownloadMD5Mismatch(t *testing.T) {
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
 
-	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
+	_, err := c.Download(context.Background(), want, dir, "", nil)
+	if err == nil {
 		t.Fatal("md5 mismatch should fail")
+	}
+	// The sentinel distinguishes "the bytes were wrong" from every other late
+	// failure that also cleans up after itself (a rename failure, a disk error).
+	// It is the difference between "this mirror served a corrupt copy" and "your
+	// filesystem is broken", and nothing else in the suite pins it.
+	if !errors.Is(err, errIntegrityCheckFailed) {
+		t.Errorf("err = %v, want errIntegrityCheckFailed", err)
+	}
+	// An integrity failure happened with bytes already flowing, so it must NOT be
+	// retryable: re-running the same schedule against a mirror serving a corrupt
+	// copy just downloads the corruption again.
+	if errors.Is(err, errStartFailed) {
+		t.Error("an integrity failure was tagged retryable; the retry schedule will re-fetch the bad copy")
 	}
 	// On integrity failure the partial is deleted and no final file is left.
 	if _, statErr := os.Stat(partPathFor(dir, want)); !os.IsNotExist(statErr) {
@@ -970,8 +998,26 @@ func TestDownloadRejectsHTMLResponse(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
-	if _, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", t.TempDir(), "", nil); err == nil {
+	dir := t.TempDir()
+	_, err := c.Download(context.Background(), "87a4ebdaf21fa6cc70009a3dd63194ee", dir, "", nil)
+	if err == nil {
 		t.Fatal("an HTML response should fail")
+	}
+	// The Content-Type gate must name what it rejected. Without this the branch is
+	// satisfied by any failure at all, including one raised before the response was
+	// ever inspected.
+	if !strings.Contains(err.Error(), "HTML") && !strings.Contains(err.Error(), "html") {
+		t.Errorf("err = %v, want it to name the HTML page it refused", err)
+	}
+	// A mirror that answers with an error page is answering, not failing to start:
+	// tagging this errStartFailed would spend the whole retry schedule re-fetching
+	// the same page before the chain is allowed to move to the next source.
+	if errors.Is(err, errStartFailed) {
+		t.Error("an HTML error page was tagged retryable; the retry schedule will re-fetch it")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Errorf("%d entries left in dir, want 0 after refusing an HTML page", len(entries))
 	}
 }
 

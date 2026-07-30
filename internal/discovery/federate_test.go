@@ -3,8 +3,12 @@ package discovery
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 )
 
 // stubProvider is a canned Provider for the federation tests: it returns its
@@ -14,20 +18,353 @@ type stubProvider struct {
 	name    string
 	results []DiscoveryResult
 	err     error
+	// block, when non-nil, holds Search until it is closed or the context ends, so a
+	// slow provider can be simulated without a sleep.
+	block chan struct{}
 
 	mu    sync.Mutex
 	calls int
+	// gotQuery, gotLimit and gotCtxErr record what the last call was handed, so a
+	// test can assert Federate forwarded them rather than substituting its own.
+	gotQuery  string
+	gotLimit  int
+	gotCtxErr error
 }
 
 // Name reports the stub's origin label.
 func (p *stubProvider) Name() string { return p.name }
 
-// Search returns the stub's canned results and error, counting the call.
-func (p *stubProvider) Search(_ context.Context, _ string, _ int) ([]DiscoveryResult, error) {
+// Search returns the stub's canned results and error, recording the call along with
+// the arguments it was given so a test can assert what Federate forwarded.
+func (p *stubProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
 	p.mu.Lock()
 	p.calls++
+	p.gotQuery = query
+	p.gotLimit = limit
+	p.gotCtxErr = ctx.Err()
 	p.mu.Unlock()
+	if p.block != nil {
+		select {
+		case <-p.block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return p.results, p.err
+}
+
+// searched reports how many times Search was called.
+func (p *stubProvider) searched() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+// TestFederateForwardsTheQueryAndLimitToEveryProvider verifies the arguments reach
+// the providers unchanged.
+//
+// Every other test in this file uses providers that ignore their arguments, so
+// Federate could pass "" and 0 — or drop the context — and the whole file would
+// still pass while federated search silently returned each provider's default page
+// of results for an empty query.
+func TestFederateForwardsTheQueryAndLimitToEveryProvider(t *testing.T) {
+	a := &stubProvider{name: "a"}
+	b := &stubProvider{name: "b"}
+
+	Federate(context.Background(), "quantum error correction", 7, a, b)
+
+	for _, p := range []*stubProvider{a, b} {
+		if p.searched() != 1 {
+			t.Errorf("provider %q searched %d times, want 1", p.name, p.searched())
+		}
+		if p.gotQuery != "quantum error correction" {
+			t.Errorf("provider %q got query %q, want the caller's query", p.name, p.gotQuery)
+		}
+		if p.gotLimit != 7 {
+			t.Errorf("provider %q got limit %d, want 7", p.name, p.gotLimit)
+		}
+		if p.gotCtxErr != nil {
+			t.Errorf("provider %q got an already-failed context: %v", p.name, p.gotCtxErr)
+		}
+	}
+}
+
+// TestFederateIsNotSunkByAProviderThatOutlivesTheDeadline verifies the isolation
+// Federate actually offers: it has no timeout of its own and blocks on wg.Wait, so
+// a provider that hangs is bounded only by the context it was handed. With a
+// deadline in play the hanging provider must abandon its work and the healthy
+// provider's results must still come back.
+//
+// This is the scenario best-effort exists for and nothing covered it: every existing
+// test uses providers that return instantly, so a Federate that ran its providers
+// sequentially, or one whose slow provider held the merge, would pass them all.
+func TestFederateIsNotSunkByAProviderThatOutlivesTheDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// block is never closed: the provider can only leave through ctx.Done().
+	hanging := &stubProvider{name: "slow", block: make(chan struct{})}
+	healthy := &stubProvider{name: "crossref", results: []DiscoveryResult{
+		{Origin: "crossref", Title: "Delivered anyway", DOI: "10.1/a"},
+	}}
+
+	started := time.Now()
+	got := Federate(ctx, "q", 10, hanging, healthy)
+	elapsed := time.Since(started)
+
+	if len(got) != 1 {
+		t.Fatalf("Federate() returned %d results, want 1 (the healthy provider's): %+v", len(got), got)
+	}
+	if got[0].Origin != "crossref" {
+		t.Errorf("kept result = %+v, want the healthy crossref result", got[0])
+	}
+	if limit := 5 * time.Second; elapsed >= limit {
+		t.Errorf("Federate took %v, want well under %v: the hanging provider held the merge", elapsed, limit)
+	}
+}
+
+// TestFederateRunsProvidersConcurrently verifies the providers really do overlap.
+//
+// TestFederate_Concurrent counts results, which a sequential implementation
+// satisfies just as well. Here each provider blocks until every provider has been
+// entered, so the call can only return if they are in flight at the same time; a
+// sequential Federate deadlocks and the test times out rather than passing.
+func TestFederateRunsProvidersConcurrently(t *testing.T) {
+	const n = 4
+	var (
+		mu      sync.Mutex
+		entered int
+		allIn   = make(chan struct{})
+	)
+	providers := make([]Provider, n)
+	for i := range providers {
+		providers[i] = providerFunc(func(ctx context.Context, _ string, _ int) ([]DiscoveryResult, error) {
+			mu.Lock()
+			entered++
+			if entered == n {
+				close(allIn)
+			}
+			mu.Unlock()
+			select {
+			case <-allIn:
+				return []DiscoveryResult{{Origin: "p", DOI: "10.1/shared"}}, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	got := Federate(ctx, "q", 10, providers...)
+
+	if len(got) != 1 {
+		t.Fatalf("Federate() returned %d results, want 1 after dedup", len(got))
+	}
+	if entered != n {
+		t.Errorf("%d of %d providers ran", entered, n)
+	}
+}
+
+// providerFunc adapts a plain function to the Provider interface so a test can
+// supply behavior inline.
+type providerFunc func(context.Context, string, int) ([]DiscoveryResult, error)
+
+// Name reports a fixed label; the concurrency test does not distinguish providers.
+func (f providerFunc) Name() string { return "func" }
+
+// Search calls the underlying function.
+func (f providerFunc) Search(ctx context.Context, q string, limit int) ([]DiscoveryResult, error) {
+	return f(ctx, q, limit)
+}
+
+// TestEveryProviderPropagatesContextCancellation verifies the one error a Provider
+// is allowed to return actually comes back as itself, for every provider at once.
+//
+// The contract is that Search degrades every failure to an empty slice and returns
+// ONLY context errors. Each provider had a cancellation test, but every one of them
+// asserted `err != nil` alone — so a provider returning fmt.Errorf("bad url") in
+// place of ctx.Err() passed. That distinction is load-bearing in both directions:
+// Federate discards results either way, so an unclassified error is invisible, and a
+// caller that wanted to know the user had walked away cannot tell.
+//
+// Running the whole registry in one table also means a provider added later is
+// covered without anyone remembering to write this test again. No request leaves the
+// machine: the context is already canceled, so the transport refuses before dialing.
+func TestEveryProviderPropagatesContextCancellation(t *testing.T) {
+	providers := ExtraProviders("test@example.com", staticMirrors{"https://annas-archive.invalid"})
+	if len(providers) < 8 {
+		t.Fatalf("ExtraProviders returned %d providers; the registry shrank and this test may be skipping one", len(providers))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for _, p := range providers {
+		t.Run(p.Name(), func(t *testing.T) {
+			got, err := p.Search(ctx, "anything", 5)
+			if err == nil {
+				t.Fatalf("Search() on a canceled context returned no error (%d results)", len(got))
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Search() error = %v, want it to wrap context.Canceled", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("Search() returned %d results alongside a context error, want none", len(got))
+			}
+		})
+	}
+}
+
+// hostileResponses are the answers a provider must survive without breaking the
+// federated search. Each is something a real deployment produces: a captive portal
+// or CDN interstitial in place of the API payload, a body cut off mid-document by a
+// dropped connection, an upstream that is simply down, and a 200 carrying nothing.
+var hostileResponses = []struct {
+	name   string
+	status int
+	body   string
+}{
+	{name: "empty body under a 200", status: http.StatusOK, body: ""},
+	{name: "html interstitial instead of the payload", status: http.StatusOK, body: "<html><body>Attention Required | Cloudflare</body></html>"},
+	{name: "body truncated mid-document", status: http.StatusOK, body: `{"message":{"items":[{"title":["Half a res`},
+	{name: "xml truncated mid-document", status: http.StatusOK, body: `<?xml version="1.0"?><feed><entry><title>Half`},
+	{name: "nul bytes and binary noise", status: http.StatusOK, body: "\x00\x01\x02\xff\xfe binary"},
+	{name: "upstream is down", status: http.StatusServiceUnavailable, body: "service unavailable"},
+	{name: "upstream is rate limiting", status: http.StatusTooManyRequests, body: "slow down"},
+	{name: "upstream reports not found", status: http.StatusNotFound, body: "no such endpoint"},
+}
+
+// TestEveryProviderDegradesToEmptyOnAHostileResponse verifies the other half of the
+// Provider contract, for every provider at once: everything that is not a context
+// error must become an empty slice and a nil error.
+//
+// This is the promise Federate is built on — it discards a provider's results the
+// moment Search returns non-nil, so a provider that surfaces a parse failure removes
+// itself from the federated result silently. Four of the eight providers asserted
+// this only against their private parse helper (parseArxivFeed(garbage) == nil),
+// which says nothing about what Search does with that nil, and no provider was tested
+// against an empty body, an HTML interstitial, or a body cut off mid-document.
+//
+// Every provider is driven through one table so a provider added later inherits the
+// check instead of relying on someone remembering to write it.
+func TestEveryProviderDegradesToEmptyOnAHostileResponse(t *testing.T) {
+	providers := []struct {
+		name    string
+		setBase func(*testing.T, string)
+		build   func(base string) Provider
+	}{
+		{name: "arxiv", setBase: setArxivBase, build: func(string) Provider { return NewArxiv() }},
+		{name: "crossref", setBase: setCrossrefBase, build: func(string) Provider { return NewCrossref("") }},
+		{name: "openlibrary", setBase: setOpenLibraryBase, build: func(string) Provider { return NewOpenLibrary("") }},
+		{name: "gutenberg", setBase: withGutendexBase, build: func(string) Provider { return NewGutenberg() }},
+		{name: "dblp", setBase: setDblpBase, build: func(string) Provider { return NewDBLP() }},
+		{name: "pubmed", setBase: setPubMedBase, build: func(string) Provider { return NewPubMed("") }},
+		{name: "eric", setBase: setERICBase, build: func(string) Provider { return NewERIC() }},
+		{
+			// Anna's takes its base from an injected mirror list rather than a package
+			// variable, so it opts out of setBase and is wired through build instead.
+			name:    "annas",
+			setBase: func(*testing.T, string) {},
+			build:   func(base string) Provider { return NewAnnas(staticMirrors{base}) },
+		},
+	}
+
+	for _, p := range providers {
+		t.Run(p.name, func(t *testing.T) {
+			for _, hr := range hostileResponses {
+				t.Run(hr.name, func(t *testing.T) {
+					srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(hr.status)
+						_, _ = io.WriteString(w, hr.body)
+					}))
+					defer srv.Close()
+					p.setBase(t, srv.URL)
+
+					got, err := p.build(srv.URL).Search(context.Background(), "anything", 5)
+					if err != nil {
+						t.Errorf("Search() error = %v, want nil: only context errors may surface", err)
+					}
+					if len(got) != 0 {
+						t.Errorf("Search() returned %d results from a hostile response: %+v", len(got), got)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestEveryProviderDegradesToEmptyOnATransportFailure verifies the same contract for
+// a dead socket rather than a bad answer. It is separated from the table above
+// because it needs a server that is closed rather than one that responds, and
+// because Anna's — whose mirror loop is the only per-provider failover in the
+// package — had no transport-failure test at all.
+func TestEveryProviderDegradesToEmptyOnATransportFailure(t *testing.T) {
+	// A server that is started and immediately closed leaves a port nothing listens
+	// on, so every request fails at the dial rather than at the response.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base := dead.URL
+	dead.Close()
+
+	providers := []struct {
+		name    string
+		setBase func(*testing.T, string)
+		build   func(base string) Provider
+	}{
+		{name: "arxiv", setBase: setArxivBase, build: func(string) Provider { return NewArxiv() }},
+		{name: "crossref", setBase: setCrossrefBase, build: func(string) Provider { return NewCrossref("") }},
+		{name: "openlibrary", setBase: setOpenLibraryBase, build: func(string) Provider { return NewOpenLibrary("") }},
+		{name: "gutenberg", setBase: withGutendexBase, build: func(string) Provider { return NewGutenberg() }},
+		{name: "dblp", setBase: setDblpBase, build: func(string) Provider { return NewDBLP() }},
+		{name: "pubmed", setBase: setPubMedBase, build: func(string) Provider { return NewPubMed("") }},
+		{name: "eric", setBase: setERICBase, build: func(string) Provider { return NewERIC() }},
+		{name: "annas", setBase: func(*testing.T, string) {}, build: func(b string) Provider { return NewAnnas(staticMirrors{b}) }},
+	}
+
+	for _, p := range providers {
+		t.Run(p.name, func(t *testing.T) {
+			p.setBase(t, base)
+
+			got, err := p.build(base).Search(context.Background(), "anything", 5)
+			if err != nil {
+				t.Errorf("Search() error = %v, want nil: a dead upstream must not sink the federated search", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("Search() returned %d results from a dead upstream", len(got))
+			}
+		})
+	}
+}
+
+// TestAnnasProviderWithNoMirrorsDegradesToEmpty verifies the one provider that can be
+// asked with nothing to ask: an empty mirror list must produce an empty result rather
+// than an error, since discovery failing is not the caller's problem.
+func TestAnnasProviderWithNoMirrorsDegradesToEmpty(t *testing.T) {
+	got, err := NewAnnas(staticMirrors{}).Search(context.Background(), "anything", 5)
+	if err != nil {
+		t.Errorf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Search() returned %d results with no mirrors configured", len(got))
+	}
+}
+
+// TestEveryProviderNamesItself verifies each provider reports a non-empty Name.
+// The name is what tags a DiscoveryResult's Origin, so an empty one silently strips
+// the provenance the search tool shows for every hit that provider contributes.
+func TestEveryProviderNamesItself(t *testing.T) {
+	seen := map[string]bool{}
+	for _, p := range ExtraProviders("", staticMirrors{"https://annas-archive.invalid"}) {
+		name := p.Name()
+		if name == "" {
+			t.Errorf("a provider (%T) reports an empty Name", p)
+			continue
+		}
+		if seen[name] {
+			t.Errorf("two providers both call themselves %q; their results are indistinguishable", name)
+		}
+		seen[name] = true
+	}
 }
 
 // TestFederate_MergesAndDedupsByDOI verifies that when two providers each return a

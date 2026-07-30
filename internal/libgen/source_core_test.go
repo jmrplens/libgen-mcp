@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,6 +81,113 @@ func coreLiveSource(t *testing.T) (coreSource, string) {
 	api := coreAPIServer(t, `{"results":[{"downloadUrl":"`+downloadURL+`"}]}`, http.StatusOK, nil, nil)
 	t.Cleanup(api.Close)
 	return coreSource{http: api.Client(), key: "k", apiBase: api.URL}, downloadURL
+}
+
+// TestCoreErrorClassification pins which failures Resolve reports as CORE answering
+// "I hold no free full text for this" (ErrNotIndexed) and which as CORE being
+// unusable right now (ErrSourceUnavailable).
+//
+// CORE is the one source whose credential can be rejected per-request, and that
+// case is the reason the distinction matters here: a rejected key fails every item
+// identically, so tagging it as a miss would re-ask CORE for every DOI in a session
+// instead of setting it aside once. The branches below were all reached by existing
+// tests, none of which looked at the tag.
+func TestCoreErrorClassification(t *testing.T) {
+	const doi = "10.1234/known"
+
+	t.Run("a DOI CORE does not hold is a clean miss", func(t *testing.T) {
+		api := coreAPIServer(t, `{"results":[]}`, http.StatusOK, nil, nil)
+		defer api.Close()
+		s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a held DOI with no download URL is a clean miss", func(t *testing.T) {
+		api := coreAPIServer(t, `{"results":[{"downloadUrl":""}]}`, http.StatusOK, nil, nil)
+		defer api.Close()
+		s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a stale download URL is a clean miss", func(t *testing.T) {
+		// CORE's downloadUrl often outlives the file. The probe failing says the copy
+		// is gone, not that CORE is broken, so the source must stay in the chain.
+		dl := coreDownloadServer(t, "404")
+		defer dl.Close()
+		api := coreAPIServer(t, `{"results":[{"downloadUrl":"`+dl.URL+`/gone.pdf"}]}`, http.StatusOK, nil, nil)
+		defer api.Close()
+		s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a rejected key is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+			api := coreAPIServer(t, `{"message":"invalid token"}`, status, nil, nil)
+			s := coreSource{http: api.Client(), key: "bad", apiBase: api.URL}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+			if errors.Is(err, ErrNotIndexed) {
+				t.Errorf("HTTP %d (rejected key) read as the DOI being unheld", status)
+			}
+			api.Close()
+		}
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+			api := coreAPIServer(t, "", status, nil, nil)
+			s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+			api.Close()
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := coreSource{http: refusingClient(), key: "k", apiBase: "https://api.core.invalid"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("an undecodable body is neither", func(t *testing.T) {
+		api := coreAPIServer(t, "<html>proxy error</html>", http.StatusOK, nil, nil)
+		defer api.Close()
+		s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("an undecodable body must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("an undecodable body read as the DOI being unheld")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("an undecodable body put CORE in cooldown")
+		}
+	})
+
+	t.Run("a missing key is neither", func(t *testing.T) {
+		// No key is a deployment choice, not an outage: CORE simply is not configured,
+		// and a cooldown would misreport that as a service problem.
+		s := coreSource{http: refusingClient()}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("Resolve without a key must fail before touching the API")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("an unconfigured key put CORE in cooldown")
+		}
+	})
 }
 
 // TestCoreSupports verifies the source claims DOI-keyed items only and names itself

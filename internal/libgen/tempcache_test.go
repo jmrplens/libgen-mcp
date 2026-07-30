@@ -103,6 +103,98 @@ func TestTempCache_ReleaseAllowsSizeEviction(t *testing.T) {
 	}
 }
 
+// TestTempCache_SizeEvictionDropsTheLeastRecentlyUsed verifies eviction picks the
+// OLDEST unreferenced entry, not merely some unreferenced entry.
+//
+// Every other size-eviction test leaves exactly one eviction candidate, so the
+// direction of the atime comparison in lruEvictableLocked is unconstrained by them:
+// reversing it turns the cache into most-recently-used eviction — throwing away the
+// file a paginated read is most likely to ask for next — and the suite stays green.
+// Three entries are stored with distinct atimes and the cap is set to admit exactly
+// two, so only the correct victim satisfies the assertions.
+func TestTempCache_SizeEvictionDropsTheLeastRecentlyUsed(t *testing.T) {
+	oldPath, oldSize := writeTempFile(t, "oldest")
+	midPath, midSize := writeTempFile(t, "middle")
+	newPath, newSize := writeTempFile(t, "newest")
+
+	// Room for two of the three entries, so exactly one eviction happens. The TTL is
+	// far longer than the spread of atimes below, so the size cap — and therefore the
+	// LRU choice — is the only thing that can evict anything here.
+	tc := newTempCache(oldSize+midSize+newSize-1, time.Hour)
+
+	// put runs an eviction pass of its own, so the entries are installed directly
+	// with hand-set atimes: staging them through put would evict before the third
+	// is in place and the ordering under test would never be exercised.
+	tc.entries["old"] = &tempEntry{path: oldPath, size: oldSize, refs: 0, atime: time.Now().Add(-3 * time.Minute)}
+	tc.entries["mid"] = &tempEntry{path: midPath, size: midSize, refs: 0, atime: time.Now().Add(-2 * time.Minute)}
+	tc.entries["new"] = &tempEntry{path: newPath, size: newSize, refs: 0, atime: time.Now().Add(-1 * time.Minute)}
+
+	tc.evict()
+
+	if _, ok := tc.entries["old"]; ok {
+		t.Error("the least-recently-used entry survived eviction")
+	}
+	if _, statErr := os.Stat(oldPath); !os.IsNotExist(statErr) {
+		t.Errorf("the least-recently-used file should be removed, stat err = %v", statErr)
+	}
+	for _, key := range []string{"mid", "new"} {
+		if _, ok := tc.entries[key]; !ok {
+			t.Errorf("entry %q was evicted; only the oldest should have been", key)
+		}
+	}
+	if _, statErr := os.Stat(newPath); statErr != nil {
+		t.Errorf("the most-recently-used file was removed: %v", statErr)
+	}
+}
+
+// TestTempCache_EvictionSkipsReferencedEntriesEvenWhenOldest verifies a live read
+// pins its file no matter how stale it looks: the oldest entry is the one being
+// read, so the next-oldest must be evicted instead. Without this the LRU ordering
+// and the refcount guard could each be correct alone and wrong together.
+func TestTempCache_EvictionSkipsReferencedEntriesEvenWhenOldest(t *testing.T) {
+	heldPath, heldSize := writeTempFile(t, "held by a live read")
+	freePath, freeSize := writeTempFile(t, "free to go")
+
+	tc := newTempCache(heldSize+freeSize-1, time.Hour)
+	tc.entries["held"] = &tempEntry{path: heldPath, size: heldSize, refs: 1, atime: time.Now().Add(-3 * time.Minute)}
+	tc.entries["free"] = &tempEntry{path: freePath, size: freeSize, refs: 0, atime: time.Now().Add(-1 * time.Minute)}
+
+	tc.evict()
+
+	if _, ok := tc.entries["held"]; !ok {
+		t.Error("an entry with a live reference was evicted; a read in progress lost its file")
+	}
+	if _, statErr := os.Stat(heldPath); statErr != nil {
+		t.Errorf("the referenced file was removed from disk: %v", statErr)
+	}
+	if _, ok := tc.entries["free"]; ok {
+		t.Error("the unreferenced entry survived while the cache was still over its cap")
+	}
+}
+
+// TestTempCache_ReleaseDoesNotUnderflow verifies releasing more times than the
+// entry was referenced leaves the refcount at zero rather than driving it negative.
+// A negative refcount would read as "still referenced" to lruEvictableLocked's
+// refs != 0 test and pin the file in the cache forever.
+func TestTempCache_ReleaseDoesNotUnderflow(t *testing.T) {
+	path, size := writeTempFile(t, "double released")
+	tc := newTempCache(1<<30, time.Hour)
+
+	tc.put("k", path, size) // refs=1
+	tc.release("k")         // refs=0
+	tc.release("k")         // one release too many
+
+	if got := tc.entries["k"].refs; got != 0 {
+		t.Fatalf("refs after an extra release = %d, want 0", got)
+	}
+	// The entry must still be evictable, which is what the floor exists to protect.
+	tc.maxBytes = 0
+	tc.evict()
+	if _, ok := tc.entries["k"]; ok {
+		t.Error("an over-released entry was not evictable")
+	}
+}
+
 // TestTempCache_PutOverwritesUnreferencedFile verifies put's overwrite branch:
 // storing a new path under a key whose previous entry is unreferenced (refs==0) and
 // backed by a different file removes that stale file and adopts the new one.

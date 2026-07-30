@@ -37,6 +37,94 @@ func TestExtract_UnsupportedExtension(t *testing.T) {
 	}
 }
 
+// TestExtract_UnsupportedExtensionOnAFileThatExists covers the sniff-fails branch
+// against real bytes.
+//
+// TestExtract_UnsupportedExtension above passes "testdata/whatever.xyz", which does
+// not exist — so sniffFormat returns "" because os.Open failed, and the branch that
+// actually reads and rejects a file's leading bytes is never reached. This writes a
+// real file with an unknown extension and unrecognizable contents, so a regression
+// in the sniffer is caught rather than masked by the missing-file shortcut.
+func TestExtract_UnsupportedExtensionOnAFileThatExists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "real.xyz")
+	if err := os.WriteFile(path, []byte("\x00\x01\x02 not a document"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Extractable {
+		t.Fatalf("expected not extractable, got %+v", c)
+	}
+	if !strings.Contains(c.Reason, ".xyz") {
+		t.Errorf("reason should name the unsupported extension, got %q", c.Reason)
+	}
+}
+
+// TestExtract_ARecognizedExtensionIsTrustedOverTheContent records that the sniffer
+// is consulted ONLY in the default dispatch branch: a file whose extension names a
+// supported format goes straight to that extractor, whatever its bytes say.
+//
+// This is worth pinning because the consequence is silent rather than loud. A PDF
+// saved as .txt is not reported as unsupported — it is reported as extractable text,
+// and the caller gets a page of binary noise with Format "txt". Nothing asserted
+// this either way, so the behavior could flip in either direction unnoticed.
+func TestExtract_ARecognizedExtensionIsTrustedOverTheContent(t *testing.T) {
+	// A PDF header is all the sniffer looks at, so the fixture is written inline
+	// rather than copied from testdata: reading a file to write it somewhere else is
+	// what makes this a taint-analysis finding, and the bytes are not the point.
+	path := filepath.Join(t.TempDir(), "book.txt")
+	if werr := os.WriteFile(path, []byte("%PDF-1.4\n1 0 obj\n<< >>\nendobj\n"), 0o600); werr != nil {
+		t.Fatal(werr)
+	}
+
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Format != "txt" {
+		t.Errorf("Format = %q, want %q: the extension is trusted over the content", c.Format, "txt")
+	}
+	if !c.Extractable {
+		t.Error("a PDF named .txt is currently extracted as text; if that changed, update this test and the docs")
+	}
+}
+
+// TestExtract_EmptyTXTIsReportedExtractable records what a zero-byte text file
+// produces: an extractable chunk with empty text, no reason, and no further pages.
+//
+// It is pinned because it is inconsistent with the sibling case and nothing said so:
+// an EPUB with no extractable text reports Extractable=false with a "no extractable
+// text" reason (TestExtract_EPUBNoExtractableText), while an empty .txt reports
+// success. A caller cannot distinguish "this file is empty" from "this file has a
+// page of nothing". Whichever way that is resolved, it should be a decision — and
+// this test will fail when it is made.
+func TestExtract_EmptyTXTIsReportedExtractable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.txt")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Format != "txt" {
+		t.Errorf("Format = %q, want %q", c.Format, "txt")
+	}
+	if !c.Extractable {
+		t.Error("an empty .txt is no longer reported extractable: the inconsistency with EPUB was fixed, so update this test")
+	}
+	if c.Text != "" {
+		t.Errorf("Text = %q, want empty", c.Text)
+	}
+	if c.HasMore {
+		t.Error("HasMore = true on an empty file")
+	}
+}
+
 // TestExtract_ContextCancelled verifies that a canceled context causes Extract
 // to return the context error.
 func TestExtract_ContextCancelled(t *testing.T) {

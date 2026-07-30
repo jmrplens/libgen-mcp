@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +17,91 @@ func scidbPage(pdfURL string) string {
 		`<a href="` + pdfURL + `">download</a>` +
 		`<iframe src="/pdfjs/web/viewer.html?file=` + url.QueryEscape(pdfURL) + `"></iframe>` +
 		`</body></html>`
+}
+
+// scidbStatusMirror starts an httptest server answering every request with status
+// and a real SciDB page as the body, and returns its base URL. The body carries a
+// genuine viewer link so a status gate that stopped holding would resolve here
+// rather than fail for want of anything to scrape.
+func scidbStatusMirror(t *testing.T, status int) string {
+	t.Helper()
+	body := scidbPage("https://cdn.example.net/stale.pdf")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// TestSciDBErrorClassification pins which failures Resolve reports as SciDB
+// answering "I do not hold this" (ErrNotIndexed) and which as SciDB being unable to
+// answer at all (ErrSourceUnavailable). The chain reads that verdict to decide
+// between retrying the source and setting it aside for five minutes, so a source
+// that reports a mirror outage as a missing article — or the reverse — degrades
+// every subsequent download. The existing tests reached these branches but asserted
+// only that an error came back.
+func TestSciDBErrorClassification(t *testing.T) {
+	const doi = "10.1016/j.cell.2016.01.043"
+
+	t.Run("a 200 page embedding no PDF is a clean miss", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`<html><body>no article here</body></html>`))
+		}))
+		t.Cleanup(srv.Close)
+		s := scidbSource{mirrors: staticMirrors{srv.URL}, http: srv.Client()}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable} {
+			s := scidbSource{mirrors: staticMirrors{scidbStatusMirror(t, status)}, http: http.DefaultClient}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := scidbSource{mirrors: staticMirrors{"https://annas.invalid"}, http: refusingClient()}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a 403 is neither", func(t *testing.T) {
+		// Anna's serves a 403 challenge page under load. It is not proof the mirror is
+		// down, so unavailableStatus leaves it untagged and the mirror keeps its place
+		// in the chain; pinned so that stays a decision rather than a regression.
+		s := scidbSource{mirrors: staticMirrors{scidbStatusMirror(t, http.StatusForbidden)}, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("a 403 must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a 403 challenge read as a clean miss")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("a 403 challenge put the mirror family in cooldown")
+		}
+	})
+
+	t.Run("no mirrors at all is neither", func(t *testing.T) {
+		// An empty mirror list means discovery failed, which says nothing about the
+		// DOI and nothing about SciDB's health either.
+		s := scidbSource{mirrors: staticMirrors{}, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("Resolve with no mirrors must fail")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("having no mirror to ask read as the article being unheld")
+		}
+	})
 }
 
 // TestSciDBSupports verifies the source claims DOI-keyed items only and names

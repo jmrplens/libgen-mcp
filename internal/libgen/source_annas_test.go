@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,111 @@ func gatewayServing(status int) *httptest.Server {
 		w.Header().Set("Content-Type", "application/pdf")
 		w.WriteHeader(status)
 	}))
+}
+
+// annasStatusMirror starts a mirror stand-in answering every request with status
+// and a real book page as the body, and returns its base URL. Serving a genuine
+// page means a status gate that stopped holding would resolve here rather than
+// merely fail differently.
+func annasStatusMirror(t *testing.T, status int) string {
+	t.Helper()
+	body := annasBookPage("QmV0", "bafyv1")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// TestAnnasErrorClassification pins the taxonomy tag on each way Resolve can fail.
+// The chain reads the tag to choose between re-asking the source on the start-retry
+// schedule and setting it aside for five minutes, and none of the existing tests
+// looked at it.
+//
+// The notable result is negative: annasSource never produces ErrNotIndexed. See
+// TestAnnasMissingCopyIsNotReportedAsACleanMiss for what that costs.
+func TestAnnasErrorClassification(t *testing.T) {
+	const md5 = "d64efd386ed7227592499460aca2044b"
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable} {
+			s := annasSource{mirrors: staticMirrors{annasStatusMirror(t, status)}, http: http.DefaultClient}
+
+			_, err := s.Resolve(context.Background(), Item{MD5: md5})
+			assertUnavailable(t, err)
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := annasSource{mirrors: staticMirrors{"https://annas.invalid"}, http: refusingClient()}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a 403 challenge is neither", func(t *testing.T) {
+		// Anna's fronts its mirrors with a challenge that a plain HTTP client cannot
+		// satisfy. It is not proof the mirror family is down, so it stays untagged and
+		// the source keeps its place in the chain.
+		s := annasSource{mirrors: staticMirrors{annasStatusMirror(t, http.StatusForbidden)}, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		if err == nil {
+			t.Fatal("a 403 challenge must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a 403 challenge read as the item being unheld")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("a 403 challenge put Anna's in cooldown")
+		}
+	})
+
+	t.Run("having no mirror to ask is neither", func(t *testing.T) {
+		s := annasSource{mirrors: staticMirrors{}, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		if err == nil {
+			t.Fatal("Resolve with no mirrors must fail")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("having no mirror to ask read as the item being unheld")
+		}
+	})
+}
+
+// TestAnnasMissingCopyIsNotReportedAsACleanMiss records that the one outcome which
+// genuinely settles the question — a mirror answering 200 with a book page that
+// embeds no IPFS CID, meaning Anna's holds no keyless copy of this md5 — comes back
+// untagged rather than as ErrNotIndexed.
+//
+// The consequence is concrete: startAttempt returns ErrNotIndexed unwrapped and so
+// skips the start-retry schedule, but an untagged error does not, so as the chain's
+// last resort Anna's spends its whole retry budget re-fetching a page whose answer
+// cannot change. Every other DOI source tags this case. The assertion is written to
+// FAIL once notIndexed is applied here, so tagging it retires this test rather than
+// silently leaving a stale claim behind.
+func TestAnnasMissingCopyIsNotReportedAsACleanMiss(t *testing.T) {
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><body>no copy on file</body></html>`))
+	}))
+	defer mirror.Close()
+	s := annasSource{mirrors: staticMirrors{mirror.URL}, http: mirror.Client()}
+
+	_, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err == nil {
+		t.Fatal("a page with no CID must not resolve")
+	}
+	if !strings.Contains(err.Error(), "embedded no IPFS CID") {
+		t.Fatalf("error = %v, want the no-CID diagnosis", err)
+	}
+	if errors.Is(err, ErrNotIndexed) {
+		t.Error("the no-CID case is now tagged ErrNotIndexed: good — delete this test")
+	}
+	if cooldownWorthy(context.Background(), err) {
+		t.Error("a missing copy put Anna's in cooldown, which is worse than leaving it untagged")
+	}
 }
 
 // TestAnnasSupports verifies the source claims md5-keyed items only and names
