@@ -147,7 +147,7 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall europepmc biorxiv rfc nist fatcat core oapen archive scihub scidb libgen randombook or annas"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall europepmc biorxiv rfc nist dagstuhl acl zenodo fatcat core oapen archive scihub scidb libgen randombook or annas"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
@@ -559,7 +559,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	}
 	if len(errs) == 0 {
 		if item.Source != "" {
-			return nil, fmt.Errorf("source %q cannot serve md5=%q doi=%q (md5 uses libgen/randombook/annas; doi uses unpaywall/europepmc/biorxiv/rfc/nist/fatcat/core/oapen/scihub/scidb)", item.Source, item.MD5, item.DOI)
+			return nil, fmt.Errorf("source %q cannot serve md5=%q doi=%q (md5 uses libgen/randombook/annas; doi uses unpaywall/europepmc/biorxiv/rfc/nist/dagstuhl/acl/zenodo/fatcat/core/oapen/scihub/scidb)", item.Source, item.MD5, item.DOI)
 		}
 		return nil, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
 	}

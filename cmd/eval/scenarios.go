@@ -117,6 +117,37 @@ const nistDOI = "10.6028/NIST.SP.800-207"
 // source list gates that path. See S46 for the run that established this.
 const standardsChainSources = "europepmc,rfc,nist,fatcat,scihub,scidb"
 
+// dagstuhlDOI is the ICALP 2023 invited talk "A (Slightly) Improved Approximation
+// Algorithm for the Metric Traveling Salesperson Problem", published by Schloss
+// Dagstuhl in LIPIcs. It is the scenario's target because nothing else in the chain
+// can serve it: Dagstuhl registers with DataCite rather than Crossref, so
+// api.crossref.org answers 404 for this DOI and Unpaywall does too, Europe PMC has
+// no hit, and fatcat holds a release page with no preserved full text. The 10.4230
+// registrant prefix is its gate, claimed by nothing else.
+const dagstuhlDOI = "10.4230/LIPIcs.ICALP.2023.1"
+
+// aclDOI is "BERT: Pre-training of Deep Bidirectional Transformers for Language
+// Understanding" in the ACL Anthology. Its identifier is volume-lettered, which is
+// the half of the source's case rule that can actually break: aclanthology.org
+// answers 404 to the lowercase spelling, so a file arriving proves the DOI suffix
+// was uppercased. It is also the one Anthology paper measured that Unpaywall cannot
+// serve — is_oa true with no url_for_pdf on any location.
+const aclDOI = "10.18653/v1/N19-1423"
+
+// zenodoConceptDOI is a Zenodo CONCEPT DOI: the identifier Zenodo mints for a
+// deposit across all its versions, and the one its own "cite all versions"
+// affordance hands out. It has no file listing of its own — the files endpoint
+// answers 404 for it — so serving it exercises the version hop, without which about
+// half of all Zenodo DOIs resolve to nothing.
+const zenodoConceptDOI = "10.5281/zenodo.21698240"
+
+// publisherDirectChainSources is the source list the publisher-direct routing
+// scenarios run with. Like standardsChainSources it keeps real competitors in front
+// of and behind the source under test, so winning means the DOI-prefix gate routed
+// rather than the chain having nowhere else to go, and it leaves unpaywall out of
+// the operator's list — the only thing that actually keeps it out, per S46.
+const publisherDirectChainSources = "europepmc,dagstuhl,acl,zenodo,fatcat,scihub,scidb"
+
 // oapenDOI and oapenISBN identify the SAME openly licensed monograph — the European
 // Investment Bank's "European firms and climate change 2020/2021" — through each of
 // the two identifiers the OAPEN source accepts. Verified live: either identifier
@@ -433,6 +464,7 @@ func scenarios() []scenario {
 		escalationAndRemoteScenarios(),
 		sourceScenarios(),
 		standardsSourceScenarios(),
+		publisherDirectScenarios(),
 	)
 }
 
@@ -1237,6 +1269,84 @@ func assertStandardsSourcesAdvertised(tr transcript) (pass bool, detail string) 
 	}
 	return true, "the download source enum advertises " + strings.Join(standardsSources, " and ") +
 		"; enum = " + strings.Join(enum, ", ")
+}
+
+// publisherDirectScenarios cover the three publishers reached directly by DOI
+// registrant prefix that are not standards bodies: Schloss Dagstuhl, the ACL
+// Anthology and Zenodo. Each grades the one thing its source could plausibly get
+// wrong — a landing-page parse, an identifier's case, and a concept DOI — rather
+// than re-grading the prefix gate the standards scenarios already cover.
+func publisherDirectScenarios() []scenario {
+	return []scenario{
+		{
+			ID: "S66",
+			Prompt: fmt.Sprintf("Download the paper with DOI %s. Don't restrict it to a particular "+
+				"source — let the server choose.", dagstuhlDOI),
+			// The DOI is supplied, so what is under test is the landing-page parse the
+			// source cannot avoid: DROPS files live under a storage path that embeds the
+			// volume number, which the DOI does not carry, so the PDF URL comes from the
+			// document page's own citation_pdf_url tag or from nowhere. A layout change
+			// there would silently remove every LIPIcs paper from reach, and this is what
+			// notices.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         publisherDirectChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS66DagstuhlChain,
+		},
+		{
+			ID:     "S67",
+			Prompt: fmt.Sprintf("Download DOI %s from the ACL Anthology source specifically.", aclDOI),
+			// The prose name mapped onto source=acl, and behind it the case rule. This
+			// DOI's identifier is volume-lettered, so the source must uppercase it; the
+			// Anthology answers 404 to the lowercase spelling, so a file arriving is the
+			// only proof the rule held on the generation of identifiers where it matters.
+			Assert: assertS67ACLSourced,
+		},
+		{
+			ID: "S68",
+			Prompt: fmt.Sprintf("Download the Zenodo deposit with DOI %s. Don't pin a source — "+
+				"let the server route it.", zenodoConceptDOI),
+			// A concept DOI rather than a version DOI, deliberately. Its file listing
+			// answers 404, so a pass means the source noticed and asked the record page
+			// which version to serve. Without that hop this scenario fails while every
+			// version-DOI scenario would still pass, which is exactly the blind spot.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         publisherDirectChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS68ZenodoConceptDOI,
+		},
+	}
+}
+
+// assertS66DagstuhlChain grades the Dagstuhl routing scenario: the chain must be
+// left unpinned and dagstuhl must be what served the file, which can only happen if
+// the document page still advertises a PDF.
+func assertS66DagstuhlChain(tr transcript) (pass bool, detail string) {
+	return assertChainServedBy(tr, "dagstuhl")
+}
+
+// assertS67ACLSourced grades the model mapping the Anthology's prose name onto
+// source=acl, and with it the uppercasing of a volume-lettered identifier.
+func assertS67ACLSourced(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "acl", "doi")
+}
+
+// assertS68ZenodoConceptDOI grades the concept-DOI hop. It additionally requires the
+// DOI the model passed to be the concept one it was given: a model that "helpfully"
+// substituted the version DOI would pass assertChainServedBy while leaving the hop
+// untested, which is the whole point of the scenario.
+func assertS68ZenodoConceptDOI(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if doi := strings.TrimSpace(stringField(call.Input, "doi")); !strings.EqualFold(doi, zenodoConceptDOI) {
+		return false, "model called download with doi=" + doi + ", not the concept DOI " +
+			zenodoConceptDOI + " the scenario is about"
+	}
+	return assertChainServedBy(tr, "zenodo")
 }
 
 // assertS51OapenDOI checks the OAPEN source keyed by a monograph DOI: the model must

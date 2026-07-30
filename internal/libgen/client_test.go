@@ -403,7 +403,8 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	c := New(staticMirrors{}, baseChainConfig())
 
 	wantChain := []string{
-		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "oapen", "archive",
+		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"fatcat", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
 	if got := sourceNames(c); !slices.Equal(got, wantChain) {
@@ -417,8 +418,9 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		}
 		// A preprint DOI is a valid DOI every prefix-agnostic article source accepts,
 		// so it counts the prefix-restricted biorxiv source alongside them. The other
-		// prefix-restricted sources (rfc, nist) claim only their own registrants and
-		// are correctly absent here; EnabledSourceNames probes each prefix in turn.
+		// prefix-restricted sources (rfc, nist, dagstuhl, acl, zenodo) claim only their
+		// own registrants and are correctly absent here; EnabledSourceNames probes each
+		// prefix in turn.
 		if s.Supports(Item{DOI: "10.1101/2020.01.01.000000"}) {
 			article = append(article, s.Name())
 		}
@@ -444,7 +446,10 @@ func TestNewWiresCoreWhenKeyed(t *testing.T) {
 	cfg := baseChainConfig()
 	cfg.CoreKey = "test-key"
 	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
-	want := []string{"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "core", "oapen", "scihub", "scidb"}
+	want := []string{
+		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"fatcat", "core", "oapen", "scihub", "scidb",
+	}
 	if !slices.Equal(article, want) {
 		t.Errorf("article chain (keyed) = %v, want %v", article, want)
 	}
@@ -458,7 +463,10 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book = %v, want %v", book, want)
 	}
-	if want := []string{"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{
+		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"fatcat", "oapen", "scihub", "scidb",
+	}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
 
@@ -468,7 +476,10 @@ func TestEnabledSourceNames(t *testing.T) {
 	if want := []string{"libgen", "randombook", "annas"}; !slices.Equal(book, want) {
 		t.Errorf("book (no email) = %v, want %v", book, want)
 	}
-	if want := []string{"europepmc", "biorxiv", "rfc", "nist", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{
+		"europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"fatcat", "oapen", "scihub", "scidb",
+	}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
 	}
 }

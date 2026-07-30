@@ -5,7 +5,7 @@ datePublished: "2026-07-25"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "526286567bb4ecbe"
+privacySource: "b60e95418998996c"
 head:
   - tag: script
     attrs:
@@ -104,7 +104,11 @@ destinos son:
   (`api.biorxiv.org`, más los hosts de contenido `biorxiv.org`/`medrxiv.org`), el
   [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) para un DOI de
   RFC, [NIST](https://nvlpubs.nist.gov) para un DOI `10.6028` (la petición va a
-  `doi.org`, cuya redirección lleva a `nvlpubs.nist.gov`) e
+  `doi.org`, cuya redirección lleva a `nvlpubs.nist.gov`),
+  [Schloss Dagstuhl](https://drops.dagstuhl.de) (`drops.dagstuhl.de`) para un DOI
+  `10.4230`, la [ACL Anthology](https://aclanthology.org) (`aclanthology.org`)
+  para un DOI `10.18653`/`10.3115`, [Zenodo](https://zenodo.org) (`zenodo.org`)
+  para un DOI `10.5281/zenodo` e
   Internet Archive Scholar / fatcat (`scholar.archive.org`, y después
   `web.archive.org` para el fichero). Un DOI de monografía se ofrece además a
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Cada petición lleva

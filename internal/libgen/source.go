@@ -317,6 +317,22 @@ func escapeDOIPath(doi string) string {
 	return strings.Join(parts, "/")
 }
 
+// absoluteHTTPURL reports whether raw is an absolute http(s) URL, the only shape
+// the download pipeline can stream from.
+//
+// It is the guard every source that lifts a file location out of someone else's
+// markup or JSON applies to that value before handing it downstream. The check is
+// on the response, not a judgement about the host: a layout change that put a
+// relative path, an empty string or a javascript: URL where a file URL belongs
+// would otherwise be passed on as somewhere to fetch from.
+func absoluteHTTPURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
 // mirrorOf reduces a file URL to its "scheme://host" origin, used as the result's
 // Mirror label and in download error messages. It falls back to the raw URL when
 // it cannot be parsed into a host.

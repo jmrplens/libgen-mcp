@@ -61,9 +61,9 @@ const dateModified = (() => {
 const featureList = [
 	"Search Library Genesis for books, papers, comics, magazines and standards",
 	"Four MCP tools: search, get_details, download, read",
-	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
+	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
 	"Refuses what it may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
-	"Twelve download sources in a fixed chain with transparent per-source failover",
+	"Seventeen download sources in a fixed chain with transparent per-source failover",
 	"Automatic mirror discovery, caching and transparent failover",
 	"Single cross-platform static Go binary (Linux, macOS, Windows; amd64 and arm64)",
 	"stdio and streamable HTTP transports; no account or API key required",

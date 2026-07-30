@@ -48,6 +48,10 @@ AI assistant) make. There are no background connections. The destinations are:
   [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) for an RFC DOI,
   [NIST](https://nvlpubs.nist.gov) for a `10.6028` DOI (the request goes to
   `doi.org`, whose redirect leads to `nvlpubs.nist.gov`),
+  [Schloss Dagstuhl](https://drops.dagstuhl.de) (`drops.dagstuhl.de`) for a
+  `10.4230` DOI, the [ACL Anthology](https://aclanthology.org)
+  (`aclanthology.org`) for a `10.18653`/`10.3115` DOI,
+  [Zenodo](https://zenodo.org) (`zenodo.org`) for a `10.5281/zenodo` DOI,
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
   `web.archive.org` for the file). A monograph DOI is also offered to
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries

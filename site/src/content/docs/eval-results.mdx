@@ -133,7 +133,7 @@ a fresh-mirror miss) — a network condition, never a model failure.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-The suite is **66 scenarios** (S1–S65 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
+The suite is **69 scenarios** (S1–S68 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
 
 {/* end generated */}
 
@@ -226,6 +226,9 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 | S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route |
 | S64 | **Reading an RFC as text** — every other DOI-keyed source yields a PDF; this is the only path where a DOI reaches `extract` as plain text and paginates by character offset, and the model must quote the document rather than merely call the tool |
 | S65 | **The standards sources are advertised** — touches no third party: a prefix-gated source can run in the chain while being absent from the enum the model is shown, which makes it reachable by the server and invisible to the caller |
+| S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere |
+| S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased |
+| S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
 
 {/* end generated */}
 

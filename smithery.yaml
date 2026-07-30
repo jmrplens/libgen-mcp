@@ -9,7 +9,7 @@ startCommand:
     properties:
       unpaywallEmail:
         type: string
-        description: Contact email for the Unpaywall API, used to resolve open-access articles by DOI. The Unpaywall source is disabled unless this is set; the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it.
+        description: Contact email for the Unpaywall API, used to resolve open-access articles by DOI. The Unpaywall source is disabled unless this is set; the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it.
       coreKey:
         type: string
         description: API key from core.ac.uk (free registration) enabling the CORE open-access article source. The core source stays out of the download chain unless this is set.
