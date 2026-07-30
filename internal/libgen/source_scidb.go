@@ -66,11 +66,11 @@ func (s scidbSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
 		pdfURL, err := s.tryMirror(ctx, httpClient, base, it.DOI)
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		if pdfURL == "" {
-			lastErr = notIndexed(fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI))
+			lastErr = strongerError(lastErr, notIndexed(fmt.Errorf("scidb: mirror %q embedded no PDF for %q", base, it.DOI)))
 			continue
 		}
 		return Resolved{
@@ -98,7 +98,7 @@ func (s scidbSource) tryMirror(ctx context.Context, httpClient *http.Client, bas
 	if err != nil {
 		return "", fmt.Errorf("scidb: building request for %q: %w", base, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

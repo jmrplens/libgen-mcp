@@ -71,11 +71,11 @@ func (s scihubSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	for _, host := range s.hosts {
 		pdfURL, err := s.tryHost(ctx, httpClient, scheme, host, it.DOI)
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		if pdfURL == "" {
-			lastErr = notIndexed(fmt.Errorf("scihub: host %q served no PDF link for %q", host, it.DOI))
+			lastErr = strongerError(lastErr, notIndexed(fmt.Errorf("scihub: host %q served no PDF link for %q", host, it.DOI)))
 			continue
 		}
 		return Resolved{
@@ -104,7 +104,7 @@ func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, sche
 	if err != nil {
 		return "", fmt.Errorf("scihub: building request for %q: %w", host, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, sche
 	// embed a stale id="pdf" element, so scraping a PDF link from a non-OK
 	// response would hand back a dead URL. Skip the host instead.
 	if resp.StatusCode != http.StatusOK {
-		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("scihub: host %q returned HTTP %d", host, resp.StatusCode))
+		return "", missOrUnavailableStatus(resp.StatusCode, fmt.Errorf("scihub: host %q returned HTTP %d", host, resp.StatusCode))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, scihubMaxBody))

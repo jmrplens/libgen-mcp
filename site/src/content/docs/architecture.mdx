@@ -23,7 +23,7 @@ head:
             "name": "How does libgen-mcp find a working Library Genesis mirror?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting LIBGEN_MIRROR pins one host and skips discovery entirely."
+              "text": "It discovers them rather than hard-coding one. The server fetches the current mirror list from a public shadow-library mirror directory and caches it on disk for 24 hours under the OS cache directory, so a restart reuses the cached list instead of fetching again; if the fetch fails it falls back to a stale cache and then to a built-in list. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting LIBGEN_MIRROR moves one host to the front of the discovered list; discovery still runs and the other mirrors stay available for failover."
             }
           },
           {
@@ -66,7 +66,7 @@ Candidate mirrors are supplied by a `Manager`:
 
 - The live list is fetched from the [shadowlibraries](https://shadowlibraries.github.io/DirectDownloads/libgen/) directory and cached for **24 hours** in the OS cache directory (`~/.cache/libgen-mcp/mirrors.json` on Linux, `~/Library/Caches/libgen-mcp/mirrors.json` on macOS).
 - On startup the manager prefers, in order: a valid disk cache, a live fetch (which it then writes to cache), a stale cache, and finally a hardcoded fallback list. Only the fallback is not memoized, so the next request retries discovery instead of pinning to it.
-- The preferred mirror (`libgen.li` by default, or `LIBGEN_MIRROR` when set) is always placed first. Setting `LIBGEN_MIRROR` pins that single mirror.
+- The preferred mirror (`libgen.li` by default, or `LIBGEN_MIRROR` when set) is always placed first. Setting `LIBGEN_MIRROR` moves that host to the front; discovery still runs and the rest of the list stays available for failover.
 - A long-running server re-discovers once the in-memory list exceeds its 24-hour TTL, so it picks up mirror changes without a restart.
 
 ### Failover, retry, and cooldown
@@ -218,7 +218,7 @@ Both transports share the same tools, HTTP client, and download pipeline; only t
 
 ### How does libgen-mcp find a working Library Genesis mirror?
 
-It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting `LIBGEN_MIRROR` pins one host and skips discovery entirely.
+It discovers them rather than hard-coding one. The server fetches the current mirror list from a public shadow-library mirror directory and caches it on disk for 24 hours under the OS cache directory, so a restart reuses the cached list instead of fetching again; if the fetch fails it falls back to a stale cache and then to a built-in list. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting `LIBGEN_MIRROR` moves one host to the front of the discovered list; discovery still runs and the other mirrors stay available for failover.
 
 ### What does libgen-mcp cache, and where?
 

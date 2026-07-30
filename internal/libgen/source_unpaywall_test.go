@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,121 @@ func unpaywallTestServer(t *testing.T, fixture string) (*httptest.Server, *strin
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &lastURI
+}
+
+// unpaywallStatusServer serves body under status at any path, for the cases where
+// the status rather than the payload is what is being pinned.
+func unpaywallStatusServer(t *testing.T, status int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestUnpaywallErrorClassification pins which failures Resolve reports as Unpaywall
+// answering "this article has no free copy" (ErrNotIndexed) and which as Unpaywall
+// being unable to answer (ErrSourceUnavailable).
+//
+// The chain acts on the difference: a clean miss is returned straight out of
+// startAttempt and costs one request, while an unclassified failure is put through
+// the whole start-retry schedule and an unavailable one additionally cools the
+// source down. The paywalled and no-PDF branches already had tests, but none of
+// them looked at the tag.
+func TestUnpaywallErrorClassification(t *testing.T) {
+	const doi = "10.1234/paywalled"
+
+	t.Run("a paywalled article is a clean miss", func(t *testing.T) {
+		srv := unpaywallStatusServer(t, http.StatusOK, `{"is_oa":false}`)
+		s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("an OA article with no fetchable location is a clean miss", func(t *testing.T) {
+		srv := unpaywallStatusServer(t, http.StatusOK, `{"is_oa":true,"oa_locations":[{"host_type":"repository"}]}`)
+		s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+			srv := unpaywallStatusServer(t, status, "")
+			s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := unpaywallSource{email: "e@example.com", http: refusingClient(), baseURL: "https://api.unpaywall.invalid"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a 404 for an unknown DOI is a clean miss", func(t *testing.T) {
+		// Unpaywall answers 404 for a DOI it has no record of. That is a settled
+		// answer, so it is tagged: startAttempt returns a clean miss unwrapped and
+		// skips the start-retry schedule rather than re-asking a question already
+		// answered. It must not put the source in cooldown either — the service is
+		// working, it simply does not know this DOI.
+		srv := unpaywallStatusServer(t, http.StatusNotFound, `{"error":true,"message":"not found"}`)
+		s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("an unknown DOI put Unpaywall in cooldown")
+		}
+	})
+
+	t.Run("a body that is not the expected JSON is neither", func(t *testing.T) {
+		// An HTML error page served with a 200 is the shape a captive portal or a
+		// misrouted proxy produces. It is no verdict on the article and none on the
+		// service, so it must read as neither.
+		srv := unpaywallStatusServer(t, http.StatusOK, "<html>gateway</html>")
+		s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("an undecodable body must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("an undecodable body read as the article having no free copy")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("an undecodable body put Unpaywall in cooldown")
+		}
+	})
+
+	t.Run("a missing contact email is neither", func(t *testing.T) {
+		// A deployment with no email configured is a configuration gap, not an outage:
+		// cooling the source down would hide the real cause behind a five-minute skip.
+		//
+		// The server fails the test if it is reached at all. A refusing client would
+		// have made this pass whether or not Resolve short-circuits, which is the one
+		// thing the "before touching the API" claim is about.
+		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Error("Resolve queried Unpaywall with no contact email")
+		}))
+		defer srv.Close()
+		s := unpaywallSource{http: srv.Client(), baseURL: srv.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("Resolve without an email must fail before touching the API")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("a missing email put Unpaywall in cooldown")
+		}
+	})
 }
 
 // TestUnpaywallResolveOA verifies that an open-access response resolves to the

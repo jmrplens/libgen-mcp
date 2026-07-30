@@ -119,7 +119,7 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		fileURL, ext, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5, tryMember)
 		tryMember = false // the single member attempt is spent, whether it succeeded or failed
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		return Resolved{FileURL: fileURL, Ext: ext, VerifyMD5: true, Account: account}, nil
@@ -238,7 +238,12 @@ func (s annasSource) fetchCID(ctx context.Context, httpClient *http.Client, base
 	}
 	cid, ok := extractIPFSCID(body)
 	if !ok {
-		return "", "", fmt.Errorf("annas: mirror %q embedded no IPFS CID for %q", base, md5)
+		// The mirror answered normally and published no CID: Anna's saying it holds
+		// no keyless copy of this md5. That is a settled answer, not an outage, so it
+		// is tagged as a clean miss — otherwise the chain treats it as worth retrying
+		// and, since annas is last, spends the whole start-retry schedule re-fetching
+		// a page that will keep saying the same thing.
+		return "", "", notIndexed(fmt.Errorf("annas: mirror %q embedded no IPFS CID for %q", base, md5))
 	}
 	return cid, extractAnnasExt(body), nil
 }
@@ -262,7 +267,7 @@ func (s annasSource) get(ctx context.Context, httpClient *http.Client, endpoint 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	for k, vs := range extra {
 		for _, v := range vs {
 			req.Header.Add(k, v)

@@ -87,23 +87,41 @@ func TestManagerFetchesAndCaches(t *testing.T) {
 	}
 }
 
-// TestManagerUsesStaleCacheWhenSourceDown verifies ManagerUsesStaleCacheWhenSourceDown.
+// TestManagerUsesStaleCacheWhenSourceDown verifies that when discovery fails, an
+// expired cache is used in preference to the hardcoded fallback: a list that was
+// true yesterday beats one frozen at release time.
+//
+// The cache is deliberately given a host that is NOT in DefaultFallback, and
+// Preferred is set to something else again. Both matter: Preferred is prepended
+// unconditionally by orderPreferred, so asserting on got[0] proves nothing, and a
+// cached host that also appears in the fallback cannot tell the two paths apart.
+// The assertion is therefore on the tail, which only the cache can supply.
 func TestManagerUsesStaleCacheWhenSourceDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
+	const cached = "https://libgen.example-stale"
+	for _, u := range DefaultFallback {
+		if u == cached {
+			t.Fatalf("test setup: %q is in DefaultFallback, so the cache path cannot be distinguished", cached)
+		}
+	}
 	cachePath := filepath.Join(t.TempDir(), "mirrors.json")
-	stale := cacheFile{FetchedAt: time.Now().Add(-48 * time.Hour), Mirrors: []string{"https://libgen.la"}}
+	stale := cacheFile{FetchedAt: time.Now().Add(-48 * time.Hour), Mirrors: []string{cached}}
 	data, err := json.Marshal(stale)
 	if err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(cachePath, data, 0o600)
-	m := &Manager{SourceURL: srv.URL, CachePath: cachePath, Preferred: "https://libgen.la", HTTP: srv.Client()}
+	if werr := os.WriteFile(cachePath, data, 0o600); werr != nil {
+		t.Fatal(werr)
+	}
+	m := &Manager{SourceURL: srv.URL, CachePath: cachePath, Preferred: "https://libgen.li", HTTP: srv.Client()}
+
 	got := m.Mirrors(context.Background())
-	if got[0] != "https://libgen.la" {
-		t.Errorf("Mirrors() with an expired cache = %v, want it to be used", got)
+	want := []string{"https://libgen.li", cached}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Mirrors() with an expired cache = %v, want %v (the stale cache, not the fallback)", got, want)
 	}
 }
 
@@ -423,7 +441,17 @@ func TestAnnasFallbackUsedWithoutNetworkOrCache(t *testing.T) {
 	m.SourceURL = "http://127.0.0.1:0/unreachable"
 
 	got := m.Mirrors(context.Background())
-	if len(got) == 0 || !strings.Contains(got[0], "annas-archive") {
-		t.Fatalf("Mirrors() = %v, want the Anna's fallback list", got)
+	// got[0] is always m.Preferred, prepended by orderPreferred whatever the
+	// discovery outcome, so it cannot show which family's fallback was used. The
+	// whole list is compared instead: with the Anna's preferred host already first
+	// in AnnasFamily.Fallback, the expected result is exactly that list, and a
+	// manager that had resolved the libgen family would fail here.
+	if !reflect.DeepEqual(got, AnnasFamily.Fallback) {
+		t.Fatalf("Mirrors() = %v, want the Anna's fallback list %v", got, AnnasFamily.Fallback)
+	}
+	for _, u := range got {
+		if strings.Contains(u, "libgen") {
+			t.Errorf("Mirrors() returned the libgen mirror %q for an Anna's manager", u)
+		}
 	}
 }

@@ -62,13 +62,13 @@ head:
             "name": "¿libgen-mcp prioriza las fuentes legales?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como un fallo de búsqueda, nunca se disfraza de archivo."
+              "text": "Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como una ausencia, nunca se disfraza de fichero."
             }
           }
         ]
       }
 hero:
-  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, descargado y leído en lenguaje natural. Diecisiete fuentes de descarga con el acceso abierto primero, ocho proveedores de búsqueda más allá del catálogo de Library Genesis. Sin cuenta, sin clave de API, un solo binario estático.
+  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, descargado y leído en lenguaje natural. Diecinueve fuentes de descarga con el acceso abierto primero, ocho proveedores de búsqueda más allá del catálogo de Library Genesis. Sin cuenta, sin clave de API, un solo binario estático.
   image:
     dark: ../../../assets/logo-dark.svg
     light: ../../../assets/logo-light.svg
@@ -111,7 +111,7 @@ Varios proyectos sin relación comparten el nombre. Este es
 | Repositorio         | [`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp) |
 | Lenguaje            | Go — un único binario estático, sin runtime que instalar        |
 | Herramientas        | Cuatro: `search`, `get_details`, `download`, `read`             |
-| Fuentes de descarga | Diecisiete, en una cadena fija, con el acceso abierto primero   |
+| Fuentes de descarga | Diecinueve, en una cadena fija, con el acceso abierto primero   |
 | Id de registro      | `io.github.jmrplens/libgen-mcp`                                 |
 
 Lo que lo distingue: la cadena de descarga está ordenada para agotar los
@@ -144,7 +144,7 @@ lugar de darse por supuesta.
 		Los artículos se resuelven por Unpaywall, Europe PMC, bioRxiv/medRxiv, el
 		RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO
 		Knowledge Repository, Internet Archive Scholar, CORE y OAPEN antes de
-		intentar cualquier fallback de biblioteca en la sombra. Los libros por ISBN
+		intentar cualquier reserva de biblioteca en la sombra. Los libros por ISBN
 		solo proceden de OAPEN y de escaneos de dominio público de Internet Archive;
 		las copias restringidas a préstamo se rechazan.
 	</Card>
@@ -206,7 +206,7 @@ evalúa resolviéndolos contra el sitio en vivo:
 </Aside>
 
 libgen-mcp prueba los proveedores legales de acceso abierto antes que cualquier
-fallback de biblioteca en la sombra, y rechaza el material que no puede
+reserva de biblioteca en la sombra, y rechaza el material que no puede
 redistribuir. [Uso responsable](/libgen-mcp/es/responsible-use/) explica qué
 significa eso en la práctica, qué se niega a hacer el servidor y cómo plantear
 una duda.
@@ -231,4 +231,4 @@ Sí. libgen-mcp es software libre y de código abierto bajo la licencia MIT. El 
 
 ### ¿libgen-mcp prioriza las fuentes legales?
 
-Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como un fallo de búsqueda, nunca se disfraza de archivo.
+Sí, por diseño. La cadena de descarga está ordenada para que los proveedores de acceso abierto se prueben primero: un artículo pedido por DOI pasa por Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar, CORE y OAPEN antes de que Sci-Hub o SciDB se consideren siquiera, y un libro pedido por ISBN solo procede de OAPEN y de escaneos de dominio público de Internet Archive. El servidor además rechaza material que no puede redistribuir: confirma el identificador de OAPEN en lugar de aceptar una coincidencia de texto libre, se salta los escaneos de Internet Archive restringidos a préstamo, y descarta los registros de Project Gutenberg alojados con permiso en lugar de estar en dominio público. Un rechazo se informa como una ausencia, nunca se disfraza de fichero.

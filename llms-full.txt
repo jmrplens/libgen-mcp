@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.3.4 | 4 tools | 4 prompts
+> Version 1.4.0 | 4 tools | 4 prompts
 
 ## Tools
 
@@ -84,7 +84,6 @@ Download a file to a local directory. Provide md5 (book), isbn (book), doi (arti
 - `md5` (string): file md5 hash from a book search result; provide md5, isbn or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
 - `resolve_only` (boolean): when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)
-- `skip_confirmation` (boolean): when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all
 - `source` (string): restrict the download to a single enabled source: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover. Allowed values: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas
 
 **Returns:**
@@ -100,7 +99,7 @@ Download a file to a local directory. Provide md5 (book), isbn (book), doi (arti
 - `source` (string): the source that served the file: unpaywall europepmc biorxiv rfc nist dagstuhl acl zenodo scielo fao fatcat core oapen archive scihub scidb libgen randombook or annas
 - `verified` (boolean) (required): true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download
 
-Annotations: readOnly=false, destructive=false, idempotent=true, openWorld=true
+Annotations: readOnly=false, destructive=true, idempotent=true, openWorld=true
 
 ### read
 
@@ -121,7 +120,7 @@ Extract and paginate the text of a book or paper so you can read it without down
 - `offset` (integer): character offset to start from (EPUB/TXT); ignored when cursor is set
 - `outline` (boolean): return the document's table of contents (chapters/sections with page or level) instead of its text; use it to decide what to read next
 - `path` (string): read an already-downloaded local file by absolute path (local server only; ignored/rejected on a remote server)
-- `source` (string): restrict the fetch to one source (libgen/randombook/annas for md5; unpaywall/europepmc/biorxiv/rfc/nist/dagstuhl/acl/zenodo/scielo/fao/fatcat/core/oapen/scihub/scidb for doi; each of rfc, nist, dagstuhl, acl, zenodo, scielo and fao serves only its own publisher's DOIs; unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY)
+- `source` (string): restrict the fetch to a single enabled source: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover. Allowed values: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb, libgen, randombook, annas
 - `start_page` (integer): first page to read (PDF), 1-based; ignored when cursor is set
 
 **Returns:**

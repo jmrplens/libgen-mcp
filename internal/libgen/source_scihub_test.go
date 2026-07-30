@@ -222,6 +222,144 @@ func TestScihubBodyReadError(t *testing.T) {
 	}
 }
 
+// scihubStatusHost starts an httptest server answering every request with status
+// and the real article fixture as the body, and returns its bare host:port. The
+// body is a genuine id="pdf" page on purpose: a status gate that stopped holding
+// would resolve here instead of failing, so the classification assertion doubles
+// as a check that a non-200 is never scraped.
+func scihubStatusHost(t *testing.T, status int) string {
+	t.Helper()
+	body := scihubFixture(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
+// TestScihubErrorClassification pins which failures Resolve reports as Sci-Hub
+// answering "I do not hold this" (ErrNotIndexed) and which as Sci-Hub being unable
+// to answer at all (ErrSourceUnavailable).
+//
+// The chain acts on the difference and the cost of getting it wrong is asymmetric:
+// a miss tagged as unavailability sidelines a healthy mirror for five minutes,
+// while an outage tagged as a miss is returned unwrapped from startAttempt and so
+// skips the retry that would have ridden out the blip. Everything here was
+// previously exercised by tests that only asserted that *some* error came back.
+func TestScihubErrorClassification(t *testing.T) {
+	const doi = "10.1016/j.cell.2016.01.043"
+
+	t.Run("a 200 page with no PDF link is a clean miss", func(t *testing.T) {
+		host := scihubHostServer(t, "<html><body>article not found</body></html>")
+		s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+			host := scihubStatusHost(t, status)
+			s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := scihubSource{hosts: []string{"sci-hub.invalid"}, http: refusingClient(), scheme: "http"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a body that cannot be read is unavailability", func(t *testing.T) {
+		// A mirror that promises more bytes than it sends taught us nothing about the
+		// article, only that the connection broke mid-response.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				return
+			}
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\nshort"))
+			_ = conn.Close()
+		}))
+		t.Cleanup(srv.Close)
+		s := scihubSource{hosts: []string{strings.TrimPrefix(srv.URL, "http://")}, http: http.DefaultClient, scheme: "http"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a 404 is a clean miss and a 403 is neither", func(t *testing.T) {
+		// A Sci-Hub host answering 404 is telling us it does not mirror the article:
+		// a settled answer, so it is tagged and startAttempt skips the start-retry
+		// schedule instead of re-asking. A 403 is the mirror's challenge page, which
+		// is not proof the service is down and not proof the article is absent, so it
+		// stays deliberately unclassified.
+		host := scihubStatusHost(t, http.StatusNotFound)
+		s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+
+		host = scihubStatusHost(t, http.StatusForbidden)
+		s = scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+		_, err = s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("HTTP 403 must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a challenge page read as a clean miss")
+		}
+		if errors.Is(err, ErrSourceUnavailable) || cooldownWorthy(context.Background(), err) {
+			t.Error("a challenge page put the source in cooldown")
+		}
+	})
+}
+
+// TestScihubClassificationIsTheStrongestNotTheLast pins that a verdict over
+// several hosts does not depend on the order they were tried.
+//
+// Resolve used to keep only the most recent host's error, so the same pair of
+// mirrors in the opposite order cooled the source down or did not. That became
+// harmful once a 404 started counting as a clean miss: one mirror down and
+// another answering 404 reported a clean miss, and startAttempt returns a clean
+// miss unwrapped and skips the start-retry schedule — losing the retry that
+// exists for exactly the transient case. The source has only proved a DOI absent
+// when every host said so.
+func TestScihubClassificationIsTheStrongestNotTheLast(t *testing.T) {
+	const doi = "10.1016/j.cell.2016.01.043"
+	down := scihubStatusHost(t, http.StatusServiceUnavailable)
+	empty := scihubHostServer(t, "<html><body>nothing here</body></html>")
+
+	for _, tc := range []struct {
+		name  string
+		hosts []string
+	}{
+		{name: "outage first, miss last", hosts: []string{down, empty}},
+		{name: "miss first, outage last", hosts: []string{empty, down}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := scihubSource{hosts: tc.hosts, http: http.DefaultClient, scheme: "http"}
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+		})
+	}
+
+	t.Run("every host missing is a clean miss", func(t *testing.T) {
+		other := scihubHostServer(t, "<html><body>nothing here either</body></html>")
+		s := scihubSource{hosts: []string{empty, other}, http: http.DefaultClient, scheme: "http"}
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+}
+
 // TestScihubSupports verifies the source claims DOI-keyed items only.
 func TestScihubSupports(t *testing.T) {
 	s := scihubSource{}

@@ -93,7 +93,7 @@ type DetailsOutput struct {
 // client's machine — the client (or an agent's own fetch tool) retrieves the URL.
 type ResolvedLink struct {
 	URL       string            `json:"url" jsonschema:"the direct URL to download the file from"`
-	Source    string            `json:"source" jsonschema:"the source that resolved the URL: libgen, randombook or annas for books by md5; oapen or archive for books by isbn; unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub or scidb for articles by doi"`
+	Source    string            `json:"source" jsonschema:"the source that resolved the URL, one of the names the download tool's source enum lists for this deployment"`
 	Filename  string            `json:"filename,omitempty" jsonschema:"a suggested filename for the saved file"`
 	MIMEType  string            `json:"mime_type,omitempty" jsonschema:"the likely content type of the file"`
 	Headers   map[string]string `json:"headers,omitempty" jsonschema:"request headers to set when fetching the URL (e.g. Referer for sci-hub); absent when the URL is fetchable as-is"`
@@ -118,11 +118,10 @@ type DownloadInput struct {
 	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi"`
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
 	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: the name the mirror announces in Content-Disposition, else a clean name built from the record metadata, else the md5)"`
-	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all: libgen, randombook or annas for books (md5); oapen or archive for books (isbn); unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub or scidb for articles (doi). rfc, nist, dagstuhl, acl, zenodo, scielo and fao each serve only their own publisher's DOIs. unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY, so both are absent unless configured. Omit to try every compatible source in order with failover"`
+	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all; the enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
 	//nolint:lll // one sentence per clause; splitting the tag would hurt the rendered schema.
-	SkipConfirmation bool `json:"skip_confirmation,omitempty" jsonschema:"when true, save the file without asking the user to confirm first. Only set it when the user has already agreed to this download or has asked not to be prompted — it suppresses their last chance to stop a file being written. Has no effect when the server was started with LIBGEN_MCP_CONFIRM_DOWNLOADS=false (never prompts) or when the client cannot be prompted at all"`
 }
 
 // registerOptions holds the optional Register knobs.
@@ -146,7 +145,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	for _, opt := range opts {
 		opt(&o)
 	}
-	truthy, falsy := true, false
+	truthy := true
 	// One lister for both tools, so a single discovery and a single cache serve
 	// the search escalation and the get_details fallback instead of each building
 	// its own manager.
@@ -175,14 +174,61 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Download file",
 		Description: desc,
 		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article)),
-		Annotations: &mcp.ToolAnnotations{Title: "Download file", DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
+		// Destructive when it writes: the saved file is moved into place with
+		// os.Rename, which replaces any file of that name in the download directory
+		// without warning and without renaming around it. A remote server returns a
+		// link and writes nothing, so there it is honestly not destructive. Clients
+		// that gate destructive tools are the second safeguard behind the save
+		// confirmation, and unlike that one the model cannot waive it.
+		Annotations: &mcp.ToolAnnotations{
+			Title: "Download file", DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
+			IdempotentHint: true, OpenWorldHint: &truthy,
+		},
 	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read",
 		Title:       "Read file text",
 		Description: readToolDescription,
+		// read fetches by md5 or doi, never by isbn, so its enum is the book and
+		// article sources without the ISBN-only ones.
+		InputSchema: readInputSchema(orderedEnabledSources(book, article)),
 		Annotations: &mcp.ToolAnnotations{Title: "Read file text", ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("read", readHandler(client, cfg, o.remoteDownloads)))
+}
+
+// readSchemaFor is a seam for tests to exercise the defensive nil-schema path,
+// matching downloadSchemaFor.
+var readSchemaFor = jsonschema.For[ReadInput]
+
+// readInputSchema infers the read tool's input schema and pins its source enum to
+// the sources this deployment can actually run.
+//
+// Without the pin the argument is free text whose description lists every source
+// the project has, so a deployment with no Unpaywall email and no CORE key still
+// advertises unpaywall and core — inviting the model to ask for a source that is
+// not in the chain. That is the same defect the download tool's enum exists to
+// prevent, and which an eval scenario asserts for download specifically.
+func readInputSchema(enabled []string) *jsonschema.Schema {
+	schema, err := readSchemaFor(nil)
+	if err != nil {
+		return nil
+	}
+	if src := schema.Properties["source"]; src != nil && len(enabled) > 0 {
+		src.Enum = make([]any, len(enabled))
+		for i, n := range enabled {
+			src.Enum[i] = n
+		}
+		src.Description = "restrict the fetch to a single enabled source: " + strings.Join(enabled, ", ") +
+			". Omit to try every compatible source in order with failover"
+	}
+	return schema
+}
+
+// destructiveWhenWriting reports the download tool's destructiveHint: true for a
+// server that saves files, false for one that only returns links.
+func destructiveWhenWriting(remote bool) *bool {
+	destructive := !remote
+	return &destructive
 }
 
 // orderedEnabledSources merges the enabled per-key source lists (md5 books, isbn
@@ -1298,19 +1344,23 @@ func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, d *downl
 // wantConfirmation reports whether the download tool should ask before writing
 // this file to disk. It is the single place the opt-outs meet, checked cheapest
 // first: a remote server (which never writes to the client's disk) or a
-// resolve-only call has nothing to confirm, then the deployment-wide switch, the
-// per-call argument, this session's "stop asking" answer, and finally whether the
-// client can be asked at all. Any one of them being set skips the prompt — none
-// of them can force one, because a client that never advertised elicitation
-// cannot be prompted.
+// resolve-only call has nothing to confirm, then the deployment-wide switch, this
+// session's "stop asking" answer, and finally whether the client can be asked at
+// all. Any one of them being set skips the prompt — none of them can force one,
+// because a client that never advertised elicitation cannot be prompted.
+//
+// There is deliberately no per-call argument here. There used to be
+// skip_confirmation, and a live eval caught the model setting it unprompted on a
+// plain "find it and download it", waiving the user's last chance to stop a write
+// on its own reading of their intent — against explicit guidance in the argument's
+// own description. Every waiver that remains is asserted by someone who can
+// actually consent: the operator through configuration, or the user through the
+// prompt's own "stop asking" answer.
 func wantConfirmation(remote bool, cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
 	if remote || in.ResolveOnly {
 		return false
 	}
 	if cfg != nil && !cfg.ConfirmDownloads {
-		return false
-	}
-	if in.SkipConfirmation {
 		return false
 	}
 	if req != nil && consent.remembered(req.Session) {
@@ -1572,6 +1622,13 @@ func progressNotifier(ctx context.Context, req *mcp.CallToolRequest) libgen.Prog
 	}
 	session := req.Session
 	return func(done, total int64) {
+		// The spec reads a zero Total as "unknown", and the field is omitempty, so a
+		// stream whose upstream announced no Content-Length must report zero rather
+		// than the -1 the pipeline uses internally. A negative total reaches a client
+		// as a negative denominator, which is worse than saying nothing.
+		if total < 0 {
+			total = 0
+		}
 		_ = session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
 			ProgressToken: token,
 			Progress:      float64(done),

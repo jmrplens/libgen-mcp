@@ -90,8 +90,9 @@ func writeResultsDoc(path string, outcomes []outcome, model string) error {
 // A run MERGES into the doc already at path rather than replacing it: a partial
 // run (--only S61,S62) refreshes just the scenarios it executed and leaves every
 // other row as it was. That is what makes it possible to re-measure one source
-// without spending a full suite — 66 scenarios against a real API, real mirrors
-// and real downloads — to publish the result.
+// without spending a whole suite — every scenario against a real API, real mirrors
+// and real downloads — to publish the result. The count is deliberately not quoted
+// here: it was, and it went stale within two releases.
 //
 // Two things keep the merged table honest. Every row carries the date it was
 // measured, so a reader can see which rows are old; and a run whose model differs

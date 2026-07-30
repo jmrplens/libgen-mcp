@@ -20,7 +20,7 @@ kill_timeout = 10
 [build]
   dockerfile = "Dockerfile"
   [build.args]
-    VERSION = "1.3.4"
+    VERSION = "1.4.0"
 
 # libgen-mcp takes a single --http <addr> flag (unlike gitlab-mcp-server's
 # --http/--http-addr split). Override the Dockerfile ENTRYPOINT args to serve

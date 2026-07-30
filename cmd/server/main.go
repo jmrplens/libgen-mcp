@@ -22,6 +22,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
+	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
 // httpShutdownTimeout bounds how long a graceful HTTP shutdown may take before
@@ -30,12 +31,22 @@ const httpShutdownTimeout = 5 * time.Second
 
 // version and commit are injected at release time with
 // -ldflags "-X main.version=<v> -X main.commit=<sha>".
+//
+// version is empty rather than a literal, and deliberately not initialized from
+// libgenmcp.Version: -X sets a variable's initial value, but a variable with a
+// runtime initializer is overwritten by package init afterwards, which would
+// silently discard the tag goreleaser stamps. Empty means "nobody stamped one",
+// and buildversion.Set leaves the number compiled in from VERSION in place.
 var (
-	version = "1.0.0"
+	version = ""
 	commit  = "none"
 )
 
 func main() {
+	// Before anything else, and before any request can be made: the release
+	// ldflags stamp this package's version, and internal/version is what builds
+	// the User-Agent every outbound request carries.
+	buildversion.Set(version)
 	// Wrap the real logic so deferred cleanup (signal reset) runs before exit;
 	// this avoids log.Fatal skipping defers on the error path.
 	os.Exit(mainWithExit())
@@ -49,7 +60,7 @@ func mainWithExit() int {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("libgen-mcp %s (commit %s)\n", version, commit)
+		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
 		return 0
 	}
 
@@ -99,7 +110,7 @@ func run(ctx context.Context, httpAddr string) error {
 		return err
 	}
 	client := libgen.New(mgr, cfg)
-	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: version}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: buildversion.Current()}, nil)
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via
@@ -114,7 +125,7 @@ func run(ctx context.Context, httpAddr string) error {
 	if httpAddr != "" {
 		return serveHTTP(ctx, server, httpAddr)
 	}
-	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", version, commit)
+	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
 	return server.Run(ctx, &mcp.StdioTransport{})
 }
 
@@ -122,7 +133,7 @@ func run(ctx context.Context, httpAddr string) error {
 // ctx is canceled, tolerating the expected http.ErrServerClosed.
 func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string) error {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
-	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", version, commit, httpAddr)
+	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", buildversion.Current(), commit, httpAddr)
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
 	// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
 	srv := &http.Server{

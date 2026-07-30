@@ -14,9 +14,10 @@ _no_ cubre y si necesita alguna credencial.
 Tres cosas valen para todas las fuentes y no se repiten más abajo. Cada una implementa `Name`,
 `Supports(item)` y `Resolve(ctx, item)`, así que la cadena solo le ofrece los elementos que
 admite. Cada una devuelve un error, y nunca un resultado parcial, cuando no puede servir un
-elemento, y ese error se etiqueta como «no indexado» (una respuesta correcta sobre un elemento
-concreto — la cadena avanza) o «no disponible» (una afirmación sobre el proveedor — la fuente
-queda apartada cinco minutos). Y la verificación MD5 solo se activa para elementos
+elemento, y ese error puede etiquetarse como «no indexado» (una respuesta correcta sobre un
+elemento concreto — la cadena avanza) o «no disponible» (una afirmación sobre el proveedor — la
+fuente queda apartada cinco minutos); un error sin etiquetar es el caso neutro, en el que la
+cadena simplemente avanza sin ganar ninguna de las dos optimizaciones. Y la verificación MD5 solo se activa para elementos
 identificados por md5, porque un elemento identificado por DOI o ISBN no lleva ningún digest de
 LibGen contra el que comprobar los bytes transmitidos.
 
@@ -97,7 +98,7 @@ bioRxiv y medRxiv son los servidores de preprints del Cold Spring Harbor Laborat
 
 ## Fuentes directas de editor
 
-Las cinco fuentes de este grupo reclaman uno o más prefijos de registrante DOI declarados
+Las siete fuentes de este grupo reclaman uno o más prefijos de registrante DOI declarados
 expresamente — `acl` reclama dos, las demás uno cada una. Eso
 es lo que las hace baratas: no compiten con nada más en la cadena, son invisibles para cualquier
 otro identificador y ninguna necesitó un nuevo espacio de identificadores en `Item` ni un
@@ -107,8 +108,9 @@ argumento nuevo en `download` y `read`.
 
 El RFC Editor publica y archiva la serie de estándares de internet del IETF.
 
-- **Identificado por** un DOI bajo `10.17487` cuyo sufijo sea `rfc<número>`, comparado sin
-  distinguir mayúsculas porque un DOI es insensible a mayúsculas por especificación. Un DOI
+- **Identificado por** un DOI bajo `10.17487` cuyo sufijo sea `rfc<número>`. El token `rfc` se
+  compara sin distinguir mayúsculas, porque un DOI es insensible a mayúsculas por especificación
+  y quien llama puede pasar razonablemente `10.17487/rfc9110`. Un DOI
   `10.17487` que nombre otra cosa se rechaza en vez de convertirse en una URL que no puede
   existir.
 - **Corpus** todos los RFC publicados, desde el RFC 1 (1969) en adelante. Libres de leer y
@@ -270,8 +272,9 @@ Zenodo es el repositorio abierto de propósito general del CERN.
   _metadatos_ del registro, `/api/records/<id>`, no lo está. Por eso el salto de versión pasa
   por la página `/records/<id>` orientada a humanos, que no lleva ningún `Disallow` (solo lo
   lleva `/records/*/preview`), y no por `/api/records/<id>/versions/latest`. También hay fijado
-  un `Crawl-delay: 10`; resolver hace como mucho dos peticiones para una descarga iniciada por
-  quien llama, en lugar de rastrear. Como el endpoint de metadatos no se llama nunca a
+  un `Crawl-delay: 10`; resolver hace una petición para un DOI de versión y tres para uno de
+  concepto — el listado que da 404, el `HEAD` de versión y el listado de esa versión —,
+  en lugar de rastrear. Como el endpoint de metadatos no se llama nunca a
   propósito, la fuente no puede ver el título ni los autores del depósito, y por eso una descarga
   de Zenodo se nombra a partir de la clave del fichero y no de los metadatos bibliográficos.
 
@@ -443,14 +446,17 @@ académicas depositan el texto completo de monografías con licencia abierta.
 - **Corpus** monografías académicas con licencia abierta.
 - **Cómo resuelve** el identificador va a la búsqueda REST DSpace de OAPEN (`/rest/search`); se
   inspeccionan como mucho tres resultados, cada uno obtenido como `/rest/items/<uuid>` expandido
-  con sus bitstreams y metadatos. El fichero es el PDF del paquete `ORIGINAL` — frente a `EXPORT`
-  (registros MARC/ONIX/RIS), `TEXT` (texto plano extraído) y `THUMBNAIL` (imágenes de portada) —
-  y el bitstream se sondea antes de devolverlo.
+  con sus bitstreams y metadatos. El fichero es preferentemente el PDF del paquete `ORIGINAL` —
+  frente a `EXPORT` (registros MARC/ONIX/RIS), `TEXT` (texto plano extraído) y `THUMBNAIL`
+  (imágenes de portada) —, con reserva a un PDF de cualquier otro paquete cuando el registro no
+  archiva ninguno bajo `ORIGINAL`, y el bitstream se sondea antes de devolverlo.
 - **La trampa del texto libre** `/rest/search` no tiene modo de identificador exacto, así que un
   identificador que OAPEN no tiene devuelve igualmente una página de monografías ajenas: un DOI
   inexistente devolvió 13 resultados cuando se midió. Por eso un candidato solo se sirve después
-  de que el propio `oapen.identifier.doi` / `oapen.identifier.isbn` del registro declare el
-  identificador pedido. Sin esa comprobación, la fuente devolvería de vez en cuando _otro libro_
+  de que los metadatos del propio registro declaren un identificador por el que se preguntó —
+  cualquier campo cuyo nombre acabe en `.doi` o `.isbn`, así que `dc.identifier.isbn` cuenta igual
+  que `oapen.identifier.isbn`, y un elemento que lleva DOI e ISBN se confirma con cualquiera de los
+  dos. Sin esa comprobación, la fuente devolvería de vez en cuando _otro libro_
   informando de éxito, que es peor que cualquier modo de fallo que la cadena ya tenga. El tope de
   tres candidatos sale de la misma propiedad: la lista de resultados es una conjetura ordenada,
   el registro buscado es el primero cuando OAPEN lo tiene, y cada candidato extra cuesta una
@@ -479,8 +485,8 @@ Los escaneos de libros de Internet Archive, alcanzados a través de OpenLibrary.
   ninguna mitad basta por sí sola. Buena parte de los elementos de libro del Archive son copias
   de préstamo digital controlado que anuncian ficheros `.pdf` y `.epub` normales igual que un
   escaneo de dominio público, pero descargar una de ellas o falla o entrega un fichero cifrado
-  con DRM e inservible — un desenlace que _parece_ un éxito. Así que la obra debe ser
-  `ebook_access: public` para OpenLibrary **y** el elemento concreto no debe llevar la marca
+  con DRM e inservible — un desenlace que _parece_ un éxito. Así que la obra debe ser a la vez
+  `ebook_access: public` y `has_fulltext` para OpenLibrary **y** el elemento concreto no debe llevar la marca
   `access-restricted-item` ni pertenecer a las colecciones `inlibrary` o `printdisabled`, porque
   una obra puede ser públicamente legible mientras un escaneo suyo concreto está restringido. La
   comprobación es deliberadamente conservadora: cualquier valor de `access-restricted-item` que
@@ -569,8 +575,8 @@ descubrimiento de mirrors, no un proveedor principal de ficheros.
   una lista de nombres de host de mirrors), y después, por mirror, la ruta `/api/download?id=<id>`
   del propio sitio, con reserva a la cadena de enlaces clásica `ads.php` en ese host. La ruta de
   descarga se confirma antes con un HEAD barato; el endpoint es solo GET, así que un 405 ya
-  demuestra que el host está vivo y la implementa, mientras que un 404 significa que es un host
-  libgen clásico más antiguo y se aplica la reserva de `ads.php`.
+  demuestra que el host está vivo y la implementa, mientras que un 404 — o cualquier 5xx —
+  significa que el host no sirve esa ruta y se aplica la reserva de `ads.php`.
 - **Qué no cubre** buena parte de lo que devuelve su propia API. La «list» con la que responde no
   garantiza contener hosts genuinos de la familia libgen.li — se la ha observado devolviendo de
   forma consistente `libgen.net`, `libgen.me` y `libgen.xyz` (aplicaciones de página única
@@ -598,7 +604,7 @@ Anna's Archive, como ruta de rescate identificada por md5.
   externos de Anna's que no son IPFS apuntan sobre todo de vuelta a ella. Lo que aporta es
   _fiabilidad_ de descarga — una ruta independiente — y no corpus nuevo.
 - **Cómo resuelve** sin clave por defecto. `<mirror>/md5/<md5>` se sirve de forma anónima, sin
-  CAPTCHA ni desafío JS, y publica el CID de IPFS del elemento (se prefiere un `bafy…` v1 al
+  CAPTCHA ni desafío JS, y publica el CID de IPFS del elemento (se prefiere un CID `baf…` v1 al
   `Qm…` heredado en base58, porque las pasarelas modernas lo resuelven con más fiabilidad) junto
   con la ruta almacenada de la que sale la extensión. La fuente transmite entonces desde la
   primera pasarela pública que sirva de verdad ese contenido, probando `dweb.link`, `w3s.link`,
@@ -624,11 +630,16 @@ Anna's Archive, como ruta de rescate identificada por md5.
 ## Cortesía e identificación
 
 - Toda petición saliente lleva un User-Agent honesto que nombra el proyecto y su repositorio —
-  `libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)`. Nunca se suplanta el User-Agent
+  `libgen-mcp/<versión> (+https://github.com/jmrplens/libgen-mcp)`, donde la versión es la que
+  se compila desde el fichero `VERSION` del repositorio. Nunca se suplanta el User-Agent
   de un navegador; ninguna fuente de aquí lo necesitó, y ninguna medición de esta página lo usó.
-- Todas las peticiones, tanto de página como de flujo de fichero, pasan por un único limitador de
-  tasa de cubo de tokens dimensionado por `LIBGEN_MCP_RATE_RPS` y `LIBGEN_MCP_RATE_BURST` (ambos
-  con valor 1 por defecto).
+- Las peticiones a los mirrors de LibGen y todos los flujos de fichero pasan por un único
+  limitador de tasa de cubo de tokens dimensionado por `LIBGEN_MCP_RATE_RPS` y
+  `LIBGEN_MCP_RATE_BURST` (ambos con valor 1 por defecto). Las consultas de resolución propias de
+  una fuente no las mide ese limitador: cada una son unas pocas peticiones, cuántas depende de la
+  fuente, contra otro host, hechas
+  una sola vez por descarga iniciada por quien llama, así que ni esperan a nada ni hacen esperar a
+  nada.
 - Cada fuente recibe `LIBGEN_MCP_TIMEOUT` como presupuesto entero para resolver, así que una
   fuente que hace varias consultas no puede retener la cadena durante varios timeouts antes de
   que se pruebe la siguiente.
@@ -642,13 +653,13 @@ Anna's Archive, como ruta de rescate identificada por md5.
 
 Dos proveedores llegan a quien llama a través de `search` y no tienen fuente de descarga alguna,
 por decisión y no por olvido. La literatura gris educativa de **ERIC** está identificada por un
-número de registro — un tercer espacio de identificadores junto al md5 y el ISBN — y de todos
-modos no habría nada que resolver, ya que ERIC sirve todo texto completo que aloja desde una URL
-derivada de ese número; sus resultados llegan con `pdf_url` ya rellenado. El catálogo de
+número de registro — un cuarto espacio de identificadores junto al md5, el DOI y el ISBN — y de
+todos modos no habría nada que resolver, ya que ERIC sirve todo texto completo que aloja desde una
+URL derivada de ese número; sus resultados llegan con `pdf_url` ya rellenado. El catálogo de
 **Project Gutenberg** está identificado por un id interno de libro, y sus textos no llevan DOI ni
 ISBN fiable, así que la única forma de basar en él una fuente de descarga sería casar título y
-autor — justo el fallo de «servir otro libro y llamarlo éxito» que existe para evitar la
-comprobación de identificador de OAPEN; sus resultados llevan en su lugar un `full_text_url`.
+autor — justo el fallo de «servir otro libro y llamarlo éxito» que la comprobación de
+identificador de OAPEN existe para evitar; sus resultados llevan en su lugar un `full_text_url`.
 
 Se midió y rechazó una lista más larga de candidatas: kikakurui.com (JIS), el programa GET de
 IEEE 802, ETSI, ECMA, 3GPP, W3C, ITU-T (aplazada en vez de rechazada), la propia ruta de

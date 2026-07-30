@@ -14,9 +14,10 @@ a credential.
 Three things hold for every source and are not repeated below. Each implements
 `Name`, `Supports(item)` and `Resolve(ctx, item)`, so the chain offers it only the items it
 claims. Each returns an error rather than a partial result when it cannot serve an item, and
-that error is tagged either "not indexed" (a correct answer about one item — the chain moves
+that error may be tagged "not indexed" (a correct answer about one item — the chain moves
 on) or "unavailable" (a statement about the provider — the source is set aside for five
-minutes). And MD5 verification is enabled only for md5-keyed items, because a DOI- or
+minutes); an untagged error is the neutral case, where the chain simply advances and gains
+neither optimization. And MD5 verification is enabled only for md5-keyed items, because a DOI- or
 ISBN-keyed item carries no LibGen digest to check the streamed bytes against.
 
 The order comes from `config.KnownSources` and is fixed in code: the legal open-access
@@ -90,7 +91,7 @@ bioRxiv and medRxiv are the Cold Spring Harbor Laboratory preprint servers.
 
 ## Publisher-direct sources
 
-The five sources in this group each claim one or more explicitly named DOI registrant
+The seven sources in this group each claim one or more explicitly named DOI registrant
 prefixes — `acl` claims two, the rest one apiece. That is what
 makes them cheap: they compete with nothing else in the chain, they are invisible to every
 other identifier, and none of them needed a new key space on `Item` or a new argument on
@@ -100,8 +101,9 @@ other identifier, and none of them needed a new key space on `Item` or a new arg
 
 The RFC Editor publishes and archives the Internet standards series for the IETF.
 
-- **Keyed by** a DOI under `10.17487` whose suffix is `rfc<number>`, matched
-  case-insensitively because a DOI is case-insensitive by specification. A `10.17487` DOI
+- **Keyed by** a DOI under `10.17487` whose suffix is `rfc<number>`. The `rfc` token is
+  matched case-insensitively, because a DOI is case-insensitive by specification and a caller
+  may reasonably pass `10.17487/rfc9110`. A `10.17487` DOI
   naming anything else is declined rather than turned into a URL that cannot exist.
 - **Corpus** every published RFC, from RFC 1 (1969) onward. Free to read and redistribute
   since publication.
@@ -254,7 +256,8 @@ Zenodo is CERN's general-purpose open repository.
   endpoint `/api/records/<id>` is not. That is why the version hop goes through the
   human-facing `/records/<id>` page, which carries no `Disallow` (only `/records/*/preview`
   does), rather than through `/api/records/<id>/versions/latest`. `Crawl-delay: 10` is also
-  set; a resolve makes at most two requests for one caller-initiated download rather than
+  set; a resolve makes one request for a version DOI and three for a concept one — the 404
+  listing, the version `HEAD`, then the version's own listing — rather than
   crawling. Because the metadata endpoint is deliberately never called, the source cannot see
   the deposit's title or authors, which is why a Zenodo download is named from the file key
   rather than from bibliographic metadata.
@@ -423,13 +426,16 @@ deposit the full text of openly licensed monographs.
 - **Corpus** openly licensed scholarly monographs.
 - **How it resolves** the identifier goes to OAPEN's DSpace REST search (`/rest/search`); at
   most three hits are inspected, each fetched as `/rest/items/<uuid>` expanded with its
-  bitstreams and metadata. The file is the PDF in the `ORIGINAL` bundle — as opposed to `EXPORT`
-  (MARC/ONIX/RIS records), `TEXT` (extracted plain text) and `THUMBNAIL` (cover images) — and
-  the bitstream is probed before it is returned.
+  bitstreams and metadata. The file is preferentially the PDF in the `ORIGINAL` bundle — as
+  opposed to `EXPORT` (MARC/ONIX/RIS records), `TEXT` (extracted plain text) and `THUMBNAIL`
+  (cover images) — falling back to a PDF in any other bundle when the record files none under
+  `ORIGINAL`, and the bitstream is probed before it is returned.
 - **The free-text trap** `/rest/search` has no exact-identifier mode, so an identifier OAPEN
   does not hold still returns a page of unrelated monographs: a nonexistent DOI returned 13 hits
-  when this was measured. A candidate is therefore served only after the record's own
-  `oapen.identifier.doi` / `oapen.identifier.isbn` states the requested identifier. Without that
+  when this was measured. A candidate is therefore served only after the record's own metadata
+  states an identifier the caller asked about — any field whose name ends in `.doi` or `.isbn`,
+  so `dc.identifier.isbn` counts alongside `oapen.identifier.isbn`, and an item carrying both a
+  DOI and an ISBN is confirmed by either. Without that
   re-check the source would occasionally hand back a _different book_ and report success, which
   is worse than any failure mode the chain already has. The three-candidate cap follows from the
   same property: the hit list is a ranked guess, the wanted record is first when OAPEN holds it,
@@ -457,7 +463,8 @@ The Internet Archive's book scans, reached through OpenLibrary.
   sufficient on its own. A large share of the Archive's book items are controlled-digital-lending
   copies that advertise ordinary `.pdf` and `.epub` files exactly like a public-domain scan does,
   but downloading one either fails or yields a DRM-encrypted, unusable file — an outcome that
-  _looks_ like success. So the work must be `ebook_access: public` to OpenLibrary **and** the
+  _looks_ like success. So the work must be both `ebook_access: public` and `has_fulltext` to
+  OpenLibrary **and** the
   individual item must carry no `access-restricted-item` flag and belong to neither the
   `inlibrary` nor the `printdisabled` collection, because a work can be publicly readable while
   a particular scan of it is restricted. The check is deliberately conservative: any
@@ -544,8 +551,8 @@ mirror-discovery fallback, not a primary file provider.
   mirror hostnames), and then per mirror the site's own `/api/download?id=<id>` route, falling
   back to the classic `ads.php` link chain on that host. The download route is confirmed with a
   cheap HEAD first; the endpoint is GET-only, so a 405 still proves the host is alive and
-  implements it, while a 404 means it is an older classic libgen host and the `ads.php` fallback
-  applies.
+  implements it, while a 404 — or any 5xx — means the host does not serve that route and the
+  `ads.php` fallback applies.
 - **What it does not cover** most of what its own API returns. The "list" it answers with is not
   guaranteed to hold genuine libgen.li-family hosts — it has been observed consistently
   returning `libgen.net`, `libgen.me` and `libgen.xyz` (client-rendered single-page apps with no
@@ -572,8 +579,8 @@ Anna's Archive, as an md5-keyed rescue route.
   external links point mostly back at it. The value added is download _reliability_ — an
   independent route — rather than new corpus.
 - **How it resolves** keyless by default. `<mirror>/md5/<md5>` serves anonymously with no
-  CAPTCHA or JS challenge and publishes the item's IPFS CID (a v1 `bafy…` is preferred over the
-  legacy base58 `Qm…`, because modern gateways resolve it most reliably) along with the stored
+  CAPTCHA or JS challenge and publishes the item's IPFS CID (a v1 `baf…` CID is preferred over
+  the legacy base58 `Qm…`, because modern gateways resolve it most reliably) along with the stored
   filepath the extension comes from. The source then streams from the first public gateway that
   actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and
   `gateway.pinata.cloud` in order. With `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API
@@ -594,11 +601,16 @@ Anna's Archive, as an md5-keyed rescue route.
 ## Politeness and identification
 
 - Every outbound request carries an honest User-Agent naming the project and its repository —
-  `libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)`. No browser User-Agent is ever
+  `libgen-mcp/<version> (+https://github.com/jmrplens/libgen-mcp)`, where the version is the one
+  compiled in from the repository's `VERSION` file. No browser User-Agent is ever
   spoofed; none was needed for any source here, and none was used for any measurement on this
   page.
-- All requests, page fetches and file streams alike, pass through one shared token-bucket rate
-  limiter sized by `LIBGEN_MCP_RATE_RPS` and `LIBGEN_MCP_RATE_BURST` (both default to 1).
+- The LibGen mirror requests and every file stream pass through one shared token-bucket rate
+  limiter sized by `LIBGEN_MCP_RATE_RPS` and `LIBGEN_MCP_RATE_BURST` (both default to 1). A
+  source's own resolve lookups are not metered by it: each is a small, source-specific number of
+  requests against a
+  different host, made once per caller-initiated download, so they queue behind nothing and
+  nothing queues behind them.
 - Each source gets `LIBGEN_MCP_TIMEOUT` as its entire resolve budget, so a source that makes
   several lookups cannot hold the chain for several timeouts before the next one is tried.
 - Where a site publishes crawl rules the source stays inside them — see the notes under
@@ -611,7 +623,7 @@ Anna's Archive, as an md5-keyed rescue route.
 
 Two providers reach the caller through `search` and have no download source at all, by
 decision rather than omission. **ERIC**'s education grey literature is keyed by an accession
-number — a third key space alongside md5 and ISBN — and would need nothing resolved anyway,
+number — a fourth key space alongside md5, DOI and ISBN — and would need nothing resolved anyway,
 since ERIC serves every full text it holds from a URL derived from that number; its hits
 arrive with `pdf_url` already filled in. **Project Gutenberg**'s catalog is keyed by an
 internal ebook id, and its texts carry no DOI and no reliable ISBN, so the only way to key a

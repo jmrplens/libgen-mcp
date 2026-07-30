@@ -139,7 +139,7 @@ func (s randombookSource) Resolve(ctx context.Context, it Item) (Resolved, error
 	for _, mirror := range mirrors {
 		fileURL, rerr := s.resolveMirror(ctx, mirror, id, it.MD5)
 		if rerr != nil {
-			lastErr = rerr
+			lastErr = strongerError(lastErr, rerr)
 			continue
 		}
 		return Resolved{FileURL: fileURL, VerifyMD5: true}, nil
@@ -330,7 +330,7 @@ func (s randombookSource) newRequest(ctx context.Context, method, endpoint strin
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	return req, nil
 }
 

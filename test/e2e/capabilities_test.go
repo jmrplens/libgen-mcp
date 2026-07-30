@@ -529,7 +529,7 @@ func TestE2EReadModes(t *testing.T) {
 // call on the returned cursor advances instead of repeating the first chunk.
 func TestE2EReadRFCTextByDOI(t *testing.T) {
 	requireLive(t)
-	requireUpstream(t, "rfc", "https://www.rfc-editor.org/rfc/rfc9110.txt")
+	requireUpstream(t, "rfc", rfcTextProbe)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	_, session := newReadSession(t, ctx)

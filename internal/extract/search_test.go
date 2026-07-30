@@ -258,8 +258,193 @@ func TestSearch_NegativeStartMatch(t *testing.T) {
 	if !res.Extractable {
 		t.Fatalf("expected extractable, got %+v", res)
 	}
-	if res.TotalMatches > 0 && len(res.Matches) == 0 {
-		t.Errorf("negative StartMatch should return the first window, got %+v", res)
+	// A conditional check ("if there were matches, there must be some") would pass
+	// even if a negative StartMatch were clamped to the LAST match instead of the
+	// first. Compare against the explicit first window instead, which is the only
+	// thing "normalized to zero" can mean.
+	base, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{StartMatch: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.TotalMatches == 0 {
+		t.Fatal("test setup: the fixture yields no matches, so nothing is being compared")
+	}
+	if res.TotalMatches != base.TotalMatches {
+		t.Errorf("TotalMatches = %d, want %d (windowing must not change the total)", res.TotalMatches, base.TotalMatches)
+	}
+	if len(res.Matches) != len(base.Matches) {
+		t.Fatalf("got %d matches, want the %d of the first window", len(res.Matches), len(base.Matches))
+	}
+	for i := range base.Matches {
+		if res.Matches[i].CharOffset != base.Matches[i].CharOffset {
+			t.Errorf("match %d at offset %d, want %d: a negative StartMatch did not clamp to the first window",
+				i, res.Matches[i].CharOffset, base.Matches[i].CharOffset)
+		}
+	}
+}
+
+// TestFindMatches_Boundaries covers the edges of the matcher directly, where an
+// off-by-one is a panic or a silently wrong offset rather than a wrong-looking
+// result. Every existing offset assertion in this file is relative ("later than the
+// previous one") or on pure-ASCII text, so none of these cases were constrained.
+func TestFindMatches_Boundaries(t *testing.T) {
+	const snippet = 40
+
+	t.Run("a match at offset zero is found and reported at zero", func(t *testing.T) {
+		got := findMatches("The quick brown fox", "The", false, 1, snippet)
+		if len(got) != 1 {
+			t.Fatalf("got %d matches, want 1", len(got))
+		}
+		if got[0].CharOffset != 0 {
+			t.Errorf("CharOffset = %d, want 0", got[0].CharOffset)
+		}
+		if !strings.Contains(got[0].Snippet, "The") {
+			t.Errorf("snippet %q does not contain the match", got[0].Snippet)
+		}
+	})
+
+	t.Run("a match at the very end is found", func(t *testing.T) {
+		const body = "the quick brown fox"
+		got := findMatches(body, "fox", false, 1, snippet)
+		if len(got) != 1 {
+			t.Fatalf("got %d matches, want 1", len(got))
+		}
+		if want := len([]rune(body)) - 3; got[0].CharOffset != want {
+			t.Errorf("CharOffset = %d, want %d", got[0].CharOffset, want)
+		}
+		if !strings.Contains(got[0].Snippet, "fox") {
+			t.Errorf("snippet %q does not contain the trailing match", got[0].Snippet)
+		}
+	})
+
+	t.Run("a query longer than the document matches nothing", func(t *testing.T) {
+		// This is the i+m <= len(hay) guard. Getting it wrong is a slice panic, not a
+		// wrong answer, so it must be exercised rather than reasoned about.
+		if got := findMatches("short", "a considerably longer query than the text", false, 1, snippet); got != nil {
+			t.Errorf("got %+v, want no matches", got)
+		}
+	})
+
+	t.Run("an empty document matches nothing", func(t *testing.T) {
+		if got := findMatches("", "anything", false, 1, snippet); got != nil {
+			t.Errorf("got %+v, want no matches", got)
+		}
+	})
+
+	t.Run("an empty query matches nothing", func(t *testing.T) {
+		// The existing test uses "   "; the literal empty string reaches the same
+		// guard but is the value a caller is most likely to send by accident.
+		if got := findMatches("some text", "", false, 1, snippet); got != nil {
+			t.Errorf("got %+v, want no matches", got)
+		}
+	})
+
+	t.Run("the whole document as the query matches once at zero", func(t *testing.T) {
+		const body = "exactly this"
+		got := findMatches(body, body, false, 1, snippet)
+		if len(got) != 1 {
+			t.Fatalf("got %d matches, want 1", len(got))
+		}
+		if got[0].CharOffset != 0 {
+			t.Errorf("CharOffset = %d, want 0", got[0].CharOffset)
+		}
+	})
+}
+
+// TestFindMatches_QueryIsLiteralNotARegex pins that the matcher compares runes and
+// never interprets the query.
+//
+// Nothing asserted this, so swapping the hand-rolled matcher for regexp — a
+// plausible "simplification" — would change the meaning of every user query
+// containing a dot, a bracket or a backslash, and no test would object. A search for
+// "a.b" must not match "axb".
+func TestFindMatches_QueryIsLiteralNotARegex(t *testing.T) {
+	cases := []struct {
+		name       string
+		text       string
+		query      string
+		wantMatch  bool
+		wantOffset int
+	}{
+		{name: "dot does not match any rune", text: "axb", query: "a.b"},
+		{name: "dot matches a literal dot", text: "a.b", query: "a.b", wantMatch: true},
+		{name: "star is not a quantifier", text: "aaab", query: "a*b"},
+		{name: "star matches a literal star", text: "a*b", query: "a*b", wantMatch: true},
+		{name: "character class is literal", text: "abc", query: "[abc]"},
+		{name: "backslash is literal", text: "a1b", query: `a\db`},
+		{name: "parentheses are literal", text: "ab", query: "(a)b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := findMatches(tc.text, tc.query, false, 1, 40)
+			if tc.wantMatch {
+				if len(got) != 1 {
+					t.Fatalf("got %d matches for %q in %q, want 1", len(got), tc.query, tc.text)
+				}
+				if got[0].CharOffset != tc.wantOffset {
+					t.Errorf("CharOffset = %d, want %d", got[0].CharOffset, tc.wantOffset)
+				}
+				return
+			}
+			if len(got) != 0 {
+				t.Errorf("query %q matched %q as a pattern (%+v); matching must be literal", tc.query, tc.text, got)
+			}
+		})
+	}
+}
+
+// TestFindMatches_UnicodeOffsetsAreRuneIndices verifies CharOffset counts runes, not
+// bytes, in text that actually distinguishes the two.
+//
+// Every other offset assertion in this file runs on pure ASCII, where rune index and
+// byte index are equal — so the rune/byte mapping through compactRunes and its `at`
+// table is effectively unasserted. A confusion there would place every reported
+// offset in a non-English document past its true position, silently, and the read
+// tool would page the user to the wrong place.
+func TestFindMatches_UnicodeOffsetsAreRuneIndices(t *testing.T) {
+	// Each of these leading characters is multiple bytes but one rune.
+	const body = "日本語のテキスト berlin"
+	if len(body) == len([]rune(body)) {
+		t.Fatal("test setup: the body has no multi-byte runes, so it cannot distinguish the two")
+	}
+
+	got := findMatches(body, "berlin", false, 1, 60)
+	if len(got) != 1 {
+		t.Fatalf("got %d matches, want 1", len(got))
+	}
+	wantRune := len([]rune("日本語のテキスト "))
+	if got[0].CharOffset != wantRune {
+		t.Errorf("CharOffset = %d, want the rune index %d (byte index would be %d)",
+			got[0].CharOffset, wantRune, strings.Index(body, "berlin"))
+	}
+}
+
+// TestFindMatches_UnicodeCaseFolding verifies the default case-insensitive match
+// folds non-ASCII letters, and that CaseSensitive turns that off.
+//
+// The package folds with unicode.ToLower, which handles far more than ASCII, but no
+// test used a non-ASCII letter — so a regression to a byte-wise ASCII fold would
+// pass everything while quietly failing every accented or Cyrillic query.
+func TestFindMatches_UnicodeCaseFolding(t *testing.T) {
+	cases := []struct {
+		name          string
+		text, query   string
+		caseSensitive bool
+		want          int
+	}{
+		{name: "accented latin folds", text: "Ärger und Öl", query: "ärger", want: 1},
+		{name: "cyrillic folds", text: "Москва зимой", query: "москва", want: 1},
+		{name: "greek folds", text: "Λόγος", query: "λόγος", want: 1},
+		{name: "case sensitive rejects the folded form", text: "Ärger", query: "ärger", caseSensitive: true},
+		{name: "case sensitive accepts the exact form", text: "Ärger", query: "Ärger", caseSensitive: true, want: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := findMatches(tc.text, tc.query, tc.caseSensitive, 1, 40)
+			if len(got) != tc.want {
+				t.Errorf("got %d matches for %q in %q, want %d", len(got), tc.query, tc.text, tc.want)
+			}
+		})
 	}
 }
 

@@ -92,6 +92,44 @@ func TestMeasuredSpanWording(t *testing.T) {
 	}
 }
 
+// TestResultsSummaryFlagsUnmeasuredScenarios verifies the prose stops claiming
+// "every scenario" once the suite holds one the last run never measured. The
+// results table drops what it has no row for, so without this the page overstates
+// its coverage by exactly the scenarios nobody has run — the ones a reader would
+// most want flagged.
+func TestResultsSummaryFlagsUnmeasuredScenarios(t *testing.T) {
+	sum := runSummary{Model: "m", Total: 3, Pass: 3, Remote: 1, First: "2026-01-02", Last: "2026-01-02"}
+
+	complete := renderResultsSummaryEN(sum, 3)
+	if !strings.Contains(complete, "every scenario") {
+		t.Errorf("a fully measured suite should still say so; got %q", complete)
+	}
+	if strings.Contains(complete, "no row here yet") {
+		t.Errorf("a fully measured suite must not warn about unmeasured rows; got %q", complete)
+	}
+
+	partial := renderResultsSummaryEN(sum, 5)
+	if strings.Contains(partial, "every scenario") {
+		t.Errorf("an unmeasured scenario must stop the every-scenario claim; got %q", partial)
+	}
+	for _, want := range []string{"3 measured so far", "2 scenarios", "no row here yet"} {
+		if !strings.Contains(partial, want) {
+			t.Errorf("summary missing %q; got %q", want, partial)
+		}
+	}
+	if one := renderResultsSummaryEN(sum, 4); !strings.Contains(one, "One scenario") {
+		t.Errorf("a single unmeasured scenario needs the singular; got %q", one)
+	}
+
+	partialES := renderResultsSummaryES(sum, 5)
+	if !strings.Contains(partialES, "2 escenarios") || !strings.Contains(partialES, "medidos hasta ahora") {
+		t.Errorf("the Spanish page must carry the same warning; got %q", partialES)
+	}
+	if oneES := renderResultsSummaryES(sum, 4); !strings.Contains(oneES, "Un escenario") {
+		t.Errorf("the Spanish singular is missing; got %q", oneES)
+	}
+}
+
 // TestMeasuredSpanWithoutDates verifies a table whose rows carry no date (an older
 // results doc) still produces a sentence rather than an empty claim.
 func TestMeasuredSpanWithoutDates(t *testing.T) {

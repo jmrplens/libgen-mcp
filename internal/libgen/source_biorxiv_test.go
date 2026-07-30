@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,6 +169,89 @@ func TestBiorxivResolveBothMissIsNotFound(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not found on bioRxiv or medRxiv") {
 		t.Fatalf("Resolve() error = %v, want the definitive not-found wording when both miss", err)
 	}
+}
+
+// TestBiorxivErrorClassification pins the tag on each outcome, which is the part
+// the download chain reads. The wording is already asserted elsewhere; the tag is
+// what decides whether the source is re-asked on the start-retry schedule and
+// whether it is set aside for five minutes afterwards, so "not found on bioRxiv or
+// medRxiv" carrying the wrong tag would still cost a full retry budget per download.
+func TestBiorxivErrorClassification(t *testing.T) {
+	const doi = "10.1101/2020.12.30.424878"
+	miss, err := os.ReadFile("testdata/biorxiv_miss.json")
+	if err != nil {
+		t.Fatalf("reading miss fixture: %v", err)
+	}
+
+	t.Run("both servers miss is a clean miss", func(t *testing.T) {
+		api := biorxivFixtureServer(t, map[string]string{}, nil)
+		defer api.Close()
+		s := biorxivSource{http: api.Client(), apiBase: api.URL}
+
+		_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, rerr)
+	})
+
+	t.Run("one server broken and the other missing is unavailability", func(t *testing.T) {
+		// The retained failure must keep its tag through Resolve's wrapper, or a
+		// half-broken API reads as a settled answer about the preprint.
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/biorxiv/") {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(miss)
+		}))
+		defer api.Close()
+		s := biorxivSource{http: api.Client(), apiBase: api.URL}
+
+		_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, rerr)
+		if errors.Is(rerr, ErrNotIndexed) {
+			t.Error("a broken lookup was also tagged as a settled miss")
+		}
+	})
+
+	t.Run("a transient status on both servers is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			s := biorxivSource{http: api.Client(), apiBase: api.URL}
+
+			_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, rerr)
+			api.Close()
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := biorxivSource{http: refusingClient(), apiBase: "https://api.biorxiv.invalid"}
+
+		_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, rerr)
+	})
+
+	t.Run("a truncated body is neither", func(t *testing.T) {
+		// A response that ends mid-JSON proves nothing either way: claiming the
+		// preprint is absent on the strength of it would be a fabricated verdict.
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"collection": [{"doi":"10.1101/2020`))
+		}))
+		defer api.Close()
+		s := biorxivSource{http: api.Client(), apiBase: api.URL}
+
+		_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+		if rerr == nil {
+			t.Fatal("a truncated body must not resolve")
+		}
+		if errors.Is(rerr, ErrNotIndexed) {
+			t.Error("a truncated body read as the preprint being absent")
+		}
+		if cooldownWorthy(context.Background(), rerr) {
+			t.Error("a truncated body put bioRxiv in cooldown")
+		}
+	})
 }
 
 // TestBiorxivResolveHTTPError verifies a non-200 from the details API surfaces as

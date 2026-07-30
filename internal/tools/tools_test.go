@@ -3040,10 +3040,9 @@ func TestConfirmationWanted(t *testing.T) {
 	}{
 		{"default: a capable client is asked", true, asking, DownloadInput{}, false, true},
 		{"env var off silences it", true, silent, DownloadInput{}, false, false},
-		{"per-call skip_confirmation silences it", true, asking, DownloadInput{SkipConfirmation: true}, false, false},
 		{"this session already opted out", true, asking, DownloadInput{}, true, false},
 		{"a client that cannot be asked is never prompted", false, asking, DownloadInput{}, false, false},
-		{"opt-outs combine without conflicting", true, silent, DownloadInput{SkipConfirmation: true}, true, false},
+		{"opt-outs combine without conflicting", true, silent, DownloadInput{}, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := runConfirmationWanted(t, tc.elicit, tc.cfg, &downloadConsent{}, tc.in, tc.preRemember)

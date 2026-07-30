@@ -81,6 +81,11 @@ var scenariosES = map[string]string{
 	"S68": "**Un DOI de concepto de Zenodo** — el identificador que Zenodo entrega para citar todas las versiones de un depósito no tiene listado de ficheros propio y responde 404, de modo que aprobar significa que la fuente lo detectó y preguntó a la página del registro qué versión servir; sin ese salto, cerca de la mitad de los DOI de Zenodo no resuelven a nada",
 	"S69": "**SciELO sobre un artículo reciente** — un artículo de 2025 que Unpaywall marca como de acceso abierto sin aportar enlace al PDF y que fatcat aún no ha ingerido, así que ninguna otra fuente de la cadena puede producir bytes; lo que se evalúa es el aterrizaje del resolutor, ya que ningún identificador que tenga quien llama predice la dirección de la página del artículo y la URL del PDF sale del propio `citation_pdf_url` de esa página",
 	"S70": "**El FAO Knowledge Repository por DOI** — la página del ítem anuncia una ruta del frontend Angular que entrega a un cliente HTTP simple 372 862 bytes del armazón de la aplicación en lugar del fichero, así que la fuente la reescribe al endpoint de bitstream del backend; una regresión ahí devuelve HTML con un 200, que la canalización rechaza, de modo que la llegada de un PDF es la prueba",
+	"S71": "**Unpaywall por su nombre** — la cabecera de la cadena de artículos y la única fuente que ningún escenario había fijado: S7 parece cubrirla y no lo hace, porque evalúa a cualquier proveedor de acceso abierto que gane la carrera, así que desde la llegada de Europe PMC cualquier ejecución pudo haberla servido otro sin que nada lo dijera",
+	"S72": "**SciDB** — la única entrada de `config.KnownSources` a la que no llegaba ningún escenario. Aparece en media docena de listas de fuentes como aquello que _no_ debe ganar, y una fuente evaluada solo como perdedora es indistinguible de una que no puede funcionar",
+	"S73": "**La confirmación de guardado no se puede eludir** — el prompt dice que la descarga ya está aprobada y pide no ser preguntado, que es exactamente la petición con la que el modelo llegaba a fijar el `skip_confirmation` ya retirado; la confirmación debe dispararse igualmente, y el host cuenta cada una que responde",
+	"S74": "**Seguir leyendo más allá del primer fragmento** — los demás escenarios de lectura toman un fragmento y paran. El modelo debe continuar desde el cursor que le devolvió `read` y recibir texto distinto; un texto idéntico al primer fragmento es el fallo, porque es lo que produce repetir la misma llamada y la respuesta que alimenta parece exactamente una continuación",
+	"S75": "**Una fuente con clave se anuncia** — S48 leído al revés: con una clave de CORE configurada, `core` debe aparecer en el enum `source` de `download`. S48 por sí solo lo satisface una compuerta atascada en cerrado, que es idéntica a una compuerta que funciona; la pareja dice que el enum sigue al despliegue. No toca a ningún tercero",
 }
 
 // The Spanish summary sentences that carry the run's counts. They live beside the
@@ -88,7 +93,16 @@ var scenariosES = map[string]string{
 // and .golangci.yml excludes this file from the English spell checker.
 const (
 	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio."
-	resultsSummaryES  = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`).%s"
+	resultsSummaryES  = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** %s%s"
+
+	// El alcance del recuento: la suite entera, o la parte de ella ya medida.
+	remoteShareES   = "incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`)."
+	scopeAllES      = "de %d — todos los escenarios, %s"
+	scopeMeasuredES = "de los %d medidos hasta ahora, %s %s"
+
+	// Los escenarios listados arriba que aún no tienen fila en la tabla.
+	unmeasuredOneES  = "Un escenario de la lista anterior aún no tiene fila aquí: se añadió después de la última ejecución en vivo, y un resultado solo se publica una vez medido."
+	unmeasuredManyES = "%d escenarios de la lista anterior aún no tienen fila aquí: se añadieron después de la última ejecución en vivo, y un resultado solo se publica una vez medido."
 
 	// Las variantes de la frase anterior según cuándo se midieron las filas.
 	measuredSpanOneES   = "una única ejecución en vivo de la suite completa el %s"

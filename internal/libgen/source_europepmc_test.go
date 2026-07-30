@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -42,6 +43,94 @@ func europePMCRenderServer(t *testing.T, fail404 ...string) *httptest.Server {
 		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write([]byte("%PDF-1.4 europe pmc payload"))
 	}))
+}
+
+// TestEuropePMCErrorClassification pins which failures Resolve reports as Europe
+// PMC answering "no open-access full text here" (ErrNotIndexed) and which as Europe
+// PMC being unable to answer (ErrSourceUnavailable).
+//
+// The two are one line apart in Resolve — an unindexed DOI and an indexed one whose
+// OA flags are off both end in notIndexed, while an unreachable render endpoint ends
+// in unavailable — and the chain spends a five-minute cooldown on one and not the
+// other. Existing tests reached all of these branches and asserted only the message.
+func TestEuropePMCErrorClassification(t *testing.T) {
+	const doi = "10.1234/known"
+
+	t.Run("a DOI Europe PMC does not index is a clean miss", func(t *testing.T) {
+		search := europePMCSearchServer(t, "europepmc_miss.json", http.StatusOK, nil)
+		defer search.Close()
+		s := europePMCSource{http: search.Client(), searchBase: search.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("an indexed DOI with no open-access full text is a clean miss", func(t *testing.T) {
+		// Europe PMC holds plenty of full text it may not redistribute. Declining to
+		// serve it is a correct answer about the article, not a fault.
+		search := europePMCSearchServer(t, "europepmc_indexed_not_oa.json", http.StatusOK, nil)
+		defer search.Close()
+		s := europePMCSource{http: search.Client(), searchBase: search.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+			search := europePMCSearchServer(t, "europepmc_oa.json", status, nil)
+			s := europePMCSource{http: search.Client(), searchBase: search.URL}
+
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+			search.Close()
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := europePMCSource{http: refusingClient(), searchBase: "https://europepmc.invalid/search"}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("no reachable render endpoint is unavailability", func(t *testing.T) {
+		// The article IS open access — the search said so — and both render candidates
+		// are official Europe PMC hosts. Neither answering is the service being
+		// unreachable, so tagging it as a miss would deny an article we know is held.
+		search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
+		defer search.Close()
+		render := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+		}))
+		defer render.Close()
+		s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertUnavailable(t, err)
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("an unreachable render host read as the article being unheld")
+		}
+	})
+
+	t.Run("an undecodable body is neither", func(t *testing.T) {
+		search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"hitCount":1,"resultList":{"result":[`))
+		}))
+		defer search.Close()
+		s := europePMCSource{http: search.Client(), searchBase: search.URL}
+
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("a truncated body must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a truncated body read as the DOI being unindexed")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("a truncated body put Europe PMC in cooldown")
+		}
+	})
 }
 
 // TestEuropePMCSupports verifies the source claims DOI-keyed items only and names

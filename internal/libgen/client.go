@@ -20,10 +20,16 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/internal/version"
 )
 
+// userAgent is the User-Agent every request from this package carries. It is a
+// function rather than a constant because the version it reports is stamped into
+// the binary and handed to internal/version during startup, after this package's
+// variables are already initialized.
+func userAgent() string { return version.UserAgent() }
+
 const (
-	userAgent   = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)"
 	maxBodySize = 20 << 20 // 20 MiB for HTML/JSON pages (not downloads)
 
 	// cooldownDuration is how long a mirror is set aside after failing.
@@ -571,7 +577,7 @@ func (c *Client) doRequest(ctx context.Context, base, path string, q url.Values)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s: %w", base, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, true, fmt.Errorf("%s: %w", base, err)

@@ -136,6 +136,80 @@ func TestRandombookNotIndexed(t *testing.T) {
 	}
 }
 
+// TestRandombookErrorClassification pins the taxonomy tag on each way Resolve can
+// fail. The chain reads the tag to decide between re-asking randombook on the
+// start-retry schedule and setting it aside for five minutes; the existing tests
+// reached every branch below and asserted only that an error came back (or, for the
+// layout cases, that a different sentinel was present).
+func TestRandombookErrorClassification(t *testing.T) {
+	const md5 = "87a4ebdaf21fa6cc70009a3dd63194ee"
+
+	t.Run("an md5 randombook does not index is a clean miss", func(t *testing.T) {
+		apiBase := randombookAPIServer(t, `{"result":null,"isError":false}`, `{"result":{"list":[]},"isError":false}`)
+		s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a transient status is unavailability", func(t *testing.T) {
+		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			s := randombookSource{apiBase: srv.URL, http: srv.Client()}
+
+			_, err := s.Resolve(context.Background(), Item{MD5: md5})
+			assertUnavailable(t, err)
+			srv.Close()
+		}
+	})
+
+	t.Run("a transport failure is unavailability", func(t *testing.T) {
+		s := randombookSource{apiBase: "https://randombook.invalid", http: refusingClient()}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		assertUnavailable(t, err)
+	})
+
+	t.Run("a layout change is neither", func(t *testing.T) {
+		// ErrLayoutChanged means the private API answered with a shape we no longer
+		// understand. That is a bug on our side, not an outage and not a verdict on the
+		// item, so it must neither cool the source down nor read as a settled miss.
+		apiBase := randombookAPIServer(t, `{"result": not-json`, `{"result":{"list":[]},"isError":false}`)
+		s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		if !errors.Is(err, ErrLayoutChanged) {
+			t.Fatalf("err = %v, want ErrLayoutChanged", err)
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a layout change read as the md5 being unindexed")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("a layout change put randombook in cooldown")
+		}
+	})
+
+	t.Run("an empty mirror list is neither", func(t *testing.T) {
+		// randombook knows the md5 but offers no usable mirror. The item exists, so
+		// this is not a miss; nothing proved the API unhealthy, so it is not an outage.
+		apiBase := randombookAPIServer(t, randombookByIDFixture(t), `{"result":{"list":[]},"isError":false}`)
+		s := randombookSource{apiBase: apiBase, http: http.DefaultClient}
+
+		_, err := s.Resolve(context.Background(), Item{MD5: md5})
+		if err == nil {
+			t.Fatal("an empty mirror list must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("an indexed md5 with no mirrors read as unindexed")
+		}
+		if cooldownWorthy(context.Background(), err) {
+			t.Error("an empty mirror list put randombook in cooldown")
+		}
+	})
+}
+
 // TestRandombookByIDError verifies the by-id short-circuit: an API response with
 // isError:true yields an error even when it carries a result object, so a flagged
 // error is never treated as a hit.

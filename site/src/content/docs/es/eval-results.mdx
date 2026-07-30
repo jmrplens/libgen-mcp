@@ -138,7 +138,7 @@ condición de red, nunca un fallo del modelo.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La suite son **71 escenarios** (S1–S70 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
+La suite son **76 escenarios** (S1–S75 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
 
 {/* end generated */}
 
@@ -239,6 +239,11 @@ Varios se repiten contra un servidor en modo **remoto** (`--http`).
 | S68 | **Un DOI de concepto de Zenodo** — el identificador que Zenodo entrega para citar todas las versiones de un depósito no tiene listado de ficheros propio y responde 404, de modo que aprobar significa que la fuente lo detectó y preguntó a la página del registro qué versión servir; sin ese salto, cerca de la mitad de los DOI de Zenodo no resuelven a nada |
 | S69 | **SciELO sobre un artículo reciente** — un artículo de 2025 que Unpaywall marca como de acceso abierto sin aportar enlace al PDF y que fatcat aún no ha ingerido, así que ninguna otra fuente de la cadena puede producir bytes; lo que se evalúa es el aterrizaje del resolutor, ya que ningún identificador que tenga quien llama predice la dirección de la página del artículo y la URL del PDF sale del propio `citation_pdf_url` de esa página |
 | S70 | **El FAO Knowledge Repository por DOI** — la página del ítem anuncia una ruta del frontend Angular que entrega a un cliente HTTP simple 372 862 bytes del armazón de la aplicación en lugar del fichero, así que la fuente la reescribe al endpoint de bitstream del backend; una regresión ahí devuelve HTML con un 200, que la canalización rechaza, de modo que la llegada de un PDF es la prueba |
+| S71 | **Unpaywall por su nombre** — la cabecera de la cadena de artículos y la única fuente que ningún escenario había fijado: S7 parece cubrirla y no lo hace, porque evalúa a cualquier proveedor de acceso abierto que gane la carrera, así que desde la llegada de Europe PMC cualquier ejecución pudo haberla servido otro sin que nada lo dijera |
+| S72 | **SciDB** — la única entrada de `config.KnownSources` a la que no llegaba ningún escenario. Aparece en media docena de listas de fuentes como aquello que _no_ debe ganar, y una fuente evaluada solo como perdedora es indistinguible de una que no puede funcionar |
+| S73 | **La confirmación de guardado no se puede eludir** — el prompt dice que la descarga ya está aprobada y pide no ser preguntado, que es exactamente la petición con la que el modelo llegaba a fijar el `skip_confirmation` ya retirado; la confirmación debe dispararse igualmente, y el host cuenta cada una que responde |
+| S74 | **Seguir leyendo más allá del primer fragmento** — los demás escenarios de lectura toman un fragmento y paran. El modelo debe continuar desde el cursor que le devolvió `read` y recibir texto distinto; un texto idéntico al primer fragmento es el fallo, porque es lo que produce repetir la misma llamada y la respuesta que alimenta parece exactamente una continuación |
+| S75 | **Una fuente con clave se anuncia** — S48 leído al revés: con una clave de CORE configurada, `core` debe aparecer en el enum `source` de `download`. S48 por sí solo lo satisface una compuerta atascada en cerrado, que es idéntica a una compuerta que funciona; la pareja dice que el enum sigue al despliegue. No toca a ningún tercero |
 
 {/* end generated */}
 
@@ -262,7 +267,7 @@ escenarios en total.
 {/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La tabla siguiente es un conjunto de ejecuciones en vivo entre el 2026-07-25 y el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **71 pasaron, 0 fallaron, 0 en SKIP** de 71 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`). Cada fila lleva la fecha en que se midió por última vez: una ejecución parcial solo refresca los escenarios que ejecutó.
+La tabla siguiente es una única ejecución en vivo de la suite completa el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **76 pasaron, 0 fallaron, 0 en SKIP** de 76 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`).
 
 {/* end generated */}
 
@@ -286,77 +291,82 @@ Ambos pasan justamente por comportarse así.
 {/* prettier-ignore */}
 | ID  | Modo   | Resultado | Medido | Evidencia |
 | --- | ------ | ------- | --- | --- |
-| S1 | local | ✅ PASS | 2026-07-25 | nonfiction search; 25 results; first md5 ok |
-| S2 | local | ✅ PASS | 2026-07-25 | articles search; found a result with a valid DOI |
-| S3 | local | ✅ PASS | 2026-07-25 | standards search; 25 results |
-| S4 | local | ✅ PASS | 2026-07-25 | get_details returned a File or Edition record |
-| S5 | local | ✅ PASS | 2026-07-25 | downloaded 982888 bytes via libgen |
-| S6 | local | ✅ PASS | 2026-07-25 | downloaded 6460651 bytes via scihub |
-| S6b | local | ✅ PASS | 2026-07-25 | downloaded 982888 bytes via randombook |
-| S7 | local | ✅ PASS | 2026-07-25 | downloaded DOI via unpaywall, an open-access provider — the chain preferred a legal copy |
-| S8 | local | ✅ PASS | 2026-07-25 | model asked to clarify instead of guessing (no tool call) |
-| S9 | local | ✅ PASS | 2026-07-25 | start-retries exhausted; actionable error surfaced and the model did not fabricate success |
-| S10 | local | ✅ PASS | 2026-07-25 | unguided search; 25 results; topics=[fiction] |
-| S11 | local | ✅ PASS | 2026-07-25 | unguided search; 25 results; topics=[comics] |
-| S12 | local | ✅ PASS | 2026-07-25 | downloaded 2404614 bytes via libgen |
-| S13 | local | ✅ PASS | 2026-07-25 | downloaded 2173792 bytes via fatcat (doi via search) |
-| S14 | local | ✅ PASS | 2026-07-25 | received 17 progress notification(s); final progress=982888 total=982888 |
-| S15 | local | ✅ PASS | 2026-07-25 | ordered page of 107 with links; model surfaced links in its answer |
-| S16 | local | ✅ PASS | 2026-07-25 | resolved a URL via libgen without downloading: https://libgen.li/get.php?(query redacted) |
-| S17 | remote | ✅ PASS | 2026-07-25 | remote: model got a link, harness fetched 982888 bytes to local disk |
-| S18 | remote | ✅ PASS | 2026-07-25 | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (Get "/article/S0092867411001279/pdf": stopped after 10 redirects) |
-| S19 | local | ✅ PASS | 2026-07-25 | read pdf (4566 chars); model summarized it in 791 chars |
-| S20 | local | ✅ PASS | 2026-07-25 | open-access discovery surfaced 41 hit(s); model referenced one in its answer |
-| S21 | local | ✅ PASS | 2026-07-25 | model searched, called get_details, and surfaced the returned BibTeX citation |
-| S22 | local | ✅ PASS | 2026-07-25 | model set enrich=true; Crossref journal="Cell" citations=56401; model answered the ask |
-| S23 | local | ✅ PASS | 2026-07-25 | model used read find="pointer"; 503 match(es); model surfaced a passage |
-| S24 | local | ✅ PASS | 2026-07-25 | no embedded table of contents; the model read the document and compiled one from its text |
-| S25 | local | ✅ PASS | 2026-07-25 | the server asked for a contact email it had none of, the host supplied one, and unpaywall served 255629 bytes |
-| S26 | local | ✅ PASS | 2026-07-25 | save-confirmation elicitation fired 1x and the host accepted it; downloaded 4366258 bytes via libgen — confirmation did not block the flow |
-| S27 | remote | ✅ PASS | 2026-07-25 | model used read find="pointer"; 503 match(es); model surfaced a passage |
-| S28 | remote | ✅ PASS | 2026-07-25 | model used read outline=true; 140 table-of-contents entr(ies) returned |
-| S29 | remote | ✅ PASS | 2026-07-25 | open-access discovery surfaced 35 hit(s); model referenced one in its answer |
-| S30 | remote | ✅ PASS | 2026-07-25 | model set enrich=true; Crossref journal="Cell" citations=56401; model answered the ask |
-| S31 | remote | ✅ PASS | 2026-07-25 | model searched, called get_details, and surfaced the returned BibTeX citation |
-| S32 | local | ✅ PASS | 2026-07-25 | escalation surfaced 7 Anna's-origin result(s); model did not report not-found |
-| S33 | remote | ✅ PASS | 2026-07-25 | escalation surfaced 7 Anna's-origin result(s); model did not report not-found |
-| S34 | local | ✅ PASS | 2026-07-25 | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23) |
-| S35 | remote | ✅ PASS | 2026-07-25 | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23) |
-| S36 | local | ✅ PASS | 2026-07-25 | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
-| S37 | remote | ✅ PASS | 2026-07-25 | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
-| S38 | local | ✅ PASS | 2026-07-25 | never mode honored and the model reported the miss honestly |
-| S39 | local | ✅ PASS | 2026-07-25 | always mode consulted the extras alongside a 27-result catalog page (annas=2, open access=33) |
-| S40 | local | ✅ PASS | 2026-07-25 | read opened an Anna's-only item (1536 chars extracted) |
-| S41 | local | ✅ PASS | 2026-07-25 | member download reported the account allowance (48 of 50 left) |
-| S42 | local | ✅ PASS | 2026-07-25 | nothing exists by that name and the model said so, inventing no metadata |
-| S43 | local | ✅ PASS | 2026-07-25 | restriction held; the model routed through the permitted source instead of the refused one |
-| S44 | local | ✅ PASS | 2026-07-25 | model set page=2 and received page 2 with 25 results |
-| S45 | local | ✅ PASS | 2026-07-25 | downloaded 91408 bytes via europepmc |
-| S46 | local | ✅ PASS | 2026-07-25 | downloaded 2114465 bytes via biorxiv |
-| S47 | local | ✅ PASS | 2026-07-25 | downloaded 374166 bytes via fatcat |
-| S48 | local | ✅ PASS | 2026-07-25 | core is absent from the download source enum on a deployment with no CORE key, and the model asked for it nowhere; enum = unpaywall, europepmc, biorxiv, fatcat, oapen, archive, scihub, scidb, libgen, randombook, annas |
-| S49 | local | ✅ PASS | 2026-07-25 | downloaded DOI via europepmc, an open-access provider — the chain preferred a legal copy |
-| S50 | local | ✅ PASS | 2026-07-25 | model discovered the isbn key unaided; downloaded 15684454 bytes via archive |
-| S51 | local | ✅ PASS | 2026-07-25 | downloaded 1850890 bytes via oapen |
-| S52 | local | ✅ PASS | 2026-07-25 | downloaded 1850890 bytes via oapen |
-| S53 | local | ✅ PASS | 2026-07-25 | oapen refused an identifier OAPEN does not hold cleanly, and the model reported the miss instead of presenting a file |
-| S54 | local | ✅ PASS | 2026-07-25 | downloaded 15684454 bytes via archive |
-| S55 | local | ✅ PASS | 2026-07-25 | archive refused a lending-restricted book cleanly, and the model reported the miss instead of presenting a file |
-| S56 | local | ✅ PASS | 2026-07-25 | gutenberg surfaced 4 hit(s) with a fetchable file URL, and the model handed the link over |
-| S57 | local | ✅ PASS | 2026-07-25 | eric surfaced 7 hit(s) with a fetchable file URL, and the model handed the link over |
-| S58 | local | ✅ PASS | 2026-07-25 | dblp contributed 5 record(s), each labeled a citation rather than free full text, and the model answered from the merged results |
-| S59 | local | ✅ PASS | 2026-07-25 | pubmed contributed 7 record(s), each labeled a citation rather than free full text, and the model answered from the merged results |
-| S60 | local | ✅ PASS | 2026-07-25 | the chain recorded the dead source as unavailable and acted on it on the next pass ("source in cooldown, skipping") |
+| S1 | local | ✅ PASS | 2026-07-30 | nonfiction search; 25 results; first md5 ok |
+| S2 | local | ✅ PASS | 2026-07-30 | articles search; found a result with a valid DOI |
+| S3 | local | ✅ PASS | 2026-07-30 | standards search; 25 results |
+| S4 | local | ✅ PASS | 2026-07-30 | get_details returned a File or Edition record |
+| S5 | local | ✅ PASS | 2026-07-30 | downloaded 979157 bytes via libgen |
+| S6 | local | ✅ PASS | 2026-07-30 | downloaded 6460651 bytes via scihub |
+| S6b | local | ✅ PASS | 2026-07-30 | model set source=randombook correctly but the live download failed (mirror/network); the model reported that plainly instead of inventing a result |
+| S7 | local | ✅ PASS | 2026-07-30 | downloaded DOI via unpaywall, an open-access provider — the chain preferred a legal copy |
+| S8 | local | ✅ PASS | 2026-07-30 | model asked to clarify instead of guessing (no tool call) |
+| S9 | local | ✅ PASS | 2026-07-30 | start-retries exhausted; actionable error surfaced and the model did not fabricate success |
+| S10 | local | ✅ PASS | 2026-07-30 | unguided search; 25 results; topics=[fiction] |
+| S11 | local | ✅ PASS | 2026-07-30 | unguided search; 25 results; topics=[comics] |
+| S12 | local | ✅ PASS | 2026-07-30 | downloaded 2404614 bytes via libgen |
+| S13 | local | ✅ PASS | 2026-07-30 | downloaded 2173792 bytes via fatcat (doi via search) |
+| S14 | local | ✅ PASS | 2026-07-30 | received 17 progress notification(s); final progress=982888 total=982888 |
+| S15 | local | ✅ PASS | 2026-07-30 | ordered page of 100 with links; model surfaced links in its answer |
+| S16 | local | ✅ PASS | 2026-07-30 | resolved a URL via libgen without downloading: https://libgen.li/get.php?(query redacted) |
+| S17 | remote | ✅ PASS | 2026-07-30 | remote: model got a link, harness fetched 982888 bytes to local disk |
+| S18 | remote | ✅ PASS | 2026-07-30 | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (HTTP 403) |
+| S19 | local | ✅ PASS | 2026-07-30 | read pdf (4566 chars); model summarized it in 779 chars |
+| S20 | local | ✅ PASS | 2026-07-30 | open-access discovery surfaced 41 hit(s); model referenced one in its answer |
+| S21 | local | ✅ PASS | 2026-07-30 | model searched, called get_details, and surfaced the returned BibTeX citation |
+| S22 | local | ✅ PASS | 2026-07-30 | model set enrich=true; Crossref journal="Cell" citations=56452; model answered the ask |
+| S23 | local | ✅ PASS | 2026-07-30 | model used read find="pointer"; 503 match(es); model surfaced a passage |
+| S24 | local | ✅ PASS | 2026-07-30 | model used read outline=true; 221 table-of-contents entr(ies) returned |
+| S25 | local | ✅ PASS | 2026-07-30 | the server asked for a contact email it had none of, the host supplied one, and unpaywall served 255629 bytes |
+| S26 | local | ✅ PASS | 2026-07-30 | save-confirmation elicitation fired 1x and the host accepted it; downloaded 4366258 bytes via libgen — confirmation did not block the flow |
+| S27 | remote | ✅ PASS | 2026-07-30 | model used read find="pointer"; 503 match(es); model surfaced a passage |
+| S28 | remote | ✅ PASS | 2026-07-30 | no embedded table of contents; the model read the document and compiled one from its text |
+| S29 | remote | ✅ PASS | 2026-07-30 | open-access discovery surfaced 42 hit(s); model referenced one in its answer |
+| S30 | remote | ✅ PASS | 2026-07-30 | model set enrich=true; Crossref journal="Cell" citations=56452; model answered the ask |
+| S31 | remote | ✅ PASS | 2026-07-30 | model searched, called get_details, and surfaced the returned BibTeX citation |
+| S32 | local | ✅ PASS | 2026-07-30 | escalation surfaced 7 Anna's-origin result(s); model did not report not-found |
+| S33 | remote | ✅ PASS | 2026-07-30 | escalation surfaced 7 Anna's-origin result(s); model did not report not-found |
+| S34 | local | ✅ PASS | 2026-07-30 | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23) |
+| S35 | remote | ✅ PASS | 2026-07-30 | model searched, found an Anna's-origin item, and downloaded it (md5=00dd2b0b58e81e3c6e7cb9e7b72dee23) |
+| S36 | local | ✅ PASS | 2026-07-30 | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
+| S37 | remote | ✅ PASS | 2026-07-30 | get_details fell back to Anna's for the escalated md5 (collection=zlib) |
+| S38 | local | ✅ PASS | 2026-07-30 | never mode honored and the model reported the miss honestly |
+| S39 | local | ✅ PASS | 2026-07-30 | always mode consulted the extras alongside a 27-result catalog page (annas=2, open access=40) |
+| S40 | local | ✅ PASS | 2026-07-30 | read opened an Anna's-only item (1536 chars extracted) |
+| S41 | local | ✅ PASS | 2026-07-30 | member download reported the account allowance (48 of 50 left) |
+| S42 | local | ✅ PASS | 2026-07-30 | nothing exists by that name and the model said so, inventing no metadata |
+| S43 | local | ✅ PASS | 2026-07-30 | restriction held; the model routed through the permitted source instead of the refused one |
+| S44 | local | ✅ PASS | 2026-07-30 | model set page=2 and received page 2 with 25 results |
+| S45 | local | ✅ PASS | 2026-07-30 | downloaded 91408 bytes via europepmc |
+| S46 | local | ✅ PASS | 2026-07-30 | downloaded 2114465 bytes via biorxiv |
+| S47 | local | ✅ PASS | 2026-07-30 | downloaded 374166 bytes via fatcat |
+| S48 | local | ✅ PASS | 2026-07-30 | core is absent from the download source enum on a deployment with no CORE key, and the model asked for it nowhere; enum = unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, oapen, archive, scihub, scidb, libgen, randombook, annas |
+| S49 | local | ✅ PASS | 2026-07-30 | downloaded DOI via europepmc, an open-access provider — the chain preferred a legal copy |
+| S50 | local | ✅ PASS | 2026-07-30 | model discovered the isbn key unaided; downloaded 15684454 bytes via archive |
+| S51 | local | ✅ PASS | 2026-07-30 | downloaded 1850890 bytes via oapen |
+| S52 | local | ✅ PASS | 2026-07-30 | downloaded 1850890 bytes via oapen |
+| S53 | local | ✅ PASS | 2026-07-30 | oapen refused an identifier OAPEN does not hold cleanly, and the model reported the miss instead of presenting a file |
+| S54 | local | ✅ PASS | 2026-07-30 | downloaded 15684454 bytes via archive |
+| S55 | local | ✅ PASS | 2026-07-30 | archive refused a lending-restricted book cleanly, and the model reported the miss instead of presenting a file |
+| S56 | local | ✅ PASS | 2026-07-30 | gutenberg surfaced 4 hit(s) with a fetchable file URL, and the model handed the link over |
+| S57 | local | ✅ PASS | 2026-07-30 | eric surfaced 7 hit(s) with a fetchable file URL, and the model handed the link over |
+| S58 | local | ✅ PASS | 2026-07-30 | dblp contributed 4 record(s), each labeled a citation rather than free full text, and the model answered from the merged results |
+| S59 | local | ✅ PASS | 2026-07-30 | pubmed contributed 7 record(s), each labeled a citation rather than free full text, and the model answered from the merged results |
+| S60 | local | ✅ PASS | 2026-07-30 | the chain recorded the dead source as unavailable and acted on it on the next pass ("source in cooldown, skipping") |
 | S61 | local | ✅ PASS | 2026-07-30 | downloaded 502941 bytes via rfc |
 | S62 | local | ✅ PASS | 2026-07-30 | downloaded 966908 bytes via nist |
 | S63 | local | ✅ PASS | 2026-07-30 | downloaded 502941 bytes via rfc |
 | S64 | local | ✅ PASS | 2026-07-30 | read opened RFC 9110 as text (6002 chars extracted) |
-| S65 | local | ✅ PASS | 2026-07-30 | the download source enum advertises rfc and nist; enum = unpaywall, europepmc, biorxiv, rfc, nist, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas |
+| S65 | local | ✅ PASS | 2026-07-30 | the download source enum advertises rfc and nist; enum = unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas |
 | S66 | local | ✅ PASS | 2026-07-30 | downloaded 339463 bytes via dagstuhl |
 | S67 | local | ✅ PASS | 2026-07-30 | downloaded 786279 bytes via acl |
-| S68 | local | ✅ PASS | 2026-07-30 | downloaded 173300 bytes via zenodo |
+| S68 | local | ✅ PASS | 2026-07-30 | downloaded 193911 bytes via zenodo |
 | S69 | local | ✅ PASS | 2026-07-30 | downloaded 737104 bytes via scielo |
 | S70 | local | ✅ PASS | 2026-07-30 | downloaded 2929735 bytes via fao |
+| S71 | local | ✅ PASS | 2026-07-30 | downloaded 91408 bytes via unpaywall |
+| S72 | local | ✅ PASS | 2026-07-30 | downloaded 2066013 bytes via scidb |
+| S73 | local | ✅ PASS | 2026-07-30 | the save confirmation fired despite the caller asking to skip it (1 raised) and downloaded 2608796 bytes via libgen |
+| S74 | local | ✅ PASS | 2026-07-30 | model read 6628 chars, then continued and received a further 6551 |
+| S75 | local | ✅ PASS | 2026-07-30 | core is advertised on a deployment that holds a CORE key; enum = unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas |
 
 {/* end generated */}
 
