@@ -144,6 +144,14 @@ in:
    so a prefix-gated source with no probe of its own runs in the chain and is
    **absent from the tool's `source` enum** — reachable by the server, invisible
    to the model. `rfc` and `nist` are the worked examples.
+5. **Document it on the sources page, not in the architecture table.**
+   Per-source detail — corpus, resolve mechanics, what the source does not
+   cover, the traps you measured, whether it is keyed, and any crawl rule it
+   observes — lives in `docs/sources.md` and its two Starlight twins
+   (`site/src/content/docs/sources.mdx` and `es/sources.mdx`). The table in
+   `docs/architecture.md` (and its twins) is a three-column index plus a
+   one-line summary and must stay that way; a source's prose belongs in exactly
+   one place, or the two copies drift.
 
 `Download` tries each supporting source in chain order and fails over to the
 next; keep `Resolve` returning an error (not a partial result) when it cannot

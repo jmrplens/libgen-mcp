@@ -601,6 +601,11 @@ export default defineConfig({
 							translations: { es: "Arquitectura" },
 						},
 						{
+							slug: "sources",
+							label: "Download sources",
+							translations: { es: "Fuentes de descarga" },
+						},
+						{
 							slug: "how-search-works",
 							label: "How search works",
 							translations: { es: "Cómo funciona la búsqueda" },

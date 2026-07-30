@@ -418,6 +418,10 @@ func docPages(toolNameList string) []docPage {
 			"Arquitectura", "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga",
 		},
 		{
+			"sources/", "Download sources", "Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys",
+			"Fuentes de descarga", "Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves",
+		},
+		{
 			"how-search-works/", "How search works", "Catalog-first search, and when and how it escalates to the extra sources",
 			"Cómo funciona la búsqueda", "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra",
 		},

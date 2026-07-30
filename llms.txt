@@ -79,6 +79,7 @@ Prompts (guided workflows a client can offer by name):
 - [Configuration](https://jmrplens.github.io/libgen-mcp/configuration/): Full environment-variable configuration reference
 - [Tools](https://jmrplens.github.io/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrplens.github.io/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
+- [Download sources](https://jmrplens.github.io/libgen-mcp/sources/): Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys
 - [How search works](https://jmrplens.github.io/libgen-mcp/how-search-works/): Catalog-first search, and when and how it escalates to the extra sources
 - [LLM eval results](https://jmrplens.github.io/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
 - [Troubleshooting](https://jmrplens.github.io/libgen-mcp/troubleshooting/): Common setup and runtime issues
@@ -93,6 +94,7 @@ Prompts (guided workflows a client can offer by name):
 - [Configuración](https://jmrplens.github.io/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
 - [Herramientas](https://jmrplens.github.io/libgen-mcp/es/tools/): Referencia por herramienta de search, get_details, download, read
 - [Arquitectura](https://jmrplens.github.io/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
+- [Fuentes de descarga](https://jmrplens.github.io/libgen-mcp/es/sources/): Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves
 - [Cómo funciona la búsqueda](https://jmrplens.github.io/libgen-mcp/es/how-search-works/): Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra
 - [Resultados de la evaluación con LLM](https://jmrplens.github.io/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
 - [Solución de problemas](https://jmrplens.github.io/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
