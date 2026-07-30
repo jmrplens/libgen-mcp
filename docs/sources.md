@@ -603,7 +603,8 @@ Anna's Archive, as an md5-keyed rescue route.
   page.
 - The LibGen mirror requests and every file stream pass through one shared token-bucket rate
   limiter sized by `LIBGEN_MCP_RATE_RPS` and `LIBGEN_MCP_RATE_BURST` (both default to 1). A
-  source's own resolve lookups are not metered by it: each is one or two requests against a
+  source's own resolve lookups are not metered by it: each is a small, source-specific number of
+  requests against a
   different host, made once per caller-initiated download, so they queue behind nothing and
   nothing queues behind them.
 - Each source gets `LIBGEN_MCP_TIMEOUT` as its entire resolve budget, so a source that makes

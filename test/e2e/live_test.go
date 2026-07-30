@@ -2210,6 +2210,17 @@ const (
 // resolves nothing.
 const hyphenatedOapenISBN = "978-92-861-5061-6"
 
+// TestHyphenatedOapenISBNMatchesTheLiveOne guards the pair the tool-layer ISBN case
+// depends on. That case asserts only that oapen resolved the request, which stays
+// true if these two ever name different books — and then it would no longer be
+// grading that NormalizeISBN ran on the way in, which is its whole purpose.
+func TestHyphenatedOapenISBNMatchesTheLiveOne(t *testing.T) {
+	if got := strings.ReplaceAll(hyphenatedOapenISBN, "-", ""); got != oapenLiveISBN {
+		t.Fatalf("hyphenatedOapenISBN normalizes to %q, but oapenLiveISBN is %q — the tool-layer "+
+			"ISBN case is no longer exercising the same book", got, oapenLiveISBN)
+	}
+}
+
 // oapenSearchProbe is the REST search the oapen source calls, used as the
 // reachability precondition by every oapen case.
 const oapenSearchProbe = "https://library.oapen.org/rest/search?query=" + oapenLiveISBN

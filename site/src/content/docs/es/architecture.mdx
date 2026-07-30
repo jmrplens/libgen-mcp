@@ -23,7 +23,7 @@ head:
             "name": "¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Los descubre, en lugar de fijar uno en el código. El servidor descarga la lista de mirrors vigente de un directorio público de mirrors de bibliotecas en la sombra y la cachea en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio reutiliza la lista cacheada en vez de volver a descargarla; si la descarga falla, recurre a una caché caducada y después a una lista integrada en el binario. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar LIBGEN_MIRROR ancla un host y se salta el descubrimiento por completo."
+              "text": "Los descubre, en lugar de fijar uno en el código. El servidor descarga la lista de mirrors vigente de un directorio público de mirrors de bibliotecas en la sombra y la cachea en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio reutiliza la lista cacheada en vez de volver a descargarla; si la descarga falla, recurre a una caché caducada y después a una lista integrada en el binario. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar LIBGEN_MIRROR coloca un host al frente de la lista descubierta; el descubrimiento se sigue ejecutando y los demás mirrors quedan disponibles para el failover."
             }
           },
           {
@@ -66,7 +66,7 @@ Un `Manager` suministra los mirrors candidatos:
 
 - La lista viva se obtiene del directorio de [shadowlibraries](https://shadowlibraries.github.io/DirectDownloads/libgen/) y se cachea durante **24 horas** en el directorio de caché del SO (`~/.cache/libgen-mcp/mirrors.json` en Linux, `~/Library/Caches/libgen-mcp/mirrors.json` en macOS).
 - Al arrancar, el manager prefiere, en orden: una caché de disco válida, una obtención en vivo (que luego escribe en caché), una caché obsoleta y, finalmente, una lista de reserva codificada. Solo la reserva no se memoiza, de modo que la siguiente petición reintenta el descubrimiento en vez de anclarse a ella.
-- El mirror preferido (`libgen.li` por defecto, o `LIBGEN_MIRROR` cuando se define) se coloca siempre primero. Fijar `LIBGEN_MIRROR` ancla ese único mirror.
+- El mirror preferido (`libgen.li` por defecto, o `LIBGEN_MIRROR` cuando se define) se coloca siempre primero. Definir `LIBGEN_MIRROR` mueve ese host al frente; el descubrimiento se sigue ejecutando y el resto de la lista queda disponible para el failover.
 - Un servidor de larga vida vuelve a descubrir en cuanto la lista en memoria supera su TTL de 24 horas, de modo que capta los cambios de mirrors sin reiniciar.
 
 ### Failover, reintentos y enfriamiento
@@ -218,7 +218,7 @@ Como un servidor HTTP es remoto y no puede escribir en el disco del cliente, en 
 
 ### ¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?
 
-Los descubre, en lugar de fijar uno en el código. El servidor descarga la lista de mirrors vigente de un directorio público de mirrors de bibliotecas en la sombra y la cachea en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio reutiliza la lista cacheada en vez de volver a descargarla; si la descarga falla, recurre a una caché caducada y después a una lista integrada en el binario. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar `LIBGEN_MIRROR` ancla un host y se salta el descubrimiento por completo.
+Los descubre, en lugar de fijar uno en el código. El servidor descarga la lista de mirrors vigente de un directorio público de mirrors de bibliotecas en la sombra y la cachea en disco durante 24 horas bajo el directorio de caché del sistema, de modo que un reinicio reutiliza la lista cacheada en vez de volver a descargarla; si la descarga falla, recurre a una caché caducada y después a una lista integrada en el binario. Un mirror que falla entra en un enfriamiento de 45 segundos y se usa el siguiente de la lista, y por eso que un mirror concreto caiga es invisible para quien llama. Fijar `LIBGEN_MIRROR` coloca un host al frente de la lista descubierta; el descubrimiento se sigue ejecutando y los demás mirrors quedan disponibles para el failover.
 
 ### ¿Qué cachea libgen-mcp, y dónde?
 

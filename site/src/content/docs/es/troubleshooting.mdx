@@ -26,7 +26,7 @@ head:
             "name": "¿Por qué falló la verificación MD5 de mi descarga?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Una discrepancia de MD5 (integrity check failed: MD5 mismatch) significa que los bytes descargados no coincidieron con el md5 solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, el fallback randombook probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por md5) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo verified es false."
+              "text": "Una discrepancia de MD5 (integrity check failed: MD5 mismatch) significa que los bytes descargados no coincidieron con el md5 solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva randombook probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por md5) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo verified es false."
             }
           },
           {
@@ -73,7 +73,7 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 
 **Significado y soluciones.**
 
-- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, el fallback `randombook` probará mirrors recién descubiertos.
+- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos.
 - **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y hace failover a la siguiente fuente.
 - **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
 - **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
@@ -104,7 +104,7 @@ Un error relacionado pero distinto, `request rejected by all mirrors`, significa
 **Soluciones.**
 
 - Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
-- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son los fallbacks.
+- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son las reservas.
 - Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
 - Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
 - Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
@@ -209,7 +209,7 @@ El error `all libgen mirrors unreachable` significa que al menos un mirror fall�
 
 ### ¿Por qué falló la verificación MD5 de mi descarga?
 
-Una discrepancia de MD5 (`integrity check failed: MD5 mismatch`) significa que los bytes descargados no coincidieron con el `md5` solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, el fallback `randombook` probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por `md5`) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo `verified` es `false`.
+Una discrepancia de MD5 (`integrity check failed: MD5 mismatch`) significa que los bytes descargados no coincidieron con el `md5` solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por `md5`) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo `verified` es `false`.
 
 ### ¿Por qué faltan algunos artículos en los resultados?
 

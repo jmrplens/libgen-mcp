@@ -126,7 +126,15 @@ func TestUnpaywallErrorClassification(t *testing.T) {
 	t.Run("a missing contact email is neither", func(t *testing.T) {
 		// A deployment with no email configured is a configuration gap, not an outage:
 		// cooling the source down would hide the real cause behind a five-minute skip.
-		s := unpaywallSource{http: refusingClient()}
+		//
+		// The server fails the test if it is reached at all. A refusing client would
+		// have made this pass whether or not Resolve short-circuits, which is the one
+		// thing the "before touching the API" claim is about.
+		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Error("Resolve queried Unpaywall with no contact email")
+		}))
+		defer srv.Close()
+		s := unpaywallSource{http: srv.Client(), baseURL: srv.URL}
 
 		_, err := s.Resolve(context.Background(), Item{DOI: doi})
 		if err == nil {

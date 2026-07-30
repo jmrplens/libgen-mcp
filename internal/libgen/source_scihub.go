@@ -71,11 +71,11 @@ func (s scihubSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	for _, host := range s.hosts {
 		pdfURL, err := s.tryHost(ctx, httpClient, scheme, host, it.DOI)
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		if pdfURL == "" {
-			lastErr = notIndexed(fmt.Errorf("scihub: host %q served no PDF link for %q", host, it.DOI))
+			lastErr = strongerError(lastErr, notIndexed(fmt.Errorf("scihub: host %q served no PDF link for %q", host, it.DOI)))
 			continue
 		}
 		return Resolved{

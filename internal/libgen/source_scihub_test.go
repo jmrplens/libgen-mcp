@@ -323,25 +323,40 @@ func TestScihubErrorClassification(t *testing.T) {
 	})
 }
 
-// TestScihubClassificationIsTakenFromTheLastHostTried documents that Resolve keeps
-// only the most recent host's error, so when hosts disagree the verdict belongs to
-// whichever was tried last. It matters because the chain reads that verdict: the
-// same pair of mirrors in the opposite order cools the source down or does not.
-func TestScihubClassificationIsTakenFromTheLastHostTried(t *testing.T) {
+// TestScihubClassificationIsTheStrongestNotTheLast pins that a verdict over
+// several hosts does not depend on the order they were tried.
+//
+// Resolve used to keep only the most recent host's error, so the same pair of
+// mirrors in the opposite order cooled the source down or did not. That became
+// harmful once a 404 started counting as a clean miss: one mirror down and
+// another answering 404 reported a clean miss, and startAttempt returns a clean
+// miss unwrapped and skips the start-retry schedule — losing the retry that
+// exists for exactly the transient case. The source has only proved a DOI absent
+// when every host said so.
+func TestScihubClassificationIsTheStrongestNotTheLast(t *testing.T) {
 	const doi = "10.1016/j.cell.2016.01.043"
 	down := scihubStatusHost(t, http.StatusServiceUnavailable)
 	empty := scihubHostServer(t, "<html><body>nothing here</body></html>")
 
-	t.Run("miss last", func(t *testing.T) {
-		s := scihubSource{hosts: []string{down, empty}, http: http.DefaultClient, scheme: "http"}
+	for _, tc := range []struct {
+		name  string
+		hosts []string
+	}{
+		{name: "outage first, miss last", hosts: []string{down, empty}},
+		{name: "miss first, outage last", hosts: []string{empty, down}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := scihubSource{hosts: tc.hosts, http: http.DefaultClient, scheme: "http"}
+			_, err := s.Resolve(context.Background(), Item{DOI: doi})
+			assertUnavailable(t, err)
+		})
+	}
+
+	t.Run("every host missing is a clean miss", func(t *testing.T) {
+		other := scihubHostServer(t, "<html><body>nothing here either</body></html>")
+		s := scihubSource{hosts: []string{empty, other}, http: http.DefaultClient, scheme: "http"}
 		_, err := s.Resolve(context.Background(), Item{DOI: doi})
 		assertCleanMiss(t, err)
-	})
-
-	t.Run("outage last", func(t *testing.T) {
-		s := scihubSource{hosts: []string{empty, down}, http: http.DefaultClient, scheme: "http"}
-		_, err := s.Resolve(context.Background(), Item{DOI: doi})
-		assertUnavailable(t, err)
 	})
 }
 

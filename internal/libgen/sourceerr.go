@@ -111,3 +111,39 @@ func cooldownWorthy(ctx context.Context, err error) bool {
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
 }
+
+// strongerError returns whichever of two source errors should decide a
+// multi-host source's verdict, so a loop over mirrors reports the strongest
+// classification rather than whichever host happened to answer last.
+//
+// The order is unavailable, then untagged, then a clean miss. A source that tried
+// several hosts has only proved the item absent when EVERY host said so: one host
+// being down, or answering a challenge nobody can classify, leaves the question
+// open. Reporting a clean miss there would be worse than saying nothing, because
+// startAttempt returns a clean miss unwrapped and skips the start-retry schedule
+// — so a transient outage on one mirror would silently cost the retry that exists
+// for exactly that case. bioRxiv already reasons this way across its two servers.
+func strongerError(existing, next error) error {
+	if existing == nil {
+		return next
+	}
+	if next == nil {
+		return existing
+	}
+	if errorRank(next) > errorRank(existing) {
+		return next
+	}
+	return existing
+}
+
+// errorRank scores a source error for strongerError: higher wins.
+func errorRank(err error) int {
+	switch {
+	case errors.Is(err, ErrSourceUnavailable):
+		return 2
+	case errors.Is(err, ErrNotIndexed):
+		return 0
+	default:
+		return 1
+	}
+}

@@ -25,7 +25,8 @@ Candidate mirrors are supplied by a `Manager`:
   writes to cache), a stale cache, and finally a hardcoded fallback list. Only the fallback
   is not memoized, so the next request retries discovery instead of pinning to it.
 - The preferred mirror (`libgen.li` by default, or `LIBGEN_MIRROR` when set) is always
-  placed first. Setting `LIBGEN_MIRROR` pins that single mirror.
+  placed first. Setting `LIBGEN_MIRROR` moves that host to the front; discovery still runs and the rest of the
+  list stays available for failover.
 - A long-running server re-discovers once the in-memory list exceeds its 24-hour TTL, so it
   picks up mirror changes without a restart.
 

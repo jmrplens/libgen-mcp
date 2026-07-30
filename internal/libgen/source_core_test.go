@@ -178,7 +178,15 @@ func TestCoreErrorClassification(t *testing.T) {
 	t.Run("a missing key is neither", func(t *testing.T) {
 		// No key is a deployment choice, not an outage: CORE simply is not configured,
 		// and a cooldown would misreport that as a service problem.
-		s := coreSource{http: refusingClient()}
+		//
+		// The server fails the test if it is reached at all. A refusing client would
+		// have made this pass whether or not Resolve short-circuits, which is the one
+		// thing the "before touching the API" claim is about.
+		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Error("Resolve called the CORE API without a key")
+		}))
+		defer srv.Close()
+		s := coreSource{http: srv.Client(), apiBase: srv.URL}
 
 		_, err := s.Resolve(context.Background(), Item{DOI: doi})
 		if err == nil {

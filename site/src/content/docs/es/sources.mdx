@@ -636,7 +636,8 @@ Anna's Archive, como ruta de rescate identificada por md5.
 - Las peticiones a los mirrors de LibGen y todos los flujos de fichero pasan por un único
   limitador de tasa de cubo de tokens dimensionado por `LIBGEN_MCP_RATE_RPS` y
   `LIBGEN_MCP_RATE_BURST` (ambos con valor 1 por defecto). Las consultas de resolución propias de
-  una fuente no las mide ese limitador: cada una son una o dos peticiones contra otro host, hechas
+  una fuente no las mide ese limitador: cada una son unas pocas peticiones, cuántas depende de la
+  fuente, contra otro host, hechas
   una sola vez por descarga iniciada por quien llama, así que ni esperan a nada ni hacen esperar a
   nada.
 - Cada fuente recibe `LIBGEN_MCP_TIMEOUT` como presupuesto entero para resolver, así que una

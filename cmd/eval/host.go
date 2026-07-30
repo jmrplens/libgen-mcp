@@ -165,12 +165,22 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	if len(fields) > 0 {
 		field = fields[0]
 	}
-	// The save confirmation carries TWO properties — the decision and the "stop
-	// asking" box — so answering whichever one a map iteration happened to yield
-	// first left the decision absent, and the server reads an accept with no
-	// decision as a decline. That made this handler randomly fail a real download:
-	// S7, S49 and S61 in the 2026-07-30 run, while S26 passed on the same code.
-	if len(fields) > 1 {
+	// Classified by field NAME, never by how many properties the schema carries: a
+	// prompt that later grows a second field (a contact email beside a "remember
+	// me" box, say) must still be answered as an email, not as a confirmation.
+	emailField, isEmail := fieldMatching(fields, "email")
+	keyField, isKey := fieldMatching(fields, "key")
+	switch {
+	case isEmail:
+		field = emailField
+	case isKey:
+		field = keyField
+	case len(fields) > 1:
+		// The save confirmation carries TWO properties — the decision and the "stop
+		// asking" box — so answering whichever one a map iteration happened to yield
+		// first left the decision absent, and the server reads an accept with no
+		// decision as a decline. That made this handler randomly fail a real download:
+		// S7, S49 and S61 in the 2026-07-30 run, while S26 passed on the same code.
 		return answerConfirmation(req, fields)
 	}
 	if strings.Contains(strings.ToLower(field), "email") {
@@ -197,6 +207,17 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	confirmElicitations.Add(1)
 	recordElicitation(field, elicitMessage(req), "accept")
 	return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
+}
+
+// fieldMatching returns the first field whose name contains want, so a prompt is
+// classified by what it asks for rather than by how wide its schema happens to be.
+func fieldMatching(fields []string, want string) (string, bool) {
+	for _, name := range fields {
+		if strings.Contains(strings.ToLower(name), want) {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // answerConfirmation accepts a multi-field save confirmation: every field is

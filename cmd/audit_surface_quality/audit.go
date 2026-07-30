@@ -213,13 +213,52 @@ func checkEnumValues(values []string, kind string, sc scope, report func(categor
 // hand-written list in a struct tag. Adding a value to the validator therefore
 // ships a schema whose enum offers something the description never explains — the
 // model is told the set is one thing and constrained to another.
+// mentionsValue reports whether a description names an enum value as a value
+// rather than merely containing its letters.
+//
+// A plain substring test lets one value vouch for another: "core" is inside
+// "scoreboard", "1" inside "10", so a description that mentions only the longer
+// one silently satisfies the check for the shorter — which is the drift this
+// audit exists to catch. The match therefore has to start and end on a boundary.
+func mentionsValue(description, value string) bool {
+	if value == "" {
+		return true
+	}
+	for at := 0; ; {
+		i := strings.Index(description[at:], value)
+		if i < 0 {
+			return false
+		}
+		start := at + i
+		end := start + len(value)
+		if !isWordByte(description, start-1) && !isWordByte(description, end) {
+			return true
+		}
+		at = start + 1
+	}
+}
+
+// isWordByte reports whether the byte at i is part of an identifier, treating an
+// out-of-range index as a boundary.
+func isWordByte(s string, i int) bool {
+	if i < 0 || i >= len(s) {
+		return false
+	}
+	// A period is deliberately NOT a word byte: enum values here never contain one,
+	// while descriptions end sentences with them, so counting it would have read
+	// "…randombook, annas." as never mentioning annas.
+	c := s[i]
+	return c == '_' || c == '-' ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
 func checkEnumDescription(values []string, kind string, sc scope, report func(category, detail string)) {
 	if strings.TrimSpace(sc.description) == "" {
 		return
 	}
 	lower := strings.ToLower(sc.description)
 	for _, v := range values {
-		if !strings.Contains(lower, strings.ToLower(v)) {
+		if !mentionsValue(lower, strings.ToLower(v)) {
 			report("enum-description-drift",
 				fmt.Sprintf("%s enum on %s accepts %q, which its description never mentions; "+
 					"the description is stale relative to the values the schema pins", kind, propertyLabel(sc), v))

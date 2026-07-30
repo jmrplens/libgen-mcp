@@ -119,7 +119,7 @@ func (s annasSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		fileURL, ext, account, err := s.resolveMirror(ctx, httpClient, base, it.MD5, tryMember)
 		tryMember = false // the single member attempt is spent, whether it succeeded or failed
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		return Resolved{FileURL: fileURL, Ext: ext, VerifyMD5: true, Account: account}, nil

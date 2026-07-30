@@ -125,7 +125,7 @@ func run(ctx context.Context, httpAddr string) error {
 	if httpAddr != "" {
 		return serveHTTP(ctx, server, httpAddr)
 	}
-	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", version, commit)
+	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
 	return server.Run(ctx, &mcp.StdioTransport{})
 }
 
@@ -133,7 +133,7 @@ func run(ctx context.Context, httpAddr string) error {
 // ctx is canceled, tolerating the expected http.ErrServerClosed.
 func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string) error {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
-	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", version, commit, httpAddr)
+	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP)", buildversion.Current(), commit, httpAddr)
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
 	// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
 	srv := &http.Server{

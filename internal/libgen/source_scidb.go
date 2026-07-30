@@ -66,7 +66,7 @@ func (s scidbSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
 		pdfURL, err := s.tryMirror(ctx, httpClient, base, it.DOI)
 		if err != nil {
-			lastErr = err
+			lastErr = strongerError(lastErr, err)
 			continue
 		}
 		if pdfURL == "" {
