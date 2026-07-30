@@ -22,6 +22,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
+	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
 // httpShutdownTimeout bounds how long a graceful HTTP shutdown may take before
@@ -36,6 +37,10 @@ var (
 )
 
 func main() {
+	// Before anything else, and before any request can be made: the release
+	// ldflags stamp this package's version, and internal/version is what builds
+	// the User-Agent every outbound request carries.
+	buildversion.Set(version)
 	// Wrap the real logic so deferred cleanup (signal reset) runs before exit;
 	// this avoids log.Fatal skipping defers on the error path.
 	os.Exit(mainWithExit())

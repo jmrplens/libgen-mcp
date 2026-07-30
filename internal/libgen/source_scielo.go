@@ -161,7 +161,7 @@ func (s scieloSource) fetchArticlePage(ctx context.Context, doi string) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("scielo: building request for %q: %w", doi, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClientOr(s.http).Do(req)
 	if err != nil {

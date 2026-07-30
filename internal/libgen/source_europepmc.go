@@ -121,7 +121,7 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 	if err != nil {
 		return europePMCResult{}, fmt.Errorf("europepmc: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := s.client().Do(req)
 	if err != nil {

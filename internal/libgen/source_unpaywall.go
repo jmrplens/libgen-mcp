@@ -135,7 +135,7 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	if err != nil {
 		return Resolved{}, fmt.Errorf("unpaywall: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
@@ -145,7 +145,7 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return Resolved{}, unavailableStatus(resp.StatusCode, fmt.Errorf("unpaywall: %q returned HTTP %d", it.DOI, resp.StatusCode))
+		return Resolved{}, missOrUnavailableStatus(resp.StatusCode, fmt.Errorf("unpaywall: %q returned HTTP %d", it.DOI, resp.StatusCode))
 	}
 
 	var rec unpaywallResponse

@@ -89,7 +89,7 @@ func (p *AnnasProvider) fetch(ctx context.Context, httpClient *http.Client, base
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", discoveryUserAgent)
+	req.Header.Set("User-Agent", discoveryUserAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

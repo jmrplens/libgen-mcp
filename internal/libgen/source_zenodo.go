@@ -180,7 +180,7 @@ func (s zenodoSource) listFiles(ctx context.Context, id string) ([]zenodoEntry, 
 	if err != nil {
 		return nil, fmt.Errorf("zenodo: building request for record %s: %w", id, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := httpClientOr(s.http).Do(req)
@@ -233,7 +233,7 @@ func (s zenodoSource) latestVersion(ctx context.Context, id string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("zenodo: building version request for %s: %w", id, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClientOr(s.http).Do(req)
 	if err != nil {

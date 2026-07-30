@@ -292,7 +292,27 @@
             "type": "string"
           },
           "source": {
-            "description": "restrict the fetch to one source (libgen/randombook/annas for md5; unpaywall/europepmc/biorxiv/rfc/nist/dagstuhl/acl/zenodo/scielo/fao/fatcat/core/oapen/scihub/scidb for doi; each of rfc, nist, dagstuhl, acl, zenodo, scielo and fao serves only its own publisher's DOIs; unpaywall needs LIBGEN_MCP_UNPAYWALL_EMAIL and core needs LIBGEN_MCP_CORE_KEY)",
+            "description": "restrict the fetch to a single enabled source: unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb, libgen, randombook, annas. Omit to try every compatible source in order with failover",
+            "enum": [
+              "unpaywall",
+              "europepmc",
+              "biorxiv",
+              "rfc",
+              "nist",
+              "dagstuhl",
+              "acl",
+              "zenodo",
+              "scielo",
+              "fao",
+              "fatcat",
+              "core",
+              "oapen",
+              "scihub",
+              "scidb",
+              "libgen",
+              "randombook",
+              "annas"
+            ],
             "type": "string"
           },
           "start_page": {

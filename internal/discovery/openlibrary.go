@@ -75,7 +75,10 @@ type OpenLibraryProvider struct {
 // https://openlibrary.org/developers/api.
 func NewOpenLibrary(email string) *OpenLibraryProvider {
 	email = strings.TrimSpace(email)
-	ua := discoveryUserAgent
+	// Resolved once here rather than per request: providers are constructed from a
+	// command's startup path, which has already handed the stamped version to
+	// internal/version.
+	ua := discoveryUserAgent()
 	rps := openLibraryAnonRPS
 	if email != "" {
 		ua += " (mailto:" + email + ")"

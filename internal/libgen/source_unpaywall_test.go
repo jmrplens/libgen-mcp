@@ -88,21 +88,17 @@ func TestUnpaywallErrorClassification(t *testing.T) {
 		assertUnavailable(t, err)
 	})
 
-	t.Run("a 404 for an unknown DOI is neither", func(t *testing.T) {
-		// Unpaywall answers 404 for a DOI it has no record of, which is a clean miss in
-		// substance. unavailableStatus tags only 5xx and 429, so it arrives untagged
-		// and the chain's last resort spends its full start-retry schedule re-asking a
-		// question that is already settled. Pinned so the cost is visible.
+	t.Run("a 404 for an unknown DOI is a clean miss", func(t *testing.T) {
+		// Unpaywall answers 404 for a DOI it has no record of. That is a settled
+		// answer, so it is tagged: startAttempt returns a clean miss unwrapped and
+		// skips the start-retry schedule rather than re-asking a question already
+		// answered. It must not put the source in cooldown either — the service is
+		// working, it simply does not know this DOI.
 		srv := unpaywallStatusServer(t, http.StatusNotFound, `{"error":true,"message":"not found"}`)
 		s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
 
 		_, err := s.Resolve(context.Background(), Item{DOI: doi})
-		if err == nil {
-			t.Fatal("a 404 must not resolve")
-		}
-		if errors.Is(err, ErrNotIndexed) {
-			t.Error("a 404 read as a clean miss; the classification improved and this test is stale")
-		}
+		assertCleanMiss(t, err)
 		if cooldownWorthy(context.Background(), err) {
 			t.Error("an unknown DOI put Unpaywall in cooldown")
 		}

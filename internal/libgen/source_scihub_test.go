@@ -297,27 +297,28 @@ func TestScihubErrorClassification(t *testing.T) {
 		assertUnavailable(t, err)
 	})
 
-	t.Run("a 403 or 404 is neither", func(t *testing.T) {
-		// unavailableStatus tags only 5xx and 429, so a mirror's challenge page (403)
-		// or missing-article page (404) comes back unclassified. That is deliberate
-		// for the 403 — a challenge is not proof the service is down — and it costs
-		// the 404 the ErrNotIndexed short-circuit, so the chain's last resort spends
-		// its full start-retry schedule re-asking. Pinned here so the trade-off is a
-		// decision on the record rather than an accident.
-		for _, status := range []int{http.StatusForbidden, http.StatusNotFound} {
-			host := scihubStatusHost(t, status)
-			s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+	t.Run("a 404 is a clean miss and a 403 is neither", func(t *testing.T) {
+		// A Sci-Hub host answering 404 is telling us it does not mirror the article:
+		// a settled answer, so it is tagged and startAttempt skips the start-retry
+		// schedule instead of re-asking. A 403 is the mirror's challenge page, which
+		// is not proof the service is down and not proof the article is absent, so it
+		// stays deliberately unclassified.
+		host := scihubStatusHost(t, http.StatusNotFound)
+		s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+		_, err := s.Resolve(context.Background(), Item{DOI: doi})
+		assertCleanMiss(t, err)
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			if err == nil {
-				t.Fatalf("HTTP %d must not resolve", status)
-			}
-			if errors.Is(err, ErrNotIndexed) {
-				t.Errorf("HTTP %d read as a clean miss", status)
-			}
-			if errors.Is(err, ErrSourceUnavailable) || cooldownWorthy(context.Background(), err) {
-				t.Errorf("HTTP %d put the source in cooldown", status)
-			}
+		host = scihubStatusHost(t, http.StatusForbidden)
+		s = scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+		_, err = s.Resolve(context.Background(), Item{DOI: doi})
+		if err == nil {
+			t.Fatal("HTTP 403 must not resolve")
+		}
+		if errors.Is(err, ErrNotIndexed) {
+			t.Error("a challenge page read as a clean miss")
+		}
+		if errors.Is(err, ErrSourceUnavailable) || cooldownWorthy(context.Background(), err) {
+			t.Error("a challenge page put the source in cooldown")
 		}
 	})
 }

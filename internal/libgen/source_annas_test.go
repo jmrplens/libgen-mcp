@@ -49,7 +49,7 @@ func annasStatusMirror(t *testing.T, status int) string {
 // looked at it.
 //
 // The notable result is negative: annasSource never produces ErrNotIndexed. See
-// TestAnnasMissingCopyIsNotReportedAsACleanMiss for what that costs.
+// TestAnnasMissingCopyIsACleanMiss for the outcome that does settle it.
 func TestAnnasErrorClassification(t *testing.T) {
 	const md5 = "d64efd386ed7227592499460aca2044b"
 
@@ -100,18 +100,15 @@ func TestAnnasErrorClassification(t *testing.T) {
 	})
 }
 
-// TestAnnasMissingCopyIsNotReportedAsACleanMiss records that the one outcome which
-// genuinely settles the question — a mirror answering 200 with a book page that
-// embeds no IPFS CID, meaning Anna's holds no keyless copy of this md5 — comes back
-// untagged rather than as ErrNotIndexed.
+// TestAnnasMissingCopyIsACleanMiss pins the one outcome that settles the question:
+// a mirror answering 200 with a book page embedding no IPFS CID means Anna's holds
+// no keyless copy of this md5, and that is a clean miss rather than an outage.
 //
-// The consequence is concrete: startAttempt returns ErrNotIndexed unwrapped and so
-// skips the start-retry schedule, but an untagged error does not, so as the chain's
-// last resort Anna's spends its whole retry budget re-fetching a page whose answer
-// cannot change. Every other DOI source tags this case. The assertion is written to
-// FAIL once notIndexed is applied here, so tagging it retires this test rather than
-// silently leaving a stale claim behind.
-func TestAnnasMissingCopyIsNotReportedAsACleanMiss(t *testing.T) {
+// The consequence of getting it wrong is concrete. startAttempt returns
+// ErrNotIndexed unwrapped and so skips the start-retry schedule, while an untagged
+// error does not — so as the chain's last resort Anna's would spend its whole retry
+// budget re-fetching a page whose answer cannot change.
+func TestAnnasMissingCopyIsACleanMiss(t *testing.T) {
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<html><body>no copy on file</body></html>`))
 	}))
@@ -125,12 +122,7 @@ func TestAnnasMissingCopyIsNotReportedAsACleanMiss(t *testing.T) {
 	if !strings.Contains(err.Error(), "embedded no IPFS CID") {
 		t.Fatalf("error = %v, want the no-CID diagnosis", err)
 	}
-	if errors.Is(err, ErrNotIndexed) {
-		t.Error("the no-CID case is now tagged ErrNotIndexed: good — delete this test")
-	}
-	if cooldownWorthy(context.Background(), err) {
-		t.Error("a missing copy put Anna's in cooldown, which is worse than leaving it untagged")
-	}
+	assertCleanMiss(t, err)
 }
 
 // TestAnnasSupports verifies the source claims md5-keyed items only and names

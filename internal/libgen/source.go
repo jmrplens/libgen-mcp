@@ -56,7 +56,7 @@ func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bo
 	if err != nil {
 		return false
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	req.Header.Set("Range", pdfProbeRange)
 	// Go sends no Accept header of its own, and a content-negotiating host reads that
 	// as a browser asking for a page: the Wayback Machine answers an Accept-less
@@ -107,7 +107,7 @@ func (f jsonFetch) get(ctx context.Context, endpoint string, out any) error {
 	if err != nil {
 		return fmt.Errorf("%s: building request for %q: %w", f.source, f.subject, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	// Go sends no Accept header of its own, and a content-negotiating REST host can
 	// read that as a browser asking for a page; both APIs behind this helper answer
 	// HTML to such a request under some paths.

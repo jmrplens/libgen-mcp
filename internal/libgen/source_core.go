@@ -109,7 +109,7 @@ func (s coreSource) lookupDownloadURL(ctx context.Context, doi string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("core: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	req.Header.Set("Authorization", "Bearer "+s.key)
 
 	resp, err := s.client().Do(req)

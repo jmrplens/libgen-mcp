@@ -168,7 +168,7 @@ func (s faoSource) fetchItemPage(ctx context.Context, id string) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("fao: building request for %s: %w", id, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClientOr(s.http).Do(req)
 	if err != nil {

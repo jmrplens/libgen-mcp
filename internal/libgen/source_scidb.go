@@ -98,7 +98,7 @@ func (s scidbSource) tryMirror(ctx context.Context, httpClient *http.Client, bas
 	if err != nil {
 		return "", fmt.Errorf("scidb: building request for %q: %w", base, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

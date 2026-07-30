@@ -138,7 +138,7 @@ func (c *Client) Enrich(ctx context.Context, doi, isbn string) *Enrichment {
 }
 
 // enrichGet issues a GET to an enrichment API after waiting on the supplied rate
-// limiter, setting the polite-pool User-Agent (the package userAgent plus a mailto
+// limiter, setting the polite-pool User-Agent (the package userAgent() plus a mailto
 // when a contact email is configured). Crossref and OpenLibrary pass different
 // limiters so each API is paced to its own etiquette. It returns the response on a
 // 200 and nil otherwise (including any transport or limiter error), so callers
@@ -151,7 +151,7 @@ func (c *Client) enrichGet(ctx context.Context, rawURL string, limiter *rate.Lim
 	if err != nil {
 		return nil
 	}
-	ua := userAgent
+	ua := userAgent()
 	if c.enrichEmail != "" {
 		ua += " (mailto:" + c.enrichEmail + ")"
 	}

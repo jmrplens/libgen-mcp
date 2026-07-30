@@ -330,7 +330,7 @@ func (s randombookSource) newRequest(ctx context.Context, method, endpoint strin
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	return req, nil
 }
 

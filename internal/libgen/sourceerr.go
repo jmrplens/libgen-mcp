@@ -64,6 +64,24 @@ func unavailableStatus(status int, err error) error {
 	return err
 }
 
+// missOrUnavailableStatus classifies an HTTP status the way unavailableStatus does,
+// and additionally treats 404 as a clean miss.
+//
+// It is deliberately separate rather than folded into unavailableStatus, because a
+// 404 means different things to different sources. Where a provider answers 404
+// for "I have no record of this identifier" — Unpaywall for a DOI outside its
+// database, Sci-Hub for an article it does not mirror — that is a settled answer,
+// and tagging it lets startAttempt skip the start-retry schedule instead of
+// re-asking a question already answered. Where a 404 might mean a URL was built
+// wrongly, it stays untagged, because claiming "not indexed" on our own mistake
+// would hide the bug.
+func missOrUnavailableStatus(status int, err error) error {
+	if status == http.StatusNotFound {
+		return notIndexed(err)
+	}
+	return unavailableStatus(status, err)
+}
+
 // cooldownWorthy reports whether err is evidence that a source is unavailable, and
 // therefore worth setting aside for a while, as opposed to a correct answer about
 // one item.

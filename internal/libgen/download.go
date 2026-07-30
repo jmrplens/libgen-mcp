@@ -486,7 +486,7 @@ func (c *Client) headContentLength(ctx context.Context, fileURL string, header h
 	if err != nil {
 		return 0, false
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	for k, vs := range header {
 		for _, v := range vs {
 			req.Header.Add(k, v)
@@ -934,7 +934,7 @@ func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	// Apply any source-specific headers (e.g. a Referer) on top of the defaults.
 	for k, vs := range header {
 		for _, v := range vs {

@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/version"
 )
 
 // discoveryMaxBody bounds how many bytes of any provider response are read before
@@ -28,7 +30,11 @@ const discoveryTimeout = 6 * time.Second
 
 // discoveryUserAgent identifies libgen-mcp to open-access APIs; sources such as
 // arXiv request courtesy identification with a contact/repository URL.
-const discoveryUserAgent = "libgen-mcp/1.0.0 (+https://github.com/jmrplens/libgen-mcp)"
+// discoveryUserAgent is the User-Agent every provider request carries. It is a
+// function rather than a constant because the version it reports is stamped into
+// the binary and handed to internal/version during startup, after this package's
+// variables are initialized.
+func discoveryUserAgent() string { return version.UserAgent() }
 
 // DiscoveryResult is one open-access hit from a discovery provider, in a shape
 // the search tool can present and the read/download tools can act on. The name is
@@ -95,7 +101,7 @@ func newDiscoveryClient() *http.Client {
 // other transport failure surfaces as an error the caller may choose to soften to
 // an empty result.
 func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status int, body []byte, err error) {
-	return boundedGetUA(ctx, client, rawURL, discoveryUserAgent)
+	return boundedGetUA(ctx, client, rawURL, discoveryUserAgent())
 }
 
 // boundedGetUA is boundedGet with an explicit User-Agent, letting a provider that

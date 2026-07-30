@@ -73,8 +73,8 @@ func TestBoundedGet_OKReturnsStatusAndBody(t *testing.T) {
 	if string(body) != payload {
 		t.Errorf("body = %q, want %q", body, payload)
 	}
-	if gotUA != discoveryUserAgent {
-		t.Errorf("User-Agent = %q, want %q", gotUA, discoveryUserAgent)
+	if gotUA != discoveryUserAgent() {
+		t.Errorf("User-Agent = %q, want %q", gotUA, discoveryUserAgent())
 	}
 }
 

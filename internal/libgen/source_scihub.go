@@ -104,7 +104,7 @@ func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, sche
 	if err != nil {
 		return "", fmt.Errorf("scihub: building request for %q: %w", host, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -116,7 +116,7 @@ func (s scihubSource) tryHost(ctx context.Context, httpClient *http.Client, sche
 	// embed a stale id="pdf" element, so scraping a PDF link from a non-OK
 	// response would hand back a dead URL. Skip the host instead.
 	if resp.StatusCode != http.StatusOK {
-		return "", unavailableStatus(resp.StatusCode, fmt.Errorf("scihub: host %q returned HTTP %d", host, resp.StatusCode))
+		return "", missOrUnavailableStatus(resp.StatusCode, fmt.Errorf("scihub: host %q returned HTTP %d", host, resp.StatusCode))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, scihubMaxBody))

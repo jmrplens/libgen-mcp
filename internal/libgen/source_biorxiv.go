@@ -128,7 +128,7 @@ func (s biorxivSource) lookupVersion(ctx context.Context, server, doi string) (s
 	if err != nil {
 		return "", fmt.Errorf("biorxiv: building request for %s: %w", server, err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)

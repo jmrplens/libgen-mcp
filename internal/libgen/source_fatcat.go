@@ -145,7 +145,7 @@ func (s fatcatSource) lookupRelease(ctx context.Context, doi string) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("fatcat: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	resp, err := httpClientOr(s.http).Do(req)
 	if err != nil {
