@@ -1324,7 +1324,11 @@ func publisherDirectScenarios() []scenario {
 // left unpinned and dagstuhl must be what served the file, which can only happen if
 // the document page still advertises a PDF.
 func assertS66DagstuhlChain(tr transcript) (pass bool, detail string) {
-	if ok, why := requireDOI(tr, dagstuhlDOI); !ok {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, noDownloadCall
+	}
+	if matched, why := requireDOI(call, dagstuhlDOI); !matched {
 		return false, why
 	}
 	return assertChainServedBy(tr, "dagstuhl")
@@ -1333,24 +1337,30 @@ func assertS66DagstuhlChain(tr transcript) (pass bool, detail string) {
 // assertS67ACLSourced grades the model mapping the Anthology's prose name onto
 // source=acl, and with it the uppercasing of a volume-lettered identifier.
 func assertS67ACLSourced(tr transcript) (pass bool, detail string) {
-	if ok, why := requireDOI(tr, aclDOI); !ok {
+	call, ok := findSourcedCall(tr, "acl")
+	if !ok {
+		return false, "download source arg is not acl"
+	}
+	if matched, why := requireDOI(call, aclDOI); !matched {
 		return false, why
 	}
 	return assertSourcedDownload(tr, "acl", "doi")
 }
 
-// requireDOI checks that the download call carried the DOI the scenario is about.
+// requireDOI checks that a download call carried the DOI the scenario is about.
 //
 // Without it these assertions grade only "the named source served something": a
 // model that substituted a different DOI the same source can serve would pass
 // while leaving the behavior under test — the DROPS document-page parse, the
 // lettered Anthology identifier — unexercised. The comparison is case-insensitive
 // because a DOI is case-insensitive by specification and Crossref lower-cases them.
-func requireDOI(tr transcript, want string) (pass bool, detail string) {
-	call, ok := findCall(tr, "download")
-	if !ok {
-		return false, noDownloadCall
-	}
+//
+// The CALL is supplied by the caller rather than looked up here, because which
+// call to grade differs: a chain-routing scenario grades the one that worked
+// (findCall), a source-pinned one the call that asked for that source
+// (findSourcedCall). Looking it up here would let a model pass a pinned scenario
+// by carrying the right DOI in some other attempt.
+func requireDOI(call toolCall, want string) (pass bool, detail string) {
 	if got := strings.TrimSpace(stringField(call.Input, "doi")); !strings.EqualFold(got, want) {
 		return false, "model called download with doi=" + got + ", not " + want +
 			", the DOI the scenario is about"
