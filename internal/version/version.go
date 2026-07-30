@@ -10,28 +10,29 @@
 // made.
 package version
 
-// fallback is the version reported by a build nobody stamped: a `go run`, a test,
-// or a command that forgot to call Set. It is deliberately not a number. A wrong
-// number is worse than an honest "unknown", because a server operator reading our
-// User-Agent in their logs cannot tell a stale release from an unstamped build.
-const fallback = "dev"
+import libgenmcp "github.com/jmrplens/libgen-mcp"
 
-// current is the stamped version. It is written once by Set during startup and
-// only read afterwards, so it needs no synchronization; Set documents that rule.
-var current = fallback
+// current is the version this binary reports. It starts as the number compiled in
+// from the repository's VERSION file — the same file the release manifests are
+// gated against — so a build nobody stamped is already honest. Set overwrites it
+// once during startup when release ldflags carried something more specific.
+//
+// It is written once by Set and only read afterwards, so it needs no
+// synchronization; Set documents that rule.
+var current = libgenmcp.Version
 
 // Set records the version this binary was stamped with. It must be called from a
 // command's startup path, before any goroutine issues a request, and never after.
-// An empty or unset value leaves the honest fallback in place rather than
-// advertising a blank version.
+// An empty value leaves the compiled-in VERSION in place rather than advertising a
+// blank version.
 func Set(v string) {
 	if v != "" {
 		current = v
 	}
 }
 
-// Current returns the version this binary reports, which is the stamped release
-// number or "dev" when nobody stamped one.
+// Current returns the version this binary reports: the release ldflags' value when
+// one was stamped, otherwise the number compiled in from VERSION.
 func Current() string { return current }
 
 // UserAgent returns the User-Agent every outbound request carries: the binary's
@@ -42,7 +43,7 @@ func Current() string { return current }
 //
 // It is built per call rather than cached in a package variable, because a
 // variable would be initialized before a command's startup path reaches Set and
-// would pin the fallback forever.
+// would pin the pre-Set value forever.
 func UserAgent() string {
 	return "libgen-mcp/" + current + " (+https://github.com/jmrplens/libgen-mcp)"
 }
