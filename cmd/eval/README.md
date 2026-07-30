@@ -105,6 +105,11 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
 | S69 | **SciELO on a recent article** — a 2025 paper Unpaywall marks open access without supplying a PDF link and fatcat has not ingested, so nothing else in the chain can produce bytes; what is graded is the resolver landing, since no identifier the caller holds predicts the article page's address and the PDF URL comes from that page's own `citation_pdf_url` |
 | S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof |
+| S71 | **Unpaywall by name** — the head of the article chain, and the one source no scenario had ever pinned: S7 reads as its coverage but grades whichever open-access provider won the race, so any run since Europe PMC arrived could have been served by something else without saying so |
+| S72 | **SciDB** — the only entry in `config.KnownSources` no scenario reached. It appears in half a dozen source lists as the thing that must _not_ win, and a source graded only as a loser is indistinguishable from one that cannot run at all |
+| S73 | **The save confirmation waived** — the prompt says the download is already approved, so the model must discover `skip_confirmation`; the host counts every confirmation it answers, so "none was raised" is hard evidence rather than an inference. It is the one argument whose whole effect is to remove a safeguard, and S26 only ever proved the safeguard fires |
+| S74 | **Reading on past the first chunk** — every other read scenario takes one chunk and stops. The model must continue from the cursor `read` handed it and receive different text; text identical to the first chunk is the failure, because that is what re-running the same call produces and the answer it feeds looks exactly like a continuation |
+| S75 | **A keyed source is advertised** — S48 read the other way: with a CORE key configured, `core` must appear in `download`'s `source` enum. S48 alone is satisfied by a gate stuck shut, which looks identical to a gate working; the pair says the enum tracks the deployment. Touches no third party |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -201,6 +206,14 @@ then acts as the agent's own fetch tool: it fetches the resolved URL to the
 sandbox download dir, so the file lands locally either way — verifying the
 model behaves the same while the server's delivery mechanism differs.
 
+**S71–S75 came from reading the suite against the surface rather than against a
+bug.** Four of them cover something that had no scenario at all — `unpaywall` and
+`scidb`, the two ends of the article chain; `skip_confirmation`, the one argument
+whose effect is to remove a safeguard; and `read`'s continuation, without which the
+tool is a preview and nothing more. The fifth is the missing half of a pair: S48
+asserts an unkeyed source stays hidden, which a gate stuck shut satisfies forever,
+so S75 configures a key and asserts the source appears.
+
 ## Running
 
 ```sh
@@ -292,8 +305,8 @@ that run file and regenerates the pages in the same step, and CI fails on a page
 that no longer matches — which is what stops a hand edit from drifting.
 
 **A partial run publishes too.** Writing to a results doc **merges** into it rather
-than replacing it, so re-measuring one source does not cost a full suite — 71
-scenarios against a real API, real mirrors and real downloads:
+than replacing it, so re-measuring one source does not cost a whole suite — every
+scenario against a real API, real mirrors and real downloads:
 
 ```bash
 make eval-only ONLY=S61,S62      # re-runs those two, merges them, regenerates the pages

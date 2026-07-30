@@ -121,6 +121,112 @@ func TestAuditSchema_EmptyEnum(t *testing.T) {
 	}
 }
 
+// TestAuditSchema_EnumDescriptionDrift is the rule for the half of an enum that
+// is not generated: the values are pinned from the code that validates them, the
+// prose beside them is hand-written, and adding a value updates only the first.
+func TestAuditSchema_EnumDescriptionDrift(t *testing.T) {
+	stale := objectSchema(map[string]any{
+		"topics": map[string]any{
+			"type":        "array",
+			"description": "collections to search: nonfiction fiction",
+			// The validator gained a collection the prose never learned about.
+			"items": map[string]any{"type": "string", "enum": []any{"nonfiction", "fiction", "standards"}},
+		},
+	})
+	vs := auditSchema("search", "input", stale)
+	if !categorySet(vs)["enum-description-drift"] {
+		t.Fatalf("a value the description never mentions must be flagged; got %v", detailSet(vs))
+	}
+	if !hasSubstr(detailSet(vs), `"standards"`) {
+		t.Errorf("the finding must name the undocumented value; got %v", detailSet(vs))
+	}
+	if hasSubstr(detailSet(vs), `"fiction"`) {
+		t.Errorf("a documented value must not be flagged; got %v", detailSet(vs))
+	}
+}
+
+// TestAuditSchema_EnumDescriptionFresh accepts a description that still lists
+// every value, including a numeric one — a JSON number arrives as a float64 and
+// must be compared as the integer a description would spell.
+func TestAuditSchema_EnumDescriptionFresh(t *testing.T) {
+	fresh := objectSchema(map[string]any{
+		"results_per_page": map[string]any{
+			"type":        "integer",
+			"description": "a single number: 25 50 or 100 (default 25)",
+			"enum":        []any{float64(25), float64(50), float64(100)},
+		},
+	})
+	if vs := auditSchema("search", "input", fresh); len(vs) != 0 {
+		t.Fatalf("a description listing every value must pass; got %v", detailSet(vs))
+	}
+}
+
+// TestAuditSchema_EnumDescriptionAbsent leaves the drift rule silent when there
+// is no description to compare against: the missing description is already
+// reported by its own rule, and reporting it twice buries the first.
+func TestAuditSchema_EnumDescriptionAbsent(t *testing.T) {
+	schema := objectSchema(map[string]any{
+		"mode": map[string]any{"type": "string", "enum": []any{"a", "b"}},
+	})
+	got := categorySet(auditSchema("tool", "input", schema))
+	if !got["field-description"] {
+		t.Error("the missing description must still be reported")
+	}
+	if got["enum-description-drift"] {
+		t.Error("drift must not be reported on top of a missing description")
+	}
+}
+
+// TestAuditSchema_EnumValues flags a repeated and a blank enum value. A repeat is
+// how the download tool's merged source enum would show that its deduplication
+// stopped working.
+func TestAuditSchema_EnumValues(t *testing.T) {
+	schema := objectSchema(map[string]any{
+		"source": map[string]any{
+			"type":        "string",
+			"description": "one of oapen, archive or  ",
+			"enum":        []any{"oapen", "archive", "oapen", " "},
+		},
+	})
+	details := detailSet(auditSchema("download", "input", schema))
+	if !hasSubstr(details, "twice") {
+		t.Errorf("a repeated enum value must be flagged; got %v", details)
+	}
+	if !hasSubstr(details, "blank value") {
+		t.Errorf("a blank enum value must be flagged; got %v", details)
+	}
+}
+
+// TestAuditMetadata_DescriptionBudget flags a tool description that outgrew its
+// budget, and leaves an ordinary one alone.
+func TestAuditMetadata_DescriptionBudget(t *testing.T) {
+	tool := &mcp.Tool{
+		Name:        "search",
+		Title:       "Search",
+		Description: strings.Repeat("x", maxToolDescLen+1),
+		Annotations: &mcp.ToolAnnotations{},
+		InputSchema: objectSchema(nil),
+	}
+	if !categorySet(auditMetadata(tool))["description-budget"] {
+		t.Fatal("an over-budget tool description must be flagged")
+	}
+	tool.Description = strings.Repeat("x", maxToolDescLen)
+	if categorySet(auditMetadata(tool))["description-budget"] {
+		t.Fatal("a description exactly at the budget must pass")
+	}
+}
+
+// TestAuditSchema_FieldDescriptionBudget flags a field description that outgrew
+// its budget.
+func TestAuditSchema_FieldDescriptionBudget(t *testing.T) {
+	schema := objectSchema(map[string]any{
+		"verbose": map[string]any{"type": "string", "description": strings.Repeat("y", maxFieldDescLen+1)},
+	})
+	if !categorySet(auditSchema("tool", "input", schema))["description-budget"] {
+		t.Fatal("an over-budget field description must be flagged")
+	}
+}
+
 // TestAuditSchema_NonMap returns no violations when the schema is absent or not
 // a JSON object (e.g. a nil OutputSchema).
 func TestAuditSchema_NonMap(t *testing.T) {

@@ -480,7 +480,258 @@ func scenarios() []scenario {
 		sourceScenarios(),
 		standardsSourceScenarios(),
 		publisherDirectScenarios(),
+		coverageGapScenarios(),
 	)
+}
+
+// coverageGapScenarios close the holes a coverage sweep of the suite found: two
+// download sources that had never been graded at all, an argument that suppresses
+// a user's last chance to stop a file being written, the read tool's whole
+// continuation path, and the half of the credential gate S48 leaves untested.
+//
+// They are grouped rather than filed beside their neighbors so the run order, the
+// README table and the results table stay in one sequence: the suite's ids are
+// consecutive and appending is the only edit that keeps them so.
+func coverageGapScenarios() []scenario {
+	return []scenario{
+		{
+			ID:     "S71",
+			Prompt: fmt.Sprintf("Download the open-access article with DOI %s from Unpaywall.", openAccessDOI),
+			// Unpaywall leads the whole article chain and no scenario had ever pinned
+			// it. S7 reads as its coverage and is not: it grades whichever open-access
+			// provider won the race, so every run since Europe PMC arrived could have
+			// been served by something else and nothing would have said so. The email
+			// is configured because the source does not exist without one.
+			SetupEnv: map[string]string{"LIBGEN_MCP_UNPAYWALL_EMAIL": unpaywallEmail()},
+			Assert:   assertS71Unpaywall,
+		},
+		{
+			ID:     "S72",
+			Prompt: fmt.Sprintf("Download the article with DOI %s from the scidb source.", scihubDOI),
+			// scidb is the one entry in config.KnownSources no scenario reached. It sat
+			// in half a dozen source lists as the thing that must NOT win, and a source
+			// only ever graded as a loser is indistinguishable from one that cannot run.
+			// It covers Sci-Hub's indexing gap, so a paywalled DOI is the right probe.
+			Assert: assertS72SciDB,
+		},
+		{
+			ID: "S73",
+			Prompt: `Find "Structure and Interpretation of Computer Programs" by Abelson and Sussman and ` +
+				`download it. I have already approved this download — save it without stopping to ask me again.`,
+			// skip_confirmation had no coverage, and it is the one argument on the
+			// surface whose whole effect is to remove a safeguard: it suppresses the
+			// prompt that is the user's last chance to stop a file being written. S26
+			// proves the confirmation fires; nothing proved the opt-out reaches it. The
+			// host counts every confirmation it answers, so the negative is hard.
+			Assert: assertSkipConfirmation,
+		},
+		{
+			ID: "S74",
+			Prompt: `Find "The C Programming Language" by Kernighan and Ritchie, read the start of it, and then ` +
+				`show me the NEXT part of the text — the part that comes after what you read first.`,
+			// The read tool paginates, and none of that was graded: every read scenario
+			// takes one chunk and stops. A model that cannot continue a document can
+			// read the first page of anything and nothing more, so the cursor is what
+			// makes read useful beyond a preview — and the only thing that carries it is
+			// a field description.
+			Assert: assertReadContinuation,
+		},
+		{
+			ID: "S75",
+			Prompt: `Which download sources can you use to fetch an article by DOI? ` +
+				`Just list them — do not download anything.`,
+			// The other half of S48. That scenario forces the CORE key empty and asserts
+			// core is hidden; a gate that hid the source unconditionally would pass it
+			// forever. This configures a key and asserts the source appears, so the two
+			// together grade a gate rather than a wall. Like S48 it reads the surface out
+			// of the transcript and calls nothing live, so the placeholder key is never
+			// sent anywhere.
+			SetupEnv: map[string]string{"LIBGEN_MCP_CORE_KEY": "eval-placeholder-core-key"},
+			Assert:   assertKeyedSourceAdvertised,
+		},
+	}
+}
+
+// assertS71Unpaywall grades the head of the article chain, pinned by its prose
+// name: the model must map "Unpaywall" onto source=unpaywall and the source must
+// serve the DOI the prompt named.
+func assertS71Unpaywall(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "unpaywall", "doi", openAccessDOI)
+}
+
+// assertS72SciDB grades the last shadow library in the chain, pinned by name.
+func assertS72SciDB(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "scidb", "doi", scihubDOI)
+}
+
+// assertSkipConfirmation grades the opt-out from the save confirmation. The model
+// must set skip_confirmation on the download it makes, and no confirmation may
+// have been raised at all — the host counts the ones it answers, so this is the
+// same hard evidence S26 uses, read the other way round.
+//
+// A confirmation that fired anyway is FUNCTIONAL: the argument reached the server
+// and did not take effect. A model that never set it is a SURFACE GAP, since the
+// field's description is the only thing that could have told it the opt-out exists.
+func assertSkipConfirmation(tr transcript) (pass bool, detail string) {
+	if _, called := findCall(tr, "download"); !called {
+		return false, noDownloadCall
+	}
+	call, ok := findDownloadBy(tr, func(c toolCall) bool {
+		skip, _ := c.Input["skip_confirmation"].(bool)
+		return skip
+	})
+	if !ok {
+		return false, "SURFACE GAP: model never set skip_confirmation although the user said they had already " +
+			"approved the download — the field's description may not convey that the prompt can be waived"
+	}
+	md5 := stringField(call.Input, "md5")
+	if !isMD5(md5) {
+		return false, badDownloadMD5Detail
+	}
+	if !md5InSearchResults(tr, md5) {
+		return false, functionalPrefix + "download md5 did not come from a prior search result"
+	}
+	if tr.ConfirmElicits > 0 {
+		return false, fmt.Sprintf("%sskip_confirmation was set but the server still raised %d save confirmation(s), "+
+			"so the opt-out did not reach the consent check", functionalPrefix, tr.ConfirmElicits)
+	}
+	if downloadFailed(call) {
+		return gradeDegraded(tr, "no confirmation was raised, as asked, but the live fetch failed (mirror/network)")
+	}
+	fileOK, msg := checkDownloadedFile(call, "")
+	if !fileOK {
+		return false, functionalPrefix + msg
+	}
+	return true, "model discovered skip_confirmation; no save confirmation was raised and " + msg
+}
+
+// assertKeyedSourceAdvertised is S48 read the other way: with a CORE key
+// configured, the source must APPEAR in the download tool's enum.
+//
+// On its own S48 is satisfied by a source that is never advertised under any
+// configuration — a gate stuck shut looks exactly like a gate working. Together
+// the two say the enum tracks the deployment, which is the property the enum
+// exists for.
+func assertKeyedSourceAdvertised(tr transcript) (pass bool, detail string) {
+	enum, ok := downloadSourceEnum(tr)
+	if !ok {
+		return false, functionalPrefix + "the download tool advertised no source enum at all"
+	}
+	if !slices.Contains(enum, "core") {
+		return false, functionalPrefix + "a CORE API key is configured but the source enum omits core, " +
+			"so the model cannot ask for a source this deployment can actually run; it advertised " +
+			strings.Join(enum, ", ")
+	}
+	return true, "core is advertised on a deployment that holds a CORE key; enum = " + strings.Join(enum, ", ")
+}
+
+// firstSequentialRead returns the first successful read call that returned text
+// without being a find or outline request — the chunk a continuation continues
+// from.
+func firstSequentialRead(tr transcript) (call toolCall, out tools.ReadOutput, found bool) {
+	for _, c := range tr.Calls {
+		if c.Name != "read" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		if stringField(c.Input, "find") != "" {
+			continue
+		}
+		if outline, _ := c.Input["outline"].(bool); outline {
+			continue
+		}
+		var o tools.ReadOutput
+		if decodeStructured(c.Structured, &o) != nil || strings.TrimSpace(o.Text) == "" {
+			continue
+		}
+		return c, o, true
+	}
+	return toolCall{}, tools.ReadOutput{}, false
+}
+
+// continuationRead returns the read call that asked to continue from first: one
+// carrying the cursor first handed back, or one positioned past the chunk first
+// returned. Both are legitimate — the cursor is the advertised way, and an offset
+// or start_page past the end is the same request spelled out — so both count.
+func continuationRead(tr transcript, first toolCall, out tools.ReadOutput) (toolCall, bool) {
+	return findReadBy(tr, func(c toolCall) bool {
+		if sameCall(c, first) {
+			return false
+		}
+		if cur := stringField(c.Input, "cursor"); cur != "" && cur == out.Cursor {
+			return true
+		}
+		if page, isNum := c.Input["start_page"].(float64); isNum && int(page) > out.PageEnd && out.PageEnd > 0 {
+			return true
+		}
+		offset, isNum := c.Input["offset"].(float64)
+		return isNum && int(offset) >= out.CharEnd && out.CharEnd > 0
+	})
+}
+
+// sameCall reports whether two recorded calls are the same request, compared by
+// the arguments the model sent — which is all a transcript preserves.
+func sameCall(a, b toolCall) bool {
+	return fmt.Sprint(a.Input) == fmt.Sprint(b.Input)
+}
+
+// findReadBy returns the first read call matching the predicate, preferring one
+// that came back without a tool error, exactly as findDownloadBy does.
+func findReadBy(tr transcript, match func(toolCall) bool) (call toolCall, found bool) {
+	var first toolCall
+	for _, c := range tr.Calls {
+		if c.Name != "read" || !match(c) {
+			continue
+		}
+		if !found {
+			first, found = c, true
+		}
+		if c.Result == nil || !c.Result.IsError {
+			return c, true
+		}
+	}
+	return first, found
+}
+
+// assertReadContinuation grades the read tool's pagination: the model must read a
+// chunk and then fetch the NEXT one, rather than re-reading the same text or
+// answering from the first chunk alone.
+//
+// The evidence is the second call's arguments plus the text it brought back. Text
+// identical to the first chunk is the failure this exists to catch: it is what a
+// model produces when it repeats the call it already made, and the answer it then
+// writes looks exactly like a successful continuation.
+func assertReadContinuation(tr transcript) (pass bool, detail string) {
+	if _, called := findCall(tr, "read"); !called {
+		return false, "SURFACE GAP: model never called read"
+	}
+	first, out, ok := firstSequentialRead(tr)
+	if !ok {
+		return gradeDegraded(tr, "no read returned any text to continue from (live mirror/source chain)")
+	}
+	if !out.HasMore {
+		return gradeDegraded(tr, "the first chunk exhausted the document, so there was nothing to continue to")
+	}
+	next, ok := continuationRead(tr, first, out)
+	if !ok {
+		return false, "SURFACE GAP: model read one chunk and stopped — it set neither the cursor read handed it " +
+			"nor an offset past the text it already had, so read's continuation fields did not convey how to go on"
+	}
+	if next.Result == nil || next.Result.IsError {
+		return gradeDegraded(tr, "the model asked for the next chunk but the follow-up read failed live")
+	}
+	var second tools.ReadOutput
+	if err := decodeStructured(next.Structured, &second); err != nil {
+		return false, err.Error()
+	}
+	if strings.TrimSpace(second.Text) == "" {
+		return gradeDegraded(tr, "the continuation read came back with no text")
+	}
+	if second.Text == out.Text {
+		return false, functionalPrefix + "the continuation returned the same text as the first chunk, " +
+			"so read paginated nowhere"
+	}
+	return true, fmt.Sprintf("model read %d chars, then continued and received a further %d",
+		len(out.Text), len(second.Text))
 }
 
 // coreSurfaceScenarios are the scenarios over the four tools' own paths: searching
@@ -1206,19 +1457,22 @@ func assertS61RFCFromNumber(tr transcript) (pass bool, detail string) {
 		return false, "SURFACE GAP: model called download with doi=" + doi +
 			", not the RFC DOI it had to derive from the RFC number"
 	}
-	return assertChainServedBy(tr, "rfc")
+	// isRFCDOI only proves the model found the door. The scenario is about RFC 9110
+	// specifically, and assertChainServedBy pins the whole DOI, so deriving the
+	// prefix and then the wrong number is a failure rather than a pass.
+	return assertChainServedBy(tr, "rfc", rfcDOI)
 }
 
 // assertS62NISTChain grades the NIST routing scenario. The DOI is supplied, so what
 // is under test is the 10.6028 gate and the doi.org redirect the source depends on.
 func assertS62NISTChain(tr transcript) (pass bool, detail string) {
-	return assertChainServedBy(tr, "nist")
+	return assertChainServedBy(tr, "nist", nistDOI)
 }
 
 // assertS63RFCSourced grades the model mapping the RFC Editor's prose name onto
 // source=rfc, the alternative to letting the chain route.
 func assertS63RFCSourced(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "rfc", "doi")
+	return assertSourcedDownload(tr, "rfc", "doi", rfcDOI)
 }
 
 // isRFCDOI reports whether the argument is a DOI under the RFC Editor's registrant
@@ -1371,46 +1625,46 @@ func publisherDirectScenarios() []scenario {
 // left unpinned and dagstuhl must be what served the file, which can only happen if
 // the document page still advertises a PDF.
 func assertS66DagstuhlChain(tr transcript) (pass bool, detail string) {
-	call, ok := findCall(tr, "download")
-	if !ok {
-		return false, noDownloadCall
-	}
-	if matched, why := requireDOI(call, dagstuhlDOI); !matched {
-		return false, why
-	}
-	return assertChainServedBy(tr, "dagstuhl")
+	return assertChainServedBy(tr, "dagstuhl", dagstuhlDOI)
 }
 
 // assertS67ACLSourced grades the model mapping the Anthology's prose name onto
 // source=acl, and with it the uppercasing of a volume-lettered identifier.
 func assertS67ACLSourced(tr transcript) (pass bool, detail string) {
-	call, ok := findSourcedCall(tr, "acl")
-	if !ok {
-		return false, "download source arg is not acl"
-	}
-	if matched, why := requireDOI(call, aclDOI); !matched {
-		return false, why
-	}
-	return assertSourcedDownload(tr, "acl", "doi")
+	return assertSourcedDownload(tr, "acl", "doi", aclDOI)
 }
 
-// requireDOI checks that a download call carried the DOI the scenario is about.
+// sameIdentifier reports whether the identifier a download call carried is the
+// one the scenario is about, and the detail to report when it is not.
 //
-// Without it these assertions grade only "the named source served something": a
-// model that substituted a different DOI the same source can serve would pass
-// while leaving the behavior under test — the DROPS document-page parse, the
-// lettered Anthology identifier — unexercised. The comparison is case-insensitive
-// because a DOI is case-insensitive by specification and Crossref lower-cases them.
+// Every scenario below names a specific document in its prompt for a specific
+// reason — the DROPS document-page parse, the lettered Anthology identifier, the
+// Zenodo concept DOI, the 2025 SciELO article nothing else has ingested — and
+// without this the assertion grades only "the named source served something". A
+// model that substituted a different item the same source can serve would pass
+// while leaving the behavior under test entirely unexercised. Two scenarios were
+// found doing exactly that; the rest are pinned so none can start.
 //
-// The CALL is supplied by the caller rather than looked up here, because which
-// call to grade differs: a chain-routing scenario grades the one that worked
-// (findCall), a source-pinned one the call that asked for that source
-// (findSourcedCall). Looking it up here would let a model pass a pinned scenario
-// by carrying the right DOI in some other attempt.
-func requireDOI(call toolCall, want string) (pass bool, detail string) {
-	if got := strings.TrimSpace(stringField(call.Input, "doi")); !strings.EqualFold(got, want) {
-		return false, "model called download with doi=" + got + ", not " + want +
-			", the DOI the scenario is about"
+// An empty want pins nothing, for the scenarios whose identifier the model is
+// expected to discover rather than copy. The comparison follows the identifier's
+// own equality rule: a DOI is case-insensitive by specification (and Crossref
+// lower-cases them), an md5 is hex, and an ISBN is compared after the same
+// normalization the download tool applies, so a reader copying "978-0-14-143951-8"
+// off a cover matches the digits the tool resolves.
+func sameIdentifier(key, got, want string) (pass bool, detail string) {
+	if want == "" {
+		return true, ""
+	}
+	var equal bool
+	switch key {
+	case "isbn":
+		equal = libgen.NormalizeISBN(got) == libgen.NormalizeISBN(want)
+	default:
+		equal = strings.EqualFold(strings.TrimSpace(got), strings.TrimSpace(want))
+	}
+	if !equal {
+		return false, "model called download with " + key + "=" + got + ", not " + want +
+			", the " + key + " the scenario is about"
 	}
 	return true, ""
 }
@@ -1420,22 +1674,14 @@ func requireDOI(call toolCall, want string) (pass bool, detail string) {
 // substituted the version DOI would pass assertChainServedBy while leaving the hop
 // untested, which is the whole point of the scenario.
 func assertS68ZenodoConceptDOI(tr transcript) (pass bool, detail string) {
-	call, ok := findCall(tr, "download")
-	if !ok {
-		return false, noDownloadCall
-	}
-	if doi := strings.TrimSpace(stringField(call.Input, "doi")); !strings.EqualFold(doi, zenodoConceptDOI) {
-		return false, "model called download with doi=" + doi + ", not the concept DOI " +
-			zenodoConceptDOI + " the scenario is about"
-	}
-	return assertChainServedBy(tr, "zenodo")
+	return assertChainServedBy(tr, "zenodo", zenodoConceptDOI)
 }
 
 // assertS69ScieloChain grades the SciELO routing scenario: the chain must be left
 // unpinned and scielo must be what served the file, which can only happen if the DOI
 // still resolves onto scielo.br and the article page still advertises a PDF.
 func assertS69ScieloChain(tr transcript) (pass bool, detail string) {
-	return assertChainServedBy(tr, "scielo")
+	return assertChainServedBy(tr, "scielo", scieloDOI)
 }
 
 // assertS70FAOChain grades the FAO routing scenario: the chain must be left unpinned
@@ -1443,42 +1689,42 @@ func assertS69ScieloChain(tr transcript) (pass bool, detail string) {
 // advertised URL was rewritten onto the backend bitstream endpoint — the frontend one
 // returns the application shell, and the pipeline refuses that.
 func assertS70FAOChain(tr transcript) (pass bool, detail string) {
-	return assertChainServedBy(tr, "fao")
+	return assertChainServedBy(tr, "fao", faoDOI)
 }
 
 // assertS51OapenDOI checks the OAPEN source keyed by a monograph DOI: the model must
 // map the provider named in prose onto source=oapen, and when the live fetch lands
 // OAPEN must be what served the bytes.
 func assertS51OapenDOI(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "oapen", "doi")
+	return assertSourcedDownload(tr, "oapen", "doi", oapenDOI)
 }
 
 // assertS52OapenISBN checks the other identifier OAPEN accepts, on the same
 // monograph: an ISBN-keyed download must reach the source and come back with the
 // book.
 func assertS52OapenISBN(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "oapen", "isbn")
+	return assertSourcedDownload(tr, "oapen", "isbn", oapenISBN)
 }
 
 // assertS54Archive checks the Internet Archive source: the model must map the prose
 // name onto source=archive, and the ISBN must survive both hops (OpenLibrary, then
 // archive.org) to bring back a scan.
 func assertS54Archive(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "archive", "isbn")
+	return assertSourcedDownload(tr, "archive", "isbn", publicDomainISBN)
 }
 
 // assertOapenRejectsUnheld checks OAPEN's identifier re-check against a DOI it does
 // not hold. See unheldOapenDOI for why the free-text search makes this the failure
 // worth asserting negatively.
 func assertOapenRejectsUnheld(tr transcript) (pass bool, detail string) {
-	return assertSourceRefuses(tr, "oapen", "doi", "an identifier OAPEN does not hold")
+	return assertSourceRefuses(tr, "oapen", "doi", unheldOapenDOI, "an identifier OAPEN does not hold")
 }
 
 // assertArchiveRefusesLending checks the Internet Archive's lending gate against a
 // book the Archive holds only for borrowing. See lendingRestrictedISBN for why a
 // file arriving here would be worse than no file at all.
 func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
-	return assertSourceRefuses(tr, "archive", "isbn", "a lending-restricted book")
+	return assertSourceRefuses(tr, "archive", "isbn", lendingRestrictedISBN, "a lending-restricted book")
 }
 
 // assertGutenbergDiscovery checks the Project Gutenberg provider: a public-domain
@@ -1525,6 +1771,12 @@ func assertISBNDownload(tr transcript) (pass bool, detail string) {
 		return false, "SURFACE GAP: no download call carried an isbn, so the legal book path was never taken — " +
 			"the isbn field's description may not convey that a book can be fetched by it"
 	}
+	// The novel the prompt names is the one OAPEN declines, which is what makes this
+	// the only scenario that exercises the isbn chain's failover. A substituted ISBN
+	// that OAPEN happens to hold would pass while testing its first source twice.
+	if keyOK, msg := downloadKeyOK(call, "isbn", publicDomainISBN); !keyOK {
+		return false, msg
+	}
 	if downloadFailed(call) {
 		return gradeDegraded(tr, "the model downloaded by isbn but the live fetch failed (OAPEN/OpenLibrary/archive.org)")
 	}
@@ -1552,7 +1804,7 @@ func assertISBNDownload(tr transcript) (pass bool, detail string) {
 // is looked for first and reported as functional. Only after that does the model's
 // honesty matter: a refusal it does not pass on leaves the user thinking a download is
 // on its way.
-func assertSourceRefuses(tr transcript, want, key, why string) (pass bool, detail string) {
+func assertSourceRefuses(tr transcript, want, key, id, why string) (pass bool, detail string) {
 	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
@@ -1560,7 +1812,7 @@ func assertSourceRefuses(tr transcript, want, key, why string) (pass bool, detai
 	if !ok {
 		return false, "download source arg is not " + want
 	}
-	if keyOK, msg := downloadKeyOK(call, key); !keyOK {
+	if keyOK, msg := downloadKeyOK(call, key, id); !keyOK {
 		return false, msg
 	}
 	if size, served := downloadServedBy(tr, want); served {
@@ -1741,8 +1993,8 @@ func assertSourceCooldown(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", scihubDOI); !keyOK {
+		return false, msg
 	}
 	// resolve_only never writes to disk, so it raises no save confirmation and the
 	// chain is walked once — there is no second pass for a cooldown to affect.
@@ -1784,14 +2036,14 @@ func cooldownDecision(tr transcript) (marker string, found bool) {
 // named in prose onto source=europepmc, and when the live fetch lands Europe PMC
 // must be what served the bytes.
 func assertS45EuropePMC(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "europepmc", "doi")
+	return assertSourcedDownload(tr, "europepmc", "doi", openAccessDOI)
 }
 
 // assertS46Biorxiv checks the bioRxiv source and, with it, the DOI-prefix gate: no
 // source is named, so bioRxiv can only serve the preprint by claiming the 10.1101
 // prefix as the chain walks past the providers that decline it.
 func assertS46Biorxiv(tr transcript) (pass bool, detail string) {
-	return assertChainServedBy(tr, "biorxiv")
+	return assertChainServedBy(tr, "biorxiv", biorxivDOI)
 }
 
 // assertS47Fatcat checks the fatcat source, which resolves for real since it was
@@ -1801,20 +2053,22 @@ func assertS46Biorxiv(tr transcript) (pass bool, detail string) {
 // than failing — assertSourcedDownload routes a failed fetch through gradeDegraded —
 // because Scholar and the Wayback captures behind it are somebody else's uptime.
 func assertS47Fatcat(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "fatcat", "doi")
+	return assertSourcedDownload(tr, "fatcat", "doi", openAccessDOI)
 }
 
 // assertChainServedBy grades a DOI download the prompt left unpinned: the model
-// only has to download by the DOI, and which source serves it is the CHAIN's
-// decision. That is what makes it a routing check — pinning the source would prove
-// only that the enum accepts the name, never that the chain reaches it.
-func assertChainServedBy(tr transcript, want string) (pass bool, detail string) {
+// only has to download by the DOI it was given, and which source serves it is the
+// CHAIN's decision. That is what makes it a routing check — pinning the source
+// would prove only that the enum accepts the name, never that the chain reaches
+// it. The DOI itself IS pinned (doi), because each of these scenarios chose its
+// document for a property no other document of the same publisher has.
+func assertChainServedBy(tr transcript, want, doi string) (pass bool, detail string) {
 	call, ok := findCall(tr, "download")
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", doi); !keyOK {
+		return false, msg
 	}
 	if src := stringField(call.Input, "source"); src != "" {
 		return false, "model pinned source=" + src + " although the prompt asked it not to, so the chain never got to route"
@@ -1835,8 +2089,8 @@ func assertOpenAccessChainOrder(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", openAccessDOI); !keyOK {
+		return false, msg
 	}
 	if src := stringField(call.Input, "source"); src != "" {
 		return false, "model pinned source=" + src + " although the prompt asked it not to, so the chain never got to route"
@@ -2276,11 +2530,18 @@ func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
 			return true, skipPrefix + " no Anna's membership key was available, so the member tier cannot be exercised"
 		}
 	}
-	call, ok := findCall(tr, "download")
-	if !ok {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
-	if member, _ := call.Input["annas_member"].(bool); !member {
+	// The call that opted in, not whichever call worked — the same distinction
+	// findSourcedCall draws for a pinned source. A member download that the account's
+	// allowance refuses, followed by a keyless one that succeeds, is a model that DID
+	// discover the argument; grading the keyless call would report it as a surface gap.
+	call, ok := findDownloadBy(tr, func(c toolCall) bool {
+		member, _ := c.Input["annas_member"].(bool)
+		return member
+	})
+	if !ok {
 		return false, "SURFACE GAP: model never set annas_member despite the user offering a membership"
 	}
 	// The scenario is about discovering the argument, which the check above already
@@ -2368,11 +2629,21 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 // resolve_only=true on a valid md5/doi download call, and the tool returns a
 // resolved URL without downloading. A live resolve failure is graded on honesty.
 func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
-	call, ok := findCall(tr, "download")
-	if !ok {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
-	if ro, _ := call.Input["resolve_only"].(bool); !ro {
+	// The call that ASKED for a link, not whichever call worked. findCall prefers a
+	// call that came back clean, so a model that resolved a link and then — wrongly
+	// or on a retry — downloaded the file would be graded on the download and
+	// reported as never having discovered resolve_only, which is the opposite of
+	// what happened. What is under test is the argument, so grade the call carrying
+	// it; the download that should not have happened is caught below by the shape of
+	// the result, which has no resolved link in it.
+	call, ok := findDownloadBy(tr, func(c toolCall) bool {
+		ro, _ := c.Input["resolve_only"].(bool)
+		return ro
+	})
+	if !ok {
 		return false, "model did not set resolve_only=true"
 	}
 	if !isMD5(stringField(call.Input, "md5")) && !isDOI(stringField(call.Input, "doi")) {
@@ -2396,6 +2667,12 @@ func assertResolveOnlyLink(tr transcript) (pass bool, detail string) {
 	return true, fmt.Sprintf("resolved a URL via %s without downloading: %s", out.Resolved.Source, redactURL(out.Resolved.URL))
 }
 
+// recencyOrders are the order values that can express "newest first". year is the
+// literal answer to a list sorted by year; time_added orders by when the catalog
+// received the file, which a model may reasonably read as the same request. Every
+// other value in the enum sorts by something the prompt never mentioned.
+var recencyOrders = []string{"year", "time_added"}
+
 // assertOrderedTableWithLinks checks a large, ordered results request that asks
 // for download links: the model must set a big page size and an ordering, get a
 // sizable page whose results carry links, and then include those links in its
@@ -2409,8 +2686,18 @@ func assertOrderedTableWithLinks(tr transcript) (pass bool, detail string) {
 	if per, _ := call.Input["results_per_page"].(float64); per < 50 {
 		return false, fmt.Sprintf("results_per_page should be large (>=50) for a big list; got %v", call.Input["results_per_page"])
 	}
-	if stringField(call.Input, "order") == "" {
-		return false, "model did not set an order for a sorted list"
+	// "sorted by year, newest first" names both halves of the ordering, and both are
+	// graded. A non-empty order alone passed for a model that sorted by title, which
+	// is a different answer to a different question — and order_mode is the only
+	// argument that can express "newest first", so setting it to asc contradicts the
+	// request outright. Leaving it unset is not graded: the mirror has its own
+	// default and this suite has never measured what it is.
+	if order := stringField(call.Input, "order"); !slices.Contains(recencyOrders, order) {
+		return false, "model set order=" + strconv.Quote(order) + " for a list sorted by year; want one of " +
+			strings.Join(recencyOrders, " or ")
+	}
+	if mode := stringField(call.Input, "order_mode"); mode == "asc" {
+		return false, "model set order_mode=asc although the prompt asked for newest first"
 	}
 	if len(out.Results) < 25 {
 		return gradeDegraded(tr, fmt.Sprintf("ordered search returned only %d results from the mirror", len(out.Results)))
@@ -3139,8 +3426,8 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", elicitOADOI); !keyOK {
+		return false, msg
 	}
 	if !acceptedEmailElicitation(tr) {
 		// The server skips the prompt when the model pins a source, because a per-call
@@ -3220,40 +3507,50 @@ func assertS5(tr transcript) (pass bool, detail string) {
 
 // assertS6Scihub checks a source-restricted article download from sci-hub.
 func assertS6Scihub(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "scihub", "doi")
+	return assertSourcedDownload(tr, "scihub", "doi", scihubDOI)
 }
 
 // assertS6Randombook checks a source-restricted book download from randombook.
 func assertS6Randombook(tr transcript) (pass bool, detail string) {
-	return assertSourcedDownload(tr, "randombook", "md5")
+	return assertSourcedDownload(tr, "randombook", "md5", "")
 }
 
 // downloadKeyOK reports whether a download call carries a well-formed identifier of
-// the given kind, and the detail to report when it does not. An unrecognized kind is
-// no constraint, so a caller that grades no particular key passes trivially.
+// the given kind — and, when want is non-empty, the very one the scenario is about.
+// An unrecognized kind is no constraint, so a caller that grades no particular key
+// passes trivially.
 //
 // The three keys are answered in one place because they are one question — "was this
 // download addressed properly?" — asked by every source-pinned scenario, and spelling
 // them out per caller is how the isbn key went ungraded when it was added.
-func downloadKeyOK(call toolCall, key string) (ok bool, detail string) {
+func downloadKeyOK(call toolCall, key, want string) (ok bool, detail string) {
+	got := stringField(call.Input, key)
 	switch key {
 	case "doi":
-		return isDOI(stringField(call.Input, "doi")), notAValidDOI
+		if !isDOI(got) {
+			return false, notAValidDOI
+		}
 	case "md5":
-		return isMD5(stringField(call.Input, "md5")), badDownloadMD5Detail
+		if !isMD5(got) {
+			return false, badDownloadMD5Detail
+		}
 	case "isbn":
-		return isISBN(stringField(call.Input, "isbn")), badDownloadISBNDetail
+		if !isISBN(got) {
+			return false, badDownloadISBNDetail
+		}
 	default:
 		return true, ""
 	}
+	return sameIdentifier(key, got, want)
 }
 
 // assertSourcedDownload checks that the model set the source arg to want and
-// keyed the download by the expected identifier (doi, md5 or isbn). When the live
-// fetch succeeds it also confirms DownloadResult.Source == want; a live fetch
-// failure is graded on honesty, since the model behavior under test (source
-// selection) was still correct.
-func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
+// keyed the download by the expected identifier (doi, md5 or isbn) — the very one
+// the prompt named, when id is non-empty. When the live fetch succeeds it also
+// confirms DownloadResult.Source == want; a live fetch failure is graded on
+// honesty, since the model behavior under test (source selection) was still
+// correct.
+func assertSourcedDownload(tr transcript, want, key, id string) (pass bool, detail string) {
 	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
@@ -3261,7 +3558,7 @@ func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail s
 	if !ok {
 		return false, "download source arg is not " + want
 	}
-	if keyOK, msg := downloadKeyOK(call, key); !keyOK {
+	if keyOK, msg := downloadKeyOK(call, key, id); !keyOK {
 		return false, msg
 	}
 	if downloadFailed(call) {
@@ -3357,8 +3654,8 @@ func assertS7(tr transcript) (pass bool, detail string) {
 	if !ok {
 		return false, noDownloadCall
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", openAccessDOI); !keyOK {
+		return false, msg
 	}
 	if downloadFailed(call) {
 		return gradeDegraded(tr, "valid DOI download but the live fetch failed (mirror/network)")
@@ -3388,8 +3685,8 @@ func assertS9Retry(tr transcript) (pass bool, detail string) {
 	if stringField(call.Input, "source") != "scihub" {
 		return false, "download source arg is not scihub"
 	}
-	if !isDOI(stringField(call.Input, "doi")) {
-		return false, notAValidDOI
+	if keyOK, msg := downloadKeyOK(call, "doi", openAccessDOI); !keyOK {
+		return false, msg
 	}
 	if !downloadFailed(call) {
 		return false, "expected the download to fail to start against the dead host, but it succeeded"

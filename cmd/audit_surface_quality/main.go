@@ -9,7 +9,12 @@
 //   - every tool's InputSchema is a JSON Schema object;
 //   - every named input and output field carries a non-empty jsonschema
 //     description (so the model is never handed an unlabeled parameter);
-//   - every enum constrains its property to a non-empty set of values.
+//   - every enum constrains its property to a non-empty set of values, with no
+//     blank or repeated one;
+//   - every value an enum accepts is named in the description beside it, so the
+//     prose cannot go stale against the values the schema pins;
+//   - no description outgrows its budget, since a tool definition is re-sent on
+//     every request (cmd/audit_tokens prices the whole surface).
 //
 // The audit exits non-zero when it finds violations, so it works as a CI gate
 // (see the audit-surface-quality Make target). Pass -json to emit the findings
@@ -23,7 +28,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -31,10 +35,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 )
 
 func main() {
@@ -66,47 +67,15 @@ func main() {
 // I/O, and no tool is ever called. The full surface is forced (all download
 // sources enabled) so the audit is deterministic regardless of the ambient
 // environment.
+//
+// The configuration comes from mcpsurface.DocsConfig rather than a second copy
+// of the same placeholders. This audit used to keep its own, and it had drifted:
+// it filled in a contact email for unpaywall but no API key for core, so the
+// surface it graded carried core's enum value on a maintainer's machine and not
+// on CI. Any rule that reads the source enum would then have held on one machine
+// and not the other, which is the opposite of what a gate is for.
 func listTools() ([]*mcp.Tool, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = &config.Config{}
-	}
-	// Enable every source so the download tool's source enum and prose reach
-	// their full shape; a disabled source would shrink the surface we audit.
-	cfg.Sources = nil
-	if cfg.UnpaywallEmail == "" {
-		cfg.UnpaywallEmail = "audit@example.com"
-	}
-
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "audit-surface-quality", Version: "0.0.1"}, nil)
-	tools.Register(server, client, cfg)
-
-	st, ct := mcp.NewInMemoryTransports()
-	ctx := context.Background()
-	serverSession, err := server.Connect(ctx, st, nil)
-	if err != nil {
-		return nil, fmt.Errorf("server connect: %w", err)
-	}
-	defer func() { _ = serverSession.Wait() }()
-
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "audit-surface-quality-client", Version: "0.0.1"}, nil)
-	session, err := mcpClient.Connect(ctx, ct, nil)
-	if err != nil {
-		return nil, fmt.Errorf("client connect: %w", err)
-	}
-	defer func() { _ = session.Close() }()
-
-	result, err := session.ListTools(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list tools: %w", err)
-	}
-	return result.Tools, nil
+	return mcpsurface.Tools(mcpsurface.DocsConfig())
 }
 
 // writeReport renders the audit findings to w, either as JSON (json=true) or as

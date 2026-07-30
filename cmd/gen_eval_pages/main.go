@@ -207,13 +207,13 @@ func run(resultsDoc string, check bool) error {
 			{scenariosBegin, renderScenariosEN(scenarios)},
 			{scenarioSummaryBegin, renderScenarioSummaryEN(scenarios, sum)},
 			{resultsBegin, renderResultsEN(results)},
-			{resultsSummaryBegin, renderResultsSummaryEN(sum)},
+			{resultsSummaryBegin, renderResultsSummaryEN(sum, len(scenarios))},
 		}},
 		{pageES, []region{
 			{scenariosBegin, renderScenariosES(scenarios)},
 			{scenarioSummaryBegin, renderScenarioSummaryES(scenarios, sum)},
 			{resultsBegin, renderResultsES(results)},
-			{resultsSummaryBegin, renderResultsSummaryES(sum)},
+			{resultsSummaryBegin, renderResultsSummaryES(sum, len(scenarios))},
 		}},
 	} {
 		if aerr := applyPage(page.path, page.regions, check); aerr != nil {
@@ -403,14 +403,42 @@ func renderScenarioSummaryES(rows []scenarioRow, sum runSummary) string {
 		len(rows), span, variantSuffix(variants, variantSuffixES, variantSuffixPluralES), sum.Remote)
 }
 
+// measuredScopeEN says what the tally is a tally OF: the whole suite, or the part
+// of it that has been measured.
+//
+// The sentence used to claim "every scenario" unconditionally, which held only
+// while a scenario could not exist without a row. It can: a scenario added since
+// the last live run has no result to publish, and the results table drops what it
+// has no row for. Saying "every scenario" then overstates the coverage by exactly
+// the scenarios nobody has run yet — the ones a reader would most want flagged.
+func measuredScopeEN(sum runSummary, scenarios int) string {
+	remote := fmt.Sprintf("including the %d that run against a server in remote (`--http`) mode.", sum.Remote)
+	unmeasured := scenarios - sum.Total
+	if unmeasured <= 0 {
+		return fmt.Sprintf("out of %d — every scenario, %s", sum.Total, remote)
+	}
+	return fmt.Sprintf("out of the %d measured so far, %s %s", sum.Total, remote, unmeasuredNoteEN(unmeasured))
+}
+
+// unmeasuredNoteEN names the scenarios listed above the table that have no row in
+// it yet.
+func unmeasuredNoteEN(n int) string {
+	if n == 1 {
+		return "One scenario in the list above has no row here yet: it was added after the last live run, " +
+			"and a result is published only once it has been measured."
+	}
+	return fmt.Sprintf("%d scenarios in the list above have no row here yet: they were added after the last "+
+		"live run, and a result is published only once it has been measured.", n)
+}
+
 // renderResultsSummaryEN renders the English run tally.
-func renderResultsSummaryEN(sum runSummary) string {
+func renderResultsSummaryEN(sum runSummary, scenarios int) string {
 	if sum.Total == 0 {
 		return ""
 	}
 	return fmt.Sprintf(
-		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** out of %d — every scenario, including the %d that run against a server in remote (`--http`) mode.%s",
-		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote, measuredTailEN(sum))
+		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s",
+		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeEN(sum, scenarios), measuredTailEN(sum))
 }
 
 // measuredSpanES is measuredSpanEN's Spanish counterpart.
@@ -432,13 +460,31 @@ func measuredTailES(sum runSummary) string {
 	return measuredTailRangeES
 }
 
+// measuredScopeES is measuredScopeEN's Spanish counterpart.
+func measuredScopeES(sum runSummary, scenarios int) string {
+	remote := fmt.Sprintf(remoteShareES, sum.Remote)
+	unmeasured := scenarios - sum.Total
+	if unmeasured <= 0 {
+		return fmt.Sprintf(scopeAllES, sum.Total, remote)
+	}
+	return fmt.Sprintf(scopeMeasuredES, sum.Total, remote, unmeasuredNoteES(unmeasured))
+}
+
+// unmeasuredNoteES is unmeasuredNoteEN's Spanish counterpart.
+func unmeasuredNoteES(n int) string {
+	if n == 1 {
+		return unmeasuredOneES
+	}
+	return fmt.Sprintf(unmeasuredManyES, n)
+}
+
 // renderResultsSummaryES renders the Spanish run tally.
-func renderResultsSummaryES(sum runSummary) string {
+func renderResultsSummaryES(sum runSummary, scenarios int) string {
 	if sum.Total == 0 {
 		return ""
 	}
 	return fmt.Sprintf(resultsSummaryES,
-		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote, measuredTailES(sum))
+		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeES(sum, scenarios), measuredTailES(sum))
 }
 
 // renderResultsEN renders the English results table.

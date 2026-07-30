@@ -14,7 +14,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,10 +22,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 )
 
 func main() {
@@ -46,54 +42,19 @@ type toolTokenInfo struct {
 // run builds the in-memory server, lists its tools, and writes the token report
 // to w. Construction is offline: config.Load and mirrors.NewManager do no network
 // I/O, and no tool is called.
+//
+// The surface comes from mcpsurface.DocsConfig rather than a local copy of the
+// same placeholders. The download tool's source enum and prose shrink when a
+// credential-gated source is off, so a missing placeholder makes the reported
+// figure depend on whose machine ran the audit — and keeping the placeholder set
+// in one place is what stops the next credential-gated source being added to two
+// of the three callers.
 func run(w io.Writer) error {
-	cfg, err := config.Load()
+	toolList, err := mcpsurface.Tools(mcpsurface.DocsConfig())
 	if err != nil {
-		cfg = &config.Config{}
+		return err
 	}
-	// Measure the full tool surface regardless of the ambient environment: the
-	// download tool's source enum shrinks when sources are disabled (e.g. unpaywall
-	// without an email, core without an API key), so enable everything for a
-	// deterministic upper-bound count. Every credential-gated source needs a
-	// placeholder, or the reported figure would depend on whoever ran the audit.
-	cfg.Sources = nil
-	if cfg.UnpaywallEmail == "" {
-		cfg.UnpaywallEmail = "audit@example.com"
-	}
-	if cfg.CoreKey == "" {
-		cfg.CoreKey = "audit-placeholder-key"
-	}
-
-	mgr, err := mirrors.NewManager(cfg)
-	if err != nil {
-		return fmt.Errorf("create mirror manager: %w", err)
-	}
-	client := libgen.New(mgr, cfg)
-
-	server := mcp.NewServer(&mcp.Implementation{Name: "audit-tokens", Version: "0.0.1"}, nil)
-	tools.Register(server, client, cfg)
-
-	st, ct := mcp.NewInMemoryTransports()
-	ctx := context.Background()
-	serverSession, err := server.Connect(ctx, st, nil)
-	if err != nil {
-		return fmt.Errorf("server connect: %w", err)
-	}
-	defer func() { _ = serverSession.Wait() }()
-
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "audit-tokens-client", Version: "0.0.1"}, nil)
-	session, err := mcpClient.Connect(ctx, ct, nil)
-	if err != nil {
-		return fmt.Errorf("client connect: %w", err)
-	}
-	defer func() { _ = session.Close() }()
-
-	result, err := session.ListTools(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("list tools: %w", err)
-	}
-
-	infos, totalTokens, totalBytes, err := measureTools(result.Tools)
+	infos, totalTokens, totalBytes, err := measureTools(toolList)
 	if err != nil {
 		return err
 	}
