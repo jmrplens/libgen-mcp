@@ -403,7 +403,19 @@ func TestGetPaper_DOINoSearch(t *testing.T) {
 		t.Errorf("missing DOI in message:\n%s", txt)
 	}
 	if !strings.Contains(txt, "get_details") {
-		t.Errorf("missing get_details caveat:\n%s", txt)
+		t.Errorf("missing the get_details route:\n%s", txt)
+	}
+	// The prompt used to end on "get_details does NOT accept a bare DOI", which was
+	// false — the tool has a doi argument and a detailsByDOI path behind it — and it
+	// steered a model away from the only route that produces a citation. Pinned so
+	// the claim cannot come back.
+	for _, denial := range []string{"does NOT accept", "does not accept", "bare DOI as input"} {
+		if strings.Contains(txt, denial) {
+			t.Errorf("the prompt tells the model get_details rejects a DOI, which it does not:\n%s", txt)
+		}
+	}
+	if !strings.Contains(txt, "citation") {
+		t.Errorf("the DOI path should name the citation get_details can produce:\n%s", txt)
 	}
 }
 

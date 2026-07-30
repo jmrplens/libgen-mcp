@@ -428,9 +428,15 @@ func handleGetPaper(ctx context.Context, client *libgen.Client, req *mcp.GetProm
 	return handleGetPaperCitation(ctx, client, citation)
 }
 
-// doiText builds the DOI-path instruction message: call download directly
-// with the DOI, with an explicit note that get_details does not accept a
-// bare DOI (so the model doesn't misroute there).
+// doiText builds the DOI-path instruction message: call download directly with the
+// DOI, and name get_details as the way to the record itself.
+//
+// It used to end on a note that get_details does NOT accept a bare DOI. That was
+// false — the tool has a doi argument and a detailsByDOI path behind it, and a
+// bare DOI returns the edition record and a ready-made BibTeX citation. The note
+// steered a model away from the one route that produces a citation, which download
+// cannot do, so it cost the caller a capability to prevent a misroute that was
+// never possible.
 func doiText(doi string) string {
 	var b strings.Builder
 	b.WriteString("Fetching paper by DOI **")
@@ -440,7 +446,9 @@ func doiText(doi string) string {
 	b.WriteString("1. Call the `download` tool with `{\"doi\": \"")
 	b.WriteString(doi)
 	b.WriteString("\"}` to fetch the article — add `\"resolve_only\": true` if this server runs remotely and cannot write to your disk.\n\n")
-	b.WriteString("Note: the `get_details` tool does NOT accept a bare DOI as input; use `download` directly with the DOI as shown above.\n\n")
+	b.WriteString("2. For the record rather than the file — publisher, year, journal and a ready-made BibTeX or RIS citation — call `get_details` with `{\"doi\": \"")
+	b.WriteString(doi)
+	b.WriteString("\"}`. It is the only route that produces a citation; `download` retrieves the article itself — as a saved file, or as a link when this server runs remotely — and nothing more.\n\n")
 	b.WriteString(untrustedCaveat)
 	return b.String()
 }
