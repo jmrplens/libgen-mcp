@@ -138,6 +138,12 @@ in:
 3. If the source needs a credential, follow the opt-in-key pattern: keyless by
    default, with an optional per-call secret (see `withPerCallAnnas` /
    `withPerCallUnpaywall`) that is used once and never stored.
+4. **If `Supports` gates on a DOI registrant prefix, add a probe to
+   `articleProbes` in `internal/libgen/client.go`.** `EnabledSourceNames` decides
+   which sources the download tool advertises by offering each one a probe DOI,
+   so a prefix-gated source with no probe of its own runs in the chain and is
+   **absent from the tool's `source` enum** — reachable by the server, invisible
+   to the model. `rfc` and `nist` are the worked examples.
 
 `Download` tries each supporting source in chain order and fails over to the
 next; keep `Resolve` returning an error (not a partial result) when it cannot
@@ -183,8 +189,8 @@ packages you touched, then the doc/surface gates:
 
 ```bash
 golangci-lint fmt --diff                                   # formatting (no diff)
-golangci-lint run                                          # lint
-go vet ./...                                               # vet
+golangci-lint run --build-tags e2e,eval ./...              # lint, ALL build tags
+go vet ./... && go vet -tags e2e ./... && go vet -tags eval ./...
 go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 go test ./...                                              # unit tests
 go test -race ./...                                        # race detector
@@ -195,6 +201,10 @@ make check-lhm-manifest                                    # lhm.plugin.json mat
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
 ```
+
+A plain `golangci-lint run` skips every tagged file, which is how the whole
+`cmd/eval` harness went unanalyzed until 2026-07-30. `make lint` passes
+`GO_ANALYSIS_TAGS` (`e2e,eval`) for this reason — add any new build tag there.
 
 Complexity budgets are enforced by golangci-lint: `gocyclo` min-complexity 20,
 `gocognit` 25, `nestif` 5. Keep functions under these; factor helpers out rather
@@ -257,7 +267,15 @@ downloads — never runs in ordinary CI):
 
 ```bash
 LIBGEN_EVAL=1 ANTHROPIC_API_KEY=sk-... go run -tags eval ./cmd/eval
+make eval-only ONLY=S61,S62   # re-run named scenarios and publish just those
 ```
+
+A run **merges** into its results doc rather than replacing it, so re-measuring a
+scenario does not cost a full suite. Each row carries the date it was measured,
+and merging a run from a different model is refused — one pass rate built from
+two models invites a comparison it cannot support. Adding a scenario means a row
+in `cmd/eval/README.md` (the catalog the pages are generated from) **and** a
+Spanish entry in `scenariosES`, or the generator fails.
 
 ## Architecture Decisions
 
@@ -336,7 +354,10 @@ into it, so re-running the publish after a partial failure is safe.
 - **Root binaries.** `go build ./cmd/<x>` drops the binary in the repo root
   (e.g. `./gen_eval_pages`). These are gitignored, but **never** `git add -A` —
   stage files explicitly so a stray binary or `.env` is never committed. Prefer
-  `go run ./cmd/<x>/` over building when you just need to run a tool.
+  `go run ./cmd/<x>/` over building when you just need to run a tool. A new
+  command needs its binary name added to `.gitignore`: `gen_eval_pages` was
+  missing from it and got committed, and an ignore rule does **not** apply to a
+  file already tracked, so the ignore alone would never have caught it.
 - **Full surface for audits.** The audit tools force every source on
   (`cfg.Sources = nil`, plus a placeholder for every credential-gated source —
   Unpaywall email and CORE key) so their output is deterministic regardless of

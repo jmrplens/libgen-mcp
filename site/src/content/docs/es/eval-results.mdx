@@ -367,7 +367,15 @@ LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… make eval
 
 # Un subconjunto, conservando los archivos descargados
 LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… go run -tags eval ./cmd/eval --only S1,S9,S14 --keep-downloads
+
+# Volver a medir escenarios concretos y publicar solo esos en la tabla de arriba
+LIBGEN_EVAL=1 ANTHROPIC_API_KEY=… make eval-only ONLY=S61,S62
 ```
+
+Una ejecución **se fusiona** con la tabla publicada en lugar de reemplazarla, así
+que volver a medir un escenario no cuesta una suite completa. Por eso cada fila
+de arriba lleva la fecha en que se midió, y por eso el resumen deja de hablar de
+una única pasada en cuanto esas fechas difieren.
 
 El proceso sale con código ≠ 0 si algún escenario **falla** o **da error** (los
 SKIP y PASS no). Consulta [`cmd/eval/README.md`](https://github.com/jmrplens/libgen-mcp/blob/main/cmd/eval/README.md)
