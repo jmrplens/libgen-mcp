@@ -1,6 +1,6 @@
 # Source and capability scope
 
-Status: accepted · Date: 2026-07-22
+Status: accepted · Date: 2026-07-22 · Last amended: 2026-07-30
 
 Decision record for how libgen-mcp grows beyond search / get_details / download / read,
 based on a fresh evaluation (MCP spec + Go SDK state, the keyless-source landscape, and
@@ -36,7 +36,7 @@ a **stable** go-sdk release; and (b) libgen-mcp grows a genuinely detached long-
 (e.g. batch/bulk download, long crawl) where a client should fire-and-poll rather than hold the
 call open. Until then, progress notifications are the correct fit.
 
-### 2. Anna's Archive as a source — NO-GO (re-confirmed 2026)
+### 2. Anna's Archive as a source — NO-GO (re-confirmed 2026; superseded in part 2026-07-24)
 
 > **Superseded in part on 2026-07-24 — see the correction below. Anna's Archive is now
 > integrated as two sources, `scidb` and `annas`. Do not act on the paragraph below
@@ -79,6 +79,12 @@ libgen family this project already reaches, so the value added is download *reli
 an independent rescue route — rather than new corpus.
 
 ### 3. Expand `search` to federate keyless open-access discovery — GO
+
+> **Scope note.** This section is where every later source amendment was filed, including the
+> ones that grew the *download* chain rather than `search`: the corrections and amendments dated
+> 2026-07-25 onward run to the end of §3. Each download-chain amendment closes with a
+> `Chain placement` subsection stating the `config.KnownSources` order it produced, so the most
+> recent one is the chain as it stands.
 
 Reposition from "Library Genesis search" to "one keyless static binary that searches Library
 Genesis **and** the open-access literature." Fold open-access discovery into the existing
@@ -277,13 +283,13 @@ need **no new identifier on `Item` and no new argument on `download`/`read`**. T
 separates them from the ERIC decision above, whose accession number was a third key space:
 
 - **`rfc`** — the RFC Editor. RFC DOIs exist and are registered (`10.17487/RFC9110` → "HTTP
-  Semantics", publisher RFC Editor), and **all seven DOI sources fail on one today**: unpaywall
+  Semantics", publisher RFC Editor), and **all seven DOI sources that can claim one failed**: unpaywall
   reports not open access, europepmc not indexed, fatcat no preserved full text, core absent,
   oapen no entry, scihub and scidb no PDF — while `rfc-editor.org/rfc/rfc9110.txt` answers 200.
   A document free since 1969 that the chain could not serve.
 - **`nist`** — NIST's own repository, reached through the DOI resolver.
 
-##### Measured — the two format traps
+##### Measured — the two format traps, and why HEAD is not used
 
 Neither shape was the obvious one, and each was found only by fetching:
 
@@ -306,7 +312,7 @@ Neither shape was the obvious one, and each was found only by fetching:
   serves the file, so a HEAD pre-check would report every NIST publication as missing. The
   download's own GET is the check.
 
-##### Rejected, with the measurement (so these are not re-litigated)
+##### Rejected or deferred, with the measurement
 
 - **kikakurui.com (JIS) — NO-GO.** The originally proposed source. Its `robots.txt` is empty and
   its HTML carries the real normative text, but it has **no search interface at all** (the `/a1/`
@@ -336,7 +342,9 @@ Neither shape was the obvious one, and each was found only by fetching:
 - **NASA, DoD ASSIST, OGC — deferred.** HTML portals with no JSON query endpoint found; each
   would need its own scraper.
 
-**Chain placement.** `config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist →
+##### Chain placement — rfc and nist
+
+`config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist →
 fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`. Both new sources
 join the publisher-direct group ahead of the shadow libraries, per §3, and being prefix-gated they
 change nothing for any other identifier.
@@ -350,8 +358,8 @@ being accepted — including, in every case, whether the chain already reached i
 
 ##### Measured — none of the three is reachable by the default, keyless chain
 
-The gap is the reason each ships, so it was checked against every source in the chain rather
-than assumed:
+The gap is the reason each ships, so it was checked against the sources that could hold them
+rather than assumed:
 
 | Candidate                | Unpaywall                             | Crossref | Europe PMC | fatcat                             | Sci-Hub           |
 | ------------------------ | ------------------------------------- | -------- | ---------- | ---------------------------------- | ----------------- |
@@ -372,7 +380,7 @@ Anthology DOIs sampled, **twelve** carry a usable `url_for_pdf` in their Unpaywa
 this is not new corpus for a deployment that has configured Unpaywall. It is new corpus for
 every deployment that has not — which is the default, since `unpaywall` is gated on
 `LIBGEN_MCP_UNPAYWALL_EMAIL` and is absent from the chain without it. Given the keyless ethos
-(§Architecture Decisions), "reachable only with a credential" is the same as "not reachable",
+(CLAUDE.md, *Architecture Decisions*), "reachable only with a credential" is the same as "not reachable",
 and that is what decided it. The thirteenth DOI is the sharper argument:
 `10.18653/v1/N19-1423` — BERT, the most-cited paper in the field — is reported `is_oa: true`
 by Unpaywall with **zero** `url_for_pdf` across every `oa_location`, so even a configured
@@ -736,7 +744,8 @@ clients and the no-friction promise must keep working unchanged.
   collections are a strict subset of the seven this project's own `search` already
   indexes (`nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards`,
   `fiction_rus`). No new servers, no new corpus, fewer collections.
-- OpenAlex (now key-required), Semantic Scholar keyless dependency.
+- OpenAlex (now key-required). ~~Semantic Scholar keyless dependency.~~ **Partly corrected
+  2026-07-30 — see the entry below.**
 - ~~CORE (key required).~~ **Corrected 2026-07-25 — see §3:** registration is free and the
   source ships as an opt-in `core` download source behind `LIBGEN_MCP_CORE_KEY`, off by
   default. ~~Internet Archive (noisy, deferred).~~ Also corrected — it ships as the keyless
@@ -756,7 +765,8 @@ clients and the no-friction promise must keep working unchanged.
   consecutive calls. Still unimplemented, but the recorded reason was wrong.
 - Discovery providers for Dagstuhl, the ACL Anthology and Zenodo, and any use of Zenodo's
   robots-disallowed `/api/records/<id>` metadata endpoint. **Decided 2026-07-30 — see the
-  publisher-direct amendment under §3.** All three ship as DOI-keyed download sources only.
+  three-more-publisher-direct-sources amendment under §3.** All three ship as DOI-keyed
+  download sources only.
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
 - Resource subscriptions, sampling, MCP logging (no fit; logging also deprecated in the RC).

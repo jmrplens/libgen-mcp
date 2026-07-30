@@ -23,7 +23,7 @@ head:
             "name": "How does libgen-mcp find a working Library Genesis mirror?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting LIBGEN_MIRROR pins one host and skips discovery entirely."
+              "text": "It discovers them rather than hard-coding one. The server fetches the current mirror list from a public shadow-library mirror directory and caches it on disk for 24 hours under the OS cache directory, so a restart reuses the cached list instead of fetching again; if the fetch fails it falls back to a stale cache and then to a built-in list. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting LIBGEN_MIRROR pins one host and skips discovery entirely."
             }
           },
           {
@@ -218,7 +218,7 @@ Both transports share the same tools, HTTP client, and download pipeline; only t
 
 ### How does libgen-mcp find a working Library Genesis mirror?
 
-It discovers them rather than hard-coding one. The server probes the known mirror hosts, keeps the ones that answer, and caches that list on disk for 24 hours under the OS cache directory, so a restart does not re-probe. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting `LIBGEN_MIRROR` pins one host and skips discovery entirely.
+It discovers them rather than hard-coding one. The server fetches the current mirror list from a public shadow-library mirror directory and caches it on disk for 24 hours under the OS cache directory, so a restart reuses the cached list instead of fetching again; if the fetch fails it falls back to a stale cache and then to a built-in list. A mirror that fails is put in a 45-second cooldown and the next one in the list is used, which is why a single mirror going down is invisible to a caller. Setting `LIBGEN_MIRROR` pins one host and skips discovery entirely.
 
 ### What does libgen-mcp cache, and where?
 

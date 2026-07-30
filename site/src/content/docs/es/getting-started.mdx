@@ -221,9 +221,9 @@ Añade el servidor al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`):
 
 ### Claude Desktop
 
-La vía más sencilla es la extensión **`.mcpb`** de un solo clic de la última [release](https://github.com/jmrplens/libgen-mcp/releases) (universal para macOS + Windows): descárgala y ábrela con Claude Desktop. Editar a mano `claude_desktop_config.json` es la alternativa.
+La vía más sencilla es la extensión **`.mcpb`** de un clic de la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest) (universal para macOS + Windows, sin Docker): descárgala, ábrela con Claude Desktop y confirma los ajustes.
 
-Edita `claude_desktop_config.json` (`~/Library/Application Support/Claude/` en macOS, `%APPDATA%\Claude\` en Windows) y añade el mismo bloque `mcpServers`, luego reinicia Claude Desktop:
+Para configurarlo a mano, edita `claude_desktop_config.json` (`~/Library/Application Support/Claude/` en macOS, `%APPDATA%\Claude\` en Windows) y añade el mismo bloque `mcpServers`, luego reinicia Claude Desktop:
 
 ```json
 {
@@ -266,7 +266,9 @@ Para ejecutar el servidor de forma centralizada y conectarte por HTTP en lugar d
 libgen-mcp --http :8080
 ```
 
-En modo HTTP el servidor expone además un endpoint `GET /health` que devuelve `200` cuando está sirviendo, útil para sondas de disponibilidad. Como en este modo el servidor es remoto y no puede escribir en tu disco, la herramienta `download` devuelve siempre un enlace de descarga (en vez de guardar el archivo) — `resolve_only` queda implícito, no hace falta indicarlo.
+En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga.
+
+Como un servidor HTTP se ejecuta en otro sitio y no puede escribir en tu disco, `download` devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero — en este modo no hace falta que fijes `resolve_only`. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para el detalle.
 
 <Aside type="note">
 	Alojar en su lugar un servidor **stdio** — por ejemplo detrás de `mcp-proxy`
@@ -351,16 +353,16 @@ Consulta [Herramientas](/libgen-mcp/es/tools/#prompts) para ver la tabla complet
 
 ### ¿Cómo instalo libgen-mcp?
 
-Descarga un binario precompilado para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp` o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
+La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp:latest` o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
 
 ### ¿Qué método de instalación debería usar?
 
-El binario precompilado es la vía recomendada: es un único ejecutable estático sin nada más que instalar — sin toolchain de Go, sin Docker, sin runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque, y `go install` si ya tienes el toolchain de Go y prefieres compilar desde el código fuente.
+Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige `go install` solo si ya tienes Go 1.26 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión `.mcpb` de un clic del último release es la opción más sencilla.
 
 ### ¿Cómo conecto libgen-mcp a Claude o VS Code?
 
-Apunta tu cliente MCP al binario `libgen-mcp` por stdio, sin argumentos adicionales. En Claude Code añade el servidor a `.mcp.json` (o ejecuta `claude mcp add`); en Claude Desktop usa la extensión `.mcpb` de un clic o añade un bloque `mcpServers` a `claude_desktop_config.json` con la ruta absoluta del binario; en VS Code añade un bloque `servers` a `mcp.json` con `type` stdio. Para ejecutarlo de forma centralizada, inícialo con `libgen-mcp --http :8080` y conecta hacia él clientes con capacidad HTTP.
+Apunta tu cliente MCP al binario `libgen-mcp`; por stdio no hacen falta argumentos adicionales. En Claude Code, añade un servidor `libgen` con command `libgen-mcp` al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`). En Claude Desktop, abre la extensión `.mcpb` de un clic, o añade el mismo bloque `mcpServers` a `claude_desktop_config.json` usando una ruta absoluta en `command`. En VS Code, añade una entrada `libgen` a `mcp.json` con command `libgen-mcp` y type `stdio`.
 
 ### ¿libgen-mcp necesita un token o cuenta?
 
-No. libgen-mcp no necesita ningún token, cuenta ni clave de API para funcionar: apuntas tu cliente al binario y ya está. Todas las variables de entorno son opcionales y tienen un valor por defecto documentado.
+No. libgen-mcp no necesita ningún token, clave de API ni cuenta de Library Genesis para funcionar. Por stdio solo le das al cliente el comando que lanza el binario. Todas las opciones de configuración son variables de entorno opcionales con un valor por defecto seguro, así que el servidor funciona nada más instalarlo.

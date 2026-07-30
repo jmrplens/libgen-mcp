@@ -27,7 +27,7 @@ head:
             "name": "¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
+              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
             }
           },
           {
@@ -35,7 +35,7 @@ head:
             "name": "¿Qué se niega a hacer libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca access-restricted-item y que no pertenezca ni a la colección inlibrary ni a printdisabled antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como un fallo de búsqueda. Un rechazo nunca se disfraza de archivo."
+              "text": "Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca access-restricted-item y que no pertenezca ni a la colección inlibrary ni a printdisabled antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como una ausencia. Un rechazo nunca se disfraza de fichero."
             }
           },
           {
@@ -87,31 +87,31 @@ Depende de qué le pidas y de dónde estés. libgen-mcp es un cliente: es softwa
 
 ## ¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?
 
-Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
+Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
 
 La cadena completa, en orden:
 
-| Posición | Fuente       | Clave     | Estado                                    |
-| -------- | ------------ | --------- | ----------------------------------------- |
-| 1        | `unpaywall`  | DOI       | Acceso abierto                            |
-| 2        | `europepmc`  | DOI       | Acceso abierto                            |
-| 3        | `biorxiv`    | DOI       | Acceso abierto (preprints)                |
-| 4        | `rfc`        | DOI       | Normas abiertas (RFC Editor)              |
-| 5        | `nist`       | DOI       | Normas abiertas (NIST)                    |
-| 6        | `dagstuhl`   | DOI       | Acceso abierto (Schloss Dagstuhl / DROPS) |
-| 7        | `acl`        | DOI       | Acceso abierto (ACL Anthology)            |
-| 8        | `zenodo`     | DOI       | Acceso abierto (Zenodo)                   |
-| 9        | `scielo`     | DOI       | Acceso abierto (SciELO Brasil)            |
-| 10       | `fao`        | DOI       | Acceso abierto (FAO Knowledge Repository) |
-| 11       | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
-| 12       | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
-| 13       | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
-| 14       | `archive`    | ISBN      | Solo escaneos de dominio público          |
-| 15       | `scihub`     | DOI       | Biblioteca en la sombra                   |
-| 16       | `scidb`      | DOI       | Biblioteca en la sombra                   |
-| 17       | `libgen`     | md5       | Catálogo de Library Genesis               |
-| 18       | `randombook` | md5       | Mirror de Library Genesis                 |
-| 19       | `annas`      | md5       | Biblioteca en la sombra                   |
+| Posición | Fuente       | Identificado por | Estado                                    |
+| -------- | ------------ | ---------------- | ----------------------------------------- |
+| 1        | `unpaywall`  | DOI              | Acceso abierto                            |
+| 2        | `europepmc`  | DOI              | Acceso abierto                            |
+| 3        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
+| 4        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
+| 5        | `nist`       | DOI              | Normas abiertas (NIST)                    |
+| 6        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
+| 7        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
+| 8        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
+| 9        | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
+| 10       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
+| 11       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
+| 12       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
+| 13       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
+| 14       | `archive`    | ISBN             | Solo escaneos de dominio público          |
+| 15       | `scihub`     | DOI              | Biblioteca en la sombra                   |
+| 16       | `scidb`      | DOI              | Biblioteca en la sombra                   |
+| 17       | `libgen`     | md5              | Catálogo de Library Genesis               |
+| 18       | `randombook` | md5              | Mirror de Library Genesis                 |
+| 19       | `annas`      | md5              | Biblioteca en la sombra                   |
 
 Las posiciones 1–14 se agotan antes de intentar la 15. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
@@ -120,7 +120,7 @@ abierto.
 
 ## ¿Qué se niega a hacer libgen-mcp?
 
-Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca `access-restricted-item` y que no pertenezca ni a la colección `inlibrary` ni a `printdisabled` antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como un fallo de búsqueda. Un rechazo nunca se disfraza de archivo.
+Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca `access-restricted-item` y que no pertenezca ni a la colección `inlibrary` ni a `printdisabled` antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como una ausencia. Un rechazo nunca se disfraza de fichero.
 
 Los tres rechazos los comprueba la [suite de evaluación](/libgen-mcp/es/eval-results/) contra
 los servicios en vivo, no solo los tests unitarios: el escenario S53 verifica que
