@@ -11,8 +11,9 @@ from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books,
 research papers, magazines, comics, and standards. It exposes four tools over
 stdio: `search`, `get_details`, `download`, and `read`. Books resolve by MD5
 (libgen + randombook + Anna's Archive); articles resolve by DOI through the
-open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet
-Archive Scholar, CORE) and then the shadow-library fallbacks (Sci-Hub, SciDB);
+open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC
+Editor, NIST, Internet Archive Scholar, CORE, OAPEN) and then the shadow-library
+fallbacks (Sci-Hub, SciDB);
 `read` extracts and paginates text — fetched server-side by MD5 or DOI, or read
 from an absolute local path.
 
@@ -119,7 +120,7 @@ user asks for the behavior:
 | `LIBGEN_MCP_CORE_KEY`        | empty (unset)  | API key (free registration at core.ac.uk) enabling the `core` open-access article source. Unset leaves `core` out of the chain. |
 | `LIBGEN_MIRROR`              | auto-discovery | Pin a specific Library Genesis mirror, e.g. `https://libgen.li`.          |
 | `LIBGEN_MCP_LOG_LEVEL`       | `info`         | `debug`, `info`, `warn`, or `error`.                                      |
-| `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources to a subset of `unpaywall`, `europepmc`, `biorxiv`, `rfc`, `nist`, `fatcat`, `core`, `scihub`, `scidb`, `libgen`, `randombook`, `annas`. The chain order is fixed; this only removes sources from it. |
+| `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources to a subset of `unpaywall`, `europepmc`, `biorxiv`, `rfc`, `nist`, `fatcat`, `core`, `oapen`, `archive`, `scihub`, `scidb`, `libgen`, `randombook`, `annas`. The chain order is fixed; this only removes sources from it. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | `false`       | Set to `1` when hosting the stdio server remotely (e.g. behind `mcp-proxy`): `download` returns a link instead of saving a file to an unreachable disk. |
 
 Full reference: <https://jmrplens.github.io/libgen-mcp/configuration/>

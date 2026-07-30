@@ -321,7 +321,7 @@ Neither shape was the obvious one, and each was found only by fetching:
   pure-Go client passes.
 - **ETSI — NO-GO for now.** Free PDFs are real (2,334,396 bytes for TS 136 211) and the initial
   403 was only the bare `curl` User-Agent — an honest `libgen-mcp/<version> (+URL)` gets 200, so
-  no browser spoofing is involved. It stays out because the deliver path needs a version *and* a
+  no browser spoofing is involved. It stays out because its `/deliver/` path needs a version *and* a
   directory range that only its search can supply, and its `robots.txt` disallows `/search/`.
 - **ITU-T — MAYBE, deferred.** Free PDFs confirmed (H.264 16,426,192 bytes; X.509 3,581,573;
   G.711 196,237), but the download id embeds the publication date
