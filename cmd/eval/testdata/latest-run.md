@@ -70,3 +70,6 @@ Model: `claude-haiku-4-5-20251001`
 | S63 | local | PASS | 2026-07-30 | downloaded 502941 bytes via rfc |
 | S64 | local | PASS | 2026-07-30 | read opened RFC 9110 as text (6002 chars extracted) |
 | S65 | local | PASS | 2026-07-30 | the download source enum advertises rfc and nist; enum = unpaywall, europepmc, biorxiv, rfc, nist, fatcat, core, oapen, archive, scihub, scidb, libgen, randombook, annas |
+| S66 | local | PASS | 2026-07-30 | downloaded 339463 bytes via dagstuhl |
+| S67 | local | PASS | 2026-07-30 | downloaded 786279 bytes via acl |
+| S68 | local | PASS | 2026-07-30 | downloaded 173300 bytes via zenodo |
