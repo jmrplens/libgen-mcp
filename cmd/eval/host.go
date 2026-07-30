@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -159,7 +160,19 @@ func confirmElicitationCount() int { return int(confirmElicitations.Load()) }
 // It never declines: the eval measures whether the model reaches the capability,
 // not whether a human would approve, so a deterministic accept keeps the flow live.
 func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
-	field := evalElicitFieldName(req)
+	fields := evalElicitFieldNames(req)
+	field := ""
+	if len(fields) > 0 {
+		field = fields[0]
+	}
+	// The save confirmation carries TWO properties — the decision and the "stop
+	// asking" box — so answering whichever one a map iteration happened to yield
+	// first left the decision absent, and the server reads an accept with no
+	// decision as a decline. That made this handler randomly fail a real download:
+	// S7, S49 and S61 in the 2026-07-30 run, while S26 passed on the same code.
+	if len(fields) > 1 {
+		return answerConfirmation(req, fields)
+	}
 	if strings.Contains(strings.ToLower(field), "email") {
 		recordElicitation(field, elicitMessage(req), "accept")
 		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: unpaywallEmail()}}, nil
@@ -186,6 +199,34 @@ func evalElicitationHandler(_ context.Context, req *mcp.ElicitRequest) (*mcp.Eli
 	return &mcp.ElicitResult{Action: "accept", Content: map[string]any{field: true}}, nil
 }
 
+// answerConfirmation accepts a multi-field save confirmation: every field is
+// answered, the decision affirmatively and the "stop asking" box negatively.
+//
+// Declining to be remembered is deliberate. Remembering would suppress the prompt
+// for the rest of the session, so a scenario that downloads twice would see one
+// confirmation and a scenario asserting the prompt fired would depend on call
+// order. Answering each download on its own keeps the count meaningful.
+func answerConfirmation(req *mcp.ElicitRequest, fields []string) (*mcp.ElicitResult, error) {
+	content := make(map[string]any, len(fields))
+	decision := ""
+	for _, name := range fields {
+		if isRememberField(name) {
+			content[name] = false
+			continue
+		}
+		content[name] = true
+		if decision == "" {
+			decision = name
+		}
+	}
+	if decision == "" {
+		decision = fields[0]
+	}
+	confirmElicitations.Add(1)
+	recordElicitation(decision, elicitMessage(req), "accept")
+	return &mcp.ElicitResult{Action: "accept", Content: content}, nil
+}
+
 // elicitMessage returns the prompt text the server showed, or "" when it sent none.
 func elicitMessage(req *mcp.ElicitRequest) string {
 	if req == nil || req.Params == nil {
@@ -199,20 +240,29 @@ func elicitMessage(req *mcp.ElicitRequest) string {
 // "confirm" for the download-save prompt. Client-side the schema arrives as a
 // map[string]any per the SDK's default JSON unmarshaling. It returns "" when the
 // schema is not the expected {"properties": {name: ...}} shape.
-func evalElicitFieldName(req *mcp.ElicitRequest) string {
+func evalElicitFieldNames(req *mcp.ElicitRequest) []string {
 	if req == nil || req.Params == nil {
-		return ""
+		return nil
 	}
 	schema, ok := req.Params.RequestedSchema.(map[string]any)
 	if !ok {
-		return ""
+		return nil
 	}
 	props, ok := schema["properties"].(map[string]any)
 	if !ok {
-		return ""
+		return nil
 	}
+	names := make([]string, 0, len(props))
 	for name := range props {
-		return name // each server elicitation carries exactly one property.
+		names = append(names, name)
 	}
-	return ""
+	sort.Strings(names) // a map's order is random; the answer must not be
+	return names
+}
+
+// isRememberField reports whether a confirmation field is the "stop asking for the
+// rest of this session" box rather than the decision itself.
+func isRememberField(name string) bool {
+	n := strings.ToLower(name)
+	return strings.Contains(n, "again") || strings.Contains(n, "remember")
 }

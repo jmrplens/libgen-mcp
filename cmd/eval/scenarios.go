@@ -1090,8 +1090,19 @@ func escalationAndRemoteScenarios() []scenario {
 			ID: "S41",
 			Prompt: `Download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC". ` +
 				`I have an Anna's Archive membership, so use the faster member download if you can.`,
-			SetupEnv: map[string]string{"LIBGEN_MCP_ANNAS_KEY": ""},
-			Assert:   assertAnnasMemberDownload,
+			// The retry schedule is shrunk for the reason S9 and S47 shrink it, and
+			// this scenario is why the reason is not hypothetical: measured on
+			// 2026-07-30, the member attempt failed and put annas in cooldown, and the
+			// keyless retry then spent 322 seconds re-trying the only capable source
+			// ("every capable source is in cooldown, trying them anyway") until the
+			// scenario's whole six-minute budget was gone and it errored. What is under
+			// test is whether the model discovers annas_member, not how patient the
+			// Anna's IPFS gateways are today.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_ANNAS_KEY":                  "",
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
+			},
+			Assert: assertAnnasMemberDownload,
 		},
 		// S42-S44 come from the classes of bug this suite has actually produced:
 		// a model filling a gap it should have reported, a deployment policy a
