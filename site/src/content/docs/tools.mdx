@@ -520,7 +520,7 @@ Resolve a specific paper by DOI or by a free-text citation and get instructions 
 | `doi`      | one of   | DOI of the paper to fetch directly (mutually exclusive with `citation`).       |
 | `citation` | one of   | Free-text citation or reference to search for (mutually exclusive with `doi`). |
 
-With `doi`, the prompt hands back a direct `download {"doi": ...}` plan — it explicitly notes that `get_details` does **not** accept a bare DOI as input, so the model doesn't misroute there. With `citation`, it searches articles for a match, retrying once among books (some papers are cataloged that way) when nothing turns up, and lists the candidates to download by DOI.
+With `doi`, the prompt hands back a direct `download {"doi": ...}` plan, and points at `get_details` with the same DOI for the record and its BibTeX or RIS citation — the one thing `download` cannot produce. With `citation`, it searches articles for a match, retrying once among books (some papers are cataloged that way) when nothing turns up, and lists the candidates to download by DOI.
 
 ### download_troubleshoot
 

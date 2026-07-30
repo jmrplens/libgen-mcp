@@ -527,7 +527,7 @@ Resuelve un artículo concreto por DOI o por una cita en texto libre, y obtén i
 | `doi`      | uno de    | DOI del artículo a obtener directamente (mutuamente excluyente con `citation`). |
 | `citation` | uno de    | Cita o referencia en texto libre a buscar (mutuamente excluyente con `doi`).    |
 
-Con `doi`, el prompt devuelve un plan directo `download {"doi": ...}` — indica explícitamente que `get_details` **no** acepta un DOI a secas como entrada, para que el modelo no se equivoque de ruta. Con `citation`, busca en artículos una coincidencia, reintentando una vez entre los libros (algunos artículos están catalogados así) cuando no aparece nada, y enumera los candidatos a descargar por DOI.
+Con `doi`, el prompt devuelve un plan directo `download {"doi": ...}` y remite a `get_details` con ese mismo DOI para obtener el registro y su cita en BibTeX o RIS — lo único que `download` no puede producir. Con `citation`, busca en artículos una coincidencia, reintentando una vez entre los libros (algunos artículos están catalogados así) cuando no aparece nada, y enumera los candidatos a descargar por DOI.
 
 ### download_troubleshoot
 
