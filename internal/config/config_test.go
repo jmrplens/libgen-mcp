@@ -718,7 +718,8 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 
 // TestKnownSourcesOrder pins the canonical chain order the download pipeline
 // relies on: the legal open-access providers lead — unpaywall, europepmc and
-// biorxiv, then the publisher-direct group (rfc, nist, dagstuhl, acl, zenodo),
+// biorxiv, then the publisher-direct group (rfc, nist, dagstuhl, acl, zenodo,
+// scielo, fao),
 // then fatcat and core for articles and oapen and archive for books — before the
 // shadow-library fallbacks (scihub, then scidb, which covers Sci-Hub's indexing
 // gap); the md5-keyed book sources follow, with annas last as the final rescue
@@ -726,7 +727,7 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 func TestKnownSourcesOrder(t *testing.T) {
 	want := []string{
 		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"fatcat", "core", "oapen", "archive",
+		"scielo", "fao", "fatcat", "core", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
 	if len(KnownSources) != len(want) {

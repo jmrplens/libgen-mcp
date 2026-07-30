@@ -147,28 +147,30 @@ flowchart TD
 
 Download sources implement a common interface — `Name`, `Supports(item)`, and
 `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built
-from configuration in the fixed order `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
+from configuration in the fixed order `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
 source is offered only the items it supports:
 
-| Source       | Keyed by                       | Role                    | In one line                                                                        |
-| ------------ | ------------------------------ | ----------------------- | ---------------------------------------------------------------------------------- |
-| `unpaywall`  | DOI                            | Open-access articles    | The best open-access PDF link the Unpaywall API knows for a DOI.                   |
-| `europepmc`  | DOI                            | Open-access articles    | PubMed Central's open-access full text, via the Europe PMC search API.             |
-| `biorxiv`    | `10.1101` DOI                  | Open-access preprints   | The latest version's `.full.pdf` on bioRxiv or medRxiv.                            |
-| `rfc`        | `10.17487` DOI                 | Internet standards      | The RFC Editor's canonical `.txt`, built from the RFC number.                      |
-| `nist`       | `10.6028` DOI                  | NIST standards          | The DOI resolver's redirect, which ends at the PDF on `nvlpubs.nist.gov`.          |
-| `dagstuhl`   | `10.4230` DOI                  | Open-access proceedings | LIPIcs, OASIcs, DARTS and the Dagstuhl Reports, off the DROPS document page.       |
-| `acl`        | `10.18653/v1`/`10.3115/v1` DOI | Open-access proceedings | `aclanthology.org/<id>.pdf`, built from the identifier the DOI embeds.             |
-| `zenodo`     | `10.5281/zenodo` DOI           | Open-access deposits    | The best file in the record, listed through the one `/api` path robots.txt allows. |
-| `fatcat`     | DOI                            | Preserved full text     | Internet Archive Scholar's preserved copies, each probed before use.               |
-| `core`       | DOI                            | Open-access articles    | CORE's download URL, returned only when it still serves a live copy.               |
-| `oapen`      | DOI/ISBN                       | Open-access books       | An openly licensed monograph, after OAPEN's record confirms the identifier.        |
-| `archive`    | ISBN                           | Public-domain books     | An Internet Archive scan, only when public and not lending-restricted.             |
-| `scihub`     | DOI                            | Article fallback        | The PDF embedded by the first Sci-Hub mirror that serves an article page.          |
-| `scidb`      | DOI                            | Article fallback        | The PDF embedded in Anna's Archive's SciDB viewer.                                 |
-| `libgen`     | MD5                            | Primary book provider   | The LibGen link chain (`ads.php` → `get.php` → CDN), with MD5 verification.        |
-| `randombook` | MD5                            | Book fallback           | Fresh libgen-family mirrors discovered through the randombook.org API.             |
-| `annas`      | MD5                            | Book fallback           | Anna's Archive over public IPFS gateways, or the member API when a key is set.     |
+| Source       | Keyed by                       | Role                    | In one line                                                                                             |
+| ------------ | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `unpaywall`  | DOI                            | Open-access articles    | The best open-access PDF link the Unpaywall API knows for a DOI.                                        |
+| `europepmc`  | DOI                            | Open-access articles    | PubMed Central's open-access full text, via the Europe PMC search API.                                  |
+| `biorxiv`    | `10.1101` DOI                  | Open-access preprints   | The latest version's `.full.pdf` on bioRxiv or medRxiv.                                                 |
+| `rfc`        | `10.17487` DOI                 | Internet standards      | The RFC Editor's canonical `.txt`, built from the RFC number.                                           |
+| `nist`       | `10.6028` DOI                  | NIST standards          | The DOI resolver's redirect, which ends at the PDF on `nvlpubs.nist.gov`.                               |
+| `dagstuhl`   | `10.4230` DOI                  | Open-access proceedings | LIPIcs, OASIcs, DARTS and the Dagstuhl Reports, off the DROPS document page.                            |
+| `acl`        | `10.18653/v1`/`10.3115/v1` DOI | Open-access proceedings | `aclanthology.org/<id>.pdf`, built from the identifier the DOI embeds.                                  |
+| `zenodo`     | `10.5281/zenodo` DOI           | Open-access deposits    | The best file in the record, listed through the one `/api` path robots.txt allows.                      |
+| `scielo`     | `10.1590` DOI                  | Open-access articles    | SciELO Brazil's own PDF, off the article page the DOI resolves to.                                      |
+| `fao`        | `10.4060` DOI                  | UN agency documents     | The FAO Knowledge Repository item's bitstream, reached through the one REST endpoint robots.txt allows. |
+| `fatcat`     | DOI                            | Preserved full text     | Internet Archive Scholar's preserved copies, each probed before use.                                    |
+| `core`       | DOI                            | Open-access articles    | CORE's download URL, returned only when it still serves a live copy.                                    |
+| `oapen`      | DOI/ISBN                       | Open-access books       | An openly licensed monograph, after OAPEN's record confirms the identifier.                             |
+| `archive`    | ISBN                           | Public-domain books     | An Internet Archive scan, only when public and not lending-restricted.                                  |
+| `scihub`     | DOI                            | Article fallback        | The PDF embedded by the first Sci-Hub mirror that serves an article page.                               |
+| `scidb`      | DOI                            | Article fallback        | The PDF embedded in Anna's Archive's SciDB viewer.                                                      |
+| `libgen`     | MD5                            | Primary book provider   | The LibGen link chain (`ads.php` → `get.php` → CDN), with MD5 verification.                             |
+| `randombook` | MD5                            | Book fallback           | Fresh libgen-family mirrors discovered through the randombook.org API.                                  |
+| `annas`      | MD5                            | Book fallback           | Anna's Archive over public IPFS gateways, or the member API when a key is set.                          |
 
 Two of these are off by default: `unpaywall` needs `LIBGEN_MCP_UNPAYWALL_EMAIL` and `core`
 needs `LIBGEN_MCP_CORE_KEY`, and without those an unconfigured deployment does not have them
@@ -178,7 +180,7 @@ table is only the index.
 
 Because the chain is a single ordered slice filtered by `Supports`, an md5-keyed book item is
 offered `[libgen, randombook, annas]`, an ISBN-keyed one `[oapen, archive]`, an article item
-`[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, oapen, scihub,
+`[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub,
 scidb]`, and an item carrying both
 an md5 and a DOI is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from
 this chain without reordering it. `Download` tries each supporting source in turn and returns

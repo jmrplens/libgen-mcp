@@ -1,10 +1,10 @@
 ---
 title: Fuentes de descarga
-description: Referencia fuente a fuente de las diecisiete fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
+description: Referencia fuente a fuente de las diecinueve fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
 datePublished: "2026-07-30"
 ---
 
-`download` resuelve un elemento a través de una cadena ordenada de diecisiete fuentes.
+`download` resuelve un elemento a través de una cadena ordenada de diecinueve fuentes.
 [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena — cómo se
 construye, cómo funciona el failover y cómo se enfría una fuente que demuestra estar
 inalcanzable. Esta página describe las fuentes en sí, una sección para cada una y en el orden
@@ -274,6 +274,104 @@ Zenodo es el repositorio abierto de propósito general del CERN.
   quien llama, en lugar de rastrear. Como el endpoint de metadatos no se llama nunca a
   propósito, la fuente no puede ver el título ni los autores del depósito, y por eso una descarga
   de Zenodo se nombra a partir de la clave del fichero y no de los metadatos bibliográficos.
+
+### `scielo`
+
+SciELO es la plataforma de publicación en acceso abierto de la ciencia latinoamericana; esta
+fuente sirve su colección brasileña.
+
+- **Identificado por** un DOI con el prefijo de registrante `10.1590`, sin distinguir
+  mayúsculas. Es el prefijo de FapUNIFESP y todo DOI bajo él es un artículo de SciELO Brasil.
+- **Corpus** cerca de medio millón de artículos de ciencias de la salud, agrarias, sociales y
+  humanas, buena parte publicados en portugués y español. Todo lo que SciELO alberga es libre
+  de leer, se sirve sin cuenta y lleva licencia Creative Commons.
+- **Cómo resuelve** `GET https://doi.org/<doi>` siguiendo redirecciones y, después, la etiqueta
+  `citation_pdf_url` de la página de artículo a la que llega.
+- **Por qué no puede omitirse el salto por el resolutor** la URL que SciELO registra es la forma
+  heredada `scielo.php?script=sci_arttext&pid=<PID>`, y ese PID solo está embebido en los DOI
+  antiguos (`10.1590/s0104-6632…`), no en los modernos (`10.1590/1982-2553202568745`). Esa URL
+  redirige a su vez a una dirección `/j/<revista>/a/<clave>/` cuya clave no aparece en ningún
+  identificador que tenga quien llama. La API ArticleMeta de la propia SciELO sí mapea un DOI a
+  su PID, pero su registro heredado de 88 KB tampoco lleva la clave `/j/…/a/…`, así que costaría
+  una petición y dejaría igualmente la página del artículo por obtener.
+- **La comprobación de aterrizaje** la fuente solo analiza la página cuando el resolutor llegó
+  de verdad a `scielo.br` (o a un subdominio suyo, casado en frontera de etiqueta). Los catorce
+  DOI muestreados lo hicieron; uno que lleve a otro sitio se informa como ausencia limpia en
+  lugar de rasparse buscando una etiqueta que nunca estuvo pensada para eso.
+- **La trampa de las entidades** la dirección anunciada va por query (`…/?lang=en&format=pdf`) y
+  el marcado escribe su separador como `&amp;`, así que el valor de la etiqueta se
+  desescapa de HTML antes de usarse. Pedirlo literal solicitaría un parámetro llamado
+  `amp;format` y devolvería HTML.
+- **Por qué no es una ruta duplicada** sobre catorce DOI reales muestreados entre 1998 y 2025,
+  Unpaywall informó `is_oa: true` en los catorce pero aportó un `url_for_pdf` descargable solo
+  en ocho — y en ninguno de los cuatro de 2025, dejando su mejor ubicación OA apuntando a la
+  página HTML del artículo, de la que `read` no puede extraer. Internet Archive Scholar anunció
+  una copia preservada para diez y respondió 404 para los más recientes, con la ingesta
+  retrasada respecto a la publicación, como le ocurre a cualquier archivo. Tres de los catorce
+  no eran alcanzables desde ninguna fuente de la cadena, con claves o sin ellas, mientras que
+  scielo.br los sirvió con 1 542 793, 737 104 y 610 410 bytes. La brecha es sistemática en
+  material reciente, que es el material que más se le pide a una herramienta de investigación.
+- **Qué no cubre** los registros más antiguos de SciELO son solo HTML. El artículo de 1998
+  `10.1590/s0104-66321998000100007` no lleva `citation_pdf_url` y responde a una petición de PDF
+  con «PDF do Artigo não encontrado», así que la fuente declina en lugar de entregar un 404 a la
+  canalización — y ninguna otra fuente lo alcanza tampoco. Las demás colecciones nacionales de
+  SciELO (Chile, México, España, Colombia) registran bajo otros prefijos y quedan fuera.
+- **Claves** sin clave.
+- **Cortesía** el `robots.txt` de `www.scielo.br` solo prohíbe `/admin`; ambas rutas usadas aquí
+  están permitidas. Resolver es una petición más la descarga.
+
+### `fao`
+
+El FAO Knowledge Repository es la instancia DSpace 7 de la Organización de las Naciones Unidas
+para la Alimentación y la Agricultura.
+
+- **Identificado por** un DOI con el prefijo de registrante `10.4060`, sin distinguir
+  mayúsculas, cuyo sufijo podría ser la parte local de un handle (letras ASCII, dígitos, puntos
+  y guiones, al menos un alfanumérico y sin secuencias `..`).
+- **Corpus** unos 9 500 documentos: los informes insignia (_El estado de la seguridad
+  alimentaria y la nutrición en el mundo_, _El estado de los bosques del mundo_), guías
+  técnicas, planes de respuesta humanitaria por país, trabajo normativo y anuarios estadísticos,
+  publicados con licencias Creative Commons en los seis idiomas de la ONU y servidos sin cuenta.
+- **Cómo resuelve** `GET /handle/20.500.14283/<sufijo del DOI>` y después la etiqueta
+  `citation_pdf_url` de la página del ítem, reescrita como se indica abajo.
+- **Por qué se omite el salto por doi.org** el sufijo del DOI es también el handle del ítem, así
+  que la dirección de la página se deduce del identificador sin consulta alguna — verificado en
+  ocho de ocho DOI muestreados, incluidos varios que el resolutor de DOI envía a
+  `www.fao.org/documents/card/…`. Eso importa por algo más que una petición ahorrada:
+  `www.fao.org` respondió HTTP 504 en cinco de los ocho mientras el repositorio sirvió los ocho.
+- **La trampa frontend/backend** la etiqueta `citation_pdf_url` nombra
+  `/bitstreams/<uuid>/download`, una ruta del _frontend_ Angular. Un navegador obtiene el
+  fichero desde ahí; un cliente HTTP simple obtiene HTTP 200, `text/html` y 372 862 bytes del
+  armazón de la aplicación. Por eso la fuente extrae el UUID de la URL anunciada y pide el
+  endpoint del _backend_ `/server/api/core/bitstreams/<uuid>/content`, que devolvió
+  `application/pdf` con 2 929 735, 12 549 068 y 8 677 202 bytes en tres ítems muestreados cuyas
+  URL de frontend sirvieron todas el armazón.
+- **Por qué no hay estado «no encontrado»** DSpace responde a un handle desconocido con HTTP
+  **200** y su armazón habitual con el texto «No item found for the identifier», no con un 404.
+  La línea de estado no puede por tanto distinguir un DOI que no tiene de uno que sí, y la
+  ausencia de la etiqueta de texto completo informa de ambos. Eso confunde un ítem desconocido
+  con uno solo de metadatos — un componente de datos como `10.4060/cc2212en-fig07` es una figura
+  sin PDF — lo que no cuesta nada, porque ambas son respuestas finales y correctas de que esta
+  fuente no puede servir el elemento. Una respuesta sin el elemento `<ds-root` del propio
+  repositorio es otra cosa y se informa como fuente no disponible.
+- **Por qué no es una ruta duplicada** en ocho DOI muestreados entre 2019 y 2024, Unpaywall
+  informó `is_oa: false` en todos — la FAO no deposita ninguna ubicación de acceso abierto en
+  Crossref, así que el corpus es invisible para un resolutor guiado por metadatos por muy
+  abiertas que sean sus licencias —, Europe PMC devolvió cero resultados e Internet Archive
+  Scholar o bien tenía una página de release sin texto completo preservado o respondía 404. El
+  catálogo de LibGen lleva un puñado de los títulos insignia y ninguno del resto: una búsqueda
+  de «FAO humanitarian response plan» no devuelve nada. Los ocho se resolvieron aquí.
+- **Claves** sin clave.
+- **Cortesía** el `robots.txt` del repositorio recorta la API REST a exactamente un endpoint
+  utilizable — `Allow: /server/api/core/bitstreams` y `Allow: /server/api/core/mapping` por
+  encima de `Disallow: /server/api/*` —, de modo que el endpoint de contenido de bitstream que
+  usa esta fuente está permitido explícitamente mientras que todo lo demás bajo `/server/api` no
+  lo está, incluida la búsqueda de descubrimiento de DSpace
+  `/server/api/discover/search/objects`, que por eso no se llama nunca. La ruta de la página del
+  ítem `/handle/<prefijo>/<id>` no lleva ningún `Disallow`; sí lo llevan `/search`, `/browse`,
+  `/entities/*`, `/items/*/full`, `/statistics` y las rutas de login y de envío. Hay fijado un
+  `Crawl-delay: 10`; resolver hace una petición de página y después la descarga, en lugar de
+  rastrear.
 
 ## Agregadores y preservación
 
@@ -553,8 +651,34 @@ autor — justo el fallo de «servir otro libro y llamarlo éxito» que existe p
 comprobación de identificador de OAPEN; sus resultados llevan en su lugar un `full_text_url`.
 
 Se midió y rechazó una lista más larga de candidatas: kikakurui.com (JIS), el programa GET de
-IEEE 802, ETSI, ECMA, 3GPP, W3C, ITU-T (aplazada en vez de rechazada) y la propia ruta de
-descarga lenta de Anna's Archive, cerrada por DDoS-Guard. Cada una lleva su medición
-bloqueante en
+IEEE 802, ETSI, ECMA, 3GPP, W3C, ITU-T (aplazada en vez de rechazada), la propia ruta de
+descarga lenta de Anna's Archive, cerrada por DDoS-Guard, y — medidas el 2026-07-30 — Project
+Euclid, DLA ASSIST y EverySpec. Estas tres últimas merecen una línea aquí porque dos de ellas
+funcionan:
+
+- **Project Euclid** sirve revistas del IMS y de estadística, y
+  `journalArticle/Download?urlId=<doi>` sí devolvió PDF reales a un User-Agent honesto. Se
+  rechaza por los dos lados del listón. Unpaywall ya aporta un enlace al PDF en seis de ocho DOI
+  muestreados, y ese enlace apunta al propio projecteuclid.org — así que para un despliegue
+  configurado es una segunda ruta al mismo fichero. Y el endpoint está protegido por Imperva:
+  tras un puñado de peticiones empezó a responder HTTP 200 con un intersticial «Pardon Our
+  Interruption» de 6 183 bytes a cada petición siguiente, incluidas las espaciadas 45 segundos,
+  y en media hora el bloqueo se había extendido a las páginas de artículo.
+- **DLA ASSIST** es el canal oficial del DoD para MIL-STD/MIL-SPEC, un corpus del que el
+  catálogo no tiene nada, y se puede manejar: el postback de búsqueda devuelve el documento
+  correcto y la ruta `WMX/Default.aspx?token=` sirvió un MIL-STD-810H de 24 788 992 bytes. Se
+  rechaza por coste. Los MIL-STD no llevan DOI, así que solo queda la vía intermedia de ERIC —
+  un proveedor de descubrimiento cuyos resultados llevan `pdf_url` — y rellenar ese campo exige
+  una sesión ASP.NET WebForms (un `__VIEWSTATE` cifrado de 1 708 caracteres más un
+  `__EVENTVALIDATION` de 1 048, reenviados con cookie) _más_ una petición de página de detalle
+  por resultado.
+- **EverySpec** replica el mismo corpus de normas militares tras una búsqueda sin estado y con
+  URL de descarga deducibles, lo que la habría hecho la más barata de las dos. Se rechaza porque
+  la réplica lleva años sin actualizarse: ASSIST tiene MIL-STD-882E Change 1 (2023),
+  MIL-STD-464D (2020) y MIL-STD-2073-1E Change 4 (2024), donde lo más nuevo de EverySpec es 882E
+  (2012), 464C (2010) y 2073-1C. En MIL-STD-810 ambas tienen 21 revisiones y a EverySpec le
+  falta la vigente.
+
+Cada una lleva su medición completa en
 [el ADR de alcance de fuentes y capacidades](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-source-and-capability-scope.md),
 así que ninguna se vuelve a litigar aquí.

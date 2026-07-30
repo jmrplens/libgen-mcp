@@ -3,7 +3,7 @@ title: Privacy policy
 description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
 datePublished: "2026-07-25"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "b60e95418998996c"
+privacySource: "95f71b60073cd97f"
 head:
   - tag: script
     attrs:
@@ -104,6 +104,10 @@ AI assistant) make. There are no background connections. The destinations are:
   `10.4230` DOI, the [ACL Anthology](https://aclanthology.org)
   (`aclanthology.org`) for a `10.18653`/`10.3115` DOI,
   [Zenodo](https://zenodo.org) (`zenodo.org`) for a `10.5281/zenodo` DOI,
+  [SciELO](https://www.scielo.br) for a `10.1590` DOI (the request goes to
+  `doi.org`, whose redirect leads to `www.scielo.br`), the
+  [FAO Knowledge Repository](https://openknowledge.fao.org)
+  (`openknowledge.fao.org`) for a `10.4060` DOI,
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
   `web.archive.org` for the file). A monograph DOI is also offered to
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries

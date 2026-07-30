@@ -103,6 +103,8 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere |
 | S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased |
 | S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
+| S69 | **SciELO on a recent article** — a 2025 paper Unpaywall marks open access without supplying a PDF link and fatcat has not ingested, so nothing else in the chain can produce bytes; what is graded is the resolver landing, since no identifier the caller holds predicts the article page's address and the PDF URL comes from that page's own `citation_pdf_url` |
+| S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -132,8 +134,8 @@ is also hidden from the download tool's `source` schema when unset. S7 sets the
 email via its per-scenario environment to exercise the open-access path.
 
 **The article chain is ordered, and S45–S49 test the order.** Articles resolve
-through `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → fatcat → core →
-oapen → scihub → scidb`
+through `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo →
+fao → fatcat → core → oapen → scihub → scidb`
 (`config.KnownSources`): the legal open-access providers lead, the shadow libraries
 are the fallback. S45–S47 each pin one of the new providers by name; S46 and S49
 pin nothing and grade which source the chain reached, which is the only way the

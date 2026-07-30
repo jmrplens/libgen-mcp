@@ -184,7 +184,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			name:   "default without email or core key disables unpaywall and core",
 			mutate: func(*config.Config) {},
 			wantEnum: []string{
-				"europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+				"europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
 				"fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: []string{"unpaywall", "core"},
@@ -193,7 +193,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			name:   "unpaywall enabled once an email is set",
 			mutate: func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
 			wantEnum: []string{
-				"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+				"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
 				"fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: nil,
@@ -202,7 +202,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			name:   "core joins the enum once its key is set",
 			mutate: func(c *config.Config) { c.UnpaywallEmail = "me@example.com"; c.CoreKey = "k" },
 			wantEnum: []string{
-				"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+				"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
 				"fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: nil,

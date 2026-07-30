@@ -37,7 +37,7 @@ head:
             "name": "What can libgen-mcp do?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The search tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (auto) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
+              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The search tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (auto) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
             }
           },
           {
@@ -45,7 +45,7 @@ head:
             "name": "Do I need an account, API key, or token to use libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is LIBGEN_MCP_CORE_KEY, a free CORE API key that enables the core open-access source."
+              "text": "No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional LIBGEN_MCP_UNPAYWALL_EMAIL contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is LIBGEN_MCP_CORE_KEY, a free CORE API key that enables the core open-access source."
             }
           },
           {
@@ -61,7 +61,7 @@ head:
             "name": "Does libgen-mcp prefer legal sources?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file."
+              "text": "Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file."
             }
           }
         ]
@@ -87,7 +87,7 @@ import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
 **LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
-Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Openly licensed books can be fetched by ISBN from OAPEN and the Internet Archive, and articles by DOI, through the open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE, OAPEN) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
+Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Openly licensed books can be fetched by ISBN from OAPEN and the Internet Archive, and articles by DOI, through the open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, OAPEN) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
 
 ## Install in one line
 
@@ -134,14 +134,15 @@ asserted.
 		Books by MD5 from LibGen, or by ISBN from OAPEN and the Internet Archive;
 		articles by DOI from the open-access providers first (Unpaywall, Europe PMC,
 		bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology,
-		Zenodo, Internet Archive Scholar, CORE, OAPEN), then Sci-Hub and SciDB.
+		Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar,
+		CORE, OAPEN), then Sci-Hub and SciDB.
 	</Card>
 	<Card title="Open access first" icon="approve-check">
 		Articles resolve through Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC
-		Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive
-		Scholar, CORE, and OAPEN before any shadow-library fallback is tried. Books
-		by ISBN come only from OAPEN and public-domain Internet Archive scans;
-		lending-restricted copies are refused.
+		Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO
+		Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN before any
+		shadow-library fallback is tried. Books by ISBN come only from OAPEN and
+		public-domain Internet Archive scans; lending-restricted copies are refused.
 	</Card>
 	<Card title="Extra-source discovery" icon="magnifier">
 		`search` reaches beyond the catalog to Anna's Archive, arXiv, Crossref,
@@ -212,11 +213,11 @@ libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go,
 
 ### What can libgen-mcp do?
 
-It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 
-No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is `LIBGEN_MCP_CORE_KEY`, a free CORE API key that enables the `core` open-access source.
+No. libgen-mcp requires no Library Genesis account, no API key, and no token. Every option is an environment variable with a documented default, so the server runs with zero configuration. The only email-shaped setting is the optional `LIBGEN_MCP_UNPAYWALL_EMAIL` contact address sent to the Unpaywall API for DOI lookups. It is unset by default, which disables the Unpaywall source — the keyless open-access sources (Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar) and the Sci-Hub/SciDB fallbacks still serve DOIs without it. Set your own address to enable Unpaywall. The one other optional credential is `LIBGEN_MCP_CORE_KEY`, a free CORE API key that enables the `core` open-access source.
 
 ### Is libgen-mcp free and open source?
 
@@ -224,4 +225,4 @@ Yes. libgen-mcp is free and open source under the MIT license. The full source c
 
 ### Does libgen-mcp prefer legal sources?
 
-Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file.
+Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE and OAPEN before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file.

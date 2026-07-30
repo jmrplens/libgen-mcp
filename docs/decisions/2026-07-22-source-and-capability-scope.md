@@ -479,6 +479,224 @@ the `/v1/` segment and `zenodo` one whose suffix is not a record number.
   which is why a Zenodo download is named from the file key rather than from the deposit's
   bibliographic metadata.
 
+#### Amendment — 2026-07-30 (two more publisher-direct DOI sources, three rejections)
+
+Five candidates that survived an earlier diagnostic pass were re-measured from scratch against
+the whole chain. **Two ship, three do not.** The bar applied throughout is the one the previous
+amendment established: a candidate ships only if it serves documents the current chain cannot,
+and "the current chain" means the *keyless default* chain as well as a fully configured one.
+Those are different claims and are kept apart below.
+
+##### Shipped — `scielo` (`10.1590`)
+
+SciELO is the open-access publishing platform of Latin American science; the Brazilian
+collection alone is roughly half a million articles, mostly in Portuguese and Spanish, all
+Creative Commons licensed and served without an account.
+
+A previous pass reported "Unpaywall covers this corpus", and that is **half right in a way that
+matters**. Over fourteen real DOIs sampled from 1998 to 2025, Unpaywall reported `is_oa: true`
+for **all fourteen** — the metadata claim is correct — but supplied a downloadable
+`url_for_pdf` for only **eight**, falling back to a `best_oa_location` that is the HTML article
+page. "Open access according to Unpaywall" and "retrievable through the `unpaywall` source" are
+not the same statement, and the earlier pass conflated them.
+
+| Sample (14 DOIs, 1998–2025) | Unpaywall `is_oa` | Unpaywall `url_for_pdf` | fatcat full text | scielo.br |
+| --------------------------- | ----------------- | ----------------------- | ---------------- | --------- |
+| all years                   | 14/14             | 8/14                    | 10/14            | 13/14     |
+| the four sampled from 2025  | 4/4               | **0/4**                 | 2/4              | 4/4       |
+
+Three of the fourteen were reachable from **no** source in the chain, keys or no keys —
+`10.1590/s0103-4014.202438112.008-en`, `10.1590/1413-7054202549009425` and
+`10.1590/1982-2553202568745` — and scielo.br served them at 1,542,793, 737,104 and 610,410
+bytes. Europe PMC returned zero hits for thirteen of the fourteen. The gap is **systematic
+rather than random**: it concentrates on recent publications, where Unpaywall has not recorded
+a PDF location and Internet Archive Scholar has not finished ingesting. That is the material a
+research tool is most often asked for, which is what decided this one.
+
+The fourteenth case is recorded because it bounds the claim: `10.1590/s0104-66321998000100007`
+(1998) is HTML-only at SciELO itself — the article page carries no `citation_pdf_url` and the
+PDF endpoint answers "PDF do Artigo não encontrado" — so it is unreachable everywhere, this
+source included, and the source declines rather than handing the pipeline a 404.
+
+**Measured — the resolver hop cannot be skipped.** Unlike `dagstuhl`, whose landing page URL is
+derivable, a SciELO DOI predicts nothing. The registered URL is the legacy
+`scielo.php?script=sci_arttext&pid=<PID>` form, whose PID is embedded only in the older DOIs
+(`10.1590/s0104-6632…`) and not at all in the modern ones (`10.1590/1982-2553202568745`); it
+then redirects to a `/j/<journal>/a/<key>/` address whose key appears in no identifier the
+caller holds. SciELO's own ArticleMeta API *does* accept a DOI as `code` and return the PID, but
+its 88 KB legacy record carries no `/j/…/a/…` key either — checked field by field — so it would
+cost a request and still leave the article page to fetch. The source therefore follows
+`doi.org`, checks it landed on `scielo.br`, and reads the page's `citation_pdf_url`.
+
+##### Shipped — `fao` (`10.4060`)
+
+The Food and Agriculture Organization of the United Nations registers about 9,500 DOIs under
+`10.4060` and publishes all of it openly — flagship reports, technical guidance, country
+humanitarian response plans, standards work and statistical yearbooks, in six languages.
+
+This one is an **absolute gap, 8 of 8**. Across DOIs sampled from 2019 to 2024, Unpaywall
+reported `is_oa: false` for **every one**: FAO deposits no open-access location with Crossref,
+so the whole corpus is invisible to a metadata-driven resolver however open its licenses
+actually are. Europe PMC returned zero hits for all eight. fatcat either held a release page
+advertising no preserved full text or answered 404. The LibGen catalog carries a handful of the
+flagship titles (`The State of Food Security and Nutrition in the World`, `Compendium of food
+additive specifications`) and nothing else — a catalog search for "FAO humanitarian response
+plan" returns zero results. All eight resolved through the repository.
+
+**Measured — the doi.org hop is skipped, and not only to save a request.** The DOI's suffix is
+also the item's handle, so `openknowledge.fao.org/handle/20.500.14283/<suffix>` follows from the
+identifier with no lookup; it answered 200 with a `citation_pdf_url` for eight of eight,
+including several whose DOI resolver sends callers to `www.fao.org/documents/card/…` instead.
+That alternative is worse than indirect: **`www.fao.org` answered HTTP 504 for five of the eight
+sampled DOIs** while the repository served all eight.
+
+**Measured — the frontend/backend trap, which would have shipped a source that downloads
+nothing.** The `citation_pdf_url` tag names `/bitstreams/<uuid>/download`, an Angular *frontend*
+route. To a browser it hands over the file; to a plain HTTP client it answers **HTTP 200,
+`text/html`, 372,862 bytes** of application shell. The backend endpoint
+`/server/api/core/bitstreams/<uuid>/content` serves the bytes — `application/pdf` at 2,929,735,
+12,549,068 and 8,677,202 for three sampled items whose frontend URLs all returned the shell — so
+the source lifts the UUID out and rebuilds the URL. Taking the advertised tag at face value, as
+`dagstuhl` and `fatcat` do, would have been wrong here.
+
+**Measured — robots.txt permits exactly the two paths used, and forbids the one the diagnostic
+pass proposed.** The repository's file reads:
+
+```text
+# Only allow access to the core bitstream and mapping endpoints on the rest api, nothing else
+Allow: /server/api/core/mapping
+Allow: /server/api/core/bitstreams
+Disallow: /server/api/*
+Disallow: /server/api
+```
+
+So the bitstream content endpoint is explicitly permitted, and the DSpace discovery search
+`/server/api/discover/search/objects` — the route an earlier pass suggested driving, and which
+does answer `application/hal+json` to a truthful `Referer` — is **disallowed**, and is never
+called. The item page path `/handle/<prefix>/<id>` carries no `Disallow`; `/search`, `/browse`,
+`/entities/*`, `/items/*/full` and the login and submission routes do. `Crawl-delay: 10` is set.
+No `Referer` turned out to be needed for either path used, truthful or otherwise.
+
+**Measured — DSpace reports an unheld handle as HTTP 200.** An unknown handle returns the
+ordinary Angular shell carrying "No item found for the identifier", not a 404, so the status
+line cannot separate a held item from an unheld one and the absence of the full-text tag reports
+both. A response missing the repository's own `<ds-root` element is treated differently — that
+is a challenge or a layout change, and is reported as the source being unavailable.
+
+##### Rejected — Project Euclid, with the measurement
+
+Project Euclid (IMS, Duke, Bernoulli and the mathematics/statistics journals) was previously
+rejected on a misread, and the correction was right as far as it went: the block is a filter on
+the literal `curl/8.7.1` User-Agent string, and an honest descriptive UA gets the article page
+and, at first, the PDF. It is rejected anyway, on **both** counts of the bar.
+
+**Overlap.** Of eight `10.1214` DOIs sampled across 1935, 1955, 1975, 1990, 2005 (×2), 2015 and
+2024, Unpaywall supplied a `url_for_pdf` for **six**, and that link points at
+`projecteuclid.org` itself. For a configured deployment this is a second route to the same file
+served by the same host. The two misses were the 1935 *Annals of Mathematical Statistics* paper
+and a 2024 *Annals of Statistics* paper, both `is_oa: false`.
+
+**Dependability, which is the decisive part.** The download endpoint is behind Imperva bot
+scoring. Requests spaced ten seconds apart returned PDFs for the 1st, 3rd and 4th DOIs and a
+**6,183-byte "Pardon Our Interruption" interstitial, served with HTTP 200**, for the rest. A
+retry pass 45 seconds apart returned the interstitial for all three DOIs tried, and about thirty
+minutes later the plain article page — not merely the download endpoint — was also serving it.
+Fourteen requests over one session were enough to close the host. A source that must
+content-sniff every 200 and degrades to permanent failure under light, polite use is not a
+source; it is a liability in a chain whose other members are expected to answer.
+
+`robots.txt` (`Crawl-delay: 10`, `Disallow: /search` and the institutional-signin paths) would
+have permitted resolve-by-DOI, so policy was never the obstacle. Behaviour was.
+
+##### Rejected — DLA ASSIST, with the measurement
+
+`quicksearch.dla.mil` is the US Department of Defense's official channel for MIL-STD/MIL-SPEC,
+and the corpus is a genuine hole: the catalog's `standards` collection returns **zero** results
+for "MIL-STD-810", "MIL-STD-461" and "military standard environmental engineering
+considerations". MIL-STDs carry no DOI, so — per the ERIC decision above — the only option is a
+discovery provider whose hits carry `pdf_url`. A schema expansion was never on the table.
+
+**It works.** This is recorded because the previous entry deferred it as "an HTML portal with no
+JSON query endpoint", which understates it. The search is an ASP.NET WebForms postback and it
+does answer: GET `qsSearch.aspx`, carry `__VIEWSTATE`, `__VIEWSTATEGENERATOR`,
+`__VIEWSTATEENCRYPTED` and `__EVENTVALIDATION` into a POST with the session cookie, and
+`DocumentIDTextBox=MIL-STD-810` comes back with `qsDocDetails.aspx?ident_number=35978`. That
+detail page lists 21 revision images as `ImageRedirector.aspx?token=<A>.<ident>`, and the
+`<A>` half alone builds `WMX/Default.aspx?token=<A>`, which 302s to `/Transient/<GUID>.pdf` and
+served **24,788,992 bytes** of MIL-STD-810H Change 1 to the honest UA. There is no `robots.txt`
+(404).
+
+**It is rejected on cost, and the cost is in the wrong place.** A `discovery.Provider` must be
+best-effort and fast — the contract says degrade to an empty slice rather than sink the
+federated result. Filling `pdf_url` here means two requests to open a search session, and then
+**one detail-page fetch per hit**: a default-sized result set is 20-plus serialized requests to
+a single F5-fronted `.mil` host inside one federated search, an order of magnitude more traffic
+than every other provider combined. Drop the per-hit fetches and the hits carry a document
+number and a title for a corpus whose users type the document number to begin with — the ERIC
+affordance minus the part that made ERIC worth wiring. And the state is opaque and unversioned:
+`__VIEWSTATEENCRYPTED` is set, so a 1,708-character VIEWSTATE and a 1,048-character
+EVENTVALIDATION must be round-tripped verbatim with a cookie, and any ASP.NET redeploy or
+machineKey rotation changes the contract silently.
+
+##### Rejected — EverySpec, with the measurement
+
+EverySpec mirrors the same military-standards corpus and is, on mechanics, the better of the
+two: `robots.txt` is `User-agent: *` / `Disallow:` (nothing disallowed), the first-party search
+is a **stateless** `POST /specifications-standards-search.php` with `query_id` and `query` that
+returns server-rendered document links, and the download URL is derivable from a result's own
+href with **no extra request** — `<dir>/download.php?spec=<NAME>.<id zero-padded to 6>.pdf`,
+confirmed on MIL-STD-810H (65,345,109 bytes), MIL-STD-810G CHG-1, MIL-STD-1472H and
+MIL-STD-1553C. Its Google Custom Search box is a red herring; the first-party form is what
+works.
+
+It is rejected because **it is the same corpus as ASSIST and a stale copy of it**:
+
+| Document       | ASSIST's newest                     | EverySpec's newest        |
+| -------------- | ----------------------------------- | ------------------------- |
+| MIL-STD-882    | Revision E Change 1 (27-SEP-2023)   | 882E (2012)               |
+| MIL-STD-464    | Revision D (2020) + Notice 1 (2026) | 464C (2010)               |
+| MIL-STD-2073-1 | Revision E Change 4 + Notice (2024) | 2073-1C                   |
+| MIL-STD-810    | 21 images, incl. H Change 1 (2022)  | 21 entries, no H Change 1 |
+
+Whichever of the two ships, the other adds routes rather than documents — and the one that is
+cheap to implement is the one that is years behind. Since ASSIST is rejected above, EverySpec
+would not be a *second* route; it would simply be a dependency on one small ad-funded mirror for
+a corpus whose official channel we declined as too expensive, delivering superseded revisions of
+safety and environmental-test standards. That is a worse failure than not covering the corpus,
+because a superseded MIL-STD looks exactly like a current one.
+
+##### Two corrections to earlier records
+
+- **Semantic Scholar** is listed in §3's table as "NO-GO — keyless shared pool too throttled to
+  depend on". That is true only of `graph/v1/paper/search`, which answered 429 on six of six
+  attempts spaced three seconds apart. **Per-paper lookup and the `batch` endpoint answered 200
+  on nine consecutive calls with zero 429s**, and the empty `openAccessPdf` that partly motivated
+  the rejection was correct data rather than throttling — that record is `isOpenAccess: false`.
+  The corrected record: Semantic Scholar is not viable for *search* on the keyless tier, and is
+  viable for *resolution and enrichment*. It is still not implemented; the point of the
+  correction is that the reason recorded for the rejection was wrong.
+- **HTTP 202 with an empty body is an AWS WAF challenge**, not a bot gate that returns nothing.
+  It was recorded that way for IEEE 802's `stampPDF` in the standards amendment above, and the
+  same signature has since been seen on IEEE Xplore, ADS/IVOA and the UN Digital Library. The
+  host is withholding its own challenge page from a non-browser header set: with a full browser
+  header set those hosts emit a ~2 KB page carrying `window.awsWafCookieDomainList` and
+  `window.gokuProps`. The conclusion for IEEE 802 is unchanged — no pure-Go HTTP client passes a
+  WAF challenge — but the signature is recorded here so the next person recognizes a 202/0-byte
+  response instead of re-measuring it.
+
+##### Chain placement
+
+`config.KnownSources` becomes `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl →
+zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook →
+annas`. Both join the publisher-direct group ahead of the shadow libraries, per §3, and both add
+a probe to `articleProbes` — `fao`'s probe has to be a plausible handle suffix, not a bare
+prefix, since the source declines a suffix that could not be one.
+
+`scielo` is the first publisher-direct source whose prefix another keyless source also reaches:
+`fatcat` preserves part of the SciELO corpus. It is placed **before** `fatcat` deliberately, so
+the publisher's own current copy is preferred over an archive capture that lags publication —
+which is precisely the lag the measurement above found.
+
 ### 4. Deepen the read loop — GO (pure-Go)
 
 - **`search_in_document`** — search the already-extracted text and return snippet + page/offset
@@ -527,6 +745,15 @@ clients and the no-friction promise must keep working unchanged.
   ETSI, ECMA, 3GPP, W3C as a download source. **Measured and rejected 2026-07-30 — see the
   standards amendment under §3** for each one's blocking measurement; ITU-T is deferred rather
   than rejected.
+- Project Euclid, DLA ASSIST and EverySpec. **Measured and rejected 2026-07-30 — see the
+  two-more-publisher-direct-sources amendment under §3.** Project Euclid duplicates Unpaywall on
+  six of eight sampled DOIs and its download endpoint is Imperva-gated (HTTP 200 carrying a
+  6,183-byte interstitial after light use); DLA ASSIST works but needs an encrypted-VIEWSTATE
+  WebForms session plus one detail fetch per search hit to produce a `pdf_url`; EverySpec is the
+  same corpus as ASSIST, years out of date.
+- ~~Semantic Scholar keyless dependency (throttled).~~ **Partly corrected 2026-07-30:** only
+  `graph/v1/paper/search` is throttled; per-paper and `batch` lookups answered 200 on nine
+  consecutive calls. Still unimplemented, but the recorded reason was wrong.
 - Discovery providers for Dagstuhl, the ACL Anthology and Zenodo, and any use of Zenodo's
   robots-disallowed `/api/records/<id>` metadata endpoint. **Decided 2026-07-30 — see the
   publisher-direct amendment under §3.** All three ship as DOI-keyed download sources only.

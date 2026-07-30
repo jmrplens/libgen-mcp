@@ -404,7 +404,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 
 	wantChain := []string{
 		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"fatcat", "oapen", "archive",
+		"scielo", "fao", "fatcat", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
 	if got := sourceNames(c); !slices.Equal(got, wantChain) {
@@ -418,7 +418,8 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		}
 		// A preprint DOI is a valid DOI every prefix-agnostic article source accepts,
 		// so it counts the prefix-restricted biorxiv source alongside them. The other
-		// prefix-restricted sources (rfc, nist, dagstuhl, acl, zenodo) claim only their
+		// prefix-restricted sources (rfc, nist, dagstuhl, acl, zenodo, scielo, fao) claim
+		// only their
 		// own registrants and are correctly absent here; EnabledSourceNames probes each
 		// prefix in turn.
 		if s.Supports(Item{DOI: "10.1101/2020.01.01.000000"}) {
@@ -448,7 +449,7 @@ func TestNewWiresCoreWhenKeyed(t *testing.T) {
 	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
 	want := []string{
 		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"fatcat", "core", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "core", "oapen", "scihub", "scidb",
 	}
 	if !slices.Equal(article, want) {
 		t.Errorf("article chain (keyed) = %v, want %v", article, want)
@@ -465,7 +466,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	}
 	if want := []string{
 		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"fatcat", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
@@ -478,7 +479,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	}
 	if want := []string{
 		"europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"fatcat", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
 	}

@@ -387,6 +387,8 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"dagstuhl":   func() DownloadSource { return dagstuhlSource{http: c.http} },
 		"acl":        func() DownloadSource { return aclSource{} },
 		"zenodo":     func() DownloadSource { return zenodoSource{http: c.http} },
+		"scielo":     func() DownloadSource { return scieloSource{http: c.http} },
+		"fao":        func() DownloadSource { return faoSource{http: c.http} },
 		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
 		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
 		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
@@ -435,14 +437,15 @@ func (c *Client) EnabledSourceNames() (book, article []string) {
 // registrant prefix, and a probe carrying one of them makes every other
 // prefix-restricted source look unusable. There is therefore one probe per
 // restricted prefix in the chain — bioRxiv/medRxiv preprints, the RFC Editor,
-// NIST, Schloss Dagstuhl, the ACL Anthology and Zenodo — and each is a valid DOI
-// that the prefix-agnostic sources accept too, so the union is the full "can serve
-// some article" set.
+// NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO Brazil and the FAO —
+// and each is a valid DOI that the prefix-agnostic sources accept too, so the union
+// is the full "can serve some article" set.
 //
 // Each probe has to satisfy its source's own well-formedness check, not merely
-// carry the right prefix: acl declines a DOI without the "/v1/" segment and zenodo
-// one whose suffix is not a record number, so a bare-prefix probe would leave
-// either absent from the schema exactly as having no probe at all would.
+// carry the right prefix: acl declines a DOI without the "/v1/" segment, zenodo one
+// whose suffix is not a record number and fao one whose suffix could not be a
+// handle, so a bare-prefix probe would leave any of them absent from the schema
+// exactly as having no probe at all would.
 //
 // A source added with a new prefix restriction must add its probe here, or it will
 // resolve correctly but never be advertised in the download tool's schema.
@@ -453,6 +456,8 @@ var articleProbes = []Item{
 	{DOI: dagstuhlDOIPrefix + "0"},
 	{DOI: aclDOIPrefixes[0] + aclVersionSegment + "P00-0000"},
 	{DOI: zenodoDOIPrefix + "1"},
+	{DOI: scieloDOIPrefix + "0"},
+	{DOI: faoDOIPrefix + "aa0000en"},
 }
 
 // supportsSomeArticle reports whether the source resolves at least one of the

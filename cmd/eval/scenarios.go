@@ -141,12 +141,27 @@ const aclDOI = "10.18653/v1/N19-1423"
 // half of all Zenodo DOIs resolve to nothing.
 const zenodoConceptDOI = "10.5281/zenodo.21698240"
 
+// scieloDOI is "Peeling and physicochemical characterization of tomato fruits", a
+// 2025 Ciência e Agrotecnologia article. It is the scenario's target because the
+// rest of the chain cannot serve it: Unpaywall reports is_oa true with no
+// url_for_pdf on any location, and scholar.archive.org answers 404 to the fatcat
+// lookup — the recency lag that is the whole reason the source exists.
+const scieloDOI = "10.1590/1413-7054202549009425"
+
+// faoDOI is the FAO/WHO "Compendium of food additive specifications". Its DOI's
+// suffix is also the item's handle in the FAO Knowledge Repository, which is what
+// lets the source skip the doi.org hop — and doing so matters, because
+// www.fao.org's document card answered HTTP 504 for five of eight sampled FAO DOIs
+// while the repository served all eight. Unpaywall reports the whole 10.4060 prefix
+// as not open access, because FAO deposits no OA location with Crossref.
+const faoDOI = "10.4060/cc7949en"
+
 // publisherDirectChainSources is the source list the publisher-direct routing
 // scenarios run with. Like standardsChainSources it keeps real competitors in front
 // of and behind the source under test, so winning means the DOI-prefix gate routed
 // rather than the chain having nowhere else to go, and it leaves unpaywall out of
 // the operator's list — the only thing that actually keeps it out, per S46.
-const publisherDirectChainSources = "europepmc,dagstuhl,acl,zenodo,fatcat,scihub,scidb"
+const publisherDirectChainSources = "europepmc,dagstuhl,acl,zenodo,scielo,fao,fatcat,scihub,scidb"
 
 // oapenDOI and oapenISBN identify the SAME openly licensed monograph — the European
 // Investment Bank's "European firms and climate change 2020/2021" — through each of
@@ -1271,11 +1286,12 @@ func assertStandardsSourcesAdvertised(tr transcript) (pass bool, detail string) 
 		"; enum = " + strings.Join(enum, ", ")
 }
 
-// publisherDirectScenarios cover the three publishers reached directly by DOI
-// registrant prefix that are not standards bodies: Schloss Dagstuhl, the ACL
-// Anthology and Zenodo. Each grades the one thing its source could plausibly get
-// wrong — a landing-page parse, an identifier's case, and a concept DOI — rather
-// than re-grading the prefix gate the standards scenarios already cover.
+// publisherDirectScenarios cover the publishers reached directly by DOI registrant
+// prefix that are not standards bodies: Schloss Dagstuhl, the ACL Anthology,
+// Zenodo, SciELO Brazil and the FAO. Each grades the one thing its source could
+// plausibly get wrong — a landing-page parse, an identifier's case, a concept DOI,
+// a resolver landing and a frontend/backend URL rewrite — rather than re-grading
+// the prefix gate the standards scenarios already cover.
 func publisherDirectScenarios() []scenario {
 	return []scenario{
 		{
@@ -1316,6 +1332,37 @@ func publisherDirectScenarios() []scenario {
 				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
 			},
 			Assert: assertS68ZenodoConceptDOI,
+		},
+		{
+			ID: "S69",
+			Prompt: fmt.Sprintf("Download the article with DOI %s. Don't pin a source — let the "+
+				"server route it.", scieloDOI),
+			// A recent SciELO article, deliberately: Unpaywall marks it open access
+			// without supplying a PDF link and fatcat has not ingested it, so nothing
+			// else in the chain can produce bytes. What is under test is the resolver
+			// landing — the source has to follow doi.org onto scielo.br and read the
+			// article page's citation_pdf_url, because no identifier the caller holds
+			// predicts that page's address.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         publisherDirectChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS69ScieloChain,
+		},
+		{
+			ID: "S70",
+			Prompt: fmt.Sprintf("Download the FAO document with DOI %s. Don't pin a source — let "+
+				"the server route it.", faoDOI),
+			// The URL rewrite is what this grades. The repository's item page advertises
+			// an Angular frontend route that answers a plain HTTP client with 372,862
+			// bytes of application shell instead of the file, so the source rewrites it
+			// to the backend bitstream endpoint. A regression there yields HTML with a
+			// 200, which the pipeline rejects — so a PDF arriving is the proof.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         publisherDirectChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS70FAOChain,
 		},
 	}
 }
@@ -1382,6 +1429,21 @@ func assertS68ZenodoConceptDOI(tr transcript) (pass bool, detail string) {
 			zenodoConceptDOI + " the scenario is about"
 	}
 	return assertChainServedBy(tr, "zenodo")
+}
+
+// assertS69ScieloChain grades the SciELO routing scenario: the chain must be left
+// unpinned and scielo must be what served the file, which can only happen if the DOI
+// still resolves onto scielo.br and the article page still advertises a PDF.
+func assertS69ScieloChain(tr transcript) (pass bool, detail string) {
+	return assertChainServedBy(tr, "scielo")
+}
+
+// assertS70FAOChain grades the FAO routing scenario: the chain must be left unpinned
+// and fao must be what served the file, which can only happen if the item page's
+// advertised URL was rewritten onto the backend bitstream endpoint — the frontend one
+// returns the application shell, and the pipeline refuses that.
+func assertS70FAOChain(tr transcript) (pass bool, detail string) {
+	return assertChainServedBy(tr, "fao")
 }
 
 // assertS51OapenDOI checks the OAPEN source keyed by a monograph DOI: the model must
