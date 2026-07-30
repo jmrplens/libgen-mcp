@@ -724,7 +724,7 @@ func TestValidateDownloadDirRemoveError(t *testing.T) {
 // after libgen and randombook.
 func TestKnownSourcesOrder(t *testing.T) {
 	want := []string{
-		"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "archive",
+		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "core", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
 	if len(KnownSources) != len(want) {

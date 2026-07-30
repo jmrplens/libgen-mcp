@@ -67,17 +67,21 @@ open-access providers first, then the shadow-library fallbacks:
    reports whether the DOI is simply not indexed or indexed without an OA full text.
 3. **`biorxiv`** — only for `10.1101` preprint DOIs; returns the latest version's full-text PDF
    from bioRxiv or medRxiv.
-4. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar's release page
+4. **`rfc`** — only for `10.17487` RFC DOIs; builds the RFC Editor's plain-text URL from the
+   RFC number without a lookup of its own.
+5. **`nist`** — only for `10.6028` DOIs; hands them to the DOI resolver, whose redirect ends at
+   the PDF in NIST's repository.
+6. **`fatcat`** — returns a preserved copy from the Internet Archive when Scholar's release page
    advertises one that still serves a PDF; it distinguishes a DOI the catalog does not hold, a
    release with nothing preserved, and a release whose preserved captures have all gone bad.
-5. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
+7. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
    download URL when CORE hosts a live copy.
-6. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
+8. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
    journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
    chain advances.
-7. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+9. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
    article page with an extractable PDF.
-8. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
+10. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
    covers papers published after Sci-Hub stopped indexing.
 
 **Fixes.**

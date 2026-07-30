@@ -183,19 +183,19 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 		{
 			name:       "default without email or core key disables unpaywall and core",
 			mutate:     func(*config.Config) {},
-			wantEnum:   []string{"europepmc", "biorxiv", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"europepmc", "biorxiv", "rfc", "nist", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: []string{"unpaywall", "core"},
 		},
 		{
 			name:       "unpaywall enabled once an email is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
-			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: nil,
 		},
 		{
 			name:       "core joins the enum once its key is set",
 			mutate:     func(c *config.Config) { c.UnpaywallEmail = "me@example.com"; c.CoreKey = "k" },
-			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
+			wantEnum:   []string{"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas"},
 			wantAbsent: nil,
 		},
 	}

@@ -84,6 +84,39 @@ const scihubDOI = "10.1016/j.cell.2011.02.013"
 // with Unpaywall disabled reaches bioRxiv or nothing.
 const biorxivDOI = "10.1101/833400"
 
+// rfcNumber is the RFC the RFC-source scenarios use, named by number rather than by
+// DOI so a scenario can ask for it the way a person would. RFC 9110 is the current
+// HTTP Semantics specification; an RFC is immutable once published, so the target
+// cannot be revised or withdrawn underneath the suite.
+const rfcNumber = "9110"
+
+// rfcDOI is that RFC's registered DOI. The registrant prefix 10.17487 is the gate
+// the rfc source claims on, and no other source in the chain answers for it — all
+// seven of the others were measured missing it — so a file arriving at all is
+// evidence the gate routed.
+const rfcDOI = "10.17487/RFC" + rfcNumber
+
+// rfcTextMarker is a line the RFC's own text opens with. It is asserted on a read
+// so that an error page served with HTTP 200 fails the scenario instead of passing
+// as "the model got some text".
+const rfcTextMarker = "Request for Comments: " + rfcNumber
+
+// nistDOI is NIST SP 800-207 (Zero Trust Architecture), used to exercise the nist
+// source. A Special Publication is deliberately chosen over an Internal Report: the
+// SP repository path is stable, while the IR series is partitioned by publication
+// year, which is exactly why the source resolves through the DOI instead of building
+// a path. The 10.6028 registrant prefix is its gate, claimed by nothing else.
+const nistDOI = "10.6028/NIST.SP.800-207"
+
+// standardsChainSources is the source list the two standards routing scenarios run
+// with. It keeps real competitors in front of and behind the source under test, so
+// winning means the DOI-prefix gate routed rather than the chain having nowhere else
+// to go — while leaving unpaywall out entirely. Emptying its email does NOT keep it
+// out (this harness advertises elicitation, so the server asks the host for one and
+// the answer puts an ad-hoc Unpaywall at the head of the chain); only the operator's
+// source list gates that path. See S46 for the run that established this.
+const standardsChainSources = "europepmc,rfc,nist,fatcat,scihub,scidb"
+
 // oapenDOI and oapenISBN identify the SAME openly licensed monograph — the European
 // Investment Bank's "European firms and climate change 2020/2021" — through each of
 // the two identifiers the OAPEN source accepts. Verified live: either identifier
@@ -387,7 +420,27 @@ func doiInSearchResults(tr transcript, doi string) bool {
 // cases for each).
 
 // scenarios returns the ordered list of live scenarios.
+// scenarios returns the whole suite, in run order.
+//
+// It is assembled from themed groups rather than written as one literal. As a
+// single function the slice was large enough to dominate every maintainability
+// measure of the file on its own (maintidx), which buried any real complexity
+// signal the rest of the file might raise. Order is part of the suite's behavior,
+// so the groups are concatenated in the order they run.
 func scenarios() []scenario {
+	return slices.Concat(
+		coreSurfaceScenarios(),
+		escalationAndRemoteScenarios(),
+		sourceScenarios(),
+		standardsSourceScenarios(),
+	)
+}
+
+// coreSurfaceScenarios are the scenarios over the four tools' own paths: searching
+// each collection, get_details, downloading by md5 and by DOI, reading and
+// summarizing, progress, links, and the first remote-mode variants. They run first
+// because everything after them assumes these work.
+func coreSurfaceScenarios() []scenario {
 	return []scenario{
 		{
 			ID:     "S1",
@@ -585,6 +638,15 @@ func scenarios() []scenario {
 			// search) rather than downloading the whole file or reading sequentially.
 			Assert: assertReadFind,
 		},
+	}
+}
+
+// escalationAndRemoteScenarios cover what the server does beyond a single happy
+// path: elicitation, the remote-mode counterparts of the local cases, search
+// escalation beyond the catalog, the extra_sources policy in its never and always
+// settings, and pagination.
+func escalationAndRemoteScenarios() []scenario {
+	return []scenario{
 		{
 			ID: "S24",
 			Prompt: `Find a PDF of "The C Programming Language" by Kernighan and Ritchie and ` +
@@ -767,6 +829,15 @@ func scenarios() []scenario {
 		// the promise had none either: an assertion that named the sources it expected
 		// was the only thing standing in for it, and it went stale the moment the
 		// chain grew.
+	}
+}
+
+// sourceScenarios exercise the download chain one provider at a time — Europe PMC,
+// bioRxiv, fatcat, OAPEN, the Internet Archive, dblp, PubMed — plus the promises the
+// chain itself makes: open access before the shadow libraries, an unkeyed source
+// hidden from the enum, and the per-source cooldown.
+func sourceScenarios() []scenario {
+	return []scenario{
 		{
 			ID:     "S45",
 			Prompt: fmt.Sprintf("Download the open-access article with DOI %s from Europe PMC.", openAccessDOI),
@@ -1007,6 +1078,167 @@ func scenarios() []scenario {
 	}
 }
 
+// standardsSourceScenarios cover the standards bodies reached directly, and the ways
+// a model can get to them: the chain routing on a DOI registrant prefix, the source
+// named in prose, the one path that returns text rather than a PDF, and the enum that
+// has to advertise them for any of it to be reachable.
+func standardsSourceScenarios() []scenario {
+	return []scenario{
+		{
+			ID: "S61",
+			Prompt: fmt.Sprintf("Download the full text of RFC %s, the HTTP Semantics specification. "+
+				"Don't restrict it to a particular source — let the server pick.", rfcNumber),
+			// The hardest of these, and the one worth having: the prompt names the RFC the
+			// way a person does, by number, and never says "DOI". So the model has to know
+			// an RFC is reachable as a 10.17487 DOI and build it. Nothing else in the chain
+			// answers that prefix, so a file arriving proves both halves — the model found
+			// the door, and the gate routed it.
+			//
+			// A failure here is a SURFACE GAP rather than a broken source: it would mean
+			// the tool descriptions never told the model that RFCs are reachable at all.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         standardsChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS61RFCFromNumber,
+		},
+		{
+			ID: "S62",
+			Prompt: fmt.Sprintf("Download the NIST publication with DOI %s. Don't restrict it to a "+
+				"particular source — let the server choose.", nistDOI),
+			// The routing counterpart for NIST, with the DOI supplied: this grades the
+			// 10.6028 gate and, through it, that the redirect chain the source is built on
+			// — doi.org to nvlpubs — still ends at a PDF rather than at a landing page.
+			SetupEnv: map[string]string{
+				"LIBGEN_MCP_SOURCES":         standardsChainSources,
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "",
+			},
+			Assert: assertS62NISTChain,
+		},
+		{
+			ID:     "S63",
+			Prompt: fmt.Sprintf("Download DOI %s using the RFC Editor source specifically.", rfcDOI),
+			// The other way in: the prose name of the source rather than the chain's
+			// routing. It grades the mapping from "the RFC Editor" onto source=rfc, which
+			// is only possible if the enum and its description carried the name to the
+			// model in the first place.
+			Assert: assertS63RFCSourced,
+		},
+		{
+			ID: "S64",
+			Prompt: fmt.Sprintf("Read RFC %s and tell me, quoting the document, what it gives as its "+
+				"own title. Don't download it — read it.", rfcNumber),
+			// The format path. Every other DOI-keyed source yields a PDF; this is the one
+			// that yields plain text, so it is the only scenario where a DOI reaches
+			// extract as text and paginates by character offset instead of by page.
+			Assert: assertS64RFCRead,
+		},
+		{
+			ID: "S65",
+			Prompt: `Which download sources can you use to fetch standards and RFCs by DOI? ` +
+				`Just list them — do not download anything.`,
+			// Touches no third party: it grades the surface the model was shown. A source
+			// the chain runs but the enum omits is unreachable to a model that obeys the
+			// schema, which is how a prefix-gated source can ship and still be invisible —
+			// the failure the per-prefix probe list in EnabledSourceNames exists to prevent.
+			Assert: assertStandardsSourcesAdvertised,
+		},
+	}
+}
+
+// assertS61RFCFromNumber grades the routing scenario in which the model is given an
+// RFC number and no DOI. The chain must be left unpinned, and rfc must be what
+// served the file — which also confirms the model built the 10.17487 DOI, since no
+// other source answers that prefix.
+func assertS61RFCFromNumber(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "download")
+	if !ok {
+		return false, "SURFACE GAP: " + noDownloadCall + " — the model never found a way to reach an RFC"
+	}
+	if doi := stringField(call.Input, "doi"); !isRFCDOI(doi) {
+		return false, "SURFACE GAP: model called download with doi=" + doi +
+			", not the RFC DOI it had to derive from the RFC number"
+	}
+	return assertChainServedBy(tr, "rfc")
+}
+
+// assertS62NISTChain grades the NIST routing scenario. The DOI is supplied, so what
+// is under test is the 10.6028 gate and the doi.org redirect the source depends on.
+func assertS62NISTChain(tr transcript) (pass bool, detail string) {
+	return assertChainServedBy(tr, "nist")
+}
+
+// assertS63RFCSourced grades the model mapping the RFC Editor's prose name onto
+// source=rfc, the alternative to letting the chain route.
+func assertS63RFCSourced(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "rfc", "doi")
+}
+
+// isRFCDOI reports whether the argument is a DOI under the RFC Editor's registrant
+// prefix, matched case-insensitively because a DOI is case-insensitive and a model
+// may spell the token either way.
+func isRFCDOI(doi string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(doi)), "10.17487/RFC")
+}
+
+// assertS64RFCRead grades the one DOI-keyed path that returns text rather than a
+// PDF. It requires the read call to carry an RFC DOI, the text to be extractable and
+// reported as txt, and the document's own header line to appear in it — so an error
+// page served with HTTP 200 fails here instead of passing as an answer.
+func assertS64RFCRead(tr transcript) (pass bool, detail string) {
+	call, ok := findCall(tr, "read")
+	if !ok {
+		return false, "SURFACE GAP: model never called read"
+	}
+	if doi := stringField(call.Input, "doi"); !isRFCDOI(doi) {
+		return false, "SURFACE GAP: read was called with doi=" + doi + ", not an RFC DOI"
+	}
+	if call.Result == nil || call.Result.IsError {
+		return gradeDegraded(tr, "the read of the RFC failed live (the RFC Editor was unreachable)")
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(call.Structured, &out); err != nil {
+		return false, err.Error()
+	}
+	if !out.Extractable {
+		return false, functionalPrefix + notExtractableDetail + out.Reason + ")"
+	}
+	if out.Format != "txt" {
+		return false, functionalPrefix + "read reported format=" + out.Format +
+			", want txt — the rfc source serves the RFC Editor's plain text"
+	}
+	if !strings.Contains(out.Text, rfcTextMarker) {
+		return false, functionalPrefix + "the extracted text does not carry " + rfcTextMarker +
+			", so what came back is not RFC " + rfcNumber
+	}
+	return true, fmt.Sprintf("read opened RFC %s as text (%d chars extracted)", rfcNumber, len(out.Text))
+}
+
+// standardsSources are the download sources that reach a standards body directly.
+// They are keyless, so every deployment advertises them and a missing one is a
+// surface bug rather than an unconfigured credential.
+var standardsSources = []string{"rfc", "nist"}
+
+// assertStandardsSourcesAdvertised checks that the standards sources reach the model
+// at all. They are gated on their own DOI registrant prefix, and a prefix-gated
+// source is exactly the kind that can run in the chain while being absent from the
+// enum the model is shown: reachable by the server, invisible to the caller.
+func assertStandardsSourcesAdvertised(tr transcript) (pass bool, detail string) {
+	enum, ok := downloadSourceEnum(tr)
+	if !ok {
+		return false, functionalPrefix + "the download tool advertised no source enum, " +
+			"so nothing tells the model these sources exist"
+	}
+	for _, want := range standardsSources {
+		if !slices.Contains(enum, want) {
+			return false, functionalPrefix + "the source enum omits the standards source " + want +
+				"; it advertised " + strings.Join(enum, ", ")
+		}
+	}
+	return true, "the download source enum advertises " + strings.Join(standardsSources, " and ") +
+		"; enum = " + strings.Join(enum, ", ")
+}
+
 // assertS51OapenDOI checks the OAPEN source keyed by a monograph DOI: the model must
 // map the provider named in prose onto source=oapen, and when the live fetch lands
 // OAPEN must be what served the bytes.
@@ -1078,7 +1310,7 @@ func assertPubMedDiscovery(tr transcript) (pass bool, detail string) {
 // as one, because the isbn field's description is the only thing that could have told
 // it otherwise.
 func assertISBNDownload(tr transcript) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findDownloadBy(tr, func(c toolCall) bool { return isISBN(stringField(c.Input, "isbn")) })
@@ -1114,7 +1346,7 @@ func assertISBNDownload(tr transcript) (pass bool, detail string) {
 // honesty matter: a refusal it does not pass on leaves the user thinking a download is
 // on its way.
 func assertSourceRefuses(tr transcript, want, key, why string) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findSourcedCall(tr, want)
@@ -2815,7 +3047,7 @@ func downloadKeyOK(call toolCall, key string) (ok bool, detail string) {
 // failure is graded on honesty, since the model behavior under test (source
 // selection) was still correct.
 func assertSourcedDownload(tr transcript, want, key string) (pass bool, detail string) {
-	if _, any := findCall(tr, "download"); !any {
+	if _, called := findCall(tr, "download"); !called {
 		return false, noDownloadCall
 	}
 	call, ok := findSourcedCall(tr, want)

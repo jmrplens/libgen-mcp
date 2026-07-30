@@ -148,7 +148,7 @@ Run the full gate set:
 
 ```bash
 golangci-lint fmt --diff
-golangci-lint run
+golangci-lint run --build-tags e2e,eval ./...   # a plain run skips every tagged file
 go vet ./...
 go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 go test ./internal/tools/ -count=1

@@ -5,7 +5,7 @@ datePublished: "2026-07-25"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "2c0da46466882194"
+privacySource: "526286567bb4ecbe"
 head:
   - tag: script
     attrs:
@@ -101,7 +101,10 @@ destinos son:
   `download` de artículos pregunta a los repositorios abiertos por una copia con
   licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`,
   `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
-  (`api.biorxiv.org`, más los hosts de contenido `biorxiv.org`/`medrxiv.org`) e
+  (`api.biorxiv.org`, más los hosts de contenido `biorxiv.org`/`medrxiv.org`), el
+  [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) para un DOI de
+  RFC, [NIST](https://nvlpubs.nist.gov) para un DOI `10.6028` (la petición va a
+  `doi.org`, cuya redirección lleva a `nvlpubs.nist.gov`) e
   Internet Archive Scholar / fatcat (`scholar.archive.org`, y después
   `web.archive.org` para el fichero). Un DOI de monografía se ofrece además a
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Cada petición lleva

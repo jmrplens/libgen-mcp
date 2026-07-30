@@ -537,6 +537,85 @@ func TestE2EBiorxivClassifiedOutcome(t *testing.T) {
 	classifyOrFail(t, "biorxiv", err, biorxivFailures)
 }
 
+// rfcLiveDOI is the registered DOI of RFC 9110 ("HTTP Semantics"), whose plain text
+// the RFC Editor served on 2026-07-30. An RFC is never withdrawn or repointed, so
+// this is the most stable live target in the suite.
+const rfcLiveDOI = "10.17487/RFC9110"
+
+// rfcFailures are the KNOWN, diagnosed ways the rfc source can fail live. The list
+// is short because Resolve issues no request: it derives the URL from the DOI, so
+// every remaining failure arrives from the download stream. The transport class
+// pins www.rfc-editor.org, so a source repointed at some other host fails the test
+// instead of skipping as an upstream outage.
+var rfcFailures = []sourceFailure{
+	diagnosed("rfc", `"[^"]*" is not an RFC DOI`, "the DOI is not one the source claims"),
+	transportTo("rfc", "", "www.rfc-editor.org"),
+	{
+		re:  regexp.MustCompile(`source rfc: .*status 404`),
+		why: "the RFC Editor no longer serves that RFC as text",
+	},
+}
+
+// TestE2ERFCClassifiedOutcome exercises the rfc source end to end against the live
+// RFC Editor, restricted to source=rfc so no other source can mask its behavior.
+// The expected outcome is the RFC's real text — asserted on the document's own
+// header line, since a 200-with-an-error-page would otherwise pass as a download.
+func TestE2ERFCClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "rfc", "https://www.rfc-editor.org/rfc/rfc9110.txt")
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, rfcLiveDOI, "rfc")
+	if err == nil {
+		assertSourceText(t, "rfc", res, "Request for Comments: 9110")
+		return
+	}
+	classifyOrFail(t, "rfc", err, rfcFailures)
+}
+
+// nistLiveDOI is the DOI of NIST SP 800-207 (Zero Trust Architecture), which
+// resolved through doi.org to a 966,908-byte PDF on nvlpubs.nist.gov on 2026-07-30.
+// A Special Publication is used rather than an Internal Report because the SP path
+// is stable, while the IR series is partitioned by year — precisely the reason the
+// source resolves through the DOI rather than building a path.
+const nistLiveDOI = "10.6028/NIST.SP.800-207"
+
+// nistFailures are the KNOWN, diagnosed ways the nist source can fail live. As with
+// rfc, Resolve makes no request of its own, so the rest arrive from the download
+// stream. The transport class pins doi.org — the host the source actually contacts
+// — so a source that stopped resolving through the DOI fails here.
+var nistFailures = []sourceFailure{
+	diagnosed("nist", `"[^"]*" is not a NIST DOI`, "the DOI is not one the source claims"),
+	transportTo("nist", "", "doi.org"),
+	{
+		re:  regexp.MustCompile(`source nist: .*status (404|410)`),
+		why: "the DOI resolver or NIST's repository no longer serves that publication",
+	},
+	{
+		re:  regexp.MustCompile(`source nist: .*HTML page instead of the file`),
+		why: "the DOI stopped redirecting to the PDF and landed on a page",
+	},
+}
+
+// TestE2ENISTClassifiedOutcome exercises the nist source end to end, restricted to
+// source=nist. It is the one case that proves the redirect chain the source depends
+// on — doi.org to nvlpubs.nist.gov — still ends at a PDF rather than at a landing
+// page, which is the assumption that lets this source skip a series→path table.
+func TestE2ENISTClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "nist", "https://doi.org/"+nistLiveDOI)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, nistLiveDOI, "nist")
+	if err == nil {
+		assertSourcePDF(t, "nist", res)
+		return
+	}
+	classifyOrFail(t, "nist", err, nistFailures)
+}
+
 // fatcatScholarProbe is the DOI lookup on fatcat's own web frontend, which is what
 // the source now drives: the JSON API it used to call (api.fatcat.wiki) resolves in
 // DNS but never completes a TCP handshake, from any network or client tried, with no

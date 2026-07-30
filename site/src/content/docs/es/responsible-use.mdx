@@ -27,7 +27,7 @@ head:
             "name": "¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
+              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
             }
           },
           {
@@ -87,7 +87,7 @@ Depende de qué le pidas y de dónde estés. libgen-mcp es un cliente: es softwa
 
 ## ¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?
 
-Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
+Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ningún fallback de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
 
 La cadena completa, en orden:
 
@@ -96,17 +96,19 @@ La cadena completa, en orden:
 | 1        | `unpaywall`  | DOI       | Acceso abierto                            |
 | 2        | `europepmc`  | DOI       | Acceso abierto                            |
 | 3        | `biorxiv`    | DOI       | Acceso abierto (preprints)                |
-| 4        | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
-| 5        | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
-| 6        | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
-| 7        | `archive`    | ISBN      | Solo escaneos de dominio público          |
-| 8        | `scihub`     | DOI       | Biblioteca en la sombra                   |
-| 9        | `scidb`      | DOI       | Biblioteca en la sombra                   |
-| 10       | `libgen`     | md5       | Catálogo de Library Genesis               |
-| 11       | `randombook` | md5       | Mirror de Library Genesis                 |
-| 12       | `annas`      | md5       | Biblioteca en la sombra                   |
+| 4        | `rfc`        | DOI       | Normas abiertas (RFC Editor)              |
+| 5        | `nist`       | DOI       | Normas abiertas (NIST)                    |
+| 6        | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
+| 7        | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
+| 8        | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
+| 9        | `archive`    | ISBN      | Solo escaneos de dominio público          |
+| 10       | `scihub`     | DOI       | Biblioteca en la sombra                   |
+| 11       | `scidb`      | DOI       | Biblioteca en la sombra                   |
+| 12       | `libgen`     | md5       | Catálogo de Library Genesis               |
+| 13       | `randombook` | md5       | Mirror de Library Genesis                 |
+| 14       | `annas`      | md5       | Biblioteca en la sombra                   |
 
-Las posiciones 1–7 se agotan antes de intentar la 8. Puedes quitar fuentes con
+Las posiciones 1–9 se agotan antes de intentar la 10. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
 la cadena, nunca promover un fallback por encima de los proveedores de acceso
 abierto.

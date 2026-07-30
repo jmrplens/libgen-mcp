@@ -519,6 +519,60 @@ func TestE2EReadModes(t *testing.T) {
 	assertQualityNoteConsistent(t, seq)
 }
 
+// TestE2EReadRFCTextByDOI reads an RFC through the read tool by DOI, which is the
+// one combination no other live case covers: every other DOI-keyed source yields a
+// PDF, so this is the only path where a DOI reaches extract as plain text and
+// paginates by character offset rather than by page.
+//
+// It asserts the format the source promises, the document's own header line (a
+// 200-with-an-error-page would otherwise read as ordinary text), and that a second
+// call on the returned cursor advances instead of repeating the first chunk.
+func TestE2EReadRFCTextByDOI(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "rfc", "https://www.rfc-editor.org/rfc/rfc9110.txt")
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	_, session := newReadSession(t, ctx)
+
+	first := callRead(t, ctx, session, map[string]any{"doi": rfcLiveDOI, "max_chars": 4000})
+	assertUntrustedFirst(t, first)
+	if !first.Extractable {
+		t.Fatalf("an RFC's plain text must be extractable, got extractable=false (%s)", first.Reason)
+	}
+	if first.Format != "txt" {
+		t.Errorf("Format = %q, want %q — the rfc source serves text, not PDF", first.Format, "txt")
+	}
+	if !strings.Contains(first.Text, "Request for Comments: 9110") {
+		t.Errorf("first chunk does not look like RFC 9110: %q", truncateForLog(first.Text))
+	}
+	if !first.HasMore {
+		t.Fatal("a 500 KB RFC read 4000 characters at a time must report has_more")
+	}
+	if first.Cursor == "" {
+		t.Fatal("read reported has_more but returned no cursor")
+	}
+	pace()
+
+	next := callRead(t, ctx, session, map[string]any{"doi": rfcLiveDOI, "cursor": first.Cursor, "max_chars": 4000})
+	assertUntrustedFirst(t, next)
+	if next.Text == first.Text {
+		t.Error("the cursor returned the same chunk again instead of advancing")
+	}
+	if strings.TrimSpace(next.Text) == "" {
+		t.Error("the second chunk is empty although has_more was reported")
+	}
+}
+
+// truncateForLog shortens a live document excerpt so a failure message stays
+// readable when the text is a whole page of an unexpected document.
+func truncateForLog(s string) string {
+	const maxLen = 200
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "…"
+}
+
 // assertQualityNoteConsistent grades the text-layer quality signal on a real
 // document. The suite cannot know whether a live file's fonts are sound, so it
 // asserts the pairing rather than the verdict: when read reports a damaged text

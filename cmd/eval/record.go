@@ -173,7 +173,7 @@ type logCapture struct {
 
 // captureServerLogs installs a capturing logger and returns it with a restore
 // func. Every log line the MCP server emits from here on is both printed and kept.
-func captureServerLogs() (*logCapture, func()) {
+func captureServerLogs() (capture *logCapture, restore func()) {
 	c := &logCapture{prev: slog.Default()}
 	handler := slog.NewJSONHandler(io.MultiWriter(os.Stderr, &syncWriter{c: c}), &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(handler))

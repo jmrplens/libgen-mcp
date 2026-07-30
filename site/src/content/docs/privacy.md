@@ -3,7 +3,7 @@ title: Privacy policy
 description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
 datePublished: "2026-07-25"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "2c0da46466882194"
+privacySource: "526286567bb4ecbe"
 head:
   - tag: script
     attrs:
@@ -96,7 +96,10 @@ AI assistant) make. There are no background connections. The destinations are:
   Before any shadow-library fallback, the article `download` chain asks the open
   repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
   (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
-  (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts),
+  (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts), the
+  [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) for an RFC DOI,
+  [NIST](https://nvlpubs.nist.gov) for a `10.6028` DOI (the request goes to
+  `doi.org`, whose redirect leads to `nvlpubs.nist.gov`),
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
   `web.archive.org` for the file). A monograph DOI is also offered to
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries

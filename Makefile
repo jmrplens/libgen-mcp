@@ -9,7 +9,7 @@
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
-        eval-pages check-eval-pages audit-tokens audit-surface-quality \
+        eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         install-tools release-check check-manifests \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -22,7 +22,7 @@ PROBE_PATH  := ./cmd/probe
 PKGS        := ./cmd/... ./internal/...
 
 GO_ANALYSIS_PKGS := ./...
-GO_ANALYSIS_TAGS := e2e
+GO_ANALYSIS_TAGS := e2e,eval
 COVERAGE_MIN     := 85
 COVERAGE_PKGS    := ./internal/...
 
@@ -107,6 +107,14 @@ eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API
 	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --record eval-record.jsonl \
 	  --results-doc cmd/eval/testdata/latest-run.md
 	@echo "Regenerating the results pages from that run..."
+	go run ./cmd/gen_eval_pages/
+
+eval-only: ## Re-run named eval scenarios and merge them into the published table (ONLY=S61,S62)
+	@[ -n "$(ONLY)" ] || { echo "ONLY is required, e.g. make eval-only ONLY=S61,S62"; exit 2; }
+	set -a; [ -f .env ] && . ./.env; set +a; \
+	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --only $(ONLY) \
+	  --results-doc cmd/eval/testdata/latest-run.md
+	@echo "Merging those scenarios into the results pages..."
 	go run ./cmd/gen_eval_pages/
 
 coverage: test ## Generate an HTML coverage report (coverage.html)

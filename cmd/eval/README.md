@@ -95,6 +95,11 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure |
 | S59 | **PubMed** — the biomedical counterpart: an index contribution, cited as a record rather than offered as free full text |
 | S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the save-confirmation prompt probes the file size first, so the chain is walked twice inside one call: the first pass must classify the failure as the source being unavailable and the second must act on it. Graded from the call's own server log |
+| S61 | **An RFC from its number alone** — the prompt names RFC 9110 the way a person does and never says "DOI", so the model must know an RFC is reachable as a `10.17487` DOI and build it; nothing else in the chain answers that prefix, so a file arriving proves both the model found the door and the gate routed |
+| S62 | **NIST by DOI** — the routing counterpart with the DOI supplied: it grades the `10.6028` gate and, through it, that the doi.org → nvlpubs redirect the source is built on still ends at a PDF rather than a landing page |
+| S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route |
+| S64 | **Reading an RFC as text** — every other DOI-keyed source yields a PDF; this is the only path where a DOI reaches `extract` as plain text and paginates by character offset, and the model must quote the document rather than merely call the tool |
+| S65 | **The standards sources are advertised** — touches no third party: a prefix-gated source can run in the chain while being absent from the enum the model is shown, which makes it reachable by the server and invisible to the caller |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -124,7 +129,7 @@ is also hidden from the download tool's `source` schema when unset. S7 sets the
 email via its per-scenario environment to exercise the open-access path.
 
 **The article chain is ordered, and S45–S49 test the order.** Articles resolve
-through `unpaywall → europepmc → biorxiv → fatcat → core → scihub → scidb`
+through `unpaywall → europepmc → biorxiv → rfc → nist → fatcat → core → oapen → scihub → scidb`
 (`config.KnownSources`): the legal open-access providers lead, the shadow libraries
 are the fallback. S45–S47 each pin one of the new providers by name; S46 and S49
 pin nothing and grade which source the chain reached, which is the only way the
@@ -280,6 +285,21 @@ the tables on both language versions from `cmd/eval/README.md` (the scenarios) a
 that run file and regenerates the pages in the same step, and CI fails on a page
 that no longer matches — which is what stops a hand edit from drifting.
 
+**A partial run publishes too.** Writing to a results doc **merges** into it rather
+than replacing it, so re-measuring one source does not cost a full suite — 66
+scenarios against a real API, real mirrors and real downloads:
+
+```bash
+make eval-only ONLY=S61,S62      # re-runs those two, merges them, regenerates the pages
+```
+
+Every row carries the date it was measured, and the published prose stops calling
+itself a single sweep once the dates differ. Two guards keep a merged table
+honest: a run whose model differs from the recorded one is refused, because one
+pass rate built from two models invites a comparison it cannot support; and a
+recorded row whose scenario no longer exists is dropped rather than carried
+forward.
+
 Both were maintained by hand before, and both drifted: a stale scenario count,
 malformed rows, an evidence string quoting a message the code no longer emitted,
 and a live download key published in a results row.
@@ -293,7 +313,8 @@ appearing on the Spanish page in English; add it to `scenariosES` in
 - **It costs money**: every scenario spends Anthropic API tokens (small model,
   but real spend).
 - **It hits third parties**: real Library Genesis mirrors, Anna's Archive, Unpaywall,
-  Europe PMC, bioRxiv, fatcat, Sci-Hub, OAPEN, OpenLibrary and the Internet Archive,
+  Europe PMC, bioRxiv, the RFC Editor, NIST, fatcat, Sci-Hub, OAPEN, OpenLibrary and
+  the Internet Archive,
   and the discovery providers behind Gutenberg, ERIC, dblp and PubMed. These are flaky
   and rate-limited; results
   vary run to run. A download scenario that selected the tool and source correctly

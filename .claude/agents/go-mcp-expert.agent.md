@@ -37,7 +37,9 @@ a different project). Do not invent one. New capability is added by:
    (`Name`, `Supports(Item)`, `Resolve`), add its name to `config.KnownSources`,
    and register a factory in `Client.buildSourceChain`. Keyless by default; any
    credential is opt-in and used per-call only (see `withPerCallAnnas` /
-   `withPerCallUnpaywall`).
+   `withPerCallUnpaywall`). If `Supports` gates on a DOI registrant prefix, add a
+   probe to `articleProbes` too, or the source runs in the chain while being
+   absent from the download tool's `source` enum.
 3. **Adding a discovery provider** — implement `discovery.Provider`
    (`Name`, `Search`) and add it to `DefaultProviders` / `ExtraProviders`.
    `Search` is best-effort: return only context errors, degrade everything else
@@ -94,7 +96,7 @@ network — every libgen-mcp tool does.
 
 ```bash
 golangci-lint fmt --diff
-golangci-lint run
+golangci-lint run --build-tags e2e,eval ./...   # a plain run skips every tagged file
 go vet ./...
 go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 go test ./...            # and: go test -race ./...

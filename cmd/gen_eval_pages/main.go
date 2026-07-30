@@ -53,7 +53,7 @@ const (
 type scenarioRow struct{ ID, What string }
 
 // resultRow is one row of a run's results.
-type resultRow struct{ ID, Mode, Status, Detail string }
+type resultRow struct{ ID, Mode, Status, Measured, Detail string }
 
 // tableRow matches a Markdown table row whose first cell is a scenario id.
 var tableRow = regexp.MustCompile(`^\|\s*(S[0-9b]+)\s*\|\s*(.*?)\s*\|$`)
@@ -66,6 +66,11 @@ type runSummary struct {
 	Model                   string
 	Total, Pass, Fail, Skip int
 	Remote                  int
+	// First and Last are the earliest and latest measurement dates among the rows.
+	// They differ when the table was assembled from more than one run — a partial
+	// run refreshes only the scenarios it executed — and the prose says so rather
+	// than claiming a single sweep it cannot show.
+	First, Last string
 }
 
 // summarize counts a run's rows so no page has to state a total by hand.
@@ -83,8 +88,38 @@ func summarize(model string, rows []resultRow) runSummary {
 		if strings.EqualFold(r.Mode, "remote") {
 			s.Remote++
 		}
+		if d := strings.TrimSpace(r.Measured); d != "" {
+			if s.First == "" || d < s.First {
+				s.First = d
+			}
+			if d > s.Last {
+				s.Last = d
+			}
+		}
 	}
 	return s
+}
+
+// measuredSpanEN describes when the table's rows were measured, for the English
+// prose: one date when every row came from the same run, a range when a partial
+// run has refreshed part of the table since.
+func measuredSpanEN(sum runSummary) string {
+	if sum.First == "" {
+		return "a single live run of the full suite"
+	}
+	if sum.First == sum.Last {
+		return "a single live run of the full suite on " + sum.First
+	}
+	return "assembled from live runs between " + sum.First + " and " + sum.Last
+}
+
+// measuredTailEN is the sentence appended when the table spans more than one run,
+// so a reader is told why the dates differ instead of inferring it.
+func measuredTailEN(sum runSummary) string {
+	if sum.First == "" || sum.First == sum.Last {
+		return ""
+	}
+	return " Each row carries the date it was last measured: a partial run refreshes only the scenarios it executed."
 }
 
 // idRange describes a scenario list the way the prose does: the numeric span,
@@ -273,14 +308,15 @@ func readScenarios(path string) ([]scenarioRow, error) {
 func readResults(path string) ([]resultRow, error) {
 	rows, err := readTable(path, func(m []string) (resultRow, bool) {
 		cells := strings.Split(m[2], "|")
-		if len(cells) < 3 {
+		if len(cells) < 4 {
 			return resultRow{}, false
 		}
 		return resultRow{
-			ID:     m[1],
-			Mode:   strings.TrimSpace(cells[0]),
-			Status: strings.TrimSpace(cells[1]),
-			Detail: strings.TrimSpace(strings.Join(cells[2:], "|")),
+			ID:       m[1],
+			Mode:     strings.TrimSpace(cells[0]),
+			Status:   strings.TrimSpace(cells[1]),
+			Measured: strings.TrimSpace(cells[2]),
+			Detail:   strings.TrimSpace(strings.Join(cells[3:], "|")),
 		}, true
 	})
 	if err != nil {
@@ -373,8 +409,27 @@ func renderResultsSummaryEN(sum runSummary) string {
 		return ""
 	}
 	return fmt.Sprintf(
-		"The table below is a single live run of the full suite against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** out of %d — every scenario, including the %d that run against a server in remote (`--http`) mode.",
-		sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote)
+		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** out of %d — every scenario, including the %d that run against a server in remote (`--http`) mode.%s",
+		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote, measuredTailEN(sum))
+}
+
+// measuredSpanES is measuredSpanEN's Spanish counterpart.
+func measuredSpanES(sum runSummary) string {
+	if sum.First == "" {
+		return measuredSpanNoneES
+	}
+	if sum.First == sum.Last {
+		return fmt.Sprintf(measuredSpanOneES, sum.First)
+	}
+	return fmt.Sprintf(measuredSpanRangeES, sum.First, sum.Last)
+}
+
+// measuredTailES is measuredTailEN's Spanish counterpart.
+func measuredTailES(sum runSummary) string {
+	if sum.First == "" || sum.First == sum.Last {
+		return ""
+	}
+	return measuredTailRangeES
 }
 
 // renderResultsSummaryES renders the Spanish run tally.
@@ -383,7 +438,7 @@ func renderResultsSummaryES(sum runSummary) string {
 		return ""
 	}
 	return fmt.Sprintf(resultsSummaryES,
-		sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote)
+		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, sum.Total, sum.Remote, measuredTailES(sum))
 }
 
 // renderResultsEN renders the English results table.
@@ -392,9 +447,9 @@ func renderResultsEN(rows []resultRow) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("| ID  | Mode   | Result  | Evidence |\n| --- | ------ | ------- | --- |\n")
+	b.WriteString("| ID  | Mode   | Result  | Measured | Evidence |\n| --- | ------ | ------- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Detail)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, r.Detail)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -407,9 +462,9 @@ func renderResultsES(rows []resultRow) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("| ID  | Modo   | Resultado | Evidencia |\n| --- | ------ | ------- | --- |\n")
+	b.WriteString("| ID  | Modo   | Resultado | Medido | Evidencia |\n| --- | ------ | ------- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Detail)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, r.Detail)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

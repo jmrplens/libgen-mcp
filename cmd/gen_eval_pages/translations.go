@@ -71,6 +71,11 @@ var scenariosES = map[string]string{
 	"S58": "**dblp** — una consulta de informática a la que el índice bibliográfico debería aportar metadatos de congresos; dblp limita el tráfico de forma agresiva y no documentada y su latencia crece con la consulta, así que una ejecución en la que no participe se marca como SKIP, nunca como fallo",
 	"S59": "**PubMed** — el equivalente biomédico: una aportación de índice, citada como registro en lugar de ofrecerse como texto completo gratuito",
 	"S60": "**Enfriamiento por fuente** — sci-hub encabeza una cadena de dos fuentes con un host muerto, y la confirmación de guardado sondea antes el tamaño del fichero, así que la cadena se recorre dos veces dentro de una misma llamada: el primer recorrido debe clasificar el fallo como fuente no disponible y el segundo debe actuar en consecuencia. Se evalúa desde el log de servidor de la propia llamada",
+	"S61": "**Un RFC solo con su número** — el prompt nombra el RFC 9110 como lo haría una persona y nunca dice «DOI», así que el modelo debe saber que un RFC se alcanza como DOI `10.17487` y construirlo; nada más en la cadena responde a ese prefijo, de modo que la llegada del fichero demuestra a la vez que el modelo encontró la puerta y que la compuerta enrutó",
+	"S62": "**NIST por DOI** — la contraparte de enrutado con el DOI dado: evalúa la compuerta `10.6028` y, a través de ella, que la redirección doi.org → nvlpubs sobre la que se apoya la fuente siga terminando en un PDF y no en una página de aterrizaje",
+	"S63": "**El RFC Editor por su nombre** — el mismo documento pedido «desde la fuente RFC Editor», de modo que el modelo mapea el nombre en prosa a `source:\"rfc\"` en lugar de dejar que enrute la cadena",
+	"S64": "**Leer un RFC como texto** — las demás fuentes por DOI entregan PDF; esta es la única vía en la que un DOI llega a `extract` como texto plano y pagina por desplazamiento de caracteres, y el modelo debe citar el documento en vez de limitarse a llamar a la herramienta",
+	"S65": "**Las fuentes de normas se anuncian** — no toca a ningún tercero: una fuente con compuerta de prefijo puede correr en la cadena y faltar en el enum que se muestra al modelo, lo que la hace alcanzable por el servidor e invisible para quien llama",
 }
 
 // The Spanish summary sentences that carry the run's counts. They live beside the
@@ -78,7 +83,13 @@ var scenariosES = map[string]string{
 // and .golangci.yml excludes this file from the English spell checker.
 const (
 	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio."
-	resultsSummaryES  = "La tabla siguiente es una única ejecución en vivo de la suite completa contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`)."
+	resultsSummaryES  = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** de %d — todos los escenarios, incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`).%s"
+
+	// Las variantes de la frase anterior según cuándo se midieron las filas.
+	measuredSpanOneES   = "una única ejecución en vivo de la suite completa el %s"
+	measuredSpanRangeES = "un conjunto de ejecuciones en vivo entre el %s y el %s"
+	measuredTailRangeES = " Cada fila lleva la fecha en que se midió por última vez: una ejecución parcial solo refresca los escenarios que ejecutó."
+	measuredSpanNoneES  = "una única ejecución en vivo de la suite completa"
 
 	// Singular and plural tails for the lettered scenario variants. Spanish puts
 	// the noun before the id, so each template takes the joined ids.
