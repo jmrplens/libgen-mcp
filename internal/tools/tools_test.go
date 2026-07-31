@@ -3184,3 +3184,94 @@ func TestDownloadToolAsksForTheEmailItLacks(t *testing.T) {
 	// the handler is covered by TestInputRound_AsksThroughTheResult, and end to
 	// end by the gated e2e and eval suites.
 }
+
+// propertyKeyword extracts properties.<property>.<keyword> from a tool input
+// schema, going through JSON like sourceEnum so it is agnostic to whatever
+// concrete type the client decoded the schema into. It returns "" when the
+// keyword is absent.
+func propertyKeyword(t *testing.T, schema any, property, keyword string) string {
+	t.Helper()
+	data, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Properties map[string]map[string]any `json:"properties"`
+	}
+	if uerr := json.Unmarshal(data, &s); uerr != nil {
+		t.Fatal(uerr)
+	}
+	prop, ok := s.Properties[property]
+	if !ok {
+		t.Fatalf("input schema has no %q property; got %v", property, s.Properties)
+	}
+	value, _ := prop[keyword].(string)
+	return value
+}
+
+// TestMD5CarriesRoutingHeader asserts the md5 argument of the tools that address
+// a file by it is annotated with the SEP-2243 routing header, so a gateway in
+// front of this server can shard or cache on the book identifier without parsing
+// the JSON-RPC body. The alternative identifiers (id, doi, isbn) are deliberately
+// not annotated: only one property per tool can be the routing key.
+func TestMD5CarriesRoutingHeader(t *testing.T) {
+	session := newSession(t)
+	res, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemas := map[string]any{}
+	for _, tool := range res.Tools {
+		schemas[tool.Name] = tool.InputSchema
+	}
+
+	for _, name := range []string{"download", "get_details"} {
+		t.Run(name, func(t *testing.T) {
+			if got := propertyKeyword(t, schemas[name], "md5", "x-mcp-header"); got != "Mcp-Param-Md5" {
+				t.Errorf("md5 x-mcp-header = %q, want %q", got, "Mcp-Param-Md5")
+			}
+		})
+	}
+
+	for _, tc := range []struct{ tool, property string }{
+		{"download", "doi"}, {"download", "isbn"}, {"get_details", "id"}, {"get_details", "doi"},
+	} {
+		t.Run(tc.tool+"/"+tc.property, func(t *testing.T) {
+			if got := propertyKeyword(t, schemas[tc.tool], tc.property, "x-mcp-header"); got != "" {
+				t.Errorf("%s x-mcp-header = %q, want none", tc.property, got)
+			}
+		})
+	}
+}
+
+// TestAnnotateMD5RoutingDegradesGracefully covers the defensive paths: the
+// routing header is a hint for intermediaries, so a schema that failed to infer
+// or that no longer carries the property must cost the annotation and nothing
+// more.
+func TestAnnotateMD5RoutingDegradesGracefully(t *testing.T) {
+	t.Run("nil schema", func(t *testing.T) {
+		annotateMD5Routing(nil)
+	})
+
+	t.Run("absent property", func(t *testing.T) {
+		schema := &jsonschema.Schema{Properties: map[string]*jsonschema.Schema{"doi": {Type: "string"}}}
+		annotateMD5Routing(schema)
+		if got := schema.Properties["doi"].Extra; got != nil {
+			t.Errorf("the surviving property was annotated instead: %v", got)
+		}
+	})
+}
+
+// TestDetailsInputSchemaNilOnInferenceError covers the defensive guard: if
+// inferring the static struct ever fails, AddTool falls back to its own inferred
+// schema rather than being handed a half-built one.
+func TestDetailsInputSchemaNilOnInferenceError(t *testing.T) {
+	orig := detailsSchemaFor
+	t.Cleanup(func() { detailsSchemaFor = orig })
+	detailsSchemaFor = func(*jsonschema.ForOptions) (*jsonschema.Schema, error) {
+		return nil, errors.New("inference failed")
+	}
+	if got := detailsInputSchema(); got != nil {
+		t.Errorf("schema inference error should yield a nil schema; got %v", got)
+	}
+}
