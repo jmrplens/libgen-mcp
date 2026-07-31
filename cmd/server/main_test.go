@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/internal/transport"
 )
 
 // awaitReturn runs fn in a goroutine and fails the test if it does not return
@@ -118,7 +119,7 @@ func TestRunValidatesConfig(t *testing.T) {
 	// be rejected by cfg.Validate, so run returns before attempting to serve.
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "999")
 
-	err := run(context.Background(), "", defaultHTTPOptions())
+	err := run(context.Background(), "", transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want validation error")
 	}
@@ -154,7 +155,7 @@ func TestIsCleanShutdown(t *testing.T) {
 func TestServeHTTPGracefulShutdown(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(canceledContext(), newTestServer(), "127.0.0.1:0", defaultHTTPOptions())
+		err = serveHTTP(canceledContext(), newTestServer(), "127.0.0.1:0", transport.DefaultOptions())
 	})
 	if err != nil {
 		t.Fatalf("serveHTTP() = %v, want nil on graceful shutdown", err)
@@ -166,7 +167,7 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 func TestServeHTTPListenError(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(context.Background(), newTestServer(), "127.0.0.1:99999", defaultHTTPOptions())
+		err = serveHTTP(context.Background(), newTestServer(), "127.0.0.1:99999", transport.DefaultOptions())
 	})
 	if err == nil {
 		t.Fatal("serveHTTP() = nil, want a listen error for an invalid port")
@@ -182,7 +183,7 @@ func TestServeHTTPListenError(t *testing.T) {
 func TestRunHTTP(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "127.0.0.1:0", defaultHTTPOptions())
+		err = run(canceledContext(), "127.0.0.1:0", transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(http) = %v, want a clean shutdown", err)
@@ -195,7 +196,7 @@ func TestRunStdio(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "", defaultHTTPOptions())
+		err = run(canceledContext(), "", transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio) = %v, want a clean shutdown", err)
@@ -210,7 +211,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "", defaultHTTPOptions())
+		err = run(canceledContext(), "", transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio, remote downloads) = %v, want a clean shutdown", err)
@@ -221,7 +222,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 // unparseable duration makes Load itself (not Validate) return an error.
 func TestRunConfigLoadError(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_TIMEOUT", "not-a-duration")
-	err := run(context.Background(), "", defaultHTTPOptions())
+	err := run(context.Background(), "", transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a config-load error")
 	}
@@ -238,7 +239,7 @@ func TestRunManagerError(t *testing.T) {
 	// surfaces from NewManager (os.UserCacheDir) rather than the home-dir lookup.
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir())
 	t.Setenv("HOME", "")
-	err := run(context.Background(), "", defaultHTTPOptions())
+	err := run(context.Background(), "", transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")
 	}
@@ -261,7 +262,7 @@ func TestServeHTTPServesRequests(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serveHTTP(ctx, newTestServer(), addr, defaultHTTPOptions()) }()
+	go func() { done <- serveHTTP(ctx, newTestServer(), addr, transport.DefaultOptions()) }()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -318,31 +319,6 @@ func healthOK(base string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// TestStreamableHTTPOptionsMapsFlags verifies the flag-to-SDK-options mapping:
-// stateless defaults on (protocol 2026-07-28 requires it over HTTP), JSON
-// response and the body cap follow their flags, and client aborts always
-// propagate into handler contexts so in-flight mirror fetches are canceled.
-func TestStreamableHTTPOptionsMapsFlags(t *testing.T) {
-	tests := []struct {
-		name string
-		in   httpOptions
-		want mcp.StreamableHTTPOptions
-	}{
-		{"defaults", defaultHTTPOptions(), mcp.StreamableHTTPOptions{Stateless: true, PropagateRequestCancellation: true}},
-		{"stateful_opt_out", httpOptions{stateless: false}, mcp.StreamableHTTPOptions{Stateless: false, PropagateRequestCancellation: true}},
-		{"json_response", httpOptions{stateless: true, jsonResponse: true}, mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: true}},
-		{"body_limit", httpOptions{stateless: true, maxRequestBodyBytes: 1024}, mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: 1024, PropagateRequestCancellation: true}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := streamableHTTPOptions(tt.in)
-			if *got != tt.want {
-				t.Errorf("streamableHTTPOptions(%+v) = %+v, want %+v", tt.in, *got, tt.want)
-			}
-		})
-	}
-}
-
 // newSearchToolServer builds the production MCP server — middleware and all —
 // carrying a single stub tool named like the real one, so a tools/list response
 // has something to name.
@@ -359,11 +335,11 @@ func newSearchToolServer() *mcp.Server {
 
 // newTransportTestServer serves the production HTTP handler for opts over an
 // httptest server, exercising real transport behavior without a fixed port.
-func newTransportTestServer(t *testing.T, opts httpOptions) *httptest.Server {
+func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Server {
 	t.Helper()
 	srv := newSearchToolServer()
 	mcpHandler := mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return srv }, streamableHTTPOptions(opts))
+		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts))
 	ts := httptest.NewServer(newHTTPHandler(mcpHandler))
 	t.Cleanup(ts.Close)
 	return ts
@@ -422,7 +398,7 @@ const listToolsRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/list","params"
 // is a complete request, no session id is handed out, and the session-oriented
 // verbs are refused while /health keeps working.
 func TestServeHTTPStateless(t *testing.T) {
-	ts := newTransportTestServer(t, defaultHTTPOptions())
+	ts := newTransportTestServer(t, transport.DefaultOptions())
 
 	t.Run("tools list without initialize", func(t *testing.T) {
 		reply := postMCP(t, ts.URL, listToolsRequest)
@@ -458,7 +434,7 @@ func TestServeHTTPStateless(t *testing.T) {
 // TestServeHTTPJSONResponse asserts --json-response swaps the SSE framing for a
 // plain JSON body a client can decode directly.
 func TestServeHTTPJSONResponse(t *testing.T) {
-	ts := newTransportTestServer(t, httpOptions{stateless: true, jsonResponse: true})
+	ts := newTransportTestServer(t, transport.Options{Stateless: true, JSONResponse: true})
 	reply := postMCP(t, ts.URL, listToolsRequest)
 	if reply.status != http.StatusOK {
 		t.Fatalf("status = %d, want %d (body %q)", reply.status, http.StatusOK, reply.body)
@@ -493,7 +469,7 @@ func TestServeHTTPJSONResponse(t *testing.T) {
 // TestServeHTTPStatefulOptOut asserts -stateless=false restores the legacy
 // session transport, which answers initialize with an Mcp-Session-Id.
 func TestServeHTTPStatefulOptOut(t *testing.T) {
-	ts := newTransportTestServer(t, httpOptions{stateless: false})
+	ts := newTransportTestServer(t, transport.Options{Stateless: false})
 	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":` +
 		`{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0.0.0"}}}`
 	reply := postMCP(t, ts.URL, initReq)

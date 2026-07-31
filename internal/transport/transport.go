@@ -1,0 +1,34 @@
+// Package transport maps this server's HTTP-transport flags onto the SDK's
+// streamable-HTTP options, so the binary, the tests and the e2e harness all
+// serve over an identically configured transport.
+package transport
+
+import "github.com/modelcontextprotocol/go-sdk/mcp"
+
+// Options carries the HTTP-transport tuning flags.
+type Options struct {
+	// Stateless serves sessionless streamable HTTP (SEP-2567): no
+	// Mcp-Session-Id tracking, every POST self-contained, GET/DELETE → 405.
+	// Required for MCP protocol 2026-07-28 over HTTP; false restores the
+	// legacy session-based transport.
+	Stateless bool
+	// JSONResponse returns application/json bodies instead of SSE.
+	JSONResponse bool
+	// MaxRequestBodyBytes caps request bodies; 0 = SDK default (4 MiB).
+	MaxRequestBodyBytes int64
+}
+
+// DefaultOptions returns the shipped defaults (stateless on).
+func DefaultOptions() Options { return Options{Stateless: true} }
+
+// StreamableHTTP maps the flags onto the SDK options. Cancellation propagation
+// is always on: client aborts cancel in-flight mirror fetches, and the SDK
+// restricts it to protocol-2026-07-28 requests so legacy clients are unaffected.
+func StreamableHTTP(opts Options) *mcp.StreamableHTTPOptions {
+	return &mcp.StreamableHTTPOptions{
+		Stateless:                    opts.Stateless,
+		JSONResponse:                 opts.JSONResponse,
+		MaxRequestBodyBytes:          opts.MaxRequestBodyBytes,
+		PropagateRequestCancellation: true,
+	}
+}

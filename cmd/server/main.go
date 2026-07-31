@@ -23,6 +23,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
@@ -80,41 +81,12 @@ func mainWithExit() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	opts := httpOptions{stateless: *stateless, jsonResponse: *jsonResponse, maxRequestBodyBytes: *maxBody}
+	opts := transport.Options{Stateless: *stateless, JSONResponse: *jsonResponse, MaxRequestBodyBytes: *maxBody}
 	if err := run(ctx, *httpAddr, opts); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
 		return 1
 	}
 	return 0
-}
-
-// httpOptions carries the HTTP-transport tuning flags into serveHTTP.
-type httpOptions struct {
-	// stateless serves sessionless streamable HTTP (SEP-2567): no
-	// Mcp-Session-Id tracking, every POST self-contained, GET/DELETE → 405.
-	// Required for MCP protocol 2026-07-28 over HTTP; false restores the
-	// legacy session-based transport.
-	stateless bool
-	// jsonResponse returns application/json bodies instead of SSE.
-	jsonResponse bool
-	// maxRequestBodyBytes caps request bodies; 0 = SDK default (4 MiB).
-	maxRequestBodyBytes int64
-}
-
-// defaultHTTPOptions returns the shipped defaults (stateless on).
-func defaultHTTPOptions() httpOptions { return httpOptions{stateless: true} }
-
-// streamableHTTPOptions maps the flags onto the SDK options. Cancellation
-// propagation is always on: client aborts cancel in-flight mirror fetches, and
-// the SDK restricts it to protocol-2026-07-28 requests so legacy clients are
-// unaffected.
-func streamableHTTPOptions(opts httpOptions) *mcp.StreamableHTTPOptions {
-	return &mcp.StreamableHTTPOptions{
-		Stateless:                    opts.stateless,
-		JSONResponse:                 opts.jsonResponse,
-		MaxRequestBodyBytes:          opts.maxRequestBodyBytes,
-		PropagateRequestCancellation: true,
-	}
 }
 
 // isCleanShutdown reports whether err represents a normal shutdown of the MCP
@@ -144,7 +116,7 @@ func newHTTPHandler(mcpHandler http.Handler) http.Handler {
 	return mux
 }
 
-func run(ctx context.Context, httpAddr string, opts httpOptions) error {
+func run(ctx context.Context, httpAddr string, opts transport.Options) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -182,11 +154,11 @@ func run(ctx context.Context, httpAddr string, opts httpOptions) error {
 
 // serveHTTP runs the streamable HTTP transport and shuts it down gracefully when
 // ctx is canceled, tolerating the expected http.ErrServerClosed.
-func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts httpOptions) error {
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, streamableHTTPOptions(opts))
+func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts transport.Options) error {
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
-		buildversion.Current(), commit, httpAddr, opts.stateless, opts.jsonResponse)
-	if !opts.stateless {
+		buildversion.Current(), commit, httpAddr, opts.Stateless, opts.JSONResponse)
+	if !opts.Stateless {
 		log.Print("stateless mode is off: legacy compatibility transport, clients negotiate MCP protocol 2025-11-25 or older")
 	}
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
