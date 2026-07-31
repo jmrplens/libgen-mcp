@@ -214,6 +214,26 @@ El servidor habla MCP sobre dos transportes:
 
 Como un servidor HTTP es remoto y no puede escribir en el disco del cliente, en este modo la herramienta `download` devuelve siempre un enlace (la URL directa como `resource_link` más un objeto `resolved`) en lugar de guardar el archivo — no hace falta pasar `resolve_only`, queda implícito. Consulta [Herramientas](/libgen-mcp/es/tools/#download) para el detalle de ese comportamiento.
 
+### Modo sin estado
+
+El transporte HTTP es **sin estado por defecto** ([SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567)): el servidor ni lee ni escribe `Mcp-Session-Id`, cada POST es una petición completa atendida por una sesión temporal, y `GET`/`DELETE` sobre el endpoint MCP responden `405 Method Not Allowed` con `Allow: POST`. `GET /health` es una ruta aparte y no se ve afectada. El modo sin estado es lo que la versión `2026-07-28` del protocolo MCP exige sobre HTTP; el transporte con sesiones negocia `2025-11-25` o anterior.
+
+Encaja con este servidor: no hay autenticación ni estado por cliente, así que un único servidor MCP compartido atiende todas las peticiones y una sesión no aportaba nada. Sin sesiones, además, cualquier número de réplicas puede ponerse detrás de un balanceador round-robin normal, sin enrutado pegajoso.
+
+| Opción                     | Por defecto | Qué hace                                                                                                                                                                                       |
+| -------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--stateless`              | `true`      | Sirve HTTP en streaming sin sesiones. `--stateless=false` restaura el transporte con sesiones anterior, y los clientes pasan a negociar el protocolo `2025-11-25` o anterior.                  |
+| `--json-response`          | `false`     | Devuelve cuerpos `application/json` en lugar de `text/event-stream` (SSE).                                                                                                                     |
+| `--max-request-body-bytes` | `0`         | Limita el cuerpo de la petición en bytes; una petición que lo supere recibe `413`. `0` usa el valor por defecto del SDK, 4 MiB. Un valor negativo se rechaza al arrancar — quitaría el límite. |
+
+**Cancelación de peticiones.** Un cliente que se desconecta a mitad de una llamada cancela el contexto del handler, de modo que una descarga de mirror abandonada se detiene en lugar de completarse. El SDK solo lo aplica a peticiones del protocolo `2026-07-28`, así que los clientes antiguos no se ven afectados.
+
+**Pistas de caché.** `tools/list`, `prompts/list` y `server/discover` llevan una pista [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) de `ttlMs: 3600000` (una hora) con el `cacheScope: "public"` por defecto. El catálogo va compilado en el binario y es idéntico para todos los clientes — sin autenticación y sin filtrado por cliente — así que un intermediario compartido también puede cachearlo.
+
+**Elicitación.** Una sesión sin estado parte de los parámetros de inicialización por defecto, así que a un cliente **antiguo** no se le reconoce soporte de elicitación y la pregunta de confirmación de descarga cae a su valor determinista por defecto. Los clientes del protocolo `2026-07-28` usan el flujo de pregunta/respuesta MRTR que viaja en el propio resultado de la herramienta, que no necesita sesión y sigue funcionando. Sirve con `--stateless=false` si necesitas conservar el camino de elicitación antiguo para clientes antiguos.
+
+**Sin enrutado por cabecera de parámetro.** Los argumentos de las herramientas viajan solo en el cuerpo JSON-RPC: nada de esta superficie lleva una anotación `x-mcp-header` de [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243). Anotar `md5` es el candidato evidente y se ha descartado a propósito — la anotación obliga al cliente a reflejar el valor en una cabecera `Mcp-Param-Md5` y al servidor a rechazar la llamada si falta, algo que los clientes de navegador no pueden cumplir por construcción, porque las cabeceras de nombre dinámico no se pueden incluir en la lista blanca de CORS con credenciales. Delante de este servidor no hay nada que fuera a enrutar con eso, así que el intercambio es todo coste.
+
 ## Preguntas frecuentes
 
 ### ¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?

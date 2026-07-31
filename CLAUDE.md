@@ -42,6 +42,7 @@ cmd/
   gen_eval_pages/       # Regenerates the evaluator results docs (--check in CI)
   eval/                 # Live LLM-driven eval harness (build tag: eval, gated)
 internal/
+  cachehints/           # SEP-2549 TTL middleware for the catalog listings
   config/               # Env-var configuration (LIBGEN_MCP_*), KnownSources
   discovery/            # Open-access + Anna's search providers; Federate()
   extract/              # PDF/EPUB/TXT text extraction, in-doc search, outline
@@ -50,6 +51,7 @@ internal/
   mirrors/              # Mirror discovery, health, rotation
   prompts/              # MCP prompt definitions (acquire_book, research_topic, …)
   tools/                # MCP tool registration, handlers, schemas, Markdown render
+  transport/            # HTTP-transport flags → SDK StreamableHTTPOptions
 test/e2e/               # Opt-in live end-to-end suite (build tag: e2e)
 docs/                   # English developer docs (source of truth for prose)
 site/                   # Starlight docs site (EN + ES parity)
@@ -80,7 +82,13 @@ make test-race        # Race detector
 make cover-check      # Fail if internal/ coverage < COVERAGE_MIN (85%)
 make lint             # golangci-lint + govulncheck
 make analyze          # Full static-analysis sweep
+make validate-http-stateless  # Smoke-check the stateless HTTP guarantees on a real server
 ```
+
+`validate-http-stateless` is a hand-run smoke check, not a CI gate: it builds the binary,
+serves it, and asserts the wire-level promises of stateless mode (no `Mcp-Session-Id`,
+`GET` → 405 with `Allow: POST`, `--json-response` content type). Run it after touching
+`internal/transport` or the HTTP wiring in `cmd/server`.
 
 Coverage is scoped to `./internal/...` (`COVERAGE_PKGS`), so command packages
 under `cmd/` are not counted toward the 85% floor — but they must still have

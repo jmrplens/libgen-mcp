@@ -10,6 +10,7 @@
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
+        validate-http-stateless \
         install-tools release-check check-manifests \
         mcpb publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -20,6 +21,11 @@ BINARY_NAME := libgen-mcp
 CMD_PATH    := ./cmd/server
 PROBE_PATH  := ./cmd/probe
 PKGS        := ./cmd/... ./internal/...
+
+# Knobs for validate-http-stateless; both are positional args to the script, so
+# each needs a default or the other would shift into the wrong slot.
+MODE ?= binary
+PORT ?= 18080
 
 GO_ANALYSIS_PKGS := ./...
 GO_ANALYSIS_TAGS := e2e,eval
@@ -200,6 +206,9 @@ audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool de
 
 audit-surface-quality: ## Fail if the MCP tool surface violates a quality convention (CI gate)
 	go run ./cmd/audit_surface_quality/
+
+validate-http-stateless: ## Smoke-validate the stateless streamable HTTP transport against a real server (MODE=binary|docker, PORT=18080)
+	./scripts/validate-http-stateless.sh $(MODE) $(PORT)
 
 # ─── Tools / Release ────────────────────────────────────────────────────────
 install-tools: ## Install golangci-lint, govulncheck and goreleaser

@@ -3184,3 +3184,38 @@ func TestDownloadToolAsksForTheEmailItLacks(t *testing.T) {
 	// the handler is covered by TestInputRound_AsksThroughTheResult, and end to
 	// end by the gated e2e and eval suites.
 }
+
+// TestNoParamHeaderAnnotations pins a deliberate omission: no tool argument
+// carries an SEP-2243 `x-mcp-header` annotation.
+//
+// It is tempting to put one on md5 — it addresses exactly one file, so it looks
+// like the routable key of this surface. Measured against the real transport,
+// the annotation is a mirroring *contract*, not a hint: on a protocol-2026-07-28
+// tools/call the server answers -32020 when the argument arrives without its
+// Mcp-Param-* header. Two consequences sink it here. A browser-based client
+// cannot send the header at all — dynamically named headers cannot be
+// allow-listed for credentialed CORS, which every MCP SDK documents as a known
+// limitation — so download and get_details by md5 become uncallable from one.
+// And a client only learns the annotation from tools/list, so one calling
+// straight from a persisted catalog is rejected too.
+//
+// That buys nothing: no gateway fronts this server. See
+// docs/decisions/2026-07-31-no-param-header-routing.md.
+func TestNoParamHeaderAnnotations(t *testing.T) {
+	session := newSession(t)
+	res, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		t.Run(tool.Name, func(t *testing.T) {
+			data, mErr := json.Marshal(tool.InputSchema)
+			if mErr != nil {
+				t.Fatal(mErr)
+			}
+			if strings.Contains(string(data), "x-mcp-header") {
+				t.Errorf("%s carries an x-mcp-header annotation; see this test's doc comment for why it must not", tool.Name)
+			}
+		})
+	}
+}

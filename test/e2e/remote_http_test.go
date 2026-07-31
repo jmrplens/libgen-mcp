@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/internal/transport"
 )
 
 // This file mirrors the local capability coverage (capabilities_test.go /
@@ -31,6 +33,24 @@ import (
 // requireLive and SKIP (never fail) when the live site is unreachable; the prompt
 // and local-path-rejection cases are DETERMINISTIC and run without LIBGEN_E2E.
 
+// serveRemoteHTTP registers the given client in REMOTE mode plus the prompts on
+// a fresh MCP server and serves it over a real streamable-HTTP transport, with
+// the same options the binary uses — so the whole remote suite runs against the
+// stateless transport the public deployment actually exposes. The httptest
+// server is closed on cleanup.
+func serveRemoteHTTP(t *testing.T, client *libgen.Client, cfg *config.Config) *httptest.Server {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
+	tools.Register(server, client, cfg, tools.WithRemoteDownloads())
+	prompts.Register(server, client, cfg)
+
+	handler := mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(transport.DefaultOptions()))
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	return httpServer
+}
+
 // serveRemoteHTTPSession registers the given client in REMOTE mode (download
 // always returns a link) plus the prompts on a fresh MCP server, serves it over a
 // real streamable-HTTP transport (an httptest.Server, closed on cleanup), and
@@ -39,13 +59,7 @@ import (
 // is closed on cleanup.
 func serveRemoteHTTPSession(t *testing.T, ctx context.Context, client *libgen.Client, cfg *config.Config, elicit mcp.ClientOptions) *mcp.ClientSession {
 	t.Helper()
-	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp-e2e", Version: "test"}, nil)
-	tools.Register(server, client, cfg, tools.WithRemoteDownloads())
-	prompts.Register(server, client, cfg)
-
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
-	httpServer := httptest.NewServer(handler)
-	t.Cleanup(httpServer.Close)
+	httpServer := serveRemoteHTTP(t, client, cfg)
 
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "e2e-http-client", Version: "test"}, &elicit)
 	session, err := mcpClient.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: httpServer.URL}, nil)
@@ -375,4 +389,64 @@ func TestE2EHTTPRemoteElicitationOverHTTP(t *testing.T) {
 	if *lastEmail != "http-asked@example.com" {
 		t.Errorf("Unpaywall received email = %q, want the HTTP-elicited %q", *lastEmail, "http-asked@example.com")
 	}
+}
+
+// TestE2EHTTPRemoteStatelessWire asserts the wire-level guarantees of the
+// stateless default straight against the served endpoint, below the SDK client:
+// a bare tools/list POST is a complete request needing no initialize and no
+// session id, and the session-oriented GET is refused with the Allow header RFC
+// 9110 requires. It is DETERMINISTIC (nothing here reaches the live site), so it
+// runs and passes without LIBGEN_E2E.
+func TestE2EHTTPRemoteStatelessWire(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cfg := offlineConfig(t)
+	httpServer := serveRemoteHTTP(t, offlineClient(t, cfg), cfg)
+
+	t.Run("tools list without a session", func(t *testing.T) {
+		body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, httpServer.URL, body)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("post tools/list: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body %q)", resp.StatusCode, http.StatusOK, raw)
+		}
+		if got := resp.Header.Get("Mcp-Session-Id"); got != "" {
+			t.Errorf("Mcp-Session-Id = %q, want none over a stateless transport", got)
+		}
+		if !strings.Contains(string(raw), `"search"`) {
+			t.Errorf("tools/list did not list the search tool; got %q", raw)
+		}
+	})
+
+	t.Run("get is refused", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusMethodNotAllowed)
+		}
+		if got := resp.Header.Get("Allow"); got != "POST" {
+			t.Errorf("Allow = %q, want %q", got, "POST")
+		}
+	})
 }
