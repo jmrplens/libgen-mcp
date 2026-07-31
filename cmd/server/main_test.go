@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -115,7 +116,7 @@ func TestRunValidatesConfig(t *testing.T) {
 	// be rejected by cfg.Validate, so run returns before attempting to serve.
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "999")
 
-	err := run(context.Background(), "")
+	err := run(context.Background(), "", defaultHTTPOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want validation error")
 	}
@@ -151,7 +152,7 @@ func TestIsCleanShutdown(t *testing.T) {
 func TestServeHTTPGracefulShutdown(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(canceledContext(), newTestServer(), "127.0.0.1:0")
+		err = serveHTTP(canceledContext(), newTestServer(), "127.0.0.1:0", defaultHTTPOptions())
 	})
 	if err != nil {
 		t.Fatalf("serveHTTP() = %v, want nil on graceful shutdown", err)
@@ -163,7 +164,7 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 func TestServeHTTPListenError(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(context.Background(), newTestServer(), "127.0.0.1:99999")
+		err = serveHTTP(context.Background(), newTestServer(), "127.0.0.1:99999", defaultHTTPOptions())
 	})
 	if err == nil {
 		t.Fatal("serveHTTP() = nil, want a listen error for an invalid port")
@@ -179,7 +180,7 @@ func TestServeHTTPListenError(t *testing.T) {
 func TestRunHTTP(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "127.0.0.1:0")
+		err = run(canceledContext(), "127.0.0.1:0", defaultHTTPOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(http) = %v, want a clean shutdown", err)
@@ -192,7 +193,7 @@ func TestRunStdio(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "")
+		err = run(canceledContext(), "", defaultHTTPOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio) = %v, want a clean shutdown", err)
@@ -207,7 +208,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "")
+		err = run(canceledContext(), "", defaultHTTPOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio, remote downloads) = %v, want a clean shutdown", err)
@@ -218,7 +219,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 // unparseable duration makes Load itself (not Validate) return an error.
 func TestRunConfigLoadError(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_TIMEOUT", "not-a-duration")
-	err := run(context.Background(), "")
+	err := run(context.Background(), "", defaultHTTPOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a config-load error")
 	}
@@ -235,7 +236,7 @@ func TestRunManagerError(t *testing.T) {
 	// surfaces from NewManager (os.UserCacheDir) rather than the home-dir lookup.
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir())
 	t.Setenv("HOME", "")
-	err := run(context.Background(), "")
+	err := run(context.Background(), "", defaultHTTPOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")
 	}
@@ -258,7 +259,7 @@ func TestServeHTTPServesRequests(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serveHTTP(ctx, newTestServer(), addr) }()
+	go func() { done <- serveHTTP(ctx, newTestServer(), addr, defaultHTTPOptions()) }()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -313,6 +314,191 @@ func healthOK(base string) bool {
 	}
 	_ = resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// TestStreamableHTTPOptionsMapsFlags verifies the flag-to-SDK-options mapping:
+// stateless defaults on (protocol 2026-07-28 requires it over HTTP), JSON
+// response and the body cap follow their flags, and client aborts always
+// propagate into handler contexts so in-flight mirror fetches are canceled.
+func TestStreamableHTTPOptionsMapsFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		in   httpOptions
+		want mcp.StreamableHTTPOptions
+	}{
+		{"defaults", defaultHTTPOptions(), mcp.StreamableHTTPOptions{Stateless: true, PropagateRequestCancellation: true}},
+		{"stateful_opt_out", httpOptions{stateless: false}, mcp.StreamableHTTPOptions{Stateless: false, PropagateRequestCancellation: true}},
+		{"json_response", httpOptions{stateless: true, jsonResponse: true}, mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: true}},
+		{"body_limit", httpOptions{stateless: true, maxRequestBodyBytes: 1024}, mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: 1024, PropagateRequestCancellation: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := streamableHTTPOptions(tt.in)
+			if *got != tt.want {
+				t.Errorf("streamableHTTPOptions(%+v) = %+v, want %+v", tt.in, *got, tt.want)
+			}
+		})
+	}
+}
+
+// newSearchToolServer builds an MCP server carrying a single stub tool named
+// like the real one, so a tools/list response has something to name.
+func newSearchToolServer() *mcp.Server {
+	type stubIn struct{}
+	type stubOut struct{}
+	srv := newTestServer()
+	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
+		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
+			return nil, stubOut{}, nil
+		})
+	return srv
+}
+
+// newTransportTestServer serves the production HTTP handler for opts over an
+// httptest server, exercising real transport behavior without a fixed port.
+func newTransportTestServer(t *testing.T, opts httpOptions) *httptest.Server {
+	t.Helper()
+	srv := newSearchToolServer()
+	mcpHandler := mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return srv }, streamableHTTPOptions(opts))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// httpReply is the part of an HTTP response the transport tests assert on,
+// captured once the body has been drained and closed.
+type httpReply struct {
+	status int
+	header http.Header
+	body   string
+}
+
+// do sends req and returns the drained reply, so callers never hold an open body.
+func do(t *testing.T, req *http.Request) httpReply {
+	t.Helper()
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", req.Method, req.URL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return httpReply{status: resp.StatusCode, header: resp.Header, body: string(raw)}
+}
+
+// postMCP sends a JSON-RPC body to the MCP endpoint with the Content-Type and
+// Accept headers the streamable transport insists on.
+func postMCP(t *testing.T, base, body string) httpReply {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	return do(t, req)
+}
+
+// getURL performs a plain GET.
+func getURL(t *testing.T, url string) httpReply {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	return do(t, req)
+}
+
+// listToolsRequest is the JSON-RPC body used by the transport behavior tests.
+const listToolsRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`
+
+// TestServeHTTPStateless drives the default (stateless) transport: a bare POST
+// is a complete request, no session id is handed out, and the session-oriented
+// verbs are refused while /health keeps working.
+func TestServeHTTPStateless(t *testing.T) {
+	ts := newTransportTestServer(t, defaultHTTPOptions())
+
+	t.Run("tools list without initialize", func(t *testing.T) {
+		reply := postMCP(t, ts.URL, listToolsRequest)
+		if reply.status != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body %q)", reply.status, http.StatusOK, reply.body)
+		}
+		if got := reply.header.Get("Mcp-Session-Id"); got != "" {
+			t.Errorf("Mcp-Session-Id = %q, want none in stateless mode", got)
+		}
+		if !strings.Contains(reply.body, `"search"`) {
+			t.Errorf("body = %q, want it to list the search tool", reply.body)
+		}
+	})
+
+	t.Run("get on the mcp endpoint is refused", func(t *testing.T) {
+		reply := getURL(t, ts.URL+"/")
+		if reply.status != http.StatusMethodNotAllowed {
+			t.Errorf("status = %d, want %d", reply.status, http.StatusMethodNotAllowed)
+		}
+		if got := reply.header.Get("Allow"); got != "POST" {
+			t.Errorf("Allow = %q, want %q", got, "POST")
+		}
+	})
+
+	t.Run("health is unaffected", func(t *testing.T) {
+		reply := getURL(t, ts.URL+"/health")
+		if reply.status != http.StatusOK {
+			t.Errorf("status = %d, want %d", reply.status, http.StatusOK)
+		}
+	})
+}
+
+// TestServeHTTPJSONResponse asserts --json-response swaps the SSE framing for a
+// plain JSON body a client can decode directly.
+func TestServeHTTPJSONResponse(t *testing.T) {
+	ts := newTransportTestServer(t, httpOptions{stateless: true, jsonResponse: true})
+	reply := postMCP(t, ts.URL, listToolsRequest)
+	if reply.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body %q)", reply.status, http.StatusOK, reply.body)
+	}
+	if ct := reply.header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	var decoded struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(reply.body), &decoded); err != nil {
+		t.Fatalf("decode %q: %v", reply.body, err)
+	}
+	if len(decoded.Result.Tools) != 1 || decoded.Result.Tools[0].Name != "search" {
+		t.Errorf("tools = %+v, want exactly the search tool", decoded.Result.Tools)
+	}
+}
+
+// TestServeHTTPStatefulOptOut asserts -stateless=false restores the legacy
+// session transport, which answers initialize with an Mcp-Session-Id.
+func TestServeHTTPStatefulOptOut(t *testing.T) {
+	ts := newTransportTestServer(t, httpOptions{stateless: false})
+	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":` +
+		`{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0.0.0"}}}`
+	reply := postMCP(t, ts.URL, initReq)
+	if reply.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body %q)", reply.status, http.StatusOK, reply.body)
+	}
+	if reply.header.Get("Mcp-Session-Id") == "" {
+		t.Error("Mcp-Session-Id is empty, want a session id in stateful mode")
+	}
+}
+
+// TestMainWithExitNegativeBodyLimit covers the flag guard: a negative cap would
+// disable the SDK limit entirely, so it is rejected before anything is served.
+func TestMainWithExitNegativeBodyLimit(t *testing.T) {
+	if code := callMainWithExit(t, "libgen-mcp", "--max-request-body-bytes", "-1"); code != 1 {
+		t.Fatalf("mainWithExit(--max-request-body-bytes=-1) = %d, want 1", code)
+	}
 }
 
 // TestMainWithExitVersion covers the --version fast path, which prints and
