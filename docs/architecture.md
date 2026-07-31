@@ -312,19 +312,13 @@ falls back to its deterministic default. Clients on protocol `2026-07-28` use th
 ask/answer flow carried in the tool result itself, which needs no session and keeps working.
 Serve with `--stateless=false` if you must keep the old elicitation path for legacy clients.
 
-**Routing annotation.** The `md5` argument of `download` and `get_details` is annotated with
-`"x-mcp-header": "Md5"`
-([SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)), which
-puts the value on the wire as an `Mcp-Param-Md5` header — the transport adds the
-`Mcp-Param-` prefix itself. A gateway can then shard, cache or rate-limit on the book
-identifier without parsing the JSON-RPC body.
-
-This is a **contract, not a passive hint**. On a protocol-`2026-07-28` `tools/call` the
-transport requires the header and the argument to mirror each other, and answers `-32020`
-when the header is missing or disagrees with the body. Clients built on an MCP SDK set it
-themselves — but only for a tool they have listed, since that is where they learn the
-annotation, so a client that calls a tool without ever fetching the catalog is rejected.
-Requests on older protocol versions are not affected at all.
+**No param-header routing.** Tool arguments are passed in the JSON-RPC body only: nothing on
+this surface carries an [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)
+`x-mcp-header` annotation. Annotating `md5` is the obvious candidate and is deliberately not
+done — the annotation obliges the client to mirror the value into an `Mcp-Param-Md5` header
+and the server to reject the call without it, which browser-based clients structurally cannot
+satisfy. See
+[the decision record](decisions/2026-07-31-no-param-header-routing.md) for the measurements.
 
 To check a deployment behaves as described, run `make validate-http-stateless` (or
 `scripts/validate-http-stateless.sh docker` to exercise the container entrypoint): it starts
