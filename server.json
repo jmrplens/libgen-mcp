@@ -3,7 +3,7 @@
   "name": "io.github.jmrplens/libgen-mcp",
   "title": "Library Genesis MCP Server",
   "description": "Search Library Genesis and open-access sources, get details, download, and read books and papers.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "websiteUrl": "https://jmrplens.github.io/libgen-mcp/",
   "repository": {
     "url": "https://github.com/jmrplens/libgen-mcp",
@@ -14,7 +14,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-linux-amd64",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "e4397e7f4a7c0bc3cb3b11aac9d2fe802f57d5e143ef39fd76397d21bdcb9b33",
       "transport": {
         "type": "stdio"
@@ -43,7 +43,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-linux-arm64",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "748211073ac22fb312a3d9e686bfed355460e7d8b9eb525c51dfb05385a8a166",
       "transport": {
         "type": "stdio"
@@ -72,7 +72,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-darwin-amd64",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "be76128677086756d122a407e274d2019a87e21564b18fc336dd19c614cb58af",
       "transport": {
         "type": "stdio"
@@ -101,7 +101,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-darwin-arm64",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "d2d500f685f84f74ff1701e31a783fe812bb2fb3c90dbb4af029098e0e8eaa46",
       "transport": {
         "type": "stdio"
@@ -130,7 +130,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-windows-amd64.exe",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "9d40c006d6d86629e37c51a7d56142d54e17185f60ddbdb2fe3c3b67425da535",
       "transport": {
         "type": "stdio"
@@ -159,7 +159,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.4.0/libgen-mcp-windows-arm64.exe",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "fileSha256": "be5419aa73429e4a3feb461cc9af411888d1dacd35a6e64bd5038fb99dbbe0f5",
       "transport": {
         "type": "stdio"
