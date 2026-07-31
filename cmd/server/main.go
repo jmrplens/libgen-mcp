@@ -16,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/cachehints"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
@@ -122,6 +123,16 @@ func isCleanShutdown(err error) bool {
 	return err == nil || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled)
 }
 
+// newMCPServer builds the bare MCP server with its receiving middleware in
+// place; the caller registers the tools and prompts on top.
+func newMCPServer() *mcp.Server {
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: buildversion.Current()}, nil)
+	// The catalog is identical for every client and only changes with a release,
+	// so tell clients how long they may hold on to it (SEP-2549).
+	server.AddReceivingMiddleware(cachehints.Middleware())
+	return server
+}
+
 // newHTTPHandler mounts the MCP handler at / and exposes GET /health.
 func newHTTPHandler(mcpHandler http.Handler) http.Handler {
 	mux := http.NewServeMux()
@@ -150,7 +161,7 @@ func run(ctx context.Context, httpAddr string, opts httpOptions) error {
 		return err
 	}
 	client := libgen.New(mgr, cfg)
-	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: buildversion.Current()}, nil)
+	server := newMCPServer()
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via

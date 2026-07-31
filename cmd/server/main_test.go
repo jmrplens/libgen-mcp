@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/jmrplens/libgen-mcp/internal/cachehints"
 )
 
 // awaitReturn runs fn in a goroutine and fails the test if it does not return
@@ -341,12 +343,13 @@ func TestStreamableHTTPOptionsMapsFlags(t *testing.T) {
 	}
 }
 
-// newSearchToolServer builds an MCP server carrying a single stub tool named
-// like the real one, so a tools/list response has something to name.
+// newSearchToolServer builds the production MCP server — middleware and all —
+// carrying a single stub tool named like the real one, so a tools/list response
+// has something to name.
 func newSearchToolServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newTestServer()
+	srv := newMCPServer()
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil
@@ -468,6 +471,8 @@ func TestServeHTTPJSONResponse(t *testing.T) {
 			Tools []struct {
 				Name string `json:"name"`
 			} `json:"tools"`
+			TTLMs      int    `json:"ttlMs"`
+			CacheScope string `json:"cacheScope"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal([]byte(reply.body), &decoded); err != nil {
@@ -475,6 +480,13 @@ func TestServeHTTPJSONResponse(t *testing.T) {
 	}
 	if len(decoded.Result.Tools) != 1 || decoded.Result.Tools[0].Name != "search" {
 		t.Errorf("tools = %+v, want exactly the search tool", decoded.Result.Tools)
+	}
+	// The cache hints ride the same response, so assert them over the wire too.
+	if decoded.Result.TTLMs != cachehints.CatalogTTLMs {
+		t.Errorf("ttlMs = %d, want %d", decoded.Result.TTLMs, cachehints.CatalogTTLMs)
+	}
+	if decoded.Result.CacheScope != "public" {
+		t.Errorf("cacheScope = %q, want %q", decoded.Result.CacheScope, "public")
 	}
 }
 
