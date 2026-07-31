@@ -275,3 +275,50 @@ and shut the active transport down gracefully. Because a `--http` server runs el
 cannot write to the client's disk, it flips `download` into remote download mode: every call
 returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. See
 [Tools](tools.md#where-the-file-goes-local-vs-remote) for details.
+
+### Stateless mode
+
+The HTTP transport is **stateless by default**
+([SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567)): the
+server neither reads nor sets `Mcp-Session-Id`, every POST is a self-contained request served
+by a temporary session, and `GET`/`DELETE` on the MCP endpoint answer
+`405 Method Not Allowed` with `Allow: POST`. `GET /health` is a separate route and is
+unaffected. Stateless is what MCP protocol `2026-07-28` requires over HTTP; the session-based
+transport negotiates `2025-11-25` or older.
+
+It suits this server: there is no authentication and no per-client state, so a single shared
+MCP server answers every request and a session bought nothing. Sessionless also means any
+number of replicas can sit behind a plain round-robin load balancer with no sticky routing.
+
+| Flag                       | Default | What it does                                                                                                                                                                 |
+| -------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--stateless`              | `true`  | Serve sessionless streamable HTTP. `--stateless=false` restores the legacy session transport, and clients then negotiate protocol `2025-11-25` or older.                     |
+| `--json-response`          | `false` | Return `application/json` response bodies instead of `text/event-stream` (SSE).                                                                                              |
+| `--max-request-body-bytes` | `0`     | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely. |
+
+**Request cancellation.** A client that disconnects mid-call cancels the handler's context,
+so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
+only to protocol-`2026-07-28` requests, so older clients are unaffected.
+
+**Cache hints.** `tools/list`, `prompts/list` and `server/discover` carry a
+[SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) hint of
+`ttlMs: 3600000` (one hour) at the default `cacheScope: "public"`. The catalog is compiled
+into the binary and identical for every client — no authentication, no per-client filtering —
+so a shared intermediary may cache it too.
+
+**Elicitation.** A stateless session starts from default initialization parameters, so a
+**legacy** client is not seen as supporting elicitation and the download-consent question
+falls back to its deterministic default. Clients on protocol `2026-07-28` use the MRTR
+ask/answer flow carried in the tool result itself, which needs no session and keeps working.
+Serve with `--stateless=false` if you must keep the old elicitation path for legacy clients.
+
+**Routing annotation.** The `md5` argument of `download` and `get_details` is annotated with
+`"x-mcp-header": "Mcp-Param-Md5"`
+([SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)), naming
+the HTTP header a gateway may also carry that value in, so it can shard, cache or rate-limit
+on the book identifier without parsing the JSON-RPC body. It is a hint for intermediaries;
+the server keeps reading the value from the request body.
+
+To check a deployment behaves as described, run `make validate-http-stateless` (or
+`scripts/validate-http-stateless.sh docker` to exercise the container entrypoint): it starts
+a real server and asserts each guarantee above over the wire.

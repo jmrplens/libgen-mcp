@@ -268,6 +268,14 @@ libgen-mcp --http :8080
 
 En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga.
 
+El transporte es **sin estado por defecto**: no hay `Mcp-Session-Id`, cada POST es una petición completa y `GET`/`DELETE` sobre el endpoint MCP devuelven `405` (`/health` no se ve afectado). Es lo que la versión `2026-07-28` del protocolo MCP exige sobre HTTP, y permite poner cualquier número de réplicas detrás de un balanceador normal, sin enrutado pegajoso. Otras dos opciones ajustan el transporte — `--json-response` devuelve `application/json` en lugar de SSE, y `--max-request-body-bytes` estrecha el límite de 4 MiB del cuerpo:
+
+```bash
+libgen-mcp --http :8080 --json-response --max-request-body-bytes 1048576
+```
+
+Si algún cliente tuyo todavía necesita el transporte con sesiones anterior, pasa `--stateless=false`; entonces negocia la versión `2025-11-25` del protocolo MCP o anterior. Consulta [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado) para lo demás que cambia, incluida la nota sobre la elicitación.
+
 Como un servidor HTTP se ejecuta en otro sitio y no puede escribir en tu disco, `download` devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero — en este modo no hace falta que fijes `resolve_only`. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para el detalle.
 
 <Aside type="note">
