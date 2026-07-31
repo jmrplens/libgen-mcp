@@ -344,7 +344,18 @@ The version lives in `VERSION` and is mirrored into four JSON manifests plus the
    it in the `server.json` job. Add any new version-bearing manifest to
    `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
    gated, and will silently ship the previous release's number.
-4. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
+4. Run `make gen-llms`. `llms.txt` and `llms-full.txt` state the version in their
+   opening line, so a bump leaves them stale. They are **not** covered by
+   `check-manifests` — `make check-llms` is the gate that catches it, in a
+   different CI job.
+5. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
+
+The tag is enough for the version-bearing files the workflow owns: on release,
+`scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
+per-package versions, its six asset identifiers and their `fileSha256` digests,
+plus `lhm.plugin.json`'s version, and commits the result back to main. The manual
+bump above exists so the pre-tag CI gates pass, not because the digests need to
+be right — they cannot be until the binaries exist.
 
 The `server.json` CI job is named for a required status check in the branch
 ruleset, not for its scope — do not rename it without updating the ruleset too.
