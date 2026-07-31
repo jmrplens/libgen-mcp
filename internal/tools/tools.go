@@ -278,19 +278,29 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 	return schema
 }
 
-// md5RoutingHeader is the HTTP header a gateway may carry the md5 argument in.
-// The md5 is the routable key of this surface: it addresses one file, so a proxy
-// can shard, cache or rate-limit on it without parsing the JSON-RPC body.
-const md5RoutingHeader = "Mcp-Param-Md5"
+// md5RoutingHeader is the SEP-2243 header name for the md5 argument. It is the
+// **bare** name: the transport prepends the `Mcp-Param-` prefix itself, so the
+// header on the wire is `Mcp-Param-Md5` and spelling that in full here would
+// have the server demand `Mcp-Param-Mcp-Param-Md5`.
+//
+// The md5 is the routable key of this surface — it addresses exactly one file —
+// so a proxy can shard, cache or rate-limit on it without parsing the JSON-RPC
+// body.
+const md5RoutingHeader = "Md5"
 
 // annotateMD5Routing marks a schema's md5 property with the SEP-2243
-// x-mcp-header keyword, naming the HTTP header a gateway may read that argument
-// from. It is a hint for intermediaries only — the server keeps reading the
-// value from the request body.
+// x-mcp-header keyword, naming the HTTP header that mirrors the argument.
 //
-// It is deliberately forgiving: a schema that failed to infer, or that no longer
-// carries an md5 property, loses the annotation and logs, rather than taking the
-// server down over a routing hint.
+// This is a contract, not a passing hint: for a protocol-2026-07-28 tools/call,
+// the SDK rejects the request with -32020 when the md5 argument is present
+// without a matching `Mcp-Param-Md5` header, or when the two disagree. Clients
+// built on an MCP SDK send it automatically alongside the `Mcp-Method` and
+// `Mcp-Name` headers that protocol version already requires. Older protocol
+// versions are not affected at all.
+//
+// It is deliberately forgiving about the schema itself: one that failed to infer,
+// or that no longer carries an md5 property, loses the annotation and logs,
+// rather than taking the server down over a routing hint.
 func annotateMD5Routing(schema *jsonschema.Schema) {
 	if schema == nil {
 		return

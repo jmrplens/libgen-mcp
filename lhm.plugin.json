@@ -150,7 +150,7 @@
           "md5": {
             "description": "file md5 hash from a search result (use exactly one of md5, id or doi). Get it from a prior search result's md5 field",
             "type": "string",
-            "x-mcp-header": "Mcp-Param-Md5"
+            "x-mcp-header": "Md5"
           },
           "object": {
             "description": "with id: a single value edition (default) or file",
@@ -192,7 +192,7 @@
           "md5": {
             "description": "file md5 hash from a book search result; provide md5, isbn or doi",
             "type": "string",
-            "x-mcp-header": "Mcp-Param-Md5"
+            "x-mcp-header": "Md5"
           },
           "path": {
             "description": "destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true",

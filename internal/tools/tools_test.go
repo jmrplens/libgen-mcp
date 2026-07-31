@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -3187,9 +3188,11 @@ func TestDownloadToolAsksForTheEmailItLacks(t *testing.T) {
 
 // propertyKeyword extracts properties.<property>.<keyword> from a tool input
 // schema, going through JSON like sourceEnum so it is agnostic to whatever
-// concrete type the client decoded the schema into. It returns "" when the
-// keyword is absent.
-func propertyKeyword(t *testing.T, schema any, property, keyword string) string {
+// concrete type the client decoded the schema into. It reports whether the
+// keyword is present separately from its value, so a caller asserting a property
+// is *not* annotated fails on a malformed non-string value too rather than
+// reading it as absent.
+func propertyKeyword(t *testing.T, schema any, property, keyword string) (any, bool) {
 	t.Helper()
 	data, err := json.Marshal(schema)
 	if err != nil {
@@ -3205,8 +3208,8 @@ func propertyKeyword(t *testing.T, schema any, property, keyword string) string 
 	if !ok {
 		t.Fatalf("input schema has no %q property; got %v", property, s.Properties)
 	}
-	value, _ := prop[keyword].(string)
-	return value
+	value, present := prop[keyword]
+	return value, present
 }
 
 // TestMD5CarriesRoutingHeader asserts the md5 argument of the tools that address
@@ -3227,8 +3230,12 @@ func TestMD5CarriesRoutingHeader(t *testing.T) {
 
 	for _, name := range []string{"download", "get_details"} {
 		t.Run(name, func(t *testing.T) {
-			if got := propertyKeyword(t, schemas[name], "md5", "x-mcp-header"); got != "Mcp-Param-Md5" {
-				t.Errorf("md5 x-mcp-header = %q, want %q", got, "Mcp-Param-Md5")
+			got, present := propertyKeyword(t, schemas[name], "md5", "x-mcp-header")
+			if !present {
+				t.Fatalf("md5 carries no x-mcp-header, want %q", "Md5")
+			}
+			if got != "Md5" {
+				t.Errorf("md5 x-mcp-header = %#v, want %q", got, "Md5")
 			}
 		})
 	}
@@ -3237,8 +3244,10 @@ func TestMD5CarriesRoutingHeader(t *testing.T) {
 		{"download", "doi"}, {"download", "isbn"}, {"get_details", "id"}, {"get_details", "doi"},
 	} {
 		t.Run(tc.tool+"/"+tc.property, func(t *testing.T) {
-			if got := propertyKeyword(t, schemas[tc.tool], tc.property, "x-mcp-header"); got != "" {
-				t.Errorf("%s x-mcp-header = %q, want none", tc.property, got)
+			// Presence, not value: a malformed non-string annotation is still an
+			// annotation, and this property must carry none at all.
+			if got, present := propertyKeyword(t, schemas[tc.tool], tc.property, "x-mcp-header"); present {
+				t.Errorf("%s x-mcp-header = %#v, want none", tc.property, got)
 			}
 		})
 	}
@@ -3274,4 +3283,125 @@ func TestDetailsInputSchemaNilOnInferenceError(t *testing.T) {
 	if got := detailsInputSchema(); got != nil {
 		t.Errorf("schema inference error should yield a nil schema; got %v", got)
 	}
+}
+
+// serveToolsOverHTTP registers the real tools in remote mode and serves them
+// over a stateless streamable-HTTP transport, returning the endpoint. Nothing
+// here reaches the network: the mirror list points at a dead address, so a tool
+// call fails fast on its own terms.
+func serveToolsOverHTTP(t *testing.T) string {
+	t.Helper()
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: time.Second,
+		RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
+	}
+	client := libgen.New(staticMirrors{"http://127.0.0.1:0"}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg, WithRemoteDownloads())
+
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: true})
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+	return ts.URL
+}
+
+// callToolRaw posts a hand-built protocol-2026-07-28 tools/call, optionally
+// setting the Mcp-Param-Md5 header, and returns the response body. Hand-built
+// because the point is to send exactly what an SDK client would not.
+func callToolRaw(t *testing.T, endpoint, md5Header string, setHeader bool) string {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"download",` +
+		`"arguments":{"md5":"0123456789abcdef0123456789abcdef","resolve_only":true},` +
+		`"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Mcp-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "download")
+	if setHeader {
+		req.Header.Set("Mcp-Param-Md5", md5Header)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+// TestMD5RoutingHeaderContract pins what the x-mcp-header annotation actually
+// costs a caller, which the schema assertion alone cannot show: over HTTP at
+// protocol 2026-07-28 the md5 argument and the Mcp-Param-Md5 header must mirror
+// each other, and the transport rejects the call with -32020 when they do not.
+//
+// The regression it guards is a doubled prefix. The annotation carries the bare
+// name (`Md5`) because the transport adds `Mcp-Param-` itself; spelling the full
+// header in the annotation makes the server demand `Mcp-Param-Mcp-Param-Md5`,
+// which no client sends — every download and get_details by md5 then fails.
+func TestMD5RoutingHeaderContract(t *testing.T) {
+	endpoint := serveToolsOverHTTP(t)
+	const wantMD5 = "0123456789abcdef0123456789abcdef"
+
+	t.Run("missing header is rejected", func(t *testing.T) {
+		got := callToolRaw(t, endpoint, "", false)
+		if !strings.Contains(got, "missing Mcp-Param-Md5 header") {
+			t.Errorf("body = %s, want a missing-Mcp-Param-Md5 rejection", got)
+		}
+	})
+
+	t.Run("mismatched header is rejected", func(t *testing.T) {
+		got := callToolRaw(t, endpoint, strings.Repeat("f", 32), true)
+		if !strings.Contains(got, "does not match body value") {
+			t.Errorf("body = %s, want a header/body mismatch rejection", got)
+		}
+	})
+
+	t.Run("matching header clears the header check", func(t *testing.T) {
+		got := callToolRaw(t, endpoint, wantMD5, true)
+		// The call still fails — the mirror address is dead — but it must get
+		// past header validation to do so.
+		if strings.Contains(got, "Mcp-Param-Md5") {
+			t.Errorf("body = %s, want no header complaint when the header matches", got)
+		}
+	})
+
+	t.Run("an SDK client satisfies the contract unaided", func(t *testing.T) {
+		ctx := t.Context()
+		session, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, nil).
+			Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+		if err != nil {
+			t.Fatalf("connect: %v", err)
+		}
+		t.Cleanup(func() { _ = session.Close() })
+
+		// The client learns the annotation from the catalog, so it can only build
+		// the header for a tool it has listed.
+		if _, lErr := session.ListTools(ctx, nil); lErr != nil {
+			t.Fatalf("ListTools: %v", lErr)
+		}
+
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "download",
+			Arguments: map[string]any{"md5": wantMD5, "resolve_only": true},
+		})
+		// The download cannot succeed offline; what matters is that the client
+		// built the header itself, so the call was never rejected over it.
+		if err != nil && strings.Contains(err.Error(), "Mcp-Param-Md5") {
+			t.Errorf("SDK client call rejected over the routing header: %v", err)
+		}
+		if err == nil && res != nil {
+			if text := textContent(res); strings.Contains(text, "Mcp-Param-Md5") {
+				t.Errorf("SDK client call rejected over the routing header: %s", text)
+			}
+		}
+	})
 }
