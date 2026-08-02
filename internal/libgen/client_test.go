@@ -403,7 +403,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 	c := New(staticMirrors{}, baseChainConfig())
 
 	wantChain := []string{
-		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
 		"scielo", "fao", "fatcat", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
@@ -433,7 +433,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		t.Errorf("book chain = %v, want %v", book, want)
 	}
 	// oapen claims monograph DOIs too, and sits ahead of the shadow libraries.
-	if want := []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "openalex", "europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article chain = %v, want %v", article, want)
 	}
 	if want := []string{"oapen", "archive"}; !slices.Equal(isbn, want) {
@@ -448,7 +448,7 @@ func TestNewWiresCoreWhenKeyed(t *testing.T) {
 	cfg.CoreKey = "test-key"
 	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
 	want := []string{
-		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
 		"scielo", "fao", "fatcat", "core", "oapen", "scihub", "scidb",
 	}
 	if !slices.Equal(article, want) {
@@ -465,7 +465,7 @@ func TestEnabledSourceNames(t *testing.T) {
 		t.Errorf("book = %v, want %v", book, want)
 	}
 	if want := []string{
-		"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
 		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
@@ -478,7 +478,7 @@ func TestEnabledSourceNames(t *testing.T) {
 		t.Errorf("book (no email) = %v, want %v", book, want)
 	}
 	if want := []string{
-		"europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+		"openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
 		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)

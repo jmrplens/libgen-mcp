@@ -1,0 +1,90 @@
+{
+  "open_access": {
+    "is_oa": false,
+    "oa_status": "closed",
+    "oa_url": null,
+    "any_repository_has_fulltext": false
+  },
+  "best_oa_location": null,
+  "locations": [
+    {
+      "id": "doi:10.2307/2937956",
+      "is_oa": false,
+      "landing_page_url": "https://doi.org/10.2307/2937956",
+      "pdf_url": null,
+      "source": {
+        "id": "https://openalex.org/S203860005",
+        "display_name": "The Quarterly Journal of Economics",
+        "issn_l": "0033-5533",
+        "issn": [
+          "0033-5533",
+          "1531-4650"
+        ],
+        "is_oa": false,
+        "is_in_doaj": false,
+        "is_core": true,
+        "host_organization": "https://openalex.org/P4310311648",
+        "host_organization_name": "Oxford University Press",
+        "host_organization_lineage": [
+          "https://openalex.org/P4310311648",
+          "https://openalex.org/P4310311647"
+        ],
+        "host_organization_lineage_names": [
+          "Oxford University Press",
+          "University of Oxford"
+        ],
+        "type": "journal"
+      },
+      "license": null,
+      "license_id": null,
+      "version": "publishedVersion",
+      "is_accepted": true,
+      "is_published": true,
+      "raw_source_name": "The Quarterly Journal of Economics",
+      "raw_type": "journal-article"
+    },
+    {
+      "id": "pmh:oai:CiteSeerX.psu:10.1.1.703.2614",
+      "is_oa": false,
+      "landing_page_url": "http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.703.2614",
+      "pdf_url": null,
+      "source": null,
+      "license": null,
+      "license_id": null,
+      "version": "submittedVersion",
+      "is_accepted": false,
+      "is_published": false,
+      "raw_source_name": "http://www.sscnet.ucla.edu/polisci/faculty/chwe/austen/tversky1991.pdf",
+      "raw_type": "text"
+    },
+    {
+      "id": "pmh:oai:RePEc:oup:qjecon:v:106:y:1991:i:4:p:1039-1061.",
+      "is_oa": false,
+      "landing_page_url": "http://hdl.handle.net/10.2307/2937956",
+      "pdf_url": null,
+      "source": {
+        "id": "https://openalex.org/S4306401271",
+        "display_name": "RePEc: Research Papers in Economics",
+        "issn_l": null,
+        "issn": null,
+        "is_oa": false,
+        "is_in_doaj": false,
+        "is_core": false,
+        "host_organization": "https://openalex.org/I77793887",
+        "host_organization_name": "Federal Reserve Bank of St. Louis",
+        "host_organization_lineage": [
+          "https://openalex.org/I77793887"
+        ],
+        "host_organization_lineage_names": [],
+        "type": "repository"
+      },
+      "license": null,
+      "license_id": null,
+      "version": "submittedVersion",
+      "is_accepted": false,
+      "is_published": false,
+      "raw_source_name": null,
+      "raw_type": "article"
+    }
+  ]
+}

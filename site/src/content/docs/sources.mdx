@@ -1,10 +1,10 @@
 ---
 title: Download sources
-description: Per-source reference for the nineteen download sources — what each one reaches, how it resolves an identifier into a file, what it does not cover, and whether it needs a key.
+description: Per-source reference for the twenty download sources — what each one reaches, how it resolves an identifier into a file, what it does not cover, and whether it needs a key.
 datePublished: "2026-07-30"
 ---
 
-`download` resolves an item through an ordered chain of nineteen sources.
+`download` resolves an item through an ordered chain of twenty sources.
 [Architecture](/libgen-mcp/architecture/#multi-source-chain) describes the chain — how it is built,
 how failover works, and how a source that proves unreachable is cooled down. This page
 describes the sources themselves, one section each, in chain order: what each one reaches,
@@ -50,6 +50,43 @@ DOI exists anywhere, and where.
   address per call; a per-call address is used for that request only and never stored.
 - **Politeness** the contact email is the API's own requirement — it identifies the caller on
   every lookup, which is why there is no keyless path here to fall back to.
+
+### `openalex`
+
+OpenAlex is OurResearch's open catalogue of scholarly works, built on the same open-access
+index that backs Unpaywall — and reachable without a credential of any kind.
+
+- **Keyed by** any DOI — no prefix restriction.
+- **Corpus** the same open-access locations Unpaywall reports, since both are OurResearch
+  projects reading one index. Measured against twelve DOIs across Oxford, Elsevier, Frontiers,
+  Springer, Wiley, Copernicus, MDPI, Cambridge, JSTOR and Routledge, the two returned an
+  identical best location every time. This source is therefore **not** here to widen coverage
+  over Unpaywall; it is here because it needs no email, so it covers that ground on a keyless
+  deployment, where `unpaywall` declines to call its API at all.
+- **How it resolves** one GET to `api.openalex.org/works/doi:<doi>`, projected with
+  `select=open_access,best_oa_location,locations` so the response omits the authorships,
+  topics and citation lists that dwarf the part actually read. The DOI's slashes stay literal
+  in the path; other URL-unsafe characters are percent-encoded, and the identifier is matched
+  case-insensitively by the API. From the record it takes `best_oa_location.pdf_url`, else the
+  first open-access location that is the published version and carries a `pdf_url`, else any
+  open-access location's `pdf_url`. A location with `is_oa: false` is skipped — OpenAlex lists
+  the publisher's paywalled record for every work — and every candidate must be an absolute
+  http(s) URL before it reaches the pipeline.
+- **What it does not cover** a record with no `pdf_url` anywhere yields nothing. There is
+  deliberately no landing-page fallback: across the records that reach that branch the landing
+  URL is a `doi.org` resolver or a repository splash page answering HTML, which the pipeline
+  would store as a `.pdf`. Nine such records were checked and not one resolved to a PDF, so
+  the fallback would have bought recall it does not actually have. The address OpenAlex names
+  is also the publisher's, not its own: Wiley and Taylor & Francis among others answer an
+  automated request with 403 HTML, which is a resolved-but-unfetchable outcome rather than a
+  defect. A paywalled DOI and an open-access DOI with no fetchable location are reported as
+  two different misses, and a DOI outside the catalogue answers 404, which is read as a clean
+  miss so the source is never cooled down for being honest.
+- **Keys** keyless, and not merely by default. OpenAlex meters its API in credits — a search
+  costs 10 and a filtered list 1, against a daily budget of $0.10 without a key and $1 with
+  one — but the single-entity lookup this source uses is billed at **zero** and is not capped.
+  There is no key to supply and no environment variable to set; an API key would buy this
+  source nothing.
 
 ### `europepmc`
 

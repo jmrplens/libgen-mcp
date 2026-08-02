@@ -148,12 +148,13 @@ flowchart TD
 
 Download sources implement a common interface — `Name`, `Supports(item)`, and
 `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built
-from configuration in the fixed order `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
+from configuration in the fixed order `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
 source is offered only the items it supports:
 
 | Source       | Keyed by                       | Role                    | In one line                                                                                             |
 | ------------ | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------- |
 | `unpaywall`  | DOI                            | Open-access articles    | The best open-access PDF link the Unpaywall API knows for a DOI.                                        |
+| `openalex`   | DOI                            | Open-access articles    | The same open-access index as Unpaywall, reached with no credential at all.                             |
 | `europepmc`  | DOI                            | Open-access articles    | PubMed Central's open-access full text, via the Europe PMC search API.                                  |
 | `biorxiv`    | `10.1101` DOI                  | Open-access preprints   | The latest version's `.full.pdf` on bioRxiv or medRxiv.                                                 |
 | `rfc`        | `10.17487` DOI                 | Internet standards      | The RFC Editor's canonical `.txt`, built from the RFC number.                                           |
@@ -181,7 +182,7 @@ table is only the index.
 
 Because the chain is a single ordered slice filtered by `Supports`, an md5-keyed book item is
 offered `[libgen, randombook, annas]`, an ISBN-keyed one `[oapen, archive]`, an article item
-`[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub,
+`[unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub,
 scidb]`, and an item carrying both
 an md5 and a DOI is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from
 this chain without reordering it. `Download` tries each supporting source in turn and returns

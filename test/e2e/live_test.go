@@ -280,6 +280,93 @@ func TestE2EUnpaywallClassifiedOutcome(t *testing.T) {
 	classifyOrFail(t, "unpaywall", err, unpaywallFailures)
 }
 
+// openalexLiveDOI is a 2024 International Journal of Life Cycle Assessment article
+// whose open-access copy sits in HAL. Verified on 2026-08-02: OpenAlex reports it
+// open access and its best_oa_location carries NO pdf_url, so the record only
+// yields a file through the locations scan — the branch pdfURL exists for — and the
+// address that scan names answered 206 application/pdf. Picking a DOI that needs
+// the scan is deliberate: a target resolvable straight from best_oa_location would
+// grade one field read and leave the preference logic untested.
+const openalexLiveDOI = "10.1007/s11367-024-02303-z"
+
+// openalexProbe is the single-entity lookup the source performs. It deliberately
+// carries no credential: that endpoint is free and unmetered, which is the whole
+// reason this source can be keyless, so a probe that needed a key would be testing
+// a different contract than the one shipped.
+const openalexProbe = "https://api.openalex.org/works/doi:" + openalexLiveDOI + "?select=open_access"
+
+// openalexFailures are the KNOWN, diagnosed ways the openalex source can fail live.
+// The two file-host classes are not defensive padding: OpenAlex names publisher
+// addresses it does not serve itself, and several of those (Wiley and Taylor &
+// Francis among them) answer an automated range request with a 403 HTML page, so a
+// resolved-but-unfetchable outcome is a normal live result rather than a defect.
+var openalexFailures = []sourceFailure{
+	diagnosed("openalex", `"[^"]*" is not open access`, "OpenAlex knows the DOI and reports no free copy"),
+	diagnosed("openalex", `no open-access PDF for `, "open access, but no location exposes a fetchable file"),
+	diagnosed("openalex", `"[^"]*" returned HTTP \d+`, "the API answered an unexpected status"),
+	diagnosed("openalex", `decoding response for `, "the API answered something that is not a work record"),
+	transportTo("openalex", "requesting ", "api.openalex.org"),
+	{
+		re:  regexp.MustCompile(`source openalex: .*HTML page instead of the file`),
+		why: "the host served a landing page in place of the PDF",
+	},
+	{
+		re:  regexp.MustCompile(`source openalex: .*download failed: status \d+`),
+		why: "the address OpenAlex named no longer serves the file",
+	},
+}
+
+// TestE2EOpenAlexClassifiedOutcome exercises the openalex source end to end against
+// the live API, restricted to source=openalex so no other source can mask its
+// behavior. On error the failure must be one of the known, diagnosed classes;
+// anything else fails the test.
+func TestE2EOpenAlexClassifiedOutcome(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "openalex", openalexProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	res, err := downloadFromSource(t, ctx, openalexLiveDOI, "openalex")
+	if err == nil {
+		assertSourcePDF(t, "openalex", res)
+		return
+	}
+	classifyOrFail(t, "openalex", err, openalexFailures)
+}
+
+// TestE2EOpenAlexResolvesWithNoCredentials pins the property the source exists for:
+// on a deployment holding NO credential of any kind it still resolves an
+// open-access DOI to a PDF.
+//
+// This is not a duplicate of the classified-outcome case above, which runs on
+// loadLiveConfig — a config that always carries a contact email and may carry API
+// keys from the environment. Here every credential is cleared first, which is the
+// configuration a default install actually runs, and the one where unpaywall
+// declines to call its API at all. If this ever needs a key to pass, the source has
+// stopped being what it was added to be.
+func TestE2EOpenAlexResolvesWithNoCredentials(t *testing.T) {
+	requireLive(t)
+	requireUpstream(t, "openalex", openalexProbe)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	cfg := loadLiveConfig(t)
+	cfg.UnpaywallEmail = ""
+	cfg.CoreKey = ""
+	cfg.AnnasKey = ""
+	cfg.MaxDownloadBytes = maxE2EDownloadBytes
+	client := buildClient(t, cfg)
+
+	res, err := client.DownloadItem(ctx,
+		libgen.Item{DOI: openalexLiveDOI, Source: "openalex"}, t.TempDir(), "")
+	if err != nil {
+		classifyOrFail(t, "openalex", err, openalexFailures)
+		return
+	}
+	assertSourcePDF(t, "openalex", res)
+	t.Logf("keyless OpenAlex resolve doi=%s bytes=%d path=%s", openalexLiveDOI, res.SizeBytes, res.Path)
+}
+
 // TestE2EArticleByDOI resolves a known open-access DOI through the
 // unpaywall -> sci-hub chain and asserts a PDF is fetched. It skips gracefully
 // when the chain cannot serve the article, since OA availability varies.

@@ -94,24 +94,25 @@ La cadena completa, en orden:
 | Posición | Fuente       | Identificado por | Estado                                    |
 | -------- | ------------ | ---------------- | ----------------------------------------- |
 | 1        | `unpaywall`  | DOI              | Acceso abierto                            |
-| 2        | `europepmc`  | DOI              | Acceso abierto                            |
-| 3        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
-| 4        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
-| 5        | `nist`       | DOI              | Normas abiertas (NIST)                    |
-| 6        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
-| 7        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
-| 8        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
-| 9        | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
-| 10       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
-| 11       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
-| 12       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
-| 13       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
-| 14       | `archive`    | ISBN             | Solo escaneos de dominio público          |
-| 15       | `scihub`     | DOI              | Biblioteca en la sombra                   |
-| 16       | `scidb`      | DOI              | Biblioteca en la sombra                   |
-| 17       | `libgen`     | md5              | Catálogo de Library Genesis               |
-| 18       | `randombook` | md5              | Mirror de Library Genesis                 |
-| 19       | `annas`      | md5              | Biblioteca en la sombra                   |
+| 2        | `openalex`   | DOI              | Acceso abierto                            |
+| 3        | `europepmc`  | DOI              | Acceso abierto                            |
+| 4        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
+| 5        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
+| 6        | `nist`       | DOI              | Normas abiertas (NIST)                    |
+| 7        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
+| 8        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
+| 9        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
+| 10       | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
+| 11       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
+| 12       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
+| 13       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
+| 14       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
+| 15       | `archive`    | ISBN             | Solo escaneos de dominio público          |
+| 16       | `scihub`     | DOI              | Biblioteca en la sombra                   |
+| 17       | `scidb`      | DOI              | Biblioteca en la sombra                   |
+| 18       | `libgen`     | md5              | Catálogo de Library Genesis               |
+| 19       | `randombook` | md5              | Mirror de Library Genesis                 |
+| 20       | `annas`      | md5              | Biblioteca en la sombra                   |
 
 Las posiciones 1–14 se agotan antes de intentar la 15. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar

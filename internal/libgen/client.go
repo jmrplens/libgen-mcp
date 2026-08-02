@@ -130,7 +130,7 @@ type Client struct {
 	// advancing to the next when one fails to resolve or stream. It is built from
 	// config by buildSourceChain in config.KnownSources order, then filtered per
 	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
-	// articles try the doi sources (unpaywall, europepmc, biorxiv, rfc, nist,
+	// articles try the doi sources (unpaywall, openalex, europepmc, biorxiv, rfc, nist,
 	// dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb) — oapen supports a
 	// DOI as well as an ISBN, since monographs carry one.
 	sources []DownloadSource
@@ -367,7 +367,7 @@ func allowedByOperator(configured []string) func(string) bool {
 // buildSourceChain assembles the ordered download-source chain from config in
 // config.KnownSources order; because Download filters each source by
 // Supports(item), this single ordered slice yields the right per-item order: an
-// article (DOI-keyed) item is offered to the doi sources (unpaywall, europepmc,
+// article (DOI-keyed) item is offered to the doi sources (unpaywall, openalex, europepmc,
 // biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb),
 // an ISBN-keyed book to the
 // open-access book sources (oapen, archive) and an md5-keyed book to the shadow
@@ -386,6 +386,7 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	annasLister := func() MirrorLister { return c.annasMirrors }
 	factories := map[string]func() DownloadSource{
 		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
+		"openalex":   func() DownloadSource { return openalexSource{http: c.http} },
 		"europepmc":  func() DownloadSource { return europePMCSource{http: c.http} },
 		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
 		"rfc":        func() DownloadSource { return rfcSource{} },
