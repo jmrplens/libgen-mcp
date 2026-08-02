@@ -1,10 +1,10 @@
 ---
 title: Fuentes de descarga
-description: Referencia fuente a fuente de las diecinueve fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
+description: Referencia fuente a fuente de las veinte fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
 datePublished: "2026-07-30"
 ---
 
-`download` resuelve un elemento a través de una cadena ordenada de diecinueve fuentes.
+`download` resuelve un elemento a través de una cadena ordenada de veinte fuentes.
 [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena — cómo se
 construye, cómo funciona el failover y cómo se enfría una fuente que demuestra estar
 inalcanzable. Esta página describe las fuentes en sí, una sección para cada una y en el orden
@@ -53,6 +53,51 @@ un DOI inscrito en Crossref, y dónde está.
   almacena.
 - **Cortesía** el email de contacto es una exigencia de la propia API — identifica a quien llama
   en cada consulta, y por eso aquí no hay camino sin clave al que recurrir.
+
+### `openalex`
+
+OpenAlex es el catálogo abierto de obra científica de OurResearch, construido sobre el mismo
+índice de acceso abierto que sostiene Unpaywall — y accesible sin credencial de ningún tipo.
+
+- **Identificado por** cualquier DOI — sin restricción de prefijo.
+- **Corpus** las mismas ubicaciones de acceso abierto que reporta Unpaywall, porque ambos son
+  proyectos de OurResearch que leen un único índice. Medido sobre doce DOI de Oxford, Elsevier,
+  Frontiers, Springer, Wiley, Copernicus, MDPI, Cambridge, JSTOR y Routledge, los dos
+  devolvieron la misma mejor ubicación en todos los casos. Esta fuente **no** está aquí, por
+  tanto, para ampliar la cobertura de Unpaywall; está porque no necesita email, así que cubre
+  ese terreno en un despliegue sin claves, donde `unpaywall` ni siquiera llama a su API.
+- **Cómo resuelve** un GET a `api.openalex.org/works/doi:<doi>`, proyectado con
+  `select=open_access,best_oa_location,locations` para que la respuesta omita las autorías, los
+  temas y las listas de citas, que empequeñecen la parte que realmente se lee. Las barras del
+  DOI se mantienen literales en la ruta; el resto de caracteres inseguros para una URL se
+  codifican en porcentaje, y la API compara el identificador sin distinguir mayúsculas. Del
+  registro toma `best_oa_location.pdf_url`, y si no la primera ubicación de acceso abierto que
+  sea la versión publicada y lleve `pdf_url`, y si no el `pdf_url` de cualquier ubicación de
+  acceso abierto. Una ubicación con `is_oa: false` se descarta — OpenAlex lista el registro de
+  pago del editor en todas las obras — y todo candidato debe ser una URL http(s) absoluta antes
+  de llegar a la canalización.
+- **Qué no cubre** un registro sin ningún `pdf_url` no da nada. No hay, deliberadamente, respaldo
+  a la página de destino: en los registros que llegan a esa rama, la URL de destino es un
+  resolvedor `doi.org` o una portada de repositorio que responde HTML, que la canalización
+  guardaría como `.pdf`. Se comprobaron nueve de esos registros y ninguno resolvió a un PDF, así
+  que ese respaldo habría comprado una recuperación que en realidad no tiene. La dirección que
+  nombra OpenAlex es además la del editor, no la suya: Wiley y Taylor & Francis, entre otros,
+  responden 403 en HTML a una petición automatizada, lo que es un resultado resuelto-pero-no
+  descargable, no un defecto. Un DOI de pago y un DOI de acceso abierto sin ubicación descargable
+  se reportan como dos fallos distintos, y un DOI fuera del catálogo responde 404, que se lee
+  como fallo limpio para que la fuente nunca se enfríe por ser sincera.
+- **Claves** sin clave, y no solo por defecto. OpenAlex tarifa su API en créditos — una búsqueda
+  cuesta 10 y un listado filtrado 1, contra un presupuesto diario de 0,10 $ sin clave y de 1 $
+  con ella — pero la consulta de entidad única que usa esta fuente se factura a **cero** y no
+  tiene tope. No hay clave que aportar ni variable de entorno que fijar; una clave de API no le
+  daría nada a esta fuente hoy. El propio anuncio de OpenAlex sí dice que «necesitarás una clave
+  de API para todas las peticiones» y califica el acceso sin clave de solo demostrativo, así que
+  conviene decirlo con claridad: no se ha publicado ninguna fecha de corte, la consulta sin clave
+  se verificó funcionando (HTTP 200, cero créditos facturados) el 2026-08-03, y el tramo gratuito
+  sin clave es de 0,10 $/día contra operaciones que esta fuente nunca realiza. Si OpenAlex
+  empezara a exigir clave, la consulta respondería 401 o 403, que no es ni un fallo limpio ni una
+  indisponibilidad — la cadena simplemente avanza a la siguiente fuente, así que el modo de fallo
+  es una resolución perdida, nunca un fichero equivocado.
 
 ### `europepmc`
 

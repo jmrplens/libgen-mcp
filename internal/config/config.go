@@ -156,7 +156,7 @@ func defaultStartRetryWaits() []time.Duration {
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
 //
-// The legal open-access providers lead: unpaywall, then Europe PMC,
+// The legal open-access providers lead: unpaywall, then OpenAlex, Europe PMC,
 // bioRxiv/medRxiv, the publisher-direct group (the RFC Editor, NIST, Schloss
 // Dagstuhl, the ACL Anthology, Zenodo, SciELO Brazil and the FAO), Internet Archive
 // Scholar (fatcat) and CORE for articles, then OAPEN and the Internet Archive for
@@ -175,10 +175,16 @@ func defaultStartRetryWaits() []time.Duration {
 // fatcat preserves part of the SciELO corpus — and it precedes fatcat deliberately,
 // so the publisher's own current copy is preferred over an archive capture that lags
 // publication.
+//
+// openalex follows unpaywall rather than leading because the two read the same
+// open-access index: where a contact email is configured, Unpaywall's own answer
+// is the authoritative one. openalex needs no credential at all, so it is what
+// covers that ground on a default keyless deployment, where unpaywall declines to
+// run.
 var KnownSources = []string{
-	"unpaywall", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-	"scielo", "fao", "fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen",
-	"randombook", "annas",
+	"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl",
+	"zenodo", "scielo", "fao", "fatcat", "core", "oapen", "archive", "scihub", "scidb",
+	"libgen", "randombook", "annas",
 }
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when

@@ -1,0 +1,140 @@
+{
+  "open_access": {
+    "is_oa": true,
+    "oa_status": "bronze",
+    "oa_url": "https://academic.oup.com/bib/article-pdf/25/1/bbad467/55123365/bbad467.pdf",
+    "any_repository_has_fulltext": true
+  },
+  "best_oa_location": {
+    "id": "doi:10.1093/bib/bbad467",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.1093/bib/bbad467",
+    "pdf_url": "https://academic.oup.com/bib/article-pdf/25/1/bbad467/55123365/bbad467.pdf",
+    "source": {
+      "id": "https://openalex.org/S91767247",
+      "display_name": "Briefings in Bioinformatics",
+      "issn_l": "1467-5463",
+      "issn": [
+        "1467-5463",
+        "1477-4054"
+      ],
+      "is_oa": false,
+      "is_in_doaj": true,
+      "is_core": true,
+      "host_organization": "https://openalex.org/P4310311648",
+      "host_organization_name": "Oxford University Press",
+      "host_organization_lineage": [
+        "https://openalex.org/P4310311648",
+        "https://openalex.org/P4310311647"
+      ],
+      "host_organization_lineage_names": [
+        "Oxford University Press",
+        "University of Oxford"
+      ],
+      "type": "journal"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "publishedVersion",
+    "is_accepted": true,
+    "is_published": true,
+    "raw_source_name": "Briefings in Bioinformatics",
+    "raw_type": "journal-article"
+  },
+  "locations": [
+    {
+      "id": "doi:10.1093/bib/bbad467",
+      "is_oa": true,
+      "landing_page_url": "https://doi.org/10.1093/bib/bbad467",
+      "pdf_url": "https://academic.oup.com/bib/article-pdf/25/1/bbad467/55123365/bbad467.pdf",
+      "source": {
+        "id": "https://openalex.org/S91767247",
+        "display_name": "Briefings in Bioinformatics",
+        "issn_l": "1467-5463",
+        "issn": [
+          "1467-5463",
+          "1477-4054"
+        ],
+        "is_oa": false,
+        "is_in_doaj": true,
+        "is_core": true,
+        "host_organization": "https://openalex.org/P4310311648",
+        "host_organization_name": "Oxford University Press",
+        "host_organization_lineage": [
+          "https://openalex.org/P4310311648",
+          "https://openalex.org/P4310311647"
+        ],
+        "host_organization_lineage_names": [
+          "Oxford University Press",
+          "University of Oxford"
+        ],
+        "type": "journal"
+      },
+      "license": null,
+      "license_id": null,
+      "version": "publishedVersion",
+      "is_accepted": true,
+      "is_published": true,
+      "raw_source_name": "Briefings in Bioinformatics",
+      "raw_type": "journal-article"
+    },
+    {
+      "id": "pmid:38189543",
+      "is_oa": false,
+      "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/38189543",
+      "pdf_url": null,
+      "source": {
+        "id": "https://openalex.org/S4306525036",
+        "display_name": "PubMed",
+        "issn_l": null,
+        "issn": null,
+        "is_oa": false,
+        "is_in_doaj": false,
+        "is_core": false,
+        "host_organization": "https://openalex.org/I1299303238",
+        "host_organization_name": "National Institutes of Health",
+        "host_organization_lineage": [
+          "https://openalex.org/I1299303238"
+        ],
+        "host_organization_lineage_names": [],
+        "type": "repository"
+      },
+      "license": null,
+      "license_id": null,
+      "version": "publishedVersion",
+      "is_accepted": true,
+      "is_published": true,
+      "raw_source_name": "Briefings in bioinformatics",
+      "raw_type": null
+    },
+    {
+      "id": "pmh:oai:pubmedcentral.nih.gov:10772984",
+      "is_oa": true,
+      "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/10772984",
+      "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10772984/pdf/bbad467.pdf",
+      "source": {
+        "id": "https://openalex.org/S2764455111",
+        "display_name": "PubMed Central",
+        "issn_l": null,
+        "issn": null,
+        "is_oa": true,
+        "is_in_doaj": false,
+        "is_core": false,
+        "host_organization": "https://openalex.org/I1299303238",
+        "host_organization_name": "National Institutes of Health",
+        "host_organization_lineage": [
+          "https://openalex.org/I1299303238"
+        ],
+        "host_organization_lineage_names": [],
+        "type": "repository"
+      },
+      "license": "cc-by-nc",
+      "license_id": "https://openalex.org/licenses/cc-by-nc",
+      "version": "submittedVersion",
+      "is_accepted": false,
+      "is_published": false,
+      "raw_source_name": "Brief Bioinform",
+      "raw_type": "Text"
+    }
+  ]
+}

@@ -214,7 +214,7 @@ var isbnBookSources = []string{"oapen", "archive"}
 // was previously spelled out inline in a single assertion, which is how it went
 // stale the moment the chain grew: a scenario whose DOI a new provider could serve
 // reported a green path as a product bug.
-var openAccessSources = []string{"unpaywall", "europepmc", "biorxiv", "fatcat", "core"}
+var openAccessSources = []string{"unpaywall", "openalex", "europepmc", "biorxiv", "fatcat", "core"}
 
 // shadowLibrarySources are the article sources of last resort, tried only once
 // every open-access provider has declined. A DOI known to be open access that one
@@ -2124,7 +2124,7 @@ func assertOpenAccessChainOrder(tr transcript) (pass bool, detail string) {
 // deployment that configures nothing still advertises every one of them. They are
 // checked before the CORE assertion so an empty or truncated enum cannot satisfy
 // "core is absent" by advertising nothing at all.
-var keylessArticleSources = []string{"europepmc", "biorxiv", "fatcat", "scihub", "scidb"}
+var keylessArticleSources = []string{"openalex", "europepmc", "biorxiv", "fatcat", "scihub", "scidb"}
 
 // downloadSourceProperty is the source parameter of the download tool's input
 // schema, narrowed to the enum these assertions read.

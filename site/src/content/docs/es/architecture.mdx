@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de diecinueve proveedores de descarga probados en un orden fijo.
+`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de veinte proveedores de descarga probados en un orden fijo.
 
 ## Cliente HTTP
 
@@ -143,11 +143,12 @@ En prosa: `download` construye la cadena de fuentes para el identificador recibi
 
 ## Cadena multi-fuente
 
-Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(item)` y `Resolve(ctx, item)` — de modo que la canalización compartida permanece agnóstica del proveedor. La cadena se construye desde la configuración en el orden fijo `unpaywall → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, y a cada fuente solo se le ofrecen los elementos que admite:
+Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(item)` y `Resolve(ctx, item)` — de modo que la canalización compartida permanece agnóstica del proveedor. La cadena se construye desde la configuración en el orden fijo `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, y a cada fuente solo se le ofrecen los elementos que admite:
 
 | Fuente       | Identificado por               | Rol                             | En una línea                                                                                             |
 | ------------ | ------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `unpaywall`  | DOI                            | Artículos de acceso abierto     | El mejor enlace a PDF de acceso abierto que la API de Unpaywall conoce para un DOI.                      |
+| `openalex`   | DOI                            | Artículos de acceso abierto     | El mismo índice de acceso abierto que Unpaywall, alcanzado sin credencial alguna.                        |
 | `europepmc`  | DOI                            | Artículos de acceso abierto     | El texto completo de acceso abierto de PubMed Central, vía la API de Europe PMC.                         |
 | `biorxiv`    | DOI `10.1101`                  | Preprints de acceso abierto     | El `.full.pdf` de la última versión en bioRxiv o medRxiv.                                                |
 | `rfc`        | DOI `10.17487`                 | Estándares de internet          | El `.txt` canónico del RFC Editor, construido a partir del número de RFC.                                |
@@ -169,7 +170,7 @@ Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(it
 
 Dos de ellas están apagadas por defecto: `unpaywall` necesita `LIBGEN_MCP_UNPAYWALL_EMAIL` y `core` necesita `LIBGEN_MCP_CORE_KEY`, y sin ellas un despliegue sin configurar no las tiene en la cadena en absoluto. Para saber qué alcanza cada fuente, cómo resuelve un identificador, las trampas medidas en ella y las reglas de rastreo que respeta, ver [Fuentes de descarga](/libgen-mcp/es/sources/) — esta tabla es solo el índice.
 
-Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro identificado por md5 se le ofrece `[libgen, randombook, annas]`, a uno identificado por ISBN `[oapen, archive]`, a un artículo `[unpaywall, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb]`, y a uno que lleva md5 y DOI se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
+Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro identificado por md5 se le ofrece `[libgen, randombook, annas]`, a uno identificado por ISBN `[oapen, archive]`, a un artículo `[unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub, scidb]`, y a uno que lleva md5 y DOI se le ofrecen primero las fuentes de artículo, luego las de libro. `LIBGEN_MCP_SOURCES` elimina fuentes de esta cadena sin reordenarla. `Download` prueba cada fuente compatible por turno y devuelve el primer éxito; si todas fallan, devuelve los errores por fuente unidos.
 
 ### Enfriamiento por fuente
 

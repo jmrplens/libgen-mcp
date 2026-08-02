@@ -27,7 +27,7 @@ head:
             "name": "¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
+              "text": "Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse."
             }
           },
           {
@@ -87,33 +87,34 @@ Depende de qué le pidas y de dónde estés. libgen-mcp es un cliente: es softwa
 
 ## ¿Qué hace libgen-mcp para priorizar las fuentes legalmente libres?
 
-Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
+Ordena la cadena de descarga para que los proveedores de acceso abierto se prueben primero, y ese orden es fijo, no orientativo. Un artículo pedido por DOI se ofrece a Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, el RFC Editor, NIST, Schloss Dagstuhl, la ACL Anthology, Zenodo, SciELO, el FAO Knowledge Repository, Internet Archive Scholar y CORE, y después a las fuentes de libros con licencia abierta OAPEN e Internet Archive, antes de que Sci-Hub o SciDB se consideren siquiera. Un libro pedido por ISBN solo se sirve desde OAPEN y desde escaneos de dominio público de Internet Archive; en la vía del ISBN no hay ninguna reserva de biblioteca en la sombra. El orden de la cadena está fijado por un test, así que un cambio futuro que degradase en silencio las fuentes legales rompería la build en lugar de publicarse.
 
 La cadena completa, en orden:
 
 | Posición | Fuente       | Identificado por | Estado                                    |
 | -------- | ------------ | ---------------- | ----------------------------------------- |
 | 1        | `unpaywall`  | DOI              | Acceso abierto                            |
-| 2        | `europepmc`  | DOI              | Acceso abierto                            |
-| 3        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
-| 4        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
-| 5        | `nist`       | DOI              | Normas abiertas (NIST)                    |
-| 6        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
-| 7        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
-| 8        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
-| 9        | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
-| 10       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
-| 11       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
-| 12       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
-| 13       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
-| 14       | `archive`    | ISBN             | Solo escaneos de dominio público          |
-| 15       | `scihub`     | DOI              | Biblioteca en la sombra                   |
-| 16       | `scidb`      | DOI              | Biblioteca en la sombra                   |
-| 17       | `libgen`     | md5              | Catálogo de Library Genesis               |
-| 18       | `randombook` | md5              | Mirror de Library Genesis                 |
-| 19       | `annas`      | md5              | Biblioteca en la sombra                   |
+| 2        | `openalex`   | DOI              | Acceso abierto                            |
+| 3        | `europepmc`  | DOI              | Acceso abierto                            |
+| 4        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
+| 5        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
+| 6        | `nist`       | DOI              | Normas abiertas (NIST)                    |
+| 7        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
+| 8        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
+| 9        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
+| 10       | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
+| 11       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
+| 12       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
+| 13       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
+| 14       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
+| 15       | `archive`    | ISBN             | Solo escaneos de dominio público          |
+| 16       | `scihub`     | DOI              | Biblioteca en la sombra                   |
+| 17       | `scidb`      | DOI              | Biblioteca en la sombra                   |
+| 18       | `libgen`     | md5              | Catálogo de Library Genesis               |
+| 19       | `randombook` | md5              | Mirror de Library Genesis                 |
+| 20       | `annas`      | md5              | Biblioteca en la sombra                   |
 
-Las posiciones 1–14 se agotan antes de intentar la 15. Puedes quitar fuentes con
+Las posiciones 1–15 se agotan antes de intentar la 16. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
 la cadena, nunca promover un fallback por encima de los proveedores de acceso
 abierto.
