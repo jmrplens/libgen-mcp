@@ -288,6 +288,17 @@ func TestOpenAlex_RejectsUnusableLocations(t *testing.T) {
 			body: `{"open_access":{"is_oa":true},"best_oa_location":{"is_oa":true,"pdf_url":"javascript:alert(1)"},
 			        "locations":[]}`,
 		},
+		{
+			// best_oa_location is named for open access and a 100-record sample held no
+			// counterexample, so this case is not reproducing an observed response — it
+			// pins that the rule is enforced rather than assumed. Were OpenAlex to put a
+			// non-OA record in that field, the short-circuit would otherwise hand the
+			// pipeline a paywalled file while the location scan below rejected the very
+			// same thing.
+			name: "a non-open-access best_oa_location is not served",
+			body: `{"open_access":{"is_oa":true},"best_oa_location":{"is_oa":false,"pdf_url":"https://publisher.example/paywalled.pdf"},
+			        "locations":[]}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

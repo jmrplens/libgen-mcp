@@ -27,7 +27,7 @@ head:
             "name": "What does libgen-mcp do to prefer legally free sources?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship."
+              "text": "It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship."
             }
           },
           {
@@ -86,7 +86,7 @@ That depends on what you ask it for and where you are. libgen-mcp is a client: i
 
 ## What does libgen-mcp do to prefer legally free sources?
 
-It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship.
+It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship.
 
 The full chain, in order:
 
@@ -113,7 +113,7 @@ The full chain, in order:
 | 19       | `randombook` | md5       | Library Genesis mirror                 |
 | 20       | `annas`      | md5       | Shadow library                         |
 
-Positions 1–14 are exhausted before position 15 is tried. You can remove sources
+Positions 1–15 are exhausted before position 16 is tried. You can remove sources
 with `LIBGEN_MCP_SOURCES`, but you cannot reorder them — a deployment can narrow
 the chain, never promote a fallback above the open-access providers.
 

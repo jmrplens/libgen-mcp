@@ -90,7 +90,14 @@ OpenAlex es el catálogo abierto de obra científica de OurResearch, construido 
   cuesta 10 y un listado filtrado 1, contra un presupuesto diario de 0,10 $ sin clave y de 1 $
   con ella — pero la consulta de entidad única que usa esta fuente se factura a **cero** y no
   tiene tope. No hay clave que aportar ni variable de entorno que fijar; una clave de API no le
-  daría nada a esta fuente.
+  daría nada a esta fuente hoy. El propio anuncio de OpenAlex sí dice que «necesitarás una clave
+  de API para todas las peticiones» y califica el acceso sin clave de solo demostrativo, así que
+  conviene decirlo con claridad: no se ha publicado ninguna fecha de corte, la consulta sin clave
+  se verificó funcionando (HTTP 200, cero créditos facturados) el 2026-08-03, y el tramo gratuito
+  sin clave es de 0,10 $/día contra operaciones que esta fuente nunca realiza. Si OpenAlex
+  empezara a exigir clave, la consulta respondería 401 o 403, que no es ni un fallo limpio ni una
+  indisponibilidad — la cadena simplemente avanza a la siguiente fuente, así que el modo de fallo
+  es una resolución perdida, nunca un fichero equivocado.
 
 ### `europepmc`
 

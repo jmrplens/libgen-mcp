@@ -87,8 +87,14 @@ func (loc openAlexLocation) isPublished() bool { return loc.Version == "publishe
 // location exposing a pdf_url. Every candidate is checked with absoluteHTTPURL, so
 // a null, relative or non-http value in the catalog can never reach the download
 // pipeline. It returns "" when no location offers a usable PDF link.
+//
+// The open-access check applies to best_oa_location too, even though the field's
+// name promises it is already open access and a 100-record sample found no
+// counterexample. The guard is what makes this source's one rule — serve nothing
+// that is not open access — true by construction rather than by trusting an
+// upstream field name, and it costs a single comparison.
 func (w openAlexWork) pdfURL() string {
-	if w.BestOALocation != nil && absoluteHTTPURL(w.BestOALocation.PDFURL) {
+	if w.BestOALocation != nil && w.BestOALocation.IsOA && absoluteHTTPURL(w.BestOALocation.PDFURL) {
 		return w.BestOALocation.PDFURL
 	}
 	var fallback string

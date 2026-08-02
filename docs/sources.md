@@ -82,7 +82,13 @@ index that backs Unpaywall — and reachable without a credential of any kind.
   costs 10 and a filtered list 1, against a daily budget of $0.10 without a key and $1 with
   one — but the single-entity lookup this source uses is billed at **zero** and is not capped.
   There is no key to supply and no environment variable to set; an API key would buy this
-  source nothing.
+  source nothing today. OpenAlex's own announcement does say "you'll need an API key for all
+  requests" and calls keyless access demo-only, so this is worth stating plainly: no cutoff
+  date has been published, the keyless lookup was verified working (HTTP 200, zero credits
+  billed) on 2026-08-03, and the free tier without a key is $0.10/day against operations this
+  source never performs. Should OpenAlex begin enforcing keys, the lookup would answer 401 or
+  403, which is neither a clean miss nor an unavailability — the chain simply advances to the
+  next source, so the failure mode is a lost resolution, never a wrong file.
 
 ### `europepmc`
 
