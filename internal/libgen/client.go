@@ -131,7 +131,7 @@ type Client struct {
 	// config by buildSourceChain in config.KnownSources order, then filtered per
 	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
 	// articles try the doi sources (unpaywall, openalex, europepmc, biorxiv, rfc, nist,
-	// dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb) — oapen supports a
+	// dagstuhl, acl, zenodo, fatcat, core, crossref, oapen, scihub, scidb) — oapen supports a
 	// DOI as well as an ISBN, since monographs carry one.
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
@@ -368,7 +368,7 @@ func allowedByOperator(configured []string) func(string) bool {
 // config.KnownSources order; because Download filters each source by
 // Supports(item), this single ordered slice yields the right per-item order: an
 // article (DOI-keyed) item is offered to the doi sources (unpaywall, openalex, europepmc,
-// biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, oapen, scihub, scidb),
+// biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, crossref, oapen, scihub, scidb),
 // an ISBN-keyed book to the
 // open-access book sources (oapen, archive) and an md5-keyed book to the shadow
 // libraries (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
@@ -398,6 +398,7 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 		"fao":        func() DownloadSource { return faoSource{http: c.http} },
 		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
 		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
+		"crossref":   func() DownloadSource { return crossrefSource{http: c.http} },
 		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
 		"archive":    func() DownloadSource { return archiveSource{http: c.http} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },

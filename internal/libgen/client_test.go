@@ -404,7 +404,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 
 	wantChain := []string{
 		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"scielo", "fao", "fatcat", "oapen", "archive",
+		"scielo", "fao", "fatcat", "crossref", "oapen", "archive",
 		"scihub", "scidb", "libgen", "randombook", "annas",
 	}
 	if got := sourceNames(c); !slices.Equal(got, wantChain) {
@@ -433,7 +433,7 @@ func TestNewWiresSourceChainFromConfig(t *testing.T) {
 		t.Errorf("book chain = %v, want %v", book, want)
 	}
 	// oapen claims monograph DOIs too, and sits ahead of the shadow libraries.
-	if want := []string{"unpaywall", "openalex", "europepmc", "biorxiv", "fatcat", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
+	if want := []string{"unpaywall", "openalex", "europepmc", "biorxiv", "fatcat", "crossref", "oapen", "scihub", "scidb"}; !slices.Equal(article, want) {
 		t.Errorf("article chain = %v, want %v", article, want)
 	}
 	if want := []string{"oapen", "archive"}; !slices.Equal(isbn, want) {
@@ -449,7 +449,7 @@ func TestNewWiresCoreWhenKeyed(t *testing.T) {
 	_, article := New(staticMirrors{}, cfg).EnabledSourceNames()
 	want := []string{
 		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"scielo", "fao", "fatcat", "core", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "core", "crossref", "oapen", "scihub", "scidb",
 	}
 	if !slices.Equal(article, want) {
 		t.Errorf("article chain (keyed) = %v, want %v", article, want)
@@ -466,7 +466,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	}
 	if want := []string{
 		"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "crossref", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article = %v, want %v", article, want)
 	}
@@ -479,7 +479,7 @@ func TestEnabledSourceNames(t *testing.T) {
 	}
 	if want := []string{
 		"openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
-		"scielo", "fao", "fatcat", "oapen", "scihub", "scidb",
+		"scielo", "fao", "fatcat", "crossref", "oapen", "scihub", "scidb",
 	}; !slices.Equal(article, want) {
 		t.Errorf("article (no email) = %v, want %v", article, want)
 	}

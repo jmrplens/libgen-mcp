@@ -65,7 +65,7 @@ type SearchOutput struct {
 	Hint           string                      `json:"hint,omitempty" jsonschema:"present only when truncated: advises how to refine the query"`
 	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, suggesting a next page may exist"`
 	Mirror         string                      `json:"mirror" jsonschema:"the mirror base URL that served this search"`
-	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits merged from arXiv/Crossref/OpenLibrary/Project Gutenberg/dblp/PubMed/ERIC, labeled by origin; only an entry with open_access true is known to be free to read (dblp and pubmed entries are bibliographic records, so cite them); fetch a paper with read/download using its doi, or fetch a pdf_url/full_text_url yourself (an arXiv paper, an ERIC report or a gutenberg ebook — none has a doi to download by); pass an isbn to download to fetch an openly licensed book, or use it to refine a libgen search"`
+	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits merged from arXiv/Crossref/OpenLibrary/Project Gutenberg/dblp/PubMed/ERIC, labeled by origin; only an entry with open_access true is licensed as free to read (dblp and pubmed entries are bibliographic records, so cite them), and even then the publisher may still refuse an automated download; a crossref pdf_url is the publisher's advertised link and is UNVERIFIED, so pass the doi to read/download rather than presenting that link as the full text; fetch a paper with read/download using its doi, or fetch a pdf_url/full_text_url yourself (an arXiv paper, an ERIC report or a gutenberg ebook — none has a doi to download by); pass an isbn to download to fetch an openly licensed book, or use it to refine a libgen search"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
@@ -499,7 +499,9 @@ func openAccessStep(hits []discovery.DiscoveryResult, extrasRan bool) string {
 	const preamble = "The results list is not open access, whatever its origin, so do not present it as such. " +
 		"In open_access, only an entry whose open_access flag is true is known to be free to read — a dblp or " +
 		"pubmed entry, or an eric entry with no pdf_url, is a bibliographic record, so cite it rather than " +
-		"offering it as full text. "
+		"offering it as full text. A crossref entry's pdf_url is the publisher's own advertised link and is " +
+		"UNVERIFIED — most major publishers refuse it to automated clients — so never present it as proof the " +
+		"paper is readable; pass the doi to read or download and let the source chain try it. "
 	if len(hits) == 0 {
 		return preamble + "The extra searchers returned nothing for this query — report that, " +
 			"rather than offering a catalog result in place of one."
@@ -514,7 +516,8 @@ func openAccessStep(hits []discovery.DiscoveryResult, extrasRan bool) string {
 		return preamble + "None of these open_access entries carries a doi, a file URL or an isbn, so none of " +
 			"them is directly fetchable — say so rather than substituting a catalog result."
 	}
-	return preamble + fmt.Sprintf("%d of %d carry something you can act on: pass a doi to read or download, "+
+	return preamble + fmt.Sprintf("%d of %d carry something you can act on: pass a doi to read or download "+
+		"(the chain tries the open-access indexes, the archives and the publisher's own crossref link), "+
 		"pass an isbn to download for an openly licensed book, and fetch a pdf_url or full_text_url with your "+
 		"own HTTP tool — download takes no URL, so a file URL is how an entry with no doi (an eric report or a "+
 		"gutenberg ebook) is obtained.", actionable, len(hits))

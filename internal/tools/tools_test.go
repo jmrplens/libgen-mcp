@@ -185,7 +185,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			mutate: func(*config.Config) {},
 			wantEnum: []string{
 				"openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
-				"fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
+				"fatcat", "crossref", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: []string{"unpaywall", "core"},
 		},
@@ -194,7 +194,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			mutate: func(c *config.Config) { c.UnpaywallEmail = "me@example.com" },
 			wantEnum: []string{
 				"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
-				"fatcat", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
+				"fatcat", "crossref", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: nil,
 		},
@@ -203,7 +203,7 @@ func TestDownloadSchemaReflectsEnabledSources(t *testing.T) {
 			mutate: func(c *config.Config) { c.UnpaywallEmail = "me@example.com"; c.CoreKey = "k" },
 			wantEnum: []string{
 				"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo", "scielo", "fao",
-				"fatcat", "core", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
+				"fatcat", "core", "crossref", "oapen", "archive", "scihub", "scidb", "libgen", "randombook", "annas",
 			},
 			wantAbsent: nil,
 		},

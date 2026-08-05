@@ -99,12 +99,17 @@ open-access providers first, then the shadow-library fallbacks:
     gone bad.
 13. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
     download URL when CORE hosts a live copy.
-14. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
+14. **`crossref`** — fetches the full-text link the publisher itself deposited with Crossref,
+    for any DOI. Every candidate is probed before it is returned, because a deposited link is
+    a syndication contract rather than a right to read: the large commercial publishers answer
+    an anonymous client with a 403 whatever the link says. When they all refuse, the error
+    says so and names the browser as the remaining route.
+15. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
     journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
     chain advances.
-15. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+16. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
     article page with an extractable PDF.
-16. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
+17. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
     covers papers published after Sci-Hub stopped indexing.
 
 **Fixes.**

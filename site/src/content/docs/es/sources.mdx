@@ -1,10 +1,10 @@
 ---
 title: Fuentes de descarga
-description: Referencia fuente a fuente de las veinte fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
+description: Referencia fuente a fuente de las veintiuna fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
 datePublished: "2026-07-30"
 ---
 
-`download` resuelve un elemento a través de una cadena ordenada de veinte fuentes.
+`download` resuelve un elemento a través de una cadena ordenada de veintiuna fuentes.
 [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena — cómo se
 construye, cómo funciona el failover y cómo se enfría una fuente que demuestra estar
 inalcanzable. Esta página describe las fuentes en sí, una sección para cada una y en el orden
@@ -476,6 +476,47 @@ repositorios de todo el mundo.
 - **Claves** depende de `LIBGEN_MCP_CORE_KEY` (el registro es gratuito). Sin fijarla, la fuente
   está ausente de la cadena por completo y oculta del enum `source` de `download`. La clave se
   envía solo a `api.core.ac.uk` y nunca viaja con la URL de fichero resuelta ni sondeada.
+
+### `crossref`
+
+Crossref es la agencia de registro de DOI con la que depositan la mayoría de las editoriales de
+revistas, y ese depósito incluye los enlaces a texto completo de la propia editorial. Esta fuente
+los obtiene.
+
+- **Identificado por** cualquier DOI — sin restricción de prefijo.
+- **Corpus** aquello para lo que la editorial decidió depositar un enlace a texto completo. No es
+  lo mismo que el corpus de acceso abierto: abarca artículos de pago que la editorial expone para
+  socios de sindicación y de minería de texto, y deja fuera artículos de acceso abierto cuya
+  editorial no depositó ningún enlace.
+- **Cómo resuelve** un GET a `api.crossref.org/works/<doi>` (el DOI en crudo, con sus barras — la
+  ruta rechaza el parámetro `select`, así que se lee el registro entero acotado a 4 MiB), y luego
+  se recogen como candidatas todas las entradas `application/pdf` del array `link` del registro,
+  primero el enlace orientado al lector de la editorial (`intended-application` ausente o
+  `unspecified`). Cada candidata se confirma con un sondeo por rango y se devuelve la primera que
+  sirve realmente un PDF; se prueban cuatro como mucho, porque las editoriales depositan el mismo
+  fichero varias veces bajo etiquetas distintas.
+- **Por qué sondea** un enlace depositado declara un acuerdo de sindicación, no un derecho de
+  lectura. En una muestra de veinte registrantes, todos los enlaces `unspecified` (6 de 6) y todos
+  los `syndication` (18 de 18) respondieron 403 a un cliente anónimo, mientras que eLife y las
+  editoriales de acceso abierto pequeñas etiquetan su fichero orientado al lector como
+  `text-mining` y se lo sirven a cualquiera. La etiqueta no predice nada; el registrante sí. Sin
+  el sondeo, la canalización guardaría como `.pdf` la página de desafío de una editorial.
+- **Por qué existe** `search` publica un resultado de Crossref con el `pdf_url` de la propia
+  editorial, y antes de esta fuente nada en la cadena de descarga probaba ese enlace — `read` y
+  `download` iban por los índices de acceso abierto —, de modo que los dos caminos podían llegar a
+  conclusiones opuestas sobre un mismo artículo y el enlace que el servidor acababa de publicar
+  solo era alcanzable por quien tuviera su propia herramienta HTTP.
+- **Qué no cubre** las grandes editoriales comerciales. ACS, AIP, IOP, Wiley, SAGE, Taylor &
+  Francis y Springer rechazan a los clientes anónimos depositen lo que depositen, así que para sus
+  DOI esta fuente informa de una ausencia limpia y señala el navegador como la vía que queda — que
+  a menudo es la verdad, incluso para artículos con licencia abierta: `10.1063/5.0282407` es CC-BY
+  y se lee en un navegador mientras AIP responde 403 a todo cliente automático, y ningún
+  repositorio guarda una copia.
+- **Dónde encaja** la última de las resolvedoras legítimas, tras los índices de acceso abierto y
+  los archivos y antes de las bibliotecas en la sombra: se prefiere una copia con licencia libre
+  allá donde exista, pero un fichero que la propia editorial sirve abiertamente se prueba siempre
+  antes que una biblioteca en la sombra.
+- **Claves** sin clave.
 
 ## Libros de acceso abierto y de dominio público
 

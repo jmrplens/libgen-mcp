@@ -34,12 +34,24 @@ const crossrefPDFType = "application/pdf"
 // unlike the proprietary publisher licenses paywalled works also advertise.
 const crossrefCreativeCommonsHost = "creativecommons.org"
 
-// crossrefTextMiningApplications are the link intended-application values that
-// require a subscription and 403 for anonymous users; a PDF link marked with one
-// of them is neither a usable full-text link nor an open-access signal.
-var crossrefTextMiningApplications = map[string]bool{
-	"text-mining":         true,
-	"similarity-checking": true,
+// crossrefReaderApplications are the link intended-application values that mark a
+// publisher's generic, reader-facing PDF link, preferred over the
+// machine-audience ones when a work advertises several.
+//
+// It is only a preference, never a filter. The tag was once used as a proxy for
+// "anonymously fetchable", blocking text-mining and similarity-checking links and
+// trusting the rest; measuring the live API against real publishers showed the
+// proxy is worthless and, where it correlates at all, inverted. Across 20
+// registrants, every unspecified link (6/6) and every syndication link (18/18)
+// answered 403, while 18 of the blocked links served a PDF — eLife and the smaller
+// open-access publishers tag their reader-facing file text-mining. What predicts
+// fetchability is the registrant, not the tag: ACS, AIP, IOP, Wiley, SAGE, Taylor &
+// Francis and Springer refuse anonymous clients whatever the tag says. So every PDF
+// link is surfaced as a candidate, and the only honest verification is fetching it,
+// which internal/libgen's crossref download source does with a ranged probe.
+var crossrefReaderApplications = map[string]bool{
+	"":            true,
+	"unspecified": true,
 }
 
 // CrossrefProvider is a keyless open-access discovery source backed by the Crossref
@@ -187,31 +199,35 @@ func parseCrossrefWorks(body []byte) []DiscoveryResult {
 
 // crossrefItemToResult maps one Crossref work item onto a DiscoveryResult: the
 // first title, "; "-joined "Given Family" author names, the issued year, the DOI,
-// a usable full-text PDF URL from the links, and OpenAccess set by a defensible
-// heuristic (a Creative Commons license or a usable free full-text link).
+// the publisher's advertised full-text PDF link, and OpenAccess set from the
+// license alone.
 func crossrefItemToResult(item crossrefWorkItem) DiscoveryResult {
-	pdf := crossrefPDFURL(item.Link)
 	return DiscoveryResult{
 		Origin:     "crossref",
 		Title:      firstNonEmpty(item.Title),
 		Authors:    crossrefAuthors(item.Author),
 		Year:       crossrefYear(item.Issued),
 		DOI:        strings.TrimSpace(item.DOI),
-		PDFURL:     pdf,
-		OpenAccess: crossrefOpenAccess(item.License, pdf),
+		PDFURL:     crossrefPDFURL(item.Link),
+		OpenAccess: crossrefOpenAccess(item.License),
 	}
 }
 
-// crossrefOpenAccess is the open-access heuristic: a work is treated as open access
-// when it carries a Creative Commons license (its URL contains creativecommons.org)
-// OR when it exposes a usable free full-text link (a non-empty pdf, which
-// crossrefPDFURL only ever fills from anonymous-usable links). It deliberately does
-// NOT treat the mere presence of a license as OA, since paywalled works routinely
-// advertise proprietary publisher licenses.
-func crossrefOpenAccess(licenses []crossrefLicense, usablePDF string) bool {
-	if usablePDF != "" {
-		return true
-	}
+// crossrefOpenAccess reports open access from the LICENSE alone: a work is open
+// access when it carries a Creative Commons license (its URL contains
+// creativecommons.org). It deliberately does NOT treat the mere presence of a
+// license as OA, since paywalled works routinely advertise proprietary publisher
+// licenses.
+//
+// The presence of a PDF link is deliberately not an open-access signal, though it
+// used to be. Crossref link metadata is a publisher's syndication contract, not a
+// statement about who may read the file: sampling the live API found paywalled
+// works advertising a PDF link under no license at all (10.1063/5.0332495) or under
+// the publisher's own policy URLs (10.1021/acs.jafc.6c07539), both of which the old
+// rule promoted to open_access true. Claiming a work is free to read on the
+// strength of a link nobody has fetched is the one error this flag must not make,
+// because a caller cites it.
+func crossrefOpenAccess(licenses []crossrefLicense) bool {
 	for _, l := range licenses {
 		if strings.Contains(strings.ToLower(l.URL), crossrefCreativeCommonsHost) {
 			return true
@@ -245,16 +261,29 @@ func crossrefYear(issued crossrefIssued) string {
 	return ""
 }
 
-// crossrefPDFURL returns a usable full-text PDF link, or "". It only ever returns a
-// link whose intended-application is anonymous-usable ("unspecified" or unset):
-// text-mining and similarity-checking links 403 for anonymous users, so surfacing
-// one would hand the caller a link it cannot fetch. When a work exposes only such
-// restricted links, "" is returned rather than a link that would fail.
+// crossrefPDFURL returns the publisher's advertised full-text PDF link, or "" when
+// the work advertises none. A reader-facing link (see crossrefReaderApplications)
+// wins when the work offers several; otherwise the first PDF link is returned
+// whatever its intended-application, because that tag does not predict whether an
+// anonymous client can fetch the file.
+//
+// The link is a CANDIDATE, not a promise: it is surfaced unverified, and both the
+// field description and the search tool's next-steps say so. Verifying it here
+// would cost one HTTP round-trip per hit on the search path, and the crossref
+// download source already probes it at the one moment the bytes are actually
+// wanted.
 func crossrefPDFURL(links []crossrefLink) string {
+	var fallback string
 	for _, l := range links {
-		if l.ContentType == crossrefPDFType && l.URL != "" && !crossrefTextMiningApplications[l.IntendedApplication] {
+		if l.ContentType != crossrefPDFType || l.URL == "" {
+			continue
+		}
+		if crossrefReaderApplications[l.IntendedApplication] {
 			return l.URL
 		}
+		if fallback == "" {
+			fallback = l.URL
+		}
 	}
-	return ""
+	return fallback
 }

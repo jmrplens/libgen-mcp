@@ -11,9 +11,9 @@ import (
 )
 
 // crossrefItemsFixture is a realistic two-item Crossref works response. The first
-// item carries a license and an application/pdf link (so it must map to
-// OpenAccess=true with that PDF URL); the second has neither a license nor a pdf
-// link (so OpenAccess=false, PDFURL empty). Both carry a DOI, a title, authors and
+// item carries a Creative Commons license and an application/pdf link (so it must
+// map to OpenAccess=true with that PDF URL); the second has neither a license nor a
+// pdf link (so OpenAccess=false, PDFURL empty). Both carry a DOI, a title, authors and
 // an issued date the parser reads the year from.
 const crossrefItemsFixture = `{
   "message": {
@@ -88,7 +88,7 @@ func TestCrossref_ParsesItems(t *testing.T) {
 		t.Errorf("first.Year = %q, want 2021", first.Year)
 	}
 	if !first.OpenAccess {
-		t.Errorf("first.OpenAccess = false, want true (has a license)")
+		t.Errorf("first.OpenAccess = false, want true (has a Creative Commons license)")
 	}
 	if first.PDFURL != "http://example.org/x.pdf" {
 		t.Errorf("first.PDFURL = %q, want the application/pdf link", first.PDFURL)
@@ -107,11 +107,11 @@ func TestCrossref_ParsesItems(t *testing.T) {
 }
 
 // crossrefPaywalledFixture is a single-item works response for a paywalled work
-// that nonetheless carries a (non-Creative-Commons) publisher license and only a
-// text-mining full-text link — the anonymous-hostile combination the OA heuristic
-// must NOT mislabel as open access. It must map to OpenAccess=false with an empty
-// PDFURL: the license is not a CC URL and the only PDF link is intended for
-// text-mining (which 403s for anonymous users), so neither OA signal holds.
+// that nonetheless carries a (non-Creative-Commons) publisher license and a
+// full-text link — the combination the OA flag must NOT mislabel as open access.
+// It must map to OpenAccess=false: the license is not a CC URL, and a deposited
+// link says nothing about who may read the file. The link is still surfaced as a
+// candidate PDFURL.
 const crossrefPaywalledFixture = `{
   "message": {
     "items": [
@@ -130,10 +130,10 @@ const crossrefPaywalledFixture = `{
 }`
 
 // crossrefLinkPreferenceFixture is a single-item works response whose work carries
-// two application/pdf links: one intended for text-mining (403s for anonymous
-// users) and one intended-application "unspecified" (the reader-facing link). The
-// parser must pick the unspecified link as the PDFURL and treat the work as open
-// access on the strength of that usable full-text link.
+// two application/pdf links: one intended for text-mining and one
+// intended-application "unspecified" (the publisher's reader-facing link). The
+// parser must surface the reader-facing one as the PDFURL. The work declares no
+// license, so it is not open access however many links it deposits.
 const crossrefLinkPreferenceFixture = `{
   "message": {
     "items": [
@@ -150,10 +150,10 @@ const crossrefLinkPreferenceFixture = `{
   }
 }`
 
-// TestCrossref_PaywalledWithLicenseStaysClosed verifies the OA heuristic does not
-// treat a paywalled work as open access merely because it advertises a license: a
-// non-Creative-Commons license plus a text-mining-only PDF link must yield
-// OpenAccess=false and an empty PDFURL.
+// TestCrossref_PaywalledWithLicenseStaysClosed verifies the OA flag does not treat
+// a paywalled work as open access merely because it advertises a license or a
+// full-text link: a non-Creative-Commons license must yield OpenAccess=false even
+// though the deposited link is surfaced as a candidate.
 func TestCrossref_PaywalledWithLicenseStaysClosed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(crossrefPaywalledFixture))
@@ -169,16 +169,60 @@ func TestCrossref_PaywalledWithLicenseStaysClosed(t *testing.T) {
 		t.Fatalf("Search() returned %d results, want 1", len(got))
 	}
 	if got[0].OpenAccess {
-		t.Error("OpenAccess = true, want false (non-CC license + text-mining-only link)")
+		t.Error("OpenAccess = true, want false (non-CC license; a deposited link is not an OA signal)")
 	}
-	if got[0].PDFURL != "" {
-		t.Errorf("PDFURL = %q, want empty (only a text-mining link, which 403s)", got[0].PDFURL)
+	if got[0].PDFURL != "http://example.org/tdm.pdf" {
+		t.Errorf("PDFURL = %q, want the deposited link surfaced as an unverified candidate", got[0].PDFURL)
+	}
+}
+
+// TestCrossref_UnlicensedLinkIsNotOpenAccess pins the regression that prompted the
+// flag to be narrowed to the license. A work that deposits a reader-facing PDF link
+// and declares NO license at all was reported open_access=true purely because the
+// link existed — the shape of AIP's 10.1063/5.0332495 and of ACS records licensed
+// only under their own policy URLs. The link is a syndication contract, and every
+// such link sampled from a major publisher answered 403 to an anonymous client, so
+// it can never be the evidence for calling a work free to read.
+func TestCrossref_UnlicensedLinkIsNotOpenAccess(t *testing.T) {
+	const fixture = `{
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1000/nolicense",
+        "title": ["No License At All"],
+        "issued": {"date-parts": [[2025]]},
+        "link": [
+          {"URL": "http://example.org/reader.pdf", "content-type": "application/pdf", "intended-application": "unspecified"}
+        ]
+      }
+    ]
+  }
+}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixture))
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	got, err := NewCrossref("").Search(context.Background(), "no license", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(got))
+	}
+	if got[0].OpenAccess {
+		t.Error("OpenAccess = true, want false: the work declares no license, so nothing states it is free to read")
+	}
+	if got[0].PDFURL != "http://example.org/reader.pdf" {
+		t.Errorf("PDFURL = %q, want the candidate link (surfaced, but unverified)", got[0].PDFURL)
 	}
 }
 
 // TestCrossref_PrefersUnspecifiedLink verifies that when a work exposes both a
 // text-mining and an "unspecified" PDF link, the reader-facing unspecified link is
-// chosen and the presence of that usable full-text link marks the work open access.
+// the one surfaced — a preference, not a filter, since the tag does not predict
+// whether an anonymous client can fetch either of them.
 func TestCrossref_PrefersUnspecifiedLink(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(crossrefLinkPreferenceFixture))
@@ -196,8 +240,8 @@ func TestCrossref_PrefersUnspecifiedLink(t *testing.T) {
 	if got[0].PDFURL != "http://example.org/reader.pdf" {
 		t.Errorf("PDFURL = %q, want the unspecified reader link", got[0].PDFURL)
 	}
-	if !got[0].OpenAccess {
-		t.Error("OpenAccess = false, want true (has a usable unspecified full-text link)")
+	if got[0].OpenAccess {
+		t.Error("OpenAccess = true, want false: two deposited links are still no statement about the license")
 	}
 }
 

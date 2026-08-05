@@ -1,6 +1,6 @@
 # Download sources
 
-`download` resolves an item through an ordered chain of twenty sources.
+`download` resolves an item through an ordered chain of twenty-one sources.
 [Architecture](architecture.md#multi-source-chain) describes the chain — how it is built,
 how failover works, and how a source that proves unreachable is cooled down. This page
 describes the sources themselves, one section each, in chain order: what each one reaches,
@@ -450,6 +450,43 @@ from repositories worldwide.
 - **Keys** gated on `LIBGEN_MCP_CORE_KEY` (free registration). With it unset the source is
   absent from the chain entirely and hidden from `download`'s `source` enum. The key is sent
   only to `api.core.ac.uk` and never travels with the resolved or probed file URL.
+
+### `crossref`
+
+Crossref is the DOI registration agency most journal publishers deposit with, and the deposit
+includes the publisher's own full-text links. This source fetches them.
+
+- **Keyed by** any DOI — no prefix restriction.
+- **Corpus** whatever the publisher chose to deposit a full-text link for. That is not the same
+  as the open-access corpus: it spans paywalled articles the publisher exposes for syndication
+  and text-mining partners, and it omits open-access articles whose publisher deposited no link.
+- **How it resolves** a GET to `api.crossref.org/works/<doi>` (the raw DOI, slashes intact — the
+  route rejects a `select` parameter, so the whole record is read and bounded at 4 MiB), then
+  every `application/pdf` entry in the record's `link` array is collected as a candidate, the
+  publisher's reader-facing link (`intended-application` unset or `unspecified`) first. Each
+  candidate is confirmed with a ranged probe and the first one that actually serves a PDF is
+  returned; at most four are tried, since publishers deposit the same file repeatedly under
+  different tags.
+- **Why it probes** a deposited link states a syndication contract, not a right to read. Sampled
+  across twenty registrants, every `unspecified` link (6/6) and every `syndication` link (18/18)
+  answered 403 to an anonymous client, while eLife and the smaller open-access publishers tag
+  their reader-facing file `text-mining` and serve it to anyone. The tag predicts nothing; the
+  registrant does. Without the probe the pipeline would store a publisher's challenge page as a
+  `.pdf`.
+- **Why it exists** `search` surfaces a Crossref hit carrying the publisher's own `pdf_url`, and
+  before this source nothing in the download chain ever tried that link — `read` and `download`
+  went through the open-access indexes instead, so the two paths could reach opposite
+  conclusions about one article and the link the server had just published was reachable only by
+  a caller holding its own HTTP tool.
+- **What it does not cover** the large commercial publishers. ACS, AIP, IOP, Wiley, SAGE, Taylor
+  & Francis and Springer refuse anonymous clients whatever they deposited, so for their DOIs this
+  source reports a clean miss naming the browser as the route that remains — which is often the
+  truth, including for openly licensed articles: `10.1063/5.0282407` is CC-BY and readable in a
+  browser while AIP answers 403 to every automated client, and no repository holds a copy.
+- **Where it sits** last among the legitimate resolvers, after the open-access indexes and the
+  archives and before the shadow libraries: a freely licensed copy is preferred wherever one
+  exists, but a file the publisher itself serves openly is always tried before a shadow library.
+- **Keys** keyless.
 
 ## Open-access and public-domain books
 

@@ -105,7 +105,7 @@ When the extras are consulted, every source is queried and the answers are merge
 Every result is labeled with an **`origin`** that says which searcher produced it. That label is not decoration — it tells you which identifier the result carries, and therefore which argument to hand to `download`:
 
 - **`libgen`** and **`annas`** — the result carries an md5, plus the file's format and size, so the two can be compared. Download it with `download`'s `md5` argument.
-- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
+- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument. It may also carry a `pdf_url`: that is the link the _publisher_ deposited with Crossref, and it is unverified — most large commercial publishers serve it only to subscribers or refuse automated clients outright — so hand the DOI to `download`/`read`, which probes that same link as part of the chain, rather than offering the URL as the full text. `open_access: true` here means the work carries a Creative Commons license, not that the file can be fetched.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no arXiv identifier.
 - **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a catalog, not a repository, so use those to run a better-targeted `search` — unless the book is publicly readable, in which case it also carries an `archive_url` you can read directly on the Internet Archive.
 - **`dblp`** and **`pubmed`** — the result carries a DOI and a `venue`, and nothing is claimed about availability. Cite it, or try `download`'s `doi` argument knowing it may find no free copy.

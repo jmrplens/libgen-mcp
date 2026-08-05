@@ -163,9 +163,14 @@ func defaultStartRetryWaits() []time.Duration {
 // books. The publisher-direct sources each claim only their own DOI registrant
 // prefix — 10.17487, 10.6028, 10.4230, 10.18653/10.3115, 10.5281/zenodo, 10.1590 and
 // 10.4060 respectively — so they resolve their own documents authoritatively and are
-// invisible to every other identifier. Only after them come the shadow libraries —
-// scihub and scidb for articles, libgen, randombook and annas for md5-keyed books —
-// so a freely licensed copy is always preferred when one exists.
+// invisible to every other identifier. crossref closes that group: it fetches the
+// full-text link the publisher itself deposited, for any DOI, and is last among the
+// legitimate resolvers because a link deposited with Crossref states a syndication
+// contract rather than a right to read — the major publishers refuse it to an
+// anonymous client — so it is the least likely of them to produce bytes. Only after
+// them come the shadow libraries — scihub and scidb for articles, libgen,
+// randombook and annas for md5-keyed books — so a freely licensed copy is always
+// preferred when one exists.
 //
 // Ordering only matters between sources that claim the same item, so the single
 // list yields the right per-identifier chain: an ISBN tries oapen then archive; a
@@ -183,8 +188,8 @@ func defaultStartRetryWaits() []time.Duration {
 // run.
 var KnownSources = []string{
 	"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl",
-	"zenodo", "scielo", "fao", "fatcat", "core", "oapen", "archive", "scihub", "scidb",
-	"libgen", "randombook", "annas",
+	"zenodo", "scielo", "fao", "fatcat", "core", "crossref", "oapen", "archive",
+	"scihub", "scidb", "libgen", "randombook", "annas",
 }
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
