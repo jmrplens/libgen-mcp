@@ -356,6 +356,15 @@ plus `lhm.plugin.json`'s version, and commits the result back to main. The manua
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.
 
+**A `remotes` URL must be globally unique across the whole registry, and the
+comparison is on the literal string.** The registry refuses a publish whose remote
+URL any other server already claims, templates included: v1.5.2 failed to publish
+because `server.json` declared `https://{host}:{port}/` as a self-hosted form,
+copied from the sibling `gitlab-mcp-server`, which had claimed that exact template
+first. Checking that nothing claims your *hostname* is not the check — the string
+is. A self-hosted templated remote is therefore only safe if no other server of
+yours already publishes the same template.
+
 The `server.json` CI job is named for a required status check in the branch
 ruleset, not for its scope — do not rename it without updating the ruleset too.
 
