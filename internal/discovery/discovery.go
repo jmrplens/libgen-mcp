@@ -14,8 +14,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/version"
 )
 
@@ -100,8 +102,23 @@ type Provider interface {
 // with a sane overall timeout so a stalled connection can never outlive the
 // per-provider context budget.
 func newDiscoveryClient() *http.Client {
-	return &http.Client{Timeout: discoveryTimeout + time.Second}
+	return netguard.Client(discoveryTimeout+time.Second, allowPrivateAddresses.Load())
 }
+
+// allowPrivateAddresses mirrors the deployment's LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES
+// setting for the providers built here. It is package state rather than a
+// constructor argument because a Provider is constructed by name with no config in
+// reach (NewCrossref, NewArxiv, ...), and threading a flag through eight
+// constructors and every call site would put the decision in eight places instead
+// of one. It is atomic because a server may build providers from several
+// goroutines, and it defaults to the safe value, so a deployment that never calls
+// SetAllowPrivateAddresses is guarded.
+var allowPrivateAddresses atomic.Bool
+
+// SetAllowPrivateAddresses applies the deployment's private-address policy to every
+// provider constructed afterwards. Call it once at startup, before building
+// providers; see internal/netguard for what the policy blocks and why.
+func SetAllowPrivateAddresses(allow bool) { allowPrivateAddresses.Store(allow) }
 
 // boundedGet issues a GET after setting the discovery User-Agent, and returns the
 // response body bytes bounded to discoveryMaxBody together with the status code.

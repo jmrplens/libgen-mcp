@@ -20,6 +20,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/version"
 )
 
@@ -295,9 +296,13 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		olRPS = openLibraryEnrichRPS
 	}
 	c := &Client{
-		mirrors:          m,
-		http:             &http.Client{Timeout: cfg.Timeout},
-		dl:               &http.Client{},
+		mirrors: m,
+		// Both clients screen their destinations (internal/netguard): every source in
+		// the chain fetches a URL some third party supplied, so the address a URL
+		// resolves to is not this server's to trust. dl carries no timeout — a
+		// streaming download's lifetime is its context's.
+		http:             netguard.Client(cfg.Timeout, cfg.AllowPrivateAddresses),
+		dl:               netguard.Client(0, cfg.AllowPrivateAddresses),
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		enrichLimiter:    rate.NewLimiter(5, 5),
 		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), olRPS),

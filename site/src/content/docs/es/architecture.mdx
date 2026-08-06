@@ -60,6 +60,16 @@ head:
 
 Las peticiones a nivel de página (`search`, `get_details` y la resolución de enlaces de LibGen que usan las descargas) pasan por un único cliente que hace que la familia de mirrors parezca un solo endpoint fiable.
 
+### Política de direcciones salientes
+
+Casi todas las URL que descarga este servidor las eligió otro: el enlace a texto completo que una editorial depositó en Crossref, la URL de descarga de un repositorio que republican Unpaywall, OpenAlex o CORE, un `citation_pdf_url` raspado de la página de una editorial. Nada en esa cadena impide que una de esas URL nombre la interfaz de loopback, la LAN del operador o un endpoint de metadatos de la nube — y si lo hiciera, el servidor estaría actuando como proxy hacia una red que quien depositó la URL jamás podría alcanzar por su cuenta. Eso es server-side request forgery, y `internal/netguard` es donde se rechaza.
+
+La comprobación vive en el hook `Control` del dialer y no sobre la URL, porque solo el dialer ve a qué resolvió realmente el nombre. Una comprobación a nivel de URL la derrota un host público con un registro `A` privado, y también el DNS rebinding; al hook `Control` se le entrega la IP concreta microsegundos antes del `connect`. Se bloquean: loopback, `0.0.0.0/8`, la dirección de difusión IPv4, link-local unicast y multicast (`169.254.0.0/16`, que contiene `169.254.169.254`, y `fe80::/10`), todos los ámbitos multicast, el espacio privado de RFC 1918 y RFC 4193, y el NAT de operador de RFC 6598 — cada uno también en su disfraz IPv4-mapped sobre IPv6.
+
+Como la política se instala en el `Transport` compartido, la heredan de golpe todas las fuentes de descarga, todos los sondeos de disponibilidad, todos los proveedores de discovery y todas las consultas de mirrors, en lugar de tener que acordarse cada una. Una política de redirects complementaria acota la cadena en cinco saltos y elimina `Authorization` y `Cookie` siempre que un redirect cambie de host — que es la única protección que el dialer no puede dar, ya que `net/http` conserva esas cabeceras para cualquier _subdominio_ del original.
+
+`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES=true` la levanta, para el único caso legítimo: un operador que ejecuta su propio mirror en su propia red. Está desactivado por defecto y se aplica a todas las fuentes a la vez, en ambos sentidos.
+
 ### Descubrimiento de mirrors
 
 Un `Manager` suministra los mirrors candidatos:
