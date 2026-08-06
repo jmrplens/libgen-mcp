@@ -147,7 +147,7 @@ type DownloadResult struct {
 	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
 	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall openalex europepmc biorxiv rfc nist dagstuhl acl zenodo scielo fao fatcat core oapen archive scihub scidb libgen randombook or annas"`
+	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall openalex europepmc biorxiv rfc nist dagstuhl acl zenodo scielo fao fatcat core crossref oapen archive scihub scidb libgen randombook or annas"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
@@ -772,7 +772,11 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 
 	resume, err := resumeDecision(resp, resumeFrom, base)
 	if err != nil {
-		return nil, startErr(err) // non-2xx status: retryable
+		// A refusal is final, so it must not enter the start-retry schedule.
+		if refusal := hostRefusal(resp.StatusCode, resolved.FileURL); refusal != nil {
+			return nil, refusal
+		}
+		return nil, startErr(err) // other non-2xx status: retryable
 	}
 
 	// Full expected size: on a resumed 206, Content-Length covers only the range,
@@ -881,6 +885,62 @@ func resumeDecision(resp *http.Response, resumeFrom int64, base string) (bool, e
 	default:
 		return false, fmt.Errorf("download failed: status %d from %s", resp.StatusCode, base)
 	}
+}
+
+// refusalStatuses are the response statuses that mean the host will not serve this
+// URL to this client at all — it is refusing on authorization grounds, not
+// failing. 401 and 403 are the subscription wall and the automated-client block;
+// 451 is a legal one. None of them can change while the request stays the same.
+var refusalStatuses = map[int]bool{
+	http.StatusUnauthorized:               true,
+	http.StatusForbidden:                  true,
+	http.StatusUnavailableForLegalReasons: true,
+}
+
+// hostRefusal converts a refusal status into a FINAL download error naming the URL
+// to open by hand, or returns nil when the status is not a refusal and the caller
+// should treat it as a retryable start failure.
+//
+// This exists because the start-retry schedule used to swallow these. A publisher
+// that blocks automated clients answers 403 to every attempt, and spending the full
+// schedule on it produced "retry later once the mirror recovers" — which reads as a
+// transient outage and is the opposite of the truth. It was measured on a genuinely
+// open-access CC-BY article (10.1063/5.0282407) whose publisher, AIP, serves 403 to
+// every non-browser client: the article was readable in a browser the whole time,
+// and the only thing missing from the answer was that sentence.
+//
+// The one case a retry could legitimately rescue — a signed URL whose token has
+// expired — cannot arise here, because startAttempt resolves the item afresh on
+// every attempt: the URL being refused was minted moments ago, so the next attempt
+// would mint an equally fresh one and be refused identically. What the schedule
+// would buy is the wait, and no wait changes an authorization verdict.
+//
+// The URL is reported without its query string: a resolved file URL can carry a
+// signed token or an account key, and an error message travels into logs and model
+// context.
+func hostRefusal(status int, fileURL string) error {
+	if !refusalStatuses[status] {
+		return nil
+	}
+	return fmt.Errorf(
+		"host refused automated access (HTTP %d) to %s — retrying cannot change that; the file may still open in a browser",
+		status, redactQuery(fileURL))
+}
+
+// redactQuery returns fileURL without its query string or fragment, so a URL can be
+// named in an error without carrying whatever credential it was signed with.
+//
+// A URL that will not parse is truncated at the first "?" or "#" textually rather
+// than echoed: falling back to the raw string would defeat the whole point on
+// exactly the inputs least likely to be well formed.
+func redactQuery(fileURL string) string {
+	u, err := url.Parse(fileURL)
+	if err != nil || u.Host == "" {
+		return strings.SplitN(strings.SplitN(fileURL, "?", 2)[0], "#", 2)[0]
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 // firstProgress returns the first progress callback from the variadic optional

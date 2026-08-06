@@ -2494,3 +2494,89 @@ func TestDownloadResultSourceNamesEveryKnownSource(t *testing.T) {
 			missing, desc)
 	}
 }
+
+// TestDownloadRefusalFailsFastAndPointsAtTheBrowser covers the third start outcome
+// beside "started" and "kept failing": a host that REFUSES. A 403 used to run the
+// whole start-retry schedule and then be reported as errDownloadCouldNotStart —
+// "retry later once the mirror recovers" — for a publisher that was never going to
+// serve an automated client and never going to recover from anything. It must fail
+// on the first attempt and say what is actually left to try.
+func TestDownloadRefusalFailsFastAndPointsAtTheBrowser(t *testing.T) {
+	var hits atomic.Int32
+	srv := md5CDNServer(t, testMD5, func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})
+	defer srv.Close()
+
+	c := newTestClient(staticMirrors{srv.URL})
+	c.startRetryWaits = tinyWaits(2) // would be 3 attempts, if the status were retryable
+	dir := t.TempDir()
+
+	_, err := c.Download(context.Background(), testMD5, dir, "", nil)
+	if err == nil {
+		t.Fatal("a refused download should fail")
+	}
+	if errors.Is(err, errDownloadCouldNotStart) {
+		t.Errorf("err = %v, want a refusal rather than the retry-schedule error", err)
+	}
+	if !strings.Contains(err.Error(), "refused automated access") {
+		t.Errorf("err = %v, want it to name the refusal", err)
+	}
+	if !strings.Contains(err.Error(), "browser") {
+		t.Errorf("err = %v, want it to name the browser as the remaining route", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Errorf("CDN hits = %d, want 1 (a refusal is final, so the schedule must be skipped)", got)
+	}
+}
+
+// TestHostRefusal covers the status taxonomy directly: the authorization refusals
+// are final, and everything else stays retryable so a genuine blip still gets the
+// schedule it exists for.
+func TestHostRefusal(t *testing.T) {
+	tests := []struct {
+		status  int
+		refusal bool
+	}{
+		{http.StatusUnauthorized, true},
+		{http.StatusForbidden, true},
+		{http.StatusUnavailableForLegalReasons, true},
+		{http.StatusNotFound, false},
+		{http.StatusTooManyRequests, false},
+		{http.StatusServiceUnavailable, false},
+		{http.StatusInternalServerError, false},
+	}
+	for _, tt := range tests {
+		got := hostRefusal(tt.status, "https://pubs.example.org/a.pdf")
+		if (got != nil) != tt.refusal {
+			t.Errorf("hostRefusal(%d) = %v, want refusal = %v", tt.status, got, tt.refusal)
+		}
+	}
+}
+
+// TestRedactQuery verifies an error naming a URL never carries its query string: a
+// resolved file URL can be signed with an account key or a one-time token, and
+// error text travels into logs and into a model's context.
+func TestRedactQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"drops a signed query", "https://cdn.example.org/f.pdf?key=s3cret&exp=1", "https://cdn.example.org/f.pdf"},
+		{"drops a fragment", "https://e.org/f.pdf#page=2", "https://e.org/f.pdf"},
+		{"keeps a plain url", "https://e.org/f.pdf", "https://e.org/f.pdf"},
+		{"unparseable is still truncated", "://nope?key=s3cret", "://nope"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := redactQuery(tt.in); got != tt.want {
+				t.Errorf("redactQuery(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			if strings.Contains(redactQuery(tt.in), "s3cret") && !strings.Contains(tt.want, "s3cret") {
+				t.Errorf("redactQuery(%q) leaked the secret", tt.in)
+			}
+		})
+	}
+}

@@ -56,7 +56,8 @@ problem — re-check the query or identifier rather than your connection.
 **Symptom.** A `download` with a `doi` fails, or returns nothing useful.
 
 **Meaning.** Articles are fetched by DOI through several sources in order — the legal
-open-access providers first, then the shadow-library fallbacks:
+open-access providers first, then `crossref` (the publisher's own deposited link, which is
+not an open-access index), then the shadow-library fallbacks:
 
 1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled
    DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain
@@ -99,12 +100,17 @@ open-access providers first, then the shadow-library fallbacks:
     gone bad.
 13. **`core`** — only in the chain when `LIBGEN_MCP_CORE_KEY` is set; returns CORE's open-access
     download URL when CORE hosts a live copy.
-14. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
+14. **`crossref`** — fetches the full-text link the publisher itself deposited with Crossref,
+    for any DOI. Every candidate is probed before it is returned, because a deposited link is
+    a syndication contract rather than a right to read: the large commercial publishers answer
+    an anonymous client with a 403 whatever the link says. When they all refuse, the error
+    says so and names the browser as the remaining route.
+15. **`oapen`** — for a monograph DOI, returns the open-access book OAPEN hosts under it. Most
     journal DOIs are simply not in its catalog, so it usually reports a clean miss and the
     chain advances.
-15. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
+16. **`scihub`** — tries each configured host (`LIBGEN_MCP_SCIHUB_HOSTS`) until one serves an
     article page with an extractable PDF.
-16. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
+17. **`scidb`** — the Anna's Archive SciDB viewer, tried last when Sci-Hub yields nothing; it
     covers papers published after Sci-Hub stopped indexing.
 
 **Fixes.**

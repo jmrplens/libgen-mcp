@@ -98,7 +98,12 @@ argument to hand to `download`:
 
 - **`libgen`** and **`annas`** — the result carries an md5, plus the file's format and
   size, so the two can be compared. Download it with `download`'s `md5` argument.
-- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument.
+- **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument. It may
+  also carry a `pdf_url`: that is the link the *publisher* deposited with Crossref, and it is
+  unverified — most large commercial publishers serve it only to subscribers or refuse
+  automated clients outright — so hand the DOI to `download`/`read`, which probes that same
+  link as part of the chain, rather than offering the URL as the full text. `open_access: true`
+  here means the work carries a Creative Commons license, not that the file can be fetched.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no
   arXiv identifier.
 - **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a

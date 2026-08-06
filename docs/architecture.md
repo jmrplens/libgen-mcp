@@ -148,7 +148,7 @@ flowchart TD
 
 Download sources implement a common interface — `Name`, `Supports(item)`, and
 `Resolve(ctx, item)` — so the shared pipeline stays provider-agnostic. The chain is built
-from configuration in the fixed order `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
+from configuration in the fixed order `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → crossref → oapen → archive → scihub → scidb → libgen → randombook → annas`, and each
 source is offered only the items it supports:
 
 | Source       | Keyed by                       | Role                    | In one line                                                                                             |
@@ -166,6 +166,7 @@ source is offered only the items it supports:
 | `fao`        | `10.4060` DOI                  | UN agency documents     | The FAO Knowledge Repository item's bitstream, reached through the one REST endpoint robots.txt allows. |
 | `fatcat`     | DOI                            | Preserved full text     | Internet Archive Scholar's preserved copies, each probed before use.                                    |
 | `core`       | DOI                            | Open-access articles    | CORE's download URL, returned only when it still serves a live copy.                                    |
+| `crossref`   | DOI                            | Publisher-deposited     | The full-text link the publisher deposited with Crossref, probed before use.                            |
 | `oapen`      | DOI/ISBN                       | Open-access books       | An openly licensed monograph, after OAPEN's record confirms the identifier.                             |
 | `archive`    | ISBN                           | Public-domain books     | An Internet Archive scan, only when public and not lending-restricted.                                  |
 | `scihub`     | DOI                            | Article fallback        | The PDF embedded by the first Sci-Hub mirror that serves an article page.                               |
@@ -182,7 +183,7 @@ table is only the index.
 
 Because the chain is a single ordered slice filtered by `Supports`, an md5-keyed book item is
 offered `[libgen, randombook, annas]`, an ISBN-keyed one `[oapen, archive]`, an article item
-`[unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, oapen, scihub,
+`[unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, crossref, oapen, scihub,
 scidb]`, and an item carrying both
 an md5 and a DOI is offered article sources first, then book sources. `LIBGEN_MCP_SOURCES` removes sources from
 this chain without reordering it. `Download` tries each supporting source in turn and returns
