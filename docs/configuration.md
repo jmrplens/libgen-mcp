@@ -139,9 +139,10 @@ source declares which items it supports, so in practice:
   `biorxiv`,
   `rfc` (RFCs), `nist` (NIST publications), `dagstuhl` (Dagstuhl proceedings), `acl` (ACL
   Anthology papers), `zenodo` (Zenodo deposits), `scielo` (SciELO Brazil articles) and `fao`
-  (FAO Knowledge Repository documents), then `fatcat`, `core` (only when
-  `LIBGEN_MCP_CORE_KEY` is set), `crossref` (the full-text link the publisher itself deposited
-  with Crossref, probed before use) and `oapen` (monographs carry DOIs too) — then the
+  (FAO Knowledge Repository documents), then `fatcat` and `core` (only when
+  `LIBGEN_MCP_CORE_KEY` is set) — then `crossref`, which is not an open-access index but the
+  full-text link the publisher itself deposited with Crossref, probed before use, and `oapen`
+  (monographs carry DOIs too) — then the
   shadow-library fallbacks `scihub` and `scidb`. This prefers a freely licensed copy whenever
   one exists.
 

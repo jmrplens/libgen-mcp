@@ -446,3 +446,41 @@ func TestCrossrefYear(t *testing.T) {
 		})
 	}
 }
+
+// TestCrossref_UppercaseMediaTypeStillYieldsPDFURL verifies the PDF media type is
+// matched case-insensitively, as MIME types are. A record spelling it
+// "APPLICATION/PDF" would otherwise be surfaced with no pdf_url here while
+// internal/libgen's crossref download source, which compares case-insensitively,
+// fetched the very same link — the two would disagree about one record.
+func TestCrossref_UppercaseMediaTypeStillYieldsPDFURL(t *testing.T) {
+	const fixture = `{
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1000/shouty",
+        "title": ["Loud Media Type"],
+        "issued": {"date-parts": [[2024]]},
+        "link": [
+          {"URL": "http://example.org/x.pdf", "content-type": "APPLICATION/PDF", "intended-application": "unspecified"}
+        ]
+      }
+    ]
+  }
+}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixture))
+	}))
+	defer srv.Close()
+	setCrossrefBase(t, srv.URL)
+
+	got, err := NewCrossref("").Search(context.Background(), "shouty", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v, want nil", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(got))
+	}
+	if got[0].PDFURL != "http://example.org/x.pdf" {
+		t.Errorf("PDFURL = %q, want the uppercase-media-type link", got[0].PDFURL)
+	}
+}

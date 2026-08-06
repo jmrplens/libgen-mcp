@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"golang.org/x/time/rate"
 )
 
 // crossrefMaxBody bounds how many bytes of a Crossref work record are read while
@@ -56,15 +58,24 @@ var crossrefDownloadApplications = map[string]bool{
 // anonymous client with a 403 or a challenge page. Without the probe the pipeline
 // would happily store that page as a .pdf.
 //
-// It sits after the open-access resolvers and the archives, and before the shadow
-// libraries: when a freely licensed copy exists somewhere, that copy is preferred,
-// but a file the publisher itself serves openly should always be tried before
-// falling back to a shadow library. MD5 verification is disabled because DOI-keyed
-// items carry no LibGen digest.
+// It is the last of the article-specific resolvers, after the open-access indexes and
+// the archives: when a freely licensed copy exists somewhere, that copy is preferred,
+// but a file the publisher itself serves openly should always be tried before falling
+// back to a shadow library. Only the two book sources and then the shadow libraries
+// follow it. MD5 verification is disabled because DOI-keyed items carry no LibGen
+// digest.
 type crossrefSource struct {
 	// http is the client used for the API lookup and the candidate probes; when
 	// nil, http.DefaultClient is used.
 	http *http.Client
+	// limiter paces the API lookups. It is the Client's enrichment limiter, shared
+	// on purpose: enrichment and this source query the same api.crossref.org host
+	// from the same process, and a budget only one of them observes is not a budget.
+	// Nil disables pacing, which is what a directly constructed source (a test) gets.
+	limiter *rate.Limiter
+	// email is the optional contact address advertised to Crossref's polite pool
+	// through the User-Agent mailto, matching what enrichment sends. Empty omits it.
+	email string
 	// baseURL overrides the API root (defaults to the package-level crossrefBase);
 	// tests set it to a local httptest server.
 	baseURL string
@@ -136,18 +147,30 @@ func (s crossrefSource) Resolve(ctx context.Context, it Item) (Resolved, error) 
 // relative or non-http value in the record can never reach the download pipeline.
 // At most crossrefMaxCandidates are returned.
 func crossrefPDFCandidates(links []crossrefDownloadLink) []string {
-	var preferred, others []string
-	seen := map[string]bool{}
+	// Every deposit of a URL is inspected before the URL is placed, because a
+	// publisher may deposit one file twice and name the reader-facing audience on
+	// the SECOND entry. Classifying on first sight would file that URL under the
+	// machine-audience bucket on the strength of a deposit that a later one
+	// supersedes, costing it its place at the front of the probe order and, once the
+	// cap bites, possibly its place altogether.
+	var order []string
+	reader := map[string]bool{}
 	for _, l := range links {
-		if !strings.EqualFold(l.ContentType, crossrefPDFContentType) || !absoluteHTTPURL(l.URL) || seen[l.URL] {
+		if !strings.EqualFold(l.ContentType, crossrefPDFContentType) || !absoluteHTTPURL(l.URL) {
 			continue
 		}
-		seen[l.URL] = true
-		if crossrefDownloadApplications[l.IntendedApplication] {
-			preferred = append(preferred, l.URL)
+		if _, ok := reader[l.URL]; !ok {
+			order = append(order, l.URL)
+		}
+		reader[l.URL] = reader[l.URL] || crossrefDownloadApplications[l.IntendedApplication]
+	}
+	var preferred, others []string
+	for _, u := range order {
+		if reader[u] {
+			preferred = append(preferred, u)
 			continue
 		}
-		others = append(others, l.URL)
+		others = append(others, u)
 	}
 	candidates := make([]string, 0, len(preferred)+len(others))
 	candidates = append(candidates, preferred...)
@@ -179,11 +202,21 @@ func (s crossrefSource) lookup(ctx context.Context, doi string) (crossrefDownloa
 	// by the live API with "this route does not support select".
 	endpoint := strings.TrimRight(base, "/") + "/works/" + escapeDOIPath(doi)
 
+	if s.limiter != nil {
+		if werr := s.limiter.Wait(ctx); werr != nil {
+			return crossrefDownloadWork{}, fmt.Errorf("crossref: waiting to query for %q: %w", doi, werr)
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
 		return crossrefDownloadWork{}, fmt.Errorf("crossref: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent())
+	ua := userAgent()
+	if s.email != "" {
+		ua += " (mailto:" + s.email + ")"
+	}
+	req.Header.Set("User-Agent", ua)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := httpClientOr(s.http).Do(req)

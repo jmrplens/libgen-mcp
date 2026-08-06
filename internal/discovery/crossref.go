@@ -275,7 +275,11 @@ func crossrefYear(issued crossrefIssued) string {
 func crossrefPDFURL(links []crossrefLink) string {
 	var fallback string
 	for _, l := range links {
-		if l.ContentType != crossrefPDFType || l.URL == "" {
+		// The media type is compared case-insensitively, as MIME types are, and as
+		// internal/libgen's crossref download source compares the same field: a record
+		// spelling it "APPLICATION/PDF" would otherwise be surfaced with no pdf_url
+		// here while the download chain fetched the very same link.
+		if !strings.EqualFold(l.ContentType, crossrefPDFType) || l.URL == "" {
 			continue
 		}
 		if crossrefReaderApplications[l.IntendedApplication] {

@@ -128,9 +128,13 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
 
 - **`doi` (crossref)** — pass it to `download` or `read` exactly like a DOI from a Library
   Genesis result.
-- **`pdf_url` (arxiv always; crossref when a direct PDF link is published)** — a
-  directly-fetchable open-access PDF; fetch it yourself (it is not a Library Genesis
-  download, so `download`/`read` do not resolve it).
+- **`pdf_url` (arxiv)** — arXiv's own hosted PDF, directly fetchable; fetch it yourself (it
+  is not a Library Genesis download, so `download`/`read` do not resolve it by URL).
+- **`pdf_url` (crossref)** — the link the *publisher* deposited with Crossref, and
+  **unverified**: most large commercial publishers serve it only to subscribers or refuse
+  automated clients outright. Do not offer it as the full text. Pass the hit's `doi` to
+  `download`/`read` instead — the chain includes a `crossref` source that probes this same
+  link and reports honestly when the publisher refuses it.
 - **`isbn`/`title` (openlibrary)** — OpenLibrary is mainly a keyless *query resolver*: use
   its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`. The one
   exception is a publicly readable book — one OpenLibrary reports as freely readable in full
@@ -297,8 +301,9 @@ The download runs through a fixed source chain, filtered by what each item suppo
   `dagstuhl` (`10.4230` Dagstuhl proceedings), `acl` (`10.18653`/`10.3115` ACL Anthology
   papers), `zenodo` (`10.5281/zenodo` deposits), `scielo` (`10.1590` SciELO Brazil
   articles), `fao` (`10.4060` FAO Knowledge Repository documents),
-  `fatcat`, `core` (only when `LIBGEN_MCP_CORE_KEY` is set), `crossref` (the publisher's own deposited link) and `oapen`
-  (monographs carry DOIs too) — then the shadow-library fallbacks `scihub` and `scidb`
+  `fatcat` and `core` (only when `LIBGEN_MCP_CORE_KEY` is set) — then `crossref`, which is not
+  an open-access index but the publisher's own deposited full-text link, probed before use,
+  and `oapen` (monographs carry DOIs too) — then the shadow-library fallbacks `scihub` and `scidb`
   (Anna's Archive SciDB viewer).
 - **Both `md5` and `doi`** → article sources first, then book sources (`libgen`, `randombook`,
   `annas`).

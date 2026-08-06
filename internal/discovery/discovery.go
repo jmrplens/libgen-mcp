@@ -63,11 +63,12 @@ type DiscoveryResult struct {
 	// byte count — and both are empty when it states neither.
 	Extension string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
 	Size      string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
-	// PDFURL is a candidate full-text PDF link. For arxiv, eric and gutenberg it is
-	// the provider's own hosted file and is reliably fetchable; for crossref it is
-	// the link the PUBLISHER advertises, which is unverified — many publishers 403
+	// PDFURL is a candidate full-text PDF link. For arxiv and eric it is the
+	// provider's own hosted file and is reliably fetchable; for crossref it is the
+	// link the PUBLISHER advertises, which is unverified — many publishers 403
 	// anonymous clients — so nothing may present it as proof the work is readable.
-	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF URL. For an arxiv, eric or gutenberg result it is the provider's own hosted file and is fetchable (and for eric it is the whole way to get the file, since ERIC grey literature has no DOI to pass to download). For a crossref result it is the link the publisher advertises and is UNVERIFIED: major publishers serve it only to subscribers or refuse automated clients outright, so do not present it as proof the work is readable — pass the doi to read/download instead and let the source chain try it"`
+	// A Gutenberg ebook is not an article PDF and rides FullTextURL instead.
+	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF URL. For an arxiv or eric result it is the provider's own hosted file and is fetchable (and for eric it is the whole way to get the file, since ERIC grey literature has no DOI to pass to download). For a crossref result it is the link the publisher advertises and is UNVERIFIED: major publishers serve it only to subscribers or refuse automated clients outright, so do not present it as proof the work is readable — pass the doi to read/download instead and let the source chain try it"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"

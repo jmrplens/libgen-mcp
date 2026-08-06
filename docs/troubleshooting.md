@@ -56,7 +56,8 @@ problem — re-check the query or identifier rather than your connection.
 **Symptom.** A `download` with a `doi` fails, or returns nothing useful.
 
 **Meaning.** Articles are fetched by DOI through several sources in order — the legal
-open-access providers first, then the shadow-library fallbacks:
+open-access providers first, then `crossref` (the publisher's own deposited link, which is
+not an open-access index), then the shadow-library fallbacks:
 
 1. **`unpaywall`** — returns a PDF only when the article is genuinely open access. A paywalled
    DOI, or one with no PDF link, produces `no open-access PDF for "<doi>"` and the chain

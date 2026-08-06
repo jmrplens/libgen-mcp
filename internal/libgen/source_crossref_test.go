@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // crossrefWorkBody wraps a work's link array in the `{"message":{...}}` envelope
@@ -244,6 +247,18 @@ func TestCrossrefPDFCandidates(t *testing.T) {
 			want: []string{"https://e.org/a.pdf"},
 		},
 		{
+			// A later deposit naming the reader-facing audience must still promote the
+			// URL. Classifying on first sight would leave it in the machine-audience
+			// bucket behind an unrelated link, and the candidate cap can drop it there.
+			name: "a reader-facing duplicate promotes a URL deposited earlier as machine-audience",
+			links: []crossrefDownloadLink{
+				{URL: "https://e.org/dup.pdf", ContentType: "application/pdf", IntendedApplication: "text-mining"},
+				{URL: "https://e.org/other.pdf", ContentType: "application/pdf", IntendedApplication: "syndication"},
+				{URL: "https://e.org/dup.pdf", ContentType: "application/pdf", IntendedApplication: "unspecified"},
+			},
+			want: []string{"https://e.org/dup.pdf", "https://e.org/other.pdf"},
+		},
+		{
 			name: "an untagged link counts as reader-facing",
 			links: []crossrefDownloadLink{
 				{URL: "https://e.org/syn.pdf", ContentType: "application/pdf", IntendedApplication: "syndication"},
@@ -291,5 +306,41 @@ func TestCrossrefPDFCandidatesCap(t *testing.T) {
 	}
 	if got := crossrefPDFCandidates(links); len(got) != crossrefMaxCandidates {
 		t.Errorf("len(candidates) = %d, want the cap %d", len(got), crossrefMaxCandidates)
+	}
+}
+
+// TestCrossrefLookupIsPacedAndIdentified verifies the two things the source owes the
+// API it shares with enrichment: it waits on the limiter it was given (the Client's
+// enrichment limiter, so one budget covers both callers of api.crossref.org), and it
+// identifies itself to Crossref's polite pool with the configured contact address.
+func TestCrossrefLookupIsPacedAndIdentified(t *testing.T) {
+	var ua atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua.Store(r.Header.Get("User-Agent"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, crossrefWorkBody(""))
+	}))
+	defer srv.Close()
+
+	// A spent limiter with no refill: the wait can only end by the context expiring,
+	// which proves the source consulted it before reaching the network.
+	spent := rate.NewLimiter(0, 0)
+	s := crossrefSource{http: srv.Client(), baseURL: srv.URL, limiter: spent, email: "someone@example.org"}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := s.Resolve(ctx, Item{DOI: "10.1000/paced"}); err == nil {
+		t.Error("Resolve() error = nil, want the exhausted limiter to hold the request")
+	}
+	if ua.Load() != nil {
+		t.Error("the request reached the server despite an exhausted limiter")
+	}
+
+	s.limiter = rate.NewLimiter(rate.Inf, 1)
+	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1000/paced"}); err == nil {
+		t.Fatal("Resolve() error = nil, want a clean miss (the fixture deposits no link)")
+	}
+	got, _ := ua.Load().(string)
+	if !strings.Contains(got, "mailto:someone@example.org") {
+		t.Errorf("User-Agent = %q, want the polite-pool mailto", got)
 	}
 }

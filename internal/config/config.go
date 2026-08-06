@@ -164,11 +164,12 @@ func defaultStartRetryWaits() []time.Duration {
 // prefix — 10.17487, 10.6028, 10.4230, 10.18653/10.3115, 10.5281/zenodo, 10.1590 and
 // 10.4060 respectively — so they resolve their own documents authoritatively and are
 // invisible to every other identifier. crossref closes that group: it fetches the
-// full-text link the publisher itself deposited, for any DOI, and is last among the
-// legitimate resolvers because a link deposited with Crossref states a syndication
-// contract rather than a right to read — the major publishers refuse it to an
-// anonymous client — so it is the least likely of them to produce bytes. Only after
-// them come the shadow libraries — scihub and scidb for articles, libgen,
+// full-text link the publisher itself deposited, for any DOI, and is the LAST of the
+// article-specific resolvers because a link deposited with Crossref states a
+// syndication contract rather than a right to read — the major publishers refuse it
+// to an anonymous client — so it is the least likely of them to produce bytes. After
+// it come the two book sources, OAPEN and the Internet Archive, which an article DOI
+// reaches only where the work is a monograph. Only then come the shadow libraries — scihub and scidb for articles, libgen,
 // randombook and annas for md5-keyed books — so a freely licensed copy is always
 // preferred when one exists.
 //

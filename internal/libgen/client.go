@@ -131,7 +131,8 @@ type Client struct {
 	// config by buildSourceChain in config.KnownSources order, then filtered per
 	// item by Supports so books try the md5 sources (libgen, randombook, annas) and
 	// articles try the doi sources (unpaywall, openalex, europepmc, biorxiv, rfc, nist,
-	// dagstuhl, acl, zenodo, fatcat, core, crossref, oapen, scihub, scidb) — oapen supports a
+	// dagstuhl, acl, zenodo, scielo, fao, fatcat, core, crossref, oapen, scihub, scidb) — oapen
+	// supports a
 	// DOI as well as an ISBN, since monographs carry one.
 	sources []DownloadSource
 	// partialLocks serializes downloads that share the same partial file (the
@@ -368,7 +369,8 @@ func allowedByOperator(configured []string) func(string) bool {
 // config.KnownSources order; because Download filters each source by
 // Supports(item), this single ordered slice yields the right per-item order: an
 // article (DOI-keyed) item is offered to the doi sources (unpaywall, openalex, europepmc,
-// biorxiv, rfc, nist, dagstuhl, acl, zenodo, fatcat, core, crossref, oapen, scihub, scidb),
+// biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, crossref, oapen,
+// scihub, scidb),
 // an ISBN-keyed book to the
 // open-access book sources (oapen, archive) and an md5-keyed book to the shadow
 // libraries (libgen, randombook, annas). Sources omitted from LIBGEN_MCP_SOURCES —
@@ -385,20 +387,22 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	}
 	annasLister := func() MirrorLister { return c.annasMirrors }
 	factories := map[string]func() DownloadSource{
-		"unpaywall":  func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
-		"openalex":   func() DownloadSource { return openalexSource{http: c.http} },
-		"europepmc":  func() DownloadSource { return europePMCSource{http: c.http} },
-		"biorxiv":    func() DownloadSource { return biorxivSource{http: c.http} },
-		"rfc":        func() DownloadSource { return rfcSource{} },
-		"nist":       func() DownloadSource { return nistSource{} },
-		"dagstuhl":   func() DownloadSource { return dagstuhlSource{http: c.http} },
-		"acl":        func() DownloadSource { return aclSource{} },
-		"zenodo":     func() DownloadSource { return zenodoSource{http: c.http} },
-		"scielo":     func() DownloadSource { return scieloSource{http: c.http} },
-		"fao":        func() DownloadSource { return faoSource{http: c.http} },
-		"fatcat":     func() DownloadSource { return fatcatSource{http: c.http} },
-		"core":       func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
-		"crossref":   func() DownloadSource { return crossrefSource{http: c.http} },
+		"unpaywall": func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
+		"openalex":  func() DownloadSource { return openalexSource{http: c.http} },
+		"europepmc": func() DownloadSource { return europePMCSource{http: c.http} },
+		"biorxiv":   func() DownloadSource { return biorxivSource{http: c.http} },
+		"rfc":       func() DownloadSource { return rfcSource{} },
+		"nist":      func() DownloadSource { return nistSource{} },
+		"dagstuhl":  func() DownloadSource { return dagstuhlSource{http: c.http} },
+		"acl":       func() DownloadSource { return aclSource{} },
+		"zenodo":    func() DownloadSource { return zenodoSource{http: c.http} },
+		"scielo":    func() DownloadSource { return scieloSource{http: c.http} },
+		"fao":       func() DownloadSource { return faoSource{http: c.http} },
+		"fatcat":    func() DownloadSource { return fatcatSource{http: c.http} },
+		"core":      func() DownloadSource { return coreSource{http: c.http, key: cfg.CoreKey} },
+		"crossref": func() DownloadSource {
+			return crossrefSource{http: c.http, limiter: c.enrichLimiter, email: c.enrichEmail}
+		},
 		"oapen":      func() DownloadSource { return oapenSource{http: c.http} },
 		"archive":    func() DownloadSource { return archiveSource{http: c.http} },
 		"scihub":     func() DownloadSource { return scihubSource{hosts: cfg.ScihubHosts, http: c.http} },
