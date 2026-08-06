@@ -236,12 +236,6 @@ check-manifests: ## Verify every version-bearing manifest parses and matches the
 		fi; \
 		echo "$$f: valid JSON, version matches VERSION ($$VF)"; \
 	done
-	@VF=$$(tr -d '[:space:]' < VERSION); \
-	FV=$$(sed -n 's/^ *VERSION = "\(.*\)"/\1/p' fly.toml); \
-	if [ "$$FV" != "$$VF" ]; then \
-		echo "FAIL: fly.toml build arg VERSION ($$FV) != VERSION ($$VF)"; exit 1; \
-	fi; \
-	echo "fly.toml: build arg VERSION matches VERSION ($$VF)"
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)

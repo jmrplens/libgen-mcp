@@ -10,6 +10,27 @@
     "source": "github",
     "id": "1304827801"
   },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.jmrp.io/libgen"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://{host}:{port}/",
+      "variables": {
+        "host": {
+          "description": "Hostname of your own libgen-mcp instance started with --http",
+          "placeholder": "localhost"
+        },
+        "port": {
+          "description": "Port your own libgen-mcp instance listens on",
+          "default": "8080",
+          "placeholder": "8080"
+        }
+      }
+    }
+  ],
   "packages": [
     {
       "registryType": "mcpb",

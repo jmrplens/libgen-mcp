@@ -19,7 +19,7 @@
 [![libgen-mcp MCP server](https://glama.ai/mcp/servers/jmrplens/libgen-mcp/badges/score.svg)](https://glama.ai/mcp/servers/jmrplens/libgen-mcp)
 [![smithery badge](https://smithery.ai/badge/jmrp/libgen-mcp)](https://smithery.ai/servers/jmrp/libgen-mcp)
 [![MCP Badge](https://lobehub.com/badge/mcp/jmrplens-libgen-mcp)](https://lobehub.com/mcp/jmrplens-libgen-mcp)
-[![Live on Fly.io](https://img.shields.io/badge/Live-Fly.io-8b5cf6?style=flat&logo=flydotio&logoColor=white)](https://libgen-mcp.fly.dev/health)
+[![Hosted endpoint](https://img.shields.io/badge/Hosted-mcp.jmrp.io%2Flibgen-6366f1?style=flat&logo=icloud&logoColor=white)](https://mcp.jmrp.io/)
 
 </p>
 
@@ -40,6 +40,25 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 The lowest-friction path is **Docker — no install, no Go, nothing to manage**. Pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
 
 Then just ask your assistant: _"Search Library Genesis for the Rust book."_
+
+### Try it without installing anything
+
+A public instance is hosted at **`https://mcp.jmrp.io/libgen`** — no account, no key, nothing to install. Point any HTTP-capable MCP client at it:
+
+```json
+{
+  "mcpServers": {
+    "libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+  }
+}
+```
+
+It is the fastest way to try the server, and the right way to keep using it is still **locally** (Docker or a binary, above) or through [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) — for two concrete reasons, not as a disclaimer:
+
+- **Your queries go through someone else's machine.** Running it locally means what you search for never leaves your computer.
+- **`download` cannot write to your disk from a remote server**, so it returns a link instead of a file. That is inherent to remote MCP, not a limitation of this endpoint — see [Where the file goes](docs/tools.md#where-the-file-goes-local-vs-remote).
+
+The endpoint is **stateless streamable HTTP**: `POST` is the transport, `GET` on it answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `ok`. It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers I maintain, each reachable at its own endpoint; `https://mcp.jmrp.io/servers.json` is the same list for automated clients.
 
 ## Add to your MCP client
 

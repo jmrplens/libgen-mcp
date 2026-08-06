@@ -333,14 +333,13 @@ Spanish entry in `scenariosES`, or the generator fails.
 
 ## Release Process
 
-The version lives in `VERSION` and is mirrored into four JSON manifests plus the
-`fly.toml` build arg. To cut a release:
+The version lives in `VERSION` and is mirrored into four JSON manifests. To cut a
+release:
 
 1. Bump `VERSION`.
 2. Update the version in `server.json` (both `.version` and the six release-asset
-   URLs), `mcpb/manifest.json`, `lhm.plugin.json`, `.plugin/plugin.json`, and the
-   `[build.args] VERSION` in `fly.toml`.
-3. Run `make check-manifests`. It gates all five against `VERSION`, and CI runs
+   URLs), `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`.
+3. Run `make check-manifests`. It gates all four against `VERSION`, and CI runs
    it in the `server.json` job. Add any new version-bearing manifest to
    `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
    gated, and will silently ship the previous release's number.

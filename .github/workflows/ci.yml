@@ -92,8 +92,8 @@ jobs:
       - name: Install jsonschema
         run: pip install --quiet jsonschema
       # Covers every manifest that carries the version, not just server.json:
-      # lhm.plugin.json, .plugin/plugin.json and the fly.toml build arg used to
-      # drift unnoticed because nothing in CI ever read them.
+      # lhm.plugin.json and .plugin/plugin.json used to drift unnoticed because
+      # nothing in CI ever read them.
       - name: Every version-bearing manifest matches the VERSION file
         run: make check-manifests
       - name: Validate server.json against the MCP Registry schema

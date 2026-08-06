@@ -197,6 +197,8 @@ y no fichas de MCP — instálalos por las vías descritas arriba:
 [Docker Hub](https://hub.docker.com/r/jmrplens/libgen-mcp) y
 [pkg.go.dev](https://pkg.go.dev/github.com/jmrplens/libgen-mcp).
 
+La entrada del registro declara además el [endpoint hospedado](#endpoint-hospedado-sin-instalar-nada) y la forma auto-hospedada con `--http` como `remotes`, junto a los seis paquetes de instalación, así que un cliente que lea el registro puede ofrecer cualquiera de los dos sin que copies una URL de esta página.
+
 Una ficha de registro puede ir por detrás de la última publicación; la versión
 que describe esta documentación es siempre la de
 [`VERSION`](https://github.com/jmrplens/libgen-mcp/blob/main/VERSION).
@@ -257,6 +259,27 @@ El soporte MCP de VS Code (o las extensiones Continue / Cline) lee un `mcp.json`
 	}
 }
 ```
+
+### Endpoint hospedado (sin instalar nada)
+
+Hay una instancia pública en **`https://mcp.jmrp.io/libgen`**. No necesita cuenta, ni clave, ni ningún proceso local: apunta ahí cualquier cliente MCP capaz de hablar HTTP:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+Es la forma más rápida de probar el servidor. Ejecutarlo **en local** — con Docker o con un binario, más arriba — o a través de [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) sigue siendo la mejor forma de usarlo a diario, por dos razones concretas y no como advertencia de rigor:
+
+- **Tus consultas pasan por la máquina de otra persona.** En local, lo que buscas no sale de tu ordenador. La instancia hospedada no guarda nada, pero "no guarda nada" es una promesa; "no se envió nunca" es un hecho.
+- **`download` no puede escribir en tu disco desde un servidor remoto**, así que devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero. Eso es inherente al MCP remoto, no una limitación de este endpoint — ver [Dónde acaba el fichero](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
+
+El endpoint habla el mismo HTTP en streaming sin estado que se describe más abajo: `POST` lleva el protocolo, `GET` sobre el endpoint responde `405` a propósito, y `https://mcp.jmrp.io/libgen/health` responde `ok`. Su versión sigue las releases de este repositorio, así que puede ir brevemente por detrás de una etiqueta recién publicada.
+
+Es uno de los servidores listados en **[mcp.jmrp.io](https://mcp.jmrp.io/)**, un directorio de los servidores MCP que mantiene el autor, cada uno accesible en su propio endpoint bajo el mismo dominio; [`servers.json`](https://mcp.jmrp.io/servers.json) es esa misma lista para clientes automáticos.
 
 ### Remoto (HTTP en streaming)
 
