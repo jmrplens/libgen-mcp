@@ -1,11 +1,11 @@
 ---
 title: Política de privacidad
 description: "Qué maneja libgen-mcp y a dónde va: sin telemetría, sin analítica, y cada destino de red listado herramienta por herramienta."
-datePublished: "2026-07-25"
+datePublished: "2026-08-06"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "95f71b60073cd97f"
+privacySource: "322a695e7ccf5eda"
 head:
   - tag: script
     attrs:
@@ -56,18 +56,28 @@ head:
       }
 ---
 
-**libgen-mcp** es un servidor Model Context Protocol (MCP) local. Se ejecuta
-enteramente en tu máquina y actúa como puente entre tu cliente MCP (Claude
-Desktop, Claude Code, Cursor, VS Code, …) y los mirrors públicos de Library
-Genesis. No necesita **ninguna cuenta, ningún token y ninguna credencial**. Esta
-política describe qué datos maneja el servidor y a dónde van.
+**libgen-mcp** es un servidor Model Context Protocol (MCP) que ejecutas tú. En su
+uso normal se ejecuta enteramente en tu máquina y actúa como puente entre tu
+cliente MCP (Claude Desktop, Claude Code, Cursor, VS Code, …) y los mirrors
+públicos de Library Genesis. No necesita **ninguna cuenta, ningún token y ninguna
+credencial**. Esta política describe qué datos maneja el software y a dónde van.
+
+Hay una vía distinta, descrita aparte más abajo: el endpoint público hospedado en
+`mcp.jmrp.io/libgen`, donde el software se ejecuta en la máquina de otra persona y
+no en la tuya. Ver [Endpoint hospedado](#endpoint-hospedado).
 
 ## Qué recopilamos
 
 **Nada.** El servidor no tiene telemetría, ni analítica, ni informes de fallos,
 ni backend propio. No hay ninguna cuenta que crear ni nada a lo que iniciar
-sesión. El mantenedor nunca recibe, almacena ni tiene acceso a ninguno de tus
-datos ni a tu información de uso.
+sesión. Cuando lo ejecutas tú — que es como esta documentación recomienda usarlo —
+el mantenedor nunca recibe, almacena ni tiene acceso a ninguno de tus datos ni a tu
+información de uso, porque nada se envía jamás a ningún sitio que el mantenedor
+controle.
+
+Esa última frase habla del software y se cumple lo ejecutes donde lo ejecutes. No
+habla del [endpoint hospedado](#endpoint-hospedado), donde ese mismo software corre
+en una máquina que opera el mantenedor.
 
 ## Flujos de datos
 
@@ -218,6 +228,28 @@ es igualmente opcional y está sin definir por defecto.
   `LIBGEN_MCP_READ_CACHE_TTL`). Una descarga interrumpida deja igualmente un
   fichero `.part` en el directorio de destino para que una llamada posterior
   pueda reanudarla.
+
+## Endpoint hospedado
+
+Hay una instancia pública de este servidor en `https://mcp.jmrp.io/libgen`. Usarla
+es opcional y nunca es lo predeterminado: nada la instala, y ninguna configuración
+de este repositorio apunta ahí.
+
+Lo que cambia al usarla es sencillo y conviene decirlo sin rodeos. Tus llamadas de
+herramienta — los títulos, autores, DOI e identificadores que buscas — viajan por la
+red hasta una máquina que opera el mantenedor de este proyecto, en lugar de quedarse
+en la tuya. Las peticiones a Library Genesis y a las fuentes de acceso abierto las
+hace entonces esa máquina y no la tuya, así que esos terceros ven su dirección en
+lugar de la tuya.
+
+Esa instancia se opera como parte de [mcp.jmrp.io](https://mcp.jmrp.io/) y su
+tratamiento de las peticiones se rige allí, no por esta política, que describe el
+software. Este documento solo puede contarte qué hace el software; no puede prometer
+nada en nombre de un servidor que no ejecutas tú.
+
+Si lo que buscas es sensible para ti, ejecuta el servidor en local. Ese es todo el
+consejo, y es la razón de que todas las vías de instalación de la documentación
+lleven ahí primero.
 
 ## Retención y cesión de datos
 

@@ -256,6 +256,27 @@ VS Code's MCP support (or the Continue / Cline extensions) reads an `mcp.json` w
 }
 ```
 
+### Hosted endpoint (no install)
+
+A public instance runs at **`https://mcp.jmrp.io/libgen`**. It needs no account, no key and no local process — point any HTTP-capable MCP client at it:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+It is the fastest way to try the server. Running it **locally** — Docker or a binary, above — or through [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) remains the better way to keep using it, for two concrete reasons rather than as a disclaimer:
+
+- **Your queries travel through someone else's machine.** Locally, what you search for never leaves your computer. The hosted instance stores nothing, but "stores nothing" is a promise; "never sent" is a fact.
+- **`download` cannot write to your disk from a remote server**, so it returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. That is inherent to remote MCP rather than a property of this endpoint — see [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote).
+
+The endpoint speaks the same stateless streamable HTTP described below: `POST` carries the protocol, `GET` on the endpoint answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `ok`. Its version tracks the releases of this repository, so it can briefly lag a fresh tag.
+
+It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers the author maintains, each reachable at its own endpoint under the same domain; [`servers.json`](https://mcp.jmrp.io/servers.json) is the same list for automated clients.
+
 ### Remote (streamable HTTP)
 
 To run the server centrally and connect over HTTP instead of stdio, start it with an address and point HTTP-capable clients at it:
