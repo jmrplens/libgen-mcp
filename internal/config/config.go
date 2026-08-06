@@ -103,6 +103,22 @@ type Config struct {
 	// Archive plus the open-access providers) are consulted. LIBGEN_MCP_EXTRA_SOURCES,
 	// default auto.
 	ExtraSources ExtraSourcesMode
+	// AllowPrivateAddresses lifts the block on connecting to loopback, link-local,
+	// private and carrier-grade-NAT addresses. LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES, a
+	// bool, default FALSE.
+	//
+	// The block exists because almost every URL this server fetches was supplied by
+	// a third party — a publisher's link deposited with Crossref, a repository's
+	// download URL republished by an open-access index, a citation_pdf_url scraped
+	// off a page — so without it, anyone able to place a URL in one of those indexes
+	// can aim this server at the operator's LAN or at a cloud instance-metadata
+	// endpoint (see internal/netguard).
+	//
+	// The one legitimate reason to set it is an operator running their own mirror on
+	// their own network and pointing LIBGEN_MIRROR at it. Setting it re-opens the
+	// whole class for every source at once, which is why it is off by default and
+	// says so in its name.
+	AllowPrivateAddresses bool
 }
 
 // ExtraSourcesMode selects when the extra searchers (Anna's Archive plus the
@@ -351,6 +367,7 @@ func loadBools(cfg *Config) error {
 		{"LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled},
 		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
 		{"LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
+		{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", &cfg.AllowPrivateAddresses},
 	} {
 		if err := envBool(b.key, b.dst); err != nil {
 			return err

@@ -45,6 +45,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: Staged waits between attempts to get a download to begin (resolve/connect/first byte); N waits = N+1 attempts (~60s by default). (default: 5s,5s,5s,10s,10s,10s,15s)
 - LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: Progress-resetting stall window while streaming: a download is cut only if no bytes arrive for this long, so a slow-but-progressing transfer is never killed. (default: 60s)
 - LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE: Give every download source the full start-retry schedule. (default: false)
+- LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES: Allow outbound connections to loopback, link-local, private and carrier-grade-NAT addresses. (default: false)
 - LIBGEN_MCP_UNPAYWALL_EMAIL: Contact email for the Unpaywall API (article/DOI downloads). (default: empty (unpaywall disabled))
 - LIBGEN_MCP_SCIHUB_HOSTS: Ordered Sci-Hub mirror hosts, tried in order until one serves an article. (default: sci-hub.ee, sci-hub.se, sci-hub.st, sci-hub.ru, sci-hub.wf)
 - LIBGEN_MCP_ANNAS_KEY: Optional Anna's Archive membership key enabling the member fast-download API for books. (default: empty (keyless IPFS))

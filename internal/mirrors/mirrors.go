@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 const (
@@ -190,7 +191,7 @@ func NewManagerFor(f Family, cfg *config.Config) (*Manager, error) {
 		SourceURL: f.SourceURL,
 		CachePath: filepath.Join(cacheDir, "libgen-mcp", f.CacheFile),
 		Preferred: preferred,
-		HTTP:      &http.Client{Timeout: cfg.Timeout},
+		HTTP:      netguard.Client(cfg.Timeout, cfg.AllowPrivateAddresses),
 		family:    f,
 	}, nil
 }

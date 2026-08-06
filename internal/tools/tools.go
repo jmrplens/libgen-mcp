@@ -146,6 +146,11 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		opt(&o)
 	}
 	truthy := true
+	// The discovery providers are built by name with no config in reach, so the
+	// deployment's private-address policy is applied to the package once here,
+	// before the first provider is constructed. Without this call they would keep
+	// their safe default and an operator's opt-out would silently not reach them.
+	discovery.SetAllowPrivateAddresses(cfg.AllowPrivateAddresses)
 	// One lister for both tools, so a single discovery and a single cache serve
 	// the search escalation and the get_details fallback instead of each building
 	// its own manager.

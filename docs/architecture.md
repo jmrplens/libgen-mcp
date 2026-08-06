@@ -12,6 +12,35 @@ Page-level requests (`search`, `get_details`, and the LibGen link resolution use
 downloads) go through a single client that makes the mirror family look like one reliable
 endpoint.
 
+### Outbound address policy
+
+Almost every URL this server fetches was chosen by someone else: a publisher's full-text link
+deposited with Crossref, a repository's download URL republished by Unpaywall, OpenAlex or
+CORE, a `citation_pdf_url` scraped off a publisher page. Nothing in that pipeline stops one of
+those URLs from naming the loopback interface, the operator's LAN, or a cloud
+instance-metadata endpoint — and if it did, the server would be acting as a proxy into a
+network the depositor could never reach directly. That is server-side request forgery, and
+`internal/netguard` is where it is refused.
+
+The check lives in the dialer's `Control` hook rather than on the URL, because only the dialer
+sees what the name actually resolved to. A URL-level check is defeated by a public hostname
+with a private `A` record and by DNS rebinding; the `Control` hook is handed the concrete IP
+microseconds before `connect`. Blocked: loopback, `0.0.0.0/8`, the IPv4 broadcast address,
+link-local unicast and multicast (`169.254.0.0/16`, which contains `169.254.169.254`, and
+`fe80::/10`), every multicast scope, RFC 1918 and RFC 4193 private space, and RFC 6598
+carrier-grade NAT — each also in its IPv4-mapped IPv6 disguise.
+
+Because the policy is installed on the shared `Transport`, every download source, every
+liveness probe, every discovery provider and every mirror lookup inherits it at once, rather
+than each having to remember. A complementary redirect policy bounds the chain at five hops
+and strips `Authorization` and `Cookie` whenever a redirect changes host — which is the one
+protection the dialer cannot give, since `net/http` keeps those headers for any _subdomain_ of
+the original.
+
+`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES=true` lifts it, for the one legitimate case: an operator
+running their own mirror on their own network. It is off by default and applies to every
+source at once, in both directions.
+
 ### Mirror discovery
 
 Candidate mirrors are supplied by a `Manager`:
