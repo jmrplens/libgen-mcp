@@ -52,11 +52,11 @@ const maxRedirects = 5
 // more reachable from the public internet than an RFC 1918 one.
 var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10")
 
-// sensitiveHeaders are stripped when a redirect changes host. net/http already
-// drops them when the redirect leaves the DOMAIN, but it keeps them for any
-// subdomain of the original — so a redirect from example.com to
-// internal.example.com still carries the Authorization header. Any host change
-// is treated as reason enough here.
+// sensitiveHeaders are stripped when a redirect leaves the origin. net/http
+// already drops them when the redirect leaves the DOMAIN, but it keeps them for
+// any subdomain of the original — so a redirect from example.com to
+// internal.example.com still carries the Authorization header. Any change of
+// scheme, host or port is treated as reason enough here.
 var sensitiveHeaders = []string{"Authorization", "Proxy-Authorization", "Cookie", "Cookie2", "Www-Authenticate"}
 
 // Blocked reports whether addr is one this server must not be talked into
@@ -147,7 +147,7 @@ func Transport(allowPrivate bool) *http.Transport {
 // refuse it anyway. What this adds is a legible error naming the redirect instead
 // of an opaque dial failure, and the one protection the dialer genuinely cannot
 // give: removing the Authorization header before it follows a redirect to a
-// different host.
+// different origin.
 //
 // It takes allowPrivate for the same reason the dialer does, and getting that
 // wrong is not theoretical: while a package-level policy, this refused redirects
@@ -165,7 +165,7 @@ func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 				return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
 			}
 		}
-		if len(via) > 0 && !sameHost(via[len(via)-1].URL, req.URL) {
+		if len(via) > 0 && !sameOrigin(via[len(via)-1].URL, req.URL) {
 			for _, h := range sensitiveHeaders {
 				req.Header.Del(h)
 			}
@@ -174,14 +174,39 @@ func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 	}
 }
 
-// sameHost reports whether two URLs address the same host, compared exactly:
-// a subdomain is a different host, because "is a subdomain of" is not "is
-// trusted by".
-func sameHost(a, b *url.URL) bool {
+// sameOrigin reports whether two URLs address the same service, comparing scheme,
+// host AND port. All three matter for a credential:
+//
+//   - a subdomain is a different host, because "is a subdomain of" is not "is
+//     trusted by";
+//   - a different port on the same host is a different service, and there is no
+//     reason the one on :8080 should receive the key meant for the one on :443;
+//   - a change of scheme is the worst of the three, because https → http puts the
+//     credential on the wire in cleartext.
+//
+// Ports are compared after defaulting, so https://example.org and
+// https://example.org:443 are correctly one origin rather than two.
+func sameOrigin(a, b *url.URL) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.Hostname() == b.Hostname()
+	return a.Scheme == b.Scheme && a.Hostname() == b.Hostname() && effectivePort(a) == effectivePort(b)
+}
+
+// effectivePort returns the URL's port, filling in the scheme's default when it is
+// left implicit so an explicit :443 and an omitted one compare equal.
+func effectivePort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch u.Scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
 }
 
 // Client builds an http.Client with the guarded Transport and redirect policy.

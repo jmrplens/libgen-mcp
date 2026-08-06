@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -81,9 +82,12 @@ func TestBlockedRejectsInvalidAddress(t *testing.T) {
 // with it lifted (see SetAllowPrivateForTest) — their fixtures are all on
 // loopback.
 func TestClientRefusesLoopbackServer(t *testing.T) {
-	var reached bool
+	// atomic, because the handler runs on the server's goroutine: a plain bool read
+	// from the test goroutine is a data race, and in the failure case — the one this
+	// test exists to catch — it could read stale and pass.
+	var reached atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		reached = true
+		reached.Store(true)
 		_, _ = io.WriteString(w, "%PDF-1.7")
 	}))
 	defer srv.Close()
@@ -96,7 +100,7 @@ func TestClientRefusesLoopbackServer(t *testing.T) {
 	if !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("error %v is not ErrBlockedAddress", err)
 	}
-	if reached {
+	if reached.Load() {
 		t.Error("the request reached the server; the dialer let a loopback connection through")
 	}
 }
@@ -142,7 +146,8 @@ func TestCheckRedirectRefusesPrivateTarget(t *testing.T) {
 	req := &http.Request{URL: mustParse(t, "http://169.254.169.254/latest/meta-data/")}
 	err := CheckRedirect(false)(req, []*http.Request{{URL: mustParse(t, "https://publisher.example.org/a.pdf")}})
 	if !errors.Is(err, ErrBlockedAddress) {
-		t.Errorf("error %v is not ErrBlockedAddress", err)
+		// Fatal, not Error: a nil err here would panic the message assertion below.
+		t.Fatalf("error %v is not ErrBlockedAddress", err)
 	}
 	if !strings.Contains(err.Error(), "169.254.169.254") {
 		t.Errorf("error = %q, want it to name the redirect target", err)
@@ -162,12 +167,13 @@ func TestCheckRedirectBoundsTheChain(t *testing.T) {
 	}
 }
 
-// TestCheckRedirectStripsCredentialsAcrossHosts pins the one protection the
+// TestCheckRedirectStripsCredentialsAcrossOrigins pins the one protection the
 // dialer cannot give. net/http keeps the Authorization header when a redirect
 // lands on a SUBDOMAIN of the original host, so a publisher API that redirects to
-// its own internal host would forward the caller's key; any host change is
-// treated as reason enough here.
-func TestCheckRedirectStripsCredentialsAcrossHosts(t *testing.T) {
+// its own internal host would forward the caller's key. Scheme and port count too:
+// another port is another service, and https -> http would put the credential on
+// the wire in cleartext.
+func TestCheckRedirectStripsCredentialsAcrossOrigins(t *testing.T) {
 	tests := []struct {
 		name       string
 		from, to   string
@@ -176,6 +182,11 @@ func TestCheckRedirectStripsCredentialsAcrossHosts(t *testing.T) {
 		{"same host keeps it", "https://api.example.org/a", "https://api.example.org/b", true},
 		{"subdomain loses it", "https://example.org/a", "https://internal.example.org/b", false},
 		{"different host loses it", "https://api.example.org/a", "https://elsewhere.test/b", false},
+		// Port and scheme are part of the origin: another port is another service,
+		// and https -> http would put the credential on the wire in cleartext.
+		{"different port loses it", "https://api.example.org/a", "https://api.example.org:8443/b", false},
+		{"downgrade to http loses it", "https://api.example.org/a", "http://api.example.org/b", false},
+		{"explicit default port is the same origin", "https://api.example.org/a", "https://api.example.org:443/b", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -229,7 +240,14 @@ func TestControlIsAbsentWhenPrivateIsAllowed(t *testing.T) {
 		t.Errorf("control error %v is not ErrBlockedAddress", err)
 	}
 	if err := control(false)("tcp", "not-an-address", nil); !errors.Is(err, ErrBlockedAddress) {
-		t.Errorf("an unparseable destination must be refused, got %v", err)
+		t.Errorf("a destination with no port must be refused, got %v", err)
+	}
+	// A destination that splits cleanly but is not an IP literal reaches the other
+	// refusal branch. Control is only ever handed resolved addresses, so this should
+	// be unreachable in practice — which is exactly why it must be pinned rather
+	// than assumed.
+	if err := control(false)("tcp", "example.org:443", nil); !errors.Is(err, ErrBlockedAddress) {
+		t.Errorf("a non-literal destination must be refused, got %v", err)
 	}
 	if err := control(false)("tcp", "104.18.32.7:443", nil); err != nil {
 		t.Errorf("control error = %v, want a public address permitted", err)
