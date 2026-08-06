@@ -273,7 +273,7 @@ Hay una instancia pública en **`https://mcp.jmrp.io/libgen`**. No necesita cuen
 Es la forma más rápida de probar el servidor. Ejecutarlo **en local** — con Docker o con un binario, más arriba — o a través de [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) sigue siendo la mejor forma de usarlo a diario, por dos razones concretas y no como advertencia de rigor:
 
 - **Tus consultas pasan por la máquina de otra persona.** En local, lo que buscas no sale de tu ordenador. La instancia hospedada no guarda nada, pero "no guarda nada" es una promesa; "no se envió nunca" es un hecho.
-- **`download` no puede escribir en tu disco desde un servidor remoto**, así que devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero. Eso es inherente al MCP remoto, no una limitación de este endpoint — ver [Dónde acaba el fichero](/libgen-mcp/es/tools/#dónde-acaba-el-fichero-local-vs-remoto).
+- **`download` no puede escribir en tu disco desde un servidor remoto**, así que devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero. Eso es inherente al MCP remoto, no una limitación de este endpoint — ver [Dónde acaba el fichero](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
 
 El endpoint habla el mismo HTTP en streaming sin estado que se describe más abajo: `POST` lleva el protocolo, `GET` sobre el endpoint responde `405` a propósito, y `https://mcp.jmrp.io/libgen/health` responde `ok`. Su versión sigue las releases de este repositorio, así que puede ir brevemente por detrás de una etiqueta recién publicada.
 
