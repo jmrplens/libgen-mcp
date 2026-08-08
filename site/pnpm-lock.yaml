@@ -45,6 +45,9 @@ importers:
       htmlhint:
         specifier: ^1.9.2
         version: 1.9.2
+      js-yaml:
+        specifier: 4.3.0
+        version: 4.3.0
       pa11y-ci:
         specifier: ^4.1.1
         version: 4.1.1(typescript@6.0.3)
