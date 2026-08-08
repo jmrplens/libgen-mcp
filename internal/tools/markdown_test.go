@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
@@ -127,7 +128,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 			Downloads: []libgen.DownloadOption{{Label: "GET", URL: "https://mirror/dl/1"}},
 		}},
 	}
-	out.NextSteps = searchNextSteps(out, false)
+	out.NextSteps = searchNextSteps(out, false, config.ExtraSourcesAuto)
 
 	md := renderSearchMarkdown(out)
 	if !strings.Contains(md, "Download links") {
@@ -146,7 +147,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 	if resultsHaveLinks(noLinks.Results) {
 		t.Fatal("fixture should have no links")
 	}
-	if strings.Contains(strings.Join(searchNextSteps(noLinks, false), "\n"), "download links") {
+	if strings.Contains(strings.Join(searchNextSteps(noLinks, false, config.ExtraSourcesAuto), "\n"), "download links") {
 		t.Error("next_steps should not mention download links when results carry none")
 	}
 }

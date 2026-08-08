@@ -1,0 +1,133 @@
+{
+  "best_oa_location": {
+    "endpoint_id": null,
+    "evidence": "deprecated",
+    "host_type": "publisher",
+    "is_best": true,
+    "license": null,
+    "oa_date": "2011-03-01",
+    "pmh_id": null,
+    "repository_institution": null,
+    "updated": "deprecated",
+    "url": "http://www.cell.com/article/S0092867411001279/pdf",
+    "url_for_landing_page": "https://doi.org/10.1016/j.cell.2011.02.013",
+    "url_for_pdf": "http://www.cell.com/article/S0092867411001279/pdf",
+    "version": "publishedVersion"
+  },
+  "data_standard": 2,
+  "doi": "10.1016/j.cell.2011.02.013",
+  "doi_url": "https://doi.org/10.1016/j.cell.2011.02.013",
+  "first_oa_location": {
+    "endpoint_id": null,
+    "evidence": "deprecated",
+    "host_type": "publisher",
+    "is_best": true,
+    "license": null,
+    "oa_date": "2011-03-01",
+    "pmh_id": null,
+    "repository_institution": null,
+    "updated": "deprecated",
+    "url": "http://www.cell.com/article/S0092867411001279/pdf",
+    "url_for_landing_page": "https://doi.org/10.1016/j.cell.2011.02.013",
+    "url_for_pdf": "http://www.cell.com/article/S0092867411001279/pdf",
+    "version": "publishedVersion"
+  },
+  "genre": "journal-article",
+  "has_repository_copy": true,
+  "is_oa": true,
+  "is_paratext": false,
+  "journal_is_in_doaj": false,
+  "journal_is_oa": false,
+  "journal_issn_l": "0092-8674",
+  "journal_issns": "0092-8674,1097-4172",
+  "journal_name": "Cell",
+  "oa_locations": [
+    {
+      "endpoint_id": null,
+      "evidence": "deprecated",
+      "host_type": "publisher",
+      "is_best": true,
+      "license": null,
+      "oa_date": "2011-03-01",
+      "pmh_id": null,
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "http://www.cell.com/article/S0092867411001279/pdf",
+      "url_for_landing_page": "https://doi.org/10.1016/j.cell.2011.02.013",
+      "url_for_pdf": "http://www.cell.com/article/S0092867411001279/pdf",
+      "version": "publishedVersion"
+    },
+    {
+      "endpoint_id": null,
+      "evidence": "deprecated",
+      "host_type": null,
+      "is_best": false,
+      "license": "cc-by",
+      "oa_date": "2011-03-01",
+      "pmh_id": null,
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "http://www.newpdf.com",
+      "url_for_landing_page": "http://www.newlandingpage.org",
+      "url_for_pdf": "http://www.newpdf.com",
+      "version": "submittedVersion"
+    },
+    {
+      "endpoint_id": "7760ae59248d04d82fd",
+      "evidence": "deprecated",
+      "host_type": "repository",
+      "is_best": false,
+      "license": null,
+      "oa_date": "2011-03-01",
+      "pmh_id": "oai:infoscience.epfl.ch:171696",
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "http://infoscience.epfl.ch/record/171696",
+      "url_for_landing_page": "http://infoscience.epfl.ch/record/171696",
+      "url_for_pdf": null,
+      "version": "submittedVersion"
+    },
+    {
+      "endpoint_id": "7760ae59248d04d82fd",
+      "evidence": "deprecated",
+      "host_type": "repository",
+      "is_best": false,
+      "license": "cc-by-nc-nd",
+      "oa_date": "2011-03-01",
+      "pmh_id": "oai:infoscience.tind.io:171696",
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "https://infoscience.epfl.ch/handle/20.500.14299/74402",
+      "url_for_landing_page": "https://infoscience.epfl.ch/handle/20.500.14299/74402",
+      "url_for_pdf": null,
+      "version": "submittedVersion"
+    }
+  ],
+  "oa_locations_embargoed": [],
+  "oa_status": "bronze",
+  "published_date": "2011-03-01",
+  "publisher": "Elsevier BV",
+  "title": "Hallmarks of Cancer: The Next Generation",
+  "updated": "2026-02-09T15:04:13Z",
+  "year": 2011,
+  "z_authors": [
+    {
+      "author_position": "first",
+      "is_corresponding": true,
+      "raw_affiliation_strings": [
+        "The Swiss Institute for Experimental Cancer Research (ISREC), School of Life Sciences, EPFL, Lausanne CH-1015, Switzerland. dh@epfl.ch",
+        "The Department of Biochemistry & Biophysics, UCSF, San Francisco, CA 94158, USA",
+        "The Swiss Institute for Experimental Cancer Research (ISREC), School of Life Sciences, EPFL, Lausanne CH-1015, Switzerland"
+      ],
+      "raw_author_name": "Douglas Hanahan"
+    },
+    {
+      "author_position": "last",
+      "is_corresponding": false,
+      "raw_affiliation_strings": [
+        "Whitehead Institute for Biomedical Research, Ludwig/MIT Center for Molecular Oncology, and MIT Department of Biology, Cambridge, MA 02142, USA"
+      ],
+      "raw_author_name": "Robert A. Weinberg"
+    }
+  ]
+}

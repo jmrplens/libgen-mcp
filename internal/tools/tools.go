@@ -504,22 +504,16 @@ func resultsHaveLinks(results []libgen.Result) bool {
 // concrete, ready-to-run example that uses the first result's real identifier so
 // the model can pivot to get_details/download without guessing the argument shape.
 // On zero results it returns recovery suggestions instead.
-func searchNextSteps(out SearchOutput, extrasRan bool) []string {
+//
+// policy is the DEPLOYMENT's extra_sources setting, not the mode this call ran
+// under, because the two answer different questions: the mode says whether the
+// extra searchers ran, the policy says whether they ever can.
+func searchNextSteps(out SearchOutput, extrasRan bool, policy config.ExtraSourcesMode) []string {
 	if len(out.Results) == 0 {
 		steps := []string{
 			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
 				strings.Join(libgen.TopicNames(), ", ") + ".",
-		}
-		// The most effective recovery from an empty catalog is to look outside it,
-		// so say so — but only when it has not already happened, or the advice is
-		// to retry something that just returned nothing.
-		if extrasRan {
-			steps = append(steps, "Anna's Archive and the open-access providers were searched too and also "+
-				"returned nothing; report that the wider search came up empty rather than retrying it unchanged.")
-		} else {
-			steps = append(steps, "The search did not look beyond the Library Genesis catalog. Retry with "+
-				"extra_sources=\"always\" to also search Anna's Archive, arXiv, Crossref, OpenLibrary, "+
-				"Project Gutenberg, dblp, PubMed and ERIC.")
+			emptySearchEscalationStep(extrasRan, policy),
 		}
 		return append(steps,
 			"Tell the user nothing was found; do not present titles, authors or download links that were not returned.")
@@ -547,6 +541,35 @@ func searchNextSteps(out SearchOutput, extrasRan bool) []string {
 		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
 	}
 	return steps
+}
+
+// emptySearchEscalationStep says what looking beyond the catalog can still do for
+// an empty result, which depends on both whether the extra searchers ran and
+// whether this deployment permits them to.
+//
+// The escalation advice used to be gated on extrasRan alone. Under
+// LIBGEN_MCP_EXTRA_SOURCES=never that flag is false forever, so every empty search
+// recommended extra_sources="always" — an argument resolveExtraMode discards under
+// that policy. The model complied, the server ignored it, and the identical
+// recommendation came back: a loop broken in a live run only because the model gave
+// up after the second try. A server must not advise an argument it will not honor.
+func emptySearchEscalationStep(extrasRan bool, policy config.ExtraSourcesMode) string {
+	switch {
+	case extrasRan:
+		return "Anna's Archive and the open-access providers were searched too and also " +
+			"returned nothing; report that the wider search came up empty rather than retrying it unchanged."
+	case policy == config.ExtraSourcesNever:
+		// The value the model must not reach for is deliberately not quoted here:
+		// naming it is what invites it to be tried.
+		return "This deployment restricts search to the Library Genesis catalog. Anna's Archive and the " +
+			"open-access providers cannot be reached from it, and the extra_sources argument is ignored on " +
+			"every call, so no retry can widen this search. Report that the catalog holds no match; suggest " +
+			"a different query or topic if one is plausible."
+	default:
+		return "The search did not look beyond the Library Genesis catalog. Retry with " +
+			"extra_sources=\"always\" to also search Anna's Archive, arXiv, Crossref, OpenLibrary, " +
+			"Project Gutenberg, dblp, PubMed and ERIC."
+	}
 }
 
 // openAccessStep says how the two result lists differ, and warns when the
@@ -637,12 +660,103 @@ func downloadNextSteps(res libgen.DownloadResult) []string {
 	}
 }
 
+// downloadFailure turns a failure of the source chain into a tool result the model
+// can act on: an IsError result carrying the joined per-source errors verbatim AND
+// the recovery guidance every other result on this surface already carries.
+//
+// It exists because the bare error was the one dead end on the surface. A live run
+// pinned source="unpaywall" for an article, got back nothing but
+// `source unpaywall: mirror returned an HTML page instead of the file`, and — with
+// no advice attached — worked through crossref and openalex by hand, one call each,
+// before dropping the pin and letting the chain fail over to europepmc on the
+// fourth try. Three calls and 3.8 seconds spent rediscovering what the result
+// should have said.
+func downloadFailure(item libgen.Item, err error, policy config.ExtraSourcesMode) (*mcp.CallToolResult, DownloadOutput, error) {
+	steps := downloadFailureSteps(item, err, policy)
+	out := DownloadOutput{NextSteps: steps}
+	var b strings.Builder
+	b.WriteString("Download failed — no file was saved.\n\n")
+	// The message is assembled from third-party text (a mirror's own words), so it
+	// is fenced rather than interpolated into the Markdown.
+	b.WriteString(fencedBlock("", err.Error()))
+	b.WriteString("\n")
+	writeNextSteps(&b, steps)
+	return &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
+	}, out, nil
+}
+
+// downloadFailureSteps builds the recovery guidance for a failed download.
+//
+// A pinned source that fails and a whole chain that is exhausted are opposite
+// situations and get opposite advice: the first has an untried chain behind it and
+// the fix is one call away, while the second has nothing left to pin and re-running
+// it with a source can only make things worse.
+func downloadFailureSteps(item libgen.Item, err error, policy config.ExtraSourcesMode) []string {
+	var steps []string
+	if src := strings.TrimSpace(item.Source); src != "" {
+		steps = append(steps, fmt.Sprintf("This call pinned source=%q, so ONLY that source was tried and this failure says "+
+			"nothing about the others. Call download again with the same identifier and NO source field — the chain then "+
+			"tries every source that can serve it and fails over automatically. Do not try the remaining sources one at a "+
+			"time by hand.", src))
+	} else {
+		steps = append(steps, "Every download source that can serve this identifier was already tried and each one failed, "+
+			"so there is nothing left to pin: do not retry this with a source field, and do not repeat the identical call.",
+			retryIdentifierStep(item, policy))
+	}
+	if errors.Is(err, libgen.ErrSourceUnavailable) {
+		steps = append(steps, "At least one source was unreachable rather than answering that it does not hold the item, "+
+			"so part of this failure may be transient; one retry after a short wait is reasonable before giving up.")
+	}
+	return append(steps, "Tell the user the download failed and what the reason above says. Do not present a download link "+
+		"as if it were the file, and never state or imply that anything was saved.")
+}
+
+// retryIdentifierStep names the check worth making once the whole chain has failed,
+// which differs by identifier: an article is most often a wrong or unindexed DOI,
+// while a book usually has another copy under a different md5.
+//
+// policy is the deployment's extra_sources setting, for the same reason
+// emptySearchEscalationStep takes it: a server that will discard the argument must
+// not be the one recommending it.
+func retryIdentifierStep(item libgen.Item, policy config.ExtraSourcesMode) string {
+	switch {
+	case item.DOI != "":
+		return fmt.Sprintf("Confirm the identifier resolves at all by calling get_details with {\"doi\":%q}; if no record "+
+			"comes back the doi is wrong, not the download. If it is right, the article is simply not obtainable from any "+
+			"configured source — %s", item.DOI, searchWiderClause(policy))
+	case item.MD5 != "":
+		return fmt.Sprintf("Call search again for the same work and download a different copy: another edition or scan of "+
+			"the same book carries a different md5 and is served by a different file. Only retry {\"md5\":%q} unchanged if "+
+			"the failure above looks transient.", item.MD5)
+	default:
+		return "Call search for the same work and download a result by its md5 instead: an isbn only matches the openly " +
+			"licensed book sources, and a catalog copy is usually available under an md5."
+	}
+}
+
+// searchWiderClause completes the fall-back-to-search advice with the widest
+// search this deployment can actually perform.
+func searchWiderClause(policy config.ExtraSourcesMode) string {
+	if policy == config.ExtraSourcesNever {
+		return "search the catalog for the title, and tell the user this deployment cannot look beyond it."
+	}
+	return "search for the title with extra_sources=\"always\" to find a copy the catalog or the open-access providers hold."
+}
+
 // withRecovery wraps a typed MCP tool handler to make it panic-safe and
 // observable. A panic is recovered and converted into an IsError tool result
 // (with a nil Go error and a zero-value output) so it never escapes to kill the
 // stdio JSON-RPC session. Every invocation, on any path, emits a ToolCall
 // metric line with the elapsed time; a recovered panic is reported to that
 // metric as a non-nil error so failures stay visible.
+//
+// A handler that deliberately reports a failure as an IsError RESULT rather than a
+// Go error — which is how a tool failure the model should act on is expressed, and
+// what the download chain's failure path does — is metered as a failure too.
+// Otherwise every such call would be logged as "tool call completed" and the logs
+// would show a clean run over a tool that returned nothing but errors.
 func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (result *mcp.CallToolResult, output Out, err error) {
 		start := time.Now()
@@ -659,10 +773,35 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 				logging.ToolCall(name, start, fmt.Errorf("tool %q panicked: %v", name, r))
 				return
 			}
-			logging.ToolCall(name, start, err)
+			logging.ToolCall(name, start, orResultError(err, result))
 		}()
 		return h(ctx, req, in)
 	}
+}
+
+// orResultError reports the error a tool call should be metered with: the
+// handler's own error when it returned one, otherwise a synthesized error when it
+// returned an IsError result instead, and nil when the call succeeded.
+func orResultError(err error, result *mcp.CallToolResult) error {
+	if err != nil || result == nil || !result.IsError {
+		return err
+	}
+	return errors.New(resultText(result))
+}
+
+// resultText joins the text content blocks of a result, so a failure result can be
+// metered with the message it actually carries.
+func resultText(result *mcp.CallToolResult) string {
+	var parts []string
+	for _, c := range result.Content {
+		if tc, ok := c.(*mcp.TextContent); ok && tc.Text != "" {
+			parts = append(parts, tc.Text)
+		}
+	}
+	if len(parts) == 0 {
+		return "tool reported an error result with no message"
+	}
+	return strings.Join(parts, "\n")
 }
 
 func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
@@ -702,7 +841,7 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 			return nil, zero, searchErr
 		}
 
-		out.NextSteps = searchNextSteps(out, extrasRan)
+		out.NextSteps = searchNextSteps(out, extrasRan, cfg.ExtraSources)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
 }
@@ -1301,7 +1440,7 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 		// A remote server cannot write to the client's disk, so it always resolves
 		// a link; a local server honors resolve_only per call.
 		if remote || in.ResolveOnly {
-			return resolveDownload(ctx, c, call.item, in.Filename)
+			return resolveDownload(ctx, c, call.item, in.Filename, cfg.ExtraSources)
 		}
 		return localDownload(ctx, req, call)
 	}
@@ -1382,7 +1521,6 @@ func downloadDir(cfg *config.Config, in DownloadInput) string {
 // AND no size probe — so the default/headless path is byte-identical to today. A
 // decline returns a non-error result carrying the resolved link, and writes nothing.
 func localDownload(ctx context.Context, req *mcp.CallToolRequest, d *downloadCall) (*mcp.CallToolResult, DownloadOutput, error) {
-	var zero DownloadOutput
 	dir := downloadDir(d.cfg, d.in)
 	if d.confirm {
 		proceed, declinedRes, declinedOut := readDownloadConfirm(ctx, req, d)
@@ -1392,7 +1530,7 @@ func localDownload(ctx context.Context, req *mcp.CallToolRequest, d *downloadCal
 	}
 	res, err := d.client.DownloadItem(ctx, d.item, dir, d.in.Filename, progressNotifier(ctx, req))
 	if err != nil {
-		return nil, zero, err
+		return downloadFailure(d.item, err, d.cfg.ExtraSources)
 	}
 	out := DownloadOutput{NextSteps: downloadNextSteps(*res), DownloadResult: *res}
 	return markdownResult(renderDownloadMarkdown(out)), out, nil
@@ -1402,11 +1540,10 @@ func localDownload(ctx context.Context, req *mcp.CallToolRequest, d *downloadCal
 // without fetching, and returns it as a resource_link content block plus
 // structured output, so a remote client or an agent's own fetch tool can retrieve
 // the file itself.
-func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, filename string) (*mcp.CallToolResult, DownloadOutput, error) {
-	var zero DownloadOutput
+func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, filename string, policy config.ExtraSourcesMode) (*mcp.CallToolResult, DownloadOutput, error) {
 	r, err := c.ResolveLink(ctx, item)
 	if err != nil {
-		return nil, zero, err
+		return downloadFailure(item, err, policy)
 	}
 	link := ResolvedLink{
 		URL:       r.URL,

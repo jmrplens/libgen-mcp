@@ -241,15 +241,17 @@ func TestUnpaywall_OALocationsAnyPDF(t *testing.T) {
 	}
 }
 
-// TestUnpaywall_LandingURLLastResort verifies that an OA record exposing no
-// url_for_pdf anywhere falls back to best_oa_location.url (the landing page) rather
-// than failing, since that URL commonly redirects to the article file.
-func TestUnpaywall_LandingURLLastResort(t *testing.T) {
+// TestUnpaywall_FileLikeURLLastResort verifies that an OA record exposing no
+// url_for_pdf anywhere still resolves when a location's plain url looks like a
+// file, and prefers the published/publisher copy over a repository one.
+func TestUnpaywall_FileLikeURLLastResort(t *testing.T) {
 	const body = `{
 	  "is_oa": true,
 	  "best_oa_location": {"url_for_pdf": null, "url": "https://landing.example/article"},
 	  "oa_locations": [
-	    {"url_for_pdf": null, "url": "https://landing.example/article", "host_type": "publisher", "version": "publishedVersion"}
+	    {"url_for_pdf": null, "url": "https://landing.example/article", "host_type": "publisher", "version": "publishedVersion"},
+	    {"url_for_pdf": null, "url": "https://repo.example/record/1/preprint.pdf", "host_type": "repository", "version": "submittedVersion"},
+	    {"url_for_pdf": null, "url": "https://publisher.example/article/S1/pdf", "host_type": "publisher", "version": "publishedVersion"}
 	  ]
 	}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -263,16 +265,86 @@ func TestUnpaywall_LandingURLLastResort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if res.FileURL != "https://landing.example/article" {
-		t.Errorf("FileURL = %q, want the landing-page fallback", res.FileURL)
+	if res.FileURL != "https://publisher.example/article/S1/pdf" {
+		t.Errorf("FileURL = %q, want the published file-like location", res.FileURL)
+	}
+}
+
+// TestUnpaywall_PLOSLandingOnlyIsACleanMiss replays the real Unpaywall record for
+// 10.1371/journal.pone.0000308 — the DOI whose download the evaluator watched fail
+// twice — captured verbatim from the live API. None of its four OA locations
+// carries a url_for_pdf, and its best location's url is the bare https://doi.org/…
+// resolver, so the only honest answer is a clean miss: following that URL costs a
+// three-hop redirect chain and yields a 170 kB HTML article page the download layer
+// then has to reject.
+func TestUnpaywall_PLOSLandingOnlyIsACleanMiss(t *testing.T) {
+	srv, _ := unpaywallTestServer(t, "unpaywall_plos_landing_only.json")
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1371/journal.pone.0000308"})
+	if err == nil {
+		t.Fatalf("Resolve() = %+v, want a miss rather than a landing page", res)
+	}
+	if !errors.Is(err, ErrNotIndexed) {
+		t.Errorf("Resolve() error = %v, want it tagged ErrNotIndexed so the source is not put in cooldown", err)
+	}
+	if strings.Contains(err.Error(), "doi.org") {
+		t.Errorf("Resolve() error = %q, should not have chosen the doi.org resolver at all", err.Error())
+	}
+}
+
+// TestUnpaywall_CellKeepsRecordedScheme replays the real Unpaywall record for
+// 10.1016/j.cell.2011.02.013, whose best location's url_for_pdf is a plain-http
+// cell.com link. It is returned with the scheme Unpaywall recorded: promoting it
+// to https rescues nothing (that host answers 403 to a non-browser client under
+// either scheme) and would break the http-only repositories Unpaywall indexes.
+func TestUnpaywall_CellKeepsRecordedScheme(t *testing.T) {
+	srv, _ := unpaywallTestServer(t, "unpaywall_cell_http_pdf.json")
+	s := unpaywallSource{email: "mail@jmrp.io", http: srv.Client(), baseURL: srv.URL}
+
+	res, err := s.Resolve(context.Background(), Item{DOI: "10.1016/j.cell.2011.02.013"})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if res.FileURL != "http://www.cell.com/article/S0092867411001279/pdf" {
+		t.Errorf("FileURL = %q, want the recorded url_for_pdf verbatim", res.FileURL)
+	}
+}
+
+// TestLooksLikeFileURL verifies the landing-page/file discrimination that decides
+// whether a location with no url_for_pdf is worth fetching at all.
+func TestLooksLikeFileURL(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"doi resolver", "https://doi.org/10.1371/journal.pone.0000308", false},
+		{"doaj record", "https://doaj.org/article/8fafaa9ad5ff4b3fa1525b29d957b01d", false},
+		{"pmc record", "https://www.ncbi.nlm.nih.gov/pmc/articles/1817752", false},
+		{"pdf suffix", "https://repo.example/files/paper.pdf", true},
+		{"pdf suffix uppercase", "https://repo.example/files/PAPER.PDF", true},
+		{"pdf path segment", "http://www.cell.com/article/S0092867411001279/pdf", true},
+		{"pdf path segment with trailing slash", "https://example.org/article/1/pdf/", true},
+		{"epub suffix", "https://repo.example/files/book.epub", true},
+		{"no host", "/relative/paper.pdf", false},
+		{"bare host", "https://example.org", false},
+		{"unparseable", "://nonsense", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksLikeFileURL(tc.raw); got != tc.want {
+				t.Errorf("looksLikeFileURL(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
 	}
 }
 
 // TestUnpaywall_DistinctDiagnoses verifies the error taxonomy stays distinct: a
 // not-open-access record reports "not open access", while an OA record with no
-// downloadable location reports "no open-access PDF". The two are separate
-// diagnoses so a caller can tell a paywalled DOI from an OA one Unpaywall simply
-// cannot serve a file for.
+// downloadable location reports that only landing pages are listed. The two are
+// separate diagnoses so a caller can tell a paywalled DOI from an OA one Unpaywall
+// simply cannot serve a file for.
 func TestUnpaywall_DistinctDiagnoses(t *testing.T) {
 	cases := []struct {
 		name string
@@ -287,7 +359,14 @@ func TestUnpaywall_DistinctDiagnoses(t *testing.T) {
 		{
 			name: "OA but no downloadable location",
 			body: `{"is_oa": true, "best_oa_location": null, "oa_locations": []}`,
-			want: "no open-access PDF",
+			want: "lists no direct file",
+		},
+		{
+			name: "OA but every location is a landing page",
+			body: `{"is_oa": true,
+			        "best_oa_location": {"url": "https://doi.org/10.1/x", "url_for_pdf": null, "host_type": "publisher", "version": "publishedVersion"},
+			        "oa_locations": [{"url": "https://doaj.org/article/abc", "url_for_pdf": null, "host_type": "repository", "version": "submittedVersion"}]}`,
+			want: "only landing pages",
 		},
 	}
 	for _, tc := range cases {

@@ -232,7 +232,7 @@ func TestSearchNextSteps(t *testing.T) {
 	withResults := searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", DOI: "10.1/x"}},
 		Page:    1,
-	}, false)
+	}, false, config.ExtraSourcesAuto)
 	joined := strings.Join(withResults, "\n")
 	if !strings.Contains(joined, "get_details") || !strings.Contains(joined, "download") {
 		t.Errorf("next_steps should mention get_details and download; got %q", joined)
@@ -244,7 +244,7 @@ func TestSearchNextSteps(t *testing.T) {
 		t.Errorf("next_steps should embed the first result's doi; got %q", joined)
 	}
 
-	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false)
+	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false, config.ExtraSourcesAuto)
 	if len(empty) == 0 || !strings.Contains(empty[0], "No matches") {
 		t.Errorf("empty search should suggest recovery; got %q", empty)
 	}
@@ -673,6 +673,184 @@ func TestDownloadToolResolveError(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatal("a download whose only source fails to resolve should be a tool error")
+	}
+}
+
+// TestDownloadFailureCarriesNextSteps is the guard on the one dead end the surface
+// had: a failed download used to return the joined source errors and nothing else,
+// while every other result carries a "Next steps" block. The failure must arrive on
+// BOTH channels — the rendered Markdown a person reads and the structured
+// next_steps the model reads — and must still be flagged IsError.
+func TestDownloadFailureCarriesNextSteps(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a failed download must still be flagged IsError")
+	}
+	text := contentText(res)
+	if !strings.Contains(text, "Next steps") {
+		t.Errorf("the failure markdown carries no Next steps block:\n%s", text)
+	}
+	if !strings.Contains(text, "resolve failed") {
+		t.Errorf("the failure markdown drops the underlying reason:\n%s", text)
+	}
+	var out struct {
+		NextSteps []string `json:"next_steps"`
+	}
+	data, merr := json.Marshal(res.StructuredContent)
+	if merr != nil {
+		t.Fatal(merr)
+	}
+	if uerr := json.Unmarshal(data, &out); uerr != nil {
+		t.Fatal(uerr)
+	}
+	if len(out.NextSteps) == 0 {
+		t.Error("structured next_steps is empty on the failure path")
+	}
+}
+
+// contentText joins the text content blocks of a tool result.
+func contentText(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// TestOrResultError verifies how a tool call is metered. A handler's own error
+// wins; failing that, an IsError result is metered as a failure carrying the text
+// it returned, so a tool that reports failures as results (which is how a failure
+// the model should act on is expressed) does not log a run of clean completions.
+func TestOrResultError(t *testing.T) {
+	handlerErr := errors.New("handler exploded")
+	if got := orResultError(handlerErr, nil); !errors.Is(got, handlerErr) {
+		t.Errorf("orResultError with a handler error = %v, want it preserved", got)
+	}
+	if got := orResultError(nil, nil); got != nil {
+		t.Errorf("orResultError with no error and no result = %v, want nil", got)
+	}
+	if got := orResultError(nil, &mcp.CallToolResult{}); got != nil {
+		t.Errorf("orResultError on a successful result = %v, want nil", got)
+	}
+	failure := &mcp.CallToolResult{
+		IsError: true,
+		Content: []mcp.Content{&mcp.TextContent{Text: "download failed"}},
+	}
+	got := orResultError(nil, failure)
+	if got == nil || !strings.Contains(got.Error(), "download failed") {
+		t.Errorf("orResultError on an IsError result = %v, want it to carry the message", got)
+	}
+	silent := &mcp.CallToolResult{IsError: true}
+	if orResultError(nil, silent) == nil {
+		t.Error("orResultError on a messageless IsError result = nil, want a failure")
+	}
+}
+
+// TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain pins the distinction
+// the guidance exists to make. A pinned source that fails has the whole untried
+// chain behind it and the fix is to drop the pin; an exhausted chain has nothing
+// left to pin, and advising a source there would send the model back through
+// sources that already failed — which is precisely the by-hand walk (three calls,
+// 3.8 seconds) a live run performed before dropping the pin on its own.
+func TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain(t *testing.T) {
+	chainErr := errors.New("source unpaywall: mirror returned an HTML page instead of the file")
+
+	pinned := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x", Source: "unpaywall"}, chainErr, config.ExtraSourcesAuto), "\n")
+	if !strings.Contains(pinned, "NO source field") {
+		t.Errorf("a pinned failure must tell the model to drop the pin; got %q", pinned)
+	}
+	if !strings.Contains(pinned, "one at a time by hand") {
+		t.Errorf("a pinned failure must warn against walking the sources by hand; got %q", pinned)
+	}
+
+	exhausted := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, chainErr, config.ExtraSourcesAuto), "\n")
+	if strings.Contains(exhausted, "NO source field") {
+		t.Errorf("an exhausted chain must not repeat the drop-the-pin advice; got %q", exhausted)
+	}
+	if !strings.Contains(exhausted, "nothing left to pin") {
+		t.Errorf("an exhausted chain must say there is nothing left to pin; got %q", exhausted)
+	}
+	if !strings.Contains(exhausted, "10.1/x") {
+		t.Errorf("the exhausted-chain advice should name the identifier to re-check; got %q", exhausted)
+	}
+
+	// Both paths must forbid inventing a result.
+	for name, steps := range map[string]string{"pinned": pinned, "exhausted": exhausted} {
+		if !strings.Contains(steps, "never state or imply that anything was saved") {
+			t.Errorf("%s guidance drops the do-not-claim-success guardrail; got %q", name, steps)
+		}
+	}
+}
+
+// TestDownloadFailureSteps_ByIdentifier verifies the recovery check named once the
+// whole chain is exhausted differs by identifier, since the likely cause does: an
+// article is most often a wrong or unindexed DOI, a book usually has another copy
+// under a different md5, and an ISBN only ever matched the openly licensed sources.
+func TestDownloadFailureSteps_ByIdentifier(t *testing.T) {
+	cases := []struct {
+		name string
+		item libgen.Item
+		want string
+	}{
+		{"doi", libgen.Item{DOI: "10.1/x"}, "get_details"},
+		{"md5", libgen.Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, "different md5"},
+		{"isbn", libgen.Item{ISBN: "9780000000001"}, "openly\nlicensed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(downloadFailureSteps(tc.item, errors.New("boom"), config.ExtraSourcesAuto), "\n")
+			want := strings.ReplaceAll(tc.want, "\n", " ")
+			if !strings.Contains(got, want) {
+				t.Errorf("guidance for %s should mention %q; got %q", tc.name, want, got)
+			}
+		})
+	}
+}
+
+// TestDownloadFailureSteps_NeverPolicyDoesNotAdviseAnIgnoredArgument verifies the
+// download failure path obeys the same rule as the search guidance: a deployment
+// that discards extra_sources must not be the one recommending it, or the fall-back
+// advice sends the model into the very loop that rule exists to prevent.
+func TestDownloadFailureSteps_NeverPolicyDoesNotAdviseAnIgnoredArgument(t *testing.T) {
+	item := libgen.Item{DOI: "10.1/x"}
+	boom := errors.New("boom")
+
+	allowed := strings.Join(downloadFailureSteps(item, boom, config.ExtraSourcesAuto), "\n")
+	if !strings.Contains(allowed, `extra_sources="always"`) {
+		t.Errorf("a deployment that honors the argument should suggest it; got %q", allowed)
+	}
+
+	restricted := strings.Join(downloadFailureSteps(item, boom, config.ExtraSourcesNever), "\n")
+	if strings.Contains(restricted, "extra_sources") {
+		t.Errorf("a never-policy deployment must not name an argument it ignores; got %q", restricted)
+	}
+	if !strings.Contains(restricted, "cannot look beyond it") {
+		t.Errorf("a never-policy deployment should say the search cannot be widened; got %q", restricted)
+	}
+}
+
+// TestDownloadFailureSteps_TransientSourceEarnsARetry verifies a chain that failed
+// because a source was unreachable — as opposed to answering that it does not hold
+// the item — says so, since only the first case is worth retrying.
+func TestDownloadFailureSteps_TransientSourceEarnsARetry(t *testing.T) {
+	transient := fmt.Errorf("source scihub: %w", libgen.ErrSourceUnavailable)
+	if got := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, transient, config.ExtraSourcesAuto), "\n"); !strings.Contains(got, "transient") {
+		t.Errorf("an unavailable source should earn a retry suggestion; got %q", got)
+	}
+	settled := errors.New("source scihub: not indexed")
+	if got := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, settled, config.ExtraSourcesAuto), "\n"); strings.Contains(got, "transient") {
+		t.Errorf("a settled miss should not be described as transient; got %q", got)
 	}
 }
 
@@ -2983,7 +3161,7 @@ func TestElicitAnnasKey_DeclineAndEmpty(t *testing.T) {
 // model that has been asked to find something and told only "try broadening" can
 // still answer as if it had found it.
 func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
-	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false), "\n"))
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false, config.ExtraSourcesAuto), "\n"))
 	if !strings.Contains(joined, "do not") {
 		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
 	}
@@ -3002,7 +3180,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	escalated := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
 		Page:    1,
-	}, false), "\n")
+	}, false, config.ExtraSourcesAuto), "\n")
 	if !strings.Contains(escalated, `"source":"annas"`) {
 		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
 	}
@@ -3011,7 +3189,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	catalog := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
 		Page:    1,
-	}, false), "\n")
+	}, false, config.ExtraSourcesAuto), "\n")
 	if strings.Contains(catalog, `"source"`) {
 		t.Errorf("a catalog result should not pin a source; got %q", catalog)
 	}
@@ -3224,7 +3402,7 @@ func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
 			{Origin: "openlibrary", Title: "A Book", ISBN: "9780000000001"},
 		},
 		Page: 1,
-	}, true), "\n"))
+	}, true, config.ExtraSourcesAuto), "\n"))
 	if !strings.Contains(joined, "open_access") {
 		t.Errorf("guidance never names the open_access list; got %q", joined)
 	}
@@ -3328,18 +3506,26 @@ func TestConfirmationWanted_NilConfigStillAsks(t *testing.T) {
 // zero-result search used to omit. The advice has to depend on whether the extra
 // searchers already ran: suggesting extra_sources="always" after it just ran and
 // found nothing sends the model to repeat a query that cannot succeed.
+//
+// It also has to depend on whether they CAN run. Under a deployment policy of
+// never they never do, so extrasRan is false forever and the escalation advice used
+// to be handed out on every empty search — for an argument the server then
+// discarded, which returned the same advice again. The last case is the guard on
+// that loop.
 func TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		extrasRan  bool
+		policy     config.ExtraSourcesMode
 		wantSubstr string
 		notWant    string
 	}{
-		{"extras not consulted", false, `extra_sources="always"`, "also returned nothing"},
-		{"extras already ran", true, "also returned nothing", `extra_sources="always"`},
+		{"extras not consulted", false, config.ExtraSourcesAuto, `extra_sources="always"`, "also returned nothing"},
+		{"extras already ran", true, config.ExtraSourcesAuto, "also returned nothing", `extra_sources="always"`},
+		{"policy forbids them", false, config.ExtraSourcesNever, "restricts search to the Library Genesis catalog", "Retry with"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			steps := searchNextSteps(SearchOutput{}, tc.extrasRan)
+			steps := searchNextSteps(SearchOutput{}, tc.extrasRan, tc.policy)
 			joined := strings.Join(steps, "\n")
 			if !strings.Contains(joined, tc.wantSubstr) {
 				t.Fatalf("guidance missing %q:\n%s", tc.wantSubstr, joined)
@@ -3355,13 +3541,58 @@ func TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog(t *testing.T) {
 	}
 }
 
+// TestSearchTool_NeverPolicyDoesNotAdviseAnIgnoredArgument is the end-to-end guard
+// on the loop, and on the wiring that causes it: the deployment policy has to reach
+// the guidance builder, not just the escalation decision.
+//
+// Under LIBGEN_MCP_EXTRA_SOURCES=never an empty search used to recommend
+// extra_sources="always"; resolveExtraMode discards that argument under this
+// policy, so the retry returned the same empty result and the same recommendation.
+// A live run survived it only because the model gave up after the second attempt.
+func TestSearchTool_NeverPolicyDoesNotAdviseAnIgnoredArgument(t *testing.T) {
+	emptyHTML, err := os.ReadFile("../libgen/testdata/search_empty.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { w.Write(emptyHTML) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, ExtraSources: config.ExtraSourcesNever,
+	}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	// Ask for the escalation explicitly: the policy overrides it, so the guidance
+	// must not turn round and recommend it again.
+	res, cerr := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "nothingmatches", "extra_sources": "always"},
+	})
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	if res.IsError {
+		t.Fatalf("empty search returned a tool error: %v", res.Content)
+	}
+	text := contentText(res)
+	if strings.Contains(text, `extra_sources="always"`) {
+		t.Errorf("a never-policy deployment must not recommend an argument it ignores:\n%s", text)
+	}
+	if !strings.Contains(text, "restricts search to the Library Genesis catalog") {
+		t.Errorf("guidance should say the deployment restricts the search:\n%s", text)
+	}
+}
+
 // TestSearchNextSteps_ExtrasRanButFoundNothing covers the branch that fires when
 // the beyond-catalog searchers ran alongside catalog results and returned
 // nothing. The guidance matters: without it a model can present a catalog hit as
 // though the wider open-access search had endorsed it.
 func TestSearchNextSteps_ExtrasRanButFoundNothing(t *testing.T) {
 	out := SearchOutput{Results: []libgen.Result{{MD5: "d41d8cd98f00b204e9800998ecf8427e"}}}
-	joined := strings.Join(searchNextSteps(out, true), "\n")
+	joined := strings.Join(searchNextSteps(out, true, config.ExtraSourcesAuto), "\n")
 	if !strings.Contains(joined, "extra searchers returned nothing") {
 		t.Fatalf("missing the empty-extras guidance:\n%s", joined)
 	}

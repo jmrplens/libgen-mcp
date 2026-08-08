@@ -1,0 +1,140 @@
+{
+  "best_oa_location": {
+    "endpoint_id": null,
+    "evidence": "deprecated",
+    "host_type": "publisher",
+    "is_best": true,
+    "license": "cc-by",
+    "oa_date": "2007-03-20",
+    "pmh_id": null,
+    "repository_institution": null,
+    "updated": "deprecated",
+    "url": "https://doi.org/10.1371/journal.pone.0000308",
+    "url_for_landing_page": "https://doi.org/10.1371/journal.pone.0000308",
+    "url_for_pdf": null,
+    "version": "publishedVersion"
+  },
+  "data_standard": 2,
+  "doi": "10.1371/journal.pone.0000308",
+  "doi_url": "https://doi.org/10.1371/journal.pone.0000308",
+  "first_oa_location": {
+    "endpoint_id": null,
+    "evidence": "deprecated",
+    "host_type": "publisher",
+    "is_best": true,
+    "license": "cc-by",
+    "oa_date": "2007-03-20",
+    "pmh_id": null,
+    "repository_institution": null,
+    "updated": "deprecated",
+    "url": "https://doi.org/10.1371/journal.pone.0000308",
+    "url_for_landing_page": "https://doi.org/10.1371/journal.pone.0000308",
+    "url_for_pdf": null,
+    "version": "publishedVersion"
+  },
+  "genre": "journal-article",
+  "has_repository_copy": true,
+  "is_oa": true,
+  "is_paratext": false,
+  "journal_is_in_doaj": true,
+  "journal_is_oa": true,
+  "journal_issn_l": "1932-6203",
+  "journal_issns": "1932-6203",
+  "journal_name": "PLoS ONE",
+  "oa_locations": [
+    {
+      "endpoint_id": null,
+      "evidence": "deprecated",
+      "host_type": "publisher",
+      "is_best": true,
+      "license": "cc-by",
+      "oa_date": "2007-03-20",
+      "pmh_id": null,
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "https://doi.org/10.1371/journal.pone.0000308",
+      "url_for_landing_page": "https://doi.org/10.1371/journal.pone.0000308",
+      "url_for_pdf": null,
+      "version": "publishedVersion"
+    },
+    {
+      "endpoint_id": "8e556f4518885d9a235",
+      "evidence": "deprecated",
+      "host_type": "repository",
+      "is_best": false,
+      "license": "cc-by-sa",
+      "oa_date": "2007-03-20",
+      "pmh_id": "oai:doaj.org/article:8fafaa9ad5ff4b3fa1525b29d957b01d",
+      "repository_institution": null,
+      "updated": "deprecated",
+      "url": "https://doaj.org/article/8fafaa9ad5ff4b3fa1525b29d957b01d",
+      "url_for_landing_page": "https://doaj.org/article/8fafaa9ad5ff4b3fa1525b29d957b01d",
+      "url_for_pdf": null,
+      "version": "submittedVersion"
+    },
+    {
+      "endpoint_id": "b5e840539009389b1a6",
+      "evidence": "deprecated",
+      "host_type": "repository",
+      "is_best": false,
+      "license": "cc-by",
+      "oa_date": "2007-03-20",
+      "pmh_id": "oai:europepmc.org:1817448",
+      "repository_institution": "European Bioinformatics Institute",
+      "updated": "deprecated",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/1817752",
+      "url_for_landing_page": "https://www.ncbi.nlm.nih.gov/pmc/articles/1817752",
+      "url_for_pdf": null,
+      "version": "submittedVersion"
+    },
+    {
+      "endpoint_id": "63d70f0f03831f36129",
+      "evidence": "deprecated",
+      "host_type": "repository",
+      "is_best": false,
+      "license": "cc-by",
+      "oa_date": "2007-03-20",
+      "pmh_id": "oai:figshare.com:article/152356",
+      "repository_institution": "Figshare (United Kingdom)",
+      "updated": "deprecated",
+      "url": "https://figshare.com/articles/dataset/Sharing_Detailed_Research_Data_Is_Associated_with_Increased_Citation_Rate/152356",
+      "url_for_landing_page": "https://figshare.com/articles/dataset/Sharing_Detailed_Research_Data_Is_Associated_with_Increased_Citation_Rate/152356",
+      "url_for_pdf": null,
+      "version": "submittedVersion"
+    }
+  ],
+  "oa_locations_embargoed": [],
+  "oa_status": "gold",
+  "published_date": "2007-03-20",
+  "publisher": "Public Library of Science (PLoS)",
+  "title": "Sharing Detailed Research Data Is Associated with Increased Citation Rate",
+  "updated": "2026-08-06T13:39:34Z",
+  "year": 2007,
+  "z_authors": [
+    {
+      "author_position": "first",
+      "is_corresponding": true,
+      "raw_affiliation_strings": [
+        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America. hpiwowar@cbmi.pitt.edu",
+        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
+      ],
+      "raw_author_name": "Heather A. Piwowar"
+    },
+    {
+      "author_position": "middle",
+      "is_corresponding": false,
+      "raw_affiliation_strings": [
+        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
+      ],
+      "raw_author_name": "Roger S. Day"
+    },
+    {
+      "author_position": "last",
+      "is_corresponding": false,
+      "raw_affiliation_strings": [
+        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
+      ],
+      "raw_author_name": "Douglas B. Fridsma"
+    }
+  ]
+}
