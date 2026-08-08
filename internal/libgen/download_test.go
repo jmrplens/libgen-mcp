@@ -51,47 +51,6 @@ func TestExtractGetLinkMissing(t *testing.T) {
 	}
 }
 
-// TestSanitizeFilename verifies SanitizeFilename.
-func TestSanitizeFilename(t *testing.T) {
-	cases := map[string]string{
-		"a/b\\c:d*e?f\"g<h>i|j.pdf": "a_b_c_d_e_f_g_h_i_j.pdf",
-		"  normal.epub  ":           "normal.epub",
-		"":                          "download",
-		"...":                       "download",
-	}
-	for in, want := range cases {
-		if got := sanitizeFilename(in); got != want {
-			t.Errorf("sanitizeFilename(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-// TestCleanFileName covers cleanFileName with table-driven subtests spanning all
-// fields present, each optional piece omitted, illegal characters sanitized, and
-// internal whitespace collapsed.
-func TestCleanFileName(t *testing.T) {
-	cases := []struct {
-		name string
-		meta FileMeta
-		want string
-	}{
-		{"all fields", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
-		{"no year", FileMeta{Author: "Jane Doe", Title: "Great Book", Ext: "pdf"}, "Jane Doe - Great Book.pdf"},
-		{"no author", FileMeta{Title: "Great Book", Year: "2020", Ext: "pdf"}, "Great Book (2020).pdf"},
-		{"no title", FileMeta{Author: "Jane Doe", Year: "2020", Ext: "pdf"}, ""},
-		{"no ext", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020"}, "Jane Doe - Great Book (2020)"},
-		{"illegal chars sanitized", FileMeta{Author: `A/B`, Title: `C:D*E?`, Year: "2020", Ext: "pdf"}, "A_B - C_D_E_ (2020).pdf"},
-		{"whitespace collapsed", FileMeta{Author: "  Jane   Doe ", Title: "Great\t\nBook ", Year: " 2020 ", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := cleanFileName(tc.meta); got != tc.want {
-				t.Errorf("cleanFileName(%+v) = %q, want %q", tc.meta, got, tc.want)
-			}
-		})
-	}
-}
-
 // noDispositionCDN builds a mirror whose CDN serves payload with NO
 // Content-Disposition header, so the output name must come from metadata (or the
 // explicit filename), never from the mirror.
@@ -144,14 +103,16 @@ func TestDownloadExplicitFilenameBeatsMeta(t *testing.T) {
 	}
 }
 
-// TestDownloadDispositionBeatsMeta verifies the CDN Content-Disposition name wins
-// over metadata when both are available.
-func TestDownloadDispositionBeatsMeta(t *testing.T) {
-	payload := []byte("%PDF-1.4 disposition-wins payload")
+// TestDownloadMetaBeatsDispositionWhenVerified verifies that on an md5 download —
+// the one whose bytes are checked against the requested digest — the
+// metadata-built name wins over the mirror's Content-Disposition, and that the
+// announced name is still reported as OriginalFilename.
+func TestDownloadMetaBeatsDispositionWhenVerified(t *testing.T) {
+	payload := []byte("%PDF-1.4 disposition-vs-meta payload")
 	want := md5Hex(payload)
 	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", `attachment; filename="from-cdn.pdf"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="[Incerto] Jane Doe - Great Book [`+want+`] - libgen.li.pdf"`)
 		w.Write(payload)
 	})
 	defer srv.Close()
@@ -163,9 +124,105 @@ func TestDownloadDispositionBeatsMeta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
-	if got := filepath.Base(res.Path); got != "from-cdn.pdf" {
-		t.Errorf("Path base = %q, want %q (Content-Disposition must win over meta)", got, "from-cdn.pdf")
+	if got := filepath.Base(res.Path); got != "Jane Doe - Great Book (2020).pdf" {
+		t.Errorf("Path base = %q, want the metadata-built name (the digest matched, so it is safe)", got)
 	}
+	if res.NameOrigin != NameFromMetadata {
+		t.Errorf("NameOrigin = %q, want %q", res.NameOrigin, NameFromMetadata)
+	}
+	if !strings.Contains(res.OriginalFilename, "libgen.li") {
+		t.Errorf("OriginalFilename = %q, want the mirror's announced name kept verbatim", res.OriginalFilename)
+	}
+}
+
+// TestDownloadUnverifiedKeepsAnnouncedName verifies the rule that keeps a
+// mis-delivery detectable: a download with no digest to check against (a DOI) is
+// saved under the name the source announced — cleaned of the mirror's own marks —
+// and is NOT renamed after the record that was requested.
+func TestDownloadUnverifiedKeepsAnnouncedName(t *testing.T) {
+	payload := []byte("%PDF-1.4 the wrong article, as it happens")
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="npre2007361-1.pdf"`)
+		_, _ = w.Write(payload)
+	}))
+	defer cdn.Close()
+	c := newTestClient(staticMirrors{cdn.URL})
+	c.sources = []DownloadSource{stubDOISource{url: cdn.URL + "/file"}}
+	dir := t.TempDir()
+
+	item := Item{
+		DOI:  "10.1371/journal.pmed.0020124",
+		Meta: &FileMeta{Author: "John P. A. Ioannidis", Title: "Why Most Published Research Findings Are False", Year: "2005"},
+	}
+	res, err := c.DownloadItem(context.Background(), item, dir, "")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "npre2007361-1.pdf" {
+		t.Errorf("Path base = %q, want the announced name kept (an unverified download must not be renamed after the request)", got)
+	}
+	if res.NameOrigin != NameFromAnnounced {
+		t.Errorf("NameOrigin = %q, want %q", res.NameOrigin, NameFromAnnounced)
+	}
+}
+
+// TestDownloadUnverifiedPlaceholderNameFallsBackToIdentifier verifies that when
+// the source announces a name that identifies nothing ("download.pdf", which is
+// what the Internet Archive returns for every ISBN), the file is named after the
+// identifier that was requested and the result says the name was derived.
+func TestDownloadUnverifiedPlaceholderNameFallsBackToIdentifier(t *testing.T) {
+	payload := []byte("%PDF-1.4 an openly licensed book")
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="download.pdf"`)
+		_, _ = w.Write(payload)
+	}))
+	defer cdn.Close()
+	c := newTestClient(staticMirrors{cdn.URL})
+	c.sources = []DownloadSource{stubISBNSource{url: cdn.URL + "/file"}}
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{ISBN: "9789286150616"}, dir, "")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "9789286150616.pdf" {
+		t.Errorf("Path base = %q, want the ISBN (the announced name was a placeholder)", got)
+	}
+	if !res.NameOrigin.Derived() {
+		t.Errorf("NameOrigin = %q, want a derived origin so the caller is told the name was not announced", res.NameOrigin)
+	}
+}
+
+// stubDOISource resolves any DOI item to a fixed URL with no MD5 verification,
+// standing in for the article sources in a naming test.
+type stubDOISource struct{ url string }
+
+// Name identifies the stub source.
+func (s stubDOISource) Name() string { return "unpaywall" }
+
+// Supports accepts any item carrying a DOI.
+func (s stubDOISource) Supports(item Item) bool { return item.DOI != "" }
+
+// Resolve returns the stub's fixed URL, unverified, as the article sources do.
+func (s stubDOISource) Resolve(context.Context, Item) (Resolved, error) {
+	return Resolved{FileURL: s.url, VerifyMD5: false}, nil
+}
+
+// stubISBNSource resolves any ISBN item to a fixed URL with no MD5 verification,
+// standing in for the open-access book sources in a naming test.
+type stubISBNSource struct{ url string }
+
+// Name identifies the stub source.
+func (s stubISBNSource) Name() string { return "archive" }
+
+// Supports accepts any item carrying an ISBN.
+func (s stubISBNSource) Supports(item Item) bool { return item.ISBN != "" }
+
+// Resolve returns the stub's fixed URL, unverified, as the ISBN sources do.
+func (s stubISBNSource) Resolve(context.Context, Item) (Resolved, error) {
+	return Resolved{FileURL: s.url, VerifyMD5: false}, nil
 }
 
 func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
@@ -471,9 +528,10 @@ func TestDownloadResumeServerError(t *testing.T) {
 	}
 }
 
-// TestDownloadRenameError verifies that a rename failure (the destination name is
-// occupied by a non-empty directory) surfaces as an error after a valid transfer.
-func TestDownloadRenameError(t *testing.T) {
+// TestDownloadRoutesAroundAnOccupiedName verifies that a destination name already
+// taken by something else does not sink the download: the file lands beside it
+// under a discriminated name rather than failing or overwriting.
+func TestDownloadRoutesAroundAnOccupiedName(t *testing.T) {
 	payload := []byte("%PDF-1.4 " + strings.Repeat("rename clash ", 64))
 	want := md5Hex(payload)
 	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
@@ -483,14 +541,70 @@ func TestDownloadRenameError(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	// Occupy the destination name ("<md5>") with a non-empty directory so the final
-	// os.Rename(part, dest) cannot succeed.
+	// Occupy the destination name ("<md5>") with a non-empty directory.
 	dest := filepath.Join(dir, want)
 	if err := os.MkdirAll(filepath.Join(dest, "occupied"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
-		t.Fatal("rename onto a non-empty directory should fail")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.Path == dest {
+		t.Errorf("Path = %q, want a name that does not collide with the occupied one", res.Path)
+	}
+	if _, statErr := os.Stat(res.Path); statErr != nil {
+		t.Errorf("the download should exist at %q: %v", res.Path, statErr)
+	}
+}
+
+// TestDownloadNeverOverwritesADifferentFile verifies the collision guarantee
+// end to end: a different file already carrying the name the download would take
+// is left byte-for-byte intact, and the new file lands beside it.
+func TestDownloadNeverOverwritesADifferentFile(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("second edition ", 32))
+	want := md5Hex(payload)
+	srv := noDispositionCDN(t, want, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	meta := &FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020"}
+	occupied := filepath.Join(dir, "Jane Doe - Great Book (2020).pdf")
+	incumbent := []byte("%PDF-1.4 the first edition, which must survive")
+	if err := os.WriteFile(occupied, incumbent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Download(context.Background(), want, dir, "", meta)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.Path == occupied {
+		t.Fatalf("Path = %q, want a discriminated name beside the incumbent", res.Path)
+	}
+	kept, err := os.ReadFile(occupied)
+	if err != nil || string(kept) != string(incumbent) {
+		t.Errorf("the incumbent file was disturbed: %q, err=%v", kept, err)
+	}
+	if !strings.Contains(filepath.Base(res.Path), want[:8]) {
+		t.Errorf("Path = %q, want the content digest as the discriminator", res.Path)
+	}
+}
+
+// TestStreamToPartAndVerifyRenameError covers the rename-failure branch: a valid
+// transfer whose destination directory does not exist surfaces the error and
+// keeps the partial for a retry.
+func TestStreamToPartAndVerifyRenameError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	dir := t.TempDir()
+	part := filepath.Join(dir, "x.part")
+	dest := filepath.Join(dir, "missing-subdir", "dest.pdf")
+	if _, _, err := c.streamToPartAndVerify(part, dest, "", strings.NewReader("x"), streamOpts{}); err == nil {
+		t.Error("a rename into a nonexistent directory should fail")
+	}
+	if _, statErr := os.Stat(part); statErr != nil {
+		t.Error("the partial should be kept when only the rename failed")
 	}
 }
 
@@ -1314,37 +1428,6 @@ func TestFilenameFromDisposition(t *testing.T) {
 	}
 }
 
-// TestChooseFileName covers the name-selection precedence and, in particular, the
-// fallback-extension branch (appending the source's extension when the chosen
-// name carries none) and its skip when a name already has an extension.
-func TestChooseFileName(t *testing.T) {
-	meta := &FileMeta{Author: "A", Title: "T", Year: "2020", Ext: "epub"}
-	cases := []struct {
-		name        string
-		filename    string
-		disposition string
-		meta        *FileMeta
-		md5         string
-		ext         string
-		want        string
-	}{
-		{"explicit filename wins", "explicit.pdf", "disp.pdf", meta, "md5", "pdf", "explicit.pdf"},
-		{"disposition when no filename", "", "disp.pdf", meta, "md5", "pdf", "disp.pdf"},
-		{"meta when no filename or disposition", "", "", meta, "md5", "pdf", "A - T (2020).epub"},
-		{"md5 with fallback extension", "", "", nil, "abcdef", "pdf", "abcdef.pdf"},
-		{"fallback extension skipped when name has one", "have.mobi", "", nil, "md5", "pdf", "have.mobi"},
-		{"no extension and no fallback", "", "", nil, "deadbeef", "", "deadbeef"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := chooseFileName(tc.filename, tc.disposition, tc.meta, tc.md5, tc.ext)
-			if got != tc.want {
-				t.Errorf("chooseFileName() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 // TestShouldEmit covers the elapsed-interval branch, the byte-advance branch, and
 // the throttled (no emit) case of the progress writer.
 func TestShouldEmit(t *testing.T) {
@@ -1447,7 +1530,7 @@ func TestValidateFileResponseNoBytes(t *testing.T) {
 func TestStreamToPartOpenError(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	dir := t.TempDir()
-	_, err := c.streamToPartAndVerify(dir, filepath.Join(dir, "dest"), "", strings.NewReader("x"), streamOpts{})
+	_, _, err := c.streamToPartAndVerify(dir, filepath.Join(dir, "dest"), "", strings.NewReader("x"), streamOpts{})
 	if err == nil {
 		t.Error("streamToPartAndVerify should fail when the partial path is a directory")
 	}
@@ -1474,21 +1557,12 @@ func TestStreamToPartTruncated(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	dir := t.TempDir()
 	part := filepath.Join(dir, "p.part")
-	_, err := c.streamToPartAndVerify(part, filepath.Join(dir, "dest"), "", strings.NewReader("short"), streamOpts{contentLength: 999})
+	_, _, err := c.streamToPartAndVerify(part, filepath.Join(dir, "dest"), "", strings.NewReader("short"), streamOpts{contentLength: 999})
 	if err == nil {
 		t.Fatal("streamToPartAndVerify should fail on a truncated transfer")
 	}
 	if _, statErr := os.Stat(part); os.IsNotExist(statErr) {
 		t.Error("a truncated transfer should keep the .part for a later resume")
-	}
-}
-
-// TestSanitizeFilenameLong covers the length-cap branch: an over-long name is
-// truncated to 200 runes.
-func TestSanitizeFilenameLong(t *testing.T) {
-	got := sanitizeFilename(strings.Repeat("a", 250))
-	if n := len([]rune(got)); n != 200 {
-		t.Errorf("sanitizeFilename(len 250) has %d runes, want 200", n)
 	}
 }
 

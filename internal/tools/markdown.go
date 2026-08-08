@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -379,11 +380,17 @@ func renderOutline(b *strings.Builder, out ReadOutput) {
 
 // renderDownloadMarkdown renders a completed download as a one-line confirmation
 // (name, size, source, path, verification) plus the next-steps block.
+//
+// The headline is the name the file was SAVED under, not the one the mirror
+// announced: those two differ by design now (chooseFileName), and reporting the
+// announced one would name a file that is not on disk. The announced name is
+// still shown, on its own line, whenever it differs — on an unverified download
+// it is the evidence of what the source actually served.
 func renderDownloadMarkdown(out DownloadOutput) string {
 	var b strings.Builder
-	name := out.OriginalFilename
-	if name == "" {
-		name = out.Path
+	name := filepath.Base(out.Path)
+	if out.Path == "" {
+		name = out.OriginalFilename
 	}
 	verified := "no"
 	if out.Verified {
@@ -391,6 +398,12 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	}
 	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes via %s.\n", mdCell(name), out.SizeBytes, mdCell(out.Source))
 	fmt.Fprintf(&b, "- Path: %s\n- Verified: %s\n", mdCell(out.Path), verified)
+	if out.OriginalFilename != "" && out.OriginalFilename != name {
+		fmt.Fprintf(&b, "- Announced by the source: %s\n", mdCell(out.OriginalFilename))
+	}
+	if out.NameOrigin != "" {
+		fmt.Fprintf(&b, "- Name origin: %s\n", mdCell(string(out.NameOrigin)))
+	}
 	if out.Resumed {
 		b.WriteString("- Resumed from a partial download.\n")
 	}

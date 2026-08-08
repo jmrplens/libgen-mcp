@@ -152,6 +152,11 @@ type DownloadResult struct {
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
 	Verified bool `json:"verified" jsonschema:"true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download"`
+	// NameOrigin reports where the saved file's name came from. It matters most on
+	// an unverified download: a "metadata" or "identifier" name was constructed
+	// here, not announced by the source, so it says what was ASKED FOR and is no
+	// evidence of what was delivered. See chooseFileName.
+	NameOrigin NameOrigin `json:"name_origin,omitempty" jsonschema:"where the saved file's name came from: caller (you supplied it), announced (the name the serving source sent, cleaned of mirror marks), metadata (built from the record's author/title/year), or identifier (built from the md5, DOI or ISBN because the source announced no usable name). On an unverified download a metadata or identifier name is derived from what you asked for, not evidence of what arrived"`
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
 	Resumed bool `json:"resumed" jsonschema:"true when the download resumed from a pre-existing partial via an HTTP Range request"`
@@ -188,8 +193,7 @@ func startErr(err error) error {
 }
 
 // FileMeta carries the bibliographic fields used to build a clean, human-readable
-// download filename when the mirror announces no name. Any field may be empty;
-// cleanFileName omits the empty pieces.
+// download filename. Any field may be empty; metadataName omits the empty pieces.
 type FileMeta struct {
 	// Author is the work's author (or authors), used as the leading name segment.
 	Author string
@@ -197,85 +201,21 @@ type FileMeta struct {
 	Title string
 	// Year is the publication year, rendered in parentheses after the title.
 	Year string
-	// Ext is the file extension (without a leading dot), e.g. "pdf" or "epub".
+	// Ext is the file extension the CATALOG records (without a leading dot), e.g.
+	// "pdf". It deliberately does NOT name the saved file: the extension of a
+	// download comes from the bytes on the wire or from the announced name, never
+	// from a record's format column, which is third-party data and frequently
+	// disagrees with what the mirror actually serves. See chooseFileName.
 	Ext string
-}
-
-// cleanFileName builds a human-readable filename from bibliographic metadata in
-// the form "<Author> - <Title> (<Year>).<Ext>", omitting any empty piece:
-// no year drops the "(<Year>)" segment, no author drops the "<Author> - " prefix,
-// and no extension drops the ".<Ext>" suffix. Textual pieces have their internal
-// whitespace collapsed and illegal path characters stripped via sanitizeFilename.
-// It returns "" when the title is empty, so the caller can fall back to the md5.
-func cleanFileName(m FileMeta) string {
-	author := cleanNamePiece(m.Author)
-	title := cleanNamePiece(m.Title)
-	year := cleanNamePiece(m.Year)
-	if title == "" {
-		return ""
-	}
-	var b strings.Builder
-	if author != "" {
-		b.WriteString(author)
-		b.WriteString(" - ")
-	}
-	b.WriteString(title)
-	if year != "" {
-		b.WriteString(" (")
-		b.WriteString(year)
-		b.WriteString(")")
-	}
-	if ext := cleanNamePiece(strings.TrimLeft(m.Ext, ".")); ext != "" {
-		b.WriteString(".")
-		b.WriteString(ext)
-	}
-	return b.String()
-}
-
-// cleanNamePiece collapses internal whitespace runs to single spaces (trimming
-// the ends) and strips illegal path characters. It returns "" for a piece that is
-// empty or all whitespace, so callers can omit it from the assembled filename.
-func cleanNamePiece(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if s == "" {
-		return ""
-	}
-	return sanitizeFilename(s)
-}
-
-// chooseFileName selects the sanitized output filename by priority: an explicit
-// filename, else the CDN-announced disposition name, else a clean name built from
-// meta (when non-nil and it yields a name), else the md5 (which may be empty for
-// non-md5 sources, in which case sanitizeFilename yields a safe default). When the
-// resulting name has no extension and fallbackExt is set, that extension is
-// appended (source-provided type hint for names that would otherwise be
-// extensionless).
-func chooseFileName(filename, disposition string, meta *FileMeta, md5, fallbackExt string) string {
-	name := filename
-	if name == "" {
-		name = disposition
-	}
-	if name == "" && meta != nil {
-		name = cleanFileName(*meta)
-	}
-	if name == "" {
-		name = md5
-	}
-	name = sanitizeFilename(name)
-	if ext := strings.TrimLeft(fallbackExt, "."); ext != "" && filepath.Ext(name) == "" {
-		name = sanitizeFilename(name + "." + ext)
-	}
-	return name
 }
 
 // Download downloads the md5 file into dir. It is a convenience wrapper over
 // DownloadItem for md5-keyed (book) downloads; DOI-keyed (article) downloads go
-// through DownloadItem directly. The output name is chosen in order: an explicit
-// filename, else the name the CDN announces (content-disposition), else a clean
-// name built from meta (when non-nil and it yields a name), else the md5; the
-// chosen name is sanitized. An optional progress callback (only the first is used)
-// is invoked throttled with the running and total byte counts; pass none to
-// disable progress reporting.
+// through DownloadItem directly. The output name is chosen by chooseFileName,
+// whose rule turns on whether the bytes were digest-verified; pass meta to supply
+// the bibliographic fields a verified download is named from. An optional
+// progress callback (only the first is used) is invoked throttled with the
+// running and total byte counts; pass none to disable progress reporting.
 func (c *Client) Download(ctx context.Context, md5, dir, filename string, meta *FileMeta, progress ...ProgressFunc) (*DownloadResult, error) {
 	return c.DownloadItem(ctx, Item{MD5: md5, Meta: meta}, dir, filename, progress...)
 }
@@ -740,7 +680,14 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		return nil, err
 	}
 
-	name := chooseFileName(req.filename, original, req.item.Meta, req.item.MD5, resolved.Ext)
+	name, origin := chooseFileName(nameRequest{
+		explicit:  req.filename,
+		announced: original,
+		sniffed:   c.sniffStart(body, resume),
+		ext:       resolved.Ext,
+		item:      req.item,
+		verified:  resolved.VerifyMD5,
+	})
 
 	if mkErr := os.MkdirAll(req.dir, 0o750); mkErr != nil {
 		return nil, fmt.Errorf("creating download dir: %w", mkErr)
@@ -751,7 +698,7 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 	dest := filepath.Join(req.dir, name)
 	// Bytes are flowing: guard the stream against stalls (no wall-clock cap), then
 	// stream to the partial. A stall aborts via streamCtx and keeps the .part.
-	n, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, c.guardStall(body, cancel), streamOpts{
+	n, saved, err := c.streamToPartAndVerify(partPath, dest, req.item.MD5, c.guardStall(body, cancel), streamOpts{
 		resume: resume, existingSize: resumeFrom, contentLength: resp.ContentLength,
 		total: totalLen, verify: resolved.VerifyMD5, progress: req.onProgress,
 	})
@@ -759,15 +706,31 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		return nil, err
 	}
 	return &DownloadResult{
-		Path:             dest,
+		Path:             saved,
 		SizeBytes:        n,
 		OriginalFilename: original,
 		Mirror:           base,
 		Source:           src.Name(),
 		Verified:         resolved.VerifyMD5,
+		NameOrigin:       origin,
 		Resumed:          resume,
 		Account:          resolved.Account,
 	}, nil
+}
+
+// sniffStart identifies the file format from the first bytes of the response, or
+// returns "" when they are not the start of the file.
+//
+// Peeking costs nothing here: validateFileResponse already filled this buffer, so
+// the bytes are in hand and Peek consumes none of them. A RESUMED transfer is
+// skipped deliberately — its body begins at the resume offset, so what looks like
+// a file header would be whatever happens to sit in the middle of the document.
+func (c *Client) sniffStart(body *bufio.Reader, resume bool) string {
+	if resume {
+		return ""
+	}
+	head, _ := body.Peek(512)
+	return sniffExt(head)
 }
 
 // guardStall wraps r in a stall-detecting reader when a stall timeout is
@@ -1058,8 +1021,9 @@ func openPartForStream(partPath string, opts streamOpts, digest io.Writer) (*os.
 
 // streamToPartAndVerify streams body into the stable partial at partPath while
 // computing the MD5 of the whole file, then (when opts.verify) checks the digest
-// against wantMD5 and atomically renames the partial to dest on success. It
-// returns the final file size.
+// against wantMD5 and atomically renames the partial into place on success. It
+// returns the final file size and the path the file actually landed at, which is
+// dest unless a different file was already sitting there (see uniqueDest).
 //
 // When opts.resume is true it appends to the existing partial and primes the hash
 // by re-reading the existingSize bytes already on disk, so the final digest covers
@@ -1072,11 +1036,11 @@ func openPartForStream(partPath string, opts streamOpts, digest io.Writer) (*os.
 // Partial lifecycle: on an MD5 mismatch (corrupt/tampered) or an oversized
 // transfer the partial is deleted; on a transient failure (network drop, short
 // read) it is kept so a later call can resume from where it stopped.
-func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, opts streamOpts) (int64, error) {
+func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.Reader, opts streamOpts) (size int64, saved string, err error) {
 	digest := cryptomd5.New() //nolint:gosec // integrity match against the LibGen-provided md5.
 	f, startSize, err := openPartForStream(partPath, opts, digest)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
 	// countingWriter aborts if the total size exceeds the cap; this defends
@@ -1094,25 +1058,31 @@ func (c *Client) streamToPartAndVerify(partPath, dest, wantMD5 string, body io.R
 		if errors.Is(copyErr, errDownloadTooLarge) {
 			os.Remove(partPath)
 		}
-		return 0, fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
+		return 0, "", fmt.Errorf("writing file: %w", errors.Join(copyErr, closeErr))
 	}
 	if opts.contentLength > 0 && streamed != opts.contentLength {
 		// Short read: keep the partial so a later call can resume from here.
-		return 0, fmt.Errorf("truncated download: got %d of %d bytes", streamed, opts.contentLength)
+		return 0, "", fmt.Errorf("truncated download: got %d of %d bytes", streamed, opts.contentLength)
 	}
 	pw.emitFinal() // report completion (done == total) regardless of throttle
 	// MD5 verification is conditional: only sources keyed by md5 request it. The
 	// size cap, HTML sniff, resume and atomic rename apply to every source.
-	if opts.verify {
-		if got := hex.EncodeToString(digest.Sum(nil)); !strings.EqualFold(got, wantMD5) {
-			os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
-			return 0, fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, got, wantMD5)
-		}
+	sum := hex.EncodeToString(digest.Sum(nil))
+	if opts.verify && !strings.EqualFold(sum, wantMD5) {
+		os.Remove(partPath) // corrupt or tampered: the partial is useless, discard it
+		return 0, "", fmt.Errorf("%w: got %s, want %s", errIntegrityCheckFailed, sum, wantMD5)
 	}
-	if rerr := os.Rename(partPath, dest); rerr != nil {
-		return 0, rerr // content is valid; keep the partial so a retry can rename it
+	size = startSize + streamed
+	// The digest is of the bytes just downloaded, so a collision is resolved by
+	// what this file IS rather than by what was requested.
+	saved, uerr := uniqueDest(dest, size, sum)
+	if uerr != nil {
+		return 0, "", uerr // content is valid; keep the partial so a retry can rename it
 	}
-	return startSize + streamed, nil
+	if rerr := os.Rename(partPath, saved); rerr != nil {
+		return 0, "", rerr // content is valid; keep the partial so a retry can rename it
+	}
+	return size, saved, nil
 }
 
 // looksLikeHTML reports whether b (a sniffed body header) begins, after trimming
@@ -1125,6 +1095,10 @@ func looksLikeHTML(b []byte) bool {
 		bytes.HasPrefix(lower, []byte("<!--"))
 }
 
+// filenameFromDisposition extracts the filename parameter from a
+// Content-Disposition header, returning "" when the header is absent, malformed
+// or carries no filename. The value is the mirror's raw claim and is neither
+// trusted nor sanitized here; chooseFileName decides what to do with it.
 func filenameFromDisposition(header string) string {
 	if header == "" {
 		return ""
@@ -1134,21 +1108,4 @@ func filenameFromDisposition(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(params["filename"])
-}
-
-func sanitizeFilename(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || strings.ContainsRune(`/\:*?"<>|`, r) {
-			return '_'
-		}
-		return r
-	}, s)
-	s = strings.Trim(s, " .")
-	if runes := []rune(s); len(runes) > 200 {
-		s = string(runes[:200])
-	}
-	if s == "" {
-		return "download"
-	}
-	return s
 }
