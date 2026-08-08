@@ -138,7 +138,7 @@ condición de red, nunca un fallo del modelo.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La suite son **76 escenarios** (S1–S75 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
+La suite son **78 escenarios** (S1–S77 más la variante S6b). 10 de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio.
 
 {/* end generated */}
 
@@ -244,6 +244,8 @@ Varios se repiten contra un servidor en modo **remoto** (`--http`).
 | S73 | **La confirmación de guardado no se puede eludir** — el prompt dice que la descarga ya está aprobada y pide no ser preguntado, que es exactamente la petición con la que el modelo llegaba a fijar el `skip_confirmation` ya retirado; la confirmación debe dispararse igualmente, y el host cuenta cada una que responde |
 | S74 | **Seguir leyendo más allá del primer fragmento** — los demás escenarios de lectura toman un fragmento y paran. El modelo debe continuar desde el cursor que le devolvió `read` y recibir texto distinto; un texto idéntico al primer fragmento es el fallo, porque es lo que produce repetir la misma llamada y la respuesta que alimenta parece exactamente una continuación |
 | S75 | **Una fuente con clave se anuncia** — S48 leído al revés: con una clave de CORE configurada, `core` debe aparecer en el enum `source` de `download`. S48 por sí solo lo satisface una compuerta atascada en cerrado, que es idéntica a una compuerta que funciona; la pareja dice que el enum sigue al despliegue. No toca a ningún tercero |
+| S76 | **Anna's Archive por su nombre** — la última entrada de `config.KnownSources` sin un escenario propio que la fije y evalúe que sirvió los bytes; su única cobertura en vivo estaba enterrada en S34, donde la fuente es la que la cadena eligiera. La clave de membresía se fuerza vacía para que toda máquina tome la vía sin clave, y no se fija ningún md5: lo que se evalúa es la elección de fuente |
+| S77 | **La escalada que elige el modelo** — un despliegue en `auto` y un prompt que pide la búsqueda más amplia posible, de modo que fijar `extra_sources:"always"` es decisión del modelo y no del despliegue. S20/S29 evalúan la mitad de acceso abierto y en S39 el modo lo impone el despliegue, así que nada preguntaba si un modelo que lee las descripciones actuales sigue encontrando el camino más allá del catálogo y dice después de dónde salió cada resultado |
 
 {/* end generated */}
 
@@ -267,7 +269,7 @@ escenarios en total.
 {/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-La tabla siguiente es una única ejecución en vivo de la suite completa el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **76 pasaron, 0 fallaron, 0 en SKIP** de 76 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`).
+La tabla siguiente es una única ejecución en vivo de la suite completa el 2026-07-30 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **76 pasaron, 0 fallaron, 0 en SKIP** de los 76 medidos hasta ahora, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`). 2 escenarios de la lista anterior aún no tienen fila aquí: se añadieron después de la última ejecución en vivo, y un resultado solo se publica una vez medido.
 
 {/* end generated */}
 

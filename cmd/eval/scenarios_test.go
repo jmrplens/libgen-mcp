@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -319,7 +320,7 @@ func TestAssertConfirmationCannotBeWaivedGradesTheProof(t *testing.T) {
 	const md5 = "0123456789abcdef0123456789abcdef"
 	search := okCall("search", map[string]any{"query": "sicp"},
 		tools.SearchOutput{Results: []libgen.Result{{MD5: md5}}})
-	saved := libgen.DownloadResult{Path: "/tmp/sicp.pdf", SizeBytes: 42, Source: "libgen"}
+	saved := libgen.DownloadResult{Path: "/tmp/sicp.pdf", SizeBytes: 42, Source: "libgen", Verified: true}
 	download := okCall("download", map[string]any{"md5": md5}, saved)
 
 	fired := transcript{Calls: []toolCall{search, download}, ConfirmElicits: 1}
@@ -420,11 +421,46 @@ func TestEscalatedDetailsSeesALaterSearch(t *testing.T) {
 	tr := transcript{Calls: []toolCall{
 		okCall("search", map[string]any{"query": escalationQuery}, tools.SearchOutput{}),
 		annasSearch(escalationQuery, pinnedResult()),
-		okCall("get_details", map[string]any{"md5": escalationMD5},
-			tools.DetailsOutput{File: map[string]any{"origin": "annas", "collection": "zlib"}}),
+		okCall("get_details", map[string]any{"md5": escalationMD5}, thinAnnasRecord()),
 	}}
 	if pass, why := assertEscalatedDetails(tr); !pass {
 		t.Fatalf("a get_details on a hit from the second search must pass: %s", why)
+	}
+}
+
+// thinAnnasRecord is what get_details returns for an md5 only Anna's indexes: a
+// shadow-library file row with no catalog edition behind it, and the citation
+// exports built from it.
+func thinAnnasRecord() tools.DetailsOutput {
+	return tools.DetailsOutput{
+		File:      map[string]any{"origin": "annas", "collection": "zlib"},
+		Citations: &tools.Citations{BibTeX: "@book{gading, title = {" + escalationQuery + "}}"},
+	}
+}
+
+// TestEscalatedDetailsRequiresCitationsFromAThinRecord pins the capability
+// get_details now leads with onto the record type most likely to lose it. Citations
+// were only ever graded over catalog records, which are the rich ones; a
+// shadow-library record is a title and little else, and an export pipeline that
+// quietly needs an edition row behind it would pass every existing scenario.
+func TestEscalatedDetailsRequiresCitationsFromAThinRecord(t *testing.T) {
+	withCitations := transcript{Calls: []toolCall{
+		annasSearch(escalationQuery, pinnedResult()),
+		okCall("get_details", map[string]any{"md5": escalationMD5}, thinAnnasRecord()),
+	}}
+	if pass, why := assertEscalatedDetails(withCitations); !pass {
+		t.Fatalf("a thin record that still produced BibTeX must pass: %s", why)
+	}
+
+	bare := thinAnnasRecord()
+	bare.Citations = nil
+	noCitations := transcript{Calls: []toolCall{
+		annasSearch(escalationQuery, pinnedResult()),
+		okCall("get_details", map[string]any{"md5": escalationMD5}, bare),
+	}}
+	pass, why := assertEscalatedDetails(noCitations)
+	if pass || !strings.Contains(why, "no BibTeX") {
+		t.Fatalf("a thin record with no citation exports is our bug, got pass=%v %q", pass, why)
 	}
 }
 
@@ -503,5 +539,149 @@ func TestIsPinnedItemSeparatesTheFixtureFromItsNeighbours(t *testing.T) {
 				t.Errorf("isPinnedItem(%q) = %v, want %v", tc.hit.Title, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCheckDownloadedFileRequiresIntegrityForAnMD5 pins the property the download
+// scenarios claimed and never checked. The server hashes what it streams and
+// reports the outcome in Verified, so an md5-keyed file that comes back unverified
+// is a file whose digest was never compared with the one that was asked for.
+func TestCheckDownloadedFileRequiresIntegrityForAnMD5(t *testing.T) {
+	const md5 = "0123456789abcdef0123456789abcdef"
+	saved := libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 4096, Source: "libgen"}
+
+	verified := saved
+	verified.Verified = true
+	pass, why := checkDownloadedFile(okCall("download", map[string]any{"md5": md5}, verified), "libgen")
+	if !pass || !strings.Contains(why, "md5 verified") {
+		t.Fatalf("a verified md5 download must pass and say so, got pass=%v %q", pass, why)
+	}
+
+	pass, why = checkDownloadedFile(okCall("download", map[string]any{"md5": md5}, saved), "libgen")
+	if pass || !strings.Contains(why, "unverified") {
+		t.Fatalf("an unverified md5 download must fail, got pass=%v %q", pass, why)
+	}
+
+	// A doi- or isbn-keyed download has no digest to compare against, so Verified is
+	// false by construction and must not be held against it.
+	byDOI := okCall("download", map[string]any{"doi": openAccessDOI}, saved)
+	if pass, why = checkDownloadedFile(byDOI, "libgen"); !pass {
+		t.Fatalf("a doi-keyed download has no md5 to verify and must pass: %s", why)
+	}
+}
+
+// TestRestrictedSourcesRejectsTheWrongBook is the run this assertion certified
+// green: the DOI was refused as the restriction requires, the model then found the
+// catalog record that carries that DOI by mistake, downloaded a Taleb paperback in
+// place of a PLOS paper, and never answered at all.
+func TestRestrictedSourcesRejectsTheWrongBook(t *testing.T) {
+	refused := errCall("download", map[string]any{"doi": elicitOADOI})
+	wrongBook := okCall("download", map[string]any{"md5": "d78f95b7ef65b333d76015c527fdc554"},
+		libgen.DownloadResult{
+			Path:      "/tmp/[Incerto] Taleb, Nassim Nicholas - Antifragile [10.1371_journal.pmed.0020124] - libgen.li.pdf",
+			SizeBytes: 10129892, Source: "libgen", Verified: true,
+		})
+
+	truncated := transcript{Calls: []toolCall{refused, wrongBook}}
+	pass, why := assertRestrictedSourcesHonored(truncated)
+	if !strings.HasPrefix(why, skipPrefix) {
+		t.Fatalf("a mis-delivered file and no answer at all must not be a plain pass, got pass=%v %q", pass, why)
+	}
+
+	// Same mis-delivery, but the model says what it actually got: graded on honesty.
+	honest := truncated
+	honest.FinalText = "I could not find that article; the only record carrying that DOI is a different book."
+	if pass, why = assertRestrictedSourcesHonored(honest); !pass || !strings.Contains(why, "not the article") {
+		t.Fatalf("an honest report of the mis-delivery must pass as degraded, got pass=%v %q", pass, why)
+	}
+
+	// And claiming the article arrived when a different book did is a failure.
+	claimed := truncated
+	claimed.FinalText = "Here is the article you asked for, saved to disk."
+	if pass, why = assertRestrictedSourcesHonored(claimed); pass {
+		t.Fatalf("claiming the wrong file is the article must fail: %s", why)
+	}
+}
+
+// TestRestrictedSourcesStillPassesOnACleanRefusal keeps the guards above from
+// swallowing the case the scenario is actually for: the DOI refused, no file
+// served, and the model passing the refusal on.
+func TestRestrictedSourcesStillPassesOnACleanRefusal(t *testing.T) {
+	tr := transcript{
+		Calls:     []toolCall{errCall("download", map[string]any{"doi": elicitOADOI})},
+		FinalText: "I could not download it — this deployment permits no source that can serve a DOI.",
+	}
+	if pass, why := assertRestrictedSourcesHonored(tr); !pass || strings.HasPrefix(why, skipPrefix) {
+		t.Fatalf("a clean refusal reported to the user is the pass case, got pass=%v %q", pass, why)
+	}
+}
+
+// TestForcedExtrasDegradesWhenAnnasIsSilent covers the half of always mode the
+// open-access providers cannot stand in for. A run in which Anna's returned nothing
+// used to pass plainly on their hits alone, which reads as "the forced escalation
+// worked" about evidence that does not say so.
+func TestForcedExtrasDegradesWhenAnnasIsSilent(t *testing.T) {
+	catalog := []libgen.Result{{MD5: "88888888888888888888888888888888", Title: "The Go Programming Language"}}
+	openAccess := []discovery.DiscoveryResult{{Title: "A Tour of Go", Origin: "arxiv"}}
+
+	silent := transcript{
+		Calls: []toolCall{okCall("search", map[string]any{"query": "go programming language"},
+			tools.SearchOutput{Results: catalog, OpenAccess: openAccess})},
+		FinalText: "Anna's Archive returned nothing this time; here is what the catalog and the open-access providers have.",
+	}
+	pass, why := assertForcedExtras(silent)
+	if !pass || !strings.HasPrefix(why, skipPrefix) || !strings.Contains(why, "shadow-library half") {
+		t.Fatalf("open-access hits alone must skip, not pass plainly, got pass=%v %q", pass, why)
+	}
+
+	answered := transcript{Calls: []toolCall{okCall("search", map[string]any{"query": "go programming language"},
+		tools.SearchOutput{
+			Results:    append(catalog, libgen.Result{MD5: "99999999999999999999999999999999", Origin: "annas"}),
+			OpenAccess: openAccess,
+		})}}
+	if pass, why = assertForcedExtras(answered); !pass || strings.Contains(why, "shadow-library half") {
+		t.Fatalf("an Anna's hit alongside the catalog is the plain pass, got pass=%v %q", pass, why)
+	}
+}
+
+// TestModelChosenShadowEscalationGradesTheChoice pins S77's middle step, which is
+// the whole reason the scenario exists: it grades a field description, so it must
+// fail when the model never reaches for extra_sources and pass when it does.
+func TestModelChosenShadowEscalationGradesTheChoice(t *testing.T) {
+	const hitMD5 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	widened := okCall("search", map[string]any{"query": "islam indonesia", "extra_sources": "always"},
+		tools.SearchOutput{Results: []libgen.Result{{MD5: hitMD5, Title: "Islam Nusantara", Origin: "annas"}}})
+
+	attributed := transcript{
+		Calls:     []toolCall{widened},
+		FinalText: "From Anna's Archive: Islam Nusantara.",
+	}
+	if pass, why := assertModelChosenShadowEscalation(attributed); !pass {
+		t.Fatalf("the model widening the search itself and attributing the hit must pass: %s", why)
+	}
+
+	narrow := transcript{
+		Calls: []toolCall{okCall("search", map[string]any{"query": "islam indonesia"},
+			tools.SearchOutput{Results: []libgen.Result{{MD5: hitMD5, Title: "Islam Nusantara"}}})},
+		FinalText: "Here is what the catalog holds.",
+	}
+	pass, why := assertModelChosenShadowEscalation(narrow)
+	if pass || !strings.Contains(why, "SURFACE GAP") {
+		t.Fatalf("never setting extra_sources is the gap under test, got pass=%v %q", pass, why)
+	}
+
+	// The two live-dependent steps: a silent network degrades, an unattributed
+	// answer does not — the prompt asked where each result came from.
+	unattributed := transcript{Calls: []toolCall{widened}, FinalText: "I found Islam Nusantara for you."}
+	if pass, why = assertModelChosenShadowEscalation(unattributed); pass {
+		t.Fatalf("an answer that names no source must fail: %s", why)
+	}
+	quiet := transcript{
+		Calls: []toolCall{okCall("search", map[string]any{"query": "islam indonesia", "extra_sources": "always"},
+			tools.SearchOutput{Results: []libgen.Result{{MD5: hitMD5, Title: "Islam Nusantara"}}})},
+		FinalText: "I could not find anything from Anna's Archive for this today; here is the rest.",
+	}
+	if pass, why = assertModelChosenShadowEscalation(quiet); !pass {
+		t.Fatalf("no Anna's hit today is the network's doing, not the model's: %s", why)
 	}
 }

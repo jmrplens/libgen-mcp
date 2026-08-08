@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -247,6 +248,20 @@ const evalUnpaywallEmail = "mail@jmrp.io"
 // email configured, only the elicited contact email can bring Unpaywall into the
 // download chain for this DOI.
 const elicitOADOI = "10.1371/journal.pmed.0020124"
+
+// elicitOAMarkers are the lowercase fragments a file that really holds the article
+// elicitOADOI names ("Why Most Published Research Findings Are False", Ioannidis
+// 2005) would carry in its name. They exist because the DOI itself no longer tells
+// the two works apart: the catalog holds a record for a 544-page Random House book
+// that carries this DOI by mistake, so a mis-keyed download comes back with the
+// requested DOI in its filename and the wrong book in its bytes. Only the title and
+// the author separate them.
+//
+// The third marker is the PLOS filename for the article itself. A source that serves
+// the real paper names it after the DOI suffix with a pdf extension, which the
+// mis-keyed catalog record — where the DOI sits in brackets among a book's title and
+// publisher — never produces.
+var elicitOAMarkers = []string{"published research findings", "ioannidis", "pmed.0020124.pdf"}
 
 // unpaywallEmail returns the Unpaywall contact email the eval injects: the
 // LIBGEN_MCP_UNPAYWALL_EMAIL environment value when set (the Makefile eval target
@@ -502,10 +517,11 @@ func scenarios() []scenario {
 	)
 }
 
-// coverageGapScenarios close the holes a coverage sweep of the suite found: two
-// download sources that had never been graded at all, an argument that suppresses
-// a user's last chance to stop a file being written, the read tool's whole
-// continuation path, and the half of the credential gate S48 leaves untested.
+// coverageGapScenarios close the holes a coverage sweep of the suite found: three
+// download sources that had never been graded on their own, an argument that
+// suppresses a user's last chance to stop a file being written, the read tool's
+// whole continuation path, the half of the credential gate S48 leaves untested, and
+// the escalation a model decides on for itself rather than one a deployment forces.
 //
 // They are grouped rather than filed beside their neighbors so the run order, the
 // README table and the results table stay in one sequence: the suite's ids are
@@ -567,7 +583,123 @@ func coverageGapScenarios() []scenario {
 			SetupEnv: map[string]string{"LIBGEN_MCP_CORE_KEY": "eval-placeholder-core-key"},
 			Assert:   assertKeyedSourceAdvertised,
 		},
+		{
+			ID: "S76",
+			Prompt: `Find the book "The C Programming Language" by Kernighan and Ritchie, then download it ` +
+				`from the Anna's Archive source.`,
+			// annas is the last entry in config.KnownSources with no scenario of its own
+			// pinning it by name and grading that it served the bytes. Its only live
+			// coverage is buried in S34, where the source is whatever the chain picked.
+			// This is S6b's shape applied to the other book source.
+			SetupEnv: map[string]string{
+				// Keyless on every machine: with a membership key present the run would
+				// exercise the member fast-download instead, which is S41's job, and the
+				// result would depend on what the operator happens to have configured.
+				"LIBGEN_MCP_ANNAS_KEY": "",
+				// Same reason S41 shrinks it: measured on 2026-07-30, the keyless IPFS
+				// gateways spent 322 of the scenario's 360 seconds retrying and left the
+				// model no turn to answer in.
+				"LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS": fastStartRetryWaits,
+			},
+			Assert: assertS76Annas,
+		},
+		{
+			ID: "S77",
+			// No SetupEnv on purpose: the deployment default is auto, so setting
+			// extra_sources to always has to be the model's own decision.
+			Prompt: `I want the widest possible search you can do — every catalog and every source you have — ` +
+				`for books about the history of Islam in the Indonesian archipelago. For each result, tell me ` +
+				`which source it came from.`,
+			// The escalation nothing graded: the model choosing to go beyond the catalog.
+			// S20 and S29 grade the open-access half of it, and S39 has the deployment
+			// impose always, so no scenario asked whether a model reading the current
+			// field description still finds the shadow-library escalation and uses what
+			// comes back. That is precisely what the reframing away from "Library
+			// Genesis" put at risk, and precisely what nothing would have caught.
+			Assert: assertModelChosenShadowEscalation,
+		},
 	}
+}
+
+// assertS76Annas grades the second book source pinned by its prose name: the model
+// must map "Anna's Archive" onto source=annas and that source must serve the bytes.
+//
+// The identifier is left unpinned (an empty id, so only a well-formed md5 is
+// required) rather than fixed to a known hash. A pinned md5 is a fixture, and this
+// suite has already been bitten twice by third-party drift retiring one; what is
+// under test here is the source selection, which any md5 the model found proves
+// just as well.
+func assertS76Annas(tr transcript) (pass bool, detail string) {
+	return assertSourcedDownload(tr, "annas", "md5", "")
+}
+
+// searchForcedExtras returns the search call in which the model asked for the
+// beyond-catalog searchers itself, if any. Every search is considered, not the
+// first: a model that searches the catalog, sees it is thin and widens the next
+// query has made the decision the scenario is about.
+func searchForcedExtras(tr transcript) (call toolCall, found bool) {
+	for _, c := range tr.Calls {
+		if c.Name == "search" && strings.EqualFold(stringField(c.Input, "extra_sources"), "always") {
+			return c, true
+		}
+	}
+	return toolCall{}, false
+}
+
+// attributesAnnasOrigin reports whether an answer says where the shadow-library
+// results came from — by naming Anna's, or by carrying one of the md5s that only
+// Anna's returned. The prompt asks for the source of each result, so provenance is
+// part of the answer and not a bonus.
+func attributesAnnasOrigin(answer string, hits []annasHit) bool {
+	lower := strings.ToLower(answer)
+	if strings.Contains(lower, "anna") {
+		return true
+	}
+	for _, h := range hits {
+		if strings.Contains(lower, h.MD5) {
+			return true
+		}
+	}
+	return false
+}
+
+// assertModelChosenShadowEscalation grades the escalation the MODEL decides on,
+// which is the case the rest of the suite leaves out: S20 and S29 grade the
+// open-access providers, and S39 has the deployment force always, so nothing asked
+// whether a model reading the tool surface still discovers that it can reach past
+// the catalog into the shadow libraries and then uses what came back.
+//
+// The extra_sources step is the point of the scenario. It grades a field
+// description: the surface no longer leads with "Library Genesis", and if that
+// reframing cost the model its route to the widest search, this is where it shows.
+// The two live-dependent steps around it are graded softly — a network that returns
+// no Anna's-origin hit today is not the model's doing — but the choice itself is
+// not, and neither is answering without saying where the results came from.
+//
+// Nothing here is pinned: no fixture, no title, no md5. Every escalation scenario
+// that pinned one has needed re-pinning when the third party drifted.
+func assertModelChosenShadowEscalation(tr transcript) (pass bool, detail string) {
+	if _, searched := findCall(tr, "search"); !searched {
+		return false, noSearchCall
+	}
+	if _, forced := searchForcedExtras(tr); !forced {
+		return false, `SURFACE GAP: model did not set extra_sources to "always" despite being asked for the ` +
+			`widest possible search — the field's description may no longer convey that it reaches past the catalog`
+	}
+	hits := annasHits(tr)
+	if len(hits) == 0 {
+		return gradeDegraded(tr, fmt.Sprintf("model widened the search itself but no Anna's-origin result came "+
+			"back today (%d open-access hit(s), live network)", openAccessHits(tr)))
+	}
+	if p, d, settled := gradeOutOfTurns(tr, "the model widened the search itself and Anna's answered"); settled {
+		return p, d
+	}
+	if !attributesAnnasOrigin(tr.FinalText, hits) {
+		return false, fmt.Sprintf("model widened the search itself and Anna's returned %d result(s), but the "+
+			"answer attributes none of them to it — the prompt asked which source each result came from", len(hits))
+	}
+	return true, fmt.Sprintf("model set extra_sources=always on its own and attributed the %d Anna's-origin "+
+		"result(s) it got back", len(hits))
 }
 
 // assertS71Unpaywall grades the head of the article chain, pinned by its prose
@@ -1967,8 +2099,8 @@ func gradeFetchableProvider(tr transcript, origin string, hits []discovery.Disco
 	if len(links) == 0 {
 		return true, skipPrefix + " " + origin + " answered, but none of its hits carried a hosted full text today"
 	}
-	if strings.TrimSpace(tr.FinalText) == "" {
-		return true, skipPrefix + " model exhausted its turn budget before answering (" + origin + " answered correctly)"
+	if p, d, settled := gradeOutOfTurns(tr, origin+" answered correctly"); settled {
+		return p, d
 	}
 	if !containsAny(tr.FinalText, links...) {
 		return false, "SURFACE GAP: " + origin + " returned a directly-fetchable file URL and the model did not " +
@@ -1995,8 +2127,8 @@ func gradeIndexProvider(tr transcript, origin string, hits []discovery.Discovery
 				"but it returned " + strconv.Quote(firstChars(h.Title, 60)) + " as freely readable"
 		}
 	}
-	if strings.TrimSpace(tr.FinalText) == "" {
-		return true, skipPrefix + " model exhausted its turn budget before answering (" + origin + " contributed correctly)"
+	if p, d, settled := gradeOutOfTurns(tr, origin+" contributed correctly"); settled {
+		return p, d
 	}
 	if reportsGaveUp(tr.FinalText) {
 		return false, origin + " contributed records but the model reported the search as empty: " +
@@ -2299,9 +2431,43 @@ func sourceOutsideAllowlist(tr transcript, allowed ...string) string {
 	return ""
 }
 
+// misdeliveredFile returns the name of a file a download saved that carries none of
+// the markers of the work the scenario asked for, or "" when nothing was saved or
+// what was saved corroborates the request.
+//
+// It exists because "which source served it" and "what did it serve" are different
+// questions, and an assertion that only asks the first will certify a file that has
+// nothing to do with the prompt. The evidence is the saved name — the path the
+// server wrote and the name the mirror announced — because that is the only thing a
+// transcript carries about the bytes.
+func misdeliveredFile(tr transcript, markers ...string) string {
+	for _, c := range tr.Calls {
+		if c.Name != "download" || c.Result == nil || c.Result.IsError {
+			continue
+		}
+		var res libgen.DownloadResult
+		if decodeStructured(c.Structured, &res) != nil || res.Path == "" {
+			continue
+		}
+		name := filepath.Base(res.Path)
+		if containsAny(strings.ToLower(name+" "+res.OriginalFilename), markers...) {
+			continue
+		}
+		return firstChars(name, 90)
+	}
+	return ""
+}
+
 // assertRestrictedSourcesHonored verifies LIBGEN_MCP_SOURCES holds. The deployment
 // permits the catalog only, so a DOI download has no source that can serve it: the
 // tool must refuse, and the model must pass that on rather than claim a file.
+//
+// The last two checks are what stops this scenario certifying a run that served the
+// wrong book to nobody. Measured on 2026-08-08: the DOI was refused as it should be,
+// the model then found the catalog record that carries the DOI by mistake, downloaded
+// a 10 MB Taleb paperback in place of a five-page PLOS paper, and ran out of turns
+// without answering — and the assertion called it a pass, because a permitted source
+// had served the file and nothing asked what the file was.
 func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
 	sawDOIAttempt, doiRefused := doiDownloadOutcome(tr)
 	if sawDOIAttempt && !doiRefused {
@@ -2316,6 +2482,17 @@ func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
 	}
 	if !sawDOIAttempt {
 		return false, "SURFACE GAP: model never tried the DOI it was given"
+	}
+	// Not a FAIL: the mis-keyed catalog record is the catalog's fault, not the
+	// model's, and routing around a refusal is the right instinct. What the model
+	// still owns is saying that what it came back with is not what was asked for —
+	// which is exactly what gradeDegraded grades.
+	if wrong := misdeliveredFile(tr, elicitOAMarkers...); wrong != "" {
+		return gradeDegraded(tr, "the permitted source served "+strconv.Quote(wrong)+
+			", which is not the article this DOI names — the only catalog record carrying it belongs to another work")
+	}
+	if p, d, settled := gradeOutOfTurns(tr, "the restriction itself held"); settled {
+		return p, d
 	}
 	if admitsMiss(tr.FinalText) {
 		return true, "restriction held and the model reported the refusal instead of claiming a file"
@@ -2437,6 +2614,22 @@ func reportsGaveUp(answer string) bool {
 	return containsAny(strings.ToLower(answer), gaveUpPhrases...)
 }
 
+// gradeOutOfTurns settles a scenario whose model never produced a final answer.
+// A conversation that ran out of turns has nothing to grade about what the model
+// told the user — it told them nothing — so it is a SKIP, never a pass: a run
+// where the tools all did the right thing and the user got no answer is not a
+// success, and reporting it as one is how a truncated conversation goes unnoticed.
+//
+// It was the same four lines in four assertions before it was a helper, and the
+// fifth caller (assertRestrictedSourcesHonored) is the one whose absence let a run
+// that answered nobody be certified green.
+func gradeOutOfTurns(tr transcript, because string) (pass bool, detail string, settled bool) {
+	if strings.TrimSpace(tr.FinalText) != "" {
+		return false, "", false
+	}
+	return true, skipPrefix + " model exhausted its turn budget before answering (" + because + ")", true
+}
+
 // gradeDegraded grades a scenario whose live payload did not arrive. The model's
 // behavior is still fully observable, and the only wrong move left is to claim a
 // result it never received — so this asserts honesty rather than skipping.
@@ -2482,8 +2675,23 @@ func assertForcedExtras(tr transcript) (pass bool, detail string) {
 			fromAnnas++
 		}
 	}
-	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
-		return gradeDegraded(tr, "always mode ran but no extra searcher returned a hit (live network)")
+	if fromAnnas == 0 {
+		// Anna's is half of what always mode forces, and the half nothing else stands
+		// in for: the open-access providers answer a different question. Passing on
+		// their hits alone reported a run in which the shadow-library escalation
+		// produced nothing as a plain success — the one reading of "always mode works"
+		// the evidence did not support.
+		if len(out.OpenAccess) == 0 {
+			return gradeDegraded(tr, "always mode ran but no extra searcher returned a hit (live network)")
+		}
+		// A SKIP rather than a degraded grade, for the reason federatedProviderHits
+		// gives for the same situation: the model is not told which searchers ran, the
+		// catalog and the open-access providers answered its question in full, and
+		// there is no miss for it to own. Grading honesty here would fail a model that
+		// did everything right for a silence it could not see.
+		return true, fmt.Sprintf("%s always mode reached the open-access providers (%d hit(s)) but Anna's "+
+			"returned nothing, so the shadow-library half of the forced escalation went ungraded",
+			skipPrefix, len(out.OpenAccess))
 	}
 	return true, fmt.Sprintf("always mode consulted the extras alongside a %d-result catalog page (annas=%d, open access=%d)",
 		len(out.Results), fromAnnas, len(out.OpenAccess))
@@ -2615,7 +2823,18 @@ func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
 	if origin != "annas" {
 		return false, fmt.Sprintf("get_details record origin = %q, want annas (the catalog has no record for this md5)", origin)
 	}
-	return true, fmt.Sprintf("get_details fell back to Anna's for the escalated md5 (collection=%v)", details.File["collection"])
+	// Citation exports are what get_details leads with, and until now they were only
+	// ever graded over catalog records — which are the rich ones. A shadow-library
+	// record is the thin case: a title, maybe an author, no edition row behind it. If
+	// the headline capability quietly needs the catalog to work, this is where it
+	// shows, and the answer must be a citation rather than nothing.
+	if details.Citations == nil || strings.TrimSpace(details.Citations.BibTeX) == "" {
+		return false, functionalPrefix + "get_details answered for the Anna's-only md5 but returned no BibTeX — " +
+			"citation exports are the capability get_details leads with, and a thin shadow-library record has to " +
+			"produce one just as a catalog record does"
+	}
+	return true, fmt.Sprintf("get_details fell back to Anna's for the escalated md5 (collection=%v) and still "+
+		"produced a BibTeX entry from the thin record", details.File["collection"])
 }
 
 // assertRemoteDownloadLandsLocal checks the remote block: the model calls
@@ -3324,8 +3543,8 @@ func assertEnrichment(tr transcript) (pass bool, detail string) {
 		return gradeDegraded(tr, "enrich=true but Crossref returned no metadata (best-effort external API)")
 	}
 	if !answerMentionsEnrichment(tr.FinalText, out.Enrichment.Crossref) {
-		if strings.TrimSpace(tr.FinalText) == "" {
-			return true, skipPrefix + " model exhausted its turn budget before answering (enrich data was fetched correctly)"
+		if p, d, settled := gradeOutOfTurns(tr, "enrich data was fetched correctly"); settled {
+			return p, d
 		}
 		return false, "FUNCTIONAL: Crossref data was present but the model's answer referenced neither the journal name, the citation count, nor any citation-specific term"
 	}
@@ -3804,7 +4023,16 @@ func assertS8(tr transcript) (pass bool, detail string) {
 }
 
 // checkDownloadedFile decodes a download result and confirms a non-empty saved
-// path and size, plus (when want is non-empty) the serving source.
+// path and size, plus (when want is non-empty) the serving source — and, when the
+// call was keyed by an md5, that the bytes were verified against it.
+//
+// Integrity was the part nobody graded. The server hashes what it streams and
+// aborts on a mismatch, reporting the outcome in DownloadResult.Verified, and every
+// md5-keyed source in the chain (libgen, annas, randombook) asks for that check —
+// so on an md5-keyed download an unverified file means the digest was never
+// compared, which is a different file arriving under the right name. The check is
+// conditional because there is nothing to compare against otherwise: Verified is
+// false by construction on every doi- and isbn-keyed download.
 func checkDownloadedFile(call toolCall, want string) (pass bool, detail string) {
 	var res libgen.DownloadResult
 	if err := decodeStructured(call.Structured, &res); err != nil {
@@ -3816,7 +4044,24 @@ func checkDownloadedFile(call toolCall, want string) (pass bool, detail string) 
 	if want != "" && res.Source != want {
 		return false, "DownloadResult.Source is " + res.Source + ", want " + want
 	}
-	return true, fmt.Sprintf("downloaded %d bytes via %s", res.SizeBytes, res.Source)
+	// No functionalPrefix here, matching the two checks above it: several callers add
+	// the prefix themselves, and one that did would otherwise say it twice.
+	if md5 := stringField(call.Input, "md5"); md5 != "" && !res.Verified {
+		return false, "download was keyed by md5 " + md5 +
+			" and came back unverified — an md5-keyed source hashes what it streams, so a file that " +
+			"arrives without that check is not provably the one that was asked for"
+	}
+	return true, fmt.Sprintf("downloaded %d bytes via %s%s", res.SizeBytes, res.Source, verifiedSuffix(res))
+}
+
+// verifiedSuffix names the integrity outcome in a pass message, so a graded
+// property is visible in the result rather than only in the code that checked it.
+// A doi- or isbn-keyed download has no digest to check and says nothing.
+func verifiedSuffix(res libgen.DownloadResult) string {
+	if res.Verified {
+		return " (md5 verified)"
+	}
+	return ""
 }
 
 // selectScenarios filters scenarios by a comma-separated --only list (empty
