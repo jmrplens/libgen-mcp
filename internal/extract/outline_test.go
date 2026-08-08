@@ -512,6 +512,12 @@ func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
 		"missing pdf":     filepath.Join(dir, "gone.pdf"),
 		"blank then text": writeBytes(t, dir, "coverthentext.pdf", blankThenTextPDF()),
 		"null page pdf":   writeBytes(t, dir, "nullpage.pdf", nullPagePDF()),
+		// A PDF no mode can read at all belongs here for the same reason as the rest:
+		// its cause is the file, not the mode, so all three must name it identically.
+		// It reaches Outline by a different route than the others — the bookmark
+		// reader returns cleanly and only the text probe behind it meets the cycle —
+		// which is exactly the kind of second path that drifts if nothing watches it.
+		"cyclic page tree": writeBytes(t, dir, "cycle.pdf", cyclicPageTreePDF()),
 	}
 	for name, p := range paths {
 		outline, err := Outline(context.Background(), p)

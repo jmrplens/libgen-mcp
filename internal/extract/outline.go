@@ -52,7 +52,23 @@ type ncxNavPoint struct {
 // read best-effort via pdfcpu bookmarks; TXT has no outline; DjVu, comic
 // archives and proprietary e-book formats are reported as unsupported. A
 // canceled ctx yields the context error.
+//
+// The whole read runs behind the time budget in guard.go, so a document no
+// parser can finish yields a not-extractable result rather than a call that
+// never returns.
 func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
+	res, reason, err := guardedRead(ctx, func(ctx context.Context) (OutlineResult, error) {
+		return outlineChecked(ctx, filePath)
+	})
+	if reason != "" {
+		return OutlineResult{Format: formatHint(filePath), Reason: reason}, nil
+	}
+	return res, err
+}
+
+// outlineChecked is Outline's work: dispatch on format. It is separate so the
+// watchdog has a single function to run.
+func outlineChecked(ctx context.Context, filePath string) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}

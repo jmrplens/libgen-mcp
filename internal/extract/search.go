@@ -67,7 +67,23 @@ var snippetReplacer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t
 // scanned or text-free PDF is likewise reported as not extractable. A canceled
 // ctx yields the context error. An empty or whitespace-only query yields zero
 // matches without an error.
+//
+// The whole search runs behind the time budget in guard.go, so a document no
+// parser can finish yields a not-extractable result rather than a call that
+// never returns.
 func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+	res, reason, err := guardedRead(ctx, func(ctx context.Context) (SearchResult, error) {
+		return searchChecked(ctx, path, query, o)
+	})
+	if reason != "" {
+		return SearchResult{Format: formatHint(path), Reason: reason}, nil
+	}
+	return res, err
+}
+
+// searchChecked is Search's work: normalize the options, then dispatch on
+// format. It is separate so the watchdog has a single function to run.
+func searchChecked(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SearchResult{}, err
 	}
@@ -128,6 +144,10 @@ func scanPDFMatches(ctx context.Context, path, query string, o SearchOpts) (Sear
 		return SearchResult{Format: "pdf", Reason: invalidPDFReason(err)}, nil
 	}
 	defer func() { _ = f.Close() }()
+
+	if cyclic := pageTreeReason(r); cyclic != "" {
+		return SearchResult{Format: "pdf", Reason: cyclic}, nil
+	}
 
 	var all []Match
 	anyText := false

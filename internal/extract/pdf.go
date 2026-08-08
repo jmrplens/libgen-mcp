@@ -59,6 +59,10 @@ func probePDFTextLayer(ctx context.Context, path string) (state pdfTextState, re
 	}
 	defer func() { _ = f.Close() }()
 
+	if cyclic := pageTreeReason(r); cyclic != "" {
+		return pdfTextUnreadable, cyclic, nil
+	}
+
 	for _, n := range probePageNumbers(r.NumPage(), textProbePages) {
 		if e := ctx.Err(); e != nil {
 			return pdfTextUnreadable, "", e
@@ -141,6 +145,10 @@ func readPDFPages(ctx context.Context, path string, startPage, maxPages, maxChar
 		return Chunk{Format: "pdf", Reason: invalidPDFReason(err)}, nil
 	}
 	defer func() { _ = f.Close() }()
+
+	if cyclic := pageTreeReason(r); cyclic != "" {
+		return Chunk{Format: "pdf", Reason: cyclic}, nil
+	}
 
 	total := r.NumPage()
 	if total > 0 && startPage > total {

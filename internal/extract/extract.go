@@ -152,7 +152,24 @@ func appendNote(reason, note string) string {
 // pipeline cannot see: a file whose fonts carry no usable character map extracts
 // text successfully, but the characters are not the ones printed on the page.
 // When the text looks like that, QualityNote says so.
+//
+// The whole read runs behind the time budget in guard.go, so a document no
+// parser can finish yields a not-extractable Chunk rather than a call that never
+// returns.
 func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
+	chunk, reason, err := guardedRead(ctx, func(ctx context.Context) (Chunk, error) {
+		return extractChecked(ctx, path, r)
+	})
+	if reason != "" {
+		return Chunk{Format: formatHint(path), Reason: reason}, nil
+	}
+	return chunk, err
+}
+
+// extractChecked is Extract's work: dispatch on format, then judge the quality
+// of whatever text came back. It is separate so the watchdog has a single
+// function to run.
+func extractChecked(ctx context.Context, path string, r Req) (Chunk, error) {
 	chunk, err := extractByFormat(ctx, path, r)
 	if err != nil || !chunk.Extractable {
 		return chunk, err
