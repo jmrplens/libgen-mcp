@@ -225,9 +225,7 @@ func readNextSteps(out ReadOutput) []string {
 	findMode := out.Query != ""
 	switch {
 	case !out.Extractable:
-		steps = append(steps,
-			"This file's text can't be extracted ("+mdCell(out.Reason)+"). Use the download tool to fetch the raw file instead.",
-			"No text was returned. Tell the user the file could not be read; do not describe, summarize or list contents you did not receive.")
+		steps = append(steps, notExtractableSteps(out)...)
 	case out.OutlineRequested && len(out.Outline) > 0:
 		steps = append(steps, "Jump to a section by calling read again with start_page set to an entry's page (PDF) — or read sequentially.")
 		if out.OutlineTotal > len(out.Outline) {
@@ -249,6 +247,27 @@ func readNextSteps(out ReadOutput) []string {
 			"Report that the term was not found; do not quote passages that were not returned.")
 	}
 	return steps
+}
+
+// notExtractableSteps builds the guidance for a file nothing could be read from.
+// An outline request gets its own wording because the mode the caller happened
+// to pick is not what failed: the file is unreadable in every mode, and saying
+// so here is what stops the model spending a second call to rediscover it — the
+// exact round trip a scanned PDF used to cost when outline mode answered "no
+// table of contents" and only the follow-up text read named the missing text
+// layer.
+func notExtractableSteps(out ReadOutput) []string {
+	if out.OutlineRequested {
+		return []string{
+			"This file can't be read at all (" + mdCell(out.Reason) + "), so it has no readable table of contents either.",
+			"Do not retry read in text or find mode — every mode fails on this file for the same reason. Use the download tool to fetch the raw file instead.",
+			"Nothing was returned. Tell the user the file could not be read; do not describe, summarize or list chapters you did not receive.",
+		}
+	}
+	return []string{
+		"This file's text can't be extracted (" + mdCell(out.Reason) + "). Use the download tool to fetch the raw file instead.",
+		"No text was returned. Tell the user the file could not be read; do not describe, summarize or list contents you did not receive.",
+	}
 }
 
 // resolveReadPath returns the file to extract from. In local mode it uses the

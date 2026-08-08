@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -62,11 +63,11 @@ func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
 	case ".pdf":
 		return pdfOutline(ctx, filePath)
 	case ".txt":
-		return OutlineResult{Format: "txt", Extractable: true}, nil
+		return txtOutline(filePath), nil
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return OutlineResult{
 			Format: strings.TrimPrefix(ext, "."),
-			Reason: "unsupported format " + ext + ": outline extraction is not available (comic/scanned/proprietary container)",
+			Reason: unsupportedFormatReason(ext),
 		}, nil
 	default:
 		// Same reasoning as Extract: an extensionless file is identified by content.
@@ -80,27 +81,76 @@ func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
 	}
 }
 
+// noEPUBOutlineReason is reported for an EPUB with readable text but neither an
+// EPUB3 nav document nor an EPUB2 NCX.
+const noEPUBOutlineReason = "no embedded table of contents (no EPUB3 nav and no EPUB2 NCX); " +
+	"the text is readable, so read it sequentially or use find"
+
+// noTXTOutlineReason is reported for a readable plain-text file: the format has
+// no table of contents to carry.
+const noTXTOutlineReason = "plain text carries no table of contents; read it sequentially or use find"
+
 // epubOutline opens the EPUB archive and resolves its navigation. A canceled
 // ctx yields the context error; a structurally broken archive is reported as
-// not extractable; an EPUB with no navigation is extractable with no entries.
+// not extractable; an EPUB with no navigation is handed to epubNoOutlineResult,
+// which separates "readable but untitled" from "no text at all".
 func epubOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
 	zr, err := zip.OpenReader(filePath)
 	if err != nil {
-		return OutlineResult{Format: "epub", Reason: "not a readable EPUB: " + err.Error()}, nil
+		return OutlineResult{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
 	defer func() { _ = zr.Close() }()
 
 	entries, err := readEPUBOutline(ctx, zr)
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return OutlineResult{}, err
-		}
-		return OutlineResult{Format: "epub", Reason: "not a readable EPUB: " + err.Error()}, nil
+		return epubOutlineFailure(err)
 	}
-	return OutlineResult{Format: "epub", Extractable: true, Entries: entries}, nil
+	if len(entries) > 0 {
+		return OutlineResult{Format: "epub", Extractable: true, Entries: entries}, nil
+	}
+	return epubNoOutlineResult(ctx, zr)
+}
+
+// epubNoOutlineResult decides what to report for an EPUB that resolved no
+// navigation entries, by asking the same question the text path asks: does the
+// spine yield any text? It keeps outline mode from telling the caller a
+// text-free EPUB is merely missing its table of contents.
+func epubNoOutlineResult(ctx context.Context, zr *zip.ReadCloser) (OutlineResult, error) {
+	// The cap flag readEPUBText also returns is irrelevant here: this call only
+	// asks whether any text exists, not how much of it was kept.
+	full, _, err := readEPUBText(ctx, zr)
+	if err != nil {
+		return epubOutlineFailure(err)
+	}
+	if strings.TrimSpace(full) == "" {
+		return OutlineResult{Format: "epub", Reason: noEPUBTextReason}, nil
+	}
+	return OutlineResult{Format: "epub", Extractable: true, Reason: noEPUBOutlineReason}, nil
+}
+
+// epubOutlineFailure maps an EPUB read failure to either the propagated context
+// error or a soft not-extractable result naming the structural problem.
+func epubOutlineFailure(err error) (OutlineResult, error) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return OutlineResult{}, err
+	}
+	return OutlineResult{Format: "epub", Reason: notReadableEPUBReason(err)}, nil
+}
+
+// txtOutline reports a plain-text file's (necessarily absent) table of contents.
+// It still opens the file, so that an unreadable one is reported exactly as the
+// text path reports it rather than as a readable document that happens to have
+// no chapters.
+func txtOutline(filePath string) OutlineResult {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return OutlineResult{Format: "txt", Reason: cannotOpenTextReason(err)}
+	}
+	_ = f.Close()
+	return OutlineResult{Format: "txt", Extractable: true, Reason: noTXTOutlineReason}
 }
 
 // readEPUBOutline resolves the OPF, then returns the EPUB3 nav entries if

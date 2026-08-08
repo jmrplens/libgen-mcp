@@ -391,7 +391,9 @@ func TestOutline_EPUB3NavSpanAndBareLI(t *testing.T) {
 
 // TestOutline_EPUBNoToc verifies that a valid EPUB with neither a nav document
 // nor an NCX is reported as extractable with no entries and no error: a missing
-// table of contents is valid, not a failure.
+// table of contents is valid, not a failure. Its reason must say that and only
+// that — the spine text is readable, so the caller should read on rather than
+// give up on the file.
 func TestOutline_EPUBNoToc(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
 	res, err := Outline(context.Background(), path)
@@ -404,6 +406,165 @@ func TestOutline_EPUBNoToc(t *testing.T) {
 	if len(res.Entries) != 0 {
 		t.Errorf("want no entries, got %+v", res.Entries)
 	}
+	if res.Reason != noEPUBOutlineReason {
+		t.Errorf("Reason = %q, want the no-table-of-contents diagnosis", res.Reason)
+	}
+}
+
+// TestOutline_EPUBNoTocAndNoText verifies the EPUB twin of the scanned-PDF bug:
+// an EPUB whose spine yields no text at all has no table of contents *because*
+// there is nothing in it, and outline mode must report the text path's diagnosis
+// rather than the far more encouraging "no table of contents".
+func TestOutline_EPUBNoTocAndNoText(t *testing.T) {
+	path := writeEPUB(t, t.TempDir(), "empty.epub", map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/chapter1.xhtml": `<html><body><img src="scan-001.png"/></body></html>`,
+	})
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Extractable {
+		t.Fatalf("an EPUB with no text must not be reported as merely TOC-less, got %+v", res)
+	}
+	chunk, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != chunk.Reason {
+		t.Errorf("outline and text paths must give one diagnosis for one cause:\n outline: %q\n text:    %q",
+			res.Reason, chunk.Reason)
+	}
+}
+
+// TestOutline_TXTMissingFile verifies the TXT twin: outline mode used to declare
+// any path ending in .txt a readable document with no table of contents, without
+// so much as opening it. An unreadable file must be reported exactly as the text
+// path reports it.
+func TestOutline_TXTMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.txt")
+	res, err := Outline(context.Background(), path)
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if res.Extractable {
+		t.Fatalf("expected not extractable, got %+v", res)
+	}
+	chunk, err := Extract(context.Background(), path, Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != chunk.Reason {
+		t.Errorf("outline and text paths must give one diagnosis for one cause:\n outline: %q\n text:    %q",
+			res.Reason, chunk.Reason)
+	}
+}
+
+// TestOutline_DiagnosisMatchesTextPath is the standing guard over the property
+// this whole area exists to hold: for one file, one cause, one answer. Whatever
+// a caller asks for, Outline and Extract must agree on whether the document can
+// be read at all, and when it cannot they must name the reason in the very same
+// words — a model that gets "no table of contents" from one and "no extractable
+// text layer" from the other pays an extra round trip to learn what the first
+// call already knew.
+//
+// The one deliberate exception is an EPUB that carries navigation but no body
+// text: its table of contents is real information and is still worth returning,
+// so no such fixture appears here.
+func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
+	dir := t.TempDir()
+	notAZip := filepath.Join(dir, "notazip.epub")
+	if err := os.WriteFile(notAZip, []byte("this is not a zip archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	brokenPDF := filepath.Join(dir, "broken.pdf")
+	if err := os.WriteFile(brokenPDF, []byte("%PDF-1.7 definitely not a pdf"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	graphics := filepath.Join(dir, "graphics.pdf")
+	if err := os.WriteFile(graphics, graphicsOnlyPDF(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := map[string]string{
+		"text pdf":        "testdata/sample.pdf",
+		"bookmarked pdf":  "testdata/bookmarked.pdf",
+		"scanned pdf":     "testdata/scanned.pdf",
+		"graphics pdf":    graphics,
+		"broken pdf":      brokenPDF,
+		"plain text":      "testdata/sample.txt",
+		"comic archive":   "testdata/unsupported.djvu",
+		"unknown suffix":  "testdata/whatever.xyz",
+		"epub with text":  buildEPUB(t, dir),
+		"not a zip":       notAZip,
+		"missing txt":     filepath.Join(dir, "gone.txt"),
+		"extensionless":   sniffableCopy(t, dir, "testdata/scanned.pdf", "noextension"),
+		"missing pdf":     filepath.Join(dir, "gone.pdf"),
+		"blank then text": writeBytes(t, dir, "coverthentext.pdf", blankThenTextPDF()),
+		"null page pdf":   writeBytes(t, dir, "nullpage.pdf", nullPagePDF()),
+	}
+	for name, p := range paths {
+		outline, err := Outline(context.Background(), p)
+		if err != nil {
+			t.Fatalf("%s: Outline: %v", name, err)
+		}
+		chunk, err := Extract(context.Background(), p, Req{})
+		if err != nil {
+			t.Fatalf("%s: Extract: %v", name, err)
+		}
+		if outline.Extractable != chunk.Extractable {
+			t.Errorf("%s: Extractable disagrees: outline=%t text=%t (outline %q / text %q)",
+				name, outline.Extractable, chunk.Extractable, outline.Reason, chunk.Reason)
+			continue
+		}
+		if !outline.Extractable && outline.Reason != chunk.Reason {
+			t.Errorf("%s: same cause, different words:\n outline: %q\n text:    %q",
+				name, outline.Reason, chunk.Reason)
+		}
+	}
+}
+
+// TestEpubNoOutlineResult_CtxCancelledDuringTextProbe verifies that a context
+// canceled while the no-navigation branch probes the spine for text propagates
+// out as an error: the fourth ctx check of the chain is the first spine document
+// read inside epubNoOutlineResult, so a context that survives three checks
+// exercises exactly that guard.
+func TestEpubNoOutlineResult_CtxCancelledDuringTextProbe(t *testing.T) {
+	path := buildEPUB(t, t.TempDir())
+	if _, err := epubOutline(passErr(3), path); err == nil {
+		t.Fatal("expected the context error to propagate from the text probe, got nil")
+	}
+}
+
+// writeBytes writes content into dir under name and returns the path.
+func writeBytes(t *testing.T, dir, name string, content []byte) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, content, 0o600); err != nil { //nolint:gosec // dir is the test's own temp dir and name is a literal.
+		t.Fatal(err)
+	}
+	return p
+}
+
+// sniffableCopy copies src into dir under an extensionless name, so a fixture
+// can exercise the by-content dispatch both entry points share.
+func sniffableCopy(t *testing.T, dir, src, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return writeBytes(t, dir, name, data)
 }
 
 // TestOutline_EPUBMalformed verifies that a structurally broken EPUB (no
@@ -555,8 +716,9 @@ func TestEpubOutline_ContextCancelledDirect(t *testing.T) {
 
 // TestOutline_EPUBNotAZip verifies epubOutline's zip.OpenReader failure branch: a
 // .epub whose bytes are not a valid ZIP archive is reported as not extractable
-// with a "not a readable EPUB" reason (distinct from the valid-ZIP structural
-// failure that TestOutline_EPUBMalformed exercises).
+// with the same "cannot open EPUB archive" reason the text and find paths give
+// (distinct from the valid-ZIP structural failure that TestOutline_EPUBMalformed
+// exercises, which all three modes call "not a readable EPUB").
 func TestOutline_EPUBNotAZip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notazip.epub")
 	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
@@ -569,7 +731,7 @@ func TestOutline_EPUBNotAZip(t *testing.T) {
 	if res.Extractable {
 		t.Fatalf("expected not extractable, got %+v", res)
 	}
-	if !strings.Contains(res.Reason, "not a readable EPUB") {
+	if !strings.Contains(res.Reason, "cannot open EPUB archive") {
 		t.Errorf("reason should note the unreadable EPUB, got %q", res.Reason)
 	}
 }

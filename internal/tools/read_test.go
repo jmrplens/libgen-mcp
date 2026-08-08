@@ -730,6 +730,44 @@ func TestReadTool_OutlineNoToc(t *testing.T) {
 	}
 }
 
+// TestReadTool_OutlineOfAScannedPDF pins the tool-level shape of the fix for a
+// live evaluator run (S28) in which a model asked for the outline of a scanned
+// PDF, was told "No table of contents found (pdf)" after a 73-second fetch, and
+// spent a second call to be told what was actually wrong: the file has no text
+// layer at all. One call must now carry the whole truth — extractable=false, the
+// same reason the text path gives, and guidance that names retrying as pointless
+// rather than leaving it as the obvious next move.
+func TestReadTool_OutlineOfAScannedPDF(t *testing.T) {
+	h := readHandler(nil, readTestCfg(), false)
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path:    "../extract/testdata/scanned.pdf",
+		Outline: true,
+	})
+	if err != nil {
+		t.Fatalf("readHandler(outline) returned an error: %v", err)
+	}
+	if res == nil || res.IsError {
+		t.Fatalf("an unreadable file is a normal result, not a tool error: %+v", res)
+	}
+	if out.Extractable {
+		t.Fatalf("Extractable = true for a scanned PDF: %+v", out)
+	}
+	if !strings.Contains(out.Reason, "no extractable text layer") {
+		t.Errorf("Reason = %q, want the missing-text-layer diagnosis", out.Reason)
+	}
+	md := textContent(res)
+	if strings.Contains(md, "No table of contents found") {
+		t.Errorf("the false 'no table of contents' verdict is back:\n%s", md)
+	}
+	steps := strings.ToLower(strings.Join(out.NextSteps, "\n"))
+	if !strings.Contains(steps, "do not retry read") {
+		t.Errorf("guidance should say retrying in another mode is pointless, got %q", steps)
+	}
+	if !strings.Contains(steps, "download") {
+		t.Errorf("guidance should point at the download tool, got %q", steps)
+	}
+}
+
 // TestReadTool_OutlineDoesNotBreakFindOrSequential is a regression guard proving
 // the new outline branch left the other two read modes intact: a plain local
 // read (no outline, no find) still returns sequential text with no outline
@@ -788,9 +826,10 @@ func TestRenderRead_TextFenceIsBreakoutSafe(t *testing.T) {
 // that describing content it had not received was off limits.
 func TestReadNextStepsForbidsInventingContent(t *testing.T) {
 	cases := map[string]ReadOutput{
-		"not extractable": {Extractable: false, Reason: "unsupported file extension"},
-		"no outline":      {Extractable: true, OutlineRequested: true},
-		"no matches":      {Extractable: true, Query: "pointer", MatchCount: 0},
+		"not extractable":          {Extractable: false, Reason: "unsupported file extension"},
+		"outline, not extractable": {Extractable: false, OutlineRequested: true, Reason: "no extractable text layer"},
+		"no outline":               {Extractable: true, OutlineRequested: true},
+		"no matches":               {Extractable: true, Query: "pointer", MatchCount: 0},
 	}
 	for name, out := range cases {
 		joined := strings.ToLower(strings.Join(readNextSteps(out), "\n"))
