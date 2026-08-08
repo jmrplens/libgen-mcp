@@ -146,10 +146,10 @@ flowchart TD
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
     Q --> S[Sweep the failed legs' .part files<br/>skipping any another download holds]
-    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
+    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
 
-In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the partials left by the legs that failed first are removed, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
+In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the partials left by the legs that failed first are removed, the source's cooldown is cleared, and the result reports path, size, `name_origin`, `verified` and `resumed`. It does **not** report which source served the file, nor the mirror host: both stay in the server log, for the operator. See [Tools](/libgen-mcp/tools/#what-the-result-withholds).
 
 ## Multi-source chain
 

@@ -171,8 +171,15 @@ flowchart TD
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
     Q --> S[Sweep the failed legs' .part files<br/>skipping any another download holds]
-    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
+    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
+
+The destination name is chosen by the verified/unverified rule, not by what the mirror
+announced, and the result reports its provenance in `name_origin`. The result reports **no**
+source and **no** mirror: both remain server-side, on the `source resolved` log line, because
+a tool result may reveal only what the call already revealed. See
+[Tools](tools.md#what-the-result-withholds) and
+[the result-disclosure ADR](decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
 
 ## Multi-source chain
 

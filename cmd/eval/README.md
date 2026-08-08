@@ -118,8 +118,19 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 
 S6 / S6b are the reason this harness exists alongside the older checks: the
 `download` tool takes an optional **`source`** argument, and these scenarios
-assert the model actually sets it (and that `DownloadResult.Source` matches when
-the live fetch succeeds).
+assert the model actually sets it (and that the source that served the live fetch
+is the one it pinned).
+
+**Which source served is read from the server log, not the result.** The download
+result deliberately names no source — it reports only `served_by_requested_source`,
+a flag about a pin the call already made
+([ADR](../../docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md)) — so every
+assertion about routing parses the server's own `source resolved` line out of
+`calls[].server_logs` and consults the result only for the file itself, since a
+logged resolve that produced no path and no bytes is not a delivery. That is the
+more faithful observation in any case: it grades what the server did rather than
+what the model was shown. It also couples those assertions to a log message's
+wording, so renaming `source resolved` stops them grading rather than failing them.
 
 **Source availability and degraded runs.** The external sources are not equally
 reliable — **libgen** (S5) and **unpaywall** (S7) are dependable, **sci-hub** (S6)
@@ -171,7 +182,10 @@ succeed through it, shadow libraries included: a file arriving from somewhere el
 the product doing its job, not the lending gate leaking. What S55 grades once the gate
 has held is therefore **provenance** — the model saying which library served the bytes,
 since a copy from Anna's Archive is not the Internet Archive copy that was asked for —
-and it falls back to requiring the miss only when nothing served the book at all.
+and it falls back to requiring the miss only when nothing served the book at all. Note
+what that now asks of the model: the result names no source, so the only way it can
+state one is to have pinned it and read `served_by_requested_source` back. Whether the
+gate itself held is graded from the server log, not from the answer.
 
 **S56–S59 cover the discovery providers, none of which `download` can reach.** Two
 carry a file URL the CALLER fetches — a Project Gutenberg ebook (`full_text_url`) and
@@ -185,13 +199,14 @@ a record first.
 
 **S60 grades the per-source cooldown from the server log.** A source a failure proved
 unavailable is skipped for five minutes, while a clean "not indexed" never cools one
-down — a distinction that leaves no trace in any tool result, which is why this is the
-one scenario whose evidence is `calls[].server_logs`. It is still a pure function of
-the transcript: the record keeps each call's log and `--regrade` restores it. Making
-it gradeable at all is a matter of getting both passes of the chain into one call: with
-`scihub` leading a two-source chain and pinned to a dead host, the save-confirmation
-prompt's size probe walks the chain once (recording the failure) before the download
-walks it again (acting on it).
+down — a distinction that leaves no trace in any tool result, and the first assertion
+here to read `calls[].server_logs`. It is still a pure function of the transcript: the
+record keeps each call's log and `--regrade` restores it. Making it gradeable is a
+matter of getting two walks of the chain into the run: the chain is now walked once per
+call, so the prompt asks for **two downloads in sequence** with `scihub` leading a
+two-source chain pinned to a dead host — the first call classifies the failure as the
+source being unavailable, the second must act on the record. A model that runs out of
+turns before the second download is a SKIP, not a failure of the server.
 
 Two of the sources are gated on a credential and behave differently for it:
 `unpaywall` on the contact email above, and `core` on `LIBGEN_MCP_CORE_KEY`. S48
