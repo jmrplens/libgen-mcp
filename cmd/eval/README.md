@@ -89,12 +89,12 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S52 | **OAPEN by ISBN** — the same monograph through the other identifier the source accepts, which is what proves the ISBN key resolves rather than merely being accepted |
 | S53 | **OAPEN does not serve the wrong book** — a DOI OAPEN does not hold; its search is free text, so it answers with a page of unrelated monographs and the source must refuse them all rather than hand over the top hit |
 | S54 | **Internet Archive by ISBN** — a public-domain novel asked for "from the Internet Archive", reached through OpenLibrary; the file that comes back must be a real scan, not a borrow page |
-| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so a file arriving here would be DRM-wrapped or truncated and the only right outcome is a clean refusal the model passes on |
+| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so bytes from `archive` would be DRM-wrapped or truncated and the gate must write none. What the model does next is a separate question: this server exists to let a download succeed through its chain, so another source serving the book is the product working, and the model owes the user its provenance rather than a report of failure |
 | S56 | **Project Gutenberg** — a public-domain ebook whose hit carries a `full_text_url` and no identifier `download` accepts, so the model must hand the user the link instead of calling it unobtainable |
 | S57 | **ERIC** — education grey literature (agency reports, no DOI) whose hosted full text rides `pdf_url`, the same caller-fetches-it shape as a Gutenberg ebook |
 | S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure |
 | S59 | **PubMed** — the biomedical counterpart: an index contribution, cited as a record rather than offered as free full text |
-| S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the save-confirmation prompt probes the file size first, so the chain is walked twice inside one call: the first pass must classify the failure as the source being unavailable and the second must act on it. Graded from the call's own server log |
+| S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the prompt asks for two downloads in sequence. The chain is walked once per call, so the first call must classify the failure as the source being unavailable and the second must act on the record; the map lives on the `Client`, which outlives a call. Graded from the calls' own server logs |
 | S61 | **An RFC from its number alone** — the prompt names RFC 9110 the way a person does and never says "DOI", so the model must know an RFC is reachable as a `10.17487` DOI and build it; nothing else in the chain answers that prefix, so a file arriving proves both the model found the door and the gate routed |
 | S62 | **NIST by DOI** — the routing counterpart with the DOI supplied: it grades the `10.6028` gate and, through it, that the doi.org → nvlpubs redirect the source is built on still ends at a PDF rather than a landing page |
 | S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route |
@@ -112,6 +112,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S75 | **A keyed source is advertised** — S48 read the other way: with a CORE key configured, `core` must appear in `download`'s `source` enum. S48 alone is satisfied by a gate stuck shut, which looks identical to a gate working; the pair says the enum tracks the deployment. Touches no third party |
 | S76 | **Anna's Archive by name** — the last entry in `config.KnownSources` with no scenario of its own pinning it and grading that it served the bytes; its only live coverage was buried in S34, where the source is whatever the chain happened to pick. The membership key is forced empty so every machine takes the keyless path, and no md5 is pinned — the source selection is what is graded |
 | S77 | **The escalation the model chooses** — a deployment left on `auto` and a prompt asking for the widest possible search, so setting `extra_sources:"always"` is the model's own decision rather than the deployment's. S20/S29 grade the open-access half and S39 has the deployment force the mode, so nothing asked whether a model reading the current field descriptions still finds its way past the catalog and then says where the results came from |
+| S78 | **A bare identifier goes straight to `download`** — an ISBN on its own, with no title, no context and no reason given, must become a fetch without the model stopping to interrogate the caller about it. The model cannot see the deployment (which sources are enabled, which credentials, memberships or institutional subscriptions are configured), and at the moment `download` is called the chain has not yet picked a source, so any licensing judgement it forms is a guess about a configuration it was never shown. Only the call is graded, never the wording: the tool's disclosure text is what this measures |
 
 **Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
 
@@ -161,7 +162,16 @@ The other two, S53 and S55, assert a **negative**, and they are the ones worth h
 Each source can fail in a way that looks exactly like success: OAPEN's search is free
 text, so an identifier it does not hold still returns a page of unrelated monographs,
 and an Internet Archive lending item advertises ordinary PDF/EPUB files that download
-fine and cannot be opened. In both cases a file arriving is the failure.
+fine and cannot be opened. In both cases a file **from that source** is the failure.
+
+They part company on what has to happen afterwards. S53 leaves the model no route at
+all — OAPEN is the only source pinned — so the one honest answer is a report of the
+refusal. S55 leaves the whole chain open, and this server exists to let a download
+succeed through it, shadow libraries included: a file arriving from somewhere else is
+the product doing its job, not the lending gate leaking. What S55 grades once the gate
+has held is therefore **provenance** — the model saying which library served the bytes,
+since a copy from Anna's Archive is not the Internet Archive copy that was asked for —
+and it falls back to requiring the miss only when nothing served the book at all.
 
 **S56–S59 cover the discovery providers, none of which `download` can reach.** Two
 carry a file URL the CALLER fetches — a Project Gutenberg ebook (`full_text_url`) and
