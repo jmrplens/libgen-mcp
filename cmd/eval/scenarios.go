@@ -2083,7 +2083,7 @@ func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
 // sourceAliases are the names a model writes in prose for a download source whose
 // internal name is spelled differently. The map is the answer to the only question
 // namesSource asks — did the model say where the file came from? — and it is keyed by
-// the name the server reports in DownloadResult.Source.
+// the name the server logs as having served the file (see servedSource).
 //
 // Only the sources whose prose name differs from their identifier need an entry; for
 // everything else the identifier is what a model writes.
@@ -2171,12 +2171,8 @@ func assertISBNDownload(tr transcript) (pass bool, detail string) {
 	if !fileOK {
 		return false, functionalPrefix + msg
 	}
-	var res libgen.DownloadResult
-	if err := decodeStructured(call.Structured, &res); err != nil {
-		return false, err.Error()
-	}
-	if !slices.Contains(isbnBookSources, res.Source) {
-		return false, functionalPrefix + "an isbn download was served by " + strconv.Quote(res.Source) +
+	if served := servedSource(call); !slices.Contains(isbnBookSources, served) {
+		return false, functionalPrefix + "an isbn download was served by " + strconv.Quote(served) +
 			", which is not one of the open-access book sources (" + strings.Join(isbnBookSources, ", ") + ")"
 	}
 	return true, "model discovered the isbn key unaided; " + msg
@@ -2216,6 +2212,44 @@ func assertSourceRefuses(tr transcript, want, key, id, why string) (pass bool, d
 	return true, want + " refused " + why + " cleanly, and the model reported the miss instead of presenting a file"
 }
 
+// sourceResolvedMsg is the message logging.SourceAttempt writes when a source
+// delivers the file, carrying a "source" attribute naming it. It is the chain's own
+// record of the decision, and since the download result stopped naming the serving
+// source it is the only place the fact is written down.
+const sourceResolvedMsg = "source resolved"
+
+// sourceResolvedLog is the shape servedSource reads out of one captured log line.
+// Only the two fields the assertions need are declared; slog's JSON handler emits
+// the rest (time, level, duration, mirror) and json.Unmarshal ignores them.
+type sourceResolvedLog struct {
+	// Msg is slog's message field, matched against sourceResolvedMsg.
+	Msg string `json:"msg"`
+	// Source is the Name() of the DownloadSource that served the file.
+	Source string `json:"source"`
+}
+
+// servedSource returns the source the server logged as having served this call's
+// file, or "" when the call served none.
+//
+// It reads the SERVER's log rather than the tool result, which no longer names the
+// source: provenance travels to the client's inference provider and answers no
+// question the caller asked, so it stays inside the server. The log is the better
+// evidence anyway — it is what the chain did, not what the model was shown — and it
+// re-grades identically, because transcriptFromRecord restores each call's
+// server_logs. cooldownDecision reads the same channel for the same reason.
+func servedSource(c toolCall) string {
+	for _, entry := range c.ServerLogs {
+		var line sourceResolvedLog
+		if json.Unmarshal([]byte(entry), &line) != nil {
+			continue
+		}
+		if line.Msg == sourceResolvedMsg && line.Source != "" {
+			return line.Source
+		}
+	}
+	return ""
+}
+
 // downloadServedBy reports whether a download in this transcript was actually served
 // by the named source, and how many bytes it produced. It answers the question a
 // refusal scenario turns on — did this source hand over a file? — independently of
@@ -2225,11 +2259,14 @@ func downloadServedBy(tr transcript, name string) (size int64, served bool) {
 		if c.Name != "download" || c.Result == nil || c.Result.IsError {
 			continue
 		}
+		if !strings.EqualFold(servedSource(c), name) {
+			continue
+		}
 		var res libgen.DownloadResult
 		if decodeStructured(c.Structured, &res) != nil {
 			continue
 		}
-		if strings.EqualFold(res.Source, name) && res.SizeBytes > 0 {
+		if res.SizeBytes > 0 {
 			return res.SizeBytes, true
 		}
 	}
@@ -2499,11 +2536,7 @@ func assertOpenAccessChainOrder(tr transcript) (pass bool, detail string) {
 	if fileOK, msg := checkDownloadedFile(call, ""); !fileOK {
 		return fileOK, msg
 	}
-	var res libgen.DownloadResult
-	if err := decodeStructured(call.Structured, &res); err != nil {
-		return false, err.Error()
-	}
-	return gradeArticleSource(res.Source)
+	return gradeArticleSource(servedSource(call))
 }
 
 // keylessArticleSources are the article sources that need no credential, so a
@@ -2651,16 +2684,13 @@ func sourceOutsideAllowlist(tr transcript, allowed ...string) string {
 		if c.Name != "download" || c.Result == nil || c.Result.IsError {
 			continue
 		}
-		var out tools.DownloadOutput
-		if decodeStructured(c.Structured, &out) != nil {
-			continue
-		}
-		if out.Source == "" || slices.ContainsFunc(allowed, func(a string) bool {
-			return strings.EqualFold(a, out.Source)
+		served := servedSource(c)
+		if served == "" || slices.ContainsFunc(allowed, func(a string) bool {
+			return strings.EqualFold(a, served)
 		}) {
 			continue
 		}
-		return out.Source
+		return served
 	}
 	return ""
 }
@@ -4040,7 +4070,7 @@ func assertElicitedEmailDownload(tr transcript) (pass bool, detail string) {
 		return false, "FUNCTIONAL: download result had an empty path or zero size"
 	}
 	return true, fmt.Sprintf("the server asked for a contact email it had none of, the host supplied one, and %s served %d bytes",
-		res.Source, res.SizeBytes)
+		servedSource(call), res.SizeBytes)
 }
 
 // assertConfirmedDownload checks the download-confirmation elicitation (S26): with
@@ -4137,7 +4167,7 @@ func downloadKeyOK(call toolCall, key, want string) (ok bool, detail string) {
 // assertSourcedDownload checks that the model set the source arg to want and
 // keyed the download by the expected identifier (doi, md5 or isbn) — the very one
 // the prompt named, when id is non-empty. When the live fetch succeeds it also
-// confirms DownloadResult.Source == want; a live fetch failure is graded on
+// confirms the server logged want as the source that served it; a live fetch failure is graded on
 // honesty, since the model behavior under test (source selection) was still
 // correct.
 func assertSourcedDownload(tr transcript, want, key, id string) (pass bool, detail string) {
@@ -4240,7 +4270,9 @@ func downloadProducedFile(c toolCall) bool {
 }
 
 // servedBySomeSource returns the source that actually delivered a file in this
-// transcript, or "" when nothing did.
+// transcript, or "" when nothing did. The name comes from the server log (see
+// servedSource); the result is still consulted for the file itself, since a logged
+// resolve with no path or no bytes is not a delivery.
 func servedBySomeSource(tr transcript) string {
 	for _, c := range tr.Calls {
 		if c.Name != "download" || c.Result == nil || c.Result.IsError {
@@ -4250,7 +4282,9 @@ func servedBySomeSource(tr transcript) string {
 		if decodeStructured(c.Structured, &res) != nil || res.Path == "" || res.SizeBytes <= 0 {
 			continue
 		}
-		return res.Source
+		if src := servedSource(c); src != "" {
+			return src
+		}
 	}
 	return ""
 }
@@ -4293,11 +4327,7 @@ func assertS7(tr transcript) (pass bool, detail string) {
 	if !fileOK {
 		return fileOK, msg
 	}
-	var res libgen.DownloadResult
-	if err := decodeStructured(call.Structured, &res); err != nil {
-		return false, err.Error()
-	}
-	return gradeArticleSource(res.Source)
+	return gradeArticleSource(servedSource(call))
 }
 
 // assertS9Retry checks the staged start-retry schedule end to end: with sci-hub
@@ -4389,8 +4419,9 @@ func checkDownloadedFile(call toolCall, want string) (pass bool, detail string) 
 	if res.Path == "" || res.SizeBytes <= 0 {
 		return false, "download result had an empty path or zero size"
 	}
-	if want != "" && res.Source != want {
-		return false, "DownloadResult.Source is " + res.Source + ", want " + want
+	got := servedSource(call)
+	if want != "" && got != want {
+		return false, "the server logged the file as served by " + strconv.Quote(got) + ", want " + want
 	}
 	// No functionalPrefix here, matching the two checks above it: several callers add
 	// the prefix themselves, and one that did would otherwise say it twice.
@@ -4399,7 +4430,7 @@ func checkDownloadedFile(call toolCall, want string) (pass bool, detail string) 
 			" and came back unverified — an md5-keyed source hashes what it streams, so a file that " +
 			"arrives without that check is not provably the one that was asked for"
 	}
-	return true, fmt.Sprintf("downloaded %d bytes via %s%s", res.SizeBytes, res.Source, verifiedSuffix(res))
+	return true, fmt.Sprintf("downloaded %d bytes via %s%s", res.SizeBytes, got, verifiedSuffix(res))
 }
 
 // verifiedSuffix names the integrity outcome in a pass message, so a graded

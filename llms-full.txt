@@ -88,16 +88,15 @@ Download a file to a local directory.
 
 **Returns:**
 
-- `account` (object): remaining metered download allowance of the account that served the file when one was used
-- `mirror` (string) (required): the scheme://host origin that served the bytes
+- `account` (object): remaining metered download allowance of the account that served the file. Reported only when this call set annas_member, since a call that did not ask for the member tier is not told what account the server holds
 - `name_origin` (string): where the saved file's name came from: caller (you supplied it), announced (the name the serving source sent, cleaned of mirror marks), metadata (built from the record's author/title/year), or identifier (built from the md5, DOI or ISBN because the source announced no usable name). On an unverified download a metadata or identifier name is derived from what you asked for, not evidence of what arrived
 - `next_steps` (array of strings): suggested follow-up now that the file is saved (or the link resolved)
 - `original_filename` (string): the name the mirror/CDN announced, if any
 - `path` (string) (required): absolute path of the saved file
 - `resolved` (object): present only when resolve_only was set: the direct URL to fetch instead of a saved file
 - `resumed` (boolean) (required): true when the download resumed from a pre-existing partial via an HTTP Range request
+- `served_by_requested_source` (boolean): whether the source you pinned is the one that served this file. Absent when the call named no source, since there is then nothing to compare against; true when the source you asked for served it; false when a different one did — in that case call download again pinning another source, or omit source and let the chain pick. The serving source is not named
 - `size_bytes` (integer) (required): final file size in bytes
-- `source` (string): the source that served the file: unpaywall openalex europepmc biorxiv rfc nist dagstuhl acl zenodo scielo fao fatcat core crossref oapen archive scihub scidb libgen randombook or annas
 - `verified` (boolean) (required): true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download
 
 Annotations: readOnly=false, destructive=true, idempotent=true, openWorld=true

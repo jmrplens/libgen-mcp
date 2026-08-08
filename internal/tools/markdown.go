@@ -379,13 +379,17 @@ func renderOutline(b *strings.Builder, out ReadOutput) {
 }
 
 // renderDownloadMarkdown renders a completed download as a one-line confirmation
-// (name, size, source, path, verification) plus the next-steps block.
+// (name, size, path, verification) plus the next-steps block.
 //
 // The headline is the name the file was SAVED under, not the one the mirror
 // announced: those two differ by design now (chooseFileName), and reporting the
 // announced one would name a file that is not on disk. The announced name is
 // still shown, on its own line, whenever it differs — on an unverified download
 // it is the evidence of what the source actually served.
+//
+// It names no source and no mirror, for the reasons DownloadResult documents; a
+// call that pinned a source gets writeRequestedSourceLine instead, which says only
+// whether that pin held.
 func renderDownloadMarkdown(out DownloadOutput) string {
 	var b strings.Builder
 	name := filepath.Base(out.Path)
@@ -396,8 +400,9 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	if out.Verified {
 		verified = "yes"
 	}
-	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes via %s.\n", mdCell(name), out.SizeBytes, mdCell(out.Source))
+	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes.\n", mdCell(name), out.SizeBytes)
 	fmt.Fprintf(&b, "- Path: %s\n- Verified: %s\n", mdCell(out.Path), verified)
+	writeRequestedSourceLine(&b, out.ServedByRequestedSource)
 	if out.OriginalFilename != "" && out.OriginalFilename != name {
 		fmt.Fprintf(&b, "- Announced by the source: %s\n", mdCell(out.OriginalFilename))
 	}
@@ -409,4 +414,20 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	}
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// writeRequestedSourceLine states whether the source the call pinned is the one
+// that served the file, and writes nothing when the call pinned none — there is
+// then no comparison to report, and stating the absence would only invite a
+// question about a provenance the result deliberately withholds.
+func writeRequestedSourceLine(b *strings.Builder, served *bool) {
+	switch {
+	case served == nil:
+		return
+	case *served:
+		b.WriteString("- The source you asked for is the one that served this file.\n")
+	default:
+		b.WriteString("- The source you asked for did not serve this file; another one in the chain did. " +
+			"Call download again pinning a different source, or omit source and let the chain pick.\n")
+	}
 }

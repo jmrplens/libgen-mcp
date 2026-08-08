@@ -138,16 +138,42 @@ func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (getURL, base st
 	return base + "/" + link, base, nil
 }
 
-// DownloadResult describes a completed download: where the file landed, its size
-// and mirror, and whether it was integrity-verified and/or resumed.
+// DownloadResult describes a completed download: where the file landed, its size,
+// and whether it was integrity-verified and/or resumed.
+//
+// Two of its fields never reach the caller. Mirror and Source carry the file's
+// provenance and are marked json:"-", so the server keeps them — the source chain
+// reads Source for its cooldown bookkeeping and logging.SourceAttempt writes it to
+// the operator's log — while the serialized result names neither.
+//
+// The rule they answer to is that a result may only reveal what the call already
+// revealed. A caller who pinned a source already knows what it asked for, so
+// ServedByRequestedSource tells it whether the pin held and adds nothing else; a
+// caller who pinned none is told nothing about the chain's internals. Provenance
+// is otherwise a fact about the operator's configuration and the user's activity,
+// not about the work, and every field of a tool result travels to the client's
+// inference provider and may be retained there. It is also inert once the bytes
+// are on disk: a model that reads a mirror's name and refuses to go on protects
+// nothing, and it cannot see which licenses, subscriptions or memberships this
+// deployment holds, so any verdict it forms from a source name is a guess.
 type DownloadResult struct {
 	Path             string `json:"path" jsonschema:"absolute path of the saved file"`
 	SizeBytes        int64  `json:"size_bytes" jsonschema:"final file size in bytes"`
 	OriginalFilename string `json:"original_filename,omitempty" jsonschema:"the name the mirror/CDN announced, if any"`
-	Mirror           string `json:"mirror" jsonschema:"the scheme://host origin that served the bytes"`
+	// Mirror is the scheme://host origin that served the bytes. Server-side only:
+	// it is logged for the operator and never serialized to the caller, which never
+	// asked for a host and cannot have named one.
+	Mirror string `json:"-"`
 	// Source is the Name() of the DownloadSource that served the file (e.g.
-	// "libgen"), identifying which provider in the chain succeeded.
-	Source string `json:"source,omitempty" jsonschema:"the source that served the file: unpaywall openalex europepmc biorxiv rfc nist dagstuhl acl zenodo scielo fao fatcat core crossref oapen archive scihub scidb libgen randombook or annas"`
+	// "libgen"), identifying which provider in the chain succeeded. Server-side
+	// only; ServedByRequestedSource is what the caller is told about it.
+	Source string `json:"-"`
+	// ServedByRequestedSource reports whether the source the call pinned is the one
+	// that served the file. It is a three-state pointer on purpose: nil when the
+	// call named no source (there is nothing to compare against, and a bare false
+	// would read as "some other source served it"), true when the pin held, false
+	// when it did not.
+	ServedByRequestedSource *bool `json:"served_by_requested_source,omitempty" jsonschema:"whether the source you pinned is the one that served this file. Absent when the call named no source, since there is then nothing to compare against; true when the source you asked for served it; false when a different one did — in that case call download again pinning another source, or omit source and let the chain pick. The serving source is not named"`
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
@@ -162,8 +188,11 @@ type DownloadResult struct {
 	Resumed bool `json:"resumed" jsonschema:"true when the download resumed from a pre-existing partial via an HTTP Range request"`
 
 	// Account reports the serving account's remaining metered allowance when the
-	// source used one (currently only Anna's member tier). Nil for keyless paths.
-	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining metered download allowance of the account that served the file when one was used"`
+	// source used one (currently only Anna's member tier). Nil for keyless paths —
+	// and cleared by the tool layer (redactUnaskedAccount) for a call that never
+	// asked for the member tier, since an allowance the caller did not enquire
+	// about discloses the operator's paid membership rather than answering it.
+	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining metered download allowance of the account that served the file. Reported only when this call set annas_member, since a call that did not ask for the member tier is not told what account the server holds"`
 }
 
 // errIntegrityCheckFailed is returned when the downloaded content's MD5 digest
@@ -432,7 +461,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		lastResort := i == len(supporting)-1
 		started := time.Now()
 		res, err := c.downloadFrom(ctx, src, req, lastResort)
-		logging.SourceAttempt(src.Name(), started, err)
+		logging.SourceAttempt(src.Name(), servingMirror(res), started, err)
 		if err == nil {
 			c.clearSourceCooldown(src.Name())
 			c.sweepPartials(req.partials)
@@ -452,6 +481,16 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		return nil, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
 	}
 	return nil, errors.Join(errs...)
+}
+
+// servingMirror returns the mirror a finished download was served from, or "" when
+// the attempt produced no result. It exists so the chain's log line can name the
+// host without the call site branching on a nil result.
+func servingMirror(res *DownloadResult) string {
+	if res == nil {
+		return ""
+	}
+	return res.Mirror
 }
 
 // sourcesNamed returns the single source whose Name matches name (case-insensitive),
@@ -706,16 +745,33 @@ func (c *Client) streamResolved(ctx context.Context, src DownloadSource, req dow
 		return nil, err
 	}
 	return &DownloadResult{
-		Path:             saved,
-		SizeBytes:        n,
-		OriginalFilename: original,
-		Mirror:           base,
-		Source:           src.Name(),
-		Verified:         resolved.VerifyMD5,
-		NameOrigin:       origin,
-		Resumed:          resume,
-		Account:          resolved.Account,
+		Path:                    saved,
+		SizeBytes:               n,
+		OriginalFilename:        original,
+		Mirror:                  base,
+		Source:                  src.Name(),
+		ServedByRequestedSource: servedAsRequested(req.item.Source, src.Name()),
+		Verified:                resolved.VerifyMD5,
+		NameOrigin:              origin,
+		Resumed:                 resume,
+		Account:                 resolved.Account,
 	}, nil
+}
+
+// servedAsRequested compares the source the call pinned against the one that
+// served the file, returning nil when nothing was pinned.
+//
+// A pinned source is the whole chain for that call (selectSources narrows to it),
+// so today the answer is true whenever a pinned download returns at all. The
+// comparison is made anyway rather than hardcoded: it is the property the field
+// claims, and it stays correct if the chain ever substitutes or falls back.
+func servedAsRequested(requested, served string) *bool {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		return nil
+	}
+	ok := strings.EqualFold(requested, served)
+	return &ok
 }
 
 // sniffStart identifies the file format from the first bytes of the response, or

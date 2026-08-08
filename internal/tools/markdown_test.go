@@ -223,6 +223,42 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 	}
 }
 
+// TestRenderDownloadMarkdownPinOutcome verifies the Markdown block says whether a
+// pinned source held, says nothing at all when nothing was pinned, and never names
+// the source in any of the three cases.
+//
+// The Markdown is the channel the model actually reads, so a leak here would defeat
+// the struct tags entirely — and the false case is the only one that has to be
+// actionable, since it is the one where the caller may want to pin something else.
+func TestRenderDownloadMarkdownPinOutcome(t *testing.T) {
+	held, missed := true, false
+	for name, tc := range map[string]struct {
+		served *bool
+		want   string
+		absent string
+	}{
+		"unpinned": {served: nil, absent: "source you asked for"},
+		"pin held": {served: &held, want: "The source you asked for is the one that served this file."},
+		"pin lost": {served: &missed, want: "did not serve this file"},
+	} {
+		out := renderDownloadMarkdown(DownloadOutput{DownloadResult: libgen.DownloadResult{
+			Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
+			ServedByRequestedSource: tc.served,
+		}})
+		if tc.want != "" && !strings.Contains(out, tc.want) {
+			t.Errorf("%s: markdown should state %q; got:\n%s", name, tc.want, out)
+		}
+		if tc.absent != "" && strings.Contains(out, tc.absent) {
+			t.Errorf("%s: markdown should say nothing about a pin; got:\n%s", name, out)
+		}
+		for _, leak := range []string{"libgen", "libgen.li"} {
+			if strings.Contains(out, leak) {
+				t.Errorf("%s: markdown leaked the provenance %q; got:\n%s", name, leak, out)
+			}
+		}
+	}
+}
+
 // TestRenderDownloadMarkdownNames verifies the headline is the name the file was
 // SAVED under (not the mirror's announced one, which now routinely differs), that
 // the announced name is still reported when it differs, and that the name's

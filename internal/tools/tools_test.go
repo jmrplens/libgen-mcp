@@ -270,17 +270,20 @@ func TestDetailsNextSteps(t *testing.T) {
 	}
 }
 
-// TestDownloadNextSteps verifies the download follow-up names the saved path,
-// size and source.
+// TestDownloadNextSteps verifies the download follow-up names the saved path and
+// size — and not the source that served them, which the result withholds.
 func TestDownloadNextSteps(t *testing.T) {
 	steps := downloadNextSteps(libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 123, Source: "libgen"})
 	if len(steps) != 1 {
 		t.Fatalf("want 1 step, got %d", len(steps))
 	}
-	for _, want := range []string{"/tmp/book.pdf", "123", "libgen"} {
+	for _, want := range []string{"/tmp/book.pdf", "123"} {
 		if !strings.Contains(steps[0], want) {
 			t.Errorf("download step should mention %q; got %q", want, steps[0])
 		}
+	}
+	if strings.Contains(steps[0], "libgen") {
+		t.Errorf("download step must not name the serving source; got %q", steps[0])
 	}
 }
 
@@ -1382,7 +1385,7 @@ func decodeDownloadResult(t *testing.T, res *mcp.CallToolResult) libgen.Download
 }
 
 // TestDownloadToolByDOI verifies the download tool resolves an article by DOI
-// through the (injected) DOI source and surfaces the serving source in the result.
+// through the (injected) DOI source and saves the bytes it serves.
 func TestDownloadToolByDOI(t *testing.T) {
 	payload := []byte("%PDF-1.4 article fetched by DOI")
 	cdn := fileCDNServer(t, payload, "") // no disposition: DOI items get a name from Ext
@@ -1401,14 +1404,127 @@ func TestDownloadToolByDOI(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 	out := decodeDownloadResult(t, res)
-	if out.Source != "scihub" {
-		t.Errorf("Source = %q, want %q", out.Source, "scihub")
-	}
 	if out.SizeBytes != int64(len(payload)) {
 		t.Errorf("SizeBytes = %d, want %d", out.SizeBytes, len(payload))
 	}
 	if !strings.HasSuffix(out.Path, ".pdf") {
 		t.Errorf("Path = %q, want a .pdf name", out.Path)
+	}
+}
+
+// downloadStructuredKeys returns the top-level keys of a download result's
+// structured content, so a test can assert on what the wire actually carries
+// rather than on what a typed decode happens to keep.
+func downloadStructuredKeys(t *testing.T, res *mcp.CallToolResult) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if uerr := json.Unmarshal(data, &raw); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return raw
+}
+
+// downloadByDOISession wires a session whose only source is a DOI stub with the
+// given name, serving payload from a local CDN. It is the fixture the provenance
+// tests share: both need a download that a NAMED source demonstrably served.
+func downloadByDOISession(t *testing.T, name string, payload []byte) *mcp.ClientSession {
+	t.Helper()
+	cdn := fileCDNServer(t, payload, "")
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return newDownloadSession(t, cfg, staticMirrors{},
+		libgen.WithSources(doiStubSource{name: name, fileURL: cdn.URL + "/file"}))
+}
+
+// TestDownloadWithholdsProvenance verifies that a download which named no source
+// gets a result naming none either: no source, no mirror, and not even the
+// pin-held flag, which has nothing to compare against.
+//
+// The rule is that a result may only reveal what the call already revealed. The
+// provenance of a file is a fact about the operator's configuration and the user's
+// activity, and every field of a tool result is shipped to the client's inference
+// provider, so a source name that answers no question the caller asked is a
+// disclosure with no counterpart benefit. Both channels are checked, because the
+// Markdown block is the one the model actually reads.
+func TestDownloadWithholdsProvenance(t *testing.T) {
+	session := downloadByDOISession(t, "scihub", []byte("%PDF-1.4 article fetched by DOI"))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pone.0000217"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	raw := downloadStructuredKeys(t, res)
+	for _, banned := range []string{"source", "mirror"} {
+		if v, present := raw[banned]; present {
+			t.Errorf("structured output must not carry %q; got %v", banned, v)
+		}
+	}
+	if v, present := raw["served_by_requested_source"]; present {
+		t.Errorf("no source was pinned, so there is nothing to compare; got served_by_requested_source=%v", v)
+	}
+	text := textContent(res)
+	if strings.Contains(text, "scihub") {
+		t.Errorf("the Markdown block must not name the serving source; got:\n%s", text)
+	}
+}
+
+// TestDownloadReportsWhetherThePinHeld verifies the one provenance fact a result
+// may state: a call that PINNED a source is told whether that source served the
+// file. It reveals nothing new — the caller wrote the name itself — and it is what
+// lets a model tell "the source I chose delivered" from "something else did".
+func TestDownloadReportsWhetherThePinHeld(t *testing.T) {
+	session := downloadByDOISession(t, "scihub", []byte("%PDF-1.4 article fetched by DOI"))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pone.0000217", "source": "scihub"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	raw := downloadStructuredKeys(t, res)
+	if served, ok := raw["served_by_requested_source"].(bool); !ok || !served {
+		t.Errorf("served_by_requested_source = %v, want true", raw["served_by_requested_source"])
+	}
+	if _, present := raw["source"]; present {
+		t.Error("a pinned call still must not get the serving source back by name")
+	}
+	if text := textContent(res); !strings.Contains(text, "The source you asked for is the one that served this file.") {
+		t.Errorf("the Markdown block should state that the pin held; got:\n%s", text)
+	}
+}
+
+// TestRedactUnaskedAccount verifies the membership allowance is reported to the
+// call that opted in and withheld from the one that did not.
+//
+// The withheld case is the one that matters. A server the operator configured a
+// key on serves every book download over that membership, so without the gate a
+// caller who never mentioned a membership learns that the operator holds a paid
+// account and how much of today's allowance has been spent — neither of which it
+// asked about.
+func TestRedactUnaskedAccount(t *testing.T) {
+	account := &libgen.AccountInfo{DownloadsLeft: 30, DownloadsPerDay: 50}
+
+	asked := libgen.DownloadResult{Account: account}
+	redactUnaskedAccount(&asked, DownloadInput{AnnasMember: true})
+	if asked.Account == nil {
+		t.Error("a call that set annas_member asked about the membership and must be told its allowance")
+	}
+
+	unasked := libgen.DownloadResult{Account: account}
+	redactUnaskedAccount(&unasked, DownloadInput{})
+	if unasked.Account != nil {
+		t.Errorf("a call that never opted in must not be told the operator's allowance; got %+v", unasked.Account)
 	}
 }
 
@@ -1463,8 +1579,8 @@ func bookMirror(t *testing.T, payload []byte) *httptest.Server {
 
 // TestDownloadToolMD5Book verifies the md5 (book) path still works and that, with
 // no explicit filename and no mirror-announced name, the file lands under a clean
-// metadata-built name ("Author - Title (Year).ext") from get_details, tagged with
-// the libgen source.
+// metadata-built name ("Author - Title (Year).ext") from get_details, digest
+// verified.
 func TestDownloadToolMD5Book(t *testing.T) {
 	payload := []byte("%PDF-1.4 book fetched by md5 for the metadata name test")
 	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
@@ -1485,9 +1601,6 @@ func TestDownloadToolMD5Book(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 	out := decodeDownloadResult(t, res)
-	if out.Source != "libgen" {
-		t.Errorf("Source = %q, want %q", out.Source, "libgen")
-	}
 	if !out.Verified {
 		t.Error("Verified = false, want true (md5-keyed book)")
 	}
@@ -1515,9 +1628,10 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 // out which source name is which, and states where in the order they are reached.
 //
 // download is the only tool that retrieves a file, so the mapping is what lets a
-// caller attribute the file it gets back; the read-only tools deliberately carry
-// none, which is what TestReadOnlyToolsLeadWithTheirCapability guards. A chain with
-// no shadow library in it says nothing, because then there is nothing to name.
+// caller understand the bare names in the source argument's enum before it pins one;
+// the read-only tools deliberately carry none, which is what
+// TestReadOnlyToolsLeadWithTheirCapability guards. A chain with no shadow library in
+// it says nothing, because then there is nothing to name.
 func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	desc := downloadToolDescription(
 		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
@@ -1551,10 +1665,20 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // facts a caller actually lacks: the order, that the serving source is not known
 // until the call runs, and that the operator's source and credential configuration
 // is invisible from here.
+//
+// The middle fact has since been halved. The serving source is not disclosed once
+// the call HAS run either, so the promise is now only that a source the caller
+// pinned reports whether it held. The old clause is checked as banned text rather
+// than merely dropped from the wanted list: "and named in the result" describes a
+// field that no longer exists, and nothing else in the build can catch a
+// description that lies.
 func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	desc := downloadToolDescription(
 		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
-	for _, banned := range []string{"without the rightsholder's permission", "copyrighted works"} {
+	for _, banned := range []string{
+		"without the rightsholder's permission", "copyrighted works",
+		"and named in the result",
+	} {
 		if strings.Contains(desc, banned) {
 			t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
 		}
@@ -1562,7 +1686,9 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	for _, want := range []string{
 		// The source is not selected when the description is read.
 		"chosen while resolving",
-		"named in the result",
+		// Nor disclosed after it has been: all the result carries is whether the
+		// caller's own pin held.
+		"is not named in the result — which reports only whether a source you pinned served the file",
 		// The operator's configuration is the thing that settles this, and it is
 		// not visible to the caller.
 		"is set by the operator and is not visible to you",

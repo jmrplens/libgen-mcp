@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -2421,32 +2420,53 @@ func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
 	}
 }
 
-// TestDownloadResultSourceNamesEveryKnownSource guards a description that has
-// already drifted once. DownloadResult.Source enumerates the sources that can
-// serve a file, and it is the schema the model reads to interpret the value it
-// gets back — but oapen and archive joined the chain without being added here,
-// so for two releases it named ten of twelve. Nothing failed, because a struct
-// tag is prose to every compiler and linter in the build.
-func TestDownloadResultSourceNamesEveryKnownSource(t *testing.T) {
-	field, ok := reflect.TypeFor[DownloadResult]().FieldByName("Source")
-	if !ok {
-		t.Fatal("DownloadResult has no Source field")
-	}
-	desc := field.Tag.Get("jsonschema")
-	if desc == "" {
-		t.Fatal("DownloadResult.Source has no jsonschema description")
-	}
-	var missing []string
-	for _, name := range config.KnownSources {
-		// Word-boundary match, so "core" is not satisfied by some other word
-		// that merely contains it.
-		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(desc) {
-			missing = append(missing, name)
+// TestDownloadResultKeepsProvenanceOffTheWire pins the field tags that decide what
+// a caller is told about where its file came from.
+//
+// Source used to be serialized, with a jsonschema description enumerating every
+// source that could serve a file — and that description drifted twice, because a
+// struct tag is prose to every compiler and linter in the build. The list is gone
+// now for a better reason than drift: the serving source is a fact about the
+// operator's configuration and the user's activity, it reaches the client's
+// inference provider on every download, and it answers no question the caller
+// asked. Both fields stay on the struct because the chain's cooldown bookkeeping
+// and the operator's log still read them; only the json tag changed, and a tag is
+// exactly the kind of thing that gets reverted by accident.
+func TestDownloadResultKeepsProvenanceOffTheWire(t *testing.T) {
+	for _, name := range []string{"Source", "Mirror"} {
+		field, ok := reflect.TypeFor[DownloadResult]().FieldByName(name)
+		if !ok {
+			t.Fatalf("DownloadResult has no %s field; the chain and the log still need it", name)
+		}
+		if got := field.Tag.Get("json"); got != "-" {
+			t.Errorf(`DownloadResult.%s json tag = %q, want "-": provenance must not be serialized to the caller`, name, got)
 		}
 	}
-	if len(missing) > 0 {
-		t.Fatalf("DownloadResult.Source description omits %v — it must name every config.KnownSources entry.\ngot: %s",
-			missing, desc)
+	served, ok := reflect.TypeFor[DownloadResult]().FieldByName("ServedByRequestedSource")
+	if !ok {
+		t.Fatal("DownloadResult has no ServedByRequestedSource field")
+	}
+	if got := served.Tag.Get("json"); got != "served_by_requested_source,omitempty" {
+		t.Errorf("ServedByRequestedSource json tag = %q; omitempty is what gives it its third state (absent)", got)
+	}
+	if served.Type.Kind() != reflect.Pointer {
+		t.Errorf("ServedByRequestedSource is %s, want a pointer: a plain bool's zero value reads as \"another source served it\"",
+			served.Type)
+	}
+}
+
+// TestServedAsRequested covers the three states of the only provenance answer a
+// download result gives: absent when the call pinned nothing, true when the pin
+// held, false when another source served the file.
+func TestServedAsRequested(t *testing.T) {
+	if got := servedAsRequested("  ", "libgen"); got != nil {
+		t.Errorf("an unpinned call has nothing to compare; got %v", *got)
+	}
+	if got := servedAsRequested(" LibGen ", "libgen"); got == nil || !*got {
+		t.Errorf("a pin that held must report true (case- and space-insensitively); got %v", got)
+	}
+	if got := servedAsRequested("annas", "libgen"); got == nil || *got {
+		t.Errorf("a pin another source outran must report false; got %v", got)
 	}
 }
 

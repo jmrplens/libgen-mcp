@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,6 +33,23 @@ func okCall(name string, input map[string]any, structured any) toolCall {
 // errCall builds a recorded tool call the tool refused.
 func errCall(name string, input map[string]any) toolCall {
 	return toolCall{Name: name, Input: input, Result: &mcp.CallToolResult{IsError: true}}
+}
+
+// servedCall builds a clean download call whose SERVER LOG says which source
+// delivered the file, which is where the assertions read provenance from now that
+// the tool result withholds it. The log line is the real one, verbatim from
+// logging.SourceAttempt through slog's JSON handler, so a change to either end of
+// that pipe fails here rather than silently blinding every source assertion.
+func servedCall(input map[string]any, structured any, source string) toolCall {
+	call := okCall("download", input, structured)
+	call.ServerLogs = []string{sourceResolvedLine(source)}
+	return call
+}
+
+// sourceResolvedLine renders one captured "source resolved" log line for source.
+func sourceResolvedLine(source string) string {
+	return fmt.Sprintf(`{"time":"2026-08-08T21:49:00.308994+02:00","level":"INFO","msg":%q,"source":%q,`+
+		`"mirror":"https://example.invalid","duration":3204670103}`, sourceResolvedMsg, source)
 }
 
 // readmeRow matches a scenario row of the evaluator README's table.
@@ -320,8 +338,8 @@ func TestAssertConfirmationCannotBeWaivedGradesTheProof(t *testing.T) {
 	const md5 = "0123456789abcdef0123456789abcdef"
 	search := okCall("search", map[string]any{"query": "sicp"},
 		tools.SearchOutput{Results: []libgen.Result{{MD5: md5}}})
-	saved := libgen.DownloadResult{Path: "/tmp/sicp.pdf", SizeBytes: 42, Source: "libgen", Verified: true}
-	download := okCall("download", map[string]any{"md5": md5}, saved)
+	saved := libgen.DownloadResult{Path: "/tmp/sicp.pdf", SizeBytes: 42, Verified: true}
+	download := servedCall(map[string]any{"md5": md5}, saved, "libgen")
 
 	fired := transcript{Calls: []toolCall{search, download}, ConfirmElicits: 1}
 	if pass, why := assertConfirmationCannotBeWaived(fired); !pass {
@@ -397,8 +415,8 @@ func TestEscalationHitsSpanEverySearch(t *testing.T) {
 		annasSearch("gading mataram", libgen.Result{MD5: "1111111111111111111111111111111a", Title: "Something Else"}),
 		annasSearch("gading mataram bantul", libgen.Result{MD5: "1111111111111111111111111111111b", Title: "Another Book"}),
 		annasSearch("sejarah bantul", libgen.Result{MD5: later, Title: "Sejarah Nasional Indonesia III"}),
-		okCall("download", map[string]any{"md5": later, "source": "annas"},
-			libgen.DownloadResult{Path: "/tmp/x.pdf", SizeBytes: 8482512, Source: "annas"}),
+		servedCall(map[string]any{"md5": later, "source": "annas"},
+			libgen.DownloadResult{Path: "/tmp/x.pdf", SizeBytes: 8482512}, "annas"),
 	}}
 	pass, why := assertSearchThenDownloadEscalated(tr)
 	if !pass {
@@ -542,29 +560,62 @@ func TestIsPinnedItemSeparatesTheFixtureFromItsNeighbours(t *testing.T) {
 	}
 }
 
+// TestServedSourceReadsTheServerLog pins the channel a dozen source assertions now
+// depend on. The download result stopped naming the source that served it, so the
+// evidence is the server's own "source resolved" line — and a parser that quietly
+// returns "" would turn every one of those assertions green without checking
+// anything, which is exactly the failure mode worth a test of its own.
+func TestServedSourceReadsTheServerLog(t *testing.T) {
+	resolved := toolCall{Name: "download", ServerLogs: []string{
+		`{"time":"2026-08-08T21:49:00Z","level":"INFO","msg":"source failed, advancing","source":"unpaywall","error":"404"}`,
+		sourceResolvedLine("europepmc"),
+	}}
+	if got := servedSource(resolved); got != "europepmc" {
+		t.Errorf("servedSource = %q, want europepmc: the resolved line names the winner", got)
+	}
+
+	// Only failures logged: the chain tried and delivered nothing, and no source may
+	// be credited with the file.
+	failedOnly := toolCall{Name: "download", ServerLogs: []string{
+		`{"time":"2026-08-08T21:49:00Z","level":"INFO","msg":"source failed, advancing","source":"unpaywall"}`,
+	}}
+	if got := servedSource(failedOnly); got != "" {
+		t.Errorf("servedSource = %q, want empty: nothing resolved", got)
+	}
+
+	// A call with no captured log at all, and a line that is not JSON: both must be
+	// survivable, since a garbled log is a missing measurement, not a crash.
+	if got := servedSource(toolCall{Name: "download"}); got != "" {
+		t.Errorf("servedSource = %q on a call with no logs, want empty", got)
+	}
+	if got := servedSource(toolCall{Name: "download", ServerLogs: []string{"source resolved source=libgen"}}); got != "" {
+		t.Errorf("servedSource = %q on a non-JSON line, want empty", got)
+	}
+}
+
 // TestCheckDownloadedFileRequiresIntegrityForAnMD5 pins the property the download
 // scenarios claimed and never checked. The server hashes what it streams and
 // reports the outcome in Verified, so an md5-keyed file that comes back unverified
 // is a file whose digest was never compared with the one that was asked for.
 func TestCheckDownloadedFileRequiresIntegrityForAnMD5(t *testing.T) {
 	const md5 = "0123456789abcdef0123456789abcdef"
-	saved := libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 4096, Source: "libgen"}
+	saved := libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 4096}
 
 	verified := saved
 	verified.Verified = true
-	pass, why := checkDownloadedFile(okCall("download", map[string]any{"md5": md5}, verified), "libgen")
+	pass, why := checkDownloadedFile(servedCall(map[string]any{"md5": md5}, verified, "libgen"), "libgen")
 	if !pass || !strings.Contains(why, "md5 verified") {
 		t.Fatalf("a verified md5 download must pass and say so, got pass=%v %q", pass, why)
 	}
 
-	pass, why = checkDownloadedFile(okCall("download", map[string]any{"md5": md5}, saved), "libgen")
+	pass, why = checkDownloadedFile(servedCall(map[string]any{"md5": md5}, saved, "libgen"), "libgen")
 	if pass || !strings.Contains(why, "unverified") {
 		t.Fatalf("an unverified md5 download must fail, got pass=%v %q", pass, why)
 	}
 
 	// A doi- or isbn-keyed download has no digest to compare against, so Verified is
 	// false by construction and must not be held against it.
-	byDOI := okCall("download", map[string]any{"doi": openAccessDOI}, saved)
+	byDOI := servedCall(map[string]any{"doi": openAccessDOI}, saved, "libgen")
 	if pass, why = checkDownloadedFile(byDOI, "libgen"); !pass {
 		t.Fatalf("a doi-keyed download has no md5 to verify and must pass: %s", why)
 	}
@@ -576,11 +627,11 @@ func TestCheckDownloadedFileRequiresIntegrityForAnMD5(t *testing.T) {
 // place of a PLOS paper, and never answered at all.
 func TestRestrictedSourcesRejectsTheWrongBook(t *testing.T) {
 	refused := errCall("download", map[string]any{"doi": elicitOADOI})
-	wrongBook := okCall("download", map[string]any{"md5": "d78f95b7ef65b333d76015c527fdc554"},
+	wrongBook := servedCall(map[string]any{"md5": "d78f95b7ef65b333d76015c527fdc554"},
 		libgen.DownloadResult{
 			Path:      "/tmp/[Incerto] Taleb, Nassim Nicholas - Antifragile [10.1371_journal.pmed.0020124] - libgen.li.pdf",
-			SizeBytes: 10129892, Source: "libgen", Verified: true,
-		})
+			SizeBytes: 10129892, Verified: true,
+		}, "libgen")
 
 	truncated := transcript{Calls: []toolCall{refused, wrongBook}}
 	pass, why := assertRestrictedSourcesHonored(truncated)
@@ -757,10 +808,10 @@ func TestModelChosenShadowEscalationGradesTheChoice(t *testing.T) {
 // failed a run where the gate held and the user got their file.
 func TestArchiveLendingGateGradesTheGateThenTheProvenance(t *testing.T) {
 	refused := errCall("download", map[string]any{"isbn": lendingRestrictedISBN, "source": "archive"})
-	viaAnnas := okCall("download", map[string]any{"md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+	viaAnnas := servedCall(map[string]any{"md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		libgen.DownloadResult{
-			Path: "/tmp/The Catcher in the Rye (2010).epub", SizeBytes: 270383, Source: "annas", Verified: true,
-		})
+			Path: "/tmp/The Catcher in the Rye (2010).epub", SizeBytes: 270383, Verified: true,
+		}, "annas")
 
 	// The measured run, in shape: the gate held, Anna's served the book, and the model
 	// said so. It must pass.
@@ -794,8 +845,8 @@ func TestArchiveLendingGateGradesTheGateThenTheProvenance(t *testing.T) {
 
 	// And the gate itself: bytes from archive are the one product failure here.
 	leaked := transcript{
-		Calls: []toolCall{okCall("download", map[string]any{"isbn": lendingRestrictedISBN, "source": "archive"},
-			libgen.DownloadResult{Path: "/tmp/catcher.epub", SizeBytes: 4096, Source: "archive"})},
+		Calls: []toolCall{servedCall(map[string]any{"isbn": lendingRestrictedISBN, "source": "archive"},
+			libgen.DownloadResult{Path: "/tmp/catcher.epub", SizeBytes: 4096}, "archive")},
 		FinalText: "Downloaded from the Internet Archive.",
 	}
 	pass, why := assertArchiveRefusesLending(leaked)
@@ -811,12 +862,12 @@ func TestSourceCooldownGradesTheDOIItIsAbout(t *testing.T) {
 	first := toolCall{
 		Name: "download", Input: map[string]any{"doi": scihubDOI},
 		Result:     &mcp.CallToolResult{},
-		Structured: libgen.DownloadResult{Path: "/tmp/a.pdf", SizeBytes: 2066013, Source: "scidb"},
+		Structured: libgen.DownloadResult{Path: "/tmp/a.pdf", SizeBytes: 2066013},
 	}
 	second := toolCall{
 		Name: "download", Input: map[string]any{"doi": openAccessDOI},
 		Result:     &mcp.CallToolResult{},
-		Structured: libgen.DownloadResult{Path: "/tmp/b.pdf", SizeBytes: 500000, Source: "scidb"},
+		Structured: libgen.DownloadResult{Path: "/tmp/b.pdf", SizeBytes: 500000},
 		ServerLogs: []string{"source in cooldown, skipping source=scihub"},
 	}
 	if pass, why := assertSourceCooldown(transcript{Calls: []toolCall{first, second}}); !pass {
@@ -842,7 +893,7 @@ func TestSourceCooldownGradesTheDOIItIsAbout(t *testing.T) {
 	silent := transcript{Calls: []toolCall{first, {
 		Name: "download", Input: map[string]any{"doi": openAccessDOI},
 		Result:     &mcp.CallToolResult{},
-		Structured: libgen.DownloadResult{Path: "/tmp/b.pdf", SizeBytes: 5, Source: "scidb"},
+		Structured: libgen.DownloadResult{Path: "/tmp/b.pdf", SizeBytes: 5},
 	}}}
 	if pass, why = assertSourceCooldown(silent); pass || !strings.Contains(why, functionalPrefix) {
 		t.Fatalf("two walks with no cooldown logged must fail, got pass=%v %q", pass, why)
@@ -854,7 +905,7 @@ func TestSourceCooldownGradesTheDOIItIsAbout(t *testing.T) {
 // chooses which failure message a maintainer reads. An assertion that graded the
 // sentence would move with the tool description it is meant to be measuring.
 func TestBareIdentifierGradesTheCallAndNotTheWording(t *testing.T) {
-	saved := libgen.DownloadResult{Path: "/tmp/clean-code.pdf", SizeBytes: 2404614, Source: "annas"}
+	saved := libgen.DownloadResult{Path: "/tmp/clean-code.pdf", SizeBytes: 2404614}
 	verified := saved
 	verified.Verified = true
 
