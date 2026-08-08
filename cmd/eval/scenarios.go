@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -100,6 +101,19 @@ const rfcDOI = "10.17487/RFC" + rfcNumber
 // so that an error page served with HTTP 200 fails the scenario instead of passing
 // as "the model got some text".
 const rfcTextMarker = "Request for Comments: " + rfcNumber
+
+// escalationQuery is what the escalation scenarios (S32-S38, S40, S41) ask for:
+// the title of the pinned catalog-miss / Anna's-hit item in
+// test/e2e/testdata/escalation_item.json. It is mirrored here rather than read
+// from that file so an assertion stays a pure function of a transcript — which is
+// what makes --regrade possible — and TestEscalationFixtureIsMirroredInTheScenarios
+// fails if the two copies ever disagree.
+const escalationQuery = "Gading Mataram: Sejarah Bantul 1678-1942"
+
+// escalationMD5 is that fixture's md5. It is what "the pinned item" means when an
+// escalation assertion decides whether the item is still in Anna's search index or
+// the fixture has drifted out of it.
+const escalationMD5 = "8da0cd29bad7e4b7e881cf31481c45fa"
 
 // nistDOI is NIST SP 800-207 (Zero Trust Architecture), used to exercise the nist
 // source. A Special Publication is deliberately chosen over an Internal Report: the
@@ -392,11 +406,15 @@ func decodeStructured(v, target any) error {
 	return nil
 }
 
+// noSearchCall is the failure detail when a search scenario produced no search
+// tool call at all.
+const noSearchCall = "no search call"
+
 // searchOutput finds the first search call and decodes its structured output.
 func searchOutput(tr transcript) (toolCall, tools.SearchOutput, error) {
 	call, ok := findCall(tr, "search")
 	if !ok {
-		return toolCall{}, tools.SearchOutput{}, errors.New("no search call")
+		return toolCall{}, tools.SearchOutput{}, errors.New(noSearchCall)
 	}
 	var out tools.SearchOutput
 	if err := decodeStructured(call.Structured, &out); err != nil {
@@ -1018,26 +1036,28 @@ func escalationAndRemoteScenarios() []scenario {
 		// S32-S35 cover the extra-sources escalation: the model searches for a title
 		// the Library Genesis catalog does not carry, and must still find it because
 		// the search escalates to Anna's Archive automatically. The pinned fixture
-		// (test/e2e/testdata/escalation_item.json) defines the query and md5.
+		// (test/e2e/testdata/escalation_item.json) defines the query and md5, and
+		// escalationQuery mirrors its query so every prompt below asks for exactly
+		// the item the assertions look for.
 		{
 			ID:     "S32",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			Prompt: fmt.Sprintf(`Find the book %q and tell me whether you found it.`, escalationQuery),
 			Assert: assertSearchEscalation,
 		},
 		{
 			ID:     "S33",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			Prompt: fmt.Sprintf(`Find the book %q and tell me whether you found it.`, escalationQuery),
 			Remote: true,
 			Assert: assertSearchEscalation,
 		},
 		{
 			ID:     "S34",
-			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
+			Prompt: fmt.Sprintf(`Find and download the book %q.`, escalationQuery),
 			Assert: assertSearchThenDownloadEscalated,
 		},
 		{
 			ID:     "S35",
-			Prompt: `Find and download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC".`,
+			Prompt: fmt.Sprintf(`Find and download the book %q.`, escalationQuery),
 			Remote: true,
 			Assert: assertSearchThenDownloadEscalated,
 		},
@@ -1047,14 +1067,14 @@ func escalationAndRemoteScenarios() []scenario {
 		// miss, which is why the case is graded rather than assumed.
 		{
 			ID: "S36",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
-				`then look up its full record details; tell me what collection it comes from.`,
+			Prompt: fmt.Sprintf(`Find the book %q and `+
+				`then look up its full record details; tell me what collection it comes from.`, escalationQuery),
 			Assert: assertEscalatedDetails,
 		},
 		{
 			ID: "S37",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
-				`then look up its full record details; tell me what collection it comes from.`,
+			Prompt: fmt.Sprintf(`Find the book %q and `+
+				`then look up its full record details; tell me what collection it comes from.`, escalationQuery),
 			Remote: true,
 			Assert: assertEscalatedDetails,
 		},
@@ -1064,7 +1084,7 @@ func escalationAndRemoteScenarios() []scenario {
 		// honest about a miss instead of inventing a result.
 		{
 			ID:       "S38",
-			Prompt:   `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and tell me whether you found it.`,
+			Prompt:   fmt.Sprintf(`Find the book %q and tell me whether you found it.`, escalationQuery),
 			SetupEnv: map[string]string{"LIBGEN_MCP_EXTRA_SOURCES": "never"},
 			Assert:   assertNoEscalationAndHonest,
 		},
@@ -1079,8 +1099,8 @@ func escalationAndRemoteScenarios() []scenario {
 		// whole keyless Anna's path end to end, download included.
 		{
 			ID: "S40",
-			Prompt: `Find the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC" and ` +
-				`show me a passage of its text.`,
+			Prompt: fmt.Sprintf(`Find the book %q and `+
+				`show me a passage of its text.`, escalationQuery),
 			Assert: assertReadEscalated,
 		},
 		// S41 covers the Anna's membership opt-in: the prompt says the user has an
@@ -1088,8 +1108,8 @@ func escalationAndRemoteScenarios() []scenario {
 		// annas_member itself. The key is supplied through elicitation, never stored.
 		{
 			ID: "S41",
-			Prompt: `Download the book "Sejarah Indonesia Masa Persebaran Islam sampai Zaman VOC". ` +
-				`I have an Anna's Archive membership, so use the faster member download if you can.`,
+			Prompt: fmt.Sprintf(`Download the book %q. `+
+				`I have an Anna's Archive membership, so use the faster member download if you can.`, escalationQuery),
 			// The retry schedule is shrunk for the reason S9 and S47 shrink it, and
 			// this scenario is why the reason is not hypothetical: measured on
 			// 2026-07-30, the member attempt failed and put annas in cooldown, and the
@@ -2500,24 +2520,19 @@ func readTracesToEscalation(tr transcript, call toolCall, annasMD5 map[string]bo
 // strictest of the escalation scenarios: reading requires the file itself, so a
 // pass means search, the Anna's download path and text extraction all worked.
 func assertReadEscalated(tr transcript) (pass bool, detail string) {
-	_, out, err := searchOutput(tr)
-	if err != nil {
-		return false, err.Error()
-	}
-	annasMD5 := map[string]bool{}
-	for _, r := range out.Results {
-		if r.Origin == "annas" && r.MD5 != "" {
-			annasMD5[strings.ToLower(r.MD5)] = true
-		}
-	}
-	if len(annasMD5) == 0 {
-		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
+	hits := annasHits(tr)
+	if p, d, settled := gradeEscalationPreconditions(tr, hits); settled {
+		return p, d
 	}
 	call, ok := findCall(tr, "read")
 	if !ok {
-		return false, "SURFACE GAP: model never called read on the escalated result"
+		// Only a SURFACE GAP because the precondition above established the pinned
+		// item WAS in the results: the model had something to read and did not reach
+		// for read. When the fixture has drifted the same silence is not the surface's
+		// fault, and is reported as drift instead.
+		return false, "SURFACE GAP: the escalated search returned the pinned item and the model never called read on it"
 	}
-	if !readTracesToEscalation(tr, call, annasMD5) {
+	if !readTracesToEscalation(tr, call, annasMD5Set(hits)) {
 		return false, functionalPrefix + "read was called on something that did not come from the escalated results"
 	}
 	if call.Result == nil || call.Result.IsError {
@@ -2584,19 +2599,9 @@ func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
 // get_details, so the tool must serve the md5 the search returned. A model that
 // never reached get_details is a SURFACE GAP and also fails.
 func assertEscalatedDetails(tr transcript) (pass bool, detail string) {
-	_, out, err := searchOutput(tr)
-	if err != nil {
-		return false, err.Error()
-	}
-	var annas bool
-	for _, r := range out.Results {
-		if r.Origin == "annas" {
-			annas = true
-			break
-		}
-	}
-	if !annas {
-		return gradeDegraded(tr, "search returned no Anna's-origin results today (live network)")
+	hits := annasHits(tr)
+	if p, d, settled := gradeEscalationPreconditions(tr, hits); settled {
+		return p, d
 	}
 	call, ok := findCall(tr, "get_details")
 	if !ok {
@@ -3836,47 +3841,195 @@ func selectScenarios(all []scenario, only string) []scenario {
 	return out
 }
 
-// assertSearchEscalation verifies the search was called and returned at least one
-// Anna's-origin result (evidence the auto escalation fired), and that the model
-// did not give up with "not found". A live provider outage is graded on honesty.
-func assertSearchEscalation(tr transcript) (pass bool, detail string) {
-	_, out, err := searchOutput(tr)
-	if err != nil {
-		return false, err.Error()
-	}
-	var fromAnnas int
-	for _, r := range out.Results {
-		if r.Origin == "annas" {
-			fromAnnas++
+// annasHit is one Anna's-origin result an escalated search returned.
+type annasHit struct {
+	// MD5 is the result's file hash, lowercased.
+	MD5 string
+	// Title is the result's title, as the searcher reported it.
+	Title string
+}
+
+// searchOutputs decodes the structured output of EVERY search call in the
+// transcript, skipping the calls that returned nothing decodable.
+//
+// The escalation assertions used searchOutput, which answers "which single search
+// worked" — the wrong question for "what did the model see". Measured on S34/S35 in
+// the 2026-08-08 run: the model searched three times, refining as it went, and
+// downloaded a hit from the third search; graded against the first search's results
+// it was failed for having refined the query, which is exactly what it should do.
+func searchOutputs(tr transcript) []tools.SearchOutput {
+	var outs []tools.SearchOutput
+	for _, c := range tr.Calls {
+		if c.Name != "search" {
+			continue
+		}
+		var out tools.SearchOutput
+		if decodeStructured(c.Structured, &out) == nil {
+			outs = append(outs, out)
 		}
 	}
-	if fromAnnas == 0 && len(out.OpenAccess) == 0 {
-		return gradeDegraded(tr, "escalation produced no extra-origin results (live network)")
+	return outs
+}
+
+// annasHits collects the Anna's-origin results of every search in the transcript,
+// first occurrence first, deduplicated by md5.
+func annasHits(tr transcript) []annasHit {
+	var hits []annasHit
+	seen := map[string]bool{}
+	for _, out := range searchOutputs(tr) {
+		for _, r := range out.Results {
+			md5 := strings.ToLower(strings.TrimSpace(r.MD5))
+			if r.Origin != "annas" || md5 == "" || seen[md5] {
+				continue
+			}
+			seen[md5] = true
+			hits = append(hits, annasHit{MD5: md5, Title: r.Title})
+		}
 	}
-	if fromAnnas == 0 {
-		return gradeDegraded(tr, "only open-access hits, no Anna's-origin results today")
+	return hits
+}
+
+// annasMD5Set indexes hits by md5, for the assertions that ask whether a download
+// or a read named one of them.
+func annasMD5Set(hits []annasHit) map[string]bool {
+	set := make(map[string]bool, len(hits))
+	for _, h := range hits {
+		set[h.MD5] = true
+	}
+	return set
+}
+
+// openAccessHits counts the open-access entries every search in the transcript
+// returned, so "the extras answered, just not Anna's" stays distinguishable from
+// "no extra searcher answered at all".
+func openAccessHits(tr transcript) int {
+	var n int
+	for _, out := range searchOutputs(tr) {
+		n += len(out.OpenAccess)
+	}
+	return n
+}
+
+// fixtureMatchMin is the fraction of the pinned title's words an Anna's-origin
+// result must carry before it counts as the pinned item. Anna's returns fuzzy
+// neighbors for any query, and they share the common words: measured against the
+// current fixture, the nearest neighbor scores 0.5 and the item itself 1.0.
+const fixtureMatchMin = 0.6
+
+// titleWords splits a title into lowercase words of three characters or more, so
+// punctuation (including the en dash in the pinned title's year range), casing and
+// one- or two-letter filler cannot decide whether two titles are the same work.
+func titleWords(s string) []string {
+	fields := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	var out []string
+	for _, f := range fields {
+		if len(f) >= 3 {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// isPinnedItem reports whether an Anna's-origin hit is the pinned escalation
+// fixture: the md5 matches, or its title carries enough of the pinned title's words
+// that no other result plausibly is it (Anna's edits titles, so an exact string
+// comparison would break on a trailing subtitle or a changed dash).
+func isPinnedItem(h annasHit) bool {
+	if strings.EqualFold(h.MD5, escalationMD5) {
+		return true
+	}
+	want := titleWords(escalationQuery)
+	if len(want) == 0 {
+		return false
+	}
+	have := titleWords(h.Title)
+	var matched int
+	for _, w := range want {
+		if slices.Contains(have, w) {
+			matched++
+		}
+	}
+	return float64(matched)/float64(len(want)) >= fixtureMatchMin
+}
+
+// escalationFound reports whether the pinned item is among the escalated results.
+func escalationFound(hits []annasHit) bool {
+	return slices.ContainsFunc(hits, isPinnedItem)
+}
+
+// gradeEscalationPreconditions grades everything the escalation scenarios share
+// before the model's own behavior is judged, and reports settled=true when it has
+// already decided the outcome.
+//
+// The last of its checks is the one the suite was missing. The scenarios rested on
+// "Anna's returned results, therefore the pinned item is among them", and that
+// premise does not survive the source drifting: the item pinned before 2026-08-08
+// still existed and was still absent from the catalog, but Anna's had reclassified
+// it out of its title search index, so the searches came back full of fuzzy
+// neighbors and every scenario asking the model to find and use it became
+// unsatisfiable. A model that says so is right, and is graded on honesty here —
+// blaming the tool surface for a fixture that has drifted only teaches the reader
+// to distrust the suite.
+func gradeEscalationPreconditions(tr transcript, hits []annasHit) (pass bool, detail string, settled bool) {
+	if _, searched := findCall(tr, "search"); !searched {
+		return false, noSearchCall, true
+	}
+	if len(hits) == 0 && openAccessHits(tr) == 0 {
+		p, d := gradeDegraded(tr, "escalation produced no extra-origin results (live network)")
+		return p, d, true
+	}
+	if len(hits) == 0 {
+		p, d := gradeDegraded(tr, "only open-access hits, no Anna's-origin results today")
+		return p, d, true
+	}
+	if !escalationFound(hits) {
+		p, d := gradeDegraded(tr, fixtureDriftDetail(hits))
+		return p, d, true
+	}
+	return false, "", false
+}
+
+// fixtureDriftDetail explains a drifted fixture in the terms a maintainer needs:
+// the escalation worked, the pinned item is not in what it returned, and the fix is
+// to re-pin rather than to look for a bug in the server.
+func fixtureDriftDetail(hits []annasHit) string {
+	return fmt.Sprintf("FIXTURE DRIFT: escalation returned %d Anna's-origin result(s) but none of them is the "+
+		"pinned item %q (md5 %s), so this scenario cannot test what it is for — re-pin "+
+		"test/e2e/testdata/escalation_item.json, checking all four conditions in its note",
+		len(hits), escalationQuery, escalationMD5)
+}
+
+// assertSearchEscalation verifies the escalation surfaced the pinned item and that
+// the model did not then give up with "not found". A live provider outage, and a
+// fixture that has drifted out of Anna's search index, are graded on honesty.
+func assertSearchEscalation(tr transcript) (pass bool, detail string) {
+	hits := annasHits(tr)
+	if p, d, settled := gradeEscalationPreconditions(tr, hits); settled {
+		return p, d
 	}
 	if reportsGaveUp(tr.FinalText) {
-		return false, "model reported not-found despite escalation returning Anna's results"
+		return false, "model reported not-found despite escalation returning the pinned item"
 	}
-	return true, fmt.Sprintf("escalation surfaced %d Anna's-origin result(s); model did not report not-found", fromAnnas)
+	return true, fmt.Sprintf("escalation surfaced %d Anna's-origin result(s) including the pinned item; "+
+		"model did not report not-found", len(hits))
 }
 
 // assertSearchThenDownloadEscalated verifies the model searched, then downloaded
 // an item found via escalation (Anna's origin). A live download failure is graded
 // on honesty.
+//
+// This is the one escalation assertion with no fixture-drift guard, and that is
+// deliberate: it never depended on the pinned item. What it grades is the handoff —
+// an escalated result carries an md5 the download tool accepts — and any
+// Anna's-origin hit proves that as well as the fixture would.
 func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string) {
-	_, out, err := searchOutput(tr)
-	if err != nil {
-		return false, err.Error()
+	if _, searched := findCall(tr, "search"); !searched {
+		return false, noSearchCall
 	}
-	var annasMD5s []string
-	for _, r := range out.Results {
-		if r.Origin == "annas" && r.MD5 != "" {
-			annasMD5s = append(annasMD5s, strings.ToLower(r.MD5))
-		}
-	}
-	if len(annasMD5s) == 0 {
+	hits := annasHits(tr)
+	if len(hits) == 0 {
 		return gradeDegraded(tr, "no Anna's-origin result to download (live network)")
 	}
 	dlCall, ok := findCall(tr, "download")
@@ -3890,8 +4043,8 @@ func assertSearchThenDownloadEscalated(tr transcript) (pass bool, detail string)
 	}
 	// Not a live-network skip: the escalation did surface Anna's results, so
 	// downloading something else is the model failing the flow under test.
-	if !slices.Contains(annasMD5s, dlMD5) {
-		return false, "model downloaded an md5 not from an Anna's-origin result"
+	if !annasMD5Set(hits)[dlMD5] {
+		return false, "model downloaded an md5 that no search in the transcript returned from Anna's"
 	}
 	if dlCall.Result != nil && dlCall.Result.IsError {
 		return gradeDegraded(tr, "download call returned a tool error (live network)")

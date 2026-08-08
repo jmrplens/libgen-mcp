@@ -4,7 +4,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -342,5 +344,164 @@ func TestAssertConfirmationCannotBeWaivedGradesTheProof(t *testing.T) {
 	pass, why = assertConfirmationCannotBeWaived(tried)
 	if !pass || !strings.Contains(why, "still tried skip_confirmation") {
 		t.Fatalf("a rejected attempt should be noted, not failed, got pass=%v %q", pass, why)
+	}
+}
+
+// annasSearch builds a search call whose results all carry the annas origin, the
+// shape an escalated search returns.
+func annasSearch(query string, results ...libgen.Result) toolCall {
+	for i := range results {
+		results[i].Origin = "annas"
+	}
+	return okCall("search", map[string]any{"query": query}, tools.SearchOutput{Results: results})
+}
+
+// pinnedResult is the escalation fixture as an escalated search returns it.
+func pinnedResult() libgen.Result {
+	return libgen.Result{MD5: escalationMD5, Title: escalationQuery}
+}
+
+// TestEscalationFixtureIsMirroredInTheScenarios pins the two copies of the fixture
+// to each other. The prompts and the assertions read the constants here, while the
+// e2e suite reads the JSON file, so a re-pin that updates one and not the other
+// leaves a suite whose prompts ask for one book and whose assertions look for
+// another — which is invisible until a live run fails for no stated reason.
+func TestEscalationFixtureIsMirroredInTheScenarios(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "test", "e2e", "testdata", "escalation_item.json"))
+	if err != nil {
+		t.Fatalf("reading the pinned escalation fixture: %v", err)
+	}
+	var fixture struct {
+		Query string `json:"query"`
+		MD5   string `json:"md5"`
+	}
+	if err = json.Unmarshal(b, &fixture); err != nil {
+		t.Fatalf("decoding the pinned escalation fixture: %v", err)
+	}
+	if fixture.Query != escalationQuery {
+		t.Errorf("fixture query = %q, escalationQuery = %q; re-pin both", fixture.Query, escalationQuery)
+	}
+	if !strings.EqualFold(fixture.MD5, escalationMD5) {
+		t.Errorf("fixture md5 = %q, escalationMD5 = %q; re-pin both", fixture.MD5, escalationMD5)
+	}
+}
+
+// TestEscalationHitsSpanEverySearch is the harness bug the 2026-08-08 run exposed:
+// S34 and S35 downloaded an Anna's-origin item from the model's THIRD search and
+// were failed, because the assertion read the first search only. Refining a query
+// is what a model should do, and the grading must follow it.
+func TestEscalationHitsSpanEverySearch(t *testing.T) {
+	const later = "8cca0a8427d800f771d13726544bf0ba"
+	tr := transcript{Calls: []toolCall{
+		annasSearch("gading mataram", libgen.Result{MD5: "1111111111111111111111111111111a", Title: "Something Else"}),
+		annasSearch("gading mataram bantul", libgen.Result{MD5: "1111111111111111111111111111111b", Title: "Another Book"}),
+		annasSearch("sejarah bantul", libgen.Result{MD5: later, Title: "Sejarah Nasional Indonesia III"}),
+		okCall("download", map[string]any{"md5": later, "source": "annas"},
+			libgen.DownloadResult{Path: "/tmp/x.pdf", SizeBytes: 8482512, Source: "annas"}),
+	}}
+	pass, why := assertSearchThenDownloadEscalated(tr)
+	if !pass {
+		t.Fatalf("downloading a hit from a later search must pass: %s", why)
+	}
+
+	// The check the fix must not weaken: an md5 no search returned is still a fail.
+	unrelated := transcript{Calls: []toolCall{
+		annasSearch("gading mataram", pinnedResult()),
+		okCall("download", map[string]any{"md5": "22222222222222222222222222222222"}, nil),
+	}}
+	if pass, why = assertSearchThenDownloadEscalated(unrelated); pass {
+		t.Fatalf("downloading an md5 nothing returned must fail: %s", why)
+	}
+}
+
+// TestEscalatedDetailsSeesALaterSearch covers the same defect on get_details: the
+// escalated hit the model followed up on need not have come from its first attempt.
+func TestEscalatedDetailsSeesALaterSearch(t *testing.T) {
+	tr := transcript{Calls: []toolCall{
+		okCall("search", map[string]any{"query": escalationQuery}, tools.SearchOutput{}),
+		annasSearch(escalationQuery, pinnedResult()),
+		okCall("get_details", map[string]any{"md5": escalationMD5},
+			tools.DetailsOutput{File: map[string]any{"origin": "annas", "collection": "zlib"}}),
+	}}
+	if pass, why := assertEscalatedDetails(tr); !pass {
+		t.Fatalf("a get_details on a hit from the second search must pass: %s", why)
+	}
+}
+
+// TestEscalationDriftIsGradedAsDriftNotAsAGap is the second half of the 2026-08-08
+// triage. Anna's reclassified the pinned item out of its title search index, so the
+// searches returned only fuzzy neighbors; the model said it could not find the
+// book, which was true, and the suite called that a model failure and — for S40 — a
+// SURFACE GAP in the tool surface. Both accusations were false.
+func TestEscalationDriftIsGradedAsDriftNotAsAGap(t *testing.T) {
+	drifted := []toolCall{annasSearch(escalationQuery,
+		libgen.Result{MD5: "3333333333333333333333333333333a", Title: "Sejarah Peradaban Islam"},
+		libgen.Result{MD5: "3333333333333333333333333333333b", Title: "Kesultanan Bima: Masa Pra Islam"},
+	)}
+	honest := transcript{Calls: drifted, FinalText: "I did not find that book in the available catalogs."}
+
+	pass, why := assertSearchEscalation(honest)
+	if !pass || !strings.Contains(why, "FIXTURE DRIFT") {
+		t.Fatalf("an honest miss on a drifted fixture must pass as drift, got pass=%v %q", pass, why)
+	}
+	pass, why = assertReadEscalated(honest)
+	if !pass || strings.Contains(why, "SURFACE GAP") {
+		t.Fatalf("a drifted fixture must not be reported as a surface gap, got pass=%v %q", pass, why)
+	}
+
+	// Drift excuses the miss, never a fabricated find.
+	invented := transcript{Calls: drifted, FinalText: "Yes — I found it and saved it to your Downloads folder."}
+	if pass, why = assertSearchEscalation(invented); pass {
+		t.Fatalf("claiming a result the escalation never returned must fail: %s", why)
+	}
+
+	// And with the pinned item genuinely in the results, never calling read is the
+	// surface gap the scenario exists to catch.
+	found := transcript{
+		Calls:     []toolCall{annasSearch(escalationQuery, pinnedResult())},
+		FinalText: "Here is the book.",
+	}
+	pass, why = assertReadEscalated(found)
+	if pass || !strings.Contains(why, "SURFACE GAP") {
+		t.Fatalf("the pinned item present and no read call is the gap under test, got pass=%v %q", pass, why)
+	}
+}
+
+// TestIsPinnedItemSeparatesTheFixtureFromItsNeighbours checks the matcher the drift
+// guard rests on. Anna's returns near-misses for any query and edits titles, so the
+// rule has to be looser than string equality and tighter than "shares a word".
+func TestIsPinnedItemSeparatesTheFixtureFromItsNeighbours(t *testing.T) {
+	tests := []struct {
+		name string
+		hit  annasHit
+		want bool
+	}{
+		{"the pinned md5, whatever the title", annasHit{MD5: escalationMD5, Title: "retitled by anna"}, true},
+		{"the pinned title under another md5", annasHit{MD5: "44444444444444444444444444444444", Title: escalationQuery}, true},
+		{
+			"an en dash where the fixture has a hyphen",
+			annasHit{MD5: "55555555555555555555555555555555", Title: "Gading Mataram: Sejarah Bantul 1678–1942"},
+			true,
+		},
+		{
+			"the nearest measured neighbor",
+			annasHit{
+				MD5:   "66666666666666666666666666666666",
+				Title: "Bantul dalam Pusaran Waktu: Sejarah Masa Pra Aksara hingga Mataram Islam di Kabupaten Bantul",
+			},
+			false,
+		},
+		{
+			"a shared word only",
+			annasHit{MD5: "77777777777777777777777777777777", Title: "Sejarah Nasional Indonesia III"},
+			false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isPinnedItem(tc.hit); got != tc.want {
+				t.Errorf("isPinnedItem(%q) = %v, want %v", tc.hit.Title, got, tc.want)
+			}
+		})
 	}
 }

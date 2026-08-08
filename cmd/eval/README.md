@@ -341,11 +341,32 @@ appearing on the Spanish page in English; add it to `scenariosES` in
   whether the answer owns the miss, and passes or fails on that. See the
   degraded-runs section above for why.
 - **S32–S38, S40 and S41 depend on a pinned fixture**
-  (`test/e2e/testdata/escalation_item.json`): an item Anna's carries and the Library
+  (`test/e2e/testdata/escalation_item.json`, mirrored as `escalationQuery` /
+  `escalationMD5` in `scenarios.go`): an item Anna's carries and the Library
   Genesis catalog does not. If the catalog later absorbs it, every one of them
   changes meaning — the escalation ones stop proving escalation and S38 stops being a
   catalog miss — so re-pin with the commands in
-  `plan/2026-07-24-extra-search-sources.md`.
+  `plan/2026-07-24-extra-search-sources.md`, and check **all four** conditions below.
+  The first three were the documented ones; the fourth is the one the 2026-08-08 run
+  found missing, having failed silently for who knows how long.
+  1. `libgen.li json.php?object=f&md5=<md5>` returns exactly `[]` — probe a
+     known-present md5 first, because a `json.php` outage returns a body that reads
+     like absence.
+  2. `libgen.li index.php?req=<query>` returns zero result rows, so the `auto` mode
+     escalates — probe a title the catalog does carry first, for the same reason.
+  3. Anna's md5 page publishes an IPFS CID, so the escalated hit is reachable
+     keylessly.
+  4. **A `search` of the query with `extra_sources=always` returns that md5, in
+     first position.** An item can satisfy 1–3 and still be unreachable: the previous
+     fixture was reclassified by Anna's out of its title search index, so it still
+     existed, was still a catalog miss, and had stopped being findable — which made
+     S32–S37, S40 and S41 unsatisfiable while the fixture still looked valid. Prefer
+     a distinctive title, and one whose PDF has a text layer (S40 reads it).
+
+  When the fixture does drift, the escalation assertions now say so: a detail
+  beginning `FIXTURE DRIFT` means the escalation worked, the pinned item was not in
+  what it returned, and the scenario graded the model on honesty alone. It is a pass
+  that tested nothing — treat it as a re-pin task, not as a green row.
 - **It downloads files**: into an `os.MkdirTemp` directory (removed on exit
   unless `--keep-downloads`). Downloads are capped at 25 MiB
   (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`) and confined to that temp dir
