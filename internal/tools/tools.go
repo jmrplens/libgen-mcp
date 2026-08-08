@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"regexp"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1318,6 +1320,10 @@ type downloadCall struct {
 	// confirm records whether this call asked the user to approve the disk write,
 	// so the answer is only read where a question was actually put.
 	confirm bool
+	// size is the catalog's recorded size of the file, in bytes, or 0 when it is
+	// not known. It is only ever filled from the metadata lookup the call already
+	// makes, never from a probe of its own.
+	size int64
 }
 
 // prepare fills in everything that has to be settled before the download runs:
@@ -1343,15 +1349,19 @@ func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, re
 	// For a book with no explicit name, fill bibliographic metadata so the file
 	// gets a clean "Author - Title (Year).ext" name. Best-effort: a details lookup
 	// failure must not fail the request. It runs before the confirmation is
-	// composed, which names the file it is about to save.
+	// composed, which names the file it is about to save — and carries the size the
+	// catalog holds, which is what the prompt quotes.
 	if d.item.MD5 != "" && d.in.Filename == "" {
-		d.item.Meta = bookMeta(ctx, d.client, d.item.MD5)
+		details := bookMeta(ctx, d.client, d.item.MD5)
+		d.item.Meta, d.size = details.Meta, details.Size
 	}
 	// The disk-writing path may also want a confirmation. It is registered here,
-	// before anything is fetched, so every question travels together.
+	// before anything is fetched, so every question travels together. Composing the
+	// prompt is guarded by willAsk because this method runs on BOTH passes of the
+	// call (ask, then act) and the second one would only throw the message away.
 	d.confirm = wantConfirmation(remote, d.cfg, d.consent, req, d.in)
-	if d.confirm {
-		askDownloadConfirm(ctx, d.round, d.client, d.item, downloadDir(d.cfg, d.in), d.in)
+	if d.confirm && d.round.willAsk() {
+		askDownloadConfirm(d.round, d.item, downloadDir(d.cfg, d.in), d.in, d.size)
 	}
 	return d.round.needsInput()
 }
@@ -1419,12 +1429,13 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 const downloadConfirmID = "download_confirm"
 
 // askDownloadConfirm registers the download confirmation. It builds a human
-// prompt naming the file (and, best-effort, its size) and puts it to the client.
-// It runs before anything is fetched, alongside any credential question, so the
-// user answers everything in one exchange.
-func askDownloadConfirm(ctx context.Context, round *inputRound, c *libgen.Client, item libgen.Item, dir string, in DownloadInput) {
+// prompt naming the file (and, when the catalog reported one, its size) and puts
+// it to the client. It runs before anything is fetched, alongside any credential
+// question, so the user answers everything in one exchange — and it touches the
+// network not at all: size comes from the metadata the call already looked up.
+func askDownloadConfirm(round *inputRound, item libgen.Item, dir string, in DownloadInput, size int64) {
 	name := resolveFilename(item, in.Filename, "")
-	round.askConfirmRemember(downloadConfirmID, confirmMessage(ctx, c, item, name, dir), "confirm",
+	round.askConfirmRemember(downloadConfirmID, confirmMessage(name, dir, size), "confirm",
 		"Confirm downloading and saving this file to the server", "dont_ask_again")
 }
 
@@ -1479,13 +1490,22 @@ func wantConfirmation(remote bool, cfg *config.Config, consent *downloadConsent,
 }
 
 // confirmMessage builds the confirmation prompt: `Save "<name>"<size> to <dir>?`,
-// where the size clause is present only when a best-effort HEAD probe reported a
-// Content-Length. The probe never fails the flow: an unknown size just drops the
-// clause.
-func confirmMessage(ctx context.Context, c *libgen.Client, item libgen.Item, name, dir string) string {
+// where the size clause is present only when size is known (> 0). An unknown size
+// just drops the clause.
+//
+// The size is whatever the catalog already told us while looking up the file's
+// name; the prompt deliberately does NOT go and measure the file. It used to: it
+// resolved the item through the whole download chain and issued a HEAD, on a pass
+// whose only job is to ask a question. Because the elicitation protocol runs the
+// handler twice (ask, then act), that put a second, identical resolution in front
+// of every confirmed download — measured at 3.3s of added latency on average, and
+// twice the traffic against third-party mirrors for one file. A size the catalog
+// hands over for free is worth stating; one that costs a round of requests to the
+// mirror before the user has even said yes is not.
+func confirmMessage(name, dir string, size int64) string {
 	sizeClause := ""
-	if n, ok := c.HeadSize(ctx, item); ok {
-		sizeClause = " (" + humanBytes(n) + ")"
+	if size > 0 {
+		sizeClause = " (" + humanBytes(size) + ")"
 	}
 	return fmt.Sprintf("Save %q%s to %s?", name, sizeClause, dir)
 }
@@ -1679,16 +1699,31 @@ func headerList(h map[string]string) string {
 	return strings.Join(parts, "; ")
 }
 
+// bookDetails is what one catalog lookup tells a download call about a book: the
+// bibliographic fields that name the saved file, and the size the catalog records
+// for it. Either half may be absent — a nil Meta or a zero Size — and both are
+// optional to the download, which is why the lookup is best-effort.
+type bookDetails struct {
+	// Meta carries the fields cleanFileName renders, or nil when the record held
+	// none of them.
+	Meta *libgen.FileMeta
+	// Size is the catalog's filesize for the record in bytes, or 0 when it reports
+	// none. It is what the save confirmation quotes, so the prompt can state a size
+	// without a live probe of the mirror.
+	Size int64
+}
+
 // bookMeta fetches bibliographic fields for a book md5 to build a clean download
-// filename. It is best-effort: any lookup error returns nil so the download still
-// proceeds and falls back to the mirror-announced name or the md5. Title, author
-// and year come from the related edition record; the extension from the file
-// record.
-func bookMeta(ctx context.Context, c *libgen.Client, md5 string) *libgen.FileMeta {
+// filename, plus the size the catalog holds for that file. It is best-effort: any
+// lookup error returns the zero bookDetails so the download still proceeds and
+// falls back to the mirror-announced name or the md5. Title, author and year come
+// from the related edition record; the extension and the size from the file record.
+func bookMeta(ctx context.Context, c *libgen.Client, md5 string) bookDetails {
 	file, edition, err := c.DetailsByMD5(ctx, md5)
 	if err != nil {
-		return nil
+		return bookDetails{}
 	}
+	details := bookDetails{Size: intField(file, "filesize")}
 	meta := &libgen.FileMeta{
 		Title:  stringField(edition, "title"),
 		Author: stringField(edition, "author"),
@@ -1696,9 +1731,36 @@ func bookMeta(ctx context.Context, c *libgen.Client, md5 string) *libgen.FileMet
 		Ext:    stringField(file, "extension"),
 	}
 	if meta.Title == "" && meta.Author == "" && meta.Year == "" && meta.Ext == "" {
-		return nil
+		return details
 	}
-	return meta
+	details.Meta = meta
+	return details
+}
+
+// intField reads a non-negative integer out of a details record map, returning 0
+// when the map is nil, the key is absent, or the value is not a number this
+// server is willing to read as one. The catalog encodes numeric columns as
+// strings ("filesize": "18298205"), but a JSON number is accepted too, since the
+// record is third-party data whose shape is not ours to assume.
+func intField(m map[string]any, key string) int64 {
+	if m == nil {
+		return 0
+	}
+	switch v := m[key].(type) {
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil || n < 0 {
+			return 0
+		}
+		return n
+	case float64:
+		if v < 0 || v > math.MaxInt64 {
+			return 0
+		}
+		return int64(v)
+	default:
+		return 0
+	}
 }
 
 // stringField reads a trimmed string value from a details record map, returning

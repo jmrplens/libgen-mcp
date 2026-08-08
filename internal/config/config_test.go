@@ -24,8 +24,10 @@ func TestLoadDefaults(t *testing.T) {
 	if filepath.Base(cfg.DownloadDir) != "Downloads" {
 		t.Errorf("DownloadDir = %q, want ~/Downloads", cfg.DownloadDir)
 	}
-	if cfg.Timeout != 30*time.Second {
-		t.Errorf("Timeout = %v, want 30s", cfg.Timeout)
+	// The default is short on purpose: it bounds one question to a mirror, never a
+	// file transfer, and every request it covers has failover behind it.
+	if cfg.Timeout != 10*time.Second {
+		t.Errorf("Timeout = %v, want 10s", cfg.Timeout)
 	}
 }
 

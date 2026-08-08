@@ -1889,92 +1889,6 @@ func TestDownloadItemRestrictIncompatibleSource(t *testing.T) {
 	}
 }
 
-// throttling that would slow the probe, a single retry, and a short timeout.
-func headSizeConfig() *config.Config {
-	return &config.Config{
-		Timeout:                5 * time.Second,
-		RateRPS:                1000,
-		RateBurst:              100,
-		RetryAttempts:          1,
-		MaxConcurrentDownloads: 2,
-	}
-}
-
-// headServer serves a HEAD-answering endpoint at /file: it records the request
-// method it saw and replies with the given Content-Length (a negative length
-// omits the header). It never writes a body, matching a real HEAD probe.
-func headServer(t *testing.T, contentLength int64, status int) (base string, sawMethod *string) {
-	t.Helper()
-	var method string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/file", func(w http.ResponseWriter, r *http.Request) {
-		method = r.Method
-		if contentLength >= 0 {
-			w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-		}
-		w.WriteHeader(status)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv.URL, &method
-}
-
-// TestHeadSize_ReportsContentLength verifies the happy path: a resolved URL whose
-// HEAD returns a positive Content-Length yields that size with ok=true, and the
-// probe used the HEAD method (never a body-fetching GET).
-func TestHeadSize_ReportsContentLength(t *testing.T) {
-	base, sawMethod := headServer(t, 4096, http.StatusOK)
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file", VerifyMD5: true}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	n, ok := c.HeadSize(context.Background(), Item{MD5: "abc"})
-	if !ok {
-		t.Fatal("HeadSize ok = false, want true for a positive Content-Length")
-	}
-	if n != 4096 {
-		t.Errorf("HeadSize = %d, want 4096", n)
-	}
-	if *sawMethod != http.MethodHead {
-		t.Errorf("probe used %s, want HEAD", *sawMethod)
-	}
-}
-
-// TestHeadSize_MissingContentLength verifies a resolved URL whose HEAD omits the
-// Content-Length header yields ok=false (unknown size), never an error.
-func TestHeadSize_MissingContentLength(t *testing.T) {
-	base, _ := headServer(t, -1, http.StatusOK) // negative → no Content-Length header
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false when Content-Length is absent")
-	}
-}
-
-// TestHeadSize_Non2xxStatus verifies a resolved URL whose HEAD returns a non-2xx
-// status yields ok=false, never an error.
-func TestHeadSize_Non2xxStatus(t *testing.T) {
-	base, _ := headServer(t, 4096, http.StatusForbidden)
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false for a 403 response")
-	}
-}
-
-// TestHeadSize_ResolveFailureIsBestEffort verifies that when no source can resolve
-// the item, HeadSize returns ok=false without an error rather than propagating the
-// resolve failure — the confirmation flow proceeds with an unknown size.
-func TestHeadSize_ResolveFailureIsBestEffort(t *testing.T) {
-	src := stubSource{name: "libgen", supports: false} // supports nothing → no resolution
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false when the item cannot be resolved")
-	}
-}
-
 // unpaywallDownloadServer serves the on-demand Unpaywall flow for a DOI download: a
 // lookup path returns OA JSON pointing at its own /pdf endpoint, which serves the
 // given PDF bytes. It records how many lookups (not /pdf fetches) it received so a
@@ -2096,39 +2010,6 @@ func TestWithPerCallUnpaywall(t *testing.T) {
 	// Positive case: email + DOI + no named source + no unpaywall present → prepend.
 	if got := c.withPerCallUnpaywall(emailDOI, plain); len(got) != 2 || got[0].Name() != "unpaywall" {
 		t.Errorf("email+DOI+no-source should prepend unpaywall, got %v", srcNames(got))
-	}
-}
-
-// TestHeadContentLength_ErrorPaths drives headContentLength's request-build and
-// transport failure branches directly: a URL with a control byte cannot be built
-// into a request, and an unreachable address fails the HEAD Do. Both yield ok=false
-// with no size.
-func TestHeadContentLength_ErrorPaths(t *testing.T) {
-	c := newTestClient(staticMirrors{})
-	if _, ok := c.headContentLength(context.Background(), "http://\x7f", nil); ok {
-		t.Error("build error should yield ok=false")
-	}
-	if _, ok := c.headContentLength(context.Background(), "http://127.0.0.1:0/f", nil); ok {
-		t.Error("transport error should yield ok=false")
-	}
-}
-
-// TestHeadContentLength_CopiesRequiredHeaders verifies that source-required headers
-// (e.g. a Sci-Hub Referer) are copied onto the HEAD request: the server only reports
-// a Content-Length when it sees the expected header.
-func TestHeadContentLength_CopiesRequiredHeaders(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Referer") == "https://sci-hub/" {
-			w.Header().Set("Content-Length", "2048")
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	c := newTestClient(staticMirrors{})
-	hdr := http.Header{"Referer": {"https://sci-hub/"}}
-	n, ok := c.headContentLength(context.Background(), srv.URL, hdr)
-	if !ok || n != 2048 {
-		t.Errorf("headContentLength with required header = (%d, %v), want (2048, true)", n, ok)
 	}
 }
 
@@ -2578,5 +2459,68 @@ func TestRedactQuery(t *testing.T) {
 				t.Errorf("redactQuery(%q) leaked the secret", tt.in)
 			}
 		})
+	}
+}
+
+// TestDownloadOutlivesRequestTimeout is the guard on the per-request timeout
+// being short: a transfer that takes many times longer than cfg.Timeout must
+// still complete in full.
+//
+// LIBGEN_MCP_TIMEOUT bounds ONE question to a mirror — a search, a lookup, a
+// resolve hop — all of which have failover behind them, which is why its default
+// is measured in seconds. The bytes of a file are governed by something else
+// entirely: the download client is built with no timeout at all, and a stream is
+// cut only by its context or by the progress-resetting stall window. A 15 MB book
+// over a slow link, or a two-minute transfer, is not this setting's business, and
+// this test fails if it ever becomes so.
+func TestDownloadOutlivesRequestTimeout(t *testing.T) {
+	const chunks, chunkDelay = 8, 25 * time.Millisecond
+	payload := bytes.Repeat([]byte("slow-but-progressing payload;"), 64)
+	chunkSize := len(payload) / chunks
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+		flusher, _ := w.(http.Flusher)
+		for off := 0; off < len(payload); off += chunkSize {
+			_, _ = w.Write(payload[off:min(off+chunkSize, len(payload))])
+			if flusher != nil {
+				flusher.Flush()
+			}
+			time.Sleep(chunkDelay)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	// A per-request timeout far shorter than the transfer will take, and a stall
+	// window comfortably longer than the gap between chunks.
+	cfg := &config.Config{
+		Timeout:                20 * time.Millisecond,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
+		DownloadStallTimeout:   5 * time.Second,
+	}
+	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: srv.URL + "/file"}}
+	c := New(staticMirrors{}, cfg, WithSources(src))
+
+	started := time.Now()
+	res, err := c.DownloadItem(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, t.TempDir(), "book.pdf")
+	if err != nil {
+		t.Fatalf("a transfer longer than the per-request timeout must still finish: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed <= cfg.Timeout {
+		t.Fatalf("transfer took %v, which is under the %v timeout — the test proves nothing", elapsed, cfg.Timeout)
+	}
+	if res.SizeBytes != int64(len(payload)) {
+		t.Errorf("saved %d bytes, want the whole %d-byte file", res.SizeBytes, len(payload))
+	}
+	got, rerr := os.ReadFile(res.Path)
+	if rerr != nil {
+		t.Fatalf("reading the saved file: %v", rerr)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Error("the saved file does not match the served bytes")
 	}
 }

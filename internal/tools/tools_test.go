@@ -736,20 +736,63 @@ func TestStringField(t *testing.T) {
 	}
 }
 
-// TestBookMetaEmptyReturnsNil verifies bookMeta returns nil when the record lookup
-// yields no usable bibliographic fields, so naming falls back to the md5.
+// TestIntField covers reading a numeric column out of a catalog record. The
+// catalog encodes them as strings, but the record is third-party data, so a JSON
+// number is read too and everything else — a missing key, a nil map, a non-numeric
+// string, a negative or absurd value — reports 0, i.e. "not known", which is what
+// drops the size clause from the save confirmation.
+func TestIntField(t *testing.T) {
+	record := map[string]any{
+		"filesize": "18298205",
+		"padded":   "  4096 ",
+		"json":     float64(2048),
+		"words":    "unknown",
+		"negative": "-1",
+		"huge":     1e19, // beyond int64
+		"wrong":    []any{1},
+	}
+	tests := []struct {
+		key  string
+		want int64
+	}{
+		{"filesize", 18298205},
+		{"padded", 4096},
+		{"json", 2048},
+		{"words", 0},
+		{"negative", 0},
+		{"huge", 0},
+		{"wrong", 0},
+		{"absent", 0},
+	}
+	for _, tt := range tests {
+		if got := intField(record, tt.key); got != tt.want {
+			t.Errorf("intField(%q) = %d, want %d", tt.key, got, tt.want)
+		}
+	}
+	if got := intField(nil, "filesize"); got != 0 {
+		t.Errorf("intField(nil) = %d, want 0", got)
+	}
+}
+
+// TestBookMetaEmptyReturnsNil verifies bookMeta returns no metadata when the
+// record lookup yields no usable bibliographic fields, so naming falls back to the
+// md5 — while still reporting the size the same record carries.
 func TestBookMetaEmptyReturnsNil(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
 		// A file record with no title/author/year/extension and no related edition.
-		_, _ = w.Write([]byte(`{"93485370":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee"}}`))
+		_, _ = w.Write([]byte(`{"93485370":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee","filesize":"4096"}}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
-	if meta := bookMeta(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee"); meta != nil {
-		t.Errorf("bookMeta() = %+v, want nil (no usable fields)", meta)
+	details := bookMeta(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee")
+	if details.Meta != nil {
+		t.Errorf("bookMeta().Meta = %+v, want nil (no usable fields)", details.Meta)
+	}
+	if details.Size != 4096 {
+		t.Errorf("bookMeta().Size = %d, want 4096 (the catalog's filesize)", details.Size)
 	}
 }
 
@@ -1795,6 +1838,171 @@ func TestDownloadTool_ConfirmCanceled(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(cfg.DownloadDir); len(entries) != 0 {
 		t.Errorf("a canceled download wrote %d file(s) to disk, want 0", len(entries))
+	}
+}
+
+// catalogConfirmMirror serves the whole book path a confirmed download walks — the
+// json.php catalog record (file, then its edition), then ads.php → get.php → CDN —
+// and counts the resolve step (ads.php) and the CDN's HEAD and GET separately. The
+// counters are what let a test prove how many times ONE tool call resolved the
+// item: the elicitation protocol runs the handler twice, so a prompt that resolves
+// eagerly shows up here as a second ads.php hit.
+//
+// The record's filesize matches the payload, so the size the confirmation quotes
+// can be checked against the file that is actually served.
+func catalogConfirmMirror(t *testing.T, payload []byte) (srv *httptest.Server, ads, cdnGET, cdnHEAD *atomic.Int32) {
+	t.Helper()
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	var adsHits, getHits, headHits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("object") == "e" {
+			_, _ = w.Write([]byte(`{"55":{"title":"Confirmed Book","author":"A. Author","year":"2020"}}`))
+			return
+		}
+		fmt.Fprintf(w, `{"93485370":{"md5":%q,"extension":"pdf","filesize":"%d","editions":{"55":{"e_id":"55"}}}}`,
+			wantMD5, len(payload))
+	})
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		adsHits.Add(1)
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			headHits.Add(1)
+			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		getHits.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, &adsHits, &getHits, &headHits
+}
+
+// TestDownloadTool_ConfirmResolvesItemOnce is the regression test for the double
+// resolution: one confirmed download must reach the mirror's resolve endpoint
+// (ads.php) exactly ONCE, and must never probe the CDN with a HEAD.
+//
+// The elicitation protocol runs the download handler twice for a single tool call
+// — once to put the question, once to act on the answer — and the confirmation
+// prompt used to measure the file live, resolving the item through the whole
+// mirror chain on each pass. That cost every confirmed download a duplicate
+// resolution and doubled the traffic this server puts on a third party. The size
+// now comes from the catalog record the call already fetches to name the file, so
+// the asking pass makes no request of its own at all.
+func TestDownloadTool_ConfirmResolvesItemOnce(t *testing.T) {
+	payload := []byte("%PDF-1.4 resolve-once book payload")
+	srv, ads, cdnGET, cdnHEAD := catalogConfirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	var prompt string
+	handler := func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		prompt = req.Params.Message
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("an accepted download should not be a tool error: %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Fatalf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	if got := ads.Load(); got != 1 {
+		t.Errorf("one confirmed download resolved the mirror %d time(s), want exactly 1", got)
+	}
+	if got := cdnHEAD.Load(); got != 0 {
+		t.Errorf("the confirmation issued %d live size probe(s), want 0 (size comes from the catalog record)", got)
+	}
+	if got := cdnGET.Load(); got != 1 {
+		t.Errorf("the file body was fetched %d time(s), want exactly 1", got)
+	}
+	// The prompt still states a size — the catalog's, which here matches the bytes
+	// actually served.
+	if want := humanBytes(int64(len(payload))); !strings.Contains(prompt, "("+want+")") {
+		t.Errorf("confirmation prompt = %q, want it to quote the catalog size %q", prompt, want)
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path == "" {
+		t.Fatalf("accepted download should report a saved path; got %+v", out)
+	}
+	if _, statErr := os.Stat(out.Path); statErr != nil {
+		t.Errorf("accepted download did not write the file: %v", statErr)
+	}
+}
+
+// TestDownloadTool_ConfirmUnknownSizeOmitsClause covers the other half of the
+// size clause: a catalog record with no usable filesize leaves the prompt without
+// one, rather than sending the server off to measure the file. The download still
+// proceeds normally on acceptance.
+func TestDownloadTool_ConfirmUnknownSizeOmitsClause(t *testing.T) {
+	payload := []byte("%PDF-1.4 unknown-size book payload")
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	var cdnHEAD atomic.Int32
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		// A record whose filesize is not a number this server will read as one.
+		fmt.Fprintf(w, `{"93485370":{"md5":%q,"extension":"pdf","filesize":"unknown"}}`, wantMD5)
+	})
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			cdnHEAD.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	var prompt string
+	handler := func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		prompt = req.Params.Message
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, confirmConfig(t), staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("an accepted download should not be a tool error: %+v", res.Content)
+	}
+	if strings.Contains(prompt, "(") {
+		t.Errorf("confirmation prompt = %q, want no size clause when the catalog reports none", prompt)
+	}
+	if got := cdnHEAD.Load(); got != 0 {
+		t.Errorf("an unknown size triggered %d live probe(s), want 0", got)
 	}
 }
 

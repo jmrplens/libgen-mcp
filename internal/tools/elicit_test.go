@@ -310,6 +310,22 @@ func TestElicitationSupported_NilCases(t *testing.T) {
 	}
 }
 
+// TestWillAsk covers the three states a round can be in when a caller is about to
+// compose a prompt: a client that cannot be asked, the pass that puts the
+// questions, and the retry that carries the answers back. Only the middle one may
+// report true — the other two would pay for a message nobody ever sees.
+func TestWillAsk(t *testing.T) {
+	if (&inputRound{supported: false}).willAsk() {
+		t.Error("a client with no elicitation capability must not be asked")
+	}
+	if !(&inputRound{supported: true}).willAsk() {
+		t.Error("the first pass of a capable client is the one that asks")
+	}
+	if (&inputRound{supported: true, retry: true}).willAsk() {
+		t.Error("a retry carries the answers back; asking again would loop")
+	}
+}
+
 // TestAskConfirmDecision_UnavailableNilReq exercises the no-capability arm
 // directly: with a nil request there is no session to ask, so the decision is
 // confirmUnavailable, nothing is recorded as a question, and the caller falls

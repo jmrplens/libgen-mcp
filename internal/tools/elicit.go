@@ -82,6 +82,21 @@ func (r *inputRound) answer(id string) (*mcp.ElicitResult, bool) {
 	return elicited, isElicit
 }
 
+// willAsk reports whether a question put on THIS call would actually reach the
+// user. It is false when the client cannot be asked at all, and false on a retry —
+// where the answers either came back with the call or the client dropped them, and
+// asking again would loop (which is why ask is a no-op there).
+//
+// It exists so a caller can skip BUILDING a prompt that would be discarded.
+// Because the handler runs twice for one tool call (once to ask, once to act, see
+// the type comment), any work spent composing a message is paid for twice, and a
+// prompt that quotes a file's size or name can cost real network requests.
+// Composing eagerly is how the download confirmation came to resolve its item
+// through the whole mirror chain on both passes.
+func (r *inputRound) willAsk() bool {
+	return r.supported && !r.retry
+}
+
 // ask records a question under id, unless this call is a retry that simply came
 // back without it — asking again there would loop.
 func (r *inputRound) ask(id string, params *mcp.ElicitParams) {

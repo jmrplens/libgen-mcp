@@ -34,20 +34,36 @@ const (
 
 // Config groups the server configuration read from the environment.
 type Config struct {
-	Mirror                 string        // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
-	DownloadDir            string        // LIBGEN_MCP_DOWNLOAD_DIR: download destination
-	Timeout                time.Duration // LIBGEN_MCP_TIMEOUT: timeout per HTTP request
-	LogLevel               slog.Level    // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
-	RateRPS                float64       // LIBGEN_MCP_RATE_RPS: allowed requests per second
-	RateBurst              int           // LIBGEN_MCP_RATE_BURST: maximum limiter burst
-	MaxDownloadBytes       int64         // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
-	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
-	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
-	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
-	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
-	AnnasKey               string        // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
-	CoreKey                string        // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
-	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	Mirror      string // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
+	DownloadDir string // LIBGEN_MCP_DOWNLOAD_DIR: download destination
+	// Timeout is the deadline for ONE HTTP request that asks a question — a catalog
+	// search, a details lookup, a mirror health probe, a source's resolve hop.
+	// LIBGEN_MCP_TIMEOUT, a Go duration. It is also the budget one download source
+	// gets to resolve an item, however many hops that takes.
+	//
+	// It never applies to the transfer of a file: the download client carries no
+	// timeout at all, and a stream is governed by the request context and the
+	// progress-resetting DownloadStallTimeout. Shortening this therefore cannot cut
+	// a large download short — it only decides how long a question may hang before
+	// this server gives up on the mirror and tries the next one.
+	//
+	// That distinction is why the default is short. Every request it covers has
+	// failover behind it, and a live run measured three separate requests hanging
+	// for the full 30 seconds it used to allow, each followed by another mirror that
+	// answered immediately: 90 seconds of nothing, 10% of all the time the tools
+	// spent in that run. A deployment on a slow link can raise it.
+	Timeout                time.Duration
+	LogLevel               slog.Level // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
+	RateRPS                float64    // LIBGEN_MCP_RATE_RPS: allowed requests per second
+	RateBurst              int        // LIBGEN_MCP_RATE_BURST: maximum limiter burst
+	MaxDownloadBytes       int64      // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
+	MaxConcurrentDownloads int        // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
+	RetryAttempts          int        // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
+	UnpaywallEmail         string     // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
+	ScihubHosts            []string   // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
+	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
+	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
+	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
 	// transport. LIBGEN_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
@@ -229,7 +245,7 @@ var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci
 // which is Load's job and an error path this cannot express.
 func Defaults() *Config {
 	return &Config{
-		Timeout:                 30 * time.Second,
+		Timeout:                 10 * time.Second,
 		LogLevel:                slog.LevelInfo,
 		RateRPS:                 1,
 		RateBurst:               1,
