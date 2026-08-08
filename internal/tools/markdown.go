@@ -231,14 +231,27 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 			fmt.Fprintf(&b, "- %s: %s\n", f.label, mdCell(v))
 		}
 	}
-	if out.Citations != nil && out.Citations.BibTeX != "" {
-		b.WriteString("\n### Citation (BibTeX)\n\n")
-		b.WriteString(fencedBlock("bibtex", out.Citations.BibTeX))
-		b.WriteString("\n")
-	}
+	writeCitation(&b, out.Citations)
 	writeEnrichment(&b, out.Enrichment)
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// writeCitation appends the ready-to-paste BibTeX block followed by its
+// provenance line. The provenance travels with the block on purpose: this is the
+// channel a person reads, and the caveat is worth nothing if it only reaches the
+// structured JSON. It goes through mdCell because it quotes catalog- and
+// registry-supplied text. It is a no-op when no citation could be built.
+func writeCitation(b *strings.Builder, c *Citations) {
+	if c == nil || c.BibTeX == "" {
+		return
+	}
+	b.WriteString("\n### Citation (BibTeX)\n\n")
+	b.WriteString(fencedBlock("bibtex", c.BibTeX))
+	b.WriteString("\n")
+	if c.Provenance != "" {
+		fmt.Fprintf(b, "\n> %s\n", mdCell(c.Provenance))
+	}
 }
 
 // writeEnrichment appends a short "External metadata" section for the best-effort

@@ -1,15 +1,45 @@
 package tools
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/jmrplens/libgen-mcp/internal/libgen"
 )
+
+// stubVerifier is a doiVerifier that answers from a fixed table instead of the
+// network, so the citation tests can pin every verdict without a Crossref round
+// trip. A DOI absent from the table answers DOIUnverified, which is what an
+// unreachable registry also yields.
+type stubVerifier struct{ byDOI map[string]libgen.DOICheck }
+
+// VerifyDOI implements doiVerifier from the stub's table.
+func (s stubVerifier) VerifyDOI(_ context.Context, doi, _ string) libgen.DOICheck {
+	if check, ok := s.byDOI[doi]; ok {
+		return check
+	}
+	return libgen.DOICheck{Verdict: libgen.DOIUnverified}
+}
+
+// confirming returns a verifier that corroborates doi against the given title.
+func confirming(doi, title string) doiVerifier {
+	return stubVerifier{byDOI: map[string]libgen.DOICheck{
+		doi: {Verdict: libgen.DOIConfirmed, CrossrefTitle: title},
+	}}
+}
+
+// citationsFor builds citations for a record with no verifier and no
+// pre-fetched Crossref title, the shape most of these tests need.
+func citationsFor(file, edition map[string]any) *Citations {
+	return buildCitations(context.Background(), nil, "", file, edition)
+}
 
 // TestBuildCitations_Book verifies a book record yields a well-formed @book entry and RIS block.
 func TestBuildCitations_Book(t *testing.T) {
 	edition := map[string]any{"title": "Clean Code", "author": "Robert C. Martin", "year": "2008", "publisher": "Prentice Hall"}
 	file := map[string]any{"md5": "d48739b6ac9e01d70dda1de46805d797", "extension": "pdf"}
-	c := buildCitations(file, edition)
+	c := citationsFor(file, edition)
 	if c == nil {
 		t.Fatal("expected citations, got nil")
 	}
@@ -26,12 +56,21 @@ func TestBuildCitations_Book(t *testing.T) {
 	}
 }
 
-// TestBuildCitations_ArticleByDOI verifies a DOI-bearing record yields an @article/JOUR citation and never emits an ISBN line.
+// TestBuildCitations_ArticleByDOI verifies a corroborated DOI reaches the entries
+// and types them as an article, and that no ISBN line is invented.
 func TestBuildCitations_ArticleByDOI(t *testing.T) {
-	edition := map[string]any{"title": "Hallmarks of Cancer", "author": "Hanahan; Weinberg", "year": "2011", "doi": "10.1016/j.cell.2011.02.013"}
-	c := buildCitations(map[string]any{"md5": "x"}, edition)
+	const doi = "10.1016/j.cell.2011.02.013"
+	edition := map[string]any{"title": "Hallmarks of Cancer", "author": "Hanahan; Weinberg", "year": "2011", "doi": doi}
+	v := confirming(doi, "Hallmarks of Cancer: The Next Generation")
+	c := buildCitations(context.Background(), v, "", map[string]any{"md5": "x"}, edition)
 	if c == nil || !strings.HasPrefix(c.BibTeX, "@article{") {
-		t.Fatalf("DOI record should yield @article, got:\n%v", c)
+		t.Fatalf("corroborated DOI record should yield @article, got:\n%v", c)
+	}
+	if !strings.Contains(c.BibTeX, "doi = {"+doi+"}") {
+		t.Errorf("corroborated DOI must appear in the entry:\n%s", c.BibTeX)
+	}
+	if c.DOIStatus != string(libgen.DOIConfirmed) {
+		t.Errorf("DOIStatus = %q, want %q", c.DOIStatus, libgen.DOIConfirmed)
 	}
 	if strings.Contains(c.BibTeX, "isbn") {
 		t.Error("must not emit an isbn line when unknown")
@@ -40,8 +79,54 @@ func TestBuildCitations_ArticleByDOI(t *testing.T) {
 
 // TestBuildCitations_NoTitleReturnsNil verifies buildCitations returns nil when the record has no title.
 func TestBuildCitations_NoTitleReturnsNil(t *testing.T) {
-	if buildCitations(map[string]any{"md5": "x"}, map[string]any{}) != nil {
+	if citationsFor(map[string]any{"md5": "x"}, map[string]any{}) != nil {
 		t.Error("no title => nil citations")
+	}
+}
+
+// TestBuildCitations_ScimagArticleWithoutCorroboration checks that a record the
+// catalog itself classifies as an article still typesets as one when its DOI could
+// not be corroborated. Only the DOI is withheld; the entry type comes from the
+// catalog's own classification, which the corrupt-DOI failure mode does not touch.
+func TestBuildCitations_ScimagArticleWithoutCorroboration(t *testing.T) {
+	edition := map[string]any{
+		"title": "A Mathematical Theory of Communication", "author": "Shannon, C. E.",
+		"year": "1948", "doi": "10.1002/j.1538-7305.1948.tb01338.x", "libgen_topic": "a",
+	}
+	c := citationsFor(map[string]any{"md5": "x"}, edition)
+	if c == nil || !strings.HasPrefix(c.BibTeX, "@article{") {
+		t.Fatalf("a catalog-classified article stays an article, got:\n%v", c)
+	}
+	if strings.Contains(c.BibTeX, "doi = {") || strings.Contains(c.RIS, "DO  - ") {
+		t.Errorf("uncorroborated DOI must not be stated:\n%s\n%s", c.BibTeX, c.RIS)
+	}
+}
+
+// TestBuildCitations_NoDOIProvenance checks that a record carrying no DOI still
+// declares where its fields came from, and reports no doi_status — there was no
+// identifier link to judge, so claiming one was "unverified" would be noise.
+func TestBuildCitations_NoDOIProvenance(t *testing.T) {
+	c := citationsFor(map[string]any{"md5": "x"}, map[string]any{"title": "Clean Code"})
+	if c == nil {
+		t.Fatal("expected citations, got nil")
+	}
+	if c.DOIStatus != "" {
+		t.Errorf("DOIStatus = %q, want empty for a record with no DOI", c.DOIStatus)
+	}
+	if !strings.Contains(c.Provenance, "unverified third-party source") {
+		t.Errorf("provenance must name the catalog as unverified: %q", c.Provenance)
+	}
+}
+
+// TestCorroborateDOI_PrefersKnownCrossrefTitle proves an already-fetched Crossref
+// title settles the verdict in-process: the verifier passed alongside it would
+// answer "confirmed", and must not be consulted at all.
+func TestCorroborateDOI_PrefersKnownCrossrefTitle(t *testing.T) {
+	const doi = "10.1371/journal.pmed.0020124"
+	v := confirming(doi, "irrelevant")
+	got := corroborateDOI(context.Background(), v, "Why Most Published Research Findings Are False", doi, "Antifragile: Things That Gain from Disorder")
+	if got.Verdict != libgen.DOIMismatch {
+		t.Errorf("verdict = %q, want %q (the known title must win over the verifier)", got.Verdict, libgen.DOIMismatch)
 	}
 }
 
@@ -55,7 +140,7 @@ func TestBuildCitations_SanitizesNewlines(t *testing.T) {
 		"author": "Jane\rDoe",
 		"year":   "2020",
 	}
-	c := buildCitations(map[string]any{"md5": "d48739b6ac9e01d70dda1de46805d797"}, edition)
+	c := citationsFor(map[string]any{"md5": "d48739b6ac9e01d70dda1de46805d797"}, edition)
 	if c == nil {
 		t.Fatal("expected citations, got nil")
 	}

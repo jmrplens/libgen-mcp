@@ -1,0 +1,21 @@
+{
+ "_comment": "Verbatim (description trimmed) LibGen edition 137198203 as served on 2026-08-08. The catalog carries Nassim Taleb's Antifragile under John Ioannidis' PLoS Medicine DOI, so the record's doi field names a different work than every other field does. Regression fixture for buildCitations: this pairing must never reach a formatted citation.",
+ "edition_id": "137198203",
+ "title": "Antifragile: Things That Gain from Disorder",
+ "author": "Taleb, Nassim Nicholas; Ochman, Joe",
+ "year": "2012",
+ "publisher": "Random House Publishing Group;Random House;Books on Tape",
+ "city": "Westminster, Md",
+ "edition": "Unabridged",
+ "series_name": "Incerto",
+ "pages": "544",
+ "doi": "10.1371/journal.pmed.0020124",
+ "type": "b",
+ "libgen_topic": "l",
+ "issue_volume": "",
+ "issue_number": "",
+ "issue_first_page": "",
+ "issue_last_page": "",
+ "cover_exists": "1",
+ "commentary": "lg1420936"
+}

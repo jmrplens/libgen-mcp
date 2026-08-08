@@ -47,9 +47,16 @@ Use get_details with a result md5 for full metadata, download to fetch the file,
 // between tools for; which catalog holds the record is a mechanic, and is stated
 // where it changes behavior (the Anna's Archive fallback for an md5 the Library
 // Genesis catalog never indexed).
+//
+// It also states the DOI corroboration rule, because a model that leads with
+// citations needs to know a DOI can be absent from one on purpose — otherwise the
+// obvious repair is to paste the record's doi field back in, which is exactly the
+// fabrication buildCitations refuses.
 const detailsDescription = "Full metadata for a bibliographic record — description, identifiers, DOI, cover, related edition — " +
 	"plus ready-to-paste BibTeX and RIS exports in its citations field. Use it whenever you are asked to cite or " +
-	"reference a work. Look up by md5 (returns file + related edition), by edition/file id, or by an " +
+	"reference a work. A record's DOI reaches those exports only once corroborated against Crossref; otherwise it is " +
+	"left out and citations.doi_status says why, so relay citations.provenance rather than presenting the citation " +
+	"as verified. Look up by md5 (returns file + related edition), by edition/file id, or by an " +
 	"article's doi (exact lookup returning the edition plus the file md5 to download). The md5/id come from a prior " +
 	"search result. An md5 the Library Genesis catalog does not carry — as a search that consulted the extra sources " +
 	"may return — falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. Set " +
@@ -930,12 +937,47 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 			return nil, zero, err
 		}
 		out.NextSteps = detailsNextSteps(out)
-		out.Citations = buildCitations(out.File, out.Edition)
-		if in.Enrich && cfg.EnrichEnabled {
-			detailsEnrich(ctx, c, &out)
-		}
+		attachCitations(ctx, c, cfg, in.Enrich, &out)
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// attachCitations runs the optional enrichment and then builds the record's
+// citations, in that order so the two share one Crossref lookup instead of making
+// two. Which is also why it decides the corroboration route rather than the
+// citation builder doing it:
+//
+//   - enrichment disabled for the deployment: no outbound lookup at all, so the
+//     record's DOI stays uncorroborated and is omitted from the entries. The
+//     keyless default path still produces a citation; it just does not assert a
+//     link it had no way to check.
+//   - enrich=true: Crossref has already been asked about this DOI, so its answer
+//     (or its silence) settles the verdict in-process and no verifier is passed.
+//   - the default enrich=false path: the client corroborates the DOI itself, one
+//     keyless request bounded by doiVerifyTimeout, and only for a record that
+//     actually carries a DOI.
+func attachCitations(ctx context.Context, c *libgen.Client, cfg *config.Config, enrich bool, out *DetailsOutput) {
+	var verifier doiVerifier
+	crossrefTitle := ""
+	switch {
+	case !cfg.EnrichEnabled:
+	case enrich:
+		detailsEnrich(ctx, c, out)
+		crossrefTitle = enrichedCrossrefTitle(out.Enrichment)
+	default:
+		verifier = c
+	}
+	out.Citations = buildCitations(ctx, verifier, crossrefTitle, out.File, out.Edition)
+}
+
+// enrichedCrossrefTitle returns the title Crossref supplied during enrichment, or
+// "" when enrichment found no Crossref record — which is itself informative, since
+// a DOI the registry does not know cannot be corroborated by asking it again.
+func enrichedCrossrefTitle(e *libgen.Enrichment) string {
+	if e == nil || e.Crossref == nil {
+		return ""
+	}
+	return e.Crossref.Title
 }
 
 // countKeys reports how many of the given identifiers are set, so the handler can
