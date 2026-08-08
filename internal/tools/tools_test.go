@@ -678,9 +678,12 @@ func TestDownloadToolResolveError(t *testing.T) {
 
 // TestDownloadFailureCarriesNextSteps is the guard on the one dead end the surface
 // had: a failed download used to return the joined source errors and nothing else,
-// while every other result carries a "Next steps" block. The failure must arrive on
-// BOTH channels — the rendered Markdown a person reads and the structured
-// next_steps the model reads — and must still be flagged IsError.
+// while every other result carries a "Next steps" block. The failure must arrive
+// flagged IsError, with the reason and the guidance in the text the model reads.
+//
+// It must arrive with NO structuredContent, which is what
+// TestDownloadFailureSendsNoStructuredContent pins: the guidance travels in the
+// document, not beside a DownloadOutput describing a download that never ran.
 func TestDownloadFailureCarriesNextSteps(t *testing.T) {
 	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
 	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
@@ -701,18 +704,63 @@ func TestDownloadFailureCarriesNextSteps(t *testing.T) {
 	if !strings.Contains(text, "resolve failed") {
 		t.Errorf("the failure markdown drops the underlying reason:\n%s", text)
 	}
-	var out struct {
-		NextSteps []string `json:"next_steps"`
+	if !strings.Contains(text, "nothing left to pin") {
+		t.Errorf("the failure markdown drops the recovery guidance:\n%s", text)
 	}
-	data, merr := json.Marshal(res.StructuredContent)
-	if merr != nil {
-		t.Fatal(merr)
+}
+
+// TestDownloadFailureSendsNoStructuredContent pins the shape of a failed download:
+// an IsError result whose only channel is the failure document.
+//
+// The handler used to return a zero DownloadOutput alongside it, which the output
+// schema then rendered as path="", size_bytes=0 and verified=false — required fields
+// asserting the results of a download that never happened, with path being exactly
+// the field a model reads to locate the file. The SDK marshals and validates that
+// output for an IsError result just as it does for a successful one, so the day any
+// of those fields gains a constraint the failure would become a JSON-RPC protocol
+// error and the actionable message would be lost.
+func TestDownloadFailureSendsNoStructuredContent(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
 	}
-	if uerr := json.Unmarshal(data, &out); uerr != nil {
-		t.Fatal(uerr)
+	if !res.IsError {
+		t.Fatal("a failed download must still be flagged IsError")
 	}
-	if len(out.NextSteps) == 0 {
-		t.Error("structured next_steps is empty on the failure path")
+	if res.StructuredContent != nil {
+		t.Errorf("a failed download must send no structuredContent; got %v", res.StructuredContent)
+	}
+	if len(res.Content) != 1 {
+		t.Fatalf("a failed download should carry exactly one content block, got %d", len(res.Content))
+	}
+	if !strings.Contains(contentText(res), "no file was saved") {
+		t.Errorf("the single content block should be the failure document; got:\n%s", contentText(res))
+	}
+}
+
+// TestDownloadFailureErrorUnwrapsTheChainError verifies the failure error keeps the
+// source chain's own error reachable, so errors.Is still classifies it — the
+// transient-source guidance is selected that way, and a fmt.Errorf carrying only the
+// rendered document would have severed it.
+func TestDownloadFailureErrorUnwrapsTheChainError(t *testing.T) {
+	cause := fmt.Errorf("source scihub: %w", libgen.ErrSourceUnavailable)
+	_, out, err := downloadFailure(libgen.Item{DOI: "10.1/x"}, cause, config.ExtraSourcesAuto)
+	if err == nil {
+		t.Fatal("downloadFailure must return a Go error")
+	}
+	if !errors.Is(err, libgen.ErrSourceUnavailable) {
+		t.Errorf("errors.Is(err, ErrSourceUnavailable) = false; the cause was dropped")
+	}
+	if !strings.Contains(err.Error(), "Next steps") {
+		t.Errorf("the error message should be the whole failure document; got %q", err.Error())
+	}
+	if len(out.NextSteps) != 0 || out.Path != "" {
+		t.Errorf("the failure output must stay zero; got %+v", out)
 	}
 }
 
@@ -726,35 +774,6 @@ func contentText(res *mcp.CallToolResult) string {
 		}
 	}
 	return b.String()
-}
-
-// TestOrResultError verifies how a tool call is metered. A handler's own error
-// wins; failing that, an IsError result is metered as a failure carrying the text
-// it returned, so a tool that reports failures as results (which is how a failure
-// the model should act on is expressed) does not log a run of clean completions.
-func TestOrResultError(t *testing.T) {
-	handlerErr := errors.New("handler exploded")
-	if got := orResultError(handlerErr, nil); !errors.Is(got, handlerErr) {
-		t.Errorf("orResultError with a handler error = %v, want it preserved", got)
-	}
-	if got := orResultError(nil, nil); got != nil {
-		t.Errorf("orResultError with no error and no result = %v, want nil", got)
-	}
-	if got := orResultError(nil, &mcp.CallToolResult{}); got != nil {
-		t.Errorf("orResultError on a successful result = %v, want nil", got)
-	}
-	failure := &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: "download failed"}},
-	}
-	got := orResultError(nil, failure)
-	if got == nil || !strings.Contains(got.Error(), "download failed") {
-		t.Errorf("orResultError on an IsError result = %v, want it to carry the message", got)
-	}
-	silent := &mcp.CallToolResult{IsError: true}
-	if orResultError(nil, silent) == nil {
-		t.Error("orResultError on a messageless IsError result = nil, want a failure")
-	}
 }
 
 // TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain pins the distinction
@@ -1002,22 +1021,27 @@ func downloadMirror(t *testing.T, payload []byte) *httptest.Server {
 // does not reach: filename derivation, MIME mapping, header flattening, and the
 // headers path of the guidance/markdown builders.
 func TestResolveHelpers(t *testing.T) {
-	// resolveFilename: explicit wins; meta builds "Author - Title (Year).ext";
-	// doi falls back to a .pdf name; md5 falls back to md5+ext.
-	if got := resolveFilename(libgen.Item{MD5: "x"}, "given.pdf", "pdf"); got != "given.pdf" {
+	// resolveFilename: explicit wins; a verified (md5) link is named from the
+	// record; an unverified one is named from the identifier, never from the
+	// requested record, so a mis-delivery is not disguised.
+	if got := resolveFilename(libgen.Item{MD5: "x"}, "given.pdf", "pdf", true); got != "given.pdf" {
 		t.Errorf("explicit filename: %q", got)
 	}
-	meta := resolveFilename(libgen.Item{MD5: "x", Meta: &libgen.FileMeta{Title: "T/it:le", Author: "A", Year: "2020"}}, "", "epub")
-	if meta != "A - T-it-le (2020).epub" {
+	meta := resolveFilename(libgen.Item{MD5: "x", Meta: &libgen.FileMeta{Title: "T/it:le", Author: "A", Year: "2020"}}, "", "epub", true)
+	if meta != "A - T_it -le (2020).epub" {
 		t.Errorf("meta filename: %q", meta)
 	}
-	if got := resolveFilename(libgen.Item{ISBN: "9789286150616"}, "", "pdf"); got != "9789286150616.pdf" {
+	unverified := resolveFilename(libgen.Item{DOI: "10.1/x", Meta: &libgen.FileMeta{Title: "Some Paper", Author: "A"}}, "", "", false)
+	if unverified != "10.1_x.pdf" {
+		t.Errorf("unverified filename = %q, want the DOI rather than the requested record's title", unverified)
+	}
+	if got := resolveFilename(libgen.Item{ISBN: "9789286150616"}, "", "pdf", false); got != "9789286150616.pdf" {
 		t.Errorf("resolveFilename(isbn) = %q, want the ISBN as the name", got)
 	}
-	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", ""); got != "10.1-x.pdf" {
+	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", "", false); got != "10.1_x.pdf" {
 		t.Errorf("doi fallback filename: %q", got)
 	}
-	if got := resolveFilename(libgen.Item{MD5: "abc"}, "", ""); got != "abc" {
+	if got := resolveFilename(libgen.Item{MD5: "abc"}, "", "", true); got != "abc" {
 		t.Errorf("md5 fallback filename: %q", got)
 	}
 
@@ -1487,19 +1511,23 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 }
 
 // TestDownloadDescriptionDisclosesShadowLibraries verifies the download tool says
-// outright that its chain reaches Library Genesis and Anna's Archive mirrors, and
-// spells out which source name is which.
+// outright that its chain reaches Library Genesis and Anna's Archive mirrors, spells
+// out which source name is which, and states where in the order they are reached.
 //
-// download is the only tool that retrieves a file, so this disclosure is what lets
-// a client judge a request case by case; the read-only tools deliberately carry
+// download is the only tool that retrieves a file, so the mapping is what lets a
+// caller attribute the file it gets back; the read-only tools deliberately carry
 // none, which is what TestReadOnlyToolsLeadWithTheirCapability guards. A chain with
-// no shadow library in it says nothing, because then there is nothing to disclose.
+// no shadow library in it says nothing, because then there is nothing to name.
 func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	desc := downloadToolDescription(
 		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
 	for _, want := range []string{
 		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
 		"randombook is a Library Genesis frontend", "scidb is Anna's Archive's SciDB article viewer",
+		// The order is a mechanic, and it is the mechanic that decides whether a
+		// mirror is reached at all, so it is disclosed with the names.
+		"Openly licensed and open-access sources are tried first",
+		"only when none of them serves the item",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
@@ -1508,6 +1536,41 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"})
 	if strings.Contains(clean, "shadow-library") {
 		t.Errorf("a chain with no shadow library needs no disclosure; got:\n%s", clean)
+	}
+}
+
+// TestDownloadDescriptionDoesNotPrejudgeTheCall verifies the disclosure states
+// mechanics rather than a verdict, because a verdict in the tool definition is read
+// before the call is made and the call has not chosen a source yet.
+//
+// The description used to assert that the mirrors "host copyrighted works without
+// the rightsholder's permission". That is a judgement, not a mechanic; it is also
+// wrong about the public-domain and openly licensed material those mirrors carry,
+// and it was applied to every download — including the majority that the open-access
+// sources serve without a mirror being touched at all. What replaced it is the three
+// facts a caller actually lacks: the order, that the serving source is not known
+// until the call runs, and that the operator's source and credential configuration
+// is invisible from here.
+func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
+	desc := downloadToolDescription(
+		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+	for _, banned := range []string{"without the rightsholder's permission", "copyrighted works"} {
+		if strings.Contains(desc, banned) {
+			t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
+		}
+	}
+	for _, want := range []string{
+		// The source is not selected when the description is read.
+		"chosen while resolving",
+		"named in the result",
+		// The operator's configuration is the thing that settles this, and it is
+		// not visible to the caller.
+		"is set by the operator and is not visible to you",
+		"do not infer from this list whether a given request is licensed",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("download description must state %q; got:\n%s", want, desc)
+		}
 	}
 }
 

@@ -143,7 +143,7 @@ type DownloadInput struct {
 	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5, isbn or doi"`
 	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi"`
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
-	Filename    string `json:"filename,omitempty" jsonschema:"destination filename (default: the name the mirror announces in Content-Disposition, else a clean name built from the record metadata, else the md5)"`
+	Filename    string `json:"filename,omitempty" jsonschema:"destination filename; used exactly as given. Leave it unset to get a clean name: an md5 download is verified against its digest, so it is named from the record as 'Author - Title (Year).ext'; a doi or isbn download cannot be verified, so it keeps the name the source announced (minus mirror marks) and only falls back to the identifier when that name is a placeholder like download.pdf"`
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all; the enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
@@ -390,10 +390,9 @@ func downloadToolDescription(book, isbnBook, article []string) string {
 	if len(book) > 0 && len(article) > 0 {
 		b.WriteString("If both md5 and doi are given, article sources are tried first, then book sources. ")
 	}
-	enabled := orderedEnabledSources(book, isbnBook, article)
-	writeShadowLibraryDisclosure(&b, enabled)
-	fmt.Fprintf(&b, "Set source to restrict the download to a single enabled provider (%s) instead of trying them all. ",
-		strings.Join(enabled, ", "))
+	writeSourceChainDisclosure(&b, orderedEnabledSources(book, isbnBook, article))
+	b.WriteString("Set source to restrict the download to a single provider instead of trying them all; " +
+		"the source argument's own enum lists the ones this deployment enabled. ")
 	fmt.Fprintf(&b, "The %s come from a prior search result. ", strings.Join(keys, "/"))
 	b.WriteString("Returns the saved path, size and the source that served it. ")
 	b.WriteString("Set resolve_only=true to instead get the direct download URL back (as a link) WITHOUT downloading — use this when the server runs remotely from you (it cannot write to your disk), or to fetch the file with your own tool. ")
@@ -406,11 +405,13 @@ func downloadToolDescription(book, isbnBook, article []string) string {
 // name actually is, in canonical chain order.
 //
 // download is the only tool in the surface that fetches a file, so it is the one
-// place where the identity of the chain changes what a caller should do: a client
-// weighing a request needs to know that the chain reaches Library Genesis and
-// Anna's Archive mirrors, and bare names like "libgen", "scidb" or "randombook"
-// do not say so on their own. The read-only tools carry no such disclosure
-// because they retrieve nothing.
+// place where the identity of the chain changes what a caller does with the answer:
+// the result reports the source that served the file as a bare name, and "scidb",
+// "randombook" or "libgen" say nothing about where the bytes came from on their
+// own. Live runs use the mapping exactly that way — one answer named Anna's Archive
+// rather than the Internet Archive it had been asked about, another attributed
+// seven results one by one. The read-only tools carry no such mapping because they
+// retrieve nothing.
 var shadowLibraryIdentities = []struct{ name, identity string }{
 	{"scihub", "scihub is Sci-Hub"},
 	{"scidb", "scidb is Anna's Archive's SciDB article viewer"},
@@ -419,11 +420,32 @@ var shadowLibraryIdentities = []struct{ name, identity string }{
 	{"annas", "annas is Anna's Archive"},
 }
 
-// writeShadowLibraryDisclosure appends the sentence naming which of the enabled
-// sources are shadow-library mirrors and what each one is, followed by the fact
-// that the open-access sources in the chain are tried before them. It writes
-// nothing for a deployment that enabled none of them.
-func writeShadowLibraryDisclosure(b *strings.Builder, enabled []string) {
+// writeSourceChainDisclosure appends the sentences that name the shadow-library
+// mirrors in the enabled chain, place them in the order, and say what the caller
+// cannot know about a call it has not made yet. It writes nothing for a deployment
+// that enabled none of them.
+//
+// The three sentences answer three separate questions, in the order they arise:
+//
+//   - Which name is which, and where it sits. The mapping is what makes the source
+//     the result reports attributable, and the order is the mechanic that governs
+//     when a mirror is reached at all: never before the openly licensed and
+//     open-access sources have failed to serve the item.
+//   - Which source will serve THIS call. None is chosen when the call is made — the
+//     chain picks one while resolving — so the description cannot say, and the
+//     result can. In the last measured suite twelve different sources served files
+//     and most downloads never reached a mirror.
+//   - Whether the request is licensed. That turns on which sources the operator
+//     enabled and which credentials, subscriptions and memberships the server holds,
+//     none of which the caller can see, so this list is the wrong thing to read a
+//     verdict off.
+//
+// What the sentences deliberately do not carry is a claim about the legal status of
+// what a mirror holds. The previous wording made one ("which host copyrighted works
+// without the rightsholder's permission"); it is a judgement rather than a mechanic,
+// it is wrong about the public-domain and openly licensed material those mirrors
+// also carry, and it was being applied to calls that never touched a mirror.
+func writeSourceChainDisclosure(b *strings.Builder, enabled []string) {
 	present := make(map[string]bool, len(enabled))
 	for _, n := range enabled {
 		present[n] = true
@@ -437,8 +459,11 @@ func writeShadowLibraryDisclosure(b *strings.Builder, enabled []string) {
 	if len(named) == 0 {
 		return
 	}
-	fmt.Fprintf(b, "Be aware that the chain includes shadow-library mirrors, which host copyrighted works without "+
-		"the rightsholder's permission: %s. Openly licensed and open-access sources are tried before them. ",
+	fmt.Fprintf(b, "Openly licensed and open-access sources are tried first; the shadow-library mirrors are "+
+		"reached only when none of them serves the item: %s. The serving source is chosen while resolving, "+
+		"not before the call, and named in the result. Which sources are enabled, and what credentials, "+
+		"subscriptions or memberships this server holds, is set by the operator and is not visible to you: "+
+		"do not infer from this list whether a given request is licensed. ",
 		strings.Join(named, ", "))
 }
 
@@ -653,27 +678,69 @@ func detailsNextSteps(out DetailsOutput) []string {
 	}
 }
 
-// downloadNextSteps confirms the saved file and points at the next natural action.
+// downloadNextSteps confirms the saved file and points at the next natural
+// action, plus — when the name had to be derived for a download with no digest to
+// check — the warning that the name says what was requested, not what arrived.
 func downloadNextSteps(res libgen.DownloadResult) []string {
-	return []string{
+	steps := []string{
 		fmt.Sprintf("File saved to %s (%d bytes) via %s; it is ready to open or read.", res.Path, res.SizeBytes, res.Source),
 	}
+	if !res.Verified && res.NameOrigin.Derived() {
+		steps = append(steps, "The source announced no usable filename, so this one was derived from what you asked for — and these bytes carry no digest to check against. Confirm the file really is that work (read a page of it) before relying on it.")
+	}
+	return steps
 }
 
-// downloadFailure turns a failure of the source chain into a tool result the model
-// can act on: an IsError result carrying the joined per-source errors verbatim AND
-// the recovery guidance every other result on this surface already carries.
+// downloadFailureError is the error a failed download returns. Its message is the
+// whole failure document — the joined per-source errors verbatim, plus the recovery
+// guidance every other result on this surface carries — so the SDK's error path
+// renders it as the tool result's only content block.
 //
-// It exists because the bare error was the one dead end on the surface. A live run
-// pinned source="unpaywall" for an article, got back nothing but
+// It is a type of its own rather than a fmt.Errorf, for two reasons. The message is
+// a rendered Markdown document: capitalized, multi-line and ending in a period,
+// which staticcheck's ST1005 rejects in an error literal and does not inspect on a
+// named type. And Unwrap keeps the chain's own error reachable, so
+// errors.Is(err, libgen.ErrSourceUnavailable) still answers about the download.
+type downloadFailureError struct {
+	document string
+	cause    error
+}
+
+// Error returns the rendered failure document.
+func (e *downloadFailureError) Error() string { return e.document }
+
+// Unwrap returns the source chain's own error, so callers can still classify the
+// failure behind the rendered document.
+func (e *downloadFailureError) Unwrap() error { return e.cause }
+
+// downloadFailure turns a failure of the source chain into the error the handler
+// returns: the joined per-source errors verbatim AND the recovery guidance every
+// other result on this surface already carries.
+//
+// The guidance exists because the bare error was the one dead end on the surface. A
+// live run pinned source="unpaywall" for an article, got back nothing but
 // `source unpaywall: mirror returned an HTML page instead of the file`, and — with
 // no advice attached — worked through crossref and openalex by hand, one call each,
 // before dropping the pin and letting the chain fail over to europepmc on the
 // fourth try. Three calls and 3.8 seconds spent rediscovering what the result
 // should have said.
+//
+// It is returned as a Go ERROR rather than an IsError result with structured output
+// beside it, because the two channels would contradict each other. DownloadOutput's
+// schema makes path, size_bytes, mirror, verified and resumed required, so a failure
+// carrying a zero DownloadOutput asserts path="" and verified=false as results of a
+// download that never ran — and path is exactly the field a model reads to find the
+// file. The SDK does not exempt an IsError result from marshaling and validating
+// that output either (mcp/server.go does not consult res.IsError before doing so),
+// so any future constraint on those fields would turn this failure into a JSON-RPC
+// protocol error and destroy the message. On the error path the SDK calls SetError
+// instead: IsError is still set, the document is the only content block, and no
+// structuredContent is sent — which is also the spec's own example of a tool
+// execution error.
+//
+// The three-value signature is kept so the call sites read like every other return.
 func downloadFailure(item libgen.Item, err error, policy config.ExtraSourcesMode) (*mcp.CallToolResult, DownloadOutput, error) {
 	steps := downloadFailureSteps(item, err, policy)
-	out := DownloadOutput{NextSteps: steps}
 	var b strings.Builder
 	b.WriteString("Download failed — no file was saved.\n\n")
 	// The message is assembled from third-party text (a mirror's own words), so it
@@ -681,10 +748,7 @@ func downloadFailure(item libgen.Item, err error, policy config.ExtraSourcesMode
 	b.WriteString(fencedBlock("", err.Error()))
 	b.WriteString("\n")
 	writeNextSteps(&b, steps)
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
-	}, out, nil
+	return nil, DownloadOutput{}, &downloadFailureError{document: b.String(), cause: err}
 }
 
 // downloadFailureSteps builds the recovery guidance for a failed download.
@@ -752,11 +816,10 @@ func searchWiderClause(policy config.ExtraSourcesMode) string {
 // metric line with the elapsed time; a recovered panic is reported to that
 // metric as a non-nil error so failures stay visible.
 //
-// A handler that deliberately reports a failure as an IsError RESULT rather than a
-// Go error — which is how a tool failure the model should act on is expressed, and
-// what the download chain's failure path does — is metered as a failure too.
-// Otherwise every such call would be logged as "tool call completed" and the logs
-// would show a clean run over a tool that returned nothing but errors.
+// A failure the model is meant to act on — the download chain running out of
+// sources, say — is returned as a Go error by the handler itself, so it reaches
+// this metric as one. The recovery path in this wrapper is the only place on the
+// surface that builds an IsError result directly, and it meters itself.
 func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (result *mcp.CallToolResult, output Out, err error) {
 		start := time.Now()
@@ -773,35 +836,10 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 				logging.ToolCall(name, start, fmt.Errorf("tool %q panicked: %v", name, r))
 				return
 			}
-			logging.ToolCall(name, start, orResultError(err, result))
+			logging.ToolCall(name, start, err)
 		}()
 		return h(ctx, req, in)
 	}
-}
-
-// orResultError reports the error a tool call should be metered with: the
-// handler's own error when it returned one, otherwise a synthesized error when it
-// returned an IsError result instead, and nil when the call succeeded.
-func orResultError(err error, result *mcp.CallToolResult) error {
-	if err != nil || result == nil || !result.IsError {
-		return err
-	}
-	return errors.New(resultText(result))
-}
-
-// resultText joins the text content blocks of a result, so a failure result can be
-// metered with the message it actually carries.
-func resultText(result *mcp.CallToolResult) string {
-	var parts []string
-	for _, c := range result.Content {
-		if tc, ok := c.(*mcp.TextContent); ok && tc.Text != "" {
-			parts = append(parts, tc.Text)
-		}
-	}
-	if len(parts) == 0 {
-		return "tool reported an error result with no message"
-	}
-	return strings.Join(parts, "\n")
 }
 
 func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
@@ -1548,7 +1586,7 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 	link := ResolvedLink{
 		URL:       r.URL,
 		Source:    r.Source,
-		Filename:  resolveFilename(item, filename, r.Ext),
+		Filename:  resolveFilename(item, filename, r.Ext, r.VerifyMD5),
 		MIMEType:  mimeForExt(r.Ext, item),
 		Headers:   headerMap(r.Header),
 		VerifyMD5: r.VerifyMD5,
@@ -1571,7 +1609,9 @@ const downloadConfirmID = "download_confirm"
 // question, so the user answers everything in one exchange — and it touches the
 // network not at all: size comes from the metadata the call already looked up.
 func askDownloadConfirm(round *inputRound, item libgen.Item, dir string, in DownloadInput, size int64) {
-	name := resolveFilename(item, in.Filename, "")
+	// An md5 download is the one the digest check covers, so it is the one whose
+	// saved name may be built from the record — the same test chooseFileName makes.
+	name := resolveFilename(item, in.Filename, "", item.MD5 != "")
 	round.askConfirmRemember(downloadConfirmID, confirmMessage(name, dir, size), "confirm",
 		"Confirm downloading and saving this file to the server", "dont_ask_again")
 }
@@ -1662,7 +1702,7 @@ func declinedDownload(ctx context.Context, c *libgen.Client, item libgen.Item, f
 	link := ResolvedLink{
 		URL:       r.URL,
 		Source:    r.Source,
-		Filename:  resolveFilename(item, filename, r.Ext),
+		Filename:  resolveFilename(item, filename, r.Ext, r.VerifyMD5),
 		MIMEType:  mimeForExt(r.Ext, item),
 		Headers:   headerMap(r.Header),
 		VerifyMD5: r.VerifyMD5,
@@ -1692,58 +1732,21 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// resolveFilename picks a filename for a resolved link: an explicit filename, a
-// clean "Author - Title (Year).ext" from bibliographic metadata, or the
-// identifier plus extension.
-func resolveFilename(item libgen.Item, explicit, ext string) string {
-	if explicit != "" {
-		return explicit
+// resolveFilename suggests a filename for a file this server is NOT downloading:
+// the resolve-only link it hands back, and the confirmation prompt that names the
+// file before the transfer starts. It defers to libgen.SuggestFilename, so the
+// suggestion follows the same rule the saved name does — verified is whether the
+// bytes will be hash-checked against the requested md5, and only then is a
+// metadata-built name allowed to speak for the contents.
+//
+// The name is a suggestion, not a promise: the fetch these callers go on to make
+// sees the real Content-Disposition and the real bytes, which the saved-file path
+// takes into account and this one cannot.
+func resolveFilename(item libgen.Item, explicit, ext string, verified bool) string {
+	if ext == "" && item.DOI != "" {
+		ext = "pdf" // articles resolve to PDFs
 	}
-	if ext == "" {
-		if item.DOI != "" {
-			ext = "pdf" // articles resolve to PDFs
-		}
-	}
-	if m := item.Meta; m != nil && strings.TrimSpace(m.Title) != "" {
-		name := m.Title
-		if strings.TrimSpace(m.Author) != "" {
-			name = m.Author + " - " + m.Title
-		}
-		if strings.TrimSpace(m.Year) != "" {
-			name += " (" + m.Year + ")"
-		}
-		return sanitizeName(name) + extSuffix(ext)
-	}
-	base := item.MD5
-	switch {
-	case base != "":
-	case item.DOI != "":
-		base = sanitizeName(item.DOI)
-	default:
-		// An ISBN-keyed book carries no md5 and often no DOI; its identifier is
-		// already filename-safe, so it names the file rather than leaving the
-		// caller with whatever last path segment the CDN URL happened to end in.
-		base = sanitizeName(item.ISBN)
-	}
-	return base + extSuffix(ext)
-}
-
-// extSuffix returns ".ext" for a non-empty extension, else "".
-func extSuffix(ext string) string {
-	if ext == "" {
-		return ""
-	}
-	return "." + strings.TrimPrefix(ext, ".")
-}
-
-// sanitizeName strips path-hostile characters from a filename component.
-func sanitizeName(s string) string {
-	return strings.Map(func(r rune) rune {
-		if strings.ContainsRune(`/\:*?"<>|`, r) {
-			return '-'
-		}
-		return r
-	}, strings.TrimSpace(s))
+	return libgen.SuggestFilename(item, explicit, ext, verified)
 }
 
 // mimeForExt maps a file extension (and the item kind) to a likely content type.
@@ -1841,8 +1844,8 @@ func headerList(h map[string]string) string {
 // for it. Either half may be absent — a nil Meta or a zero Size — and both are
 // optional to the download, which is why the lookup is best-effort.
 type bookDetails struct {
-	// Meta carries the fields cleanFileName renders, or nil when the record held
-	// none of them.
+	// Meta carries the fields libgen.SuggestFilename and the download pipeline's
+	// namer render, or nil when the record held none of them.
 	Meta *libgen.FileMeta
 	// Size is the catalog's filesize for the record in bytes, or 0 when it reports
 	// none. It is what the save confirmation quotes, so the prompt can state a size
@@ -1855,6 +1858,12 @@ type bookDetails struct {
 // lookup error returns the zero bookDetails so the download still proceeds and
 // falls back to the mirror-announced name or the md5. Title, author and year come
 // from the related edition record; the extension and the size from the file record.
+//
+// It runs only for md5 downloads, and that is the point rather than an
+// optimization: an md5 download is digest-verified, so naming it after the record
+// is safe. A DOI or ISBN download deliberately gets no metadata to be named from,
+// because renaming an unverified file after what was requested would disguise a
+// wrong delivery — see libgen's chooseFileName.
 func bookMeta(ctx context.Context, c *libgen.Client, md5 string) bookDetails {
 	file, edition, err := c.DetailsByMD5(ctx, md5)
 	if err != nil {
