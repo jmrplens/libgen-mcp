@@ -23,7 +23,7 @@ head:
             "@type": "ListItem",
             "position": 1,
             "name": "search",
-            "description": "Busca en el catálogo de Library Genesis libros, artículos, cómics, revistas y normas, devolviendo metadatos y hashes MD5 por resultado. Escala a Anna's Archive y a los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) según la política extra_sources. De solo lectura y de mundo abierto.",
+            "description": "Búsqueda federada de libros, artículos, cómics, revistas y normas sobre varios catálogos bibliográficos y fuentes de acceso abierto, devolviendo metadatos y hashes MD5 por resultado. El catálogo primario (Library Genesis) se consulta primero; escala a Anna's Archive y a los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) según la política extra_sources. De solo lectura y de mundo abierto.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#search"
           },
           {
@@ -108,7 +108,7 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 
 ## search
 
-`search` es la herramienta que consulta el catálogo de Library Genesis y, cuando la política `extra_sources` lo permite, los ocho proveedores que hay más allá. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
+`search` es la herramienta de búsqueda federada: consulta primero el catálogo primario (Library Genesis) y, cuando la política `extra_sources` lo permite, los ocho proveedores que hay más allá. Devuelve una página de resultados de archivos con metadatos, hashes MD5 y opciones de descarga por resultado, más metadatos de paginación.
 
 ### entrada de search
 
@@ -217,7 +217,7 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 
 ## get_details
 
-`get_details` es la herramienta que obtiene los metadatos completos de un registro vía la API JSON de LibGen — descripción, identificadores, DOI, portada y edición relacionada. Consulta por `md5`, por `id` o por `doi` — exactamente uno de los tres.
+`get_details` es la herramienta que obtiene los metadatos completos de un registro bibliográfico — descripción, identificadores, DOI, portada y edición relacionada — más las exportaciones BibTeX y RIS listas para pegar en su campo `citations`. Consulta por `md5`, por `id` o por `doi` — exactamente uno de los tres. Los registros del catálogo se obtienen vía la API JSON de LibGen.
 
 ### entrada de get_details
 

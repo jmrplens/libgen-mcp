@@ -23,7 +23,7 @@
 
 </p>
 
-**An [MCP](https://modelcontextprotocol.io) server, written in Go, that lets your AI assistant search and download from [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) — books, research papers, magazines, comics, and standards — and discover extra sources (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) when the catalog has nothing.** Papers and openly licensed books also download straight from the open-access providers — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, OAPEN and the Internet Archive — through a single chain that fails over on its own. It ships as one static binary (or a container) with four focused tools plus guided prompts: `search`, `get_details`, `download`, and `read`. It works with Claude, Cursor, VS Code, and any MCP client.
+**A [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server, written in Go, for federated search, citation and reading of books, papers, comics, magazines and standards across the [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis) catalog and open-access sources.** Your assistant queries the primary catalog first and reaches beyond it — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC — when the catalog has nothing. Papers and openly licensed books also download straight from the open-access providers — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, OAPEN and the Internet Archive — through a single chain that fails over on its own. It ships as one static binary (or a container) with four focused tools plus guided prompts: `search`, `get_details`, `download`, and `read`. It works with Claude, Cursor, VS Code, and any MCP client.
 
 Four MCP **prompts** (`acquire_book`, `research_topic`, `get_paper`, `download_troubleshoot`) turn common requests into ready-to-run tool plans, `get_details` can return a `citations` field with a ready-to-paste BibTeX/RIS export for the record (and an opt-in `enrich` flag adds best-effort Crossref/OpenLibrary metadata), and `read` extracts and paginates a file's text so your assistant can summarize a book or paper without downloading it. `search` can also federate keyless discovery from [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/), and [ERIC](https://eric.ed.gov/) — merged, deduped, and labeled by origin — via the `extra_sources` argument (default `auto`: the extra searchers are consulted only when the Library Genesis catalog returns nothing or fails; a deployment can change that with `LIBGEN_MCP_EXTRA_SOURCES`).
 
@@ -39,7 +39,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 The lowest-friction path is **Docker — no install, no Go, nothing to manage**. Pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
 
-Then just ask your assistant: _"Search Library Genesis for the Rust book."_
+Then just ask your assistant: _"Search for the Rust book."_
 
 ### Try it without installing anything
 
@@ -229,9 +229,9 @@ The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/ar
 Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrplens.github.io/libgen-mcp/tools/)).
 
 <details>
-<summary><code>search</code> — search the catalog (and, optionally, extra sources)</summary>
+<summary><code>search</code> — federated search for books &amp; papers</summary>
 
-Returns a page of file results with metadata, MD5 hashes, and download options, plus pagination metadata.
+Queries the primary catalog (Library Genesis) and, when the `extra_sources` policy allows it, the eight providers beyond it. Returns a page of file results with metadata, MD5 hashes, and download options, plus pagination metadata.
 
 | Parameter          | Type     | Required | Description                                                                                                                                                                                                                                                                                                                                        |
 | ------------------ | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

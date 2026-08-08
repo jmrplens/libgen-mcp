@@ -176,7 +176,8 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 	var b strings.Builder
 
 	b.WriteString("# libgen-mcp\n\n")
-	b.WriteString("> A Model Context Protocol (MCP) server that searches and downloads books, papers, comics, magazines and standards from Library Genesis for AI assistants.\n\n")
+	b.WriteString("> A Model Context Protocol (MCP) server for federated search, citation and reading of books, papers, " +
+		"comics, magazines and standards across the Library Genesis catalog and open-access sources.\n\n")
 	fmt.Fprintf(&b, "libgen-mcp v%s is a single static Go binary that runs locally via stdio or remotely via HTTP transport.\n", version)
 	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
 

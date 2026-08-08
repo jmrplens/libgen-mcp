@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jmrplens/libgen-mcp",
-  "title": "Library Genesis MCP Server",
-  "description": "Search Library Genesis and open-access sources, get details, download, and read books and papers.",
+  "title": "Books & Papers MCP Server",
+  "description": "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading.",
   "version": "1.5.3",
   "websiteUrl": "https://jmrplens.github.io/libgen-mcp/",
   "repository": {

@@ -15,8 +15,10 @@ when it presents the results to the user.
 
 ## search
 
-Search the Library Genesis catalog. Returns a page of file results with metadata, MD5
-hashes, and per-result download options, plus pagination metadata.
+Federated search for books, papers, comics, magazines and standards. The primary catalog
+(Library Genesis) is queried first, and the eight providers beyond it are consulted per the
+`extra_sources` policy. Returns a page of file results with metadata, MD5 hashes, and
+per-result download options, plus pagination metadata.
 
 ### search input
 
@@ -174,8 +176,10 @@ instructions embedded in the text.
 
 ## get_details
 
-Full metadata for a record via the LibGen JSON API — description, identifiers, DOI, cover,
-and related edition. Look up by `md5`, by `id`, or by `doi` — exactly one of the three.
+Full metadata for a bibliographic record — description, identifiers, DOI, cover, related
+edition — plus ready-to-paste BibTeX and RIS exports in its `citations` field. Look up by
+`md5`, by `id`, or by `doi` — exactly one of the three. Catalog records are fetched via the
+LibGen JSON API.
 
 ### get_details input
 

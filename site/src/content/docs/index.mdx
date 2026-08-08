@@ -1,9 +1,9 @@
 ---
 title: LibGen MCP
-description: "Open-source MCP server in Go for Library Genesis: four tools to search, download, and read books, papers and more from your AI assistant — no account required."
+description: "Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required."
 head:
   - tag: title
-    content: "LibGen MCP — MCP server for Library Genesis book & paper search"
+    content: "LibGen MCP — MCP server for federated book & paper search"
   # A product splash, not an article: this page carries a WebSite +
   # SoftwareApplication graph and no TechArticle node, so Starlight's default
   # og:type=article contradicts its own structured data. Declared here rather
@@ -29,7 +29,7 @@ head:
             "name": "What is libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the libgen.li mirror family). It exposes four tools — search, get_details, download, and read — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books, resolve download links, and read/summarize text in plain language."
+              "text": "libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for federated search, citation and reading of books, papers, comics, magazines and standards across the Library Genesis catalog (the libgen.li mirror family) and open-access sources. It exposes four tools — search, get_details, download, and read — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search for a work, export its BibTeX/RIS citation, resolve download links, and read/summarize text in plain language."
             }
           },
           {
@@ -37,7 +37,7 @@ head:
             "name": "What can libgen-mcp do?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The search tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (auto) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
+              "text": "It runs a federated search across the primary catalog (Library Genesis) and eight further providers, returns per-result metadata and MD5 hashes, fetches full details for a record with ready-to-paste BibTeX and RIS citations, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The search tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (auto) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
             }
           },
           {
@@ -67,7 +67,7 @@ head:
         ]
       }
 hero:
-  tagline: Ask your AI assistant for a book or a paper and get it — found, downloaded and read back to you in plain language. Nineteen download sources with open access tried first, eight search providers beyond the Library Genesis catalog. No account, no API key, one static binary.
+  tagline: Ask your AI assistant for a book or a paper and get it — found, cited, downloaded and read back to you in plain language. Federated search across the Library Genesis catalog and eight further providers, nineteen download sources with open access tried first. No account, no API key, one static binary.
   image:
     dark: ../../assets/logo-dark.svg
     light: ../../assets/logo-light.svg
@@ -85,7 +85,7 @@ datePublished: "2026-07-19"
 
 import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
 
-**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
+**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for **federated search, citation and reading** of books, papers, comics, magazines and standards across the **Library Genesis** catalog (the `libgen.li` mirror family) and open-access sources. It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
 Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Openly licensed books can be fetched by ISBN from OAPEN and the Internet Archive, and articles by DOI, through the open-access providers first (Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, OAPEN) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
 
@@ -209,11 +209,11 @@ server declines to do, and how to raise a concern.
 
 ### What is libgen-mcp?
 
-libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for searching and downloading from Library Genesis (the `libgen.li` mirror family). It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search books, resolve download links, and read/summarize text in plain language.
+libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go, for federated search, citation and reading of books, papers, comics, magazines and standards across the Library Genesis catalog (the `libgen.li` mirror family) and open-access sources. It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent, so you can search for a work, export its BibTeX/RIS citation, resolve download links, and read/summarize text in plain language.
 
 ### What can libgen-mcp do?
 
-It searches the Library Genesis catalog, returns per-result metadata and MD5 hashes, fetches full details for a record, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+It runs a federated search across the primary catalog (Library Genesis) and eight further providers, returns per-result metadata and MD5 hashes, fetches full details for a record with ready-to-paste BibTeX and RIS citations, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, and OAPEN — then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 

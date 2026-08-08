@@ -1265,6 +1265,61 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 	}
 }
 
+// TestDownloadDescriptionDisclosesShadowLibraries verifies the download tool says
+// outright that its chain reaches Library Genesis and Anna's Archive mirrors, and
+// spells out which source name is which.
+//
+// download is the only tool that retrieves a file, so this disclosure is what lets
+// a client judge a request case by case; the read-only tools deliberately carry
+// none, which is what TestReadOnlyToolsLeadWithTheirCapability guards. A chain with
+// no shadow library in it says nothing, because then there is nothing to disclose.
+func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
+	desc := downloadToolDescription(
+		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+	for _, want := range []string{
+		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
+		"randombook is a Library Genesis frontend", "scidb is Anna's Archive's SciDB article viewer",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
+		}
+	}
+	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"})
+	if strings.Contains(clean, "shadow-library") {
+		t.Errorf("a chain with no shadow library needs no disclosure; got:\n%s", clean)
+	}
+}
+
+// TestReadOnlyToolsLeadWithTheirCapability verifies that the three read-only tools
+// open on what they do — federated bibliographic search, metadata and citations,
+// text extraction — rather than on the name of one catalog behind them.
+//
+// A tool that only reads metadata or text is chosen by capability, and leading with
+// a shadow library's name in the very first line has clients decline bibliographic
+// work the surface performs perfectly legally. The catalogs are still named further
+// down, and in the field descriptions, where they explain behavior; only download
+// leads with the chain's identity, because only download fetches a file.
+func TestReadOnlyToolsLeadWithTheirCapability(t *testing.T) {
+	for name, desc := range map[string]string{
+		"search":      searchDescription,
+		"get_details": detailsDescription,
+		"read":        readToolDescription,
+	} {
+		lead := desc
+		if para, _, found := strings.Cut(lead, "\n\n"); found {
+			lead = para
+		}
+		if sentence, _, found := strings.Cut(lead, ". "); found {
+			lead = sentence
+		}
+		for _, banned := range []string{"Library Genesis", "Anna's Archive", "Sci-Hub"} {
+			if strings.Contains(lead, banned) {
+				t.Errorf("%s must not lead with %q; opening line is:\n%s", name, banned, lead)
+			}
+		}
+	}
+}
+
 // TestDownloadDescriptionNamesEachKeysChain verifies the prose keeps the three
 // identifier chains apart, so the model never pins an ISBN-only source for an md5
 // download (or the reverse), and mentions a key only when a source serves it.

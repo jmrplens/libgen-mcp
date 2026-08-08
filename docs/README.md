@@ -1,9 +1,10 @@
 # libgen-mcp documentation
 
 `libgen-mcp` is an [MCP](https://modelcontextprotocol.io) server, written in Go, for
-searching and downloading from **Library Genesis** (the `libgen.li` mirror family). It
-exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible
-client such as Claude Code, Claude Desktop, or your own agent.
+**federated search, citation and reading** of books, papers, comics, magazines and standards
+across the **Library Genesis** catalog (the `libgen.li` mirror family) and open-access
+sources. It exposes four tools — `search`, `get_details`, `download`, and `read` — to any
+MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
 
 Mirrors are discovered automatically and cached, with transparent failover, so the server
 keeps working as individual mirrors go up and down. Articles can also be fetched from

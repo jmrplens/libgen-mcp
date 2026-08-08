@@ -23,7 +23,7 @@ head:
             "@type": "ListItem",
             "position": 1,
             "name": "search",
-            "description": "Search the Library Genesis catalog for books, papers, comics, magazines and standards, returning per-result metadata and MD5 hashes. Escalates to Anna's Archive and the keyless open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) according to the extra_sources policy. Read-only and open-world.",
+            "description": "Federated search for books, papers, comics, magazines and standards across multiple bibliographic catalogs and open-access sources, returning per-result metadata and MD5 hashes. The primary catalog (Library Genesis) is queried first; it escalates to Anna's Archive and the keyless open-access providers (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) according to the extra_sources policy. Read-only and open-world.",
             "url": "https://jmrplens.github.io/libgen-mcp/tools/#search"
           },
           {
@@ -108,7 +108,7 @@ Every result is returned on two channels: the structured JSON output documented 
 
 ## search
 
-`search` is the tool that queries the Library Genesis catalog and, when the `extra_sources` policy allows it, the eight providers beyond it. It returns a page of file results with metadata, MD5 hashes, and per-result download options, plus pagination metadata.
+`search` is the federated search tool: it queries the primary catalog (Library Genesis) first and, when the `extra_sources` policy allows it, the eight providers beyond it. It returns a page of file results with metadata, MD5 hashes, and per-result download options, plus pagination metadata.
 
 ### search input
 
@@ -214,7 +214,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 
 ## get_details
 
-`get_details` is the tool that fetches full metadata for one record via the LibGen JSON API — description, identifiers, DOI, cover, and related edition. It looks a record up by `md5`, by `id`, or by `doi` — exactly one of the three.
+`get_details` is the tool that fetches full metadata for one bibliographic record — description, identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its `citations` field. It looks a record up by `md5`, by `id`, or by `doi` — exactly one of the three. Catalog records come from the LibGen JSON API.
 
 ### get_details input
 

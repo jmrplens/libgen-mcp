@@ -1,10 +1,11 @@
 # Architecture
 
-`libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family,
-plus a set of pluggable download sources. This page describes the three pieces that do the
-work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the
-**download pipeline** (resolve → stream → resume → verify → atomic rename), and the
-**multi-source chain**.
+`libgen-mcp` federates a set of bibliographic catalogs and open-access providers behind four
+MCP tools. Underneath, it is a thin server around an HTTP client for the primary catalog's
+`libgen.li` mirror family, plus a set of pluggable download sources. This page describes the
+three pieces that do the work: the resilient **HTTP client** (mirror discovery, failover,
+retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic
+rename), and the **multi-source chain**.
 
 ## HTTP client
 

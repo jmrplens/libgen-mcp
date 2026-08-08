@@ -221,7 +221,7 @@ these, and [Architecture](architecture.md) for how the transports work.
 
 Once the client shows `libgen` as connected, ask it to search. A prompt such as:
 
-> Search Library Genesis for "the go programming language" in nonfiction, 25 results.
+> Search for "the go programming language" in nonfiction, 25 results.
 
 drives the `search` tool with roughly these arguments:
 
