@@ -91,8 +91,8 @@
     "timeout": {
       "type": "string",
       "title": "Request timeout",
-      "description": "Timeout per HTTP request as a Go duration, e.g. 30s or 2m (max 10m).",
-      "default": "30s",
+      "description": "Timeout per HTTP request as a Go duration, e.g. 10s or 1m (max 10m). Not the budget a download source gets to resolve an item — that is LIBGEN_MCP_RESOLVE_BUDGET, which defaults to 30s.",
+      "default": "10s",
       "required": false
     },
     "max_download_bytes": {

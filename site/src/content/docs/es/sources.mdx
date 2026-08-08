@@ -39,8 +39,26 @@ un DOI inscrito en Crossref, y dónde está.
   mantienen literales en la ruta (esa es la forma documentada); el resto de caracteres inseguros
   para una URL se codifican en porcentaje. Del registro toma `best_oa_location.url_for_pdf`, y
   si no la primera `oa_location` que sea la versión publicada o del editor y lleve
-  `url_for_pdf`, y si no el `url_for_pdf` de cualquier ubicación; solo como último recurso, la
-  URL de destino de la mejor ubicación.
+  `url_for_pdf`, y si no el `url_for_pdf` de cualquier ubicación. Cuando ninguna ubicación
+  anuncia un `url_for_pdf`, el último recurso es una ubicación cuya `url` a secas todavía
+  _parece_ un fichero — una ruta que acaba en `.pdf`, `.epub` o `.djvu`, o cuyo último segmento
+  es `/pdf` —, prefiriendo una copia publicada o del editor. Un registro que solo lista páginas
+  de destino se declina sin más.
+- **Por qué declina las páginas de destino** antes recurría a la `url` de la mejor ubicación,
+  que es una página de destino mucho más a menudo que no: para `10.1371/journal.pone.0000308`
+  Unpaywall responde con cuatro ubicaciones, ninguna con `url_for_pdf`, cuya mejor `url` es el
+  resolutor pelado `https://doi.org/…`. Pedirla costaba una cadena de redirecciones completa
+  (medido: 3 redirecciones, 1,1 s, 170 kB) solo para entregar a la capa de descarga una página
+  HTML de artículo que esta rechazaba, con razón. Declinar convierte la forma más común del
+  corpus en un fallo limpio que cuesta una sola llamada a la API, y la cadena llega antes a una
+  fuente que sí puede servir el artículo.
+- **Se conserva el esquema** la URL se devuelve con el esquema que registró Unpaywall, `http`
+  incluido. Se probó una promoción incondicional de `http` a `https` y se descartó: no rescata
+  nada — los 403 de las editoriales que la motivaban son bloqueos de bot que responden igual por
+  ambos esquemas (`10.1016/j.cell.2011.02.013` resuelve a `http://www.cell.com/…/pdf`, y ese host
+  devuelve 403 a un cliente que no es un navegador de las dos formas; la forma `http` a secas
+  simplemente redirige antes a la `https`) — mientras que sí rompería los repositorios
+  institucionales solo por `http` que Unpaywall sigue indexando.
 - **Qué no cubre** nada inscrito en DataCite en vez de en Crossref, porque Unpaywall está
   construido sobre Crossref: un DOI `10.4230` de Dagstuhl y uno `10.5281` de Zenodo responden
   ambos 404. `is_oa: true` tampoco implica que haya fichero descargable —
@@ -727,9 +745,12 @@ Anna's Archive, como ruta de rescate identificada por md5.
   fuente, contra otro host, hechas
   una sola vez por descarga iniciada por quien llama, así que ni esperan a nada ni hacen esperar a
   nada.
-- Cada fuente recibe `LIBGEN_MCP_TIMEOUT` como presupuesto entero para resolver, así que una
-  fuente que hace varias consultas no puede retener la cadena durante varios timeouts antes de
-  que se pruebe la siguiente.
+- Cada fuente recibe `LIBGEN_MCP_RESOLVE_BUDGET` (30 s por defecto) como presupuesto entero para
+  resolver, así que una fuente que hace varias consultas no puede retener la cadena
+  indefinidamente antes de que se pruebe la siguiente. Dentro de ese presupuesto, cada petición
+  individual sigue acotada por `LIBGEN_MCP_TIMEOUT` (10 s por defecto); son dos ajustes separados
+  precisamente para que acortar el timeout por petición no deje fuera de la cadena a una fuente
+  lenta de varios saltos.
 - Donde un sitio publica reglas de rastreo, la fuente se mantiene dentro de ellas — ver las notas
   de `dagstuhl` y `zenodo`. Un resolve son como mucho un par de peticiones al servicio de una
   descarga iniciada por quien llama; aquí nada rastrea.

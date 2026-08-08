@@ -222,7 +222,8 @@ the first success; if all fail, it returns the joined per-source errors.
 ### Per-source cooldown
 
 A source that fails because it is **unavailable** — a transport error, a timeout, a 5xx or a
-429 — is set aside for 5 minutes, so the next download does not spend its resolve budget on a
+429 — is set aside for 5 minutes, so the next download does not spend its resolve budget
+(`LIBGEN_MCP_RESOLVE_BUDGET`, default 30 s per source) on a
 provider that just proved unreachable. This is the source-level counterpart of the per-mirror
 cooldown in the HTTP client, and it matters most for a service that is down for hours at a
 time: without it, every article download pays the full per-source budget for that provider

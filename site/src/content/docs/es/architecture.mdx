@@ -185,7 +185,7 @@ Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro i
 
 ### Enfriamiento por fuente
 
-Una fuente que falla porque está **no disponible** — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Es el equivalente a nivel de fuente del enfriamiento por mirror del cliente HTTP, y donde más importa es en un servicio caído durante horas: sin él, cada descarga de artículo paga otra vez el presupuesto completo de esa fuente.
+Una fuente que falla porque está **no disponible** — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución (`LIBGEN_MCP_RESOLVE_BUDGET`, 30 s por fuente por defecto) en un proveedor que acaba de demostrar ser inalcanzable. Es el equivalente a nivel de fuente del enfriamiento por mirror del cliente HTTP, y donde más importa es en un servicio caído durante horas: sin él, cada descarga de artículo paga otra vez el presupuesto completo de esa fuente.
 
 Una fuente que responde correctamente que **no tiene el elemento** — no indexado, sin acceso abierto, sin copia preservada — nunca se aparta: es una respuesta normal y correcta sobre un elemento y no dice nada sobre la salud del proveedor. Ambos casos se distinguen por la taxonomía de errores con la que cada fuente etiqueta sus fallos (`ErrSourceUnavailable` frente a `ErrNotIndexed`).
 
