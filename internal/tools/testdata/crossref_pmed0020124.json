@@ -1,0 +1,45 @@
+{
+ "status": "ok",
+ "message-type": "work",
+ "message": {
+  "DOI": "10.1371/journal.pmed.0020124",
+  "type": "journal-article",
+  "title": [
+   "Why Most Published Research Findings Are False"
+  ],
+  "container-title": [
+   "PLoS Medicine"
+  ],
+  "ISSN": [
+   "1549-1676"
+  ],
+  "volume": "2",
+  "issue": "8",
+  "publisher": "Public Library of Science (PLoS)",
+  "published": {
+   "date-parts": [
+    [
+     2005,
+     8,
+     30
+    ]
+   ]
+  },
+  "references-count": 36,
+  "is-referenced-by-count": 8109,
+  "author": [
+   {
+    "given": "John P. A.",
+    "family": "Ioannidis",
+    "sequence": "first",
+    "affiliation": [],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   }
+  ]
+ }
+}

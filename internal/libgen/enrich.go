@@ -72,6 +72,7 @@ func (c *Client) openLibraryURL() string {
 // CrossrefWork is the subset of a Crossref work record surfaced by enrichment:
 // bibliographic container metadata plus reference and citation counts.
 type CrossrefWork struct {
+	Title          string   `json:"title,omitempty" jsonschema:"the title Crossref registers for this DOI, which is the authority on which work the DOI names"`
 	ContainerTitle string   `json:"container_title,omitempty" jsonschema:"the journal or book title the work appears in"`
 	ISSN           []string `json:"issn,omitempty" jsonschema:"ISSNs of the containing publication"`
 	Volume         string   `json:"volume,omitempty" jsonschema:"volume number"`
@@ -190,6 +191,7 @@ type crossrefPublished struct {
 // crossrefMessage is the subset of the Crossref work object that enrichment reads;
 // field tags map the hyphenated JSON keys onto Go fields.
 type crossrefMessage struct {
+	Title           []string          `json:"title"`
 	ContainerTitle  []string          `json:"container-title"`
 	ISSN            []string          `json:"ISSN"`
 	Volume          string            `json:"volume"`
@@ -207,8 +209,8 @@ type crossrefEnvelope struct {
 }
 
 // parseCrossref decodes a Crossref work envelope into a CrossrefWork, mapping the
-// first container-title and the published year from date-parts[0][0]. Missing
-// fields stay zero; it returns nil only when the body cannot be decoded.
+// first title and container-title and the published year from date-parts[0][0].
+// Missing fields stay zero; it returns nil only when the body cannot be decoded.
 func parseCrossref(r io.Reader) *CrossrefWork {
 	var env crossrefEnvelope
 	if err := json.NewDecoder(r).Decode(&env); err != nil {
@@ -223,6 +225,9 @@ func parseCrossref(r io.Reader) *CrossrefWork {
 		ReferenceCount: m.ReferencesCount,
 		CitationCount:  m.IsReferencedBy,
 		Subjects:       m.Subject,
+	}
+	if len(m.Title) > 0 {
+		w.Title = m.Title[0]
 	}
 	if len(m.ContainerTitle) > 0 {
 		w.ContainerTitle = m.ContainerTitle[0]

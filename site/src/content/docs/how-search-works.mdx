@@ -1,6 +1,6 @@
 ---
 title: How search works
-description: A conceptual walk through what a search queries, when it reaches beyond the Library Genesis catalog, and how each result tells you where it came from.
+description: A conceptual walk through what a federated search queries, when it reaches beyond the primary catalog, and how each result tells you where it came from.
 datePublished: "2026-07-24"
 head:
   # Mirrors the "Frequently asked questions" section at the foot of this page
@@ -54,7 +54,7 @@ head:
       }
 ---
 
-**libgen-mcp searches the Library Genesis catalog first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven further providers — five open-access repositories plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
+**`search` is federated: it queries the primary catalog — Library Genesis — first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven further providers — five open-access repositories plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
 
 This page explains that flow: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
 

@@ -34,7 +34,24 @@ DOI exists anywhere, and where.
   literal in the path (that is the documented shape); other URL-unsafe characters are
   percent-encoded. From the record it takes `best_oa_location.url_for_pdf`, else the first
   `oa_location` that is the published/publisher version and carries a `url_for_pdf`, else any
-  location's `url_for_pdf`, and only as a last resort the best location's landing URL.
+  location's `url_for_pdf`. When no location advertises a `url_for_pdf` at all, the last resort
+  is a location whose plain `url` still *looks* like a file — a path ending in `.pdf`, `.epub`
+  or `.djvu`, or a last segment of `/pdf` — preferring a published/publisher copy. A record
+  that only lists landing pages is declined outright.
+- **Why it declines landing pages** it used to fall back to the best location's `url`, which is
+  a landing page far more often than not: for `10.1371/journal.pone.0000308` Unpaywall answers
+  with four locations, none carrying a `url_for_pdf`, whose best `url` is the bare
+  `https://doi.org/…` resolver. Fetching that cost a full redirect chain (measured: 3 redirects,
+  1.1 s, 170 kB) only to hand the download layer an HTML article page it correctly rejected.
+  Declining turns the commonest shape in the corpus into a clean miss costing one API call, and
+  the chain reaches a source that can actually serve the article sooner.
+- **Scheme preserved** the URL is returned with the scheme Unpaywall recorded, `http` included.
+  An unconditional `http`→`https` promotion was tried and dropped: it rescues nothing — the
+  publisher 403s that motivated it are bot blocks that answer identically over both schemes
+  (`10.1016/j.cell.2011.02.013` resolves to `http://www.cell.com/…/pdf`, and that host 403s a
+  non-browser client either way, the plain-`http` form simply redirecting to the `https` one
+  first) — while it would break the `http`-only institutional repositories Unpaywall still
+  indexes.
 - **What it does not cover** anything registered with DataCite rather than Crossref, because
   Unpaywall is built on Crossref: a Dagstuhl `10.4230` DOI and a Zenodo `10.5281` DOI both
   answer 404. `is_oa: true` also does not imply a fetchable file —
@@ -688,8 +705,11 @@ Anna's Archive, as an md5-keyed rescue route.
   requests against a
   different host, made once per caller-initiated download, so they queue behind nothing and
   nothing queues behind them.
-- Each source gets `LIBGEN_MCP_TIMEOUT` as its entire resolve budget, so a source that makes
-  several lookups cannot hold the chain for several timeouts before the next one is tried.
+- Each source gets `LIBGEN_MCP_RESOLVE_BUDGET` (default 30 s) as its entire resolve budget, so a
+  source that makes several lookups cannot hold the chain indefinitely before the next one is
+  tried. Within that budget each individual request is still bounded by `LIBGEN_MCP_TIMEOUT`
+  (default 10 s); the two are separate settings precisely so that shortening the per-request
+  timeout does not strike a slow multi-hop source out of the chain.
 - Where a site publishes crawl rules the source stays inside them — see the notes under
   `dagstuhl` and `zenodo`. A resolve is at most a couple of requests serving one
   caller-initiated download; nothing here crawls.

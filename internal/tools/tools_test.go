@@ -232,7 +232,7 @@ func TestSearchNextSteps(t *testing.T) {
 	withResults := searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", DOI: "10.1/x"}},
 		Page:    1,
-	}, false)
+	}, false, config.ExtraSourcesAuto)
 	joined := strings.Join(withResults, "\n")
 	if !strings.Contains(joined, "get_details") || !strings.Contains(joined, "download") {
 		t.Errorf("next_steps should mention get_details and download; got %q", joined)
@@ -244,7 +244,7 @@ func TestSearchNextSteps(t *testing.T) {
 		t.Errorf("next_steps should embed the first result's doi; got %q", joined)
 	}
 
-	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false)
+	empty := searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false, config.ExtraSourcesAuto)
 	if len(empty) == 0 || !strings.Contains(empty[0], "No matches") {
 		t.Errorf("empty search should suggest recovery; got %q", empty)
 	}
@@ -270,17 +270,20 @@ func TestDetailsNextSteps(t *testing.T) {
 	}
 }
 
-// TestDownloadNextSteps verifies the download follow-up names the saved path,
-// size and source.
+// TestDownloadNextSteps verifies the download follow-up names the saved path and
+// size — and not the source that served them, which the result withholds.
 func TestDownloadNextSteps(t *testing.T) {
 	steps := downloadNextSteps(libgen.DownloadResult{Path: "/tmp/book.pdf", SizeBytes: 123, Source: "libgen"})
 	if len(steps) != 1 {
 		t.Fatalf("want 1 step, got %d", len(steps))
 	}
-	for _, want := range []string{"/tmp/book.pdf", "123", "libgen"} {
+	for _, want := range []string{"/tmp/book.pdf", "123"} {
 		if !strings.Contains(steps[0], want) {
 			t.Errorf("download step should mention %q; got %q", want, steps[0])
 		}
+	}
+	if strings.Contains(steps[0], "libgen") {
+		t.Errorf("download step must not name the serving source; got %q", steps[0])
 	}
 }
 
@@ -676,6 +679,203 @@ func TestDownloadToolResolveError(t *testing.T) {
 	}
 }
 
+// TestDownloadFailureCarriesNextSteps is the guard on the one dead end the surface
+// had: a failed download used to return the joined source errors and nothing else,
+// while every other result carries a "Next steps" block. The failure must arrive
+// flagged IsError, with the reason and the guidance in the text the model reads.
+//
+// It must arrive with NO structuredContent, which is what
+// TestDownloadFailureSendsNoStructuredContent pins: the guidance travels in the
+// document, not beside a DownloadOutput describing a download that never ran.
+func TestDownloadFailureCarriesNextSteps(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a failed download must still be flagged IsError")
+	}
+	text := contentText(res)
+	if !strings.Contains(text, "Next steps") {
+		t.Errorf("the failure markdown carries no Next steps block:\n%s", text)
+	}
+	if !strings.Contains(text, "resolve failed") {
+		t.Errorf("the failure markdown drops the underlying reason:\n%s", text)
+	}
+	if !strings.Contains(text, "nothing left to pin") {
+		t.Errorf("the failure markdown drops the recovery guidance:\n%s", text)
+	}
+}
+
+// TestDownloadFailureSendsNoStructuredContent pins the shape of a failed download:
+// an IsError result whose only channel is the failure document.
+//
+// The handler used to return a zero DownloadOutput alongside it, which the output
+// schema then rendered as path="", size_bytes=0 and verified=false — required fields
+// asserting the results of a download that never happened, with path being exactly
+// the field a model reads to locate the file. The SDK marshals and validates that
+// output for an IsError result just as it does for a successful one, so the day any
+// of those fields gains a constraint the failure would become a JSON-RPC protocol
+// error and the actionable message would be lost.
+func TestDownloadFailureSendsNoStructuredContent(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	session := newDownloadSession(t, cfg, staticMirrors{}, libgen.WithSources(md5ErrSource{}))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("a failed download must still be flagged IsError")
+	}
+	if res.StructuredContent != nil {
+		t.Errorf("a failed download must send no structuredContent; got %v", res.StructuredContent)
+	}
+	if len(res.Content) != 1 {
+		t.Fatalf("a failed download should carry exactly one content block, got %d", len(res.Content))
+	}
+	if !strings.Contains(contentText(res), "no file was saved") {
+		t.Errorf("the single content block should be the failure document; got:\n%s", contentText(res))
+	}
+}
+
+// TestDownloadFailureErrorUnwrapsTheChainError verifies the failure error keeps the
+// source chain's own error reachable, so errors.Is still classifies it — the
+// transient-source guidance is selected that way, and a fmt.Errorf carrying only the
+// rendered document would have severed it.
+func TestDownloadFailureErrorUnwrapsTheChainError(t *testing.T) {
+	cause := fmt.Errorf("source scihub: %w", libgen.ErrSourceUnavailable)
+	_, out, err := downloadFailure(libgen.Item{DOI: "10.1/x"}, cause, config.ExtraSourcesAuto)
+	if err == nil {
+		t.Fatal("downloadFailure must return a Go error")
+	}
+	if !errors.Is(err, libgen.ErrSourceUnavailable) {
+		t.Errorf("errors.Is(err, ErrSourceUnavailable) = false; the cause was dropped")
+	}
+	if !strings.Contains(err.Error(), "Next steps") {
+		t.Errorf("the error message should be the whole failure document; got %q", err.Error())
+	}
+	if len(out.NextSteps) != 0 || out.Path != "" {
+		t.Errorf("the failure output must stay zero; got %+v", out)
+	}
+}
+
+// contentText joins the text content blocks of a tool result.
+func contentText(res *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain pins the distinction
+// the guidance exists to make. A pinned source that fails has the whole untried
+// chain behind it and the fix is to drop the pin; an exhausted chain has nothing
+// left to pin, and advising a source there would send the model back through
+// sources that already failed — which is precisely the by-hand walk (three calls,
+// 3.8 seconds) a live run performed before dropping the pin on its own.
+func TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain(t *testing.T) {
+	chainErr := errors.New("source unpaywall: mirror returned an HTML page instead of the file")
+
+	pinned := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x", Source: "unpaywall"}, chainErr, config.ExtraSourcesAuto), "\n")
+	if !strings.Contains(pinned, "NO source field") {
+		t.Errorf("a pinned failure must tell the model to drop the pin; got %q", pinned)
+	}
+	if !strings.Contains(pinned, "one at a time by hand") {
+		t.Errorf("a pinned failure must warn against walking the sources by hand; got %q", pinned)
+	}
+
+	exhausted := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, chainErr, config.ExtraSourcesAuto), "\n")
+	if strings.Contains(exhausted, "NO source field") {
+		t.Errorf("an exhausted chain must not repeat the drop-the-pin advice; got %q", exhausted)
+	}
+	if !strings.Contains(exhausted, "nothing left to pin") {
+		t.Errorf("an exhausted chain must say there is nothing left to pin; got %q", exhausted)
+	}
+	if !strings.Contains(exhausted, "10.1/x") {
+		t.Errorf("the exhausted-chain advice should name the identifier to re-check; got %q", exhausted)
+	}
+
+	// Both paths must forbid inventing a result.
+	for name, steps := range map[string]string{"pinned": pinned, "exhausted": exhausted} {
+		if !strings.Contains(steps, "never state or imply that anything was saved") {
+			t.Errorf("%s guidance drops the do-not-claim-success guardrail; got %q", name, steps)
+		}
+	}
+}
+
+// TestDownloadFailureSteps_ByIdentifier verifies the recovery check named once the
+// whole chain is exhausted differs by identifier, since the likely cause does: an
+// article is most often a wrong or unindexed DOI, a book usually has another copy
+// under a different md5, and an ISBN only ever matched the openly licensed sources.
+func TestDownloadFailureSteps_ByIdentifier(t *testing.T) {
+	cases := []struct {
+		name string
+		item libgen.Item
+		want string
+	}{
+		{"doi", libgen.Item{DOI: "10.1/x"}, "get_details"},
+		{"md5", libgen.Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, "different md5"},
+		{"isbn", libgen.Item{ISBN: "9780000000001"}, "openly\nlicensed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(downloadFailureSteps(tc.item, errors.New("boom"), config.ExtraSourcesAuto), "\n")
+			want := strings.ReplaceAll(tc.want, "\n", " ")
+			if !strings.Contains(got, want) {
+				t.Errorf("guidance for %s should mention %q; got %q", tc.name, want, got)
+			}
+		})
+	}
+}
+
+// TestDownloadFailureSteps_NeverPolicyDoesNotAdviseAnIgnoredArgument verifies the
+// download failure path obeys the same rule as the search guidance: a deployment
+// that discards extra_sources must not be the one recommending it, or the fall-back
+// advice sends the model into the very loop that rule exists to prevent.
+func TestDownloadFailureSteps_NeverPolicyDoesNotAdviseAnIgnoredArgument(t *testing.T) {
+	item := libgen.Item{DOI: "10.1/x"}
+	boom := errors.New("boom")
+
+	allowed := strings.Join(downloadFailureSteps(item, boom, config.ExtraSourcesAuto), "\n")
+	if !strings.Contains(allowed, `extra_sources="always"`) {
+		t.Errorf("a deployment that honors the argument should suggest it; got %q", allowed)
+	}
+
+	restricted := strings.Join(downloadFailureSteps(item, boom, config.ExtraSourcesNever), "\n")
+	if strings.Contains(restricted, "extra_sources") {
+		t.Errorf("a never-policy deployment must not name an argument it ignores; got %q", restricted)
+	}
+	if !strings.Contains(restricted, "cannot look beyond it") {
+		t.Errorf("a never-policy deployment should say the search cannot be widened; got %q", restricted)
+	}
+}
+
+// TestDownloadFailureSteps_TransientSourceEarnsARetry verifies a chain that failed
+// because a source was unreachable — as opposed to answering that it does not hold
+// the item — says so, since only the first case is worth retrying.
+func TestDownloadFailureSteps_TransientSourceEarnsARetry(t *testing.T) {
+	transient := fmt.Errorf("source scihub: %w", libgen.ErrSourceUnavailable)
+	if got := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, transient, config.ExtraSourcesAuto), "\n"); !strings.Contains(got, "transient") {
+		t.Errorf("an unavailable source should earn a retry suggestion; got %q", got)
+	}
+	settled := errors.New("source scihub: not indexed")
+	if got := strings.Join(downloadFailureSteps(libgen.Item{DOI: "10.1/x"}, settled, config.ExtraSourcesAuto), "\n"); strings.Contains(got, "transient") {
+		t.Errorf("a settled miss should not be described as transient; got %q", got)
+	}
+}
+
 // TestSearchToolEmptyResults verifies the handler normalizes a zero-result page to
 // an empty (non-nil) results slice.
 func TestSearchToolEmptyResults(t *testing.T) {
@@ -736,20 +936,80 @@ func TestStringField(t *testing.T) {
 	}
 }
 
-// TestBookMetaEmptyReturnsNil verifies bookMeta returns nil when the record lookup
-// yields no usable bibliographic fields, so naming falls back to the md5.
+// TestIntField covers reading a numeric column out of a catalog record. The
+// catalog encodes them as strings, but the record is third-party data, so a JSON
+// number is read too and everything else — a missing key, a nil map, a non-numeric
+// string, a negative, absurd or fractional value — reports 0, i.e. "not known",
+// which is what drops the size clause from the save confirmation.
+func TestIntField(t *testing.T) {
+	record := map[string]any{
+		"filesize": "18298205",
+		"padded":   "  4096 ",
+		"json":     float64(2048),
+		"words":    "unknown",
+		"negative": "-1",
+		"huge":     1e19, // beyond int64
+		// Exactly 2^63: one past the largest int64, and the value math.MaxInt64
+		// rounds to when it is converted to float64 — so a > math.MaxInt64 bound
+		// would wave it through into an out-of-range conversion.
+		"boundary": float64(1 << 63),
+		// The largest float64 that is a valid int64, i.e. the last value that must
+		// still be read rather than rejected.
+		"boundaryOK": float64(1<<63 - 1024),
+		// A fractional number is a corrupt record, not a roundable size: truncating
+		// it would report a byte count the catalog never stated.
+		"fraction":     12.5,
+		"tinyFraction": 0.5,
+		"negFraction":  -0.5,
+		"wrong":        []any{1},
+	}
+	tests := []struct {
+		key  string
+		want int64
+	}{
+		{"filesize", 18298205},
+		{"padded", 4096},
+		{"json", 2048},
+		{"words", 0},
+		{"negative", 0},
+		{"huge", 0},
+		{"boundary", 0},
+		{"boundaryOK", 1<<63 - 1024},
+		{"fraction", 0},
+		{"tinyFraction", 0},
+		{"negFraction", 0},
+		{"wrong", 0},
+		{"absent", 0},
+	}
+	for _, tt := range tests {
+		if got := intField(record, tt.key); got != tt.want {
+			t.Errorf("intField(%q) = %d, want %d", tt.key, got, tt.want)
+		}
+	}
+	if got := intField(nil, "filesize"); got != 0 {
+		t.Errorf("intField(nil) = %d, want 0", got)
+	}
+}
+
+// TestBookMetaEmptyReturnsNil verifies bookMeta returns no metadata when the
+// record lookup yields no usable bibliographic fields, so naming falls back to the
+// md5 — while still reporting the size the same record carries.
 func TestBookMetaEmptyReturnsNil(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
 		// A file record with no title/author/year/extension and no related edition.
-		_, _ = w.Write([]byte(`{"93485370":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee"}}`))
+		_, _ = w.Write([]byte(`{"93485370":{"md5":"87a4ebdaf21fa6cc70009a3dd63194ee","filesize":"4096"}}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
-	if meta := bookMeta(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee"); meta != nil {
-		t.Errorf("bookMeta() = %+v, want nil (no usable fields)", meta)
+	details := bookMeta(context.Background(), client, "87a4ebdaf21fa6cc70009a3dd63194ee")
+	if details.Meta != nil {
+		t.Errorf("bookMeta().Meta = %+v, want nil (no usable fields)", details.Meta)
+	}
+	if details.Size != 4096 {
+		t.Errorf("bookMeta().Size = %d, want 4096 (the catalog's filesize)", details.Size)
 	}
 }
 
@@ -781,22 +1041,27 @@ func downloadMirror(t *testing.T, payload []byte) *httptest.Server {
 // does not reach: filename derivation, MIME mapping, header flattening, and the
 // headers path of the guidance/markdown builders.
 func TestResolveHelpers(t *testing.T) {
-	// resolveFilename: explicit wins; meta builds "Author - Title (Year).ext";
-	// doi falls back to a .pdf name; md5 falls back to md5+ext.
-	if got := resolveFilename(libgen.Item{MD5: "x"}, "given.pdf", "pdf"); got != "given.pdf" {
+	// resolveFilename: explicit wins; a verified (md5) link is named from the
+	// record; an unverified one is named from the identifier, never from the
+	// requested record, so a mis-delivery is not disguised.
+	if got := resolveFilename(libgen.Item{MD5: "x"}, "given.pdf", "pdf", true); got != "given.pdf" {
 		t.Errorf("explicit filename: %q", got)
 	}
-	meta := resolveFilename(libgen.Item{MD5: "x", Meta: &libgen.FileMeta{Title: "T/it:le", Author: "A", Year: "2020"}}, "", "epub")
-	if meta != "A - T-it-le (2020).epub" {
+	meta := resolveFilename(libgen.Item{MD5: "x", Meta: &libgen.FileMeta{Title: "T/it:le", Author: "A", Year: "2020"}}, "", "epub", true)
+	if meta != "A - T_it -le (2020).epub" {
 		t.Errorf("meta filename: %q", meta)
 	}
-	if got := resolveFilename(libgen.Item{ISBN: "9789286150616"}, "", "pdf"); got != "9789286150616.pdf" {
+	unverified := resolveFilename(libgen.Item{DOI: "10.1/x", Meta: &libgen.FileMeta{Title: "Some Paper", Author: "A"}}, "", "", false)
+	if unverified != "10.1_x.pdf" {
+		t.Errorf("unverified filename = %q, want the DOI rather than the requested record's title", unverified)
+	}
+	if got := resolveFilename(libgen.Item{ISBN: "9789286150616"}, "", "pdf", false); got != "9789286150616.pdf" {
 		t.Errorf("resolveFilename(isbn) = %q, want the ISBN as the name", got)
 	}
-	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", ""); got != "10.1-x.pdf" {
+	if got := resolveFilename(libgen.Item{DOI: "10.1/x"}, "", "", false); got != "10.1_x.pdf" {
 		t.Errorf("doi fallback filename: %q", got)
 	}
-	if got := resolveFilename(libgen.Item{MD5: "abc"}, "", ""); got != "abc" {
+	if got := resolveFilename(libgen.Item{MD5: "abc"}, "", "", true); got != "abc" {
 		t.Errorf("md5 fallback filename: %q", got)
 	}
 
@@ -1137,7 +1402,7 @@ func decodeDownloadResult(t *testing.T, res *mcp.CallToolResult) libgen.Download
 }
 
 // TestDownloadToolByDOI verifies the download tool resolves an article by DOI
-// through the (injected) DOI source and surfaces the serving source in the result.
+// through the (injected) DOI source and saves the bytes it serves.
 func TestDownloadToolByDOI(t *testing.T) {
 	payload := []byte("%PDF-1.4 article fetched by DOI")
 	cdn := fileCDNServer(t, payload, "") // no disposition: DOI items get a name from Ext
@@ -1156,14 +1421,126 @@ func TestDownloadToolByDOI(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 	out := decodeDownloadResult(t, res)
-	if out.Source != "scihub" {
-		t.Errorf("Source = %q, want %q", out.Source, "scihub")
-	}
 	if out.SizeBytes != int64(len(payload)) {
 		t.Errorf("SizeBytes = %d, want %d", out.SizeBytes, len(payload))
 	}
 	if !strings.HasSuffix(out.Path, ".pdf") {
 		t.Errorf("Path = %q, want a .pdf name", out.Path)
+	}
+}
+
+// downloadStructuredKeys returns the top-level keys of a download result's
+// structured content, so a test can assert on what the wire actually carries
+// rather than on what a typed decode happens to keep.
+func downloadStructuredKeys(t *testing.T, res *mcp.CallToolResult) map[string]any {
+	t.Helper()
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if uerr := json.Unmarshal(data, &raw); uerr != nil {
+		t.Fatal(uerr)
+	}
+	return raw
+}
+
+// downloadByDOISession wires a session whose only source is a DOI stub with the
+// given name, serving payload from a local CDN. It is the fixture the provenance
+// tests share: both need a download that a NAMED source demonstrably served.
+func downloadByDOISession(t *testing.T, name string, payload []byte) *mcp.ClientSession {
+	t.Helper()
+	cdn := fileCDNServer(t, payload, "")
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	return newDownloadSession(t, cfg, staticMirrors{},
+		libgen.WithSources(doiStubSource{name: name, fileURL: cdn.URL + "/file"}))
+}
+
+// TestDownloadWithholdsProvenance verifies that a download which named no source
+// gets a result naming none either: no source and no mirror.
+//
+// The rule is that a result may only reveal what the call already revealed. The
+// provenance of a file is a fact about the operator's configuration and the user's
+// activity, and every field of a tool result is shipped to the client's inference
+// provider, so a source name that answers no question the caller asked is a
+// disclosure with no counterpart benefit. Both channels are checked, because the
+// Markdown block is the one the model actually reads.
+func TestDownloadWithholdsProvenance(t *testing.T) {
+	session := downloadByDOISession(t, "scihub", []byte("%PDF-1.4 article fetched by DOI"))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pone.0000217"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	raw := downloadStructuredKeys(t, res)
+	for _, banned := range []string{"source", "mirror"} {
+		if v, present := raw[banned]; present {
+			t.Errorf("structured output must not carry %q; got %v", banned, v)
+		}
+	}
+	text := textContent(res)
+	if strings.Contains(text, "scihub") {
+		t.Errorf("the Markdown block must not name the serving source; got:\n%s", text)
+	}
+}
+
+// TestDownloadPinnedCallGetsNoProvenanceEither verifies that pinning a source buys
+// the caller no provenance in the result: no source name, and no flag about the pin.
+//
+// The flag existed here until it was noticed that it could not be false. A pinned
+// call runs against that one source and nothing else, so the file arriving IS the
+// answer — it came from the source the caller named — and an error is the other
+// answer. Reporting a bit that is true whenever it is present tells the model
+// nothing it did not already know from getting a file at all.
+func TestDownloadPinnedCallGetsNoProvenanceEither(t *testing.T) {
+	session := downloadByDOISession(t, "scihub", []byte("%PDF-1.4 article fetched by DOI"))
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"doi": "10.1371/journal.pone.0000217", "source": "scihub"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("download returned tool error: %+v", res.Content)
+	}
+	raw := downloadStructuredKeys(t, res)
+	for _, banned := range []string{"source", "mirror", "served_by_requested_source"} {
+		if v, present := raw[banned]; present {
+			t.Errorf("a pinned call must not get %q back; got %v", banned, v)
+		}
+	}
+	if text := textContent(res); strings.Contains(text, "scihub") || strings.Contains(text, "source you asked for") {
+		t.Errorf("the Markdown block should say nothing about the pin or the source; got:\n%s", text)
+	}
+}
+
+// TestRedactUnaskedAccount verifies the membership allowance is reported to the
+// call that opted in and withheld from the one that did not.
+//
+// The withheld case is the one that matters. A server the operator configured a
+// key on serves every book download over that membership, so without the gate a
+// caller who never mentioned a membership learns that the operator holds a paid
+// account and how much of today's allowance has been spent — neither of which it
+// asked about.
+func TestRedactUnaskedAccount(t *testing.T) {
+	account := &libgen.AccountInfo{DownloadsLeft: 30, DownloadsPerDay: 50}
+
+	asked := libgen.DownloadResult{Account: account}
+	redactUnaskedAccount(&asked, DownloadInput{AnnasMember: true})
+	if asked.Account == nil {
+		t.Error("a call that set annas_member asked about the membership and must be told its allowance")
+	}
+
+	unasked := libgen.DownloadResult{Account: account}
+	redactUnaskedAccount(&unasked, DownloadInput{})
+	if unasked.Account != nil {
+		t.Errorf("a call that never opted in must not be told the operator's allowance; got %+v", unasked.Account)
 	}
 }
 
@@ -1218,8 +1595,8 @@ func bookMirror(t *testing.T, payload []byte) *httptest.Server {
 
 // TestDownloadToolMD5Book verifies the md5 (book) path still works and that, with
 // no explicit filename and no mirror-announced name, the file lands under a clean
-// metadata-built name ("Author - Title (Year).ext") from get_details, tagged with
-// the libgen source.
+// metadata-built name ("Author - Title (Year).ext") from get_details, digest
+// verified.
 func TestDownloadToolMD5Book(t *testing.T) {
 	payload := []byte("%PDF-1.4 book fetched by md5 for the metadata name test")
 	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
@@ -1240,9 +1617,6 @@ func TestDownloadToolMD5Book(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 	out := decodeDownloadResult(t, res)
-	if out.Source != "libgen" {
-		t.Errorf("Source = %q, want %q", out.Source, "libgen")
-	}
 	if !out.Verified {
 		t.Error("Verified = false, want true (md5-keyed book)")
 	}
@@ -1262,6 +1636,118 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 	desc := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"})
 	if !strings.Contains(desc, "untrusted") {
 		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
+	}
+}
+
+// TestDownloadDescriptionDisclosesShadowLibraries verifies the download tool says
+// outright that its chain reaches Library Genesis and Anna's Archive mirrors, spells
+// out which source name is which, and states where in the order they are reached.
+//
+// download is the only tool that retrieves a file, so the mapping is what lets a
+// caller understand the bare names in the source argument's enum before it pins one;
+// the read-only tools deliberately carry none, which is what
+// TestReadOnlyToolsLeadWithTheirCapability guards. A chain with no shadow library in
+// it says nothing, because then there is nothing to name.
+func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
+	desc := downloadToolDescription(
+		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+	for _, want := range []string{
+		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
+		"randombook is a Library Genesis frontend", "scidb is Anna's Archive's SciDB article viewer",
+		// The order is a mechanic, and it is the mechanic that decides whether a
+		// mirror is reached at all, so it is disclosed with the names.
+		"Openly licensed and open-access sources are tried first",
+		"only when none of them serves the item",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
+		}
+	}
+	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"})
+	if strings.Contains(clean, "shadow-library") {
+		t.Errorf("a chain with no shadow library needs no disclosure; got:\n%s", clean)
+	}
+}
+
+// TestDownloadDescriptionDoesNotPrejudgeTheCall verifies the disclosure states
+// mechanics rather than a verdict, because a verdict in the tool definition is read
+// before the call is made and the call has not chosen a source yet.
+//
+// The description used to assert that the mirrors "host copyrighted works without
+// the rightsholder's permission". That is a judgement, not a mechanic; it is also
+// wrong about the public-domain and openly licensed material those mirrors carry,
+// and it was applied to every download — including the majority that the open-access
+// sources serve without a mirror being touched at all. What replaced it is the three
+// facts a caller actually lacks: the order, that the serving source is not known
+// until the call runs, and that the operator's source and credential configuration
+// is invisible from here.
+//
+// The middle fact has since been revised twice. The serving source is not disclosed
+// once the call HAS run either; and the flag that briefly stood in for it is gone
+// too, because a pin narrows the chain to that one source, so the flag could only
+// ever be true. What the description carries in its place is the contract that makes
+// that so — a pinned download is served by the pinned source or it fails — which is
+// the routing fact a caller can act on and the one thing the source argument's own
+// enum never explained. Both retired clauses are checked as banned text rather than
+// merely dropped from the wanted list: each describes a field that no longer exists,
+// and nothing else in the build can catch a description that lies.
+func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
+	desc := downloadToolDescription(
+		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+	for _, banned := range []string{
+		"without the rightsholder's permission", "copyrighted works",
+		"and named in the result", "whether a source you pinned served the file",
+	} {
+		if strings.Contains(desc, banned) {
+			t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
+		}
+	}
+	for _, want := range []string{
+		// The source is not selected when the description is read.
+		"chosen while resolving",
+		// Nor disclosed after it has been. What stands in its place is the pin's own
+		// contract, stated where the source argument is introduced.
+		"is not named in the result",
+		"restrict the download to one provider instead of all of them, with no substitution",
+		"a failure means it could not serve the item",
+		// The operator's configuration is the thing that settles this, and it is
+		// not visible to the caller.
+		"is set by the operator and is not visible to you",
+		"do not infer from this list whether a given request is licensed",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("download description must state %q; got:\n%s", want, desc)
+		}
+	}
+}
+
+// TestReadOnlyToolsLeadWithTheirCapability verifies that the three read-only tools
+// open on what they do — federated bibliographic search, metadata and citations,
+// text extraction — rather than on the name of one catalog behind them.
+//
+// A tool that only reads metadata or text is chosen by capability, and leading with
+// a shadow library's name in the very first line has clients decline bibliographic
+// work the surface performs perfectly legally. The catalogs are still named further
+// down, and in the field descriptions, where they explain behavior; only download
+// leads with the chain's identity, because only download fetches a file.
+func TestReadOnlyToolsLeadWithTheirCapability(t *testing.T) {
+	for name, desc := range map[string]string{
+		"search":      searchDescription,
+		"get_details": detailsDescription,
+		"read":        readToolDescription,
+	} {
+		lead := desc
+		if para, _, found := strings.Cut(lead, "\n\n"); found {
+			lead = para
+		}
+		if sentence, _, found := strings.Cut(lead, ". "); found {
+			lead = sentence
+		}
+		for _, banned := range []string{"Library Genesis", "Anna's Archive", "Sci-Hub"} {
+			if strings.Contains(lead, banned) {
+				t.Errorf("%s must not lead with %q; opening line is:\n%s", name, banned, lead)
+			}
+		}
 	}
 }
 
@@ -1740,6 +2226,171 @@ func TestDownloadTool_ConfirmCanceled(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(cfg.DownloadDir); len(entries) != 0 {
 		t.Errorf("a canceled download wrote %d file(s) to disk, want 0", len(entries))
+	}
+}
+
+// catalogConfirmMirror serves the whole book path a confirmed download walks — the
+// json.php catalog record (file, then its edition), then ads.php → get.php → CDN —
+// and counts the resolve step (ads.php) and the CDN's HEAD and GET separately. The
+// counters are what let a test prove how many times ONE tool call resolved the
+// item: the elicitation protocol runs the handler twice, so a prompt that resolves
+// eagerly shows up here as a second ads.php hit.
+//
+// The record's filesize matches the payload, so the size the confirmation quotes
+// can be checked against the file that is actually served.
+func catalogConfirmMirror(t *testing.T, payload []byte) (srv *httptest.Server, ads, cdnGET, cdnHEAD *atomic.Int32) {
+	t.Helper()
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	var adsHits, getHits, headHits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("object") == "e" {
+			_, _ = w.Write([]byte(`{"55":{"title":"Confirmed Book","author":"A. Author","year":"2020"}}`))
+			return
+		}
+		fmt.Fprintf(w, `{"93485370":{"md5":%q,"extension":"pdf","filesize":"%d","editions":{"55":{"e_id":"55"}}}}`,
+			wantMD5, len(payload))
+	})
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		adsHits.Add(1)
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			headHits.Add(1)
+			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		getHits.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, &adsHits, &getHits, &headHits
+}
+
+// TestDownloadTool_ConfirmResolvesItemOnce is the regression test for the double
+// resolution: one confirmed download must reach the mirror's resolve endpoint
+// (ads.php) exactly ONCE, and must never probe the CDN with a HEAD.
+//
+// The elicitation protocol runs the download handler twice for a single tool call
+// — once to put the question, once to act on the answer — and the confirmation
+// prompt used to measure the file live, resolving the item through the whole
+// mirror chain on each pass. That cost every confirmed download a duplicate
+// resolution and doubled the traffic this server puts on a third party. The size
+// now comes from the catalog record the call already fetches to name the file, so
+// the asking pass makes no request of its own at all.
+func TestDownloadTool_ConfirmResolvesItemOnce(t *testing.T) {
+	payload := []byte("%PDF-1.4 resolve-once book payload")
+	srv, ads, cdnGET, cdnHEAD := catalogConfirmMirror(t, payload)
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+
+	cfg := confirmConfig(t)
+	var elicits atomic.Int32
+	var prompt string
+	handler := func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		elicits.Add(1)
+		prompt = req.Params.Message
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, cfg, staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("an accepted download should not be a tool error: %+v", res.Content)
+	}
+	if elicits.Load() != 1 {
+		t.Fatalf("elicitation handler invoked %d times, want 1", elicits.Load())
+	}
+	if got := ads.Load(); got != 1 {
+		t.Errorf("one confirmed download resolved the mirror %d time(s), want exactly 1", got)
+	}
+	if got := cdnHEAD.Load(); got != 0 {
+		t.Errorf("the confirmation issued %d live size probe(s), want 0 (size comes from the catalog record)", got)
+	}
+	if got := cdnGET.Load(); got != 1 {
+		t.Errorf("the file body was fetched %d time(s), want exactly 1", got)
+	}
+	// The prompt still states a size — the catalog's, which here matches the bytes
+	// actually served.
+	if want := humanBytes(int64(len(payload))); !strings.Contains(prompt, "("+want+")") {
+		t.Errorf("confirmation prompt = %q, want it to quote the catalog size %q", prompt, want)
+	}
+	out := decodeDownloadOutput(t, res)
+	if out.Path == "" {
+		t.Fatalf("accepted download should report a saved path; got %+v", out)
+	}
+	if _, statErr := os.Stat(out.Path); statErr != nil {
+		t.Errorf("accepted download did not write the file: %v", statErr)
+	}
+}
+
+// TestDownloadTool_ConfirmUnknownSizeOmitsClause covers the other half of the
+// size clause: a catalog record with no usable filesize leaves the prompt without
+// one, rather than sending the server off to measure the file. The download still
+// proceeds normally on acceptance.
+func TestDownloadTool_ConfirmUnknownSizeOmitsClause(t *testing.T) {
+	payload := []byte("%PDF-1.4 unknown-size book payload")
+	sum := md5.Sum(payload) //nolint:gosec // integrity digest, not a security primitive.
+	wantMD5 := hex.EncodeToString(sum[:])
+	var cdnHEAD atomic.Int32
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) {
+		// A record whose filesize is not a number this server will read as one.
+		fmt.Fprintf(w, `{"93485370":{"md5":%q,"extension":"pdf","filesize":"unknown"}}`, wantMD5)
+	})
+	mux.HandleFunc("/ads.php", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `<html><a href="get.php?md5=%s&key=TESTKEY123">GET</a></html>`, wantMD5)
+	})
+	mux.HandleFunc("/get.php", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, srv.URL+"/cdn/file", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/cdn/file", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			cdnHEAD.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	})
+	srv = httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	var prompt string
+	handler := func(_ context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		prompt = req.Params.Message
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"confirm": true}}, nil
+	}
+	session := newConfirmSession(t, confirmConfig(t), staticMirrors{srv.URL}, handler)
+
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "download",
+		Arguments: map[string]any{"md5": wantMD5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(download) transport error = %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("an accepted download should not be a tool error: %+v", res.Content)
+	}
+	if strings.Contains(prompt, "(") {
+		t.Errorf("confirmation prompt = %q, want no size clause when the catalog reports none", prompt)
+	}
+	if got := cdnHEAD.Load(); got != 0 {
+		t.Errorf("an unknown size triggered %d live probe(s), want 0", got)
 	}
 }
 
@@ -2720,7 +3371,7 @@ func TestElicitAnnasKey_DeclineAndEmpty(t *testing.T) {
 // model that has been asked to find something and told only "try broadening" can
 // still answer as if it had found it.
 func TestSearchNextStepsForbidsInventingResults(t *testing.T) {
-	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false), "\n"))
+	joined := strings.ToLower(strings.Join(searchNextSteps(SearchOutput{Results: []libgen.Result{}}, false, config.ExtraSourcesAuto), "\n"))
 	if !strings.Contains(joined, "do not") {
 		t.Errorf("empty-search guidance must state plainly what not to do; got %q", joined)
 	}
@@ -2739,7 +3390,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	escalated := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: annasMD5, Origin: "annas"}},
 		Page:    1,
-	}, false), "\n")
+	}, false, config.ExtraSourcesAuto), "\n")
 	if !strings.Contains(escalated, `"source":"annas"`) {
 		t.Errorf("an annas-origin result should be downloaded with the source pinned; got %q", escalated)
 	}
@@ -2748,7 +3399,7 @@ func TestSearchNextStepsPinsTheSourceForEscalatedResults(t *testing.T) {
 	catalog := strings.Join(searchNextSteps(SearchOutput{
 		Results: []libgen.Result{{MD5: "0123456789abcdef0123456789abcdef", Origin: "libgen"}},
 		Page:    1,
-	}, false), "\n")
+	}, false, config.ExtraSourcesAuto), "\n")
 	if strings.Contains(catalog, `"source"`) {
 		t.Errorf("a catalog result should not pin a source; got %q", catalog)
 	}
@@ -2961,7 +3612,7 @@ func TestSearchNextStepsSeparatesOpenAccessFromTheCatalog(t *testing.T) {
 			{Origin: "openlibrary", Title: "A Book", ISBN: "9780000000001"},
 		},
 		Page: 1,
-	}, true), "\n"))
+	}, true, config.ExtraSourcesAuto), "\n"))
 	if !strings.Contains(joined, "open_access") {
 		t.Errorf("guidance never names the open_access list; got %q", joined)
 	}
@@ -3065,18 +3716,26 @@ func TestConfirmationWanted_NilConfigStillAsks(t *testing.T) {
 // zero-result search used to omit. The advice has to depend on whether the extra
 // searchers already ran: suggesting extra_sources="always" after it just ran and
 // found nothing sends the model to repeat a query that cannot succeed.
+//
+// It also has to depend on whether they CAN run. Under a deployment policy of
+// never they never do, so extrasRan is false forever and the escalation advice used
+// to be handed out on every empty search — for an argument the server then
+// discarded, which returned the same advice again. The last case is the guard on
+// that loop.
 func TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		extrasRan  bool
+		policy     config.ExtraSourcesMode
 		wantSubstr string
 		notWant    string
 	}{
-		{"extras not consulted", false, `extra_sources="always"`, "also returned nothing"},
-		{"extras already ran", true, "also returned nothing", `extra_sources="always"`},
+		{"extras not consulted", false, config.ExtraSourcesAuto, `extra_sources="always"`, "also returned nothing"},
+		{"extras already ran", true, config.ExtraSourcesAuto, "also returned nothing", `extra_sources="always"`},
+		{"policy forbids them", false, config.ExtraSourcesNever, "restricts search to the Library Genesis catalog", "Retry with"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			steps := searchNextSteps(SearchOutput{}, tc.extrasRan)
+			steps := searchNextSteps(SearchOutput{}, tc.extrasRan, tc.policy)
 			joined := strings.Join(steps, "\n")
 			if !strings.Contains(joined, tc.wantSubstr) {
 				t.Fatalf("guidance missing %q:\n%s", tc.wantSubstr, joined)
@@ -3092,13 +3751,58 @@ func TestSearchNextSteps_EmptyResultsPointBeyondTheCatalog(t *testing.T) {
 	}
 }
 
+// TestSearchTool_NeverPolicyDoesNotAdviseAnIgnoredArgument is the end-to-end guard
+// on the loop, and on the wiring that causes it: the deployment policy has to reach
+// the guidance builder, not just the escalation decision.
+//
+// Under LIBGEN_MCP_EXTRA_SOURCES=never an empty search used to recommend
+// extra_sources="always"; resolveExtraMode discards that argument under this
+// policy, so the retry returned the same empty result and the same recommendation.
+// A live run survived it only because the model gave up after the second attempt.
+func TestSearchTool_NeverPolicyDoesNotAdviseAnIgnoredArgument(t *testing.T) {
+	emptyHTML, err := os.ReadFile("../libgen/testdata/search_empty.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.php", func(w http.ResponseWriter, _ *http.Request) { w.Write(emptyHTML) })
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, ExtraSources: config.ExtraSourcesNever,
+	}
+	session := newDownloadSession(t, cfg, staticMirrors{srv.URL})
+
+	// Ask for the escalation explicitly: the policy overrides it, so the guidance
+	// must not turn round and recommend it again.
+	res, cerr := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "search",
+		Arguments: map[string]any{"query": "nothingmatches", "extra_sources": "always"},
+	})
+	if cerr != nil {
+		t.Fatal(cerr)
+	}
+	if res.IsError {
+		t.Fatalf("empty search returned a tool error: %v", res.Content)
+	}
+	text := contentText(res)
+	if strings.Contains(text, `extra_sources="always"`) {
+		t.Errorf("a never-policy deployment must not recommend an argument it ignores:\n%s", text)
+	}
+	if !strings.Contains(text, "restricts search to the Library Genesis catalog") {
+		t.Errorf("guidance should say the deployment restricts the search:\n%s", text)
+	}
+}
+
 // TestSearchNextSteps_ExtrasRanButFoundNothing covers the branch that fires when
 // the beyond-catalog searchers ran alongside catalog results and returned
 // nothing. The guidance matters: without it a model can present a catalog hit as
 // though the wider open-access search had endorsed it.
 func TestSearchNextSteps_ExtrasRanButFoundNothing(t *testing.T) {
 	out := SearchOutput{Results: []libgen.Result{{MD5: "d41d8cd98f00b204e9800998ecf8427e"}}}
-	joined := strings.Join(searchNextSteps(out, true), "\n")
+	joined := strings.Join(searchNextSteps(out, true, config.ExtraSourcesAuto), "\n")
 	if !strings.Contains(joined, "extra searchers returned nothing") {
 		t.Fatalf("missing the empty-extras guidance:\n%s", joined)
 	}

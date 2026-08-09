@@ -97,7 +97,7 @@ func registerAcquireBook(server *mcp.Server, client *libgen.Client) {
 	server.AddPrompt(&mcp.Prompt{
 		Name:        "acquire_book",
 		Title:       "Acquire a Book",
-		Description: "Search Library Genesis for a book and generate step-by-step instructions to confirm and download the best matching edition.",
+		Description: "Find a book across the catalogs and open-access sources, then generate step-by-step instructions to confirm and download the best matching edition.",
 		Arguments: []*mcp.PromptArgument{
 			arg("title", "Book title to search for (required).", true),
 			arg("author", "Author name to narrow the search (optional).", false),
@@ -257,7 +257,7 @@ func registerResearchTopic(server *mcp.Server, client *libgen.Client) {
 	server.AddPrompt(&mcp.Prompt{
 		Name:        "research_topic",
 		Title:       "Research a Topic",
-		Description: "Search Library Genesis for papers and books on a topic and build a reading list with instructions to download and produce an annotated bibliography.",
+		Description: "Survey papers and books on a topic across the catalogs and open-access sources, then build a reading list with instructions to download and produce an annotated bibliography.",
 		Arguments: []*mcp.PromptArgument{
 			arg("topic", "Topic to research (required).", true),
 			arg("kind", "Which record types to search: articles, books, or both (default: both).", false),

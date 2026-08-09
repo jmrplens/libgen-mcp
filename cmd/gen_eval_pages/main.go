@@ -487,6 +487,16 @@ func renderResultsSummaryES(sum runSummary, scenarios int) string {
 		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeES(sum, scenarios), measuredTailES(sum))
 }
 
+// mdxEvidence makes a harness message safe to paste into an MDX table cell. The
+// messages quote tool output verbatim, so one can carry a brace — a failure that
+// reproduces a JSON payload, say — and MDX reads a bare "{" as the start of a
+// JavaScript expression and fails the whole site build. Escaping both braces is
+// enough: MDX renders "\{" as a literal brace, and the pages are generated, so a
+// hand-fixed page would only be regenerated broken.
+func mdxEvidence(s string) string {
+	return strings.NewReplacer("{", `\{`, "}", `\}`).Replace(s)
+}
+
 // renderResultsEN renders the English results table.
 func renderResultsEN(rows []resultRow) string {
 	if len(rows) == 0 {
@@ -495,7 +505,7 @@ func renderResultsEN(rows []resultRow) string {
 	var b strings.Builder
 	b.WriteString("| ID  | Mode   | Result  | Measured | Evidence |\n| --- | ------ | ------- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, r.Detail)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, mdxEvidence(r.Detail))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -510,7 +520,7 @@ func renderResultsES(rows []resultRow) string {
 	var b strings.Builder
 	b.WriteString("| ID  | Modo   | Resultado | Medido | Evidencia |\n| --- | ------ | ------- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, r.Detail)
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, statusIcon(r.Status), r.Measured, mdxEvidence(r.Detail))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

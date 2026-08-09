@@ -6,7 +6,7 @@ import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
 
 const siteDescription =
-	"Open-source MCP server in Go for Library Genesis: four tools to search, read and download books, papers and more from your AI assistant — no account required.";
+	"Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required.";
 
 // --- Identity, URLs and structured-data ids ------------------------------
 const siteUrl = "https://jmrplens.github.io";
@@ -59,7 +59,7 @@ const dateModified = (() => {
 // Human-readable capability list and requirements. These feed AI "what can it
 // do?" and "what do I need?" queries directly from structured data.
 const featureList = [
-	"Search Library Genesis for books, papers, comics, magazines and standards",
+	"Federated search for books, papers, comics, magazines and standards across the Library Genesis catalog and open-access sources",
 	"Four MCP tools: search, get_details, download, read",
 	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
 	"Refuses what it may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
@@ -258,7 +258,7 @@ const jsonLd = JSON.stringify({
 			softwareRequirements,
 			featureList,
 			description:
-				"MCP server to search and download books, research papers, comics, magazines and standards from Library Genesis. No account required.",
+				"MCP server for federated search, citation and reading of books, research papers, comics, magazines and standards across the Library Genesis catalog and open-access sources. No account required.",
 			keywords:
 				"Model Context Protocol, MCP, Library Genesis, libgen, books, research papers, AI assistants, Go",
 			// The two subjects this software is about, as Wikidata entities. An

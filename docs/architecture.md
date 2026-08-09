@@ -1,10 +1,11 @@
 # Architecture
 
-`libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family,
-plus a set of pluggable download sources. This page describes the three pieces that do the
-work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the
-**download pipeline** (resolve → stream → resume → verify → atomic rename), and the
-**multi-source chain**.
+`libgen-mcp` federates a set of bibliographic catalogs and open-access providers behind four
+MCP tools. Underneath, it is a thin server around an HTTP client for the primary catalog's
+`libgen.li` mirror family, plus a set of pluggable download sources. This page describes the
+three pieces that do the work: the resilient **HTTP client** (mirror discovery, failover,
+retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic
+rename), and the **multi-source chain**.
 
 ## HTTP client
 
@@ -137,9 +138,13 @@ For a given item the pipeline:
    caller's download directory. Each removal takes that path's lock and skips the partial when
    another download holds it, so a concurrent transfer is never unlinked from under.
 
-The chosen filename is, in priority order: an explicit `filename`, the CDN-announced
-`Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the
-MD5 — always sanitized, with a source-provided extension appended when the name has none.
+An explicit `filename` always wins. With none, the name turns on whether the bytes were
+digest-verified: a **verified** (`md5`) download is named `Author - Title (Year).ext` from the
+record, while an **unverified** (`doi`/`isbn`) one keeps the announced `Content-Disposition`
+name stripped of mirror marks and falls back to the requested identifier — naming an unverified
+delivery after the record that was asked for would dress a wrong file in the right name. Every
+name is sanitized, with a source-provided extension appended when it has none. See
+[Tools](tools.md#how-the-saved-file-is-named) for the full rule.
 
 ### Download flow
 
@@ -170,8 +175,19 @@ flowchart TD
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
     Q --> S[Sweep the failed legs' .part files<br/>skipping any another download holds]
-    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
+    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
+
+The destination name is chosen by the verified/unverified rule above — which on an
+**unverified** download does use the announced `Content-Disposition` name, stripped of mirror
+marks, and never does on a verified one — and the result reports which of the four origins it
+came from in `name_origin`. The result reports **no** source and **no** mirror: both remain
+server-side, on the `source resolved` log line, because
+a tool result may reveal only what the call already revealed. A `resolve_only` call is the one
+exception the rule allows — it returns a direct URL instead of a saved file, and that URL's own
+host names the provider, so `resolved.source` travels beside it. See
+[Tools](tools.md#what-the-result-withholds) and
+[the result-disclosure ADR](decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
 
 ## Multi-source chain
 
@@ -221,7 +237,8 @@ the first success; if all fail, it returns the joined per-source errors.
 ### Per-source cooldown
 
 A source that fails because it is **unavailable** — a transport error, a timeout, a 5xx or a
-429 — is set aside for 5 minutes, so the next download does not spend its resolve budget on a
+429 — is set aside for 5 minutes, so the next download does not spend its resolve budget
+(`LIBGEN_MCP_RESOLVE_BUDGET`, default 30 s per source) on a
 provider that just proved unreachable. This is the source-level counterpart of the per-mirror
 cooldown in the HTTP client, and it matters most for a service that is down for hours at a
 time: without it, every article download pays the full per-source budget for that provider

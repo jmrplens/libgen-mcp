@@ -1,8 +1,8 @@
 # How search works
 
-A `search` asks one question, but it does not always ask it of only one place. By default it
-queries the **Library Genesis catalog** and stops there. When that catalog has nothing — or
-fails outright — the search quietly reaches further, into Anna's Archive and the
+A `search` is federated: one question, asked of as many places as it needs. By default it
+queries the **primary catalog** — Library Genesis — and stops there. When that catalog has
+nothing, or fails outright, the search quietly reaches further, into Anna's Archive and the
 open-access providers, so a miss is never reported as a dead end without having looked
 further. This page explains that flow in plain terms: what a search does by default, when and
 why it reaches beyond the catalog, and what comes back and how to act on it.

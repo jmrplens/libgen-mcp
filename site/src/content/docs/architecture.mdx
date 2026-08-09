@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` is a thin MCP server around an HTTP client for the `libgen.li` mirror family, plus a set of pluggable download sources. Three pieces do the work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic rename), and the **multi-source chain** of twenty download providers tried in a fixed order.
+`libgen-mcp` federates a set of bibliographic catalogs and open-access providers behind four MCP tools. Underneath, it is a thin server around an HTTP client for the primary catalog's `libgen.li` mirror family, plus a set of pluggable download sources. Three pieces do the work: the resilient **HTTP client** (mirror discovery, failover, retry, cooldown), the **download pipeline** (resolve → stream → resume → verify → atomic rename), and the **multi-source chain** of twenty-one download providers tried in a fixed order.
 
 ## HTTP client
 
@@ -115,7 +115,7 @@ For a given item the pipeline:
 7. **Verifies** (for MD5-keyed sources) the digest against the requested MD5. A mismatch or an oversized transfer deletes the partial; a transient short read keeps it so a later call can resume.
 8. **Atomically renames** the completed `.part` to the final destination, then **sweeps** the partials the failed legs of this call left behind: a partial is only worth keeping while the item is still unresolved, and once a source delivers the file the rest are litter in the caller's download directory. Each removal takes that path's lock and skips the partial when another download holds it, so a concurrent transfer is never unlinked from under.
 
-The chosen filename is, in priority order: an explicit `filename`, the CDN-announced `Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the MD5 — always sanitized, with a source-provided extension appended when the name has none.
+An explicit `filename` always wins. With none, the name turns on whether the bytes were digest-verified: a **verified** (`md5`) download is named `Author - Title (Year).ext` from the record, while an **unverified** (`doi`/`isbn`) one keeps the announced `Content-Disposition` name stripped of mirror marks and falls back to the requested identifier — naming an unverified delivery after the record that was asked for would dress a wrong file in the right name. Every name is sanitized, with a source-provided extension appended when it has none. See [Tools](/libgen-mcp/tools/#how-the-saved-file-is-named) for the full rule.
 
 ### Download flow
 
@@ -146,10 +146,10 @@ flowchart TD
     O -- book: mismatch --> P[Delete .part] --> C
     O -- ok / not required --> Q[Atomic rename to destination]
     Q --> S[Sweep the failed legs' .part files<br/>skipping any another download holds]
-    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, source, verified, resumed]
+    S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
 
-In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the partials left by the legs that failed first are removed, the source's cooldown is cleared, and the result reports path, size, source, `verified` and `resumed`.
+In prose: `download` builds the source chain for the identifier it was given, skips any source in cooldown (unless all of them are), and tries each in turn. A source that cannot serve the item is skipped; one that fails is cooled down for five minutes. Once a source resolves a URL, the download takes a concurrency slot and a per-partial lock, resumes from an existing `.part` when the server honours the `Range` request and restarts from zero otherwise, then validates the response — rejecting HTML error pages, oversized files and insufficient disk — before streaming to `.part` while computing the MD5. A short read keeps the partial for a later resume. An md5 mismatch deletes it and moves to the next source. On success the file is atomically renamed into place, the partials left by the legs that failed first are removed, the source's cooldown is cleared, and the result reports path, size, `name_origin`, `verified` and `resumed`. It does **not** report which source served the file, nor the mirror host: both stay in the server log, for the operator. A `resolve_only` call is the one exception — it returns a direct URL instead of a saved file, and that URL's own host names the provider, so `resolved.source` travels beside it. See [Tools](/libgen-mcp/tools/#what-the-result-withholds).
 
 ## Multi-source chain
 
@@ -185,7 +185,7 @@ Because the chain is a single ordered slice filtered by `Supports`, an md5-keyed
 
 ### Per-source cooldown
 
-A source that fails because it is **unavailable** — a transport error, a timeout, a 5xx or a 429 — is set aside for 5 minutes, so the next download does not spend its resolve budget on a provider that just proved unreachable. This is the source-level counterpart of the per-mirror cooldown in the HTTP client, and it matters most for a service that is down for hours at a time: without it, every article download pays the full per-source budget for that provider again and again.
+A source that fails because it is **unavailable** — a transport error, a timeout, a 5xx or a 429 — is set aside for 5 minutes, so the next download does not spend its resolve budget (`LIBGEN_MCP_RESOLVE_BUDGET`, default 30 s per source) on a provider that just proved unreachable. This is the source-level counterpart of the per-mirror cooldown in the HTTP client, and it matters most for a service that is down for hours at a time: without it, every article download pays the full per-source budget for that provider again and again.
 
 A source that answers correctly that it does **not hold the item** — not indexed, not open access, no preserved copy — is never set aside: that is a normal, correct answer about one item and says nothing about the provider's health. The two cases are told apart by the error taxonomy each source tags its failures with (`ErrSourceUnavailable` vs `ErrNotIndexed`).
 

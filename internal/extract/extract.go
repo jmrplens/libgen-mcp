@@ -77,6 +77,28 @@ const capExceededNote = "document exceeds the 8 MiB extraction cap; text beyond 
 // signatures below all live in the first few bytes; 512 is generous and cheap.
 const sniffLen = 512
 
+// Diagnoses shared by every read mode. A file's problem does not depend on
+// whether the caller asked for text, for matches or for a table of contents, so
+// the three entry points must name it identically: a model that gets "no table
+// of contents" from Outline and "no extractable text layer" from Extract for the
+// same scanned PDF spends a second call learning what the first already knew.
+// Keeping the wording in one constant is what makes that impossible.
+const (
+	// noTextLayerReason is reported for a PDF whose pages carry no text at all.
+	noTextLayerReason = "no extractable text layer (likely a scanned or image-only PDF); OCR is not supported"
+	// noEPUBTextReason is reported for an EPUB whose spine yields no text.
+	noEPUBTextReason = "no extractable text found in EPUB spine"
+)
+
+// unsupportedFormatReason explains why a container format is not served at all.
+// It is deliberately the same sentence in every mode: DjVu, comic archives and
+// proprietary e-book containers yield neither text nor a table of contents, and
+// a mode-specific phrasing ("outline extraction is not available") would invite
+// the caller to retry in another mode that fails identically.
+func unsupportedFormatReason(ext string) string {
+	return "unsupported format " + ext + ": text extraction is not available (comic/scanned/proprietary container)"
+}
+
 // UnrecognizedReason explains why a file could not be dispatched to an extractor,
 // naming its extension when it has one. It is shared by every entry point so the
 // three modes report the same thing about the same file.
@@ -130,7 +152,24 @@ func appendNote(reason, note string) string {
 // pipeline cannot see: a file whose fonts carry no usable character map extracts
 // text successfully, but the characters are not the ones printed on the page.
 // When the text looks like that, QualityNote says so.
+//
+// The whole read runs behind the time budget in guard.go, so a document no
+// parser can finish yields a not-extractable Chunk rather than a call that never
+// returns.
 func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
+	chunk, reason, err := guardedRead(ctx, func(ctx context.Context) (Chunk, error) {
+		return extractChecked(ctx, path, r)
+	})
+	if reason != "" {
+		return Chunk{Format: formatHint(path), Reason: reason}, nil
+	}
+	return chunk, err
+}
+
+// extractChecked is Extract's work: dispatch on format, then judge the quality
+// of whatever text came back. It is separate so the watchdog has a single
+// function to run.
+func extractChecked(ctx context.Context, path string, r Req) (Chunk, error) {
 	chunk, err := extractByFormat(ctx, path, r)
 	if err != nil || !chunk.Extractable {
 		return chunk, err
@@ -156,7 +195,7 @@ func extractByFormat(ctx context.Context, path string, r Req) (Chunk, error) {
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return Chunk{
 			Format: strings.TrimPrefix(ext, "."),
-			Reason: "unsupported format " + ext + ": text extraction is not available (comic/scanned/proprietary container)",
+			Reason: unsupportedFormatReason(ext),
 		}, nil
 	default:
 		// The name did not identify the file, so its bytes must: anything fetched by

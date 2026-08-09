@@ -54,7 +54,7 @@ head:
       }
 ---
 
-`libgen-mcp` es un servidor MCP ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li`, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de veinte proveedores de descarga probados en un orden fijo.
+`libgen-mcp` federa un conjunto de catálogos bibliográficos y proveedores de acceso abierto tras cuatro herramientas MCP. Por debajo es un servidor ligero en torno a un cliente HTTP para la familia de mirrors `libgen.li` del catálogo primario, más un conjunto de fuentes de descarga conectables. Tres piezas hacen el trabajo: el **cliente HTTP** resiliente (descubrimiento de mirrors, failover, reintentos, enfriamiento), la **canalización de descarga** (resolver → transmitir → reanudar → verificar → renombrado atómico) y la **cadena multi-fuente** de veintiún proveedores de descarga probados en un orden fijo.
 
 ## Cliente HTTP
 
@@ -115,7 +115,7 @@ Para un elemento dado, la canalización:
 7. **Verifica** (para fuentes con clave MD5) el digest contra el MD5 solicitado. Una discrepancia o una transferencia sobredimensionada elimina el parcial; una lectura corta transitoria lo conserva para que una llamada posterior pueda reanudar.
 8. **Renombra atómicamente** el `.part` completado a su destino final y, después, **barre** los parciales que las patas fallidas de esta llamada dejaron atrás: un parcial solo merece conservarse mientras el ítem sigue sin resolver, y en cuanto una fuente entrega el archivo el resto son basura en el directorio de descargas de quien llama. Cada borrado toma el cerrojo de esa ruta y omite el parcial si otra descarga lo tiene tomado, para no desvincular un archivo que otra transferencia está escribiendo.
 
-El nombre de archivo elegido es, por orden de prioridad: un `filename` explícito, el nombre `Content-Disposition` anunciado por el CDN, un `Author - Title (Year).ext` limpio construido a partir de los metadatos, o el MD5 — siempre saneado, con una extensión aportada por la fuente añadida cuando el nombre no tiene ninguna.
+Un `filename` explícito siempre gana. Sin él, el nombre depende de si los bytes se verificaron contra un digest: una descarga **verificada** (`md5`) se nombra `Autor - Título (Año).ext` a partir del registro, mientras que una **sin verificar** (`doi`/`isbn`) conserva el nombre anunciado en `Content-Disposition` sin marcas de mirror y, si no sirve, recurre al identificador pedido — nombrar una entrega sin verificar según el registro que se pidió vestiría un archivo equivocado con el nombre correcto. Todo nombre se sanea, con una extensión aportada por la fuente añadida cuando no tiene ninguna. Consulta [Herramientas](/libgen-mcp/es/tools/#cómo-se-nombra-el-archivo-guardado) para la regla completa.
 
 ### Flujo de descarga
 
@@ -146,10 +146,10 @@ flowchart TD
     O -- libro: no coincide --> P[Borrar el .part] --> C
     O -- correcto / no requerido --> Q[Renombrado atómico al destino]
     Q --> S[Barrer los .part de las patas fallidas<br/>omitiendo los que otra descarga tenga tomados]
-    S --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, source, verified, resumed]
+    S --> R[Limpiar el enfriamiento de la fuente y devolver<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
 
-En prosa: `download` construye la cadena de fuentes para el identificador recibido, salta las que estén en enfriamiento (salvo que lo estén todas) y prueba cada una por turno. Una fuente que no puede servir el ítem se omite; una que falla se enfría cinco minutos. Cuando una fuente resuelve una URL, la descarga toma un hueco de concurrencia y un cerrojo por parcial, reanuda desde un `.part` existente si el servidor respeta la petición `Range` y reinicia desde cero si no, y valida la respuesta — rechazando páginas HTML de error, ficheros que exceden el tope y disco insuficiente — antes de transmitir a `.part` calculando el MD5. Una lectura corta conserva el parcial para reanudar más tarde. Una discrepancia de MD5 lo borra y pasa a la siguiente fuente. Al terminar, el fichero se renombra atómicamente a su destino, se eliminan los parciales que dejaron las patas que fallaron antes, se limpia el enfriamiento de la fuente y el resultado informa de path, size, source, `verified` y `resumed`.
+En prosa: `download` construye la cadena de fuentes para el identificador recibido, salta las que estén en enfriamiento (salvo que lo estén todas) y prueba cada una por turno. Una fuente que no puede servir el ítem se omite; una que falla se enfría cinco minutos. Cuando una fuente resuelve una URL, la descarga toma un hueco de concurrencia y un cerrojo por parcial, reanuda desde un `.part` existente si el servidor respeta la petición `Range` y reinicia desde cero si no, y valida la respuesta — rechazando páginas HTML de error, ficheros que exceden el tope y disco insuficiente — antes de transmitir a `.part` calculando el MD5. Una lectura corta conserva el parcial para reanudar más tarde. Una discrepancia de MD5 lo borra y pasa a la siguiente fuente. Al terminar, el fichero se renombra atómicamente a su destino, se eliminan los parciales que dejaron las patas que fallaron antes, se limpia el enfriamiento de la fuente y el resultado informa de path, size, `name_origin`, `verified` y `resumed`. **No** informa de qué fuente sirvió el archivo, ni del host del mirror: ambos se quedan en el log del servidor, para el operador. Una llamada con `resolve_only` es la única excepción: devuelve una URL directa en lugar de un archivo guardado, y el propio host de esa URL nombra al proveedor, así que `resolved.source` viaja junto a ella. Consulta [Herramientas](/libgen-mcp/es/tools/#lo-que-el-resultado-no-revela).
 
 ## Cadena multi-fuente
 
@@ -185,7 +185,7 @@ Como la cadena es un único slice ordenado filtrado por `Supports`, a un libro i
 
 ### Enfriamiento por fuente
 
-Una fuente que falla porque está **no disponible** — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Es el equivalente a nivel de fuente del enfriamiento por mirror del cliente HTTP, y donde más importa es en un servicio caído durante horas: sin él, cada descarga de artículo paga otra vez el presupuesto completo de esa fuente.
+Una fuente que falla porque está **no disponible** — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución (`LIBGEN_MCP_RESOLVE_BUDGET`, 30 s por fuente por defecto) en un proveedor que acaba de demostrar ser inalcanzable. Es el equivalente a nivel de fuente del enfriamiento por mirror del cliente HTTP, y donde más importa es en un servicio caído durante horas: sin él, cada descarga de artículo paga otra vez el presupuesto completo de esa fuente.
 
 Una fuente que responde correctamente que **no tiene el elemento** — no indexado, sin acceso abierto, sin copia preservada — nunca se aparta: es una respuesta normal y correcta sobre un elemento y no dice nada sobre la salud del proveedor. Ambos casos se distinguen por la taxonomía de errores con la que cada fuente etiqueta sus fallos (`ErrSourceUnavailable` frente a `ErrNotIndexed`).
 

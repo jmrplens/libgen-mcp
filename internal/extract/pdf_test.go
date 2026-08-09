@@ -33,6 +33,42 @@ func buildPDF(objs []string) []byte {
 	return b.Bytes()
 }
 
+// streamObj wraps content as a PDF stream object with the /Length its bytes
+// actually have, so a fixture stays valid when its content is edited.
+func streamObj(content string) string {
+	return fmt.Sprintf("<</Length %d>>\nstream\n%s\nendstream", len(content), content)
+}
+
+// graphicsOnlyPDF returns the bytes of a structurally valid one-page PDF whose
+// content stream paints a filled rectangle and contains no text-showing
+// operator. That is what a scanned page looks like to a text extractor — pixels
+// and no characters — so it stands in for a scan without shipping one: no
+// third-party file enters the repository, and the fixture is a few hundred bytes
+// of readable PDF syntax rather than an opaque blob.
+func graphicsOnlyPDF() []byte {
+	return buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R>>",
+		"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+		"<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<</ProcSet[/PDF]>>>>",
+		streamObj("0 0 0 rg 10 10 100 100 re f"),
+	})
+}
+
+// blankThenTextPDF returns the bytes of a two-page PDF whose first page is
+// graphics-only (as above) and whose second shows text, modeling a book that
+// opens on a scanned cover before its text layer begins.
+func blankThenTextPDF() []byte {
+	return buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R>>",
+		"<</Type/Pages/Kids[3 0 R 4 0 R]/Count 2>>",
+		"<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 5 0 R/Resources<</ProcSet[/PDF]>>>>",
+		"<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 6 0 R/Resources<</Font<</F1 7 0 R>>>>>>",
+		streamObj("0 0 0 rg 10 10 100 100 re f"),
+		streamObj("BT /F1 12 Tf 10 100 Td (readable body text) Tj ET"),
+		"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+	})
+}
+
 // nullPagePDF returns the bytes of a PDF whose Pages tree declares Count 1 but
 // whose single Kid reference points at a missing object, so pdf.NumPage reports
 // one page while pdf.Page(1) resolves to a null page. It drives the
@@ -42,6 +78,20 @@ func nullPagePDF() []byte {
 		"<</Type/Catalog/Pages 2 0 R>>",
 		"<</Type/Pages/Kids[99 0 R]/Count 1>>",
 	})
+}
+
+// TestPDFReasonHelpers verifies the two diagnoses every PDF mode shares are
+// produced in one place and word the failure identically. They exist to stop the
+// text, find and outline paths from drifting into three phrasings of one
+// problem; the recover-guarded malformed case in particular is reachable only
+// from a panicking reader, so this is where its wording is pinned.
+func TestPDFReasonHelpers(t *testing.T) {
+	if got := invalidPDFReason(os.ErrNotExist); got != "not a valid PDF: file does not exist" {
+		t.Errorf("invalidPDFReason = %q", got)
+	}
+	if got := malformedPDFReason("index out of range"); got != "cannot read PDF (malformed or encrypted): index out of range" {
+		t.Errorf("malformedPDFReason = %q", got)
+	}
 }
 
 // TestExtract_PDF verifies that a text-layer PDF extracts its first page,

@@ -25,6 +25,11 @@ const maxTimeout = 10 * time.Minute
 // maxStallTimeout is the allowed ceiling for DownloadStallTimeout.
 const maxStallTimeout = time.Hour
 
+// maxResolveBudget is the allowed ceiling for ResolveBudget. It matches
+// maxTimeout numerically but is its own constant, because the two bound
+// unrelated things and must be free to move apart.
+const maxResolveBudget = 10 * time.Minute
+
 // maxStartRetryWait is the allowed ceiling for a single start-retry wait, and
 // maxStartRetries caps how many waits the schedule may list.
 const (
@@ -34,20 +39,58 @@ const (
 
 // Config groups the server configuration read from the environment.
 type Config struct {
-	Mirror                 string        // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
-	DownloadDir            string        // LIBGEN_MCP_DOWNLOAD_DIR: download destination
-	Timeout                time.Duration // LIBGEN_MCP_TIMEOUT: timeout per HTTP request
-	LogLevel               slog.Level    // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
-	RateRPS                float64       // LIBGEN_MCP_RATE_RPS: allowed requests per second
-	RateBurst              int           // LIBGEN_MCP_RATE_BURST: maximum limiter burst
-	MaxDownloadBytes       int64         // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
-	MaxConcurrentDownloads int           // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
-	RetryAttempts          int           // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
-	UnpaywallEmail         string        // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
-	ScihubHosts            []string      // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
-	AnnasKey               string        // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
-	CoreKey                string        // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
-	Sources                []string      // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	Mirror      string // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
+	DownloadDir string // LIBGEN_MCP_DOWNLOAD_DIR: download destination
+	// Timeout is the deadline for ONE HTTP request that asks a question — a catalog
+	// search, a details lookup, a mirror health probe, a single hop made by a
+	// download source. LIBGEN_MCP_TIMEOUT, a Go duration.
+	//
+	// It never applies to the transfer of a file: the download client carries no
+	// timeout at all, and a stream is governed by the request context and the
+	// progress-resetting DownloadStallTimeout. Shortening this therefore cannot cut
+	// a large download short — it only decides how long a question may hang before
+	// this server gives up on the mirror and tries the next one.
+	//
+	// That distinction is why the default is short. Every request it covers has
+	// failover behind it, and a live run measured three separate requests hanging
+	// for the full 30 seconds it used to allow, each followed by another mirror that
+	// answered immediately: 90 seconds of nothing, 10% of all the time the tools
+	// spent in that run. A deployment on a slow link can raise it.
+	//
+	// It is NOT the budget a whole download source gets to resolve an item — that
+	// is ResolveBudget, and the two are deliberately separate. See its doc.
+	Timeout time.Duration
+	// ResolveBudget is the wall-clock budget ONE download source gets to turn an
+	// item into a direct URL, however many sequential hops that takes, before the
+	// chain abandons it and moves to the next source.
+	// LIBGEN_MCP_RESOLVE_BUDGET, a Go duration. Default: 30s.
+	//
+	// It is its own setting rather than a reuse of Timeout because the two bound
+	// different things. Timeout bounds one request, and it is short on purpose:
+	// every request it covers has an alternative mirror behind it, so hanging is
+	// pure loss. A resolve is a whole multi-hop conversation — Sci-Hub fetches an
+	// article page and then the embedded file URL, Anna's Archive walks a member
+	// download page — so a source that legitimately needs three hops needs three
+	// times one request's worth of time. Deriving the budget from Timeout coupled
+	// them, and shortening Timeout to 10s silently cut every source's resolve
+	// budget from 30s to 10s with it, which can strike a slow multi-hop source out
+	// of a chain it would have served.
+	//
+	// A non-positive value disables the bound, leaving a resolve to run under the
+	// caller's context alone; Validate rejects that from the environment, so only
+	// a Config built in code (a test) can select it.
+	ResolveBudget          time.Duration
+	LogLevel               slog.Level // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
+	RateRPS                float64    // LIBGEN_MCP_RATE_RPS: allowed requests per second
+	RateBurst              int        // LIBGEN_MCP_RATE_BURST: maximum limiter burst
+	MaxDownloadBytes       int64      // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
+	MaxConcurrentDownloads int        // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
+	RetryAttempts          int        // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
+	UnpaywallEmail         string     // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
+	ScihubHosts            []string   // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
+	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
+	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
+	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
 	// transport. LIBGEN_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
@@ -229,7 +272,8 @@ var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci
 // which is Load's job and an error path this cannot express.
 func Defaults() *Config {
 	return &Config{
-		Timeout:                 30 * time.Second,
+		Timeout:                 10 * time.Second,
+		ResolveBudget:           30 * time.Second,
 		LogLevel:                slog.LevelInfo,
 		RateRPS:                 1,
 		RateBurst:               1,
@@ -312,10 +356,17 @@ func loadStringVars(cfg *Config) {
 	}
 }
 
-// loadDownloadTuning fills the download-tuning fields (the stall timeout and the
-// start-retry schedule) from the environment, leaving the spec defaults in place
-// when the variables are unset.
+// loadDownloadTuning fills the download-tuning fields (the per-source resolve
+// budget, the stall timeout and the start-retry schedule) from the environment,
+// leaving the spec defaults in place when the variables are unset.
 func loadDownloadTuning(cfg *Config) error {
+	if v := os.Getenv("LIBGEN_MCP_RESOLVE_BUDGET"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("LIBGEN_MCP_RESOLVE_BUDGET: %w", err)
+		}
+		cfg.ResolveBudget = d
+	}
 	if v := os.Getenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -577,11 +628,14 @@ func (c *Config) validateReadRanges() error {
 	return nil
 }
 
-// validateDownloadTuning checks the start-retry schedule and the stall timeout:
-// the stall window must be positive and within its ceiling, the schedule must not
-// list more than maxStartRetries waits, and each wait must be positive and within
-// its ceiling.
+// validateDownloadTuning checks the resolve budget, the start-retry schedule and
+// the stall timeout: the resolve budget and the stall window must each be
+// positive and within their ceiling, the schedule must not list more than
+// maxStartRetries waits, and each wait must be positive and within its ceiling.
 func (c *Config) validateDownloadTuning() error {
+	if c.ResolveBudget <= 0 || c.ResolveBudget > maxResolveBudget {
+		return fmt.Errorf("LIBGEN_MCP_RESOLVE_BUDGET must be in (0, %v], got %v", maxResolveBudget, c.ResolveBudget)
+	}
 	if c.DownloadStallTimeout <= 0 || c.DownloadStallTimeout > maxStallTimeout {
 		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT must be in (0, %v], got %v", maxStallTimeout, c.DownloadStallTimeout)
 	}

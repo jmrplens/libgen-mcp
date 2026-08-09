@@ -1,9 +1,11 @@
 package tools
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
@@ -127,7 +129,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 			Downloads: []libgen.DownloadOption{{Label: "GET", URL: "https://mirror/dl/1"}},
 		}},
 	}
-	out.NextSteps = searchNextSteps(out, false)
+	out.NextSteps = searchNextSteps(out, false, config.ExtraSourcesAuto)
 
 	md := renderSearchMarkdown(out)
 	if !strings.Contains(md, "Download links") {
@@ -146,7 +148,7 @@ func TestSearchLinksSurfacedAndHinted(t *testing.T) {
 	if resultsHaveLinks(noLinks.Results) {
 		t.Fatal("fixture should have no links")
 	}
-	if strings.Contains(strings.Join(searchNextSteps(noLinks, false), "\n"), "download links") {
+	if strings.Contains(strings.Join(searchNextSteps(noLinks, false, config.ExtraSourcesAuto), "\n"), "download links") {
 		t.Error("next_steps should not mention download links when results carry none")
 	}
 }
@@ -218,6 +220,85 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 	})
 	if !strings.Contains(dl, "Resumed") {
 		t.Errorf("resumed download markdown should note the resume; got:\n%s", dl)
+	}
+}
+
+// TestRenderDownloadMarkdownWithholdsProvenance verifies the Markdown block names
+// neither the serving source nor the mirror, and says nothing about a pin either.
+//
+// The Markdown is the channel the model actually reads, so a leak here would defeat
+// the struct tags entirely. Nothing is said about the pin because there is nothing
+// to say: a pinned call runs against that one source, so a rendered download is the
+// pinned source's own delivery and a sentence confirming it would be noise.
+func TestRenderDownloadMarkdownWithholdsProvenance(t *testing.T) {
+	out := renderDownloadMarkdown(DownloadOutput{DownloadResult: libgen.DownloadResult{
+		Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
+	}})
+	for _, leak := range []string{"libgen", "libgen.li", "source you asked for"} {
+		if strings.Contains(out, leak) {
+			t.Errorf("markdown leaked %q; got:\n%s", leak, out)
+		}
+	}
+}
+
+// TestRenderDownloadMarkdownNames verifies the headline is the name the file was
+// SAVED under (not the mirror's announced one, which now routinely differs), that
+// the announced name is still reported when it differs, and that the name's
+// origin is stated.
+func TestRenderDownloadMarkdownNames(t *testing.T) {
+	out := renderDownloadMarkdown(DownloadOutput{
+		DownloadResult: libgen.DownloadResult{
+			Path:             filepath.Join("/books", "Jane Doe - Great Book (2020).epub"),
+			SizeBytes:        9,
+			Source:           "libgen",
+			OriginalFilename: "Great Book [10.1_x] - libgen.li.epub",
+			Verified:         true,
+			NameOrigin:       libgen.NameFromMetadata,
+		},
+	})
+	if !strings.Contains(out, "**Jane Doe - Great Book (2020).epub**") {
+		t.Errorf("the headline should be the saved name; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Announced by the source: Great Book [10.1_x] - libgen.li.epub") {
+		t.Errorf("the announced name should still be reported; got:\n%s", out)
+	}
+	if !strings.Contains(out, "Name origin: metadata") {
+		t.Errorf("the name origin should be reported; got:\n%s", out)
+	}
+
+	// A resolve-style result with no path at all falls back to the announced name.
+	noPath := renderDownloadMarkdown(DownloadOutput{
+		DownloadResult: libgen.DownloadResult{OriginalFilename: "book.pdf", Source: "scihub"},
+	})
+	if !strings.Contains(noPath, "**book.pdf**") {
+		t.Errorf("with no path the announced name should headline; got:\n%s", noPath)
+	}
+}
+
+// TestDownloadNextStepsWarnsOnADerivedName verifies the download result says so
+// when the saved name was derived rather than announced AND the bytes carry no
+// digest to check — the one combination where the filename is not evidence.
+func TestDownloadNextStepsWarnsOnADerivedName(t *testing.T) {
+	derived := strings.Join(downloadNextSteps(libgen.DownloadResult{
+		Path: "/d/10.1371_journal.pmed.0020124.pdf", Source: "unpaywall", NameOrigin: libgen.NameFromIdentifier,
+	}), "\n")
+	if !strings.Contains(derived, "derived") {
+		t.Errorf("an unverified derived name should be flagged; got:\n%s", derived)
+	}
+
+	announced := strings.Join(downloadNextSteps(libgen.DownloadResult{
+		Path: "/d/npre2007361-1.pdf", Source: "fatcat", NameOrigin: libgen.NameFromAnnounced,
+	}), "\n")
+	if strings.Contains(announced, "derived") {
+		t.Errorf("an announced name is evidence and must not be flagged; got:\n%s", announced)
+	}
+
+	verified := strings.Join(downloadNextSteps(libgen.DownloadResult{
+		Path: "/d/Jane Doe - Great Book (2020).epub", Source: "libgen",
+		Verified: true, NameOrigin: libgen.NameFromMetadata,
+	}), "\n")
+	if strings.Contains(verified, "derived") {
+		t.Errorf("a digest-verified metadata name is safe and must not be flagged; got:\n%s", verified)
 	}
 }
 

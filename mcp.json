@@ -13,6 +13,8 @@
                 "-e",
                 "LIBGEN_MCP_TIMEOUT",
                 "-e",
+                "LIBGEN_MCP_RESOLVE_BUDGET",
+                "-e",
                 "LIBGEN_MCP_LOG_LEVEL",
                 "-e",
                 "LIBGEN_MCP_RATE_RPS",
@@ -41,7 +43,8 @@
             "env": {
                 "LIBGEN_MIRROR": "${LIBGEN_MIRROR:-}",
                 "LIBGEN_MCP_DOWNLOAD_DIR": "${LIBGEN_MCP_DOWNLOAD_DIR:-}",
-                "LIBGEN_MCP_TIMEOUT": "${LIBGEN_MCP_TIMEOUT:-30s}",
+                "LIBGEN_MCP_TIMEOUT": "${LIBGEN_MCP_TIMEOUT:-10s}",
+                "LIBGEN_MCP_RESOLVE_BUDGET": "${LIBGEN_MCP_RESOLVE_BUDGET:-30s}",
                 "LIBGEN_MCP_LOG_LEVEL": "${LIBGEN_MCP_LOG_LEVEL:-info}",
                 "LIBGEN_MCP_RATE_RPS": "${LIBGEN_MCP_RATE_RPS:-1}",
                 "LIBGEN_MCP_RATE_BURST": "${LIBGEN_MCP_RATE_BURST:-1}",

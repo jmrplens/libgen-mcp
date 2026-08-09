@@ -45,13 +45,22 @@ func Setup(level slog.Level) {
 // the file — and that question was previously unanswerable: the log held the
 // mirror requests and the tool call's total duration, and nothing about the
 // decision between them. It is one line per source tried.
-func SourceAttempt(source string, start time.Time, err error) {
+//
+// mirror is the scheme://host that served the bytes, empty when the attempt
+// failed or the caller has none to report. It is logged here because the download
+// result no longer carries it: provenance is the operator's business, and this
+// line is now the only place the pair (source, mirror) is written down.
+func SourceAttempt(source, mirror string, start time.Time, err error) {
 	duration := time.Since(start)
 	if err != nil {
 		slog.Info("source failed, advancing", "source", source, "duration", duration, "error", err)
 		return
 	}
-	slog.Info("source resolved", "source", source, "duration", duration)
+	if mirror == "" {
+		slog.Info("source resolved", "source", source, "duration", duration)
+		return
+	}
+	slog.Info("source resolved", "source", source, "mirror", mirror, "duration", duration)
 }
 
 // SourceSkipped records that the chain passed over a download source because an

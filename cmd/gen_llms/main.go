@@ -176,9 +176,10 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 	var b strings.Builder
 
 	b.WriteString("# libgen-mcp\n\n")
-	b.WriteString("> A Model Context Protocol (MCP) server that searches and downloads books, papers, comics, magazines and standards from Library Genesis for AI assistants.\n\n")
+	b.WriteString("> A Model Context Protocol (MCP) server for federated search, citation and reading of books, papers, " +
+		"comics, magazines and standards across the Library Genesis catalog and open-access sources.\n\n")
 	fmt.Fprintf(&b, "libgen-mcp v%s is a single static Go binary that runs locally via stdio or remotely via HTTP transport.\n", version)
-	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
+	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the Library Genesis mirrors and a chain of open-access sources. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
 
 	b.WriteString("Quick start:\n\n")
 	b.WriteString("1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)\n")
@@ -361,7 +362,7 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Pr
 	fmt.Fprintf(&b, "> Version %s | %d tools | %d prompts\n\n", version, len(toolList), len(promptList))
 
 	b.WriteString("## Tools\n\n")
-	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the libgen.li family of mirrors. No account or token is required.\n\n", len(toolList))
+	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the Library Genesis mirrors and a chain of open-access sources. No account or token is required.\n\n", len(toolList))
 	for _, tool := range toolList {
 		writeLLMSFullTool(&b, tool)
 	}
@@ -534,7 +535,8 @@ func configEnvVars() []envVarDoc {
 	return []envVarDoc{
 		{"LIBGEN_MIRROR", "auto-discovered", "http/https URL with a host", "Force a specific mirror base URL, e.g. https://libgen.li. Empty means the mirror is auto-discovered."},
 		{"LIBGEN_MCP_DOWNLOAD_DIR", "~/Downloads", "writable directory path", "Download destination directory. Created if missing; must be writable."},
-		{"LIBGEN_MCP_TIMEOUT", "30s", "(0, 10m]", "Timeout per HTTP request, as a Go duration string (e.g. 30s, 2m)."},
+		{"LIBGEN_MCP_TIMEOUT", "10s", "(0, 10m]", "Timeout for ONE HTTP request that asks a question — a catalog search, a details lookup, a mirror health probe, a single hop made by a download source — as a Go duration string (e.g. 30s, 2m). Never applied to a file transfer. It is not the budget a whole download source gets to resolve an item; that is LIBGEN_MCP_RESOLVE_BUDGET."},
+		{"LIBGEN_MCP_RESOLVE_BUDGET", "30s", "(0, 10m]", "Wall-clock budget one download source gets to turn an item into a direct URL, however many sequential hops that takes, before the chain abandons it and tries the next source. Longer than LIBGEN_MCP_TIMEOUT on purpose: a resolve is a multi-hop conversation (Sci-Hub fetches an article page and then the file URL embedded in it), so bounding it by the single-request timeout would strike a slow but working source out of the chain."},
 		{"LIBGEN_MCP_LOG_LEVEL", "info", "debug, info, warn or error", "Logging verbosity."},
 		{"LIBGEN_MCP_RATE_RPS", "1", "(0, 20]", "Allowed outbound requests per second."},
 		{"LIBGEN_MCP_RATE_BURST", "1", "[1, 100]", "Maximum rate-limiter burst."},

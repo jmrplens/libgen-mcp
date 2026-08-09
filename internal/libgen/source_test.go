@@ -278,8 +278,11 @@ func TestResolveBudgetBoundsEachSource(t *testing.T) {
 	defer cdn.Close()
 
 	const budget = 150 * time.Millisecond
+	// Timeout is deliberately left long: the bound under test is ResolveBudget's,
+	// and the two are separate settings.
 	cfg := &config.Config{
-		Timeout:                budget,
+		Timeout:                30 * time.Second,
+		ResolveBudget:          budget,
 		RateRPS:                1000,
 		RateBurst:              100,
 		RetryAttempts:          1,
@@ -302,6 +305,44 @@ func TestResolveBudgetBoundsEachSource(t *testing.T) {
 	// about scheduling jitter; the unbounded behavior takes the source's full 10s.
 	if limit := 5 * time.Second; elapsed >= limit {
 		t.Errorf("chain took %v, want under %v: the slow source was not bounded by its resolve budget", elapsed, limit)
+	}
+}
+
+// TestResolveBudgetIsIndependentOfTimeout is the guard on the two settings staying
+// decoupled: a source that needs longer than the per-request timeout to resolve
+// must still be given its full ResolveBudget.
+//
+// They used to be one setting — the client took cfg.Timeout as each source's whole
+// resolve budget — so shortening the per-request timeout from 30s to 10s silently
+// cut every source's resolve budget with it. A resolve is a multi-hop conversation
+// (Sci-Hub fetches an article page and then the file URL embedded in it), so a
+// source that legitimately needs several requests' worth of time was at risk of
+// being struck out of a chain it would have served. This test fails if the budget
+// is ever derived from Timeout again.
+func TestResolveBudgetIsIndependentOfTimeout(t *testing.T) {
+	payload := []byte("%PDF-1.4 decoupled payload")
+	cdn := fileCDN(t, payload, `attachment; filename="d.pdf"`)
+	defer cdn.Close()
+
+	// The source takes ten times the per-request timeout to resolve, and the budget
+	// is generous enough to let it.
+	cfg := &config.Config{
+		Timeout:                20 * time.Millisecond,
+		ResolveBudget:          5 * time.Second,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 1,
+	}
+	slow := slowSource{name: "slow", delay: 200 * time.Millisecond, resolved: Resolved{FileURL: cdn.URL + "/file"}}
+	c := New(staticMirrors{}, cfg, WithSources(slow))
+
+	res, err := c.DownloadItem(context.Background(), Item{DOI: "10.1234/decoupled"}, t.TempDir(), "")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v, want the slow source to get its full resolve budget", err)
+	}
+	if res.Source != "slow" {
+		t.Errorf("Source = %q, want %q", res.Source, "slow")
 	}
 }
 

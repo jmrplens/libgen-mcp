@@ -24,8 +24,10 @@ func TestLoadDefaults(t *testing.T) {
 	if filepath.Base(cfg.DownloadDir) != "Downloads" {
 		t.Errorf("DownloadDir = %q, want ~/Downloads", cfg.DownloadDir)
 	}
-	if cfg.Timeout != 30*time.Second {
-		t.Errorf("Timeout = %v, want 30s", cfg.Timeout)
+	// The default is short on purpose: it bounds one question to a mirror, never a
+	// file transfer, and every request it covers has failover behind it.
+	if cfg.Timeout != 10*time.Second {
+		t.Errorf("Timeout = %v, want 10s", cfg.Timeout)
 	}
 }
 
@@ -55,6 +57,58 @@ func TestLoadBadTimeout(t *testing.T) {
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() with an invalid timeout should fail")
 	}
+}
+
+// TestLoadResolveBudget covers LIBGEN_MCP_RESOLVE_BUDGET: it defaults to 30s, is
+// overridden by the environment, rejects a non-duration — and, above all, does not
+// move when LIBGEN_MCP_TIMEOUT does. The two were one setting, and shortening the
+// per-request timeout used to cut every download source's resolve budget with it.
+func TestLoadResolveBudget(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir()) // keep Load() offline/valid
+
+	t.Run("default 30s", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_RESOLVE_BUDGET", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.ResolveBudget != 30*time.Second {
+			t.Errorf("ResolveBudget = %v, want 30s", cfg.ResolveBudget)
+		}
+	})
+
+	t.Run("override", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_RESOLVE_BUDGET", "45s")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.ResolveBudget != 45*time.Second {
+			t.Errorf("ResolveBudget = %v, want 45s", cfg.ResolveBudget)
+		}
+	})
+
+	t.Run("independent of the request timeout", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_RESOLVE_BUDGET", "")
+		t.Setenv("LIBGEN_MCP_TIMEOUT", "2s")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.Timeout != 2*time.Second {
+			t.Errorf("Timeout = %v, want 2s", cfg.Timeout)
+		}
+		if cfg.ResolveBudget != 30*time.Second {
+			t.Errorf("ResolveBudget = %v, want it to stay at its own 30s default", cfg.ResolveBudget)
+		}
+	})
+
+	t.Run("invalid duration", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_RESOLVE_BUDGET", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() with an invalid resolve budget should fail")
+		}
+	})
 }
 
 // TestLoadRemoteDownloads checks LIBGEN_MCP_REMOTE_DOWNLOADS: unset defaults to
@@ -487,6 +541,7 @@ func validConfig(t *testing.T) *Config {
 		Mirror:                  "https://libgen.li",
 		DownloadDir:             t.TempDir(),
 		Timeout:                 30 * time.Second,
+		ResolveBudget:           30 * time.Second,
 		LogLevel:                slog.LevelInfo,
 		RateRPS:                 1,
 		RateBurst:               1,
@@ -596,6 +651,9 @@ func TestValidateInvalid(t *testing.T) {
 		{"MaxBytesTooHigh", func(c *Config) { c.MaxDownloadBytes = 51 * 1024 * 1024 * 1024 }},
 		{"TimeoutZero", func(c *Config) { c.Timeout = 0 }},
 		{"TimeoutTooHigh", func(c *Config) { c.Timeout = 11 * time.Minute }},
+		{"ResolveBudgetZero", func(c *Config) { c.ResolveBudget = 0 }},
+		{"ResolveBudgetNegative", func(c *Config) { c.ResolveBudget = -time.Second }},
+		{"ResolveBudgetTooHigh", func(c *Config) { c.ResolveBudget = 11 * time.Minute }},
 		{"StallTimeoutZero", func(c *Config) { c.DownloadStallTimeout = 0 }},
 		{"StallTimeoutTooHigh", func(c *Config) { c.DownloadStallTimeout = 2 * time.Hour }},
 		{"StartRetryWaitZero", func(c *Config) { c.DownloadStartRetryWaits = []time.Duration{0} }},

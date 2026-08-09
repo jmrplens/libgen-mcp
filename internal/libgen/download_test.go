@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -48,47 +47,6 @@ func TestExtractGetLinkFixture(t *testing.T) {
 func TestExtractGetLinkMissing(t *testing.T) {
 	if _, err := ExtractGetLink([]byte("<html>no link</html>")); err == nil {
 		t.Fatal("should fail without a get.php link")
-	}
-}
-
-// TestSanitizeFilename verifies SanitizeFilename.
-func TestSanitizeFilename(t *testing.T) {
-	cases := map[string]string{
-		"a/b\\c:d*e?f\"g<h>i|j.pdf": "a_b_c_d_e_f_g_h_i_j.pdf",
-		"  normal.epub  ":           "normal.epub",
-		"":                          "download",
-		"...":                       "download",
-	}
-	for in, want := range cases {
-		if got := sanitizeFilename(in); got != want {
-			t.Errorf("sanitizeFilename(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-// TestCleanFileName covers cleanFileName with table-driven subtests spanning all
-// fields present, each optional piece omitted, illegal characters sanitized, and
-// internal whitespace collapsed.
-func TestCleanFileName(t *testing.T) {
-	cases := []struct {
-		name string
-		meta FileMeta
-		want string
-	}{
-		{"all fields", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
-		{"no year", FileMeta{Author: "Jane Doe", Title: "Great Book", Ext: "pdf"}, "Jane Doe - Great Book.pdf"},
-		{"no author", FileMeta{Title: "Great Book", Year: "2020", Ext: "pdf"}, "Great Book (2020).pdf"},
-		{"no title", FileMeta{Author: "Jane Doe", Year: "2020", Ext: "pdf"}, ""},
-		{"no ext", FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020"}, "Jane Doe - Great Book (2020)"},
-		{"illegal chars sanitized", FileMeta{Author: `A/B`, Title: `C:D*E?`, Year: "2020", Ext: "pdf"}, "A_B - C_D_E_ (2020).pdf"},
-		{"whitespace collapsed", FileMeta{Author: "  Jane   Doe ", Title: "Great\t\nBook ", Year: " 2020 ", Ext: "pdf"}, "Jane Doe - Great Book (2020).pdf"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := cleanFileName(tc.meta); got != tc.want {
-				t.Errorf("cleanFileName(%+v) = %q, want %q", tc.meta, got, tc.want)
-			}
-		})
 	}
 }
 
@@ -144,14 +102,16 @@ func TestDownloadExplicitFilenameBeatsMeta(t *testing.T) {
 	}
 }
 
-// TestDownloadDispositionBeatsMeta verifies the CDN Content-Disposition name wins
-// over metadata when both are available.
-func TestDownloadDispositionBeatsMeta(t *testing.T) {
-	payload := []byte("%PDF-1.4 disposition-wins payload")
+// TestDownloadMetaBeatsDispositionWhenVerified verifies that on an md5 download —
+// the one whose bytes are checked against the requested digest — the
+// metadata-built name wins over the mirror's Content-Disposition, and that the
+// announced name is still reported as OriginalFilename.
+func TestDownloadMetaBeatsDispositionWhenVerified(t *testing.T) {
+	payload := []byte("%PDF-1.4 disposition-vs-meta payload")
 	want := md5Hex(payload)
 	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", `attachment; filename="from-cdn.pdf"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="[Incerto] Jane Doe - Great Book [`+want+`] - libgen.li.pdf"`)
 		w.Write(payload)
 	})
 	defer srv.Close()
@@ -163,9 +123,105 @@ func TestDownloadDispositionBeatsMeta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
-	if got := filepath.Base(res.Path); got != "from-cdn.pdf" {
-		t.Errorf("Path base = %q, want %q (Content-Disposition must win over meta)", got, "from-cdn.pdf")
+	if got := filepath.Base(res.Path); got != "Jane Doe - Great Book (2020).pdf" {
+		t.Errorf("Path base = %q, want the metadata-built name (the digest matched, so it is safe)", got)
 	}
+	if res.NameOrigin != NameFromMetadata {
+		t.Errorf("NameOrigin = %q, want %q", res.NameOrigin, NameFromMetadata)
+	}
+	if !strings.Contains(res.OriginalFilename, "libgen.li") {
+		t.Errorf("OriginalFilename = %q, want the mirror's announced name kept verbatim", res.OriginalFilename)
+	}
+}
+
+// TestDownloadUnverifiedKeepsAnnouncedName verifies the rule that keeps a
+// mis-delivery detectable: a download with no digest to check against (a DOI) is
+// saved under the name the source announced — cleaned of the mirror's own marks —
+// and is NOT renamed after the record that was requested.
+func TestDownloadUnverifiedKeepsAnnouncedName(t *testing.T) {
+	payload := []byte("%PDF-1.4 the wrong article, as it happens")
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="npre2007361-1.pdf"`)
+		_, _ = w.Write(payload)
+	}))
+	defer cdn.Close()
+	c := newTestClient(staticMirrors{cdn.URL})
+	c.sources = []DownloadSource{stubDOISource{url: cdn.URL + "/file"}}
+	dir := t.TempDir()
+
+	item := Item{
+		DOI:  "10.1371/journal.pmed.0020124",
+		Meta: &FileMeta{Author: "John P. A. Ioannidis", Title: "Why Most Published Research Findings Are False", Year: "2005"},
+	}
+	res, err := c.DownloadItem(context.Background(), item, dir, "")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "npre2007361-1.pdf" {
+		t.Errorf("Path base = %q, want the announced name kept (an unverified download must not be renamed after the request)", got)
+	}
+	if res.NameOrigin != NameFromAnnounced {
+		t.Errorf("NameOrigin = %q, want %q", res.NameOrigin, NameFromAnnounced)
+	}
+}
+
+// TestDownloadUnverifiedPlaceholderNameFallsBackToIdentifier verifies that when
+// the source announces a name that identifies nothing ("download.pdf", which is
+// what the Internet Archive returns for every ISBN), the file is named after the
+// identifier that was requested and the result says the name was derived.
+func TestDownloadUnverifiedPlaceholderNameFallsBackToIdentifier(t *testing.T) {
+	payload := []byte("%PDF-1.4 an openly licensed book")
+	cdn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", `attachment; filename="download.pdf"`)
+		_, _ = w.Write(payload)
+	}))
+	defer cdn.Close()
+	c := newTestClient(staticMirrors{cdn.URL})
+	c.sources = []DownloadSource{stubISBNSource{url: cdn.URL + "/file"}}
+	dir := t.TempDir()
+
+	res, err := c.DownloadItem(context.Background(), Item{ISBN: "9789286150616"}, dir, "")
+	if err != nil {
+		t.Fatalf("DownloadItem() error = %v", err)
+	}
+	if got := filepath.Base(res.Path); got != "9789286150616.pdf" {
+		t.Errorf("Path base = %q, want the ISBN (the announced name was a placeholder)", got)
+	}
+	if !res.NameOrigin.Derived() {
+		t.Errorf("NameOrigin = %q, want a derived origin so the caller is told the name was not announced", res.NameOrigin)
+	}
+}
+
+// stubDOISource resolves any DOI item to a fixed URL with no MD5 verification,
+// standing in for the article sources in a naming test.
+type stubDOISource struct{ url string }
+
+// Name identifies the stub source.
+func (s stubDOISource) Name() string { return "unpaywall" }
+
+// Supports accepts any item carrying a DOI.
+func (s stubDOISource) Supports(item Item) bool { return item.DOI != "" }
+
+// Resolve returns the stub's fixed URL, unverified, as the article sources do.
+func (s stubDOISource) Resolve(context.Context, Item) (Resolved, error) {
+	return Resolved{FileURL: s.url, VerifyMD5: false}, nil
+}
+
+// stubISBNSource resolves any ISBN item to a fixed URL with no MD5 verification,
+// standing in for the open-access book sources in a naming test.
+type stubISBNSource struct{ url string }
+
+// Name identifies the stub source.
+func (s stubISBNSource) Name() string { return "archive" }
+
+// Supports accepts any item carrying an ISBN.
+func (s stubISBNSource) Supports(item Item) bool { return item.ISBN != "" }
+
+// Resolve returns the stub's fixed URL, unverified, as the ISBN sources do.
+func (s stubISBNSource) Resolve(context.Context, Item) (Resolved, error) {
+	return Resolved{FileURL: s.url, VerifyMD5: false}, nil
 }
 
 func downloadTestServer(t *testing.T, payload []byte) *httptest.Server {
@@ -471,9 +527,10 @@ func TestDownloadResumeServerError(t *testing.T) {
 	}
 }
 
-// TestDownloadRenameError verifies that a rename failure (the destination name is
-// occupied by a non-empty directory) surfaces as an error after a valid transfer.
-func TestDownloadRenameError(t *testing.T) {
+// TestDownloadRoutesAroundAnOccupiedName verifies that a destination name already
+// taken by something else does not sink the download: the file lands beside it
+// under a discriminated name rather than failing or overwriting.
+func TestDownloadRoutesAroundAnOccupiedName(t *testing.T) {
 	payload := []byte("%PDF-1.4 " + strings.Repeat("rename clash ", 64))
 	want := md5Hex(payload)
 	srv := md5CDNServer(t, want, func(w http.ResponseWriter, _ *http.Request) {
@@ -483,14 +540,70 @@ func TestDownloadRenameError(t *testing.T) {
 	defer srv.Close()
 	c := newTestClient(staticMirrors{srv.URL})
 	dir := t.TempDir()
-	// Occupy the destination name ("<md5>") with a non-empty directory so the final
-	// os.Rename(part, dest) cannot succeed.
+	// Occupy the destination name ("<md5>") with a non-empty directory.
 	dest := filepath.Join(dir, want)
 	if err := os.MkdirAll(filepath.Join(dest, "occupied"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Download(context.Background(), want, dir, "", nil); err == nil {
-		t.Fatal("rename onto a non-empty directory should fail")
+	res, err := c.Download(context.Background(), want, dir, "", nil)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.Path == dest {
+		t.Errorf("Path = %q, want a name that does not collide with the occupied one", res.Path)
+	}
+	if _, statErr := os.Stat(res.Path); statErr != nil {
+		t.Errorf("the download should exist at %q: %v", res.Path, statErr)
+	}
+}
+
+// TestDownloadNeverOverwritesADifferentFile verifies the collision guarantee
+// end to end: a different file already carrying the name the download would take
+// is left byte-for-byte intact, and the new file lands beside it.
+func TestDownloadNeverOverwritesADifferentFile(t *testing.T) {
+	payload := []byte("%PDF-1.4 " + strings.Repeat("second edition ", 32))
+	want := md5Hex(payload)
+	srv := noDispositionCDN(t, want, payload)
+	defer srv.Close()
+	c := newTestClient(staticMirrors{srv.URL})
+	dir := t.TempDir()
+
+	meta := &FileMeta{Author: "Jane Doe", Title: "Great Book", Year: "2020"}
+	occupied := filepath.Join(dir, "Jane Doe - Great Book (2020).pdf")
+	incumbent := []byte("%PDF-1.4 the first edition, which must survive")
+	if err := os.WriteFile(occupied, incumbent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := c.Download(context.Background(), want, dir, "", meta)
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
+	if res.Path == occupied {
+		t.Fatalf("Path = %q, want a discriminated name beside the incumbent", res.Path)
+	}
+	kept, err := os.ReadFile(occupied)
+	if err != nil || string(kept) != string(incumbent) {
+		t.Errorf("the incumbent file was disturbed: %q, err=%v", kept, err)
+	}
+	if !strings.Contains(filepath.Base(res.Path), want[:8]) {
+		t.Errorf("Path = %q, want the content digest as the discriminator", res.Path)
+	}
+}
+
+// TestStreamToPartAndVerifyRenameError covers the rename-failure branch: a valid
+// transfer whose destination directory does not exist surfaces the error and
+// keeps the partial for a retry.
+func TestStreamToPartAndVerifyRenameError(t *testing.T) {
+	c := newTestClient(staticMirrors{})
+	dir := t.TempDir()
+	part := filepath.Join(dir, "x.part")
+	dest := filepath.Join(dir, "missing-subdir", "dest.pdf")
+	if _, _, err := c.streamToPartAndVerify(part, dest, "", strings.NewReader("x"), streamOpts{}); err == nil {
+		t.Error("a rename into a nonexistent directory should fail")
+	}
+	if _, statErr := os.Stat(part); statErr != nil {
+		t.Error("the partial should be kept when only the rename failed")
 	}
 }
 
@@ -1314,37 +1427,6 @@ func TestFilenameFromDisposition(t *testing.T) {
 	}
 }
 
-// TestChooseFileName covers the name-selection precedence and, in particular, the
-// fallback-extension branch (appending the source's extension when the chosen
-// name carries none) and its skip when a name already has an extension.
-func TestChooseFileName(t *testing.T) {
-	meta := &FileMeta{Author: "A", Title: "T", Year: "2020", Ext: "epub"}
-	cases := []struct {
-		name        string
-		filename    string
-		disposition string
-		meta        *FileMeta
-		md5         string
-		ext         string
-		want        string
-	}{
-		{"explicit filename wins", "explicit.pdf", "disp.pdf", meta, "md5", "pdf", "explicit.pdf"},
-		{"disposition when no filename", "", "disp.pdf", meta, "md5", "pdf", "disp.pdf"},
-		{"meta when no filename or disposition", "", "", meta, "md5", "pdf", "A - T (2020).epub"},
-		{"md5 with fallback extension", "", "", nil, "abcdef", "pdf", "abcdef.pdf"},
-		{"fallback extension skipped when name has one", "have.mobi", "", nil, "md5", "pdf", "have.mobi"},
-		{"no extension and no fallback", "", "", nil, "deadbeef", "", "deadbeef"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := chooseFileName(tc.filename, tc.disposition, tc.meta, tc.md5, tc.ext)
-			if got != tc.want {
-				t.Errorf("chooseFileName() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 // TestShouldEmit covers the elapsed-interval branch, the byte-advance branch, and
 // the throttled (no emit) case of the progress writer.
 func TestShouldEmit(t *testing.T) {
@@ -1447,7 +1529,7 @@ func TestValidateFileResponseNoBytes(t *testing.T) {
 func TestStreamToPartOpenError(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	dir := t.TempDir()
-	_, err := c.streamToPartAndVerify(dir, filepath.Join(dir, "dest"), "", strings.NewReader("x"), streamOpts{})
+	_, _, err := c.streamToPartAndVerify(dir, filepath.Join(dir, "dest"), "", strings.NewReader("x"), streamOpts{})
 	if err == nil {
 		t.Error("streamToPartAndVerify should fail when the partial path is a directory")
 	}
@@ -1474,21 +1556,12 @@ func TestStreamToPartTruncated(t *testing.T) {
 	c := newTestClient(staticMirrors{})
 	dir := t.TempDir()
 	part := filepath.Join(dir, "p.part")
-	_, err := c.streamToPartAndVerify(part, filepath.Join(dir, "dest"), "", strings.NewReader("short"), streamOpts{contentLength: 999})
+	_, _, err := c.streamToPartAndVerify(part, filepath.Join(dir, "dest"), "", strings.NewReader("short"), streamOpts{contentLength: 999})
 	if err == nil {
 		t.Fatal("streamToPartAndVerify should fail on a truncated transfer")
 	}
 	if _, statErr := os.Stat(part); os.IsNotExist(statErr) {
 		t.Error("a truncated transfer should keep the .part for a later resume")
-	}
-}
-
-// TestSanitizeFilenameLong covers the length-cap branch: an over-long name is
-// truncated to 200 runes.
-func TestSanitizeFilenameLong(t *testing.T) {
-	got := sanitizeFilename(strings.Repeat("a", 250))
-	if n := len([]rune(got)); n != 200 {
-		t.Errorf("sanitizeFilename(len 250) has %d runes, want 200", n)
 	}
 }
 
@@ -1889,92 +1962,6 @@ func TestDownloadItemRestrictIncompatibleSource(t *testing.T) {
 	}
 }
 
-// throttling that would slow the probe, a single retry, and a short timeout.
-func headSizeConfig() *config.Config {
-	return &config.Config{
-		Timeout:                5 * time.Second,
-		RateRPS:                1000,
-		RateBurst:              100,
-		RetryAttempts:          1,
-		MaxConcurrentDownloads: 2,
-	}
-}
-
-// headServer serves a HEAD-answering endpoint at /file: it records the request
-// method it saw and replies with the given Content-Length (a negative length
-// omits the header). It never writes a body, matching a real HEAD probe.
-func headServer(t *testing.T, contentLength int64, status int) (base string, sawMethod *string) {
-	t.Helper()
-	var method string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/file", func(w http.ResponseWriter, r *http.Request) {
-		method = r.Method
-		if contentLength >= 0 {
-			w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
-		}
-		w.WriteHeader(status)
-	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv.URL, &method
-}
-
-// TestHeadSize_ReportsContentLength verifies the happy path: a resolved URL whose
-// HEAD returns a positive Content-Length yields that size with ok=true, and the
-// probe used the HEAD method (never a body-fetching GET).
-func TestHeadSize_ReportsContentLength(t *testing.T) {
-	base, sawMethod := headServer(t, 4096, http.StatusOK)
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file", VerifyMD5: true}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	n, ok := c.HeadSize(context.Background(), Item{MD5: "abc"})
-	if !ok {
-		t.Fatal("HeadSize ok = false, want true for a positive Content-Length")
-	}
-	if n != 4096 {
-		t.Errorf("HeadSize = %d, want 4096", n)
-	}
-	if *sawMethod != http.MethodHead {
-		t.Errorf("probe used %s, want HEAD", *sawMethod)
-	}
-}
-
-// TestHeadSize_MissingContentLength verifies a resolved URL whose HEAD omits the
-// Content-Length header yields ok=false (unknown size), never an error.
-func TestHeadSize_MissingContentLength(t *testing.T) {
-	base, _ := headServer(t, -1, http.StatusOK) // negative → no Content-Length header
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false when Content-Length is absent")
-	}
-}
-
-// TestHeadSize_Non2xxStatus verifies a resolved URL whose HEAD returns a non-2xx
-// status yields ok=false, never an error.
-func TestHeadSize_Non2xxStatus(t *testing.T) {
-	base, _ := headServer(t, 4096, http.StatusForbidden)
-	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: base + "/file"}}
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false for a 403 response")
-	}
-}
-
-// TestHeadSize_ResolveFailureIsBestEffort verifies that when no source can resolve
-// the item, HeadSize returns ok=false without an error rather than propagating the
-// resolve failure — the confirmation flow proceeds with an unknown size.
-func TestHeadSize_ResolveFailureIsBestEffort(t *testing.T) {
-	src := stubSource{name: "libgen", supports: false} // supports nothing → no resolution
-	c := New(staticMirrors{}, headSizeConfig(), WithSources(src))
-
-	if _, ok := c.HeadSize(context.Background(), Item{MD5: "abc"}); ok {
-		t.Error("HeadSize ok = true, want false when the item cannot be resolved")
-	}
-}
-
 // unpaywallDownloadServer serves the on-demand Unpaywall flow for a DOI download: a
 // lookup path returns OA JSON pointing at its own /pdf endpoint, which serves the
 // given PDF bytes. It records how many lookups (not /pdf fetches) it received so a
@@ -2096,39 +2083,6 @@ func TestWithPerCallUnpaywall(t *testing.T) {
 	// Positive case: email + DOI + no named source + no unpaywall present → prepend.
 	if got := c.withPerCallUnpaywall(emailDOI, plain); len(got) != 2 || got[0].Name() != "unpaywall" {
 		t.Errorf("email+DOI+no-source should prepend unpaywall, got %v", srcNames(got))
-	}
-}
-
-// TestHeadContentLength_ErrorPaths drives headContentLength's request-build and
-// transport failure branches directly: a URL with a control byte cannot be built
-// into a request, and an unreachable address fails the HEAD Do. Both yield ok=false
-// with no size.
-func TestHeadContentLength_ErrorPaths(t *testing.T) {
-	c := newTestClient(staticMirrors{})
-	if _, ok := c.headContentLength(context.Background(), "http://\x7f", nil); ok {
-		t.Error("build error should yield ok=false")
-	}
-	if _, ok := c.headContentLength(context.Background(), "http://127.0.0.1:0/f", nil); ok {
-		t.Error("transport error should yield ok=false")
-	}
-}
-
-// TestHeadContentLength_CopiesRequiredHeaders verifies that source-required headers
-// (e.g. a Sci-Hub Referer) are copied onto the HEAD request: the server only reports
-// a Content-Length when it sees the expected header.
-func TestHeadContentLength_CopiesRequiredHeaders(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Referer") == "https://sci-hub/" {
-			w.Header().Set("Content-Length", "2048")
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	c := newTestClient(staticMirrors{})
-	hdr := http.Header{"Referer": {"https://sci-hub/"}}
-	n, ok := c.headContentLength(context.Background(), srv.URL, hdr)
-	if !ok || n != 2048 {
-		t.Errorf("headContentLength with required header = (%d, %v), want (2048, true)", n, ok)
 	}
 }
 
@@ -2466,32 +2420,36 @@ func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
 	}
 }
 
-// TestDownloadResultSourceNamesEveryKnownSource guards a description that has
-// already drifted once. DownloadResult.Source enumerates the sources that can
-// serve a file, and it is the schema the model reads to interpret the value it
-// gets back — but oapen and archive joined the chain without being added here,
-// so for two releases it named ten of twelve. Nothing failed, because a struct
-// tag is prose to every compiler and linter in the build.
-func TestDownloadResultSourceNamesEveryKnownSource(t *testing.T) {
-	field, ok := reflect.TypeFor[DownloadResult]().FieldByName("Source")
-	if !ok {
-		t.Fatal("DownloadResult has no Source field")
-	}
-	desc := field.Tag.Get("jsonschema")
-	if desc == "" {
-		t.Fatal("DownloadResult.Source has no jsonschema description")
-	}
-	var missing []string
-	for _, name := range config.KnownSources {
-		// Word-boundary match, so "core" is not satisfied by some other word
-		// that merely contains it.
-		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`).MatchString(desc) {
-			missing = append(missing, name)
+// TestDownloadResultKeepsProvenanceOffTheWire pins the field tags that decide what
+// a caller is told about where its file came from.
+//
+// Source used to be serialized, with a jsonschema description enumerating every
+// source that could serve a file — and that description drifted twice, because a
+// struct tag is prose to every compiler and linter in the build. The list is gone
+// now for a better reason than drift: the serving source is a fact about the
+// operator's configuration and the user's activity, it reaches the client's
+// inference provider on every download, and it answers no question the caller
+// asked. Both fields stay on the struct because the chain's cooldown bookkeeping
+// and the operator's log still read them; only the json tag changed, and a tag is
+// exactly the kind of thing that gets reverted by accident.
+//
+// The flag that briefly replaced Source is checked as ABSENT for a different
+// reason: it was never a disclosure risk, it was empty. selectSources narrows a
+// pinned call to that one source, so a pinned download either returns that
+// source's file or errors out, and the flag could report nothing but true.
+func TestDownloadResultKeepsProvenanceOffTheWire(t *testing.T) {
+	for _, name := range []string{"Source", "Mirror"} {
+		field, ok := reflect.TypeFor[DownloadResult]().FieldByName(name)
+		if !ok {
+			t.Fatalf("DownloadResult has no %s field; the chain and the log still need it", name)
+		}
+		if got := field.Tag.Get("json"); got != "-" {
+			t.Errorf(`DownloadResult.%s json tag = %q, want "-": provenance must not be serialized to the caller`, name, got)
 		}
 	}
-	if len(missing) > 0 {
-		t.Fatalf("DownloadResult.Source description omits %v — it must name every config.KnownSources entry.\ngot: %s",
-			missing, desc)
+	if _, present := reflect.TypeFor[DownloadResult]().FieldByName("ServedByRequestedSource"); present {
+		t.Error("DownloadResult carries ServedByRequestedSource again: selectSources narrows a pinned " +
+			"call to that one source, so the flag can only ever be true and carries no information")
 	}
 }
 
@@ -2578,5 +2536,68 @@ func TestRedactQuery(t *testing.T) {
 				t.Errorf("redactQuery(%q) leaked the secret", tt.in)
 			}
 		})
+	}
+}
+
+// TestDownloadOutlivesRequestTimeout is the guard on the per-request timeout
+// being short: a transfer that takes many times longer than cfg.Timeout must
+// still complete in full.
+//
+// LIBGEN_MCP_TIMEOUT bounds ONE question to a mirror — a search, a lookup, a
+// resolve hop — all of which have failover behind them, which is why its default
+// is measured in seconds. The bytes of a file are governed by something else
+// entirely: the download client is built with no timeout at all, and a stream is
+// cut only by its context or by the progress-resetting stall window. A 15 MB book
+// over a slow link, or a two-minute transfer, is not this setting's business, and
+// this test fails if it ever becomes so.
+func TestDownloadOutlivesRequestTimeout(t *testing.T) {
+	const chunks, chunkDelay = 8, 25 * time.Millisecond
+	payload := bytes.Repeat([]byte("slow-but-progressing payload;"), 64)
+	chunkSize := len(payload) / chunks
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+		flusher, _ := w.(http.Flusher)
+		for off := 0; off < len(payload); off += chunkSize {
+			_, _ = w.Write(payload[off:min(off+chunkSize, len(payload))])
+			if flusher != nil {
+				flusher.Flush()
+			}
+			time.Sleep(chunkDelay)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	// A per-request timeout far shorter than the transfer will take, and a stall
+	// window comfortably longer than the gap between chunks.
+	cfg := &config.Config{
+		Timeout:                20 * time.Millisecond,
+		RateRPS:                1000,
+		RateBurst:              100,
+		RetryAttempts:          1,
+		MaxConcurrentDownloads: 2,
+		DownloadStallTimeout:   5 * time.Second,
+	}
+	src := stubSource{name: "libgen", supports: true, resolved: Resolved{FileURL: srv.URL + "/file"}}
+	c := New(staticMirrors{}, cfg, WithSources(src))
+
+	started := time.Now()
+	res, err := c.DownloadItem(context.Background(), Item{MD5: "87a4ebdaf21fa6cc70009a3dd63194ee"}, t.TempDir(), "book.pdf")
+	if err != nil {
+		t.Fatalf("a transfer longer than the per-request timeout must still finish: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed <= cfg.Timeout {
+		t.Fatalf("transfer took %v, which is under the %v timeout — the test proves nothing", elapsed, cfg.Timeout)
+	}
+	if res.SizeBytes != int64(len(payload)) {
+		t.Errorf("saved %d bytes, want the whole %d-byte file", res.SizeBytes, len(payload))
+	}
+	got, rerr := os.ReadFile(res.Path)
+	if rerr != nil {
+		t.Fatalf("reading the saved file: %v", rerr)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Error("the saved file does not match the served bytes")
 	}
 }

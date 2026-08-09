@@ -83,13 +83,78 @@ func (rec unpaywallResponse) bestPDFURL() string {
 	return fallback
 }
 
-// landingURL is the last-resort URL when no location exposes a PDF: the best OA
-// location's landing page, which commonly redirects to the article file.
-func (rec unpaywallResponse) landingURL() string {
+// allLocations lists every OA location in preference order: the record's own best
+// location first, then the rest as Unpaywall ordered them.
+func (rec unpaywallResponse) allLocations() []unpaywallLocation {
+	locs := make([]unpaywallLocation, 0, len(rec.OALocations)+1)
 	if rec.BestOALocation != nil {
-		return rec.BestOALocation.URL
+		locs = append(locs, *rec.BestOALocation)
 	}
-	return ""
+	return append(locs, rec.OALocations...)
+}
+
+// directFileURL is the last-resort pick when NO location advertises a
+// url_for_pdf: a location whose plain url still looks like a file rather than a
+// landing page, preferring a published/publisher copy. It returns "" when every
+// location only offers a landing page.
+//
+// This replaces an earlier fallback that simply took the best location's url. That
+// url is a landing page far more often than not — for 10.1371/journal.pone.0000308
+// Unpaywall answers with four locations, none carrying a url_for_pdf, whose best
+// url is the bare https://doi.org/… resolver. Fetching it costs a full redirect
+// chain (measured: 3 redirects, 1.1 s, 170 kB) only to hand the download layer an
+// HTML article page it correctly rejects. Declining here instead turns that into a
+// clean miss that costs one API call, and the chain reaches a source that can
+// actually serve the article sooner.
+func (rec unpaywallResponse) directFileURL() string {
+	var fallback string
+	for _, loc := range rec.allLocations() {
+		if !looksLikeFileURL(loc.URL) {
+			continue
+		}
+		if loc.isPublished() {
+			return loc.URL
+		}
+		if fallback == "" {
+			fallback = loc.URL
+		}
+	}
+	return fallback
+}
+
+// noFileReason says why an open-access record yielded nothing to download, and
+// tells the two ways that happens apart. A record Unpaywall lists no OA location
+// for at all is a different fact from one whose locations are all landing pages:
+// the first says the index has nowhere to send anyone, the second says there is a
+// copy out there behind a page this client will not scrape. Reporting the second
+// when the first happened sends a caller looking for a landing page that was
+// never listed, so the diagnoses stay separate.
+func (rec unpaywallResponse) noFileReason() string {
+	if len(rec.allLocations()) == 0 {
+		return "is open access but Unpaywall lists no open-access location for it"
+	}
+	return "is open access but Unpaywall lists no direct file for it, only landing pages"
+}
+
+// looksLikeFileURL reports whether raw is plausibly a direct file rather than a
+// landing page: its path ends in a known document extension, or its last segment
+// is "pdf" (the shape publishers use for /article/<id>/pdf). Anything else — a
+// doi.org resolver, a DOAJ or repository record page — is a page, not a file.
+func looksLikeFileURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	path := strings.ToLower(strings.TrimRight(u.Path, "/"))
+	if path == "" {
+		return false
+	}
+	for _, ext := range []string{".pdf", ".epub", ".djvu"} {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+	return strings.HasSuffix(path, "/pdf")
 }
 
 // Name identifies the Unpaywall source.
@@ -162,11 +227,17 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 	}
 	fileURL := rec.bestPDFURL()
 	if fileURL == "" {
-		fileURL = rec.landingURL()
+		fileURL = rec.directFileURL()
 	}
 	if fileURL == "" {
-		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: no open-access PDF for %q", it.DOI))
+		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: %q %s", it.DOI, rec.noFileReason()))
 	}
+	// The URL is returned with the scheme Unpaywall recorded, http included. An
+	// unconditional http→https promotion was tried and dropped: it rescues nothing
+	// (10.1016/j.cell.2011.02.013 resolves to http://www.cell.com/…/pdf, and that
+	// host answers 403 to a non-browser client under BOTH schemes — the plain-http
+	// form simply redirects to the https one first), while it would break the
+	// http-only institutional repositories that Unpaywall still indexes.
 	return Resolved{
 		FileURL:   fileURL,
 		VerifyMD5: false,

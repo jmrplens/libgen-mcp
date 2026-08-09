@@ -39,6 +39,22 @@ type opfPackage struct {
 	} `xml:"spine"`
 }
 
+// cannotOpenEPUBReason is the diagnosis for a file whose bytes are not a
+// readable ZIP archive at all. Shared so every read mode words it the same way.
+func cannotOpenEPUBReason(err error) string {
+	return fmt.Sprintf("cannot open EPUB archive: %v", err)
+}
+
+// notReadableEPUBReason is the diagnosis for a readable archive whose EPUB
+// structure (container.xml, OPF) is broken. Shared so every read mode words it
+// the same way. It formats err with %v rather than calling err.Error(), matching
+// its sibling above: three read modes reach these two helpers, and one of them
+// growing a path that reports a broken EPUB without an error to name should
+// produce a lame diagnosis, not a panic.
+func notReadableEPUBReason(err error) string {
+	return fmt.Sprintf("not a readable EPUB: %v", err)
+}
+
 // extractEPUB reads an EPUB as a ZIP archive, concatenates the text of its
 // spine documents in reading order and returns a character-paginated Chunk. A
 // malformed archive yields a not-extractable Chunk.
@@ -48,7 +64,7 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 	}
 	zr, err := zip.OpenReader(filePath)
 	if err != nil {
-		return Chunk{Format: "epub", Reason: fmt.Sprintf("cannot open EPUB archive: %v", err)}, nil
+		return Chunk{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
 	defer func() { _ = zr.Close() }()
 
@@ -57,10 +73,10 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return Chunk{}, err
 		}
-		return Chunk{Format: "epub", Extractable: false, Reason: "not a readable EPUB: " + err.Error()}, nil
+		return Chunk{Format: "epub", Extractable: false, Reason: notReadableEPUBReason(err)}, nil
 	}
 	if strings.TrimSpace(full) == "" {
-		return Chunk{Format: "epub", Reason: "no extractable text found in EPUB spine"}, nil
+		return Chunk{Format: "epub", Reason: noEPUBTextReason}, nil
 	}
 	c := paginateChars(full, "epub", r)
 	if truncated {

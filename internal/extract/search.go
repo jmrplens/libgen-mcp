@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -55,7 +54,6 @@ type SearchResult struct {
 const (
 	defaultMaxMatches   = 10
 	defaultSnippetChars = 160
-	noTextLayerReason   = "no extractable text layer (likely a scanned or image-only PDF); OCR is not supported"
 )
 
 // snippetReplacer collapses line breaks and tabs to single spaces so a snippet
@@ -69,7 +67,23 @@ var snippetReplacer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t
 // scanned or text-free PDF is likewise reported as not extractable. A canceled
 // ctx yields the context error. An empty or whitespace-only query yields zero
 // matches without an error.
+//
+// The whole search runs behind the time budget in guard.go, so a document no
+// parser can finish yields a not-extractable result rather than a call that
+// never returns.
 func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+	res, reason, err := guardedRead(ctx, func(ctx context.Context) (SearchResult, error) {
+		return searchChecked(ctx, path, query, o)
+	})
+	if reason != "" {
+		return SearchResult{Format: formatHint(path), Reason: reason}, nil
+	}
+	return res, err
+}
+
+// searchChecked is Search's work: normalize the options, then dispatch on
+// format. It is separate so the watchdog has a single function to run.
+func searchChecked(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SearchResult{}, err
 	}
@@ -94,7 +108,7 @@ func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return SearchResult{
 			Format: strings.TrimPrefix(ext, "."),
-			Reason: "unsupported format " + ext + ": text extraction is not available (comic/scanned/proprietary container)",
+			Reason: unsupportedFormatReason(ext),
 		}, nil
 	default:
 		// Same reasoning as Extract: an extensionless file is identified by content.
@@ -114,7 +128,7 @@ func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult
 func searchPDF(ctx context.Context, path, query string, o SearchOpts) (result SearchResult, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			result = SearchResult{Format: "pdf", Reason: fmt.Sprintf("cannot read PDF (malformed or encrypted): %v", rec)}
+			result = SearchResult{Format: "pdf", Reason: malformedPDFReason(rec)}
 			err = nil
 		}
 	}()
@@ -127,9 +141,13 @@ func searchPDF(ctx context.Context, path, query string, o SearchOpts) (result Se
 func scanPDFMatches(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
 	f, r, err := pdf.Open(path)
 	if err != nil {
-		return SearchResult{Format: "pdf", Reason: fmt.Sprintf("not a valid PDF: %v", err)}, nil
+		return SearchResult{Format: "pdf", Reason: invalidPDFReason(err)}, nil
 	}
 	defer func() { _ = f.Close() }()
+
+	if cyclic := pageTreeReason(r); cyclic != "" {
+		return SearchResult{Format: "pdf", Reason: cyclic}, nil
+	}
 
 	var all []Match
 	anyText := false
@@ -165,13 +183,13 @@ func searchTXT(ctx context.Context, path, query string, o SearchOpts) (SearchRes
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return SearchResult{Format: "txt", Reason: fmt.Sprintf("cannot open text file: %v", err)}, nil
+		return SearchResult{Format: "txt", Reason: cannotOpenTextReason(err)}, nil
 	}
 	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(f, maxTextFileBytes))
 	if err != nil {
-		return SearchResult{Format: "txt", Reason: fmt.Sprintf("cannot read text file: %v", err)}, nil
+		return SearchResult{Format: "txt", Reason: cannotReadTextReason(err)}, nil
 	}
 	all := findMatches(string(data), query, o.CaseSensitive, 0, o.SnippetChars)
 	res := windowMatches(all, o)
@@ -187,7 +205,7 @@ func searchEPUB(ctx context.Context, path, query string, o SearchOpts) (SearchRe
 	}
 	zr, err := zip.OpenReader(path)
 	if err != nil {
-		return SearchResult{Format: "epub", Reason: fmt.Sprintf("cannot open EPUB archive: %v", err)}, nil
+		return SearchResult{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
 	defer func() { _ = zr.Close() }()
 
@@ -198,7 +216,7 @@ func searchEPUB(ctx context.Context, path, query string, o SearchOpts) (SearchRe
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return SearchResult{}, err
 		}
-		return SearchResult{Format: "epub", Reason: "not a readable EPUB: " + err.Error()}, nil
+		return SearchResult{Format: "epub", Reason: notReadableEPUBReason(err)}, nil
 	}
 	all := findMatches(full, query, o.CaseSensitive, 0, o.SnippetChars)
 	res := windowMatches(all, o)

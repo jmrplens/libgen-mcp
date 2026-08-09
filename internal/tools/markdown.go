@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -231,14 +232,27 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 			fmt.Fprintf(&b, "- %s: %s\n", f.label, mdCell(v))
 		}
 	}
-	if out.Citations != nil && out.Citations.BibTeX != "" {
-		b.WriteString("\n### Citation (BibTeX)\n\n")
-		b.WriteString(fencedBlock("bibtex", out.Citations.BibTeX))
-		b.WriteString("\n")
-	}
+	writeCitation(&b, out.Citations)
 	writeEnrichment(&b, out.Enrichment)
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// writeCitation appends the ready-to-paste BibTeX block followed by its
+// provenance line. The provenance travels with the block on purpose: this is the
+// channel a person reads, and the caveat is worth nothing if it only reaches the
+// structured JSON. It goes through mdCell because it quotes catalog- and
+// registry-supplied text. It is a no-op when no citation could be built.
+func writeCitation(b *strings.Builder, c *Citations) {
+	if c == nil || c.BibTeX == "" {
+		return
+	}
+	b.WriteString("\n### Citation (BibTeX)\n\n")
+	b.WriteString(fencedBlock("bibtex", c.BibTeX))
+	b.WriteString("\n")
+	if c.Provenance != "" {
+		fmt.Fprintf(b, "\n> %s\n", mdCell(c.Provenance))
+	}
 }
 
 // writeEnrichment appends a short "External metadata" section for the best-effort
@@ -365,19 +379,35 @@ func renderOutline(b *strings.Builder, out ReadOutput) {
 }
 
 // renderDownloadMarkdown renders a completed download as a one-line confirmation
-// (name, size, source, path, verification) plus the next-steps block.
+// (name, size, path, verification) plus the next-steps block.
+//
+// The headline is the name the file was SAVED under, not the one the mirror
+// announced: those two differ by design now (chooseFileName), and reporting the
+// announced one would name a file that is not on disk. The announced name is
+// still shown, on its own line, whenever it differs — on an unverified download
+// it is the evidence of what the source actually served.
+//
+// It names no source and no mirror, for the reasons DownloadResult documents, and
+// says nothing about a pinned source either: a pin restricts the chain to that one
+// source, so a rendered download is already the pinned source's own delivery.
 func renderDownloadMarkdown(out DownloadOutput) string {
 	var b strings.Builder
-	name := out.OriginalFilename
-	if name == "" {
-		name = out.Path
+	name := filepath.Base(out.Path)
+	if out.Path == "" {
+		name = out.OriginalFilename
 	}
 	verified := "no"
 	if out.Verified {
 		verified = "yes"
 	}
-	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes via %s.\n", mdCell(name), out.SizeBytes, mdCell(out.Source))
+	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes.\n", mdCell(name), out.SizeBytes)
 	fmt.Fprintf(&b, "- Path: %s\n- Verified: %s\n", mdCell(out.Path), verified)
+	if out.OriginalFilename != "" && out.OriginalFilename != name {
+		fmt.Fprintf(&b, "- Announced by the source: %s\n", mdCell(out.OriginalFilename))
+	}
+	if out.NameOrigin != "" {
+		fmt.Fprintf(&b, "- Name origin: %s\n", mdCell(string(out.NameOrigin)))
+	}
 	if out.Resumed {
 		b.WriteString("- Resumed from a partial download.\n")
 	}
