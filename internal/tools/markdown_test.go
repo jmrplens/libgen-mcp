@@ -223,38 +223,20 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 	}
 }
 
-// TestRenderDownloadMarkdownPinOutcome verifies the Markdown block says whether a
-// pinned source held, says nothing at all when nothing was pinned, and never names
-// the source in any of the three cases.
+// TestRenderDownloadMarkdownWithholdsProvenance verifies the Markdown block names
+// neither the serving source nor the mirror, and says nothing about a pin either.
 //
 // The Markdown is the channel the model actually reads, so a leak here would defeat
-// the struct tags entirely — and the false case is the only one that has to be
-// actionable, since it is the one where the caller may want to pin something else.
-func TestRenderDownloadMarkdownPinOutcome(t *testing.T) {
-	held, missed := true, false
-	for name, tc := range map[string]struct {
-		served *bool
-		want   string
-		absent string
-	}{
-		"unpinned": {served: nil, absent: "source you asked for"},
-		"pin held": {served: &held, want: "The source you asked for is the one that served this file."},
-		"pin lost": {served: &missed, want: "did not serve this file"},
-	} {
-		out := renderDownloadMarkdown(DownloadOutput{DownloadResult: libgen.DownloadResult{
-			Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
-			ServedByRequestedSource: tc.served,
-		}})
-		if tc.want != "" && !strings.Contains(out, tc.want) {
-			t.Errorf("%s: markdown should state %q; got:\n%s", name, tc.want, out)
-		}
-		if tc.absent != "" && strings.Contains(out, tc.absent) {
-			t.Errorf("%s: markdown should say nothing about a pin; got:\n%s", name, out)
-		}
-		for _, leak := range []string{"libgen", "libgen.li"} {
-			if strings.Contains(out, leak) {
-				t.Errorf("%s: markdown leaked the provenance %q; got:\n%s", name, leak, out)
-			}
+// the struct tags entirely. Nothing is said about the pin because there is nothing
+// to say: a pinned call runs against that one source, so a rendered download is the
+// pinned source's own delivery and a sentence confirming it would be noise.
+func TestRenderDownloadMarkdownWithholdsProvenance(t *testing.T) {
+	out := renderDownloadMarkdown(DownloadOutput{DownloadResult: libgen.DownloadResult{
+		Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
+	}})
+	for _, leak := range []string{"libgen", "libgen.li", "source you asked for"} {
+		if strings.Contains(out, leak) {
+			t.Errorf("markdown leaked %q; got:\n%s", leak, out)
 		}
 	}
 }

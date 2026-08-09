@@ -138,9 +138,13 @@ For a given item the pipeline:
    caller's download directory. Each removal takes that path's lock and skips the partial when
    another download holds it, so a concurrent transfer is never unlinked from under.
 
-The chosen filename is, in priority order: an explicit `filename`, the CDN-announced
-`Content-Disposition` name, a clean `Author - Title (Year).ext` built from metadata, or the
-MD5 — always sanitized, with a source-provided extension appended when the name has none.
+An explicit `filename` always wins. With none, the name turns on whether the bytes were
+digest-verified: a **verified** (`md5`) download is named `Author - Title (Year).ext` from the
+record, while an **unverified** (`doi`/`isbn`) one keeps the announced `Content-Disposition`
+name stripped of mirror marks and falls back to the requested identifier — naming an unverified
+delivery after the record that was asked for would dress a wrong file in the right name. Every
+name is sanitized, with a source-provided extension appended when it has none. See
+[Tools](tools.md#how-the-saved-file-is-named) for the full rule.
 
 ### Download flow
 
@@ -177,7 +181,9 @@ flowchart TD
 The destination name is chosen by the verified/unverified rule, not by what the mirror
 announced, and the result reports its provenance in `name_origin`. The result reports **no**
 source and **no** mirror: both remain server-side, on the `source resolved` log line, because
-a tool result may reveal only what the call already revealed. See
+a tool result may reveal only what the call already revealed. A `resolve_only` call is the one
+exception the rule allows — it returns a direct URL instead of a saved file, and that URL's own
+host names the provider, so `resolved.source` travels beside it. See
 [Tools](tools.md#what-the-result-withholds) and
 [the result-disclosure ADR](decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
 

@@ -109,32 +109,5 @@
   "publisher": "Public Library of Science (PLoS)",
   "title": "Sharing Detailed Research Data Is Associated with Increased Citation Rate",
   "updated": "2026-08-06T13:39:34Z",
-  "year": 2007,
-  "z_authors": [
-    {
-      "author_position": "first",
-      "is_corresponding": true,
-      "raw_affiliation_strings": [
-        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America. hpiwowar@cbmi.pitt.edu",
-        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
-      ],
-      "raw_author_name": "Heather A. Piwowar"
-    },
-    {
-      "author_position": "middle",
-      "is_corresponding": false,
-      "raw_affiliation_strings": [
-        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
-      ],
-      "raw_author_name": "Roger S. Day"
-    },
-    {
-      "author_position": "last",
-      "is_corresponding": false,
-      "raw_affiliation_strings": [
-        "Department of Biomedical Informatics, University of Pittsburgh School of Medicine, Pittsburgh, Pennsylvania, United States of America"
-      ],
-      "raw_author_name": "Douglas B. Fridsma"
-    }
-  ]
+  "year": 2007
 }

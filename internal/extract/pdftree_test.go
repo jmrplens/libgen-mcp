@@ -30,6 +30,13 @@ func cyclicPageTreePDF() []byte {
 // nodes ending in one page of real text. It is the acyclic counterpart of the
 // fixture above: nesting alone, with no cycle, so the depth bound can be shown
 // to accept a deep-but-finite tree and reject a deeper one on the same shape.
+//
+// The fixture's depth and the depth walkPageTree counts differ by one, and the
+// two boundary tests below depend on knowing which way. The walk enters at the
+// root /Pages node with depth 0, so the last of the depth chained /Pages nodes is
+// inspected at walk-depth depth-1, and the bound (depth >= maxPageTreeDepth,
+// tested on entry to a /Pages node) first bites at a fixture depth of
+// maxPageTreeDepth+1. A chain of exactly maxPageTreeDepth still reads.
 func nestedPageTreePDF(depth int) []byte {
 	objs := []string{"<</Type/Catalog/Pages 2 0 R>>"}
 	for i := range depth {
@@ -147,9 +154,15 @@ func TestReadModes_LegitimatePDFUnaffected(t *testing.T) {
 // producer emits still has an end, so the walk reaches it and the document reads
 // normally — the bound is there to catch descent that never ends, not descent
 // that is merely long.
+//
+// The chain is exactly maxPageTreeDepth deep, the last shape the walk accepts
+// (see nestedPageTreePDF for the fixture-to-walk offset). Paired with
+// TestPageTree_RejectsNestingPastTheBound one level further down, that pins the
+// transition rather than bracketing it: the two used to sit at -2 and +4, a gap
+// wide enough for an off-by-one in the comparison to sit in unnoticed.
 func TestPageTree_AcceptsDeepButFiniteNesting(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deep.pdf")
-	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth-2), 0o600); err != nil {
+	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	chunk, err := Extract(context.Background(), path, Req{})
@@ -166,10 +179,12 @@ func TestPageTree_AcceptsDeepButFiniteNesting(t *testing.T) {
 
 // TestPageTree_RejectsNestingPastTheBound verifies the same shape one level too
 // deep is refused, and refused with the shared diagnosis rather than a
-// mode-specific one.
+// mode-specific one. "One level" is literal: maxPageTreeDepth+1 is the shallowest
+// chain the walk turns down, so this is the other side of the exact transition
+// TestPageTree_AcceptsDeepButFiniteNesting pins from below.
 func TestPageTree_RejectsNestingPastTheBound(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "deeper.pdf")
-	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth+4), 0o600); err != nil {
+	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	chunk, err := Extract(context.Background(), path, Req{})

@@ -52,15 +52,36 @@ operator holds a paid account and how much of the window the user has spent.
 
 ## Decision
 
-The download result carries no `source` and no `mirror`. In their place:
+The download result carries no `source` and no `mirror`. Nothing is substituted
+for them:
 
-- **`served_by_requested_source`**, a three-state boolean. **Absent** when the
-  call named no source — there is nothing to compare against, and a bare `false`
-  would read as "some other source served it", which is exactly the disclosure
-  being withheld. **`true`** when the pin held. **`false`** when a different
-  source in the chain served the file, which is enough for the caller to pin
-  another one or drop the pin and let the chain choose.
+- **The serving source is not exposed at all**, not even indirectly. A caller
+  that pinned nothing named no provider, so there is nothing to report back to
+  it. A caller that pinned one needs nothing reported: pinning narrows the chain
+  to that source alone — `selectSources` returns exactly the named source, and
+  there is no substitution or fallback behind a pin — so a returned file came
+  from the source the caller named, and an error means that source could not
+  serve the item. The routing fact is in the outcome, not in a field.
 - **`account`** is reported only when the call set `annas_member: true`.
+
+### The boolean that was tried first
+
+This decision originally shipped a three-state `served_by_requested_source`:
+absent when the call pinned nothing, `true` when the pin held, `false` when a
+different source served the file. The false state does not exist. Because a pin
+is the whole chain, a pinned download either returns that source's file or fails
+outright, so the flag was `true` whenever it was present and absent otherwise —
+the same bit as "did I get a file", carried twice. It was withdrawn.
+
+It is recorded here rather than quietly deleted because the flag reads as
+reasonable until someone checks `selectSources`, and because its jsonschema
+description told models what to do "when a different one did" serve the file,
+documenting a behavior the code never implemented. Anyone reaching for a
+provenance bit again should find this paragraph before rediscovering it.
+
+The case that motivated the flag survives its removal. A model that pins
+`archive`, is refused, and then pins a different source knows perfectly well
+where the file it finally gets came from — it chose the source itself.
 
 The source and the mirror stay inside the server, tagged out of the wire
 (`json:"-"`). Cooldown bookkeeping needs both, and the `source resolved` log line
@@ -74,6 +95,11 @@ The tool's own description was reworded to match: it leads with the chain's orde
 none of them serves the item), keeps the identifier-to-name mapping so a caller
 can read the `source` enum and the `resolve_only` link, and states plainly that
 the serving source is chosen while resolving and is not named in the result.
+Where it introduces the `source` argument it also states the pin's contract —
+one provider instead of all of them, with no substitution, so a file that comes
+back came from it and a failure means it could not serve the item. That sentence
+is what makes the argument usable without a provenance field behind it, and it
+discloses nothing, since the caller supplied the name.
 
 ## What stays in the result on purpose
 
@@ -94,9 +120,10 @@ the serving source is chosen while resolving and is not named in the result.
   intended. Attribution before the call — which providers a deployment can reach
   — is still available from the `source` enum and the tool description; only the
   after-the-fact naming is gone.
-- A caller that wants a specific provider must pin it and read
-  `served_by_requested_source`, which is one bit rather than a name. Pinning is
-  now the only way to learn anything about routing from a result.
+- A caller that wants a specific provider must pin it, and the pin reports
+  itself: the file that comes back is that provider's, or no file comes back.
+  Pinning is the only way to learn anything about routing from a call, and what
+  it learns comes from the outcome rather than from a field in the result.
 - **The evaluator had to move its assertions to the server log.** Several
   scenarios graded the chain by reading `DownloadResult.Source` out of the
   result; they now parse the `source resolved` line out of `calls[].server_logs`,

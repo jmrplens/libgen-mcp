@@ -59,6 +59,30 @@ func TestCheckDOITitle(t *testing.T) {
 			wantCrossref: "Why Most Published Research Findings Are False",
 		},
 		{
+			// One content word is the shape with no middle band: the score can only
+			// be 1 or 0, so without a floor on the evidence every unconfirmed
+			// one-word title is condemned outright. A catalog record reduced to
+			// "Editorial" is thin ground for telling the caller the catalog lies,
+			// and the DOI is withheld either way, so the quieter verdict is right.
+			name: "one content word is not enough to accuse", record: "Editorial",
+			crossref: "Why Most Published Research Findings Are False", wantVerdict: DOIUnverified,
+			wantCrossref: "Why Most Published Research Findings Are False",
+		},
+		{
+			// The floor is a floor, not a general softening: two content words with
+			// nothing in common still resolve to a mismatch.
+			name: "two content words still accuse", record: "Editorial Board",
+			crossref: "Why Most Published Research Findings Are False", wantVerdict: DOIMismatch,
+			wantCrossref: "Why Most Published Research Findings Are False",
+		},
+		{
+			// A one-word title is still confirmable — the floor only guards the
+			// accusation, so the subtitle-dropping case keeps working at one word.
+			name: "one content word still confirms", record: "Antifragile",
+			crossref: "Antifragile: Things That Gain from Disorder", wantVerdict: DOIConfirmed,
+			wantCrossref: "Antifragile: Things That Gain from Disorder",
+		},
+		{
 			name: "registry returned no title", record: "Antifragile",
 			crossref: "", wantVerdict: DOIUnverified, wantCrossref: "",
 		},
@@ -116,14 +140,10 @@ func newVerifyClient(t *testing.T, base string) *Client {
 		DownloadDir: t.TempDir(), Timeout: 5 * time.Second,
 		RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
 	}
-	return New(staticMirrorList{}, cfg, WithEnrichBaseURLs(base, base))
+	// staticMirrors, from client_test.go, is the package's one MirrorLister stub;
+	// empty because these tests never touch the catalog.
+	return New(staticMirrors{}, cfg, WithEnrichBaseURLs(base, base))
 }
-
-// staticMirrorList is an empty MirrorLister: these tests never touch the catalog.
-type staticMirrorList []string
-
-// Mirrors implements MirrorLister.
-func (s staticMirrorList) Mirrors(context.Context) []string { return s }
 
 // TestVerifyDOI covers the network path end to end: a registry that names a
 // different work yields DOIMismatch, and every way the lookup can come up empty —

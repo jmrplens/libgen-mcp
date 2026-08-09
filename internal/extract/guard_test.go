@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -174,8 +175,10 @@ func TestGuardedRead_AlreadyCanceledContext(t *testing.T) {
 // TestGuardedRead_CallerCancelsMidRead verifies the difference between the two
 // ways a guarded read can end early. When the caller cancels, that is the
 // caller's own error and must propagate as one; only the budget expiring on a
-// live caller produces the unreadable-file diagnosis, and only that case counts
-// against the stuck-read gauge.
+// live caller produces the unreadable-file diagnosis. The accounting is the same
+// on both paths (see TestGuardedRead_CancellationCountsAStuckRead), but the work
+// here honors its context, so the slot it briefly holds is given back at once and
+// the gauge settles at zero.
 func TestGuardedRead_CallerCancelsMidRead(t *testing.T) {
 	awaitNoStuckReads(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -195,6 +198,61 @@ func TestGuardedRead_CallerCancelsMidRead(t *testing.T) {
 	if reason != "" {
 		t.Errorf("a caller's own cancellation is not a diagnosis about the file; got %q", reason)
 	}
+	awaitNoStuckReads(t)
+}
+
+// TestGuardedRead_CancellationCountsAStuckRead closes the hole the accounting
+// used to have. A caller that cancels abandons its goroutine exactly as an
+// expired budget does, but only the budget path claimed a stuck slot — so a read
+// wedged in uninterruptible third-party code was invisible to maxStuckReads
+// whenever the caller happened to give up first. That is not a rare shape: a
+// client disconnecting, or carrying a deadline shorter than readBudget, is the
+// fastest way to accumulate abandoned goroutines, and the backstop that caps the
+// damage was blind to precisely it.
+//
+// The work here ignores its context and blocks on a channel this test owns, so
+// the assertion is deterministic rather than timing-dependent: the goroutine
+// provably has not finished at the moment the gauge is read. Releasing it
+// afterwards proves the other half — a slot claimed on this path is still given
+// back, so a cancellation the work honors does not leak gauge.
+func TestGuardedRead_CancellationCountsAStuckRead(t *testing.T) {
+	awaitNoStuckReads(t)
+
+	release := make(chan struct{})
+	releaseWork := sync.OnceFunc(func() { close(release) })
+	// Registered as cleanup as well, so a failed assertion below cannot strand the
+	// goroutine and leave every later test looking saturated.
+	t.Cleanup(releaseWork)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	var (
+		reason string
+		err    error
+	)
+	mustReturnWithin(t, 10*time.Second, "guardedRead", func() {
+		go func() {
+			<-started
+			cancel()
+		}()
+		_, reason, err = guardedRead(ctx, func(context.Context) (int, error) {
+			close(started)
+			<-release // Never consults the context, exactly as a parsing library does not.
+			return 0, nil
+		})
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if reason != "" {
+		t.Errorf("a caller's own cancellation is not a diagnosis about the file; got %q", reason)
+	}
+	if got := stuckReads.Load(); got != 1 {
+		t.Errorf("an abandoned goroutine must be counted however the wait ended; gauge = %d, want 1", got)
+	}
+	releaseWork()
 	awaitNoStuckReads(t)
 }
 

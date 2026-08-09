@@ -47,9 +47,12 @@ func cannotOpenEPUBReason(err error) string {
 
 // notReadableEPUBReason is the diagnosis for a readable archive whose EPUB
 // structure (container.xml, OPF) is broken. Shared so every read mode words it
-// the same way.
+// the same way. It formats err with %v rather than calling err.Error(), matching
+// its sibling above: three read modes reach these two helpers, and one of them
+// growing a path that reports a broken EPUB without an error to name should
+// produce a lame diagnosis, not a panic.
 func notReadableEPUBReason(err error) string {
-	return "not a readable EPUB: " + err.Error()
+	return fmt.Sprintf("not a readable EPUB: %v", err)
 }
 
 // extractEPUB reads an EPUB as a ZIP archive, concatenates the text of its

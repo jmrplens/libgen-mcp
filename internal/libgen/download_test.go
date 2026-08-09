@@ -2432,6 +2432,11 @@ func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
 // asked. Both fields stay on the struct because the chain's cooldown bookkeeping
 // and the operator's log still read them; only the json tag changed, and a tag is
 // exactly the kind of thing that gets reverted by accident.
+//
+// The flag that briefly replaced Source is checked as ABSENT for a different
+// reason: it was never a disclosure risk, it was empty. selectSources narrows a
+// pinned call to that one source, so a pinned download either returns that
+// source's file or errors out, and the flag could report nothing but true.
 func TestDownloadResultKeepsProvenanceOffTheWire(t *testing.T) {
 	for _, name := range []string{"Source", "Mirror"} {
 		field, ok := reflect.TypeFor[DownloadResult]().FieldByName(name)
@@ -2442,31 +2447,9 @@ func TestDownloadResultKeepsProvenanceOffTheWire(t *testing.T) {
 			t.Errorf(`DownloadResult.%s json tag = %q, want "-": provenance must not be serialized to the caller`, name, got)
 		}
 	}
-	served, ok := reflect.TypeFor[DownloadResult]().FieldByName("ServedByRequestedSource")
-	if !ok {
-		t.Fatal("DownloadResult has no ServedByRequestedSource field")
-	}
-	if got := served.Tag.Get("json"); got != "served_by_requested_source,omitempty" {
-		t.Errorf("ServedByRequestedSource json tag = %q; omitempty is what gives it its third state (absent)", got)
-	}
-	if served.Type.Kind() != reflect.Pointer {
-		t.Errorf("ServedByRequestedSource is %s, want a pointer: a plain bool's zero value reads as \"another source served it\"",
-			served.Type)
-	}
-}
-
-// TestServedAsRequested covers the three states of the only provenance answer a
-// download result gives: absent when the call pinned nothing, true when the pin
-// held, false when another source served the file.
-func TestServedAsRequested(t *testing.T) {
-	if got := servedAsRequested("  ", "libgen"); got != nil {
-		t.Errorf("an unpinned call has nothing to compare; got %v", *got)
-	}
-	if got := servedAsRequested(" LibGen ", "libgen"); got == nil || !*got {
-		t.Errorf("a pin that held must report true (case- and space-insensitively); got %v", got)
-	}
-	if got := servedAsRequested("annas", "libgen"); got == nil || *got {
-		t.Errorf("a pin another source outran must report false; got %v", got)
+	if _, present := reflect.TypeFor[DownloadResult]().FieldByName("ServedByRequestedSource"); present {
+		t.Error("DownloadResult carries ServedByRequestedSource again: selectSources narrows a pinned " +
+			"call to that one source, so the flag can only ever be true and carries no information")
 	}
 }
 

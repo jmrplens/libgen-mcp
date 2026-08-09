@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"regexp"
 	"runtime/debug"
@@ -143,7 +142,7 @@ type DownloadInput struct {
 	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; articles are fetched by DOI; provide md5, isbn or doi"`
 	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi"`
 	Path        string `json:"path,omitempty" jsonschema:"destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true"`
-	Filename    string `json:"filename,omitempty" jsonschema:"destination filename; used exactly as given. Leave it unset to get a clean name: an md5 download is verified against its digest, so it is named from the record as 'Author - Title (Year).ext'; a doi or isbn download cannot be verified, so it keeps the name the source announced (minus mirror marks) and only falls back to the identifier when that name is a placeholder like download.pdf"`
+	Filename    string `json:"filename,omitempty" jsonschema:"destination filename; used as given once sanitized into a single filename component (path separators become underscores, so it always names one file inside the destination directory and never a path). Leave it unset to get a clean name: an md5 download is verified against its digest, so it is named from the record as 'Author - Title (Year).ext'; a doi or isbn download cannot be verified, so it keeps the name the source announced (minus mirror marks) and only falls back to the identifier when that name is a placeholder like download.pdf"`
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all; the enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"when true, RESOLVE the direct download URL and return it as a link WITHOUT downloading — use this when the server runs remotely from the user (a hosted/HTTP deployment cannot write to the client's disk), or to hand the URL to your own fetch/HTTP tool. When false (default), the file is downloaded to the server's disk (correct for a local stdio/Docker server, where that is the user's machine)"`
@@ -391,8 +390,9 @@ func downloadToolDescription(book, isbnBook, article []string) string {
 		b.WriteString("If both md5 and doi are given, article sources are tried first, then book sources. ")
 	}
 	writeSourceChainDisclosure(&b, orderedEnabledSources(book, isbnBook, article))
-	b.WriteString("Set source to restrict the download to a single provider instead of trying them all; " +
-		"the source argument's own enum lists the ones this deployment enabled. ")
+	b.WriteString("Set source to restrict the download to one provider instead of all of them, with no " +
+		"substitution: a file you get back came from it, and a failure means it could not serve the item. " +
+		"Its enum lists the ones this deployment enabled. ")
 	fmt.Fprintf(&b, "The %s come from a prior search result. ", strings.Join(keys, "/"))
 	b.WriteString("Returns the saved path and size. ")
 	b.WriteString("Set resolve_only=true to instead get the direct download URL back (as a link) WITHOUT downloading — use this when the server runs remotely from you (it cannot write to your disk), or to fetch the file with your own tool. ")
@@ -434,11 +434,11 @@ var shadowLibraryIdentities = []struct{ name, identity string }{
 //     mirror is reached at all: never before the openly licensed and open-access
 //     sources have failed to serve the item.
 //   - Which source will serve THIS call. None is chosen when the call is made — the
-//     chain picks one while resolving — and the result does not name it either. What
-//     the result does say is whether a source the caller PINNED served the file,
-//     which reveals nothing the call did not already state. In the last measured
-//     suite twelve different sources served files and most downloads never reached
-//     a mirror.
+//     chain picks one while resolving — and the result does not name it either. The
+//     only routing fact a caller can hold is the one it supplies itself by pinning a
+//     source, and that contract is stated a sentence later, where the source argument
+//     is introduced. In the last measured suite twelve different sources served files
+//     and most downloads never reached a mirror.
 //   - Whether the request is licensed. That turns on which sources the operator
 //     enabled and which credentials, subscriptions and memberships the server holds,
 //     none of which the caller can see, so this list is the wrong thing to read a
@@ -465,8 +465,7 @@ func writeSourceChainDisclosure(b *strings.Builder, enabled []string) {
 	}
 	fmt.Fprintf(b, "Openly licensed and open-access sources are tried first; the shadow-library mirrors are "+
 		"reached only when none of them serves the item: %s. The serving source is chosen while resolving, "+
-		"not before the call, and is not named in the result — which reports only whether a source you pinned "+
-		"served the file. Which sources are enabled, and what credentials, "+
+		"not before the call, and is not named in the result. Which sources are enabled, and what credentials, "+
 		"subscriptions or memberships this server holds, is set by the operator and is not visible to you: "+
 		"do not infer from this list whether a given request is licensed. ",
 		strings.Join(named, ", "))
@@ -1922,7 +1921,13 @@ func intField(m map[string]any, key string) int64 {
 		}
 		return n
 	case float64:
-		if v < 0 || v > math.MaxInt64 {
+		// The bound is 2^63 and the comparison is >=, not > math.MaxInt64: that
+		// constant is not representable in float64 and rounds up to 2^63 when the
+		// compiler converts it, so a JSON number of exactly 9223372036854775808
+		// would pass the check and then reach an out-of-range int64() conversion
+		// whose result the spec leaves implementation-defined.
+		const overInt64 = 1 << 63
+		if v < 0 || v >= overInt64 {
 			return 0
 		}
 		return int64(v)

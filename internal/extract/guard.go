@@ -138,10 +138,18 @@ func guardedRead[T any](ctx context.Context, fn func(context.Context) (T, error)
 		}
 		return out.value, "", out.err
 	case <-inner.Done():
+		// The goroutine is abandoned identically whichever context ended the wait: a
+		// caller that gives up leaves the read running exactly as an expired budget
+		// does, and if that read is inside uninterruptible third-party code nothing
+		// will ever stop it. So the slot is claimed on both paths — counting only the
+		// budget case left the backstop blind to the traffic that fills it fastest, a
+		// client disconnecting from a stream of poisoned files. finish() hands the
+		// slot straight back when the read was merely slow, so a cancellation the
+		// work actually honors costs nothing.
+		w.abandon()
 		if e := ctx.Err(); e != nil {
 			return zero, "", e
 		}
-		w.abandon()
 		return zero, unresponsiveReadReason, nil
 	}
 }

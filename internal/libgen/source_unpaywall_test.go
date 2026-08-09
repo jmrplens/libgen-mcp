@@ -15,6 +15,11 @@ import (
 // unpaywallTestServer serves the given testdata fixture at any path and records
 // the last request URI, so tests can assert both the parsed outcome and that the
 // DOI/email were embedded in the request.
+//
+// The fixtures are live Unpaywall records kept verbatim in every field this
+// source reads, with one deletion: z_authors, a per-author block of names and
+// affiliation strings that unpaywallResponse does not decode and no test looks
+// at, ran to roughly a fifth of each file's bytes for nothing.
 func unpaywallTestServer(t *testing.T, fixture string) (*httptest.Server, *string) {
 	t.Helper()
 	body, err := os.ReadFile("testdata/" + fixture)
@@ -340,11 +345,13 @@ func TestLooksLikeFileURL(t *testing.T) {
 	}
 }
 
-// TestUnpaywall_DistinctDiagnoses verifies the error taxonomy stays distinct: a
-// not-open-access record reports "not open access", while an OA record with no
-// downloadable location reports that only landing pages are listed. The two are
-// separate diagnoses so a caller can tell a paywalled DOI from an OA one Unpaywall
-// simply cannot serve a file for.
+// TestUnpaywall_DistinctDiagnoses verifies the error taxonomy stays distinct
+// across all three ways a lookup can decline to hand over a file: a paywalled
+// DOI, an OA DOI with no locations indexed at all, and an OA DOI whose locations
+// are every one of them a landing page. The last two used to share the
+// landing-page wording, which claimed a page existed to go and look at when the
+// record listed nothing whatsoever — the same false steer for the caller as
+// calling a paywalled article open.
 func TestUnpaywall_DistinctDiagnoses(t *testing.T) {
 	cases := []struct {
 		name string
@@ -357,9 +364,18 @@ func TestUnpaywall_DistinctDiagnoses(t *testing.T) {
 			want: "not open access",
 		},
 		{
-			name: "OA but no downloadable location",
+			name: "OA but no location at all",
 			body: `{"is_oa": true, "best_oa_location": null, "oa_locations": []}`,
-			want: "lists no direct file",
+			want: "lists no open-access location",
+		},
+		{
+			// Distinct from the case above by construction: a location exists, it just
+			// is not a file. The assertion is that this one, and only this one, gets
+			// the landing-page wording.
+			name: "OA but the only location is not a file",
+			body: `{"is_oa": true, "best_oa_location": null,
+			        "oa_locations": [{"url": "https://doaj.org/article/abc", "url_for_pdf": null, "host_type": "repository", "version": "submittedVersion"}]}`,
+			want: "only landing pages",
 		},
 		{
 			name: "OA but every location is a landing page",

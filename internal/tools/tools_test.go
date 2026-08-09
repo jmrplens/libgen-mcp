@@ -949,7 +949,14 @@ func TestIntField(t *testing.T) {
 		"words":    "unknown",
 		"negative": "-1",
 		"huge":     1e19, // beyond int64
-		"wrong":    []any{1},
+		// Exactly 2^63: one past the largest int64, and the value math.MaxInt64
+		// rounds to when it is converted to float64 — so a > math.MaxInt64 bound
+		// would wave it through into an out-of-range conversion.
+		"boundary": float64(1 << 63),
+		// The largest float64 that is a valid int64, i.e. the last value that must
+		// still be read rather than rejected.
+		"boundaryOK": float64(1<<63 - 1024),
+		"wrong":      []any{1},
 	}
 	tests := []struct {
 		key  string
@@ -961,6 +968,8 @@ func TestIntField(t *testing.T) {
 		{"words", 0},
 		{"negative", 0},
 		{"huge", 0},
+		{"boundary", 0},
+		{"boundaryOK", 1<<63 - 1024},
 		{"wrong", 0},
 		{"absent", 0},
 	}
@@ -1440,8 +1449,7 @@ func downloadByDOISession(t *testing.T, name string, payload []byte) *mcp.Client
 }
 
 // TestDownloadWithholdsProvenance verifies that a download which named no source
-// gets a result naming none either: no source, no mirror, and not even the
-// pin-held flag, which has nothing to compare against.
+// gets a result naming none either: no source and no mirror.
 //
 // The rule is that a result may only reveal what the call already revealed. The
 // provenance of a file is a fact about the operator's configuration and the user's
@@ -1467,20 +1475,21 @@ func TestDownloadWithholdsProvenance(t *testing.T) {
 			t.Errorf("structured output must not carry %q; got %v", banned, v)
 		}
 	}
-	if v, present := raw["served_by_requested_source"]; present {
-		t.Errorf("no source was pinned, so there is nothing to compare; got served_by_requested_source=%v", v)
-	}
 	text := textContent(res)
 	if strings.Contains(text, "scihub") {
 		t.Errorf("the Markdown block must not name the serving source; got:\n%s", text)
 	}
 }
 
-// TestDownloadReportsWhetherThePinHeld verifies the one provenance fact a result
-// may state: a call that PINNED a source is told whether that source served the
-// file. It reveals nothing new — the caller wrote the name itself — and it is what
-// lets a model tell "the source I chose delivered" from "something else did".
-func TestDownloadReportsWhetherThePinHeld(t *testing.T) {
+// TestDownloadPinnedCallGetsNoProvenanceEither verifies that pinning a source buys
+// the caller no provenance in the result: no source name, and no flag about the pin.
+//
+// The flag existed here until it was noticed that it could not be false. A pinned
+// call runs against that one source and nothing else, so the file arriving IS the
+// answer — it came from the source the caller named — and an error is the other
+// answer. Reporting a bit that is true whenever it is present tells the model
+// nothing it did not already know from getting a file at all.
+func TestDownloadPinnedCallGetsNoProvenanceEither(t *testing.T) {
 	session := downloadByDOISession(t, "scihub", []byte("%PDF-1.4 article fetched by DOI"))
 	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:      "download",
@@ -1493,14 +1502,13 @@ func TestDownloadReportsWhetherThePinHeld(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 	raw := downloadStructuredKeys(t, res)
-	if served, ok := raw["served_by_requested_source"].(bool); !ok || !served {
-		t.Errorf("served_by_requested_source = %v, want true", raw["served_by_requested_source"])
+	for _, banned := range []string{"source", "mirror", "served_by_requested_source"} {
+		if v, present := raw[banned]; present {
+			t.Errorf("a pinned call must not get %q back; got %v", banned, v)
+		}
 	}
-	if _, present := raw["source"]; present {
-		t.Error("a pinned call still must not get the serving source back by name")
-	}
-	if text := textContent(res); !strings.Contains(text, "The source you asked for is the one that served this file.") {
-		t.Errorf("the Markdown block should state that the pin held; got:\n%s", text)
+	if text := textContent(res); strings.Contains(text, "scihub") || strings.Contains(text, "source you asked for") {
+		t.Errorf("the Markdown block should say nothing about the pin or the source; got:\n%s", text)
 	}
 }
 
@@ -1666,18 +1674,21 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // until the call runs, and that the operator's source and credential configuration
 // is invisible from here.
 //
-// The middle fact has since been halved. The serving source is not disclosed once
-// the call HAS run either, so the promise is now only that a source the caller
-// pinned reports whether it held. The old clause is checked as banned text rather
-// than merely dropped from the wanted list: "and named in the result" describes a
-// field that no longer exists, and nothing else in the build can catch a
-// description that lies.
+// The middle fact has since been revised twice. The serving source is not disclosed
+// once the call HAS run either; and the flag that briefly stood in for it is gone
+// too, because a pin narrows the chain to that one source, so the flag could only
+// ever be true. What the description carries in its place is the contract that makes
+// that so — a pinned download is served by the pinned source or it fails — which is
+// the routing fact a caller can act on and the one thing the source argument's own
+// enum never explained. Both retired clauses are checked as banned text rather than
+// merely dropped from the wanted list: each describes a field that no longer exists,
+// and nothing else in the build can catch a description that lies.
 func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	desc := downloadToolDescription(
 		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
 	for _, banned := range []string{
 		"without the rightsholder's permission", "copyrighted works",
-		"and named in the result",
+		"and named in the result", "whether a source you pinned served the file",
 	} {
 		if strings.Contains(desc, banned) {
 			t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
@@ -1686,9 +1697,11 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	for _, want := range []string{
 		// The source is not selected when the description is read.
 		"chosen while resolving",
-		// Nor disclosed after it has been: all the result carries is whether the
-		// caller's own pin held.
-		"is not named in the result — which reports only whether a source you pinned served the file",
+		// Nor disclosed after it has been. What stands in its place is the pin's own
+		// contract, stated where the source argument is introduced.
+		"is not named in the result",
+		"restrict the download to one provider instead of all of them, with no substitution",
+		"a failure means it could not serve the item",
 		// The operator's configuration is the thing that settles this, and it is
 		// not visible to the caller.
 		"is set by the operator and is not visible to you",

@@ -49,6 +49,13 @@ const (
 	// badDownloadISBNDetail is the failure detail when a download call's isbn is not
 	// shaped like a ten- or thirteen-character ISBN.
 	badDownloadISBNDetail = "download isbn is not a well-formed ISBN"
+	// wrongSourceArgDetail opens the failure detail when a download call pinned some
+	// source other than the one the scenario is about; the wanted name is appended.
+	wrongSourceArgDetail = "download source arg is not "
+	// refusedInfix joins a source name to the case it declined, in the details of the
+	// assertions that grade a clean refusal ("archive refused a lending-restricted
+	// book …").
+	refusedInfix = " refused "
 )
 
 // noDownloadCall is the failure detail when a download scenario produced no
@@ -2389,6 +2396,20 @@ func assertOapenRejectsUnheld(tr transcript) (pass bool, detail string) {
 // 270,383 verified bytes, and said twice where they came from — and the shared
 // assertion failed it, because admitsMiss cannot recognize an answer that reports a
 // success by another route.
+//
+// What the answer is held to, once the gate has held, is narrower than "provenance",
+// and the reason is that the model is not told it. The download result names no
+// serving source, and pinning one only ever confirms itself (a pinned call is served
+// by that source or it fails), so a model that pinned archive, got an error, and then
+// let the chain pick knows exactly one thing about the file it ended up with: it did
+// not come from the Internet Archive.
+// Requiring it to name Anna's Archive would be asking for a fact the tool withholds —
+// passable only by a model that happened to pin the fallback too, which is exactly
+// what the 2026-08-08 run above did. A bar that a model clears by an unrelated choice
+// is a false green waiting, not a test. So what is required is the fact the model does
+// hold: it must not present the file as the Archive copy that was asked for. Naming
+// the real source still passes — a model that pinned it does know — but it is
+// accepted, never required.
 func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
 	const want, why = "archive", "a lending-restricted book"
 	if _, called := findDownloadCall(tr); !called {
@@ -2396,7 +2417,7 @@ func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
 	}
 	call, ok := findSourcedCall(tr, want)
 	if !ok {
-		return false, "download source arg is not " + want
+		return false, wrongSourceArgDetail + want
 	}
 	if keyOK, msg := downloadKeyOK(call, "isbn", lendingRestrictedISBN); !keyOK {
 		return false, msg
@@ -2416,22 +2437,59 @@ func assertArchiveRefusesLending(tr transcript) (pass bool, detail string) {
 	}
 	// Everything below grades the ANSWER, and the bar depends on what the user ended
 	// up with. Nothing arrived: the model owes them the miss. Something arrived from
-	// elsewhere: the model owes them its provenance, since a file from a shadow
-	// library is not the Internet Archive copy they asked for.
+	// elsewhere: the model owes them the one fact it holds — that the copy is not the
+	// Internet Archive's — since a file from a shadow library is not what was asked
+	// for and handing it over unqualified says it is.
 	elsewhere := servedBySomeSource(tr)
 	if elsewhere == "" {
 		if !admitsMiss(tr.FinalText) {
-			return false, want + " refused " + why + " but the model did not pass that on; it answered: " +
+			return false, want + refusedInfix + why + " but the model did not pass that on; it answered: " +
 				firstChars(tr.FinalText, 200)
 		}
-		return true, want + " refused " + why + " cleanly, and the model reported the miss instead of presenting a file"
+		return true, want + refusedInfix + why + " cleanly, and the model reported the miss instead of presenting a file"
 	}
-	if !namesSource(tr.FinalText, elsewhere) && !admitsMiss(tr.FinalText) {
-		return false, want + " refused " + why + " and " + elsewhere +
-			" served the book instead, but the model declared neither; it answered: " + firstChars(tr.FinalText, 200)
+	if namesSource(tr.FinalText, elsewhere) {
+		return true, want + refusedInfix + why + " cleanly and wrote nothing; the model routed to " + elsewhere +
+			" and named it, which it could only do by having pinned that source itself"
 	}
-	return true, want + " refused " + why + " cleanly and wrote nothing; the model routed to " + elsewhere +
-		" and told the user where the file came from"
+	if !reportsPinnedSourceMiss(tr.FinalText) {
+		return false, want + refusedInfix + why + " and " + elsewhere +
+			" served the book instead, but the model handed the file over without saying " + want +
+			" had not supplied it; it answered: " + firstChars(tr.FinalText, 200)
+	}
+	return true, want + refusedInfix + why + " cleanly and wrote nothing; the model recovered through " + elsewhere +
+		" and did not pass the file off as the " + want + " copy"
+}
+
+// pinnedSourceMissPhrases are the ways an answer says the source the call pinned is
+// not where the file came from, beyond the ones admitsMiss already knows. Two
+// vocabularies say it, from opposite ends: describing the gate that declined, and
+// describing the recovery that followed. Either one tells the user the copy in hand
+// is not the one they asked for, which is the whole disclosure S55 is owed.
+//
+// Every entry is matched as a substring, so "borrow" covers borrowable/borrowing and
+// "refus" covers refused/refusal. "instead" is the loosest of them and is kept
+// anyway: a model can use it for something other than a substituted source, but the
+// cost of that is crediting an honest answer twice over, whereas dropping it costs a
+// FAIL for the plainest way there is to say "not from there, from here".
+var pinnedSourceMissPhrases = []string{
+	// The gate, described.
+	"borrow", "lending", "loan", "restricted", "not downloadable",
+	"cannot be downloaded", "can't be downloaded", "refus", "declin", "blocked",
+	// The recovery, described.
+	"another source", "other source", "different source", "another library",
+	"elsewhere", "fell back", "fallback", "instead",
+}
+
+// reportsPinnedSourceMiss reports whether an answer acknowledges that the source the
+// call pinned did not supply the file — either by saying it came up short, or by
+// placing the file somewhere else.
+//
+// It is deliberately broader than namesSource: the model is never told which source
+// served it (the download result reports no routing fact at all), so the only
+// provenance it can state unaided is negative.
+func reportsPinnedSourceMiss(answer string) bool {
+	return admitsMiss(answer) || containsAny(strings.ToLower(answer), pinnedSourceMissPhrases...)
 }
 
 // sourceAliases are the names a model writes in prose for a download source whose
@@ -2458,8 +2516,10 @@ var sourceAliases = map[string][]string{
 // namesSource reports whether an answer says the file came from the given source,
 // under any of the names a model plausibly writes for it.
 //
-// It grades a disclosure, not a phrasing: the model has to have told the user which
-// library served the bytes, and it may spell it however it likes.
+// It recognizes a disclosure, not a phrasing: if the model did tell the user which
+// library served the bytes, it may spell it however it likes. No assertion requires
+// it, and none may — the download result names no source, so a model can state one
+// only when it pinned that source itself.
 func namesSource(answer, source string) bool {
 	names := sourceAliases[strings.ToLower(source)]
 	if len(names) == 0 {
@@ -2547,7 +2607,7 @@ func assertSourceRefuses(tr transcript, want, key, id, why string) (pass bool, d
 	}
 	call, ok := findSourcedCall(tr, want)
 	if !ok {
-		return false, "download source arg is not " + want
+		return false, wrongSourceArgDetail + want
 	}
 	if keyOK, msg := downloadKeyOK(call, key, id); !keyOK {
 		return false, msg
@@ -2560,10 +2620,10 @@ func assertSourceRefuses(tr transcript, want, key, id, why string) (pass bool, d
 		return false, functionalPrefix + want + " reported success for " + why + " without producing a file"
 	}
 	if !admitsMiss(tr.FinalText) {
-		return false, want + " refused " + why + " but the model did not pass that on; it answered: " +
+		return false, want + refusedInfix + why + " but the model did not pass that on; it answered: " +
 			firstChars(tr.FinalText, 200)
 	}
-	return true, want + " refused " + why + " cleanly, and the model reported the miss instead of presenting a file"
+	return true, want + refusedInfix + why + " cleanly, and the model reported the miss instead of presenting a file"
 }
 
 // sourceResolvedMsg is the message logging.SourceAttempt writes when a source
@@ -4530,7 +4590,7 @@ func assertSourcedDownload(tr transcript, want, key, id string) (pass bool, deta
 	}
 	call, ok := findSourcedCall(tr, want)
 	if !ok {
-		return false, "download source arg is not " + want
+		return false, wrongSourceArgDetail + want
 	}
 	if keyOK, msg := downloadKeyOK(call, key, id); !keyOK {
 		return false, msg
@@ -4696,7 +4756,7 @@ func assertS9Retry(tr transcript) (pass bool, detail string) {
 		return false, noDownloadCall
 	}
 	if stringField(call.Input, "source") != "scihub" {
-		return false, "download source arg is not scihub"
+		return false, wrongSourceArgDetail + "scihub"
 	}
 	if keyOK, msg := downloadKeyOK(call, "doi", openAccessDOI); !keyOK {
 		return false, msg

@@ -4,7 +4,7 @@
 
 ## Tools
 
-libgen-mcp exposes 4 tools over the libgen.li family of mirrors. No account or token is required.
+libgen-mcp exposes 4 tools over the Library Genesis mirrors and a chain of open-access sources. No account or token is required.
 
 ### search
 
@@ -79,7 +79,7 @@ Download a file to a local directory.
 
 - `annas_member` (boolean): opt in to Anna's Archive member (fast) downloads for this book. Only meaningful when the server has no account key configured: the client is then asked for one, used for this request only and never stored. Requires an active paid membership; leave false to download over IPFS keylessly
 - `doi` (string): DOI from an article search result; articles are fetched by DOI; provide md5, isbn or doi
-- `filename` (string): destination filename; used exactly as given. Leave it unset to get a clean name: an md5 download is verified against its digest, so it is named from the record as 'Author - Title (Year).ext'; a doi or isbn download cannot be verified, so it keeps the name the source announced (minus mirror marks) and only falls back to the identifier when that name is a placeholder like download.pdf
+- `filename` (string): destination filename; used as given once sanitized into a single filename component (path separators become underscores, so it always names one file inside the destination directory and never a path). Leave it unset to get a clean name: an md5 download is verified against its digest, so it is named from the record as 'Author - Title (Year).ext'; a doi or isbn download cannot be verified, so it keeps the name the source announced (minus mirror marks) and only falls back to the identifier when that name is a placeholder like download.pdf
 - `isbn` (string): ISBN of a book (10 or 13 characters, hyphens optional), e.g. from an openlibrary search result; fetches an openly licensed copy from the open-access book sources. Provide md5, isbn or doi
 - `md5` (string): file md5 hash from a book search result; provide md5, isbn or doi
 - `path` (string): destination directory (default: LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads). Ignored when resolve_only is true
@@ -95,7 +95,6 @@ Download a file to a local directory.
 - `path` (string) (required): absolute path of the saved file
 - `resolved` (object): present only when resolve_only was set: the direct URL to fetch instead of a saved file
 - `resumed` (boolean) (required): true when the download resumed from a pre-existing partial via an HTTP Range request
-- `served_by_requested_source` (boolean): whether the source you pinned is the one that served this file. Absent when the call named no source, since there is then nothing to compare against; true when the source you asked for served it; false when a different one did — in that case call download again pinning another source, or omit source and let the chain pick. The serving source is not named
 - `size_bytes` (integer) (required): final file size in bytes
 - `verified` (boolean) (required): true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download
 

@@ -122,6 +122,20 @@ func (rec unpaywallResponse) directFileURL() string {
 	return fallback
 }
 
+// noFileReason says why an open-access record yielded nothing to download, and
+// tells the two ways that happens apart. A record Unpaywall lists no OA location
+// for at all is a different fact from one whose locations are all landing pages:
+// the first says the index has nowhere to send anyone, the second says there is a
+// copy out there behind a page this client will not scrape. Reporting the second
+// when the first happened sends a caller looking for a landing page that was
+// never listed, so the diagnoses stay separate.
+func (rec unpaywallResponse) noFileReason() string {
+	if len(rec.allLocations()) == 0 {
+		return "is open access but Unpaywall lists no open-access location for it"
+	}
+	return "is open access but Unpaywall lists no direct file for it, only landing pages"
+}
+
 // looksLikeFileURL reports whether raw is plausibly a direct file rather than a
 // landing page: its path ends in a known document extension, or its last segment
 // is "pdf" (the shape publishers use for /article/<id>/pdf). Anything else — a
@@ -216,7 +230,7 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 		fileURL = rec.directFileURL()
 	}
 	if fileURL == "" {
-		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: %q is open access but Unpaywall lists no direct file for it, only landing pages", it.DOI))
+		return Resolved{}, notIndexed(fmt.Errorf("unpaywall: %q %s", it.DOI, rec.noFileReason()))
 	}
 	// The URL is returned with the scheme Unpaywall recorded, http included. An
 	// unconditional http→https promotion was tried and dropped: it rescues nothing

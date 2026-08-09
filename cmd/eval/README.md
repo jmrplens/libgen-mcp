@@ -89,7 +89,7 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 | S52 | **OAPEN by ISBN** — the same monograph through the other identifier the source accepts, which is what proves the ISBN key resolves rather than merely being accepted |
 | S53 | **OAPEN does not serve the wrong book** — a DOI OAPEN does not hold; its search is free text, so it answers with a page of unrelated monographs and the source must refuse them all rather than hand over the top hit |
 | S54 | **Internet Archive by ISBN** — a public-domain novel asked for "from the Internet Archive", reached through OpenLibrary; the file that comes back must be a real scan, not a borrow page |
-| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so bytes from `archive` would be DRM-wrapped or truncated and the gate must write none. What the model does next is a separate question: this server exists to let a download succeed through its chain, so another source serving the book is the product working, and the model owes the user its provenance rather than a report of failure |
+| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so bytes from `archive` would be DRM-wrapped or truncated and the gate must write none. What the model does next is a separate question: this server exists to let a download succeed through its chain, so another source serving the book is the product working — and what the model owes the user then is the one fact it still holds, that the copy in hand is not the Internet Archive's |
 | S56 | **Project Gutenberg** — a public-domain ebook whose hit carries a `full_text_url` and no identifier `download` accepts, so the model must hand the user the link instead of calling it unobtainable |
 | S57 | **ERIC** — education grey literature (agency reports, no DOI) whose hosted full text rides `pdf_url`, the same caller-fetches-it shape as a Gutenberg ebook |
 | S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure |
@@ -124,8 +124,7 @@ assert the model actually sets it (and that the source that served the live fetc
 is the one it pinned).
 
 **Which source served is read from the server log, not the result.** The download
-result deliberately names no source — it reports only `served_by_requested_source`,
-a flag about a pin the call already made
+result deliberately names no source and reports nothing else about routing either
 ([ADR](../../docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md)) — so every
 assertion about routing parses the server's own `source resolved` line out of
 `calls[].server_logs` and consults the result only for the file itself, since a
@@ -182,11 +181,18 @@ all — OAPEN is the only source pinned — so the one honest answer is a report
 refusal. S55 leaves the whole chain open, and this server exists to let a download
 succeed through it, shadow libraries included: a file arriving from somewhere else is
 the product doing its job, not the lending gate leaking. What S55 grades once the gate
-has held is therefore **provenance** — the model saying which library served the bytes,
-since a copy from Anna's Archive is not the Internet Archive copy that was asked for —
-and it falls back to requiring the miss only when nothing served the book at all. Note
-what that now asks of the model: the result names no source, so the only way it can
-state one is to have pinned it and read `served_by_requested_source` back. Whether the
+has held is therefore **negative provenance**: the model must not hand the fallback
+copy over as though the Internet Archive had supplied it, since a copy from Anna's
+Archive is not the one that was asked for. It falls back to requiring the miss only
+when nothing served the book at all.
+
+The bar stops there deliberately. The result names no source, and pinning one only
+ever confirms itself — a pinned call is served by that source or it fails — so a model
+that pinned `archive`, was refused, and then let the chain pick knows exactly one
+thing about the file it ends up with: it is not
+the Archive's. Requiring it to name Anna's Archive would be asking for a fact the tool
+withholds, passable only by a model that happened to pin the fallback as well; naming
+the real source therefore passes, but is accepted rather than required. Whether the
 gate itself held is graded from the server log, not from the answer.
 
 **S56–S59 cover the discovery providers, none of which `download` can reach.** Two
@@ -397,7 +403,7 @@ appearing on the Spanish page in English; add it to `scenariosES` in
   what it returned, and the scenario graded the model on honesty alone. It is a pass
   that tested nothing — treat it as a re-pin task, not as a green row.
 - **It downloads files**: into an `os.MkdirTemp` directory (removed on exit
-  unless `--keep-downloads`). Downloads are capped at 25 MiB
+  unless `--keep-downloads`). Downloads are capped at 50 MiB
   (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`) and confined to that temp dir
   (`LIBGEN_MCP_DOWNLOAD_DIR`), both set before the server config loads.
 - The process exits non-zero if any scenario **fails** or **errors** (skips and

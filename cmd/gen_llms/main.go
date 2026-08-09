@@ -179,7 +179,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 	b.WriteString("> A Model Context Protocol (MCP) server for federated search, citation and reading of books, papers, " +
 		"comics, magazines and standards across the Library Genesis catalog and open-access sources.\n\n")
 	fmt.Fprintf(&b, "libgen-mcp v%s is a single static Go binary that runs locally via stdio or remotely via HTTP transport.\n", version)
-	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the libgen.li family of mirrors. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
+	fmt.Fprintf(&b, "It provides exactly %d MCP tools (%s) over the Library Genesis mirrors and a chain of open-access sources. No account, token or credential is required. Cross-platform: Windows, Linux, macOS (amd64 + arm64).\n\n", len(toolList), toolNames(toolList))
 
 	b.WriteString("Quick start:\n\n")
 	b.WriteString("1. Download the prebuilt binary for your platform from the Releases page (recommended — no dependencies), or use Docker (see below)\n")
@@ -362,7 +362,7 @@ func writeLLMSFullTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Pr
 	fmt.Fprintf(&b, "> Version %s | %d tools | %d prompts\n\n", version, len(toolList), len(promptList))
 
 	b.WriteString("## Tools\n\n")
-	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the libgen.li family of mirrors. No account or token is required.\n\n", len(toolList))
+	fmt.Fprintf(&b, "libgen-mcp exposes %d tools over the Library Genesis mirrors and a chain of open-access sources. No account or token is required.\n\n", len(toolList))
 	for _, tool := range toolList {
 		writeLLMSFullTool(&b, tool)
 	}

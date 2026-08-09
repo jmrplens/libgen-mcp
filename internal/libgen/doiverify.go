@@ -66,14 +66,14 @@ func (c *Client) VerifyDOI(ctx context.Context, doi, recordTitle string) DOIChec
 // can reach a verdict without asking the registry the same question twice.
 func CheckDOITitle(recordTitle, crossrefTitle string) DOICheck {
 	check := DOICheck{Verdict: DOIUnverified, CrossrefTitle: strings.TrimSpace(crossrefTitle)}
-	overlap, ok := titleOverlap(recordTitle, check.CrossrefTitle)
+	overlap, words := titleOverlap(recordTitle, check.CrossrefTitle)
 	switch {
-	case !ok:
+	case words == 0:
 		// One of the titles carries no comparable words, so there is nothing to
 		// judge. Silence is the honest answer, not an accusation.
 	case overlap >= titleConfirmRatio:
 		check.Verdict = DOIConfirmed
-	case overlap <= titleMismatchRatio:
+	case overlap <= titleMismatchRatio && words >= titleMismatchMinWords:
 		check.Verdict = DOIMismatch
 	}
 	return check
@@ -88,6 +88,22 @@ const (
 	titleConfirmRatio  = 0.6
 	titleMismatchRatio = 0.2
 )
+
+// titleMismatchMinWords is how many content words the shorter title must carry
+// before a low overlap is allowed to become an accusation. The band above only
+// works when the score can land inside it, and a one-word title makes that
+// impossible: the score is 1 or 0 and nothing else, so every one-word title that
+// is not confirmed is condemned on a single missing token.
+//
+// That is the wrong side to err on here, and cheaply so. A mismatch and an
+// unverified verdict both keep the DOI out of the citation (see
+// tools.doiForCitation) — the only thing the mismatch verdict adds is the
+// sentence telling the caller the catalog is wrong and not to cite the DOI at
+// all. Article records routinely reduce to one word ("Editorial", "Corrigendum",
+// or a subtitle-less book title after stopwords go), and calling the catalog a
+// liar on that evidence buys no protection the quieter verdict was not already
+// giving. Two words is the smallest count at which the middle band exists.
+const titleMismatchMinWords = 2
 
 // titleMarkup matches the inline JATS/HTML tags Crossref titles carry (<i>, <sub>,
 // <mml:math>…), which are formatting rather than words and are dropped whole so
@@ -107,12 +123,17 @@ var titleStopwords = map[string]bool{
 // as |A∩B| / min(|A|,|B|) over their content words. Containment rather than
 // symmetric similarity, because a catalog record legitimately drops a subtitle the
 // registry keeps ("Hallmarks of Cancer" vs "Hallmarks of Cancer: The Next
-// Generation") and that is agreement, not disagreement. ok is false when either
-// title has no content words left to compare.
-func titleOverlap(a, b string) (score float64, ok bool) {
+// Generation") and that is agreement, not disagreement.
+//
+// words is the size of that shorter title, which is the denominator of the score
+// and so the amount of evidence behind it — a caller needs it to tell an overlap
+// of 0 out of one word from an overlap of 0 out of eight. It is zero when either
+// title has no content words left to compare, which is also the signal that the
+// score means nothing.
+func titleOverlap(a, b string) (score float64, words int) {
 	ta, tb := titleTokens(a), titleTokens(b)
 	if len(ta) == 0 || len(tb) == 0 {
-		return 0, false
+		return 0, 0
 	}
 	shorter, longer := ta, tb
 	if len(longer) < len(shorter) {
@@ -124,7 +145,7 @@ func titleOverlap(a, b string) (score float64, ok bool) {
 			common++
 		}
 	}
-	return float64(common) / float64(len(shorter)), true
+	return float64(common) / float64(len(shorter)), len(shorter)
 }
 
 // titleTokens reduces a title to the set of its content words: markup stripped,

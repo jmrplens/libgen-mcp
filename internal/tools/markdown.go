@@ -387,9 +387,9 @@ func renderOutline(b *strings.Builder, out ReadOutput) {
 // still shown, on its own line, whenever it differs — on an unverified download
 // it is the evidence of what the source actually served.
 //
-// It names no source and no mirror, for the reasons DownloadResult documents; a
-// call that pinned a source gets writeRequestedSourceLine instead, which says only
-// whether that pin held.
+// It names no source and no mirror, for the reasons DownloadResult documents, and
+// says nothing about a pinned source either: a pin restricts the chain to that one
+// source, so a rendered download is already the pinned source's own delivery.
 func renderDownloadMarkdown(out DownloadOutput) string {
 	var b strings.Builder
 	name := filepath.Base(out.Path)
@@ -402,7 +402,6 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	}
 	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes.\n", mdCell(name), out.SizeBytes)
 	fmt.Fprintf(&b, "- Path: %s\n- Verified: %s\n", mdCell(out.Path), verified)
-	writeRequestedSourceLine(&b, out.ServedByRequestedSource)
 	if out.OriginalFilename != "" && out.OriginalFilename != name {
 		fmt.Fprintf(&b, "- Announced by the source: %s\n", mdCell(out.OriginalFilename))
 	}
@@ -414,20 +413,4 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	}
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
-}
-
-// writeRequestedSourceLine states whether the source the call pinned is the one
-// that served the file, and writes nothing when the call pinned none — there is
-// then no comparison to report, and stating the absence would only invite a
-// question about a provenance the result deliberately withholds.
-func writeRequestedSourceLine(b *strings.Builder, served *bool) {
-	switch {
-	case served == nil:
-		return
-	case *served:
-		b.WriteString("- The source you asked for is the one that served this file.\n")
-	default:
-		b.WriteString("- The source you asked for did not serve this file; another one in the chain did. " +
-			"Call download again pinning a different source, or omit source and let the chain pick.\n")
-	}
 }

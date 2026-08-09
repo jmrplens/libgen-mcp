@@ -84,10 +84,13 @@ func TestOutline_PDFNoBookmarks(t *testing.T) {
 	if len(res.Entries) != 0 {
 		t.Errorf("want no entries, got %+v", res.Entries)
 	}
-	if !strings.Contains(res.Reason, "no embedded table of contents") {
-		t.Errorf("want a reason mentioning the missing table of contents, got %q", res.Reason)
+	// Compared against the constants, not fragments of them: the point of this
+	// test is that one cause gets one wording, and a substring match would keep
+	// passing after that wording drifted apart from the constant it quotes.
+	if res.Reason != noPDFOutlineReason {
+		t.Errorf("Reason = %q, want the no-table-of-contents diagnosis %q", res.Reason, noPDFOutlineReason)
 	}
-	if strings.Contains(res.Reason, "text layer (likely") {
+	if res.Reason == noTextLayerReason {
 		t.Errorf("a readable PDF must not borrow the scanned diagnosis, got %q", res.Reason)
 	}
 }

@@ -109,25 +109,5 @@
   "publisher": "Elsevier BV",
   "title": "Hallmarks of Cancer: The Next Generation",
   "updated": "2026-02-09T15:04:13Z",
-  "year": 2011,
-  "z_authors": [
-    {
-      "author_position": "first",
-      "is_corresponding": true,
-      "raw_affiliation_strings": [
-        "The Swiss Institute for Experimental Cancer Research (ISREC), School of Life Sciences, EPFL, Lausanne CH-1015, Switzerland. dh@epfl.ch",
-        "The Department of Biochemistry & Biophysics, UCSF, San Francisco, CA 94158, USA",
-        "The Swiss Institute for Experimental Cancer Research (ISREC), School of Life Sciences, EPFL, Lausanne CH-1015, Switzerland"
-      ],
-      "raw_author_name": "Douglas Hanahan"
-    },
-    {
-      "author_position": "last",
-      "is_corresponding": false,
-      "raw_affiliation_strings": [
-        "Whitehead Institute for Biomedical Research, Ludwig/MIT Center for Molecular Oncology, and MIT Department of Biology, Cambridge, MA 02142, USA"
-      ],
-      "raw_author_name": "Robert A. Weinberg"
-    }
-  ]
+  "year": 2011
 }
