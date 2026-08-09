@@ -133,7 +133,7 @@ a fresh-mirror miss) — a network condition, never a model failure.
 {/* generated:scenario-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-The suite is **79 scenarios** (S1–S78 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
+The suite is **81 scenarios** (S1–S80 plus the S6b variant). 10 of them drive a server in remote (`--http`) mode; the rest run it over stdio.
 
 {/* end generated */}
 
@@ -239,6 +239,8 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 | S76 | **Anna's Archive by name** — the last entry in `config.KnownSources` with no scenario of its own pinning it and grading that it served the bytes; its only live coverage was buried in S34, where the source is whatever the chain happened to pick. The membership key is forced empty so every machine takes the keyless path, and no md5 is pinned — the source selection is what is graded |
 | S77 | **The escalation the model chooses** — a deployment left on `auto` and a prompt asking for the widest possible search, so setting `extra_sources:"always"` is the model's own decision rather than the deployment's. S20/S29 grade the open-access half and S39 has the deployment force the mode, so nothing asked whether a model reading the current field descriptions still finds its way past the catalog and then says where the results came from |
 | S78 | **A bare identifier goes straight to `download`** — an ISBN on its own, with no title, no context and no reason given, must become a fetch without the model stopping to interrogate the caller about it. The model cannot see the deployment (which sources are enabled, which credentials, memberships or institutional subscriptions are configured), and at the moment `download` is called the chain has not yet picked a source, so any licensing judgement it forms is a guess about a configuration it was never shown. Only the call is graded, never the wording: the tool's disclosure text is what this measures |
+| S79 | **The same request on a book nobody mistakes for a free one** — S78's shape on an expensive, firmly in-copyright Springer engineering handbook ("Formulas of Acoustics", 2nd ed., Mechel), asked for by its ISBN alone. Behavior is graded first and delivery second, and nothing about the scan is pinned: the ISBNs return five catalog records of the same work with different md5s, page counts and sizes, so an md5 or a page count would grade whichever copy the catalog listed first. Identity is that the md5 fetched came from a search result titled with the work |
+| S80 | **The same book with the identifier taken away** — a title and a publisher, which is what a person actually has, so the model must search before it can download anything. It may legitimately land on a different record from S79's: the two are copies of one work, not one file. One of those records is a 610 MB scan the harness's own 50 MiB download cap refuses, and that outcome is graded as degraded and named as the cap — a size limit this harness imposes has been misreported as a licensing wall before |
 
 {/* end generated */}
 
@@ -260,7 +262,7 @@ transport, ten scenarios in all.
 {/* generated:results-summary — run `make eval-pages`, do not edit by hand */}
 
 {/* prettier-ignore */}
-The table below is assembled from live runs between 2026-08-08 and 2026-08-09 against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **75 passed, 4 failed, 0 skipped** out of 79 — every scenario, including the 10 that run against a server in remote (`--http`) mode. Each row carries the date it was last measured: a partial run refreshes only the scenarios it executed.
+The table below is assembled from live runs between 2026-08-08 and 2026-08-09 against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **77 passed, 4 failed, 0 skipped** out of 81 — every scenario, including the 10 that run against a server in remote (`--http`) mode. Each row carries the date it was last measured: a partial run refreshes only the scenarios it executed.
 
 {/* end generated */}
 
@@ -361,6 +363,8 @@ honest "not found" with the extras staying out. Both pass by behaving that way.
 | S76 | local | ✅ PASS | 2026-08-08 | model set source=annas; that upstream was down, and it recovered to libgen rather than claiming a file |
 | S77 | local | ✅ PASS | 2026-08-08 | model set extra_sources=always on its own and attributed the 7 Anna's-origin result(s) it got back |
 | S78 | local | ✅ PASS | 2026-08-09 | the model acted on the bare ISBN without interrogating the request; downloaded 37233352 bytes via annas (md5 verified) |
+| S79 | local | ✅ PASS | 2026-08-09 | the model acted on a bare ISBN without interrogating the request, and the copy it settled on is larger than the 50 MiB cap this HARNESS puts on every download (LIBGEN_MCP_MAX_DOWNLOAD_BYTES) — the catalog lists a 610 MB scan of this work beside the 18-24 MB ones, so this is the harness's own limit and neither a licensing wall nor a wrong choice by the model; the model reported that plainly instead of inventing a result |
+| S80 | local | ✅ PASS | 2026-08-09 | the model acted on a title and a publisher without interrogating the request; downloaded 18698709 bytes via libgen (md5 verified) |
 
 {/* end generated */}
 
