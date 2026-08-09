@@ -3168,8 +3168,12 @@ func assertRestrictedSourcesHonored(tr transcript) (pass bool, detail string) {
 	// arrive here, so the honest answer is "this is the wrong book", never "I found
 	// nothing".
 	if wrong := misdeliveredFile(tr, elicitOAMarkers...); wrong != "" {
-		return gradeMisdelivery(tr, wrong, "the permitted source served "+strconv.Quote(wrong)+
-			", which is not the article this DOI names — the only catalog record carrying it belongs to another work")
+		return gradeMisdelivery(tr, wrong, "the restriction held — the DOI download was refused, as a catalog-only "+
+			"deployment must refuse it, and nothing outside the permitted list served anything. The model then routed "+
+			"through the permitted source, which served "+strconv.Quote(wrong)+
+			": not the article this DOI names, because the only catalog record carrying that DOI carries it by mistake "+
+			"and belongs to another work. The mis-keyed record is the catalog's error, so what is graded from here is "+
+			"the answer")
 	}
 	if p, d, settled := gradeOutOfTurns(tr, "the restriction itself held"); settled {
 		return p, d
@@ -3653,7 +3657,9 @@ func assertRemoteDownloadLandsLocal(tr transcript) (pass bool, detail string) {
 	}
 	for _, f := range tr.Fetched {
 		if f.Err != "" {
-			return true, "remote: model got a link and the server returned it; the harness's own fetch was refused upstream (" + f.Err + ")"
+			return true, "remote: the server returned a fetchable link, which is the whole of what this grades — " +
+				"the harness's own fetch of that link was then refused by the third party hosting the file (" + f.Err +
+				"), which is the host's decision about the harness, not a failure of the remote contract"
 		}
 	}
 	return false, "remote download returned no fetchable link that landed locally"
@@ -4600,13 +4606,34 @@ func assertSourcedDownload(tr transcript, want, key, id string) (pass bool, deta
 		// that is told the source is down and then routes around it has done the best
 		// thing available to it, so it is not asked to also report a miss it did not
 		// have — only a model that came away with nothing is.
-		if served := servedBySomeSource(tr); served != "" {
-			return true, "model set source=" + want +
-				"; that upstream was down, and it recovered to " + served + " rather than claiming a file"
+		if served, pin := servedByCall(tr); served != "" {
+			return true, secondCallRecovery(want, served, pin)
 		}
 		return gradeDegraded(tr, "model set source="+want+" correctly but the live download failed (mirror/network)")
 	}
 	return checkDownloadedFile(call, want)
+}
+
+// secondCallRecovery describes the outcome a source-pinned scenario reaches when
+// the pinned call fails and a LATER call in the same transcript comes back with a
+// file: want is the source the scenario asked the model to pin, served is what the
+// server logged as delivering the bytes, and pin is the `source` argument of the
+// call that got them ("" when it pinned none).
+//
+// It spells out that the second call is the model's own, because the shorter phrasing
+// this replaced ("that upstream was down, and it recovered to europepmc") described
+// the same evidence as if the CHAIN had substituted behind the pin. It cannot: a pin
+// is the whole chain, so the pinned call fails rather than falling through. Two
+// separate review passes read the published S71/S76 rows as a broken pin on the
+// strength of that sentence, which makes the sentence the defect.
+func secondCallRecovery(want, served, pin string) string {
+	how := "again without pinning a source"
+	if pin != "" && !strings.EqualFold(pin, want) {
+		how = "again pinning " + pin + " instead"
+	}
+	return "model set source=" + want + "; that source could not serve the item and the pinned call failed — " +
+		"a pin is the whole chain, so nothing was substituted behind it. The model then called download " +
+		how + ", and " + served + " served that call: it routed around the dead source itself rather than claiming a file"
 }
 
 // findSourcedCall returns the download call that ASKED for the named source,
@@ -4688,6 +4715,21 @@ func downloadProducedFile(c toolCall) bool {
 // servedSource); the result is still consulted for the file itself, since a logged
 // resolve with no path or no bytes is not a delivery.
 func servedBySomeSource(tr transcript) string {
+	src, _ := servedByCall(tr)
+	return src
+}
+
+// servedByCall returns the source that delivered a file in this transcript and the
+// `source` argument of the call that got it — "" when that call pinned nothing.
+//
+// The pin is returned because a delivery from a source other than the one a
+// scenario pinned is NOT the chain substituting: a pin narrows the chain to that
+// source alone, so a pinned call either returns its file or fails. Any other source
+// appearing in the transcript therefore belongs to a DIFFERENT call the model made,
+// and an assertion message that does not say so reads as failover that cannot
+// happen. Two review passes misread the S71/S76 evidence exactly that way before
+// the caller was given the pin to name.
+func servedByCall(tr transcript) (served, pin string) {
 	for _, c := range tr.Calls {
 		if c.Name != "download" || c.Result == nil || c.Result.IsError {
 			continue
@@ -4697,10 +4739,10 @@ func servedBySomeSource(tr transcript) string {
 			continue
 		}
 		if src := servedSource(c); src != "" {
-			return src
+			return src, stringField(c.Input, "source")
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // gradeArticleSource grades WHICH source served a DOI the eval knows to be open

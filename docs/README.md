@@ -18,7 +18,7 @@ open-access and Sci-Hub sources by DOI.
 | [Configuration](configuration.md)       | Every environment variable, with its default, valid range, and meaning.                                                                  |
 | [Tools](tools.md)                       | The `search`, `get_details`, `download`, and `read` tools — inputs, outputs, and error behavior.                                         |
 | [Architecture](architecture.md)         | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, and the multi-source chain.                         |
-| [Download sources](sources.md)          | Per-source reference for the twenty download sources: corpus, resolve mechanics, measured traps, keys, and crawl-rule constraints.       |
+| [Download sources](sources.md)          | Per-source reference for the twenty-one download sources: corpus, resolve mechanics, measured traps, keys, and crawl-rule constraints.   |
 | [How search works](how-search-works.md) | A conceptual walk through what a search queries, when it escalates beyond the catalog, and how each result's origin guides the download. |
 | [Troubleshooting](troubleshooting.md)   | Fixes for unreachable mirrors, failed downloads, missing articles, truncated searches, and disk-space errors.                            |
 

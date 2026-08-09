@@ -21,8 +21,8 @@ Model: `claude-haiku-4-5-20251001`
 | S14 | local | PASS | 2026-08-09 | received 1 progress notification(s); final progress=982888 total=0 |
 | S15 | local | PASS | 2026-08-09 | ordered page of 50 with links; model surfaced links in its answer |
 | S16 | local | PASS | 2026-08-09 | resolved a URL via libgen without downloading: https://libgen.li/get.php?(query redacted) |
-| S17 | remote | PASS | 2026-08-09 | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (HTTP 500) |
-| S18 | remote | PASS | 2026-08-09 | remote: model got a link and the server returned it; the harness's own fetch was refused upstream (Get "/article/S0092867411001279/pdf": stopped after 10 redirects) |
+| S17 | remote | PASS | 2026-08-09 | remote: the server returned a fetchable link, which is the whole of what this grades — the harness's own fetch of that link was then refused by the third party hosting the file (HTTP 500), which is the host's decision about the harness, not a failure of the remote contract |
+| S18 | remote | PASS | 2026-08-09 | remote: the server returned a fetchable link, which is the whole of what this grades — the harness's own fetch of that link was then refused by the third party hosting the file (Get "/article/S0092867411001279/pdf": stopped after 10 redirects), which is the host's decision about the harness, not a failure of the remote contract |
 | S19 | local | PASS | 2026-08-09 | read pdf (4566 chars); model summarized it in 882 chars |
 | S20 | local | PASS | 2026-08-09 | open-access discovery surfaced 35 hit(s); model referenced one in its answer |
 | S21 | local | PASS | 2026-08-09 | model searched, called get_details, and surfaced the returned BibTeX citation |
@@ -47,7 +47,7 @@ Model: `claude-haiku-4-5-20251001`
 | S40 | local | PASS | 2026-08-09 | read opened an Anna's-only item (1169 chars extracted) |
 | S41 | local | PASS | 2026-08-09 | member download reported the account allowance (24 of 50 left) |
 | S42 | local | PASS | 2026-08-09 | nothing exists by that name and the model said so, inventing no metadata |
-| S43 | local | PASS | 2026-08-09 | the permitted source served "Taleb, Nassim Nicholas et al. - Antifragile - Things That Gain from Disorder (2012).epub", which is not the article this DOI names — the only catalog record carrying it belongs to another work; the model reported the miss plainly instead of inventing a result |
+| S43 | local | PASS | 2026-08-09 | the restriction held — the DOI download was refused, as a catalog-only deployment must refuse it, and nothing outside the permitted list served anything. The model then routed through the permitted source, which served "Taleb, Nassim Nicholas et al. - Antifragile - Things That Gain from Disorder (2012).epub": not the article this DOI names, because the only catalog record carrying that DOI carries it by mistake and belongs to another work. The mis-keyed record is the catalog's error, so what is graded from here is the answer; the model reported the miss plainly instead of inventing a result |
 | S44 | local | PASS | 2026-08-09 | model set page=2 and received page 2 with 25 results |
 | S45 | local | PASS | 2026-08-09 | downloaded 91408 bytes via europepmc |
 | S46 | local | PASS | 2026-08-09 | downloaded 2114465 bytes via biorxiv |
@@ -75,12 +75,12 @@ Model: `claude-haiku-4-5-20251001`
 | S68 | local | PASS | 2026-08-09 | downloaded 193911 bytes via zenodo |
 | S69 | local | PASS | 2026-08-09 | downloaded 737104 bytes via scielo |
 | S70 | local | PASS | 2026-08-09 | downloaded 2929735 bytes via fao |
-| S71 | local | PASS | 2026-08-09 | model set source=unpaywall; that upstream was down, and it recovered to europepmc rather than claiming a file |
+| S71 | local | PASS | 2026-08-09 | model set source=unpaywall; that source could not serve the item and the pinned call failed — a pin is the whole chain, so nothing was substituted behind it. The model then called download again without pinning a source, and europepmc served that call: it routed around the dead source itself rather than claiming a file |
 | S72 | local | PASS | 2026-08-09 | downloaded 2066013 bytes via scidb |
 | S73 | local | PASS | 2026-08-09 | the save confirmation fired despite the caller asking to skip it (1 raised) and downloaded 2608796 bytes via randombook (md5 verified) |
 | S74 | local | PASS | 2026-08-09 | model read 6628 chars, then continued and received a further 6551 |
 | S75 | local | PASS | 2026-08-09 | core is advertised on a deployment that holds a CORE key; enum = unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, crossref, oapen, archive, scihub, scidb, libgen, randombook, annas |
-| S76 | local | PASS | 2026-08-09 | model set source=annas; that upstream was down, and it recovered to randombook rather than claiming a file |
+| S76 | local | PASS | 2026-08-09 | model set source=annas; that source could not serve the item and the pinned call failed — a pin is the whole chain, so nothing was substituted behind it. The model then called download again without pinning a source, and randombook served that call: it routed around the dead source itself rather than claiming a file |
 | S77 | local | PASS | 2026-08-09 | model set extra_sources=always on its own and attributed the 7 Anna's-origin result(s) it got back |
 | S78 | local | PASS | 2026-08-09 | the model acted on the bare ISBN without interrogating the request; downloaded 37233352 bytes via annas (md5 verified) |
 | S79 | local | PASS | 2026-08-09 | the model acted on a title and a publisher without interrogating the request; downloaded 18698709 bytes via randombook (md5 verified) |

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"regexp"
 	"runtime/debug"
@@ -1906,9 +1907,10 @@ func bookMeta(ctx context.Context, c *libgen.Client, md5 string) bookDetails {
 
 // intField reads a non-negative integer out of a details record map, returning 0
 // when the map is nil, the key is absent, or the value is not a number this
-// server is willing to read as one. The catalog encodes numeric columns as
-// strings ("filesize": "18298205"), but a JSON number is accepted too, since the
-// record is third-party data whose shape is not ours to assume.
+// server is willing to read as one — negative, out of int64 range, or fractional.
+// The catalog encodes numeric columns as strings ("filesize": "18298205"), but a
+// JSON number is accepted too, since the record is third-party data whose shape is
+// not ours to assume.
 func intField(m map[string]any, key string) int64 {
 	if m == nil {
 		return 0
@@ -1928,6 +1930,14 @@ func intField(m map[string]any, key string) int64 {
 		// whose result the spec leaves implementation-defined.
 		const overInt64 = 1 << 63
 		if v < 0 || v >= overInt64 {
+			return 0
+		}
+		// A fractional value is not a truncated integer, it is a record that does
+		// not mean what this field means: no file is 12.5 bytes long and no catalog
+		// row has 3.5 pages. Rounding it would publish a made-up number as though the
+		// catalog had stated it, so the value is refused the same way a non-numeric
+		// one is and the field reads as unknown.
+		if v != math.Trunc(v) {
 			return 0
 		}
 		return int64(v)

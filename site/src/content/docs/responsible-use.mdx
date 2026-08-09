@@ -105,15 +105,16 @@ The full chain, in order:
 | 11       | `fao`        | DOI       | Open access (FAO Knowledge Repository) |
 | 12       | `fatcat`     | DOI       | Open access (Internet Archive Scholar) |
 | 13       | `core`       | DOI       | Open access (needs a free API key)     |
-| 14       | `oapen`      | DOI, ISBN | Openly licensed books                  |
-| 15       | `archive`    | ISBN      | Public-domain scans only               |
-| 16       | `scihub`     | DOI       | Shadow library                         |
-| 17       | `scidb`      | DOI       | Shadow library                         |
-| 18       | `libgen`     | md5       | Library Genesis catalog                |
-| 19       | `randombook` | md5       | Library Genesis mirror                 |
-| 20       | `annas`      | md5       | Shadow library                         |
+| 14       | `crossref`   | DOI       | The publisher's own deposited link     |
+| 15       | `oapen`      | DOI, ISBN | Openly licensed books                  |
+| 16       | `archive`    | ISBN      | Public-domain scans only               |
+| 17       | `scihub`     | DOI       | Shadow library                         |
+| 18       | `scidb`      | DOI       | Shadow library                         |
+| 19       | `libgen`     | md5       | Library Genesis catalog                |
+| 20       | `randombook` | md5       | Library Genesis mirror                 |
+| 21       | `annas`      | md5       | Shadow library                         |
 
-Positions 1–15 are exhausted before position 16 is tried. You can remove sources
+Positions 1–16 are exhausted before position 17 is tried. You can remove sources
 with `LIBGEN_MCP_SOURCES`, but you cannot reorder them — a deployment can narrow
 the chain, never promote a fallback above the open-access providers.
 

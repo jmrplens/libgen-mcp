@@ -939,8 +939,8 @@ func TestStringField(t *testing.T) {
 // TestIntField covers reading a numeric column out of a catalog record. The
 // catalog encodes them as strings, but the record is third-party data, so a JSON
 // number is read too and everything else — a missing key, a nil map, a non-numeric
-// string, a negative or absurd value — reports 0, i.e. "not known", which is what
-// drops the size clause from the save confirmation.
+// string, a negative, absurd or fractional value — reports 0, i.e. "not known",
+// which is what drops the size clause from the save confirmation.
 func TestIntField(t *testing.T) {
 	record := map[string]any{
 		"filesize": "18298205",
@@ -956,7 +956,12 @@ func TestIntField(t *testing.T) {
 		// The largest float64 that is a valid int64, i.e. the last value that must
 		// still be read rather than rejected.
 		"boundaryOK": float64(1<<63 - 1024),
-		"wrong":      []any{1},
+		// A fractional number is a corrupt record, not a roundable size: truncating
+		// it would report a byte count the catalog never stated.
+		"fraction":     12.5,
+		"tinyFraction": 0.5,
+		"negFraction":  -0.5,
+		"wrong":        []any{1},
 	}
 	tests := []struct {
 		key  string
@@ -970,6 +975,9 @@ func TestIntField(t *testing.T) {
 		{"huge", 0},
 		{"boundary", 0},
 		{"boundaryOK", 1<<63 - 1024},
+		{"fraction", 0},
+		{"tinyFraction", 0},
+		{"negFraction", 0},
 		{"wrong", 0},
 		{"absent", 0},
 	}

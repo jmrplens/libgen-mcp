@@ -106,15 +106,16 @@ La cadena completa, en orden:
 | 11       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
 | 12       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
 | 13       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
-| 14       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
-| 15       | `archive`    | ISBN             | Solo escaneos de dominio público          |
-| 16       | `scihub`     | DOI              | Biblioteca en la sombra                   |
-| 17       | `scidb`      | DOI              | Biblioteca en la sombra                   |
-| 18       | `libgen`     | md5              | Catálogo de Library Genesis               |
-| 19       | `randombook` | md5              | Mirror de Library Genesis                 |
-| 20       | `annas`      | md5              | Biblioteca en la sombra                   |
+| 14       | `crossref`   | DOI              | El enlace que depositó el propio editor   |
+| 15       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
+| 16       | `archive`    | ISBN             | Solo escaneos de dominio público          |
+| 17       | `scihub`     | DOI              | Biblioteca en la sombra                   |
+| 18       | `scidb`      | DOI              | Biblioteca en la sombra                   |
+| 19       | `libgen`     | md5              | Catálogo de Library Genesis               |
+| 20       | `randombook` | md5              | Mirror de Library Genesis                 |
+| 21       | `annas`      | md5              | Biblioteca en la sombra                   |
 
-Las posiciones 1–15 se agotan antes de intentar la 16. Puedes quitar fuentes con
+Las posiciones 1–16 se agotan antes de intentar la 17. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
 la cadena, nunca promover un fallback por encima de los proveedores de acceso
 abierto.

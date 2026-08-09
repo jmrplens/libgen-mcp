@@ -178,9 +178,11 @@ flowchart TD
     S --> R[Clear the source's cooldown, then return<br/>DownloadResult: path, size, name_origin, verified, resumed]
 ```
 
-The destination name is chosen by the verified/unverified rule, not by what the mirror
-announced, and the result reports its provenance in `name_origin`. The result reports **no**
-source and **no** mirror: both remain server-side, on the `source resolved` log line, because
+The destination name is chosen by the verified/unverified rule above — which on an
+**unverified** download does use the announced `Content-Disposition` name, stripped of mirror
+marks, and never does on a verified one — and the result reports which of the four origins it
+came from in `name_origin`. The result reports **no** source and **no** mirror: both remain
+server-side, on the `source resolved` log line, because
 a tool result may reveal only what the call already revealed. A `resolve_only` call is the one
 exception the rule allows — it returns a direct URL instead of a saved file, and that URL's own
 host names the provider, so `resolved.source` travels beside it. See

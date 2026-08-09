@@ -167,9 +167,10 @@ func TestFindCallPrefersTheCallThatWorked(t *testing.T) {
 }
 
 // TestFindSourcedCallGradesTheCallThatAsked is the distinction a live run made
-// concrete: the model pinned fatcat, fatcat was unreachable, and it recovered to
-// Europe PMC. findCall answers "which call worked" and would hand back the
-// recovery; a source-selection scenario has to grade the call that asked.
+// concrete: the model pinned fatcat, fatcat was unreachable, and the model itself
+// called download a second time reaching Europe PMC. findCall answers "which call
+// worked" and would hand back that second call; a source-selection scenario has to
+// grade the call that asked.
 func TestFindSourcedCallGradesTheCallThatAsked(t *testing.T) {
 	tr := transcript{Calls: []toolCall{
 		errCall("download", map[string]any{"doi": openAccessDOI, "source": "fatcat"}),
@@ -181,6 +182,69 @@ func TestFindSourcedCallGradesTheCallThatAsked(t *testing.T) {
 	}
 	if _, found := findSourcedCall(tr, "scidb"); found {
 		t.Error("a source nothing asked for must not be found")
+	}
+}
+
+// TestSecondCallRecoveryNamesTheModelsOwnRetry pins the wording of the one detail
+// string that two review passes misread as chain failover behind a pin. A pin is
+// the whole chain, so a source other than the pinned one can only belong to a
+// LATER call the model made; the message has to say which call that was and must
+// not say the pinned call "recovered" to anything.
+func TestSecondCallRecoveryNamesTheModelsOwnRetry(t *testing.T) {
+	unpinned := secondCallRecovery("unpaywall", "europepmc", "")
+	if !strings.Contains(unpinned, "called download again without pinning a source") {
+		t.Errorf("secondCallRecovery with an unpinned retry = %q, want it to name the second, unpinned call", unpinned)
+	}
+	repinned := secondCallRecovery("annas", "scidb", "scidb")
+	if !strings.Contains(repinned, "called download again pinning scidb instead") {
+		t.Errorf("secondCallRecovery with a re-pinned retry = %q, want it to name the source the retry pinned", repinned)
+	}
+	// The scenario's own source appearing as the pin of the serving call is not a
+	// second pin worth reporting — it is the same request the assertion already
+	// named, so the message stays on the unpinned phrasing rather than saying
+	// "again pinning annas instead" about a call that pinned what was asked for.
+	same := secondCallRecovery("annas", "annas", "Annas")
+	if strings.Contains(same, "instead") {
+		t.Errorf("secondCallRecovery re-reporting the scenario's own pin = %q, want no \"instead\" clause", same)
+	}
+	for _, msg := range []string{unpinned, repinned, same} {
+		if strings.Contains(msg, "recovered to") {
+			t.Errorf("detail %q still says the pinned call recovered to another source, which a pin cannot do", msg)
+		}
+		if !strings.Contains(msg, "a pin is the whole chain") {
+			t.Errorf("detail %q must state why no substitution happened behind the pin", msg)
+		}
+	}
+}
+
+// TestServedByCallReportsThePinOfTheServingCall verifies the assertion is handed
+// both halves of the evidence: the source the server logged as delivering the file,
+// and how the call that got it was pinned — "" when it pinned nothing, which is the
+// case the S71/S76 rows describe.
+func TestServedByCallReportsThePinOfTheServingCall(t *testing.T) {
+	file := libgen.DownloadResult{Path: "/tmp/paper.pdf", SizeBytes: 91408}
+	tr := transcript{Calls: []toolCall{
+		errCall("download", map[string]any{"doi": openAccessDOI, "source": "unpaywall"}),
+		servedCall(map[string]any{"doi": openAccessDOI}, file, "europepmc"),
+	}}
+	served, pin := servedByCall(tr)
+	if served != "europepmc" || pin != "" {
+		t.Errorf("servedByCall = (%q, %q), want (europepmc, \"\"): the delivering call pinned nothing", served, pin)
+	}
+
+	repinned := transcript{Calls: []toolCall{
+		errCall("download", map[string]any{"doi": openAccessDOI, "source": "unpaywall"}),
+		servedCall(map[string]any{"doi": openAccessDOI, "source": "scidb"}, file, "scidb"),
+	}}
+	if served, pin = servedByCall(repinned); served != "scidb" || pin != "scidb" {
+		t.Errorf("servedByCall = (%q, %q), want (scidb, scidb)", served, pin)
+	}
+
+	// Nothing delivered: a logged resolve is not a delivery without a file behind it,
+	// and the caller must be told nothing served rather than shown a bare source.
+	none := transcript{Calls: []toolCall{errCall("download", map[string]any{"doi": openAccessDOI})}}
+	if served, pin = servedByCall(none); served != "" || pin != "" {
+		t.Errorf("servedByCall on a transcript that delivered nothing = (%q, %q), want empty", served, pin)
 	}
 }
 

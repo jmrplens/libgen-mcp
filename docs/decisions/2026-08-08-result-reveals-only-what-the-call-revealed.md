@@ -112,7 +112,59 @@ discloses nothing, since the caller supplied the name.
   the name beside it would conceal nothing and only make the link harder to use.
 - **`original_filename`.** On an unverified download it is the evidence of what
   actually arrived, and it is a property of the delivered file rather than of the
-  deployment.
+  deployment. It is also the one field here that can leak a provider name, so it
+  gets its own section below rather than a line.
+
+### Why `original_filename` stays verbatim, marks and all
+
+The serving host writes `Content-Disposition`, and it can write anything into it.
+Sometimes what it writes names the host: a measured delivery came back as
+`… - libgen.li.epub`. That string reaches the caller, and the saved filename it
+sits beside does not contain it, because the naming rule strips mirror marks. So
+this field can disclose a provider on a call that named none — the very thing the
+rule above forbids. It is kept anyway, knowingly, for four reasons.
+
+1. **It is not a provenance channel, and cannot be used as one.** `source` was a
+   structured field that named the serving provider on every single call, in a
+   fixed vocabulary a model could branch on. A mark inside an announced filename
+   is a substring some hosts emit and most do not, in no fixed form, on no
+   predictable subset of calls. Its absence proves nothing and its presence is the
+   host's accident. What leaks is therefore incidental and unreliable, where
+   `source` was total and dependable — and "unreliable" is a defect in a
+   provenance field and a mitigation in a leak.
+2. **Finding 2 of the rule does not hold here.** The three findings against
+   returning provenance were that it leaves the machine, that it buys the caller
+   nothing actionable, and that the model cannot judge it. The second is plainly
+   false for this field: on an unverified download — every `doi` and every `isbn`
+   call, where there is no digest to check the bytes against — the announced name
+   is the caller's **only** evidence that what arrived is what was asked for. It
+   is not decoration. Two wrong deliveries were caught by reading it, one of them
+   the mis-keyed catalog record behind eval scenario S43. A rule whose stated
+   justification fails on a case is a rule with an exception, not a rule being
+   broken.
+3. **Sanitizing it would be strictly worse than either keeping or dropping it.**
+   Strip the host mark and the field converges on the saved name — which is what
+   the naming rule already produced from the same string — so it stops being
+   independent evidence while still being labelled "the name the serving source
+   announced". That is a field that lies about its own provenance, and false
+   evidence is worse than no evidence: a caller comparing a laundered
+   `original_filename` against a laundered `path` would see them agree and
+   conclude the delivery was consistent, which is exactly the check it was there
+   to perform, now guaranteed to pass. The saved name strips marks because it is a
+   **name**, chosen by this server. This field keeps them because it is a
+   **quotation**, and a quotation that has been edited is not one.
+4. **Dropping it is the only honest alternative, and it costs more than the
+   leak.** Weighed against each other: what is disclosed is a substring the host
+   chose to put in a header, on a call the caller itself made, about bytes already
+   sitting in the caller's own download directory — never which sources the
+   operator enabled, never a credential, never the mirror that was picked from
+   among several. What is lost is the caller's only way to notice it received the
+   wrong document. The trade goes the way it goes.
+
+The exception is bounded to the announced string and does not generalize. This
+field is never a place to *put* provenance: nothing may be added to it, and if a
+future change ever composes a value here rather than quoting one, it stops being a
+quotation and the rule above reclaims it.
 
 ## Consequences
 
