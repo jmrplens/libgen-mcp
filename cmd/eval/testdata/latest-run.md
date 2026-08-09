@@ -83,5 +83,5 @@ Model: `claude-haiku-4-5-20251001`
 | S76 | local | PASS | 2026-08-08 | model set source=annas; that upstream was down, and it recovered to libgen rather than claiming a file |
 | S77 | local | PASS | 2026-08-08 | model set extra_sources=always on its own and attributed the 7 Anna's-origin result(s) it got back |
 | S78 | local | PASS | 2026-08-09 | the model acted on the bare ISBN without interrogating the request; downloaded 37233352 bytes via annas (md5 verified) |
-| S79 | local | PASS | 2026-08-09 | the model acted on a bare ISBN without interrogating the request, and the copy it settled on is larger than the 50 MiB cap this HARNESS puts on every download (LIBGEN_MCP_MAX_DOWNLOAD_BYTES) — the catalog lists a 610 MB scan of this work beside the 18-24 MB ones, so this is the harness's own limit and neither a licensing wall nor a wrong choice by the model; the model reported that plainly instead of inventing a result |
-| S80 | local | PASS | 2026-08-09 | the model acted on a title and a publisher without interrogating the request; downloaded 18698709 bytes via libgen (md5 verified) |
+| S79 | local | PASS | 2026-08-09 | the model acted on a title and a publisher without interrogating the request; downloaded 18698709 bytes via libgen (md5 verified) |
+| S80 | local | PASS | 2026-08-09 | the model searched the topic and downloaded a result it chose itself, without interrogating the request; downloaded 13864769 bytes via libgen (md5 verified) |
