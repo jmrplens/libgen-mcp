@@ -30,9 +30,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// maxDownloadBytes caps every download the harness makes (25 MiB) so a runaway
-// file never fills the disk.
-const maxDownloadBytes = 25 * 1024 * 1024
+// maxDownloadBytes caps every download the harness makes (50 MiB) so a runaway
+// file never fills the disk. It was 25 MiB until a scenario measured what that
+// costs: an ordinary in-copyright paperback ran to 37 MB, so three sources in a
+// row refused it and the run graded a size cap as if it were a licensing dead
+// end. A cap this harness imposes must stay clear of the sizes real books reach,
+// or it stops measuring the product and starts measuring itself.
+const maxDownloadBytes = 50 * 1024 * 1024
 
 func main() {
 	only := flag.String("only", "", "comma-separated scenario IDs to run (e.g. S1,S6); empty runs all")

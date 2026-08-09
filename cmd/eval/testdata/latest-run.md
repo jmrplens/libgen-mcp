@@ -82,3 +82,4 @@ Model: `claude-haiku-4-5-20251001`
 | S75 | local | PASS | 2026-08-08 | core is advertised on a deployment that holds a CORE key; enum = unpaywall, openalex, europepmc, biorxiv, rfc, nist, dagstuhl, acl, zenodo, scielo, fao, fatcat, core, crossref, oapen, archive, scihub, scidb, libgen, randombook, annas |
 | S76 | local | PASS | 2026-08-08 | model set source=annas; that upstream was down, and it recovered to libgen rather than claiming a file |
 | S77 | local | PASS | 2026-08-08 | model set extra_sources=always on its own and attributed the 7 Anna's-origin result(s) it got back |
+| S78 | local | PASS | 2026-08-09 | the model acted on the bare ISBN without interrogating the request; downloaded 37233352 bytes via annas (md5 verified) |
