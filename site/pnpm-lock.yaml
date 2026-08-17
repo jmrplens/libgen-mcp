@@ -46,8 +46,8 @@ importers:
         specifier: ^1.9.2
         version: 1.9.2
       js-yaml:
-        specifier: 5.3.0
-        version: 5.3.0
+        specifier: 4.3.0
+        version: 4.3.0
       pa11y-ci:
         specifier: ^4.1.1
         version: 4.1.1(supports-color@10.2.2)(typescript@6.0.3)
@@ -2519,10 +2519,6 @@ packages:
 
   js-yaml@4.3.0:
     resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
-    hasBin: true
-
-  js-yaml@5.3.0:
-    resolution: {integrity: sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q==}
     hasBin: true
 
   json-buffer@3.0.1:
@@ -6761,10 +6757,6 @@ snapshots:
   js-tokens@4.0.0: {}
 
   js-yaml@4.3.0:
-    dependencies:
-      argparse: 2.0.1
-
-  js-yaml@5.3.0:
     dependencies:
       argparse: 2.0.1
 
