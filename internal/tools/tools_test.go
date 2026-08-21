@@ -1,12 +1,14 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5" //nolint:gosec // tests compute the LibGen file digest for integrity assertions.
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2957,6 +2959,61 @@ func TestForcedEscalationIsAlwaysModeOnly(t *testing.T) {
 // for the other. A sequential implementation waits it out in full and then fails,
 // so a regression reports a clear error instead of hanging the suite.
 const rendezvousTimeout = 3 * time.Second
+
+// TestProgressNotifierLogsAnUndeliveredNotification covers the send-failure
+// branch: emission is best-effort, so a notification that cannot be delivered
+// must not panic, block or surface to the caller — but it must no longer vanish
+// silently, because a drop in transit is otherwise indistinguishable from a
+// notification that was never emitted.
+//
+// A canceled context is the deterministic way to make the send fail; provoking a
+// real transport failure would race the connection's teardown.
+//
+// It does not call t.Parallel: it swaps the process-wide default logger.
+func TestProgressNotifierLogsAnUndeliveredNotification(t *testing.T) {
+	logs := captureToolsLog(t)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test-server", Version: "0.0.1"}, nil)
+	st, ct := mcp.NewInMemoryTransports()
+	session, err := server.Connect(context.Background(), st, nil)
+	if err != nil {
+		t.Fatalf("server.Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	clientSession, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0.0.1"}, nil).
+		Connect(context.Background(), ct, nil)
+	if err != nil {
+		t.Fatalf("client.Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = clientSession.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	params := &mcp.CallToolParamsRaw{Name: "download"}
+	params.SetProgressToken("tok-undeliverable")
+	notify := progressNotifier(ctx, &mcp.CallToolRequest{Session: session, Params: params})
+	if notify == nil {
+		t.Fatal("progressNotifier returned nil for a request carrying a progress token")
+	}
+
+	notify(7, 11) // must return normally despite the send failing
+
+	if got := logs.String(); !strings.Contains(got, "progress notification not delivered") {
+		t.Errorf("an undelivered notification was not logged; got:\n%s", got)
+	}
+}
+
+// captureToolsLog redirects slog to a buffer for the duration of the test and
+// returns it.
+func captureToolsLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	return &buf
+}
 
 // progressGrace bounds the extra wait a failing progress assertion allows itself
 // before it reports. It is diagnostic only — the assertion fails either way.
