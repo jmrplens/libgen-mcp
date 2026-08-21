@@ -348,6 +348,11 @@ its Brazilian collection.
 - **The entity trap** the advertised address is query-driven (`…/?lang=en&format=pdf`) and the
   markup writes its separator as `&amp;`, so the tag's value is HTML-unescaped before use.
   Requesting it literally would ask for a parameter named `amp;format` and receive HTML.
+- **Measured 2026-08-21: the article page is behind a browser check.** `scielo.br` answers 403
+  to this project's User-Agent and to a bare `curl` alike, and serves an "Establishing a secure
+  connection" interstitial to a third-party fetcher, so the block is not aimed at one address.
+  The DOI still resolves to the correct article URL, so the source is calling the right place;
+  it is the page that is now closed to automated clients.
 - **Why it is not a duplicate route** over fourteen real DOIs sampled from 1998 to 2025,
   Unpaywall reported `is_oa: true` for all fourteen but supplied a downloadable `url_for_pdf`
   for only eight — and for none of the four sampled from 2025, leaving its best OA location
@@ -676,10 +681,10 @@ Anna's Archive, as an md5-keyed rescue route.
 - **Corpus** largely the same libgen family this server already reaches: Anna's non-IPFS
   external links point mostly back at it. The value added is download _reliability_ — an
   independent route — rather than new corpus.
-- **How it resolves** keyless by default. `<mirror>/md5/<md5>` serves anonymously with no
-  CAPTCHA or JS challenge and publishes the item's IPFS CID (a v1 `baf…` CID is preferred over
-  the legacy base58 `Qm…`, because modern gateways resolve it most reliably) along with the stored
-  filepath the extension comes from. The source then streams from the first public gateway that
+- **How it resolves** keyless by default. `<mirror>/md5/<md5>` served anonymously with no
+  CAPTCHA or JS challenge when this was written — but see the measurement below — publishing the
+  item's IPFS CID (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern
+  gateways resolve it most reliably) along with the stored filepath the extension comes from. The source then streams from the first public gateway that
   actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and
   `gateway.pinata.cloud` in order. With `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API
   is tried first — on the first mirror only — and IPFS remains the fallback.
@@ -737,6 +742,12 @@ program, ETSI, ECMA, 3GPP, W3C, ITU-T (deferred rather than rejected), Anna's Ar
 DDoS-Guard-gated slow-download route, and — measured on 2026-07-30 — Project Euclid, DLA
 ASSIST and EverySpec. The last three are worth a line here because two of them work:
 
+- **Measured 2026-08-21: the record page is now challenged too.** `<mirror>/md5/<md5>` answers
+  403 with DDoS-Guard's "Checking your browser" interstitial, as `/search` does, so both HTML
+  routes are closed to a pure-Go client. The member fast-download API is unaffected — it
+  answered 200 with a real `download_url` under this project's own User-Agent — so a keyed
+  download still works while the keyless IPFS route and the discovery/details scrape do not.
+  No browser User-Agent was adopted in response; see Politeness and identification.
 - **Project Euclid** serves IMS and statistics journals, and
   `journalArticle/Download?urlId=<doi>` did return real PDFs to an honest User-Agent. It is
   rejected on both counts of the bar. Unpaywall already supplies a PDF link for six of eight
