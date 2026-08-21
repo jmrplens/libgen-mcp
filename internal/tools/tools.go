@@ -1961,8 +1961,10 @@ func stringField(m map[string]any, key string) string {
 // progressNotifier builds a libgen.ProgressFunc that forwards download progress
 // to the client as MCP notifications/progress, keyed by the progress token the
 // client supplied in the request's _meta. When the client sent no token it
-// returns nil (a no-op) so no notifications are emitted. Emission errors are
-// ignored: progress is best-effort and must never fail the download.
+// returns nil (a no-op) so no notifications are emitted. Emission errors do not
+// fail the download — progress is best-effort — but they are logged, because a
+// notification dropped in transit otherwise looks exactly like one that was
+// never emitted.
 func progressNotifier(ctx context.Context, req *mcp.CallToolRequest) libgen.ProgressFunc {
 	// A nil request or session carries no token and no way to send one. Guarding
 	// here rather than at each call site keeps the callers free to pass whatever
@@ -1983,10 +1985,16 @@ func progressNotifier(ctx context.Context, req *mcp.CallToolRequest) libgen.Prog
 		if total < 0 {
 			total = 0
 		}
-		_ = session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+		// Still best-effort — a failed notification must never fail the download —
+		// but no longer silent. A dropped notification was invisible from both
+		// sides: the client simply never saw one, which is indistinguishable from
+		// one that was never emitted. Logging it is what tells those apart.
+		if err := session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
 			ProgressToken: token,
 			Progress:      float64(done),
 			Total:         float64(total),
-		})
+		}); err != nil {
+			slog.Warn("progress notification not delivered", "done", done, "total", total, "error", err)
+		}
 	}
 }

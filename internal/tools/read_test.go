@@ -888,11 +888,17 @@ func TestReadEmitsProgressNotifications(t *testing.T) {
 		t.Fatalf("CallTool(read) transport error = %v", cerr)
 	}
 
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got)
+	}
+	if count() == 0 {
+		reportMissingProgress(t, "read", count)
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) == 0 {
-		t.Fatal("read fetched the file without emitting a single progress notification")
-	}
 	if last := got[len(got)-1]; last != float64(len(payload)) {
 		t.Errorf("final progress = %v, want the full payload size %d", last, len(payload))
 	}

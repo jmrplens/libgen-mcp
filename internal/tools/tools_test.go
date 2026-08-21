@@ -1287,11 +1287,17 @@ func TestDownloadToolWithProgressToken(t *testing.T) {
 		t.Fatalf("download returned tool error: %+v", res.Content)
 	}
 
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(progresses)
+	}
+	if count() == 0 {
+		reportMissingProgress(t, "download", count)
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
-	if len(progresses) == 0 {
-		t.Fatal("no progress notifications received, want at least one")
-	}
 	if last := progresses[len(progresses)-1]; last != float64(len(payload)) {
 		t.Errorf("last progress = %v, want %d", last, len(payload))
 	}
@@ -2951,6 +2957,38 @@ func TestForcedEscalationIsAlwaysModeOnly(t *testing.T) {
 // for the other. A sequential implementation waits it out in full and then fails,
 // so a regression reports a clear error instead of hanging the suite.
 const rendezvousTimeout = 3 * time.Second
+
+// progressGrace bounds the extra wait a failing progress assertion allows itself
+// before it reports. It is diagnostic only — the assertion fails either way.
+const progressGrace = 3 * time.Second
+
+// reportMissingProgress fails the calling test with the diagnosis a flaking run
+// needs, having waited up to progressGrace for a notification the assertion may
+// simply have raced.
+//
+// The distinction is the whole point. One that lands during the grace period
+// means delivery lost a race with CallTool returning, which is a problem with
+// this assertion. One that never lands means it was never emitted or was dropped
+// in transit, which is a problem with the server — and progressNotifier now logs
+// a failed send, so a run that hits this carries that half of the answer too.
+//
+// Neither case is tolerated: this always fails. TestDownloadToolWithProgressToken
+// flaked once in CI on 2026-08-21 and could not be reproduced locally across the
+// coverage and GOMAXPROCS variations, so the next occurrence has to explain
+// itself rather than be waited out.
+func reportMissingProgress(t *testing.T, what string, count func() int) {
+	t.Helper()
+	deadline := time.Now().Add(progressGrace)
+	for time.Now().Before(deadline) {
+		if count() > 0 {
+			t.Fatalf("%s: no progress notification had arrived when the tool call returned, "+
+				"but one landed within %s — the assertion raced delivery", what, progressGrace)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("%s: no progress notification arrived at all, even %s after the tool call returned "+
+		"— it was never emitted, or it was dropped in transit", what, progressGrace)
+}
 
 // awaitPeer blocks until peer is closed, reporting a failure if the wait times out.
 // It is called from httptest handler goroutines, so it uses t.Errorf (safe from any
