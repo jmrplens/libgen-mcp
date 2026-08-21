@@ -115,7 +115,8 @@ func (s dagstuhlSource) Resolve(ctx context.Context, it Item) (Resolved, error) 
 	}
 	if !bytes.Contains(page, dagstuhlDocumentMarker) {
 		return Resolved{}, unavailable(fmt.Errorf(
-			"dagstuhl: the page for %q is not a document page (challenge or changed layout)", it.DOI))
+			"dagstuhl: the page for %q is not a document page (challenge or changed layout)", it.DOI,
+		))
 	}
 	fileURL, ok := dagstuhlFulltextURL(page)
 	if !ok {

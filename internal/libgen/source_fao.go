@@ -145,7 +145,8 @@ func (s faoSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	}
 	if !bytes.Contains(page, faoRepositoryMarker) {
 		return Resolved{}, unavailable(fmt.Errorf(
-			"fao: the page for %q is not a repository page (challenge or changed layout)", it.DOI))
+			"fao: the page for %q is not a repository page (challenge or changed layout)", it.DOI,
+		))
 	}
 	fileURL, ok := faoFileURL(page, s.root())
 	if !ok {

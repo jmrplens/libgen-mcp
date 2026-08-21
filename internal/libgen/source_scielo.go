@@ -128,7 +128,8 @@ func (s scieloSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	}
 	if !bytes.Contains(page, scieloArticleMarker) {
 		return Resolved{}, unavailable(fmt.Errorf(
-			"scielo: the page for %q is not an article page (challenge or changed layout)", it.DOI))
+			"scielo: the page for %q is not an article page (challenge or changed layout)", it.DOI,
+		))
 	}
 	fileURL, ok := scieloFulltextURL(page)
 	if !ok {
@@ -178,7 +179,8 @@ func (s scieloSource) fetchArticlePage(ctx context.Context, doi string) ([]byte,
 	}
 	if !scieloHost(resp.Request.URL, s.landingHost()) {
 		return nil, notIndexed(fmt.Errorf(
-			"scielo: %q resolved to %q, not a SciELO article", doi, resp.Request.URL.Host))
+			"scielo: %q resolved to %q, not a SciELO article", doi, resp.Request.URL.Host,
+		))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, scieloMaxBody))
 	if err != nil {

@@ -160,7 +160,8 @@ func TestFatcatResolveServesPreservedPDF(t *testing.T) {
 	stub := startFatcatStub(t)
 	stub.files["/preserved.pdf"] = fatcatStubPDF
 	stub.release = fatcatRepointFulltext(
-		fatcatFixture(t, "fatcat_release_hit.html"), stub.srv.URL+"/preserved.pdf")
+		fatcatFixture(t, "fatcat_release_hit.html"), stub.srv.URL+"/preserved.pdf",
+	)
 
 	got, err := stub.source().Resolve(context.Background(), Item{DOI: doi})
 	if err != nil {

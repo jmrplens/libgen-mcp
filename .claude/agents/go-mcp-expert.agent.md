@@ -112,7 +112,7 @@ factor helpers out rather than raising them.
 
 ## MCP Go SDK v1.6.1 Notes
 
-- Module requires Go 1.26.
+- Module requires Go 1.27.
 - Input-validation errors are returned as tool results (not JSON-RPC errors) so
   the model can self-correct.
 - Tool names must match `^[a-zA-Z0-9_-]+$` (no dots/spaces).

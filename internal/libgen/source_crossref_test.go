@@ -115,7 +115,8 @@ func TestCrossrefResolveServesProbedLink(t *testing.T) {
 func TestCrossrefResolveAcceptsTextMiningLink(t *testing.T) {
 	files, _ := crossrefFileServer(t)
 	api, _ := crossrefAPIServer(t, http.StatusOK, crossrefWorkBody(
-		crossrefLinkJSON(files.URL+"/ok.pdf", "application/pdf", "similarity-checking")))
+		crossrefLinkJSON(files.URL+"/ok.pdf", "application/pdf", "similarity-checking"),
+	))
 	s := crossrefSource{http: api.Client(), baseURL: api.URL}
 
 	res, err := s.Resolve(context.Background(), Item{DOI: "10.1000/only-tdm"})
@@ -135,7 +136,8 @@ func TestCrossrefResolvePrefersReaderLinkThenFallsThrough(t *testing.T) {
 	files, probed := crossrefFileServer(t)
 	api, _ := crossrefAPIServer(t, http.StatusOK, crossrefWorkBody(
 		crossrefLinkJSON(files.URL+"/tdm.pdf", "application/pdf", "text-mining")+","+
-			crossrefLinkJSON(files.URL+"/blocked.pdf", "application/pdf", "unspecified")))
+			crossrefLinkJSON(files.URL+"/blocked.pdf", "application/pdf", "unspecified"),
+	))
 	s := crossrefSource{http: api.Client(), baseURL: api.URL}
 
 	res, err := s.Resolve(context.Background(), Item{DOI: "10.1000/two"})
@@ -160,7 +162,8 @@ func TestCrossrefResolvePrefersReaderLinkThenFallsThrough(t *testing.T) {
 func TestCrossrefResolveRefusedLinkIsACleanMiss(t *testing.T) {
 	files, _ := crossrefFileServer(t)
 	api, _ := crossrefAPIServer(t, http.StatusOK, crossrefWorkBody(
-		crossrefLinkJSON(files.URL+"/blocked.pdf", "application/pdf", "syndication")))
+		crossrefLinkJSON(files.URL+"/blocked.pdf", "application/pdf", "syndication"),
+	))
 	s := crossrefSource{http: api.Client(), baseURL: api.URL}
 
 	_, err := s.Resolve(context.Background(), Item{DOI: "10.1063/5.0282407"})
@@ -180,7 +183,8 @@ func TestCrossrefResolveRefusedLinkIsACleanMiss(t *testing.T) {
 // are different facts about the DOI and a caller acts differently on each.
 func TestCrossrefResolveNoLinkIsACleanMiss(t *testing.T) {
 	api, _ := crossrefAPIServer(t, http.StatusOK, crossrefWorkBody(
-		crossrefLinkJSON("http://example.org/x.html", "text/html", "unspecified")))
+		crossrefLinkJSON("http://example.org/x.html", "text/html", "unspecified"),
+	))
 	s := crossrefSource{http: api.Client(), baseURL: api.URL}
 
 	_, err := s.Resolve(context.Background(), Item{DOI: "10.1000/nolink"})

@@ -231,7 +231,8 @@ func readNextSteps(out ReadOutput) []string {
 		if out.OutlineTotal > len(out.Outline) {
 			steps = append(steps, fmt.Sprintf(
 				"Showing %d of %d entries: max_depth hid the deeper levels. Raise max_depth or omit it for the full table of contents.",
-				len(out.Outline), out.OutlineTotal))
+				len(out.Outline), out.OutlineTotal,
+			))
 		}
 	case out.OutlineRequested:
 		steps = append(steps,

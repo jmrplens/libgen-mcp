@@ -393,7 +393,8 @@ func renderScenarioSummaryEN(rows []scenarioRow, sum runSummary) string {
 	span, variants := idRange(rows)
 	return fmt.Sprintf(
 		"The suite is **%d scenarios** (%s%s). %d of them drive a server in remote (`--http`) mode; the rest run it over stdio.",
-		len(rows), span, variantSuffix(variants, " plus the %s variant", " plus the %s variants"), sum.Remote)
+		len(rows), span, variantSuffix(variants, " plus the %s variant", " plus the %s variants"), sum.Remote,
+	)
 }
 
 // renderScenarioSummaryES renders the Spanish scenario tally.
@@ -438,7 +439,8 @@ func renderResultsSummaryEN(sum runSummary, scenarios int) string {
 	}
 	return fmt.Sprintf(
 		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s",
-		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeEN(sum, scenarios), measuredTailEN(sum))
+		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeEN(sum, scenarios), measuredTailEN(sum),
+	)
 }
 
 // measuredSpanES is measuredSpanEN's Spanish counterpart.

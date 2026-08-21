@@ -798,7 +798,8 @@ func TestOutline_EPUB3NavNoNavElement(t *testing.T) {
 // depth-first search still finds it and its entry is extracted.
 func TestOutline_EPUB3NavOLInWrapper(t *testing.T) {
 	files := epub3NavFiles(
-		`<nav epub:type="toc"><div><ol><li><a href="chapter1.xhtml">Wrapped Chapter</a></li></ol></div></nav>`)
+		`<nav epub:type="toc"><div><ol><li><a href="chapter1.xhtml">Wrapped Chapter</a></li></ol></div></nav>`,
+	)
 	path := writeEPUB(t, t.TempDir(), "nav-ol-wrapper.epub", files)
 	res, err := Outline(context.Background(), path)
 	if err != nil {
@@ -816,7 +817,8 @@ func TestOutline_EPUB3NavOLInWrapper(t *testing.T) {
 func TestWalkOL_CtxCancelledEntry(t *testing.T) {
 	files := epub3NavFiles(
 		`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a>` +
-			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`)
+			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`,
+	)
 	path := writeEPUB(t, t.TempDir(), "nav-walk-cancel.epub", files)
 	if _, err := epubOutline(passErr(2), path); err == nil {
 		t.Fatal("expected a context error from walkOL, got nil")
@@ -829,7 +831,8 @@ func TestWalkOL_CtxCancelledEntry(t *testing.T) {
 func TestAppendLI_CtxCancelledNested(t *testing.T) {
 	files := epub3NavFiles(
 		`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a>` +
-			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`)
+			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`,
+	)
 	path := writeEPUB(t, t.TempDir(), "nav-appendli-cancel.epub", files)
 	if _, err := epubOutline(passErr(3), path); err == nil {
 		t.Fatal("expected a context error from appendLI's nested walk, got nil")

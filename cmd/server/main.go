@@ -153,7 +153,9 @@ func run(ctx context.Context, httpAddr string, opts transport.Options) error {
 }
 
 // serveHTTP runs the streamable HTTP transport and shuts it down gracefully when
-// ctx is canceled, tolerating the expected http.ErrServerClosed.
+// ctx is canceled, tolerating the expected http.ErrServerClosed. Connections
+// still streaming after httpShutdownTimeout are closed outright rather than
+// waited on.
 func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts transport.Options) error {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
@@ -184,9 +186,19 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts tr
 		// the dead parent, keeping graceful shutdown bounded by httpShutdownTimeout.
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpShutdownTimeout)
 		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
+		err := srv.Shutdown(shutdownCtx)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		return nil
+		// Shutdown waits for every connection to go idle, and a streamable HTTP
+		// (SSE) stream never does on its own: a client attached when the signal
+		// arrives holds the graceful phase open until the deadline. That is an
+		// expected shutdown, not a failure — cut the remaining connections so the
+		// listener is released instead of leaking it and reporting an error.
+		log.Printf("graceful shutdown exceeded %s with streams still open; closing remaining connections", httpShutdownTimeout)
+		return srv.Close()
 	}
 }

@@ -191,7 +191,8 @@ func readResultsDoc(path, model string) (map[string]recordedResult, error) {
 			return nil, fmt.Errorf(
 				"results doc %s was recorded against model %q but this run used %q; "+
 					"pass rates from two models in one table are not comparable, so re-run the "+
-					"full suite or write to a different --results-doc", path, m[1], model)
+					"full suite or write to a different --results-doc", path, m[1], model,
+			)
 		}
 		m := resultsDocRow.FindStringSubmatch(line)
 		if m == nil {

@@ -61,7 +61,8 @@ func TestNISTResolve(t *testing.T) {
 // slashes literal.
 func TestNISTResolveEscapesDOI(t *testing.T) {
 	got, err := nistSource{doiBase: "https://example.test/"}.Resolve(
-		context.Background(), Item{DOI: "10.6028/NIST.SP.800 53"})
+		context.Background(), Item{DOI: "10.6028/NIST.SP.800 53"},
+	)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}

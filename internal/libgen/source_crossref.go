@@ -136,7 +136,8 @@ func (s crossrefSource) Resolve(ctx context.Context, it Item) (Resolved, error) 
 	}
 	return Resolved{}, notIndexed(fmt.Errorf(
 		"crossref: the publisher's PDF link for %q is not served to automated clients (tried %d, first was %s); it may still open in a browser",
-		it.DOI, len(candidates), candidates[0]))
+		it.DOI, len(candidates), candidates[0],
+	))
 }
 
 // crossrefPDFCandidates returns the deposited PDF links worth probing, in probe

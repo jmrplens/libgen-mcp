@@ -487,7 +487,8 @@ func diagnosed(source, diag, why string) sourceFailure {
 func transportTo(source, wrapper, host string) sourceFailure {
 	return sourceFailure{
 		re: regexp.MustCompile(
-			regexp.QuoteMeta(source+": "+wrapper) + `.*` + regexp.QuoteMeta(`"https://`+host+`/`)),
+			regexp.QuoteMeta(source+": "+wrapper) + `.*` + regexp.QuoteMeta(`"https://`+host+`/`),
+		),
 		why: "transport failure reaching " + host,
 	}
 }

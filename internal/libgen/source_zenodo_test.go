@@ -142,7 +142,8 @@ func TestZenodoSupports(t *testing.T) {
 func TestZenodoResolveVersionRecord(t *testing.T) {
 	stub := startZenodoStub(t)
 	stub.listings["21698070"] = zenodoListing(
-		zenodoFile("TRMSRV3I3I2025207.pdf", 271574, "https://example.invalid/a.pdf"))
+		zenodoFile("TRMSRV3I3I2025207.pdf", 271574, "https://example.invalid/a.pdf"),
+	)
 
 	got, err := stub.source().Resolve(context.Background(), Item{DOI: "10.5281/zenodo.21698070"})
 	if err != nil {
@@ -170,7 +171,8 @@ func TestZenodoResolveConceptDOI(t *testing.T) {
 	stub := startZenodoStub(t)
 	stub.versions["19978417"] = "21676215"
 	stub.listings["21676215"] = zenodoListing(
-		zenodoFile("paper.pdf", 100, "https://example.invalid/v.pdf"))
+		zenodoFile("paper.pdf", 100, "https://example.invalid/v.pdf"),
+	)
 
 	got, err := stub.source().Resolve(context.Background(), Item{DOI: "10.5281/zenodo.19978417"})
 	if err != nil {
@@ -199,7 +201,8 @@ func TestZenodoPickFileFormat(t *testing.T) {
 			name: "pdf beats an earlier zip",
 			listing: zenodoListing(
 				zenodoFile("data.zip", 999999, "https://example.invalid/data.zip"),
-				zenodoFile("paper.pdf", 10, "https://example.invalid/paper.pdf")),
+				zenodoFile("paper.pdf", 10, "https://example.invalid/paper.pdf"),
+			),
 			want:    "https://example.invalid/paper.pdf",
 			wantExt: "pdf",
 		},
@@ -208,7 +211,8 @@ func TestZenodoPickFileFormat(t *testing.T) {
 			listing: zenodoListing(
 				zenodoFile("b.txt", 5, "https://example.invalid/b.txt"),
 				zenodoFile("b.epub", 5, "https://example.invalid/b.epub"),
-				zenodoFile("b.pdf", 5, "https://example.invalid/b.pdf")),
+				zenodoFile("b.pdf", 5, "https://example.invalid/b.pdf"),
+			),
 			want:    "https://example.invalid/b.pdf",
 			wantExt: "pdf",
 		},
@@ -216,14 +220,16 @@ func TestZenodoPickFileFormat(t *testing.T) {
 			name: "epub beats txt",
 			listing: zenodoListing(
 				zenodoFile("b.txt", 5, "https://example.invalid/b.txt"),
-				zenodoFile("b.epub", 5, "https://example.invalid/b.epub")),
+				zenodoFile("b.epub", 5, "https://example.invalid/b.epub"),
+			),
 			want:    "https://example.invalid/b.epub",
 			wantExt: "epub",
 		},
 		{
 			name: "case in the name does not hide a readable format",
 			listing: zenodoListing(
-				zenodoFile("Report.PDF", 5, "https://example.invalid/Report.PDF")),
+				zenodoFile("Report.PDF", 5, "https://example.invalid/Report.PDF"),
+			),
 			want:    "https://example.invalid/Report.PDF",
 			wantExt: "pdf",
 		},
@@ -232,14 +238,16 @@ func TestZenodoPickFileFormat(t *testing.T) {
 			listing: zenodoListing(
 				zenodoFile("README.md", 5928, "https://example.invalid/README.md"),
 				zenodoFile("dataset.zip", 270505103, "https://example.invalid/dataset.zip"),
-				zenodoFile("manifest.csv", 240, "https://example.invalid/manifest.csv")),
+				zenodoFile("manifest.csv", 240, "https://example.invalid/manifest.csv"),
+			),
 			want:    "https://example.invalid/dataset.zip",
 			wantExt: "zip",
 		},
 		{
 			name: "a single extensionless file is still served",
 			listing: zenodoListing(
-				zenodoFile("LICENSE", 1024, "https://example.invalid/LICENSE")),
+				zenodoFile("LICENSE", 1024, "https://example.invalid/LICENSE"),
+			),
 			want:    "https://example.invalid/LICENSE",
 			wantExt: "",
 		},
@@ -247,7 +255,8 @@ func TestZenodoPickFileFormat(t *testing.T) {
 			name: "entries without a usable content url are skipped",
 			listing: zenodoListing(
 				zenodoFile("broken.pdf", 900, "/relative/broken.pdf"),
-				zenodoFile("ok.zip", 5, "https://example.invalid/ok.zip")),
+				zenodoFile("ok.zip", 5, "https://example.invalid/ok.zip"),
+			),
 			want:    "https://example.invalid/ok.zip",
 			wantExt: "zip",
 		},

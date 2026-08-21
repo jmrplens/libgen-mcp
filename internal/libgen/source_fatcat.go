@@ -96,7 +96,8 @@ func (s fatcatSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	}
 	if !bytes.Contains(page, fatcatReleaseMarker) {
 		return Resolved{}, unavailable(fmt.Errorf(
-			"fatcat: the lookup for %q returned no release page (session challenge or changed layout)", it.DOI))
+			"fatcat: the lookup for %q returned no release page (session challenge or changed layout)", it.DOI,
+		))
 	}
 	candidates := fatcatFulltextURLs(page)
 	if len(candidates) == 0 {
@@ -114,7 +115,8 @@ func (s fatcatSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 		}
 	}
 	return Resolved{}, notIndexed(fmt.Errorf(
-		"fatcat: no preserved copy of %q currently serves a PDF (%d tried)", it.DOI, len(candidates)))
+		"fatcat: no preserved copy of %q currently serves a PDF (%d tried)", it.DOI, len(candidates),
+	))
 }
 
 // fatcatFileHeader returns the headers the download stream must carry to receive the

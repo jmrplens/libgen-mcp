@@ -63,7 +63,7 @@ docker run --rm -p 8080:8080 \
 
 ### 3. `go install` (from source)
 
-If you already have Go 1.26 or newer and prefer building from source:
+If you already have Go 1.27 or newer and prefer building from source:
 
 ```bash
 go install github.com/jmrplens/libgen-mcp/cmd/server@latest
