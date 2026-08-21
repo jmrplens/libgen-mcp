@@ -282,14 +282,107 @@ func TestServeHTTPServesRequests(t *testing.T) {
 	}
 
 	cancel()
+	// The budget has to clear httpShutdownTimeout: a stream the client has closed
+	// but the handler has not noticed yet keeps the graceful phase running to its
+	// own deadline, which a 5s wait loses to by microseconds.
 	select {
 	case sErr := <-done:
 		if sErr != nil {
 			t.Fatalf("serveHTTP() = %v, want nil after graceful shutdown", sErr)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(httpShutdownTimeout + 5*time.Second):
 		t.Fatal("serveHTTP did not return after cancel")
 	}
+}
+
+// TestServeHTTPClosesStreamsThatOutlastShutdown pins the forced-close path. A
+// stateful session's GET stream stays open until the client or the server ends
+// it, so the connection never returns to idle and graceful shutdown runs out its
+// deadline. serveHTTP must still come back clean, having cut the stream, rather
+// than reporting the deadline as a failure and leaving the listener held.
+func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	// Stateful mode is what exposes the long-lived GET stream; the stateless
+	// default answers GET with 405 and closes every POST stream on reply.
+	opts := transport.DefaultOptions()
+	opts.Stateless = false
+	go func() { done <- serveHTTP(ctx, newTestServer(), addr, opts) }()
+
+	base := "http://" + addr
+	waitForHealth(t, base)
+
+	sessionID := initStatefulSession(t, base)
+	stream := openSessionStream(t, base, sessionID)
+	defer func() { _ = stream.Close() }()
+
+	start := time.Now()
+	cancel()
+	select {
+	case sErr := <-done:
+		if sErr != nil {
+			t.Fatalf("serveHTTP() = %v, want nil once the open stream is force-closed", sErr)
+		}
+		if elapsed := time.Since(start); elapsed < httpShutdownTimeout {
+			t.Errorf("returned after %v, want at least the %v graceful phase", elapsed, httpShutdownTimeout)
+		}
+	case <-time.After(httpShutdownTimeout + 15*time.Second):
+		t.Fatal("serveHTTP did not return after cancel with a stream still open")
+	}
+}
+
+// initStatefulSession runs initialize against a stateful server and returns the
+// session id it hands back.
+func initStatefulSession(t *testing.T, base string) string {
+	t.Helper()
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":` +
+		`{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0.0.0"}}}`)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, base+"/", body)
+	if err != nil {
+		t.Fatalf("build initialize request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	id := resp.Header.Get("Mcp-Session-Id")
+	if id == "" {
+		t.Fatal("initialize returned no Mcp-Session-Id; stateful mode is not active")
+	}
+	return id
+}
+
+// openSessionStream opens the session's long-lived GET stream and returns its
+// still-open body, having waited for the response headers.
+func openSessionStream(t *testing.T, base, sessionID string) io.ReadCloser {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, base+"/", nil)
+	if err != nil {
+		t.Fatalf("build stream request: %v", err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Mcp-Session-Id", sessionID)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("open session stream: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		t.Fatalf("stream status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	return resp.Body
 }
 
 // waitForHealth polls GET /health until the server accepts connections.
@@ -339,7 +432,8 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	t.Helper()
 	srv := newSearchToolServer()
 	mcpHandler := mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts))
+		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
+	)
 	ts := httptest.NewServer(newHTTPHandler(mcpHandler))
 	t.Cleanup(ts.Close)
 	return ts
