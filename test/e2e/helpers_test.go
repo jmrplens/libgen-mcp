@@ -493,6 +493,25 @@ func transportTo(source, wrapper, host string) sourceFailure {
 	}
 }
 
+// serverErrorFrom builds the "upstream is having a bad day" class: a 5xx arriving
+// from the host the source is supposed to be calling. It is deliberately narrower
+// than transportTo, which only sees errors raised before a response existed — a
+// 5xx comes back through the download stream's own wrapper instead, and so was
+// classified as an undiagnosed failure.
+//
+// Restricted to 5xx on purpose. A 4xx must keep failing: 404 or 403 is the shape
+// a source pointed at the wrong URL produces, which is the confusion the whole
+// classified-outcome discipline exists to prevent. Only the server admitting its
+// own fault is weather.
+func serverErrorFrom(source, host string) sourceFailure {
+	return sourceFailure{
+		re: regexp.MustCompile(
+			regexp.QuoteMeta("source "+source+": ") + `.*status 5\d\d from ` + regexp.QuoteMeta("https://"+host),
+		),
+		why: "upstream " + host + " answered a server error",
+	}
+}
+
 // matchFailure returns the reason of the first class whose pattern matches msg,
 // or "" when none does. It is the pure half of classifyOrFail, so a test can ask
 // which class an error text falls into without skipping or failing — the only way

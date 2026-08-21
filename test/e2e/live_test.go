@@ -588,10 +588,11 @@ func TestE2EDiagnosedClassesMatchSourceErrorText(t *testing.T) {
 // test exists. Each string is what the chain produces for one real outcome; see
 // startWrap for the wrapping.
 func diagnosedClassCases() []classificationCase {
-	cases := append(append(
+	cases := append(append(append(
 		libgenClassCases(), unpaywallClassCases()...,
 	),
-		shadowLibraryClassCases()...)
+		shadowLibraryClassCases()...),
+		upstreamWeatherClassCases()...)
 	// The historical case, kept as a regression guard: this class was once written
 	// without the leading "the lookup for" fragment and so could never match.
 	return append(cases, classificationCase{
@@ -602,8 +603,56 @@ func diagnosedClassCases() []classificationCase {
 	})
 }
 
+// upstreamWeatherClassCases covers the two classes added for upstreams that fail
+// on their own account, and — the cases that carry the weight — the neighboring
+// texts that must stay undiagnosed. A class this broad earns its place only if the
+// negatives hold: a 4xx and a malformed payload are how "we are calling it wrong"
+// reads, and neither may be absorbed as weather.
+func upstreamWeatherClassCases() []classificationCase {
+	return []classificationCase{
+		{
+			"archive/server-error", "archive",
+			"source archive: " + startWrap + "download failed: status 500 from https://archive.org",
+			archiveFailures, true,
+		},
+		{
+			"archive/gateway-timeout", "archive",
+			"source archive: " + startWrap + "download failed: status 504 from https://archive.org",
+			archiveFailures, true,
+		},
+		// A 4xx is not weather: it is what a source asking for the wrong thing gets.
+		// archiveFailures diagnoses some 4xx texts through their own OpenLibrary
+		// shapes, so this uses the stream wrapper the new class matches on.
+		{
+			"archive/client-error-must-not-be-weather", "archive",
+			"source archive: " + startWrap + "download failed: status 404 from https://archive.org",
+			archiveFailures, false,
+		},
+		// Nor is a 5xx from a host this source has no business calling.
+		{
+			"archive/server-error-wrong-host-must-fail", "archive",
+			"source archive: " + startWrap + "download failed: status 500 from https://example.invalid",
+			archiveFailures, false,
+		},
+		{
+			"biorxiv/empty-body", "biorxiv",
+			"source biorxiv: " + startWrap +
+				`biorxiv: could not confirm "10.1/x": biorxiv: decoding biorxiv response for "10.1/x": EOF`,
+			biorxivFailures, true,
+		},
+		// A payload we cannot parse is a layout change, not an empty answer.
+		{
+			"biorxiv/malformed-must-fail", "biorxiv",
+			"source biorxiv: " + startWrap +
+				`biorxiv: decoding biorxiv response for "10.1/x": invalid character 'x' looking for beginning of value`,
+			biorxivFailures, false,
+		},
+	}
+}
+
 // libgenClassCases covers libgenFailures, including the layout change that must
 // stay undiagnosed.
+
 func libgenClassCases() []classificationCase {
 	const src = "libgen"
 	return []classificationCase{
@@ -940,6 +989,10 @@ var biorxivFailures = []sourceFailure{
 	diagnosed("biorxiv", `"[^"]*" not found on bioRxiv or medRxiv`, "neither server carries the DOI"),
 	diagnosed("biorxiv", `(bio|med)rxiv returned HTTP \d+`, "details API answered an unexpected status"),
 	transportTo("biorxiv", "requesting ", "api.biorxiv.org"),
+	// An empty body decodes as EOF. It is the details API failing to answer, not a
+	// shape we parse wrongly: a malformed payload reports the syntax it choked on,
+	// and a wrong host is already pinned by the transport class above.
+	diagnosed("biorxiv", `decoding (bio|med)rxiv response for "[^"]*": EOF`, "the details API returned an empty body"),
 	{
 		re:  regexp.MustCompile(`source biorxiv: .*HTML page instead of the file`),
 		why: "the content host served an interstitial, not the PDF",
@@ -2475,6 +2528,7 @@ var archiveFailures = []sourceFailure{
 	diagnosed("archive", `item "[^"]*" does not serve `, "the item's file endpoint is not serving the scan"),
 	transportTo("archive", "requesting ", "openlibrary.org"),
 	transportTo("archive", "requesting ", "archive.org"),
+	serverErrorFrom("archive", "archive.org"),
 }
 
 // TestE2EArchiveClassifiedOutcome exercises the archive source end to end against
@@ -2616,6 +2670,12 @@ func assertEbookURLServesFile(t *testing.T, ctx context.Context, fileURL string)
 		t.Skipf("gutenberg.org was unreachable live: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// A 5xx is the same event as the transport error above — the host did not serve
+	// — so it skips rather than fails. A 4xx does not: that is the shape of an
+	// advertised URL that is wrong, which is this assertion's whole purpose.
+	if resp.StatusCode >= 500 {
+		t.Skipf("%s answered HTTP %d: the host is failing, not the URL", fileURL, resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("%s returned HTTP %d, want 200 — the advertised ebook URL does not serve", fileURL, resp.StatusCode)
 	}
