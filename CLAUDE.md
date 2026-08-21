@@ -245,6 +245,18 @@ review the Spanish page and copy the new digest into its `privacySource`).
 Because the chain is `&&`-joined, the first failure hides the rest — so re-run
 it to completion after fixing one.
 
+**`js-yaml` is pinned in `site/package.json` for Starlight, not for us.** No file
+in this repo imports it. It is there because `@astrojs/starlight` ships
+TypeScript source (`utils/translations-fs.ts` does `import yaml from 'js-yaml'`),
+which Vite compiles into our bundle and leaves as a bare external — so it
+resolves at runtime from `site/node_modules`, *our* tree, not Starlight's. That
+makes the root pin the version Starlight actually gets. It must stay inside
+Starlight's own range (`^4.1.1`): js-yaml 5 dropped the default export, and
+bumping the pin to it fails the build in `generating static routes` with "does
+not provide an export named 'default'" — a message that names neither Starlight
+nor the pin. Keep the version exact (no caret) so a range bump cannot drift
+across the major.
+
 A plain `golangci-lint run` skips every tagged file, which is how the whole
 `cmd/eval` harness went unanalyzed until 2026-07-30. `make lint` passes
 `GO_ANALYSIS_TAGS` (`e2e,eval`) for this reason — add any new build tag there.
