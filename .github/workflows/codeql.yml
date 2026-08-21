@@ -1,0 +1,69 @@
+# CodeQL code scanning (advanced setup).
+#
+# Defined by hand instead of using GitHub's default setup so the Go job can
+# install the toolchain the module requires: the default-setup environment pins
+# GOTOOLCHAIN=local to the runner's Go, which breaks every time go.mod moves to
+# a Go version the CodeQL runtime has not shipped yet (first hit: Go 1.27.0,
+# 2026-08). Coverage matches what default setup would analyze here: actions, go
+# and the docs site's javascript-typescript, with the default query suite and a
+# weekly scheduled scan.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "26 14 * * 2"
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.27.0"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        if: matrix.language == 'go'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      # Manual build keeps the Go extractor on the setup-go toolchain instead of
+      # autobuild's environment probing. Building every package plus the tagged
+      # e2e/eval trees is what the extractor needs to see the whole module.
+      - name: Build Go
+        if: matrix.language == 'go'
+        run: |
+          go mod download
+          go build ./...
+          go build -tags e2e,eval ./...
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

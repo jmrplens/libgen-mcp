@@ -220,11 +220,19 @@ cd site && pnpm run lint                                   # the docs site, if y
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 ```
 
-**`make` does not cover everything CI runs.** Two gates have no `make` target and
-so pass locally by not being run: `markdownlint-cli2` over every `*.md` (the
+**`make` does not cover everything CI runs.** Three gates have no `make` target
+and so pass locally by not being run: `markdownlint-cli2` over every `*.md` (the
 `Analyze Markdown` job — MD024 forbids two headings with the same text in one
-file, which an ADR accumulating amendments trips easily), and the docs site's
-own chain.
+file, which an ADR accumulating amendments trips easily), the docs site's own
+chain, and the `CodeQL` workflow.
+
+**CodeQL is advanced setup, defined in `.github/workflows/codeql.yml`.** GitHub's
+default setup is deliberately left off: it pins `GOTOOLCHAIN=local` to whatever
+Go the CodeQL runtime ships, so the Go job breaks every time `go.mod` moves to a
+release the runtime has not picked up yet. The workflow installs the toolchain
+with `setup-go` and uses `build-mode: manual` for Go instead. Bump its
+`GO_VERSION` alongside the ones in `ci.yml` and `release.yml`, and do not enable
+default setup in the repository settings — the two cannot coexist.
 
 **`make` does not cover the docs site.** `site/` has its own gate chain —
 `astro check`, i18n parity, the PRIVACY.md sync check, eslint, prettier,
