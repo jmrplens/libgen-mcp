@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // credentialVars are the optional settings that decide how much of the suite
@@ -37,6 +39,15 @@ var credentialVars = []struct {
 //
 // An entry already present in the environment always wins, so an explicit
 // export still overrides the file and CI, which has no .env, is unaffected.
+//
+// It also permits private destinations for the whole binary, the way the six
+// unit packages with fixtures do. Part of this suite serves its fixtures from
+// httptest servers, which listen on loopback — the address family
+// internal/netguard refuses — so under the real policy those cases spend their
+// retry schedules failing to dial their own fixtures. Unlike those packages this
+// one also talks to live mirrors, and the allowance covers those calls too; that
+// is acceptable in a test binary aimed at hosts we choose, and the policy itself
+// is exercised against real dials in internal/netguard.
 func TestMain(m *testing.M) {
 	if path, err := findDotEnv(); err == nil {
 		if n, loadErr := loadDotEnv(path); loadErr != nil {
@@ -46,7 +57,10 @@ func TestMain(m *testing.M) {
 		}
 	}
 	reportCredentials()
-	os.Exit(m.Run())
+	restore := netguard.SetAllowPrivateForTest(true)
+	code := m.Run()
+	restore()
+	os.Exit(code)
 }
 
 // reportCredentials prints which optional credentials are present, so a

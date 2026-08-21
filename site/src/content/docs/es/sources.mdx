@@ -368,6 +368,12 @@ fuente sirve su colección brasileña.
   el marcado escribe su separador como `&amp;`, así que el valor de la etiqueta se
   desescapa de HTML antes de usarse. Pedirlo literal solicitaría un parámetro llamado
   `amp;format` y devolvería HTML.
+- **Medido el 2026-08-21: la página del artículo está tras una comprobación de navegador.**
+  `scielo.br` responde 403 tanto al User-Agent de este proyecto como a un `curl` pelado, y sirve
+  un interstitial "Establishing a secure connection" a un recuperador de terceros, así que el
+  bloqueo no apunta a una dirección concreta. El DOI sigue resolviendo a la URL correcta del
+  artículo, de modo que la fuente llama al sitio adecuado; es la página la que ha quedado
+  cerrada a los clientes automatizados.
 - **Por qué no es una ruta duplicada** sobre catorce DOI reales muestreados entre 1998 y 2025,
   Unpaywall informó `is_oa: true` en los catorce pero aportó un `url_for_pdf` descargable solo
   en ocho — y en ninguno de los cuatro de 2025, dejando su mejor ubicación OA apuntando a la
@@ -708,8 +714,9 @@ Anna's Archive, como ruta de rescate identificada por md5.
 - **Corpus** en su mayor parte la misma familia libgen que este servidor ya alcanza: los enlaces
   externos de Anna's que no son IPFS apuntan sobre todo de vuelta a ella. Lo que aporta es
   _fiabilidad_ de descarga — una ruta independiente — y no corpus nuevo.
-- **Cómo resuelve** sin clave por defecto. `<mirror>/md5/<md5>` se sirve de forma anónima, sin
-  CAPTCHA ni desafío JS, y publica el CID de IPFS del elemento (se prefiere un CID `baf…` v1 al
+- **Cómo resuelve** sin clave por defecto. `<mirror>/md5/<md5>` se servía de forma anónima, sin
+  CAPTCHA ni desafío JS, cuando se escribió esto (pero véase la medición más abajo), y publica
+  el CID de IPFS del elemento (se prefiere un CID `baf…` v1 al
   `Qm…` heredado en base58, porque las pasarelas modernas lo resuelven con más fiabilidad) junto
   con la ruta almacenada de la que sale la extensión. La fuente transmite entonces desde la
   primera pasarela pública que sirva de verdad ese contenido, probando `dweb.link`, `w3s.link`,
@@ -775,6 +782,13 @@ descarga lenta de Anna's Archive, cerrada por DDoS-Guard, y — medidas el 2026-
 Euclid, DLA ASSIST y EverySpec. Estas tres últimas merecen una línea aquí porque dos de ellas
 funcionan:
 
+- **Medido el 2026-08-21: la página de registro también está protegida.** `<mirror>/md5/<md5>`
+  responde 403 con el interstitial "Checking your browser" de DDoS-Guard, igual que `/search`,
+  así que ambas rutas HTML están cerradas a un cliente Go puro. La API de descarga rápida de
+  miembro no está afectada — respondió 200 con un `download_url` real bajo el propio User-Agent
+  de este proyecto —, de modo que una descarga con clave sigue funcionando mientras que la ruta
+  IPFS sin clave y el scrape de descubrimiento/detalles no. No se adoptó ningún User-Agent de
+  navegador; véase Cortesía e identificación.
 - **Project Euclid** sirve revistas del IMS y de estadística, y
   `journalArticle/Download?urlId=<doi>` sí devolvió PDF reales a un User-Agent honesto. Se
   rechaza por los dos lados del listón. Unpaywall ya aporta un enlace al PDF en seis de ocho DOI
