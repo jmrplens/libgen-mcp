@@ -216,7 +216,7 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 	}
 
 	dl := renderDownloadMarkdown(DownloadOutput{
-		DownloadResult: libgen.DownloadResult{Path: "/p", SizeBytes: 9, Source: "libgen", Resumed: true},
+		Path: "/p", SizeBytes: 9, Source: "libgen", Resumed: true,
 	})
 	if !strings.Contains(dl, "Resumed") {
 		t.Errorf("resumed download markdown should note the resume; got:\n%s", dl)
@@ -231,9 +231,9 @@ func TestRenderMarkdownEdgeCases(t *testing.T) {
 // to say: a pinned call runs against that one source, so a rendered download is the
 // pinned source's own delivery and a sentence confirming it would be noise.
 func TestRenderDownloadMarkdownWithholdsProvenance(t *testing.T) {
-	out := renderDownloadMarkdown(DownloadOutput{DownloadResult: libgen.DownloadResult{
+	out := renderDownloadMarkdown(DownloadOutput{
 		Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
-	}})
+	})
 	for _, leak := range []string{"libgen", "libgen.li", "source you asked for"} {
 		if strings.Contains(out, leak) {
 			t.Errorf("markdown leaked %q; got:\n%s", leak, out)
@@ -247,14 +247,12 @@ func TestRenderDownloadMarkdownWithholdsProvenance(t *testing.T) {
 // origin is stated.
 func TestRenderDownloadMarkdownNames(t *testing.T) {
 	out := renderDownloadMarkdown(DownloadOutput{
-		DownloadResult: libgen.DownloadResult{
-			Path:             filepath.Join("/books", "Jane Doe - Great Book (2020).epub"),
-			SizeBytes:        9,
-			Source:           "libgen",
-			OriginalFilename: "Great Book [10.1_x] - libgen.li.epub",
-			Verified:         true,
-			NameOrigin:       libgen.NameFromMetadata,
-		},
+		Path:             filepath.Join("/books", "Jane Doe - Great Book (2020).epub"),
+		SizeBytes:        9,
+		Source:           "libgen",
+		OriginalFilename: "Great Book [10.1_x] - libgen.li.epub",
+		Verified:         true,
+		NameOrigin:       libgen.NameFromMetadata,
 	})
 	if !strings.Contains(out, "**Jane Doe - Great Book (2020).epub**") {
 		t.Errorf("the headline should be the saved name; got:\n%s", out)
@@ -268,7 +266,7 @@ func TestRenderDownloadMarkdownNames(t *testing.T) {
 
 	// A resolve-style result with no path at all falls back to the announced name.
 	noPath := renderDownloadMarkdown(DownloadOutput{
-		DownloadResult: libgen.DownloadResult{OriginalFilename: "book.pdf", Source: "scihub"},
+		OriginalFilename: "book.pdf", Source: "scihub",
 	})
 	if !strings.Contains(noPath, "**book.pdf**") {
 		t.Errorf("with no path the announced name should headline; got:\n%s", noPath)

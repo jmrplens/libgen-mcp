@@ -478,7 +478,8 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 		// recognize and the file endpoint serves everything as octet-stream regardless.
 		stub := startZenodoStub(t)
 		stub.listings["3233986"] = zenodoListing(
-			zenodoFile("paper.pdf", 10, "https://example.invalid/paper.pdf"))
+			zenodoFile("paper.pdf", 10, "https://example.invalid/paper.pdf"),
+		)
 		assertDeclaresExt(t, stub.source(), Item{DOI: "10.5281/zenodo.3233986"})
 	})
 }

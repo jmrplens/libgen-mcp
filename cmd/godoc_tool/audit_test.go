@@ -660,7 +660,7 @@ func setupModule(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-const documentedModule = "module example.com/tm\n\ngo 1.26\n"
+const documentedModule = "module example.com/tm\n\ngo 1.27\n"
 
 // TestGoExecutable_ReturnsRuntimeGo verifies goExecutable resolves to the Go
 // tool inside the active runtime installation.

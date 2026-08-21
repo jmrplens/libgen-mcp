@@ -589,7 +589,8 @@ func TestE2EDiagnosedClassesMatchSourceErrorText(t *testing.T) {
 // startWrap for the wrapping.
 func diagnosedClassCases() []classificationCase {
 	cases := append(append(
-		libgenClassCases(), unpaywallClassCases()...),
+		libgenClassCases(), unpaywallClassCases()...,
+	),
 		shadowLibraryClassCases()...)
 	// The historical case, kept as a regression guard: this class was once written
 	// without the leading "the lookup for" fragment and so could never match.

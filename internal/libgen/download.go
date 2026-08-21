@@ -870,7 +870,8 @@ func hostRefusal(status int, fileURL string) error {
 	}
 	return fmt.Errorf(
 		"host refused automated access (HTTP %d) to %s — retrying cannot change that; the file may still open in a browser",
-		status, redactQuery(fileURL))
+		status, redactQuery(fileURL),
+	)
 }
 
 // redactQuery returns fileURL without its query string or fragment, so a URL can be

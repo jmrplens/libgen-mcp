@@ -23,9 +23,9 @@ func TestMiddlewareStampsCatalogTTL(t *testing.T) {
 		method string
 		result mcp.CacheableResult
 	}{
-		{"tools", "tools/list", &mcp.ListToolsResult{Cacheable: mcp.Cacheable{CacheScope: "public"}}},
-		{"prompts", "prompts/list", &mcp.ListPromptsResult{Cacheable: mcp.Cacheable{CacheScope: "public"}}},
-		{"discover", "server/discover", &mcp.DiscoverResult{Cacheable: mcp.Cacheable{CacheScope: "public"}}},
+		{"tools", "tools/list", &mcp.ListToolsResult{CacheScope: "public"}},
+		{"prompts", "prompts/list", &mcp.ListPromptsResult{CacheScope: "public"}},
+		{"discover", "server/discover", &mcp.DiscoverResult{CacheScope: "public"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

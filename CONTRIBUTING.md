@@ -33,7 +33,7 @@ development build running is just:
 
 ### Prerequisites
 
-- **Go 1.26+** — [Download](https://go.dev/dl/). The module is
+- **Go 1.27+** — [Download](https://go.dev/dl/). The module is
   `github.com/jmrplens/libgen-mcp`.
 - **Static-analysis tools** — `golangci-lint`, `govulncheck` and `goreleaser`
   (the last one only for `make release-check`). Install all three with

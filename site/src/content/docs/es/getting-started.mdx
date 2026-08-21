@@ -28,7 +28,7 @@ head:
             "@type": "HowToStep",
             "position": 1,
             "name": "Instala el servidor",
-            "text": "Descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH. Es un único ejecutable completamente estático sin nada más que instalar. Como alternativa, descarga la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compila desde el código con go install si tienes Go 1.26 o superior.",
+            "text": "Descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH. Es un único ejecutable completamente estático sin nada más que instalar. Como alternativa, descarga la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compila desde el código con go install si tienes Go 1.27 o superior.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#instalación"
           },
           {
@@ -70,7 +70,7 @@ head:
             "name": "¿Cómo instalo libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp:latest o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
+              "text": "La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp:latest o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
             }
           },
           {
@@ -78,7 +78,7 @@ head:
             "name": "¿Qué método de instalación debería usar?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige go install solo si ya tienes Go 1.26 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión .mcpb de un clic del último release es la opción más sencilla."
+              "text": "Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige go install solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión .mcpb de un clic del último release es la opción más sencilla."
             }
           },
           {
@@ -159,7 +159,7 @@ La instalación recomendada es el **binario precompilado**: un único ejecutable
     	```
     </TabItem>
     <TabItem label="go install">
-    	Si ya tienes Go 1.26 o posterior y prefieres compilar desde el código fuente:
+    	Si ya tienes Go 1.27 o posterior y prefieres compilar desde el código fuente:
 
     	```bash
     	go install github.com/jmrplens/libgen-mcp/cmd/server@latest
@@ -384,11 +384,11 @@ Consulta [Herramientas](/libgen-mcp/es/tools/#prompts) para ver la tabla complet
 
 ### ¿Cómo instalo libgen-mcp?
 
-La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp:latest` o, si ya tienes Go 1.26 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
+La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp:latest` o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
 
 ### ¿Qué método de instalación debería usar?
 
-Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige `go install` solo si ya tienes Go 1.26 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión `.mcpb` de un clic del último release es la opción más sencilla.
+Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige `go install` solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión `.mcpb` de un clic del último release es la opción más sencilla.
 
 ### ¿Cómo conecto libgen-mcp a Claude o VS Code?
 

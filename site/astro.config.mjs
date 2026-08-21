@@ -69,7 +69,7 @@ const featureList = [
 	"stdio and streamable HTTP transports; no account or API key required",
 ];
 const softwareRequirements =
-	"None — a single static binary; Go 1.26+ only to build from source.";
+	"None — a single static binary; Go 1.27+ only to build from source.";
 
 // Site-wide JSON-LD @graph: the stable Person / WebSite / SoftwareApplication /
 // SourceCode nodes that per-page TechArticle + BreadcrumbList nodes link into.

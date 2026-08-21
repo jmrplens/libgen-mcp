@@ -45,7 +45,8 @@ func serveRemoteHTTP(t *testing.T, client *libgen.Client, cfg *config.Config) *h
 	prompts.Register(server, client, cfg)
 
 	handler := mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(transport.DefaultOptions()))
+		func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(transport.DefaultOptions()),
+	)
 	httpServer := httptest.NewServer(handler)
 	t.Cleanup(httpServer.Close)
 	return httpServer

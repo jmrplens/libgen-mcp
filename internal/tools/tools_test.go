@@ -80,7 +80,8 @@ func TestHandlerRecoversPanic(t *testing.T) {
 	handler := mcp.ToolHandlerFor[panicIn, panicOut](
 		func(context.Context, *mcp.CallToolRequest, panicIn) (*mcp.CallToolResult, panicOut, error) {
 			panic("boom")
-		})
+		},
+	)
 	mcp.AddTool(server, &mcp.Tool{Name: "boom", Description: "panics on purpose for testing"},
 		withRecovery("boom", handler))
 
@@ -1650,7 +1651,8 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 // it says nothing, because then there is nothing to name.
 func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"},
+	)
 	for _, want := range []string{
 		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
 		"randombook is a Library Genesis frontend", "scidb is Anna's Archive's SciDB article viewer",
@@ -1693,7 +1695,8 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // and nothing else in the build can catch a description that lies.
 func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"})
+		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"},
+	)
 	for _, banned := range []string{
 		"without the rightsholder's permission", "copyrighted works",
 		"and named in the result", "whether a source you pinned served the file",

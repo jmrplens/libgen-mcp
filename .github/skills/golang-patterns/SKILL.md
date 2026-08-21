@@ -673,7 +673,21 @@ func (c *Counter) Increment() { c.n++ }        // Pointer receiver
 
 **Remember**: Go code should be boring in the best way - predictable, consistent, and easy to understand. When in doubt, keep it simple.
 
-## Go 1.24+ / 1.25+ Modern Patterns
+## Go 1.24+ / 1.25+ / 1.27+ Modern Patterns
+
+### Promoted Fields in Composite Literals (Go 1.27+)
+
+Struct literals may assign promoted (embedded) fields directly — no embedded
+type wrapper needed. The `modernize/embedlit` check enforces this style:
+
+```go
+type DownloadOutput struct {
+    libgen.DownloadResult // embeds Path, SizeBytes, Source
+    Notes string
+}
+
+out := DownloadOutput{Path: "/p", SizeBytes: 9, Source: "libgen"} // Go 1.27+
+```
 
 ### Range-over-func Iterators (Go 1.23+)
 

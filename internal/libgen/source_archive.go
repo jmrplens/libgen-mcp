@@ -219,7 +219,8 @@ func (s archiveSource) resolveCandidates(ctx context.Context, ids []string, isbn
 		return Resolved{}, failure
 	}
 	return Resolved{}, notIndexed(fmt.Errorf(
-		"archive: no freely downloadable scan for %s (every candidate is lending-restricted or holds no book file)", isbn))
+		"archive: no freely downloadable scan for %s (every candidate is lending-restricted or holds no book file)", isbn,
+	))
 }
 
 // resolveCandidate confirms one Internet Archive item and turns it into a Resolved.
