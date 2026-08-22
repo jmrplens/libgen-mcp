@@ -210,3 +210,56 @@ func TestServerCardListsBeyondOnePage(t *testing.T) {
 			len(card.Tools), 2, want)
 	}
 }
+
+// TestServerCardCarriesIcons pins the icons pass-through on both primitives.
+// This server registers none today, so without a fixture that declares some the
+// field would sit in the card types untested and could stop being copied without
+// anything noticing.
+func TestServerCardCarriesIcons(t *testing.T) {
+	type stubIn struct{}
+	type stubOut struct{}
+	toolIcon := mcp.Icon{Source: "https://example.invalid/tool.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}}
+	promptIcon := mcp.Icon{Source: "https://example.invalid/prompt.png", MIMEType: "image/png"}
+
+	srv := newMCPServer()
+	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub", Icons: []mcp.Icon{toolIcon}},
+		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
+			return nil, stubOut{}, nil
+		})
+	srv.AddPrompt(&mcp.Prompt{Name: "acquire_book", Description: "stub", Icons: []mcp.Icon{promptIcon}},
+		func(context.Context, *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return &mcp.GetPromptResult{}, nil
+		})
+
+	raw, err := buildServerCard(t.Context(), srv)
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	var card serverCard
+	if uErr := json.Unmarshal(raw, &card); uErr != nil {
+		t.Fatalf("card is not valid JSON: %v", uErr)
+	}
+
+	if len(card.Tools) != 1 || len(card.Tools[0].Icons) != 1 {
+		t.Fatalf("tool icons = %+v, want the one declared", card.Tools)
+	}
+	if got := card.Tools[0].Icons[0]; got.Source != toolIcon.Source || got.MIMEType != toolIcon.MIMEType {
+		t.Errorf("tool icon = %+v, want %+v", got, toolIcon)
+	}
+	if len(card.Prompts) != 1 || len(card.Prompts[0].Icons) != 1 {
+		t.Fatalf("prompt icons = %+v, want the one declared", card.Prompts)
+	}
+	if got := card.Prompts[0].Icons[0]; got.Source != promptIcon.Source {
+		t.Errorf("prompt icon = %+v, want %+v", got, promptIcon)
+	}
+
+	// The key must be absent, not null, when nothing declares an icon — that is
+	// what keeps the published document unchanged while this server has none.
+	plain, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	if strings.Contains(string(plain), `"icons"`) {
+		t.Error("a surface with no icons emitted an icons key")
+	}
+}
