@@ -448,4 +448,4 @@ See [LICENSE](LICENSE). Released under the MIT License.
 
 Maintained by [José M. Requena Plens](https://jmrp.io/) ·
 [Project page](https://jmrp.io/projects/) ·
-Hosted instance: [https://mcp.jmrp.io/libgen](https://mcp.jmrp.io/libgen) (POST-only; a GET returns 405 by design)
+Hosted instance: [mcp.jmrp.io/libgen](https://mcp.jmrp.io/libgen) (POST-only; a GET returns 405 by design)

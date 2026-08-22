@@ -224,11 +224,16 @@ jobs:
         run: |
           cosign sign --yes \
             docker.io/${{ env.DOCKERHUB_IMAGE }}@${{ steps.docker-push.outputs.digest }}
-      # Docker Hub does not take a description from the image, so a repository
-      # published only by `docker push` shows an empty page — which is what this
-      # one did for its first 1,400 pulls. Publishing it from here keeps the page
-      # and the README from drifting apart.
-      - name: Publish Docker Hub description
+      # The Docker Hub repository descriptions are owned by this repo so they
+      # cannot drift (they had been empty since the repository was published,
+      # across thousands of pulls): the short description and the curated
+      # description file are re-pushed on every release, right after the
+      # image publish. The full README (~50KB) exceeds Docker Hub's 25,000
+      # character limit, so .github/dockerhub-description.md carries the
+      # Docker-relevant sections. DOCKERHUB_TOKEN must be a Docker Hub PAT
+      # with read/write/delete scope — the descriptions API rejects narrower
+      # ones.
+      - name: Update Docker Hub description
         if: steps.dockerhub-login.outputs.skip == 'false'
         uses: peter-evans/dockerhub-description@v5
         with:
@@ -236,4 +241,4 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKERHUB_IMAGE }}
           short-description: "MCP server to search and read Library Genesis and open-access sources. By jmrp.io"
-          readme-filepath: ./README.md
+          readme-filepath: ./.github/dockerhub-description.md
