@@ -275,7 +275,7 @@ It is the fastest way to try the server. Running it **locally** — Docker or a 
 - **Your queries travel through someone else's machine.** Locally, what you search for never leaves your computer. The hosted instance stores nothing, but "stores nothing" is a promise; "never sent" is a fact.
 - **`download` cannot write to your disk from a remote server**, so it returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. That is inherent to remote MCP rather than a property of this endpoint — see [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote).
 
-The endpoint speaks the same stateless streamable HTTP described below: `POST` carries the protocol, `GET` on the endpoint answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `ok`. Its version tracks the releases of this repository, so it can briefly lag a fresh tag.
+The endpoint speaks the same stateless streamable HTTP described below: `POST` carries the protocol, `GET` on the endpoint answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `{"status":"ok","version":"…","commit":"…"}`. Its version tracks the releases of this repository, so it can briefly lag a fresh tag.
 
 It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers the author maintains, each reachable at its own endpoint under the same domain; [`servers.json`](https://mcp.jmrp.io/servers.json) is the same list for automated clients.
 

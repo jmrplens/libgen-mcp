@@ -5,7 +5,7 @@
 # guarantees a stateless deployment makes over the wire — the ones a unit test
 # can only approximate, because they depend on the process actually listening:
 #
-#   1. GET /health           → 200 "ok"                (liveness is unaffected)
+#   1. GET /health           → 200 JSON status/version/commit (liveness is unaffected)
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
 #                               no session handshake)
@@ -120,10 +120,18 @@ echo
 echo "Stateless defaults (${BASE}):"
 start_server
 
-if [ "$(curl -fsS "${BASE}/health")" = "ok" ]; then
-  pass "GET /health returns ok"
+# The body is JSON carrying status/version/commit, the same contract the sibling
+# gitlab-mcp-server serves, so an external probe can read both the same way.
+HEALTH=$(curl -fsS "${BASE}/health")
+if printf '%s' "$HEALTH" | grep -q '"status":"ok"'; then
+  pass "GET /health reports status ok"
 else
-  fail "GET /health did not return ok"
+  fail "GET /health did not report status ok (body: ${HEALTH})"
+fi
+if printf '%s' "$HEALTH" | grep -qE '"version":"[^"]+"' && printf '%s' "$HEALTH" | grep -q '"commit":'; then
+  pass "GET /health carries version and commit"
+else
+  fail "GET /health is missing version or commit (body: ${HEALTH})"
 fi
 
 BODY=$(post_mcp "$HEADERS" "$TOOLS_LIST")

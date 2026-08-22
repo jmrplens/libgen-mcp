@@ -19,6 +19,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
+	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
 // awaitReturn runs fn in a goroutine and fails the test if it does not return
@@ -91,6 +92,10 @@ func TestHealthEndpoint(t *testing.T) {
 	})
 	handler := newHTTPHandler(stub)
 
+	// The three fields and the content type are a contract shared with the sibling
+	// gitlab-mcp-server, so one external probe can read both servers and confirm
+	// which build is running without entering the container. Asserting the shape
+	// rather than a literal body is what keeps that contract from drifting.
 	t.Run("health", func(t *testing.T) {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
 		rec := httptest.NewRecorder()
@@ -98,8 +103,23 @@ func TestHealthEndpoint(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 		}
-		if got := rec.Body.String(); got != "ok" {
-			t.Errorf("body = %q, want %q", got, "ok")
+		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", ct)
+		}
+		var got healthResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("health body is not JSON: %v (body %q)", err, rec.Body.String())
+		}
+		if got.Status != "ok" {
+			t.Errorf("status = %q, want ok", got.Status)
+		}
+		// Version must be the real number even unstamped: buildversion falls back
+		// to VERSION, so a probe never sees an empty field or a placeholder.
+		if got.Version != buildversion.Current() || got.Version == "" {
+			t.Errorf("version = %q, want %q", got.Version, buildversion.Current())
+		}
+		if got.Commit != commit {
+			t.Errorf("commit = %q, want %q", got.Commit, commit)
 		}
 	})
 
