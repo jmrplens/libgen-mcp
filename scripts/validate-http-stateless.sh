@@ -5,7 +5,7 @@
 # guarantees a stateless deployment makes over the wire — the ones a unit test
 # can only approximate, because they depend on the process actually listening:
 #
-#   1. GET /health           → 200 JSON status/version/commit (liveness is unaffected)
+#   1. GET /health           → 200 JSON status/version/commit/started_at/uptime_seconds
 #      GET server-card.json  → 200 JSON serverInfo/tools/prompts (discovery is unaffected)
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
@@ -133,6 +133,14 @@ if printf '%s' "$HEALTH" | grep -qE '"version":"[^"]+"' && printf '%s' "$HEALTH"
   pass "GET /health carries version and commit"
 else
   fail "GET /health is missing version or commit (body: ${HEALTH})"
+fi
+
+# started_at lets a monitor spot a restart; uptime_seconds is the derived value.
+if printf '%s' "$HEALTH" | grep -qE '"started_at":"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z"' \
+  && printf '%s' "$HEALTH" | grep -qE '"uptime_seconds":[0-9]+'; then
+  pass "GET /health carries started_at and uptime_seconds"
+else
+  fail "GET /health is missing started_at or uptime_seconds (body: ${HEALTH})"
 fi
 
 # The server card is a separate route, so stateless mode's 405 on the MCP

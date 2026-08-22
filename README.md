@@ -58,7 +58,7 @@ It is the fastest way to try the server, and the right way to keep using it is s
 - **Your queries go through someone else's machine.** Running it locally means what you search for never leaves your computer.
 - **`download` cannot write to your disk from a remote server**, so it returns a link instead of a file. That is inherent to remote MCP, not a limitation of this endpoint — see [Where the file goes](docs/tools.md#where-the-file-goes-local-vs-remote).
 
-The endpoint is **stateless streamable HTTP**: `POST` is the transport, `GET` on it answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `{"status":"ok","version":"…","commit":"…"}`. It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers I maintain, each reachable at its own endpoint; `https://mcp.jmrp.io/servers.json` is the same list for automated clients.
+The endpoint is **stateless streamable HTTP**: `POST` is the transport, `GET` on it answers `405` by design, and `https://mcp.jmrp.io/libgen/health` answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers I maintain, each reachable at its own endpoint; `https://mcp.jmrp.io/servers.json` is the same list for automated clients.
 
 ## Add to your MCP client
 

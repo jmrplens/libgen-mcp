@@ -169,7 +169,7 @@ keep using it, for two concrete reasons rather than as a disclaimer:
 
 The endpoint speaks the same stateless streamable HTTP described below: `POST` carries the
 protocol, `GET` on the endpoint answers `405` by design, and `https://mcp.jmrp.io/libgen/health`
-answers `{"status":"ok","version":"…","commit":"…"}`. Its version tracks the releases of this repository, so it can briefly lag a fresh
+answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. Its version tracks the releases of this repository, so it can briefly lag a fresh
 tag.
 
 It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the

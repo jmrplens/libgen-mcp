@@ -121,6 +121,14 @@ func TestHealthEndpoint(t *testing.T) {
 		if got.Commit != commit {
 			t.Errorf("commit = %q, want %q", got.Commit, commit)
 		}
+		// A probe reads these to tell a restart from a long-running process, so
+		// the handler must actually fill them rather than leave the zero values.
+		if _, pErr := time.Parse(time.RFC3339, got.StartedAt); pErr != nil {
+			t.Errorf("started_at = %q, not RFC 3339: %v", got.StartedAt, pErr)
+		}
+		if got.UptimeSeconds < 0 {
+			t.Errorf("uptime_seconds = %d, want a non-negative count", got.UptimeSeconds)
+		}
 	})
 
 	t.Run("delegates to mcp handler", func(t *testing.T) {
@@ -633,5 +641,54 @@ func TestMainWithExitRunError(t *testing.T) {
 	})
 	if code != 1 {
 		t.Fatalf("mainWithExit(bad http) = %d, want 1", code)
+	}
+}
+
+// TestNewHealthResponseUptimeAndStartedAt verifies the two liveness fields
+// against controlled instants: started_at must be RFC 3339 in UTC, and
+// uptime_seconds must be whole seconds since that instant.
+//
+// Both instants are parameters precisely so this can be exercised without
+// waiting on a real clock or mutating package state from a parallel test.
+func TestNewHealthResponseUptimeAndStartedAt(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 8, 23, 10, 30, 0, 0, time.UTC)
+	cases := []struct {
+		name       string
+		now        time.Time
+		wantUptime int64
+	}{
+		{"same instant", start, 0},
+		{"partial second truncates down", start.Add(1900 * time.Millisecond), 1},
+		{"whole minute", start.Add(time.Minute), 60},
+		{"two weeks", start.Add(14 * 24 * time.Hour), 1_209_600},
+		// time.Now cannot go backwards within one process, but the clamp is what
+		// keeps a negative from ever reaching a probe if a caller passes one.
+		{"observation before start is clamped", start.Add(-time.Hour), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := newHealthResponse(start, tc.now)
+			if got.UptimeSeconds != tc.wantUptime {
+				t.Errorf("uptime_seconds = %d, want %d", got.UptimeSeconds, tc.wantUptime)
+			}
+			if got.StartedAt != "2026-08-23T10:30:00Z" {
+				t.Errorf("started_at = %q, want the start instant in RFC 3339 UTC", got.StartedAt)
+			}
+		})
+	}
+}
+
+// TestNewHealthResponseRendersStartedAtInUTC pins the timezone: a start instant
+// observed in another zone must still be published as UTC, so two probes in
+// different regions read the same string for the same process.
+func TestNewHealthResponseRendersStartedAtInUTC(t *testing.T) {
+	t.Parallel()
+	zone := time.FixedZone("UTC+5", 5*60*60)
+	start := time.Date(2026, 8, 23, 15, 30, 0, 0, zone)
+	got := newHealthResponse(start, start)
+	if got.StartedAt != "2026-08-23T10:30:00Z" {
+		t.Errorf("started_at = %q, want the same instant normalized to UTC", got.StartedAt)
 	}
 }
