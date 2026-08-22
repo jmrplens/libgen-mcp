@@ -90,7 +90,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub)
+	handler := newHTTPHandler(stub, nil)
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -454,7 +454,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil))
 	t.Cleanup(ts.Close)
 	return ts
 }

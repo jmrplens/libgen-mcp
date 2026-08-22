@@ -427,6 +427,8 @@ By default the server speaks MCP over **stdio**. To serve **streamable HTTP** in
 
 The HTTP transport is **stateless by default** (MCP protocol `2026-07-28`, SEP-2567): no `Mcp-Session-Id`, every POST a complete request, `GET`/`DELETE` on the MCP endpoint answering `405` (`/health` is unaffected) — so replicas need no sticky routing. `--json-response` returns `application/json` instead of SSE, `--max-request-body-bytes` tightens the 4 MiB body cap, and `--stateless=false` restores the legacy session transport for a client that still needs it. See [Architecture → Stateless mode](docs/architecture.md#stateless-mode).
 
+In HTTP mode the server also publishes a **server card** at `GET /.well-known/mcp/server-card.json`: `serverInfo`, an `authentication` block (this server takes none), and the full `tools` and `prompts` listings, so a directory or scanner can read the whole surface — the four prompts included — without opening an MCP session. It is served unauthenticated and is unaffected by stateless mode's `405` on the MCP endpoint.
+
 ## Maintenance
 
 Library Genesis mirrors occasionally change their HTML layout or routes. Two tools help you detect and confirm those changes:

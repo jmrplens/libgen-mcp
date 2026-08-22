@@ -291,6 +291,8 @@ libgen-mcp --http :8080
 
 En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga.
 
+En modo HTTP el servidor publica además una **server card** en `GET /.well-known/mcp/server-card.json`: `serverInfo`, un bloque `authentication` (este servidor no pide ninguna) y los listados completos de `tools` y `prompts`, de modo que un directorio o un escáner puede leer toda la superficie — los cuatro prompts incluidos — sin abrir una sesión MCP. Se sirve sin autenticación y no le afecta el `405` que el modo sin estado devuelve en el endpoint MCP.
+
 El transporte es **sin estado por defecto**: no hay `Mcp-Session-Id`, cada POST es una petición completa y `GET`/`DELETE` sobre el endpoint MCP devuelven `405` (`/health` no se ve afectado). Es lo que la versión `2026-07-28` del protocolo MCP exige sobre HTTP, y permite poner cualquier número de réplicas detrás de un balanceador normal, sin enrutado pegajoso. Otras dos opciones ajustan el transporte — `--json-response` devuelve `application/json` en lugar de SSE, y `--max-request-body-bytes` estrecha el límite de 4 MiB del cuerpo:
 
 ```bash

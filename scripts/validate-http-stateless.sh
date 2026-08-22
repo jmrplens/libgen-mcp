@@ -6,6 +6,7 @@
 # can only approximate, because they depend on the process actually listening:
 #
 #   1. GET /health           → 200 JSON status/version/commit (liveness is unaffected)
+#      GET server-card.json  → 200 JSON serverInfo/tools/prompts (discovery is unaffected)
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
 #                               no session handshake)
@@ -132,6 +133,20 @@ if printf '%s' "$HEALTH" | grep -qE '"version":"[^"]+"' && printf '%s' "$HEALTH"
   pass "GET /health carries version and commit"
 else
   fail "GET /health is missing version or commit (body: ${HEALTH})"
+fi
+
+# The server card is a separate route, so stateless mode's 405 on the MCP
+# endpoint must not reach it: a scanner fetches this with a plain GET.
+CARD=$(curl -fsS "${BASE}/.well-known/mcp/server-card.json" 2>/dev/null || true)
+if printf '%s' "$CARD" | grep -q '"serverInfo"'; then
+  pass "GET /.well-known/mcp/server-card.json serves the card"
+else
+  fail "server card not served (body: ${CARD})"
+fi
+if printf '%s' "$CARD" | grep -q '"prompts"'; then
+  pass "the card enumerates prompts"
+else
+  fail "the card does not enumerate prompts"
 fi
 
 BODY=$(post_mcp "$HEADERS" "$TOOLS_LIST")

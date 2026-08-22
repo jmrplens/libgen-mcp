@@ -314,7 +314,8 @@ The server speaks MCP over one of two transports, selected at startup:
 - **streamable HTTP (opt-in).** Started with `--http host:port` (for example
   `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport,
   suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
-  also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body while the
+  also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body, plus the
+  server card at `GET /.well-known/mcp/server-card.json`, while the
   server is serving — handy for container and load-balancer health checks.
 
 Both transports share the same tools, HTTP client, and download pipeline; only the

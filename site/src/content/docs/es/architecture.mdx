@@ -222,7 +222,7 @@ Para el recorrido conceptual con diagramas, ver [Cómo funciona la búsqueda](/l
 El servidor habla MCP sobre dos transportes:
 
 - **stdio por defecto** — cómo lo lanzan clientes como Claude Code, Claude Desktop, Cursor o VS Code. Sin argumentos adicionales, el proceso sirve por stdio (stdout se reserva para el protocolo; los logs van a stderr).
-- **HTTP en streaming** — cuando se inicia con `--http host:port` (p. ej. `--http :8080`). En este modo el servidor expone además un endpoint `GET /health` que devuelve `200` y un cuerpo JSON — `{"status":"ok","version":"…","commit":"…"}` — mientras está sirviendo, útil para sondas de disponibilidad y para confirmar qué build está corriendo.
+- **HTTP en streaming** — cuando se inicia con `--http host:port` (p. ej. `--http :8080`). En este modo el servidor expone además un endpoint `GET /health` que devuelve `200` y un cuerpo JSON — `{"status":"ok","version":"…","commit":"…"}` — mientras está sirviendo, útil para sondas de disponibilidad y para confirmar qué build está corriendo. Publica además una server card en `GET /.well-known/mcp/server-card.json` — `serverInfo`, un bloque `authentication` y los listados completos de `tools` y `prompts` — para que un directorio o un escáner pueda leer la superficie sin abrir una sesión MCP.
 
 Como un servidor HTTP es remoto y no puede escribir en el disco del cliente, en este modo la herramienta `download` devuelve siempre un enlace (la URL directa como `resource_link` más un objeto `resolved`) en lugar de guardar el archivo — no hace falta pasar `resolve_only`, queda implícito. Consulta [Herramientas](/libgen-mcp/es/tools/#download) para el detalle de ese comportamiento.
 

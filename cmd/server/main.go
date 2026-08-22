@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -130,10 +131,20 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// newHTTPHandler mounts the MCP handler at / and exposes GET /health.
-func newHTTPHandler(mcpHandler http.Handler) http.Handler {
+// newHTTPHandler mounts the MCP handler at /, exposes GET /health, and serves
+// the server card when one was built. A nil card leaves the route unmounted, so
+// the path falls through to the MCP handler exactly as it did before.
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	if cardJSON != nil {
+		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			// The card only changes with a release, so a scanner may hold it.
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = w.Write(cardJSON)
+		})
+	}
 	mux.Handle("/", mcpHandler)
 	return mux
 }
@@ -187,9 +198,18 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts tr
 	}
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
 	// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
+	// Built once here rather than per request: it only changes with a release.
+	// A failure is not fatal — the endpoint simply stays unmounted, because a
+	// server that serves its tools is more useful than one that refuses to start
+	// over a discovery document.
+	cardJSON, cardErr := buildServerCard(ctx, server)
+	if cardErr != nil {
+		slog.Warn("server card unavailable; "+serverCardPath+" will not be served", "error", cardErr)
+	}
+
 	srv := &http.Server{
 		Addr:              httpAddr,
-		Handler:           newHTTPHandler(mcpHandler),
+		Handler:           newHTTPHandler(mcpHandler, cardJSON),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
