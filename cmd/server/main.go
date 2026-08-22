@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -106,12 +107,56 @@ func newMCPServer() *mcp.Server {
 	return server
 }
 
+// processStartTime marks when this process began serving.
+//
+// Package-level initialization runs before main, so this is the earliest
+// instant the program can observe about itself. Tests do not override it:
+// newHealthResponse takes both instants as parameters instead, so uptime is
+// deterministic without a mutable package-level clock.
+var processStartTime = time.Now()
+
 // healthResponse is the JSON body returned by the /health endpoint. The field
 // names match the sibling gitlab-mcp-server so one probe can read both servers.
+//
+// Liveness is reported two ways on purpose. StartedAt is the stable fact: it
+// does not change between probes, so a monitor can cache it, deduplicate it,
+// and detect a restart by noticing it moved — the same reason Prometheus
+// exposes process_start_time_seconds rather than an uptime counter.
+// UptimeSeconds is the derived convenience value, in the unit the IETF health
+// check draft uses for it ("observedUnit": "s").
 type healthResponse struct {
-	Status  string `json:"status"`
+	// Status is the liveness verdict; this endpoint only ever reports "ok",
+	// because a process that cannot answer at all is the failure signal.
+	Status string `json:"status"`
+	// Version is the release this build reports, stamped or compiled in.
 	Version string `json:"version"`
-	Commit  string `json:"commit"`
+	// Commit is the revision the release ldflags stamped, or "none".
+	Commit string `json:"commit"`
+	// StartedAt is the process start instant in RFC 3339, matching how this
+	// project renders timestamps everywhere else.
+	StartedAt string `json:"started_at"`
+	// UptimeSeconds is whole seconds since StartedAt. Sub-second precision
+	// would be noise on an endpoint polled at probe intervals.
+	UptimeSeconds int64 `json:"uptime_seconds"`
+}
+
+// newHealthResponse builds the /health body for a start instant observed at
+// now. Both instants are parameters so the uptime arithmetic can be tested
+// without mutating a package-level clock from concurrent tests.
+func newHealthResponse(startedAt, now time.Time) healthResponse {
+	// Truncating instead of rounding keeps uptime from reporting a second that
+	// has not fully elapsed. The clamp guards a caller that observes an instant
+	// before the start; time.Now within one process cannot, because its
+	// monotonic reading never goes backwards.
+	uptime := int64(now.Sub(startedAt).Seconds())
+	uptime = max(uptime, 0)
+	return healthResponse{
+		Status:        "ok",
+		Version:       buildversion.Current(),
+		Commit:        commit,
+		StartedAt:     startedAt.UTC().Format(time.RFC3339),
+		UptimeSeconds: uptime,
+	}
 }
 
 // healthHandler responds with HTTP 200 and a JSON body for container healthchecks
@@ -123,17 +168,23 @@ type healthResponse struct {
 // actually is instead of a placeholder.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(healthResponse{ //nolint:errchkjson // healthcheck: client write errors are non-actionable
-		Status:  "ok",
-		Version: buildversion.Current(),
-		Commit:  commit,
-	})
+	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
 }
 
-// newHTTPHandler mounts the MCP handler at / and exposes GET /health.
-func newHTTPHandler(mcpHandler http.Handler) http.Handler {
+// newHTTPHandler mounts the MCP handler at /, exposes GET /health, and serves
+// the server card when one was built. A nil card leaves the route unmounted, so
+// the path falls through to the MCP handler exactly as it did before.
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	if cardJSON != nil {
+		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			// The card only changes with a release, so a scanner may hold it.
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = w.Write(cardJSON)
+		})
+	}
 	mux.Handle("/", mcpHandler)
 	return mux
 }
@@ -187,9 +238,18 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts tr
 	}
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
 	// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
+	// Built once here rather than per request: it only changes with a release.
+	// A failure is not fatal — the endpoint simply stays unmounted, because a
+	// server that serves its tools is more useful than one that refuses to start
+	// over a discovery document.
+	cardJSON, cardErr := buildServerCard(ctx, server)
+	if cardErr != nil {
+		slog.Warn("server card unavailable; "+serverCardPath+" will not be served", "error", cardErr)
+	}
+
 	srv := &http.Server{
 		Addr:              httpAddr,
-		Handler:           newHTTPHandler(mcpHandler),
+		Handler:           newHTTPHandler(mcpHandler, cardJSON),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
