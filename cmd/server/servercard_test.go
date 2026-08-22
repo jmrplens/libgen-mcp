@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -171,5 +172,41 @@ func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 
 	if rec.Code != http.StatusTeapot {
 		t.Errorf("status = %d, want the MCP handler to have seen it (%d)", rec.Code, http.StatusTeapot)
+	}
+}
+
+// TestServerCardListsBeyondOnePage guards the reason the builder uses the SDK's
+// paginated iterators rather than a single ListTools call: one call returns one
+// page, so a surface that outgrew the page size would publish a card silently
+// missing its tail.
+//
+// The server is built with a deliberately tiny PageSize. The SDK's default is
+// 1000, so a test that merely registered a lot of tools would pass against the
+// single-call code too and prove nothing; forcing several pages is what makes
+// this able to fail.
+func TestServerCardListsBeyondOnePage(t *testing.T) {
+	type stubIn struct{}
+	type stubOut struct{}
+	srv := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: "test"},
+		&mcp.ServerOptions{PageSize: 2})
+	const want = 7
+	for i := range want {
+		mcp.AddTool(srv, &mcp.Tool{Name: fmt.Sprintf("tool_%d", i), Description: "stub"},
+			func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
+				return nil, stubOut{}, nil
+			})
+	}
+
+	raw, err := buildServerCard(t.Context(), srv)
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	var card serverCard
+	if uErr := json.Unmarshal(raw, &card); uErr != nil {
+		t.Fatalf("card is not valid JSON: %v", uErr)
+	}
+	if len(card.Tools) != want {
+		t.Errorf("card lists %d tools across %d-item pages, want all %d",
+			len(card.Tools), 2, want)
 	}
 }

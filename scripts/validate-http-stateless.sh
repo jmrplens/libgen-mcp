@@ -136,8 +136,11 @@ else
 fi
 
 # started_at lets a monitor spot a restart; uptime_seconds is the derived value.
+# The uptime pattern ends at a non-digit on purpose: an unanchored [0-9]+ also
+# matches the integer part of a decimal, so it would accept 1.5 and never catch
+# the field turning into a float.
 if printf '%s' "$HEALTH" | grep -qE '"started_at":"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z"' \
-  && printf '%s' "$HEALTH" | grep -qE '"uptime_seconds":[0-9]+'; then
+  && printf '%s' "$HEALTH" | grep -qE '"uptime_seconds":[0-9]+([,}]|$)'; then
   pass "GET /health carries started_at and uptime_seconds"
 else
   fail "GET /health is missing started_at or uptime_seconds (body: ${HEALTH})"

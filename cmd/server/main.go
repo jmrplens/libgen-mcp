@@ -125,9 +125,13 @@ var processStartTime = time.Now()
 // UptimeSeconds is the derived convenience value, in the unit the IETF health
 // check draft uses for it ("observedUnit": "s").
 type healthResponse struct {
-	Status  string `json:"status"`
+	// Status is the liveness verdict; this endpoint only ever reports "ok",
+	// because a process that cannot answer at all is the failure signal.
+	Status string `json:"status"`
+	// Version is the release this build reports, stamped or compiled in.
 	Version string `json:"version"`
-	Commit  string `json:"commit"`
+	// Commit is the revision the release ldflags stamped, or "none".
+	Commit string `json:"commit"`
 	// StartedAt is the process start instant in RFC 3339, matching how this
 	// project renders timestamps everywhere else.
 	StartedAt string `json:"started_at"`

@@ -24,6 +24,10 @@ type serverCardTool struct {
 	InputSchema  any                  `json:"inputSchema,omitempty"`
 	OutputSchema any                  `json:"outputSchema,omitempty"`
 	Annotations  *mcp.ToolAnnotations `json:"annotations,omitempty"`
+	// Icons carries whatever the tool declares. Empty today — this server
+	// registers none — and omitted when so, which keeps the document byte for
+	// byte what it was while still mirroring the surface if that changes.
+	Icons []mcp.Icon `json:"icons,omitempty"`
 }
 
 // serverCardPromptArgument is one argument of a prompt as the card presents it.
@@ -43,6 +47,8 @@ type serverCardPrompt struct {
 	Title       string                     `json:"title,omitempty"`
 	Description string                     `json:"description,omitempty"`
 	Arguments   []serverCardPromptArgument `json:"arguments,omitempty"`
+	// Icons carries whatever the prompt declares; see serverCardTool.Icons.
+	Icons []mcp.Icon `json:"icons,omitempty"`
 }
 
 // serverCard is the document itself, mirroring what initialize plus the list
@@ -89,15 +95,6 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 	}
 	defer func() { _ = session.Close() }()
 
-	toolsResult, err := session.ListTools(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list tools: %w", err)
-	}
-	promptsResult, err := session.ListPrompts(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list prompts: %w", err)
-	}
-
 	var card serverCard
 	card.ServerInfo.Name = "libgen-mcp"
 	card.ServerInfo.Version = buildversion.Current()
@@ -105,8 +102,15 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 	// explicitly is more useful to a scanner than omitting the block.
 	card.Authentication.Required = false
 	card.Authentication.Schemes = []string{}
-	card.Tools = make([]serverCardTool, 0, len(toolsResult.Tools))
-	for _, t := range toolsResult.Tools {
+	// The paginated iterators rather than a single ListTools/ListPrompts call:
+	// one call returns one page, so a surface that outgrew the page size would
+	// publish a card silently missing its tail. Four tools and four prompts fit
+	// today; the card should not depend on that staying true.
+	card.Tools = []serverCardTool{}
+	for t, tErr := range session.Tools(ctx, nil) {
+		if tErr != nil {
+			return nil, fmt.Errorf("list tools: %w", tErr)
+		}
 		card.Tools = append(card.Tools, serverCardTool{
 			Name:         t.Name,
 			Title:        t.Title,
@@ -114,10 +118,14 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 			InputSchema:  t.InputSchema,
 			OutputSchema: t.OutputSchema,
 			Annotations:  t.Annotations,
+			Icons:        t.Icons,
 		})
 	}
-	card.Prompts = make([]serverCardPrompt, 0, len(promptsResult.Prompts))
-	for _, p := range promptsResult.Prompts {
+	card.Prompts = []serverCardPrompt{}
+	for p, pErr := range session.Prompts(ctx, nil) {
+		if pErr != nil {
+			return nil, fmt.Errorf("list prompts: %w", pErr)
+		}
 		args := make([]serverCardPromptArgument, 0, len(p.Arguments))
 		for _, a := range p.Arguments {
 			args = append(args, serverCardPromptArgument{
@@ -132,6 +140,7 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 			Title:       p.Title,
 			Description: p.Description,
 			Arguments:   args,
+			Icons:       p.Icons,
 		})
 	}
 	card.Resources = []any{}
