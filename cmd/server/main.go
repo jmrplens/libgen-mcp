@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -105,13 +106,34 @@ func newMCPServer() *mcp.Server {
 	return server
 }
 
+// healthResponse is the JSON body returned by the /health endpoint. The field
+// names match the sibling gitlab-mcp-server so one probe can read both servers.
+type healthResponse struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+// healthHandler responds with HTTP 200 and a JSON body for container healthchecks
+// and load-balancer probes. It does not require authentication.
+//
+// Version comes from buildversion rather than the raw ldflags variable: that one
+// is empty unless a release stamped it, whereas buildversion falls back to the
+// number compiled in from VERSION, so a development build reports what it
+// actually is instead of a placeholder.
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(healthResponse{ //nolint:errchkjson // healthcheck: client write errors are non-actionable
+		Status:  "ok",
+		Version: buildversion.Current(),
+		Commit:  commit,
+	})
+}
+
 // newHTTPHandler mounts the MCP handler at / and exposes GET /health.
 func newHTTPHandler(mcpHandler http.Handler) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = io.WriteString(w, "ok")
-	})
+	mux.HandleFunc("GET /health", healthHandler)
 	mux.Handle("/", mcpHandler)
 	return mux
 }

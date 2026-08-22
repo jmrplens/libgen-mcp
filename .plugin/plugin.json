@@ -1,7 +1,7 @@
 {
   "$schema": "./plugin.schema.json",
   "name": "libgen-mcp",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "MCP server in Go for federated search, citation and reading of books, papers, comics, magazines and standards — querying the Library Genesis catalog alongside open-access discovery (arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) and article downloads from Unpaywall, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, CORE and OAPEN. Four focused tools (search, get_details, download, read), one static binary, no account required.",
   "author": {
     "name": "José Manuel Requena Plens",
