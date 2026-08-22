@@ -4,7 +4,7 @@
   "title": "Books & Papers MCP Server",
   "description": "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading.",
   "version": "1.6.1",
-  "websiteUrl": "https://jmrplens.github.io/libgen-mcp/",
+  "websiteUrl": "https://jmrp.io/docs/libgen-mcp",
   "repository": {
     "url": "https://github.com/jmrplens/libgen-mcp",
     "source": "github",
