@@ -64,6 +64,23 @@ func TestServerCardIdentity(t *testing.T) {
 	}
 }
 
+// TestServerCardIdentityCarriesDisplayMetadata pins ServerInfo to the live
+// handshake rather than a restated {name, version}: it previously hardcoded
+// just those two fields and silently dropped Title, Description and
+// WebsiteURL — exactly what a registry listing renders.
+func TestServerCardIdentityCarriesDisplayMetadata(t *testing.T) {
+	card := buildTestCard(t)
+	if card.ServerInfo.Title != implementationTitle {
+		t.Errorf("serverInfo.title = %q, want %q", card.ServerInfo.Title, implementationTitle)
+	}
+	if card.ServerInfo.Description != implementationDescription {
+		t.Errorf("serverInfo.description = %q, want %q", card.ServerInfo.Description, implementationDescription)
+	}
+	if card.ServerInfo.WebsiteURL != implementationWebsiteURL {
+		t.Errorf("serverInfo.websiteUrl = %q, want %q", card.ServerInfo.WebsiteURL, implementationWebsiteURL)
+	}
+}
+
 // TestServerCardDeclaresNoAuthentication pins the keyless guarantee. It is a
 // product promise, so the card states it rather than leaving the block out and
 // letting a reader assume.

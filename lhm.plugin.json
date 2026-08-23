@@ -125,8 +125,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Search books & papers"
+        "readOnlyHint": true
       }
     },
     {
@@ -162,8 +161,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Get record details"
+        "readOnlyHint": true
       }
     },
     {
@@ -235,8 +233,7 @@
         "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true,
-        "readOnlyHint": false,
-        "title": "Download file"
+        "readOnlyHint": false
       }
     },
     {
@@ -326,8 +323,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Read file text"
+        "readOnlyHint": true
       }
     }
   ],

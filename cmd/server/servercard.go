@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
 // serverCardPath is where reputation scanners and directories look for the card.
@@ -55,10 +53,12 @@ type serverCardPrompt struct {
 // calls would return. Field names and shape follow the sibling
 // gitlab-mcp-server so one scanner reads both.
 type serverCard struct {
-	ServerInfo struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	} `json:"serverInfo"`
+	// ServerInfo is taken verbatim from the handshake (see buildServerCard)
+	// rather than restated here, so the card cannot advertise less than the
+	// server does: it previously hardcoded name and version and silently
+	// dropped Title, Description, WebsiteURL and Icons — exactly the fields a
+	// registry listing renders.
+	ServerInfo     *mcp.Implementation `json:"serverInfo"`
 	Authentication struct {
 		Required bool     `json:"required"`
 		Schemes  []string `json:"schemes"`
@@ -96,8 +96,7 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 	defer func() { _ = session.Close() }()
 
 	var card serverCard
-	card.ServerInfo.Name = "libgen-mcp"
-	card.ServerInfo.Version = buildversion.Current()
+	card.ServerInfo = session.InitializeResult().ServerInfo
 	// Keyless by design: no account, no API key, nothing to present. Saying so
 	// explicitly is more useful to a scanner than omitting the block.
 	card.Authentication.Required = false

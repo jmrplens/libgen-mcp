@@ -186,13 +186,13 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Title:       "Search books & papers",
 		Description: searchDescription,
 		InputSchema: searchInputSchema(),
-		Annotations: &mcp.ToolAnnotations{Title: "Search books & papers", ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
 		Description: detailsDescription,
-		Annotations: &mcp.ToolAnnotations{Title: "Get record details", ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	isbnBook := client.EnabledISBNSources()
@@ -212,8 +212,8 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		// that gate destructive tools are the second safeguard behind the save
 		// confirmation, and unlike that one the model cannot waive it.
 		Annotations: &mcp.ToolAnnotations{
-			Title: "Download file", DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
-			IdempotentHint: true, OpenWorldHint: &truthy,
+			DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
+			IdempotentHint:  true, OpenWorldHint: &truthy,
 		},
 	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
 	mcp.AddTool(server, &mcp.Tool{
@@ -223,7 +223,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		// read fetches by md5 or doi, never by isbn, so its enum is the book and
 		// article sources without the ISBN-only ones.
 		InputSchema: readInputSchema(orderedEnabledSources(book, article)),
-		Annotations: &mcp.ToolAnnotations{Title: "Read file text", ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
 	}, withRecovery("read", readHandler(client, cfg, o.remoteDownloads)))
 }
 

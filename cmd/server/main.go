@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -44,6 +45,49 @@ const httpShutdownTimeout = 5 * time.Second
 var (
 	version = ""
 	commit  = "none"
+)
+
+func init() {
+	commit = resolveCommit(commit, debug.ReadBuildInfo)
+}
+
+// resolveCommit fills in an unstamped commit from the module build info Go
+// embeds in every binary. `go install github.com/jmrplens/libgen-mcp/cmd/server@version`
+// carries no -ldflags, so without this it always reports "none" even though the
+// VCS revision that produced the binary is right there in its build info. A
+// release build's stamped value always wins.
+//
+// readBuildInfo is injected so tests can exercise the paths where build info is
+// unavailable or carries no usable revision.
+func resolveCommit(ldflagsCommit string, readBuildInfo func() (*debug.BuildInfo, bool)) string {
+	if ldflagsCommit != "none" {
+		return ldflagsCommit
+	}
+	info, ok := readBuildInfo()
+	if !ok || info == nil {
+		return ldflagsCommit
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			return setting.Value
+		}
+	}
+	return ldflagsCommit
+}
+
+// Handshake display metadata. These mirror the title, description and website
+// URL server.json and the marketplace manifests already advertise, so the live
+// MCP handshake — the first thing any client or registry renders — states the
+// same identity instead of the bare {name, version} it sent before.
+const (
+	implementationTitle       = "Books & Papers MCP Server"
+	implementationDescription = "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading."
+	// implementationWebsiteURL is the documentation site rather than the
+	// repository or the hosted endpoint: a client rendering serverInfo shows
+	// this to an end user, for whom the guides are more useful than a source
+	// tree or an API base URL. mcp.jmrp.io/libgen is the real endpoint this
+	// server answers as — that belongs in server.json's remotes, not here.
+	implementationWebsiteURL = "https://jmrp.io/docs/libgen-mcp"
 )
 
 func main() {
@@ -100,7 +144,13 @@ func isCleanShutdown(err error) bool {
 // newMCPServer builds the bare MCP server with its receiving middleware in
 // place; the caller registers the tools and prompts on top.
 func newMCPServer() *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-mcp", Version: buildversion.Current()}, nil)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:        "libgen-mcp",
+		Title:       implementationTitle,
+		Description: implementationDescription,
+		Version:     buildversion.Current(),
+		WebsiteURL:  implementationWebsiteURL,
+	}, nil)
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
 	server.AddReceivingMiddleware(cachehints.Middleware())
