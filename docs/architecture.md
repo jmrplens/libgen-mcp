@@ -366,11 +366,13 @@ Serve with `--stateless=false` if you must keep the old elicitation path for leg
 single-entry brand icon alongside `Name`/`Version`; `ServerOptions.Instructions` gives a
 connecting model the one thing no single tool's `Description` documents on its own — how
 `search`, `get_details`, `download` and `read` chain together, and that four prompts wrap
-them into ready-made workflows. Under SEP-2575 the whole `Implementation`, icon included,
-rides in every response's `_meta`, not just the handshake, so both the brand mark and every
-tool/prompt icon (`internal/toolutil`) are single-entry `currentColor` SVGs rather than
-themed pairs — and `make audit-tokens` (`cmd/audit_tokens`) excludes icons from its
-context-window figure entirely: a client's own UI reads them, never the model.
+them into ready-made workflows. On protocol `2026-07-28` and later (SEP-2575), the whole
+`Implementation`, icon included, rides in every response's `_meta`, not just the handshake —
+a legacy client on `2025-11-25` or older still gets it only once, in the `initialize` result.
+Either way, both the brand mark and every tool/prompt icon (`internal/toolutil`) are
+single-entry `currentColor` SVGs rather than themed pairs, and `make audit-tokens`
+(`cmd/audit_tokens`) excludes icons from its context-window figure entirely: a client's own
+UI reads them, never the model.
 
 **No param-header routing.** Tool arguments are passed in the JSON-RPC body only: nothing on
 this surface carries an [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)
