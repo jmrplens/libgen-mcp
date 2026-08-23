@@ -17,8 +17,8 @@
 
 [![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/libgen-mcp)
 [![libgen-mcp MCP server](https://glama.ai/mcp/servers/jmrplens/libgen-mcp/badges/score.svg)](https://glama.ai/mcp/servers/jmrplens/libgen-mcp)
-[![smithery badge](https://smithery.ai/badge/jmrp/libgen-mcp)](https://smithery.ai/servers/jmrp/libgen-mcp)
 [![MCP Badge](https://lobehub.com/badge/mcp/jmrplens-libgen-mcp)](https://lobehub.com/mcp/jmrplens-libgen-mcp)
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.jmrplens%2Flibgen-mcp.svg)](https://mcptoplist.com/server/io.github.jmrplens%2Flibgen-mcp)
 [![Hosted endpoint](https://img.shields.io/badge/Hosted-mcp.jmrp.io%2Flibgen-6366f1?style=flat&logo=icloud&logoColor=white)](https://mcp.jmrp.io/)
 
 </p>
