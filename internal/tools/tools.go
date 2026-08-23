@@ -24,6 +24,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
 var md5Re = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
@@ -187,12 +188,14 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Description: searchDescription,
 		InputSchema: searchInputSchema(),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Icons:       toolutil.IconSearch,
 	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_details",
 		Title:       "Get record details",
 		Description: detailsDescription,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Icons:       toolutil.IconDetails,
 	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	isbnBook := client.EnabledISBNSources()
@@ -215,6 +218,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 			DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
 			IdempotentHint:  true, OpenWorldHint: &truthy,
 		},
+		Icons: toolutil.IconDownload,
 	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read",
@@ -224,6 +228,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		// article sources without the ISBN-only ones.
 		InputSchema: readInputSchema(orderedEnabledSources(book, article)),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &truthy},
+		Icons:       toolutil.IconRead,
 	}, withRecovery("read", readHandler(client, cfg, o.remoteDownloads)))
 }
 

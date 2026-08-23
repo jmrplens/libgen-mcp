@@ -26,6 +26,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -90,6 +91,22 @@ const (
 	implementationWebsiteURL = "https://jmrp.io/docs/libgen-mcp"
 )
 
+// serverInstructions is the handshake's Instructions text: the one place that
+// tells a connecting model how the four tools chain together, since each
+// tool's own Description documents only itself. It goes straight into the
+// model's system prompt, so it stays short and names only what a client
+// cannot otherwise infer from the tool list — [TestServerInstructionsNameEveryToolAndPrompt]
+// guards that every name below still exists on the registered surface.
+const serverInstructions = `libgen-mcp searches, retrieves and reads books, papers, comics, magazines and standards — no account or API key needed for any tool.
+
+WORKFLOW — the tools chain by identifier: search returns each record's md5 (books) or doi (articles); carry that identifier into the next call.
+1. search — find candidate records across the catalog and, when needed, open-access sources.
+2. get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested.
+3. download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving.
+4. read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first.
+
+PROMPTS — acquire_book, research_topic, get_paper and download_troubleshoot wrap these tools into ready-made, step-by-step workflows. Prefer one of them over calling the tools ad hoc when the user's request matches its shape.`
+
 func main() {
 	// Before anything else, and before any request can be made: the release
 	// ldflags stamp this package's version, and internal/version is what builds
@@ -150,7 +167,8 @@ func newMCPServer() *mcp.Server {
 		Description: implementationDescription,
 		Version:     buildversion.Current(),
 		WebsiteURL:  implementationWebsiteURL,
-	}, nil)
+		Icons:       toolutil.IconBrand,
+	}, &mcp.ServerOptions{Instructions: serverInstructions})
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
 	server.AddReceivingMiddleware(cachehints.Middleware())
@@ -251,9 +269,26 @@ func run(ctx context.Context, httpAddr string, opts transport.Options) error {
 	// stderr (stdout is reserved for the stdio MCP transport).
 	logging.Setup(cfg.LogLevel)
 
-	mgr, err := mirrors.NewManager(cfg)
+	server, err := newRegisteredServer(cfg, httpAddr)
 	if err != nil {
 		return err
+	}
+
+	if httpAddr != "" {
+		return serveHTTP(ctx, server, httpAddr, opts)
+	}
+	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
+	return server.Run(ctx, &mcp.StdioTransport{})
+}
+
+// newRegisteredServer builds the MCP server for cfg with every tool and
+// prompt registered — the same construction run performs, pulled out so a
+// test can inspect the live handshake (e.g. that serverInstructions still
+// names every registered tool and prompt) without duplicating it.
+func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, error) {
+	mgr, err := mirrors.NewManager(cfg)
+	if err != nil {
+		return nil, err
 	}
 	client := libgen.New(mgr, cfg)
 	server := newMCPServer()
@@ -267,12 +302,7 @@ func run(ctx context.Context, httpAddr string, opts transport.Options) error {
 	}
 	tools.Register(server, client, cfg, regOpts...)
 	prompts.Register(server, client, cfg)
-
-	if httpAddr != "" {
-		return serveHTTP(ctx, server, httpAddr, opts)
-	}
-	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
-	return server.Run(ctx, &mcp.StdioTransport{})
+	return server, nil
 }
 
 // serveHTTP runs the streamable HTTP transport and shuts it down gracefully when

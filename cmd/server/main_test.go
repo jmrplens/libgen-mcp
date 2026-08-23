@@ -19,6 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -744,5 +745,57 @@ func TestResolveCommit(t *testing.T) {
 				t.Errorf("resolveCommit(%q) = %q, want %q", tt.ldflagsCommit, got, tt.wantCommit)
 			}
 		})
+	}
+}
+
+// TestServerInstructionsNameEveryToolAndPrompt guards serverInstructions
+// against drift: it goes straight into a connecting model's system prompt, so
+// a tool or prompt renamed without updating the hand-written text would send
+// the model at a name it can no longer call. The check walks the live,
+// registered surface rather than a hardcoded list of names, so it catches a
+// rename on either side — the registration or the instructions text.
+func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	server, err := newRegisteredServer(cfg, "")
+	if err != nil {
+		t.Fatalf("newRegisteredServer() error = %v", err)
+	}
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "instructions-test", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	instructions := session.InitializeResult().Instructions
+	if instructions == "" {
+		t.Fatal("handshake Instructions is empty")
+	}
+	for tl, tErr := range session.Tools(t.Context(), nil) {
+		if tErr != nil {
+			t.Fatalf("list tools: %v", tErr)
+		}
+		if !strings.Contains(instructions, tl.Name) {
+			t.Errorf("Instructions does not mention registered tool %q", tl.Name)
+		}
+	}
+	for p, pErr := range session.Prompts(t.Context(), nil) {
+		if pErr != nil {
+			t.Fatalf("list prompts: %v", pErr)
+		}
+		if !strings.Contains(instructions, p.Name) {
+			t.Errorf("Instructions does not mention registered prompt %q", p.Name)
+		}
 	}
 }
