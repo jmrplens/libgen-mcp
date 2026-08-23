@@ -84,6 +84,35 @@ func TestMeasureTools(t *testing.T) {
 	}
 }
 
+// TestMeasureTools_ExcludesIcons verifies Icons never reach the measured
+// count: a client's own UI reads them, never the LLM the report exists to
+// account for, and a base64 data: URI would otherwise dwarf the rest of a
+// small tool's definition.
+func TestMeasureTools_ExcludesIcons(t *testing.T) {
+	plain := &mcp.Tool{Name: "a", Description: "does a thing"}
+	withIcon := &mcp.Tool{
+		Name: "a", Description: "does a thing",
+		Icons: []mcp.Icon{{Source: "data:image/svg+xml;base64," + strings.Repeat("QQ", 200), MIMEType: "image/svg+xml"}},
+	}
+
+	plainInfos, plainTokens, plainBytes, err := measureTools([]*mcp.Tool{plain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	iconInfos, iconTokens, iconBytes, err := measureTools([]*mcp.Tool{withIcon})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if iconTokens != plainTokens || iconBytes != plainBytes {
+		t.Errorf("measureTools with Icons set = (%d tokens, %d bytes), want the icon-free result (%d tokens, %d bytes)",
+			iconTokens, iconBytes, plainTokens, plainBytes)
+	}
+	if iconInfos[0] != plainInfos[0] {
+		t.Errorf("per-tool info = %+v, want %+v", iconInfos[0], plainInfos[0])
+	}
+}
+
 // TestMeasureTools_MarshalError verifies a tool that cannot be JSON-serialized
 // (a channel in the InputSchema is unmarshalable) surfaces a wrapped error.
 func TestMeasureTools_MarshalError(t *testing.T) {
@@ -94,6 +123,76 @@ func TestMeasureTools_MarshalError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "marshal tool") || !strings.Contains(err.Error(), "bad") {
 		t.Fatalf("measureTools() error = %v, want marshal tool \"bad\"", err)
+	}
+}
+
+// TestMeasurePrompts sums per-prompt tokens/bytes and skips nils, mirroring
+// TestMeasureTools for the prompt catalog.
+func TestMeasurePrompts(t *testing.T) {
+	list := []*mcp.Prompt{
+		{Name: "a", Description: "does a thing"},
+		nil,
+		{Name: "b", Description: "does another thing"},
+	}
+	infos, totalTokens, totalBytes, err := measurePrompts(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(infos) != 2 {
+		t.Fatalf("got %d prompt infos, want 2 (nil skipped)", len(infos))
+	}
+	if totalTokens <= 0 || totalBytes <= 0 {
+		t.Errorf("totals should be positive: tokens=%d bytes=%d", totalTokens, totalBytes)
+	}
+	sumT, sumB := 0, 0
+	for _, in := range infos {
+		sumT += in.Tokens
+		sumB += in.Bytes
+	}
+	if sumT != totalTokens || sumB != totalBytes {
+		t.Errorf("totals (%d/%d) do not match the per-prompt sum (%d/%d)", totalTokens, totalBytes, sumT, sumB)
+	}
+}
+
+// TestMeasurePrompts_ExcludesIcons mirrors TestMeasureTools_ExcludesIcons for
+// prompts: their Icons are also client-UI-only and must not inflate the
+// measured footprint.
+func TestMeasurePrompts_ExcludesIcons(t *testing.T) {
+	plain := &mcp.Prompt{Name: "a", Description: "does a thing"}
+	withIcon := &mcp.Prompt{
+		Name: "a", Description: "does a thing",
+		Icons: []mcp.Icon{{Source: "data:image/svg+xml;base64," + strings.Repeat("QQ", 200), MIMEType: "image/svg+xml"}},
+	}
+
+	plainInfos, plainTokens, plainBytes, err := measurePrompts([]*mcp.Prompt{plain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	iconInfos, iconTokens, iconBytes, err := measurePrompts([]*mcp.Prompt{withIcon})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if iconTokens != plainTokens || iconBytes != plainBytes {
+		t.Errorf("measurePrompts with Icons set = (%d tokens, %d bytes), want the icon-free result (%d tokens, %d bytes)",
+			iconTokens, iconBytes, plainTokens, plainBytes)
+	}
+	if iconInfos[0] != plainInfos[0] {
+		t.Errorf("per-prompt info = %+v, want %+v", iconInfos[0], plainInfos[0])
+	}
+}
+
+// TestMeasurePrompts_MarshalError verifies a prompt that cannot be
+// JSON-serialized (a channel in _meta is unmarshalable) surfaces a wrapped
+// error.
+func TestMeasurePrompts_MarshalError(t *testing.T) {
+	list := []*mcp.Prompt{{Name: "bad", Meta: mcp.Meta{"x": make(chan int)}}}
+	_, _, _, err := measurePrompts(list)
+	if err == nil {
+		t.Fatal("measurePrompts() error = nil, want marshal failure")
+	}
+	if !strings.Contains(err.Error(), "marshal prompt") || !strings.Contains(err.Error(), "bad") {
+		t.Fatalf("measurePrompts() error = %v, want marshal prompt \"bad\"", err)
 	}
 }
 
@@ -128,12 +227,20 @@ func TestRun_MirrorManagerError(t *testing.T) {
 	}
 }
 
-// TestWriteReport renders a table with a TOTAL row and the summary line.
+// TestWriteReport renders both tables with their TOTAL rows and the combined
+// summary line.
 func TestWriteReport(t *testing.T) {
 	var b bytes.Buffer
-	writeReport(&b, []toolTokenInfo{{Name: "search", Tokens: 100, Bytes: 400}}, 100, 400)
+	writeReport(&b,
+		[]entryTokenInfo{{Name: "search", Tokens: 100, Bytes: 400}}, 100, 400,
+		[]entryTokenInfo{{Name: "acquire_book", Tokens: 50, Bytes: 200}}, 50, 200,
+	)
 	out := b.String()
-	for _, want := range []string{"TOOL", "TOKENS", "search", "TOTAL (1 tools)", "adds ~100 tokens"} {
+	for _, want := range []string{
+		"TOOL", "search", "TOTAL (1 tools)",
+		"PROMPT", "acquire_book", "TOTAL (1 prompts)",
+		"adds ~150 tokens", "~100 for its 1 tool definitions", "~50 for its 1 prompt definitions",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q; got:\n%s", want, out)
 		}
@@ -141,14 +248,18 @@ func TestWriteReport(t *testing.T) {
 }
 
 // TestRunEndToEnd exercises the real registration path: it builds the in-memory
-// server, lists the 4 tools, and asserts a positive footprint is reported.
+// server, lists the 4 tools and 4 prompts, and asserts a positive footprint is
+// reported for both.
 func TestRunEndToEnd(t *testing.T) {
 	var b bytes.Buffer
 	if err := run(&b); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	out := b.String()
-	for _, want := range []string{"search", "get_details", "download", "read", "TOTAL (4 tools)"} {
+	for _, want := range []string{
+		"search", "get_details", "download", "read", "TOTAL (4 tools)",
+		"acquire_book", "research_topic", "get_paper", "download_troubleshoot", "TOTAL (4 prompts)",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q; got:\n%s", want, out)
 		}

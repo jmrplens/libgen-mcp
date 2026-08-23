@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
 
@@ -61,6 +62,26 @@ func TestServerCardIdentity(t *testing.T) {
 	}
 	if card.ServerInfo.Version != buildversion.Current() || card.ServerInfo.Version == "" {
 		t.Errorf("serverInfo.version = %q, want %q", card.ServerInfo.Version, buildversion.Current())
+	}
+}
+
+// TestServerCardIdentityCarriesDisplayMetadata pins ServerInfo to the live
+// handshake rather than a restated {name, version}: it previously hardcoded
+// just those two fields and silently dropped Title, Description and
+// WebsiteURL — exactly what a registry listing renders.
+func TestServerCardIdentityCarriesDisplayMetadata(t *testing.T) {
+	card := buildTestCard(t)
+	if card.ServerInfo.Title != implementationTitle {
+		t.Errorf("serverInfo.title = %q, want %q", card.ServerInfo.Title, implementationTitle)
+	}
+	if card.ServerInfo.Description != implementationDescription {
+		t.Errorf("serverInfo.description = %q, want %q", card.ServerInfo.Description, implementationDescription)
+	}
+	if card.ServerInfo.WebsiteURL != implementationWebsiteURL {
+		t.Errorf("serverInfo.websiteUrl = %q, want %q", card.ServerInfo.WebsiteURL, implementationWebsiteURL)
+	}
+	if len(card.ServerInfo.Icons) != len(toolutil.IconBrand) {
+		t.Errorf("serverInfo.icons = %+v, want the %d-entry brand icon", card.ServerInfo.Icons, len(toolutil.IconBrand))
 	}
 }
 
@@ -211,10 +232,9 @@ func TestServerCardListsBeyondOnePage(t *testing.T) {
 	}
 }
 
-// TestServerCardCarriesIcons pins the icons pass-through on both primitives.
-// This server registers none today, so without a fixture that declares some the
-// field would sit in the card types untested and could stop being copied without
-// anything noticing.
+// TestServerCardCarriesIcons pins the icons pass-through on both primitives,
+// using fixture icons distinct from the real toolutil ones so this test does
+// not accidentally pass just because the real tools happen to carry icons now.
 func TestServerCardCarriesIcons(t *testing.T) {
 	type stubIn struct{}
 	type stubOut struct{}
@@ -253,13 +273,22 @@ func TestServerCardCarriesIcons(t *testing.T) {
 		t.Errorf("prompt icon = %+v, want %+v", got, promptIcon)
 	}
 
-	// The key must be absent, not null, when nothing declares an icon — that is
-	// what keeps the published document unchanged while this server has none.
-	plain, err := buildServerCard(t.Context(), newCardTestServer())
+	// A tool or prompt that declares no icon of its own must carry an absent
+	// key, not a null one. The Implementation itself is a different story:
+	// newMCPServer always sets IconBrand, so serverInfo carries icons
+	// regardless (see TestServerCardIdentityCarriesDisplayMetadata).
+	plainRaw, err := buildServerCard(t.Context(), newCardTestServer())
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
-	if strings.Contains(string(plain), `"icons"`) {
-		t.Error("a surface with no icons emitted an icons key")
+	var plain serverCard
+	if uErr := json.Unmarshal(plainRaw, &plain); uErr != nil {
+		t.Fatalf("card is not valid JSON: %v", uErr)
+	}
+	if len(plain.Tools) != 1 || plain.Tools[0].Icons != nil {
+		t.Errorf("tool icons = %+v, want none declared", plain.Tools)
+	}
+	if len(plain.Prompts) != 1 || plain.Prompts[0].Icons != nil {
+		t.Errorf("prompt icons = %+v, want none declared", plain.Prompts)
 	}
 }

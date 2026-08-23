@@ -1,8 +1,8 @@
 {
   "identifier": "jmrplens-libgen-mcp",
   "name": "Books & Papers MCP Server",
-  "version": "1.6.3",
-  "description": "Model Context Protocol server for federated bibliographic search: your AI assistant searches books, research papers, comics, magazines and standards across multiple catalogs and open-access sources, pulls full metadata with ready-to-paste BibTeX/RIS citations, and retrieves or reads the text. It queries the Library Genesis catalog and, when that comes up empty, discovers open-access literature from arXiv, Crossref and OpenLibrary, public-domain books from Project Gutenberg, plus bibliographic records from dblp and PubMed and education grey literature from ERIC. Four focused tools (search, get_details, download, read); one static Go binary; stdio or streamable-HTTP transport; multi-source downloads with automatic mirror discovery and failover. No account, API key or token required.",
+  "version": "1.6.4",
+  "description": "Model Context Protocol server for federated bibliographic search: your AI assistant searches books, research papers, comics, magazines and standards across multiple catalogs and open-access sources, pulls full metadata with ready-to-paste BibTeX/RIS citations, and retrieves or reads the text. It queries the Library Genesis catalog and, when that comes up empty, discovers open-access literature from Anna's Archive, arXiv, Crossref and OpenLibrary, public-domain books from Project Gutenberg, plus bibliographic records from dblp and PubMed and education grey literature from ERIC. Four focused tools (search, get_details, download, read); one static Go binary; stdio or streamable-HTTP transport; multi-source downloads with automatic mirror discovery and failover. No account, API key or token required.",
   "author": "José M. Requena Plens",
   "authorUrl": "https://github.com/jmrplens",
   "cloudEndpoint": "https://mcp.jmrp.io/libgen",
@@ -125,8 +125,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Search books & papers"
+        "readOnlyHint": true
       }
     },
     {
@@ -162,8 +161,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Get record details"
+        "readOnlyHint": true
       }
     },
     {
@@ -235,8 +233,7 @@
         "destructiveHint": true,
         "idempotentHint": true,
         "openWorldHint": true,
-        "readOnlyHint": false,
-        "title": "Download file"
+        "readOnlyHint": false
       }
     },
     {
@@ -326,8 +323,7 @@
       "annotations": {
         "idempotentHint": false,
         "openWorldHint": true,
-        "readOnlyHint": true,
-        "title": "Read file text"
+        "readOnlyHint": true
       }
     }
   ],

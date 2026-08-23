@@ -18,6 +18,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
 // maxCandidates bounds how many search results are rendered in a prompt table.
@@ -104,6 +105,7 @@ func registerAcquireBook(server *mcp.Server, client *libgen.Client) {
 			arg("format", "Preferred file format, e.g. pdf or epub (optional).", false),
 			arg("language", "Preferred language (optional).", false),
 		},
+		Icons: toolutil.IconAcquireBook,
 	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return handleAcquireBook(ctx, client, req)
 	})
@@ -263,6 +265,7 @@ func registerResearchTopic(server *mcp.Server, client *libgen.Client) {
 			arg("kind", "Which record types to search: articles, books, or both (default: both).", false),
 			arg("limit", "Maximum rows per section (default: 10).", false),
 		},
+		Icons: toolutil.IconResearchTopic,
 	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return handleResearchTopic(ctx, client, req)
 	})
@@ -401,6 +404,7 @@ func registerGetPaper(server *mcp.Server, client *libgen.Client) {
 			arg("doi", "DOI of the paper to fetch directly (mutually exclusive with citation).", false),
 			arg("citation", "Free-text citation or reference to search for (mutually exclusive with doi).", false),
 		},
+		Icons: toolutil.IconGetPaper,
 	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return handleGetPaper(ctx, client, req)
 	})
@@ -579,6 +583,7 @@ func registerDownloadTroubleshoot(server *mcp.Server, client *libgen.Client) {
 			arg("doi", "DOI of the article download that failed (optional).", false),
 			arg("error", "The error message the download tool returned, if any (optional).", false),
 		},
+		Icons: toolutil.IconDownloadTroubleshoot,
 	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return handleDownloadTroubleshoot(client, req)
 	})

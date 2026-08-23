@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -690,5 +692,110 @@ func TestNewHealthResponseRendersStartedAtInUTC(t *testing.T) {
 	got := newHealthResponse(start, start)
 	if got.StartedAt != "2026-08-23T10:30:00Z" {
 		t.Errorf("started_at = %q, want the same instant normalized to UTC", got.StartedAt)
+	}
+}
+
+// TestResolveCommit covers resolveCommit's three paths: a stamped release value
+// always wins, an unstamped build recovers vcs.revision from the embedded build
+// info, and an unavailable or revision-less build info leaves "none" in place
+// rather than fabricating a value.
+func TestResolveCommit(t *testing.T) {
+	t.Parallel()
+	withRevision := func(rev string) func() (*debug.BuildInfo, bool) {
+		return func() (*debug.BuildInfo, bool) {
+			return &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: rev}}}, true
+		}
+	}
+
+	tests := []struct {
+		name          string
+		ldflagsCommit string
+		readBuildInfo func() (*debug.BuildInfo, bool)
+		wantCommit    string
+	}{
+		{
+			name:          "stamped value wins over build info",
+			ldflagsCommit: "abc1234",
+			readBuildInfo: withRevision("def5678"),
+			wantCommit:    "abc1234",
+		},
+		{
+			name:          "unstamped recovers vcs.revision from build info",
+			ldflagsCommit: "none",
+			readBuildInfo: withRevision("def5678"),
+			wantCommit:    "def5678",
+		},
+		{
+			name:          "build info unavailable leaves none in place",
+			ldflagsCommit: "none",
+			readBuildInfo: func() (*debug.BuildInfo, bool) { return nil, false },
+			wantCommit:    "none",
+		},
+		{
+			name:          "build info present but carries no vcs.revision",
+			ldflagsCommit: "none",
+			readBuildInfo: func() (*debug.BuildInfo, bool) { return &debug.BuildInfo{}, true },
+			wantCommit:    "none",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveCommit(tt.ldflagsCommit, tt.readBuildInfo); got != tt.wantCommit {
+				t.Errorf("resolveCommit(%q) = %q, want %q", tt.ldflagsCommit, got, tt.wantCommit)
+			}
+		})
+	}
+}
+
+// TestServerInstructionsNameEveryToolAndPrompt guards serverInstructions
+// against drift: it goes straight into a connecting model's system prompt, so
+// a tool or prompt renamed without updating the hand-written text would send
+// the model at a name it can no longer call. The check walks the live,
+// registered surface rather than a hardcoded list of names, so it catches a
+// rename on either side — the registration or the instructions text.
+func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	server, err := newRegisteredServer(cfg, "")
+	if err != nil {
+		t.Fatalf("newRegisteredServer() error = %v", err)
+	}
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "instructions-test", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	instructions := session.InitializeResult().Instructions
+	if instructions == "" {
+		t.Fatal("handshake Instructions is empty")
+	}
+	for tl, tErr := range session.Tools(t.Context(), nil) {
+		if tErr != nil {
+			t.Fatalf("list tools: %v", tErr)
+		}
+		if !strings.Contains(instructions, tl.Name) {
+			t.Errorf("Instructions does not mention registered tool %q", tl.Name)
+		}
+	}
+	for p, pErr := range session.Prompts(t.Context(), nil) {
+		if pErr != nil {
+			t.Fatalf("list prompts: %v", pErr)
+		}
+		if !strings.Contains(instructions, p.Name) {
+			t.Errorf("Instructions does not mention registered prompt %q", p.Name)
+		}
 	}
 }
