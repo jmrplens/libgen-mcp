@@ -10,23 +10,27 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Brand icon: the two theme variants of the logo already published at
-// site/src/assets/logo-{light,dark}.svg (dark marks for a light background,
-// light marks for a dark one). Kept as literal copies here rather than an
-// embed directive reaching into the site assets: that directive cannot reach
-// outside its own package directory (see the root VERSION embed's doc
-// comment), and the site's own build reads them directly, so there is no
-// single directory both could embed from. The svg source is small and
-// effectively static, so a manual copy carries little drift risk.
-const (
-	svgBrandLight = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="libgen-mcp"><path d="M28 8 h8 v14 h8 L32 36 20 22 h8 z" fill="#0f766e"/><path d="M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z" fill="#0d9488"/><path d="M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z" fill="#14b8a6"/></svg>`
-	svgBrandDark  = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="libgen-mcp"><path d="M28 8 h8 v14 h8 L32 36 20 22 h8 z" fill="#99f6e4"/><path d="M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z" fill="#2dd4bf"/><path d="M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z" fill="#5eead4"/></svg>`
-)
+// Brand icon: the same open-book-and-arrow mark published at
+// site/src/assets/logo-{light,dark}.svg, merged into one currentColor path
+// instead of copying either theme variant.
+//
+// That merge is possible because the three sub-paths (the arrow, the left
+// page, the right page) are each already a separate closed shape — they were
+// given three different fill colors for visual depth, not because any one of
+// them needs another to close. A currentColor render loses that depth but
+// keeps the exact outline; verified by rendering both side by side before
+// this replaced the two-file version.
+//
+// The single currentColor render is not just simpler than a light/dark pair,
+// it matters for size: under SEP-2575 the whole Implementation — Icons
+// included — rides in the `_meta` of every response, not just the handshake,
+// so a two-theme pair would double that recurring cost for no benefit a
+// currentColor render doesn't already give a client.
+const svgBrand = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="libgen-mcp"><path fill="currentColor" d="M28 8 h8 v14 h8 L32 36 20 22 h8 z M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z"/></svg>`
 
 // Feature icons: one per tool and one per prompt, each a single-color
 // currentColor SVG so it renders correctly against any client theme without
-// needing a light/dark pair — unlike the brand mark above, none of these
-// carries its own brand colors.
+// needing a light/dark pair.
 const (
 	svgSearch               = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="10" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.5"/></svg>`
 	svgDetails              = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="7" x2="8" y2="11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="4.5" r="1" fill="currentColor"/></svg>`
@@ -40,44 +44,32 @@ const (
 
 const svgMIME = "image/svg+xml"
 
-// icon wraps a single-variant SVG string as a one-element [mcp.Icon] slice
-// with a base64-encoded data URI. Base64 encoding is required because raw SVG
-// markup contains characters (<, >, ", spaces, #) that are not valid in an
-// unencoded RFC 2397 data URI; the MCP spec also documents base64 as the
-// canonical form for embedded image data.
+// icon wraps svg as a one-element [mcp.Icon] slice with a base64-encoded data
+// URI. Base64 encoding is required because raw SVG markup contains characters
+// (<, >, ", spaces, #) that are not valid in an unencoded RFC 2397 data URI;
+// the MCP spec also documents base64 as the canonical form for embedded image
+// data.
 //
 // Sizes is set to ["any"] to advertise that the SVG is resolution-independent
-// and can be rendered at any size by the client.
+// and can be rendered at any size by the client. Every icon here uses
+// currentColor and declares no Theme, so this single entry serves every
+// client theme.
 func icon(svg string) []mcp.Icon {
-	return []mcp.Icon{dataURIIcon(svg, "")}
-}
-
-// brandIcon wraps a light-background and a dark-background SVG variant as a
-// two-element [mcp.Icon] slice, each tagged with the [mcp.IconTheme] it was
-// drawn for. It is only needed for the brand mark: the feature icons above
-// use currentColor and so need no theme variant of their own.
-func brandIcon(light, dark string) []mcp.Icon {
-	return []mcp.Icon{dataURIIcon(light, mcp.IconThemeLight), dataURIIcon(dark, mcp.IconThemeDark)}
-}
-
-func dataURIIcon(svg string, theme mcp.IconTheme) mcp.Icon {
 	encoded := base64.StdEncoding.EncodeToString([]byte(svg))
-	return mcp.Icon{
+	return []mcp.Icon{{
 		Source:   "data:" + svgMIME + ";base64," + encoded,
 		MIMEType: svgMIME,
 		Sizes:    []string{"any"},
-		Theme:    theme,
-	}
+	}}
 }
 
-// IconBrand is the libgen-mcp logo, used on the MCP Implementation
-// (serverInfo). It is the only icon in this package that needs a theme pair:
-// everything else below is a currentColor line icon, one per tool
-// (IconSearch, IconDetails, IconDownload, IconRead) and one per prompt
-// (IconAcquireBook, IconResearchTopic, IconGetPaper,
-// IconDownloadTroubleshoot).
+// IconBrand identifies the server itself on the MCP Implementation
+// (serverInfo), as opposed to any one tool or prompt. Everything below it is
+// a domain icon: one per tool (IconSearch, IconDetails, IconDownload,
+// IconRead) and one per prompt (IconAcquireBook, IconResearchTopic,
+// IconGetPaper, IconDownloadTroubleshoot).
 var (
-	IconBrand                = brandIcon(svgBrandLight, svgBrandDark)
+	IconBrand                = icon(svgBrand)
 	IconSearch               = icon(svgSearch)
 	IconDetails              = icon(svgDetails)
 	IconDownload             = icon(svgDownload)

@@ -11,7 +11,7 @@ import (
 
 // decodeIconSVG extracts and decodes the raw SVG source a data: URI icon
 // carries, failing the test if the URI is not the "data:<mime>;base64,<data>"
-// shape [dataURIIcon] produces.
+// shape [icon] produces.
 func decodeIconSVG(t *testing.T, ic mcp.Icon) string {
 	t.Helper()
 	prefix := "data:" + svgMIME + ";base64,"
@@ -48,26 +48,20 @@ func TestIcon_SingleThemelessEntry(t *testing.T) {
 	}
 }
 
-// TestBrandIcon_LightAndDarkVariants pins the brand mark's two-entry shape: a
-// light-background variant tagged IconThemeLight and a dark-background one
-// tagged IconThemeDark, each decoding back to the SVG it was built from.
-func TestBrandIcon_LightAndDarkVariants(t *testing.T) {
-	got := brandIcon(svgBrandLight, svgBrandDark)
-	if len(got) != 2 {
-		t.Fatalf("brandIcon() returned %d entries, want 2", len(got))
+// TestIconBrand_SingleEntryNoTheme pins the brand mark to the same
+// single-entry, themeless shape every other icon uses: under SEP-2575 the
+// whole Implementation (Icons included) rides in the `_meta` of every
+// response, not just the handshake, so a two-theme pair would double that
+// recurring cost.
+func TestIconBrand_SingleEntryNoTheme(t *testing.T) {
+	if len(IconBrand) != 1 {
+		t.Fatalf("IconBrand has %d entries, want 1 (no light/dark pair)", len(IconBrand))
 	}
-	light, dark := got[0], got[1]
-	if light.Theme != mcp.IconThemeLight {
-		t.Errorf("entry 0 theme = %q, want %q", light.Theme, mcp.IconThemeLight)
+	if IconBrand[0].Theme != "" {
+		t.Errorf("IconBrand[0].Theme = %q, want empty: a currentColor icon needs no theme", IconBrand[0].Theme)
 	}
-	if dark.Theme != mcp.IconThemeDark {
-		t.Errorf("entry 1 theme = %q, want %q", dark.Theme, mcp.IconThemeDark)
-	}
-	if decodeIconSVG(t, light) != svgBrandLight {
-		t.Error("light entry does not round-trip to svgBrandLight")
-	}
-	if decodeIconSVG(t, dark) != svgBrandDark {
-		t.Error("dark entry does not round-trip to svgBrandDark")
+	if decodeIconSVG(t, IconBrand[0]) != svgBrand {
+		t.Error("IconBrand does not round-trip to svgBrand")
 	}
 }
 
