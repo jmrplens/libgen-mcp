@@ -84,6 +84,35 @@ func TestMeasureTools(t *testing.T) {
 	}
 }
 
+// TestMeasureTools_ExcludesIcons verifies Icons never reach the measured
+// count: a client's own UI reads them, never the LLM the report exists to
+// account for, and a base64 data: URI would otherwise dwarf the rest of a
+// small tool's definition.
+func TestMeasureTools_ExcludesIcons(t *testing.T) {
+	plain := &mcp.Tool{Name: "a", Description: "does a thing"}
+	withIcon := &mcp.Tool{
+		Name: "a", Description: "does a thing",
+		Icons: []mcp.Icon{{Source: "data:image/svg+xml;base64," + strings.Repeat("QQ", 200), MIMEType: "image/svg+xml"}},
+	}
+
+	plainInfos, plainTokens, plainBytes, err := measureTools([]*mcp.Tool{plain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	iconInfos, iconTokens, iconBytes, err := measureTools([]*mcp.Tool{withIcon})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if iconTokens != plainTokens || iconBytes != plainBytes {
+		t.Errorf("measureTools with Icons set = (%d tokens, %d bytes), want the icon-free result (%d tokens, %d bytes)",
+			iconTokens, iconBytes, plainTokens, plainBytes)
+	}
+	if iconInfos[0] != plainInfos[0] {
+		t.Errorf("per-tool info = %+v, want %+v", iconInfos[0], plainInfos[0])
+	}
+}
+
 // TestMeasureTools_MarshalError verifies a tool that cannot be JSON-serialized
 // (a channel in the InputSchema is unmarshalable) surfaces a wrapped error.
 func TestMeasureTools_MarshalError(t *testing.T) {

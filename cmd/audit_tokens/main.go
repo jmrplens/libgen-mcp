@@ -64,12 +64,18 @@ func run(w io.Writer) error {
 
 // measureTools serializes each tool definition to JSON and counts its tokens,
 // returning the per-tool breakdown and the totals.
+//
+// Icons are stripped before marshaling. The MCP spec defines them as visual
+// identifiers for a client's own UI (a tool picker, an approval dialog); the
+// tool definition actually handed to an LLM — name, description, input
+// schema — never includes them. Counting a base64 data: URI's bytes here
+// would inflate this command's number past what any request actually pays.
 func measureTools(toolsList []*mcp.Tool) (infos []toolTokenInfo, totalTokens, totalBytes int, err error) {
 	for _, t := range toolsList {
 		if t == nil {
 			continue
 		}
-		data, marshalErr := json.Marshal(t)
+		data, marshalErr := json.Marshal(withoutIcons(t))
 		if marshalErr != nil {
 			return nil, 0, 0, fmt.Errorf("marshal tool %q: %w", t.Name, marshalErr)
 		}
@@ -79,6 +85,15 @@ func measureTools(toolsList []*mcp.Tool) (infos []toolTokenInfo, totalTokens, to
 		totalBytes += len(data)
 	}
 	return infos, totalTokens, totalBytes, nil
+}
+
+// withoutIcons returns a shallow copy of t with Icons cleared, so a client-UI
+// asset never counts toward the LLM context-window figure this command
+// reports. The copy is shallow because every other field is read-only here.
+func withoutIcons(t *mcp.Tool) *mcp.Tool {
+	cp := *t
+	cp.Icons = nil
+	return &cp
 }
 
 // writeReport renders the token footprint as an aligned table plus a one-line
