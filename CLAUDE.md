@@ -240,15 +240,30 @@ it to completion after fixing one.
 
 **`js-yaml` is pinned in `site/package.json` for Starlight, not for us.** No file
 in this repo imports it. It is there because `@astrojs/starlight` ships
-TypeScript source (`utils/translations-fs.ts` does `import yaml from 'js-yaml'`),
-which Vite compiles into our bundle and leaves as a bare external — so it
-resolves at runtime from `site/node_modules`, *our* tree, not Starlight's. That
-makes the root pin the version Starlight actually gets. It must stay inside
-Starlight's own range (`^4.1.1`): js-yaml 5 dropped the default export, and
-bumping the pin to it fails the build in `generating static routes` with "does
-not provide an export named 'default'" — a message that names neither Starlight
-nor the pin. Keep the version exact (no caret) so a range bump cannot drift
-across the major.
+TypeScript source (`utils/translations-fs.ts` does `import yaml from 'js-yaml'`,
+`schemas/head.ts` too), which Vite compiles into our bundle and leaves as a bare
+external — so it resolves at runtime from `site/node_modules`, *our* tree, not
+Starlight's. That makes the root pin the version Starlight actually gets.
+
+**It must stay inside Starlight's declared range (`^4.1.1`)**, and keep the
+version exact (no caret) so a range bump cannot drift across the major. Reject
+any bot PR that moves it to 5.x while Starlight still declares `^4.1.1` — being
+outside the range its own dependency declares is the reason on its own, no build
+run needed.
+
+Two details, because the obvious explanation is wrong and sends you down a dead
+end. First, it is **not** that "js-yaml 5 dropped the default export": v4's ESM
+build has no `export default` either. `import yaml from 'js-yaml'` works today
+because the CJS path (`require` → `index.js`) reassigns `module.exports`, which
+Node/Vite interop hands over as the default; v5's CJS build emits
+`exports.load = …` per-name instead, and that synthesis is what stops. Second,
+that part is fixable from the outside (a Vite `resolve.alias` to a shim adding a
+default export) — **do not**: v5 is an API rewrite, not a repackaging. It drops
+`safeLoad`, `safeLoadAll` and `types` and adds a new AST/visitor surface. The
+two calls Starlight actually makes (`load(content, {filename})`, `dump(…)`) do
+survive, so a shim would appear to work while leaving us maintaining a patch to
+somebody else's transitive dependency, silently breaking the day Starlight
+imports anything else from it.
 
 A plain `golangci-lint run` skips every tagged file, which is how the whole
 `cmd/eval` harness went unanalyzed until 2026-07-30. `make lint` passes
