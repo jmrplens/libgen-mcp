@@ -22,9 +22,10 @@ type serverCardTool struct {
 	InputSchema  any                  `json:"inputSchema,omitempty"`
 	OutputSchema any                  `json:"outputSchema,omitempty"`
 	Annotations  *mcp.ToolAnnotations `json:"annotations,omitempty"`
-	// Icons carries whatever the tool declares. Empty today — this server
-	// registers none — and omitted when so, which keeps the document byte for
-	// byte what it was while still mirroring the surface if that changes.
+	// Icons carries whatever the tool declares: three entries per tool — the
+	// scalable SVG plus the light/dark WebP fallbacks internal/toolutil builds
+	// (see docs/architecture.md § Icons). Omitted when a tool declares none, so
+	// a surface that drops them does not leave a null key behind.
 	Icons []mcp.Icon `json:"icons,omitempty"`
 }
 

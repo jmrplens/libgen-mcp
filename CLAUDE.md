@@ -40,6 +40,7 @@ cmd/
   gen_llms/             # Generates llms.txt / llms-full.txt (--check in CI)
   gen_lhm_manifest/     # Fills lhm.plugin.json's tools/prompts (--check in CI)
   gen_eval_pages/       # Regenerates the evaluator results docs (--check in CI)
+  gen_icon_webp/        # Rasterizes icons.go's SVGs to WebP (maintainer-only)
   eval/                 # Live LLM-driven eval harness (build tag: eval, gated)
 internal/
   cachehints/           # SEP-2549 TTL middleware for the catalog listings
@@ -51,6 +52,7 @@ internal/
   mirrors/              # Mirror discovery, health, rotation
   prompts/              # MCP prompt definitions (acquire_book, research_topic, …)
   tools/                # MCP tool registration, handlers, schemas, Markdown render
+  toolutil/             # Shared MCP registration bits: the icon set (SVG + WebP)
   transport/            # HTTP-transport flags → SDK StreamableHTTPOptions
 test/e2e/               # Opt-in live end-to-end suite (build tag: e2e)
 docs/                   # English developer docs (source of truth for prose)
@@ -173,6 +175,33 @@ An open-access searcher implements `internal/discovery.Provider`
 return only context errors, and degrade every other failure to an empty slice so
 one slow provider never sinks the federated result.
 
+### Adding or editing an icon
+
+Icons live in `internal/toolutil/icons.go`. Each is a three-entry `[]mcp.Icon`:
+the hand-authored `currentColor` SVG plus a light/dark 16×16 WebP pair, because
+a client can support icons and still reject `image/svg+xml` (VS Code Copilot's
+MIME allowlist does exactly that). To add one:
+
+1. Add an `svg<Name>` constant — `currentColor` only, no hardcoded fill, so the
+   SVG entry adapts to any client theme and the generator can recolor it.
+2. Add `IconName = icon("<name>", svg<Name>)` to the `var` block. The string
+   must be the constant's suffix **lowercased with non-alphanumerics stripped**
+   (`svgAcquireBook` → `"acquirebook"`); that is the key
+   `cmd/gen_icon_webp` writes the asset filenames under, and a mismatch panics
+   at startup rather than shipping a broken icon.
+3. Run `make gen-icon-webp` and commit the generated `.webp` files.
+
+The generator needs `rsvg-convert` (librsvg) and `cwebp` (libwebp) on `PATH`
+(`brew install librsvg webp`). It is **maintainer-only and not a CI gate** — the
+assets are committed, so ordinary builds and CI never need those tools.
+`make check-icon-webp` verifies the committed assets still match `icons.go`; run
+it by hand after touching an icon, since nothing in CI will.
+
+**Look at the rendered result before committing.** A hand-written SVG path that
+parses is not necessarily a shape that reads at 16×16, and the tests can only
+catch malformed XML and a wrong image size — not a glyph that renders as a
+smudge.
+
 ### Error handling in handlers
 
 Handlers return `(*mcp.CallToolResult, Out, error)`. Return a real `error` for
@@ -218,6 +247,7 @@ make check-doc-links                                       # local doc links res
 make audit-surface-quality                                 # tool surface conventions
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
+make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
 ```
 
 **`make` does not cover everything CI runs.** Three gates have no `make` target

@@ -363,16 +363,46 @@ ask/answer flow carried in the tool result itself, which needs no session and ke
 Serve with `--stateless=false` if you must keep the old elicitation path for legacy clients.
 
 **Handshake metadata.** `Implementation` carries `Title`, `Description`, `WebsiteURL` and a
-single-entry brand icon alongside `Name`/`Version`; `ServerOptions.Instructions` gives a
+brand icon alongside `Name`/`Version`; `ServerOptions.Instructions` gives a
 connecting model the one thing no single tool's `Description` documents on its own — how
 `search`, `get_details`, `download` and `read` chain together, and that four prompts wrap
 them into ready-made workflows. On protocol `2026-07-28` and later (SEP-2575), the whole
-`Implementation`, icon included, rides in every response's `_meta`, not just the handshake —
+`Implementation`, icons included, rides in every response's `_meta`, not just the handshake —
 a legacy client on `2025-11-25` or older still gets it only once, in the `initialize` result.
-Either way, both the brand mark and every tool/prompt icon (`internal/toolutil`) are
-single-entry `currentColor` SVGs rather than themed pairs, and `make audit-tokens`
-(`cmd/audit_tokens`) excludes icons from its context-window figure entirely: a client's own
-UI reads them, never the model.
+`make audit-tokens` (`cmd/audit_tokens`) excludes icons from its context-window figure
+entirely: a client's own UI reads them, never the model.
+
+### Icons
+
+Every icon — the brand mark on `Implementation`, one per tool, one per prompt — is a
+three-entry `[]mcp.Icon` built by `internal/toolutil`:
+
+| Entry | Format | Sizes   | Theme    | For                                  |
+| ----- | ------ | ------- | -------- | ------------------------------------ |
+| 1     | SVG    | `any`   | _(none)_ | Clients that accept `image/svg+xml`  |
+| 2     | WebP   | `16x16` | `light`  | Clients that reject SVG, light theme |
+| 3     | WebP   | `16x16` | `dark`   | Clients that reject SVG, dark theme  |
+
+The SVG is authored by hand and uses `currentColor`, so one themeless entry adapts to any
+client theme. The raster pair exists because a client can support icons and still refuse this
+one: VS Code Copilot's MIME allowlist admits `image/webp` but not `image/svg+xml`, so an
+SVG-only icon silently failed to render there. A raster cannot inherit the theme's color, so
+it needs the light/dark pair the SVG does not.
+
+The WebP files under `internal/toolutil/icons/webp/` are **generated and committed**, not
+built: `make gen-icon-webp` (`cmd/gen_icon_webp`) parses `icons.go` for its `svg<Name>`
+constants, substitutes `currentColor` for a near-black or near-white glyph, and rasterizes
+each via `rsvg-convert` + `cwebp`. That needs librsvg and libwebp on `PATH`, which is exactly
+why it is not a CI gate — the assets are in the repository, so ordinary builds and CI never
+invoke it. Run `make check-icon-webp` after editing an icon to confirm the committed assets
+still match.
+
+The fallbacks are not free, and the brand mark is where it shows: measured as serialized
+JSON, it grows from 477 to 1,028 bytes, and under SEP-2575 that rides in **every** response,
+not just the handshake. Lossless WebP at 16×16 is what keeps the figure that low — it beat
+optimized PNG by roughly a third on this icon set, JPEG has no alpha channel, and GIF's
+1-bit alpha would band the antialiased edges. The four tool icons add ~4.5 KB to `tools/list`,
+which is paid once per listing and is covered by the SEP-2549 one-hour cache hint.
 
 **No param-header routing.** Tool arguments are passed in the JSON-RPC body only: nothing on
 this surface carries an [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)
