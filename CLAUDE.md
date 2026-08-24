@@ -29,35 +29,8 @@ The single source of truth for the version is the `VERSION` file.
 
 ## Project Structure
 
-```text
-cmd/
-  server/               # The MCP server entrypoint (stdio + HTTP transports)
-  probe/                # Standalone mirror/diagnostics CLI
-  audit_tokens/         # Reports the token footprint of the tool definitions
-  audit_surface_quality/# Fails if the tool surface breaks a quality convention
-  godoc_tool/           # Go doc-comment auditor + fixer (audit | fix)
-  format_md_tables/     # Normalizes Markdown pipe tables (--check in CI)
-  gen_llms/             # Generates llms.txt / llms-full.txt (--check in CI)
-  gen_lhm_manifest/     # Fills lhm.plugin.json's tools/prompts (--check in CI)
-  gen_eval_pages/       # Regenerates the evaluator results docs (--check in CI)
-  gen_icon_webp/        # Rasterizes icons.go's SVGs to WebP (maintainer-only)
-  eval/                 # Live LLM-driven eval harness (build tag: eval, gated)
-internal/
-  cachehints/           # SEP-2549 TTL middleware for the catalog listings
-  config/               # Env-var configuration (LIBGEN_MCP_*), KnownSources
-  discovery/            # Open-access + Anna's search providers; Federate()
-  extract/              # PDF/EPUB/TXT text extraction, in-doc search, outline
-  libgen/               # LibGen client: search, details, enrich, download chain
-  logging/              # slog setup
-  mirrors/              # Mirror discovery, health, rotation
-  prompts/              # MCP prompt definitions (acquire_book, research_topic, …)
-  tools/                # MCP tool registration, handlers, schemas, Markdown render
-  toolutil/             # Shared MCP registration bits: the icon set (SVG + WebP)
-  transport/            # HTTP-transport flags → SDK StreamableHTTPOptions
-test/e2e/               # Opt-in live end-to-end suite (build tag: e2e)
-docs/                   # English developer docs (source of truth for prose)
-site/                   # Starlight docs site (EN + ES parity)
-```
+`ls cmd/ internal/` gives the layout; every package carries a doc comment saying
+what it is, which `make godoc-check` enforces. What that does not tell you:
 
 ### Package roles worth knowing
 
@@ -75,17 +48,7 @@ site/                   # Starlight docs site (EN + ES parity)
 ## Build & Test Commands
 
 Everything is driven through the `Makefile`; run `make help` for the full list.
-
-```bash
-make build            # Build dist/libgen-mcp
-make run              # Run the server on stdio
-make test             # go test with a coverage profile (./cmd/... ./internal/...)
-make test-race        # Race detector
-make cover-check      # Fail if internal/ coverage < COVERAGE_MIN (85%)
-make lint             # golangci-lint + govulncheck
-make analyze          # Full static-analysis sweep
-make validate-http-stateless  # Smoke-check the stateless HTTP guarantees on a real server
-```
+Two things `make help` does not tell you:
 
 `validate-http-stateless` is a hand-run smoke check, not a CI gate: it builds the binary,
 serves it, and asserts the wire-level promises of stateless mode (no `Mcp-Session-Id`,
@@ -383,67 +346,10 @@ Spanish entry in `scenariosES`, or the generator fails.
 
 ## Release Process
 
-The version lives in `VERSION` and is mirrored into four JSON manifests. To cut a
-release:
-
-1. Bump `VERSION`.
-2. Update the version in `server.json` (both `.version` and the six release-asset
-   URLs), `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`.
-3. Run `make check-manifests`. It gates all four against `VERSION`, and CI runs
-   it in the `server.json` job. Add any new version-bearing manifest to
-   `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
-   gated, and will silently ship the previous release's number.
-4. Run `make gen-llms`. `llms.txt` and `llms-full.txt` state the version in their
-   opening line, so a bump leaves them stale. They are **not** covered by
-   `check-manifests` — `make check-llms` is the gate that catches it, in a
-   different CI job.
-5. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
-
-The tag is enough for the version-bearing files the workflow owns: on release,
-`scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
-per-package versions, its six asset identifiers and their `fileSha256` digests,
-plus `lhm.plugin.json`'s version, and commits the result back to main. The manual
-bump above exists so the pre-tag CI gates pass, not because the digests need to
-be right — they cannot be until the binaries exist.
-
-**A `remotes` URL must be globally unique across the whole registry, and the
-comparison is on the literal string.** The registry refuses a publish whose remote
-URL any other server already claims, templates included: v1.5.2 failed to publish
-because `server.json` declared `https://{host}:{port}/` as a self-hosted form,
-copied from the sibling `gitlab-mcp-server`, which had claimed that exact template
-first. Checking that nothing claims your *hostname* is not the check — the string
-is. A self-hosted templated remote is therefore only safe if no other server of
-yours already publishes the same template.
-
-The `server.json` CI job is named for a required status check in the branch
-ruleset, not for its scope — do not rename it without updating the ruleset too.
-
-### Publishing to the LobeHub Marketplace
-
-LobeHub is the one listing that is **not** part of the tagged release, and it
-needs a manual step after the tag:
-
-```bash
-make publish-lobehub    # npx -y @lobehub/market-cli plugin publish
-```
-
-It cannot be automated. LobeHub's publish endpoint authenticates over OIDC PKCE
-with a one-time interactive `lhm login` + `lhm github connect`; its own
-documentation states there is no token-only, non-interactive path, and the
-machine-to-machine credentials it does offer carry no publish permission. The
-release workflow therefore only *stamps* the version into `lhm.plugin.json`
-(step 5 of `scripts/update-server-json-sha.sh`, committed back to main); the
-actual publish is a human running the target above.
-
-The manifest also carries the full `tools` and `prompts` arrays, and it has to:
-LobeHub derives a listing's capability badges from those arrays, because its
-crawler cannot introspect a server that ships as a Go binary or a Docker image.
-Without them the marketplace advertises **zero tools and zero prompts** no matter
-what the server registers — which is exactly what the listing showed until
-v1.3.3. Never hand-edit them; `make gen-lhm-manifest` regenerates them from a
-real `tools/list` + `prompts/list` round-trip and `make check-lhm-manifest` fails
-CI when they drift. Re-publishing the same version merges the supplied fields
-into it, so re-running the publish after a partial failure is safe.
+Cutting a release is a multi-step sequence with two gates that catch different
+things and a registry rule that has already broken one publish. It lives in the
+`release` skill (`.claude/skills/release/SKILL.md`) — invoke it when bumping the
+version, tagging, or publishing to the MCP registry or LobeHub.
 
 ## Commit & PR Conventions
 
