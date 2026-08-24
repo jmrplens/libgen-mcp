@@ -9,6 +9,7 @@
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
+        gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         validate-http-stateless \
         install-tools release-check check-manifests \
@@ -194,6 +195,21 @@ gen-lhm-manifest: ## Regenerate the tools/prompts arrays in lhm.plugin.json from
 
 check-lhm-manifest: ## Fail if lhm.plugin.json no longer matches the registered surface (CI mode)
 	go run ./cmd/gen_lhm_manifest/ --check
+
+## gen-icon-webp: regenerate the light/dark WebP fallbacks for every icon in
+## internal/toolutil/icons.go. Maintainer-only: needs rsvg-convert (librsvg)
+## and cwebp (libwebp) on PATH — `brew install librsvg webp`, or the
+## equivalent apt/dnf packages. Deliberately NOT a CI gate: the generated
+## .webp files under internal/toolutil/icons/webp/ are committed, so ordinary
+## builds never invoke this and CI never needs those tools installed. Run it
+## after adding or editing an icon.
+gen-icon-webp:
+	go run ./cmd/gen_icon_webp/
+
+## check-icon-webp: verify the committed WebP icon assets still match
+## icons.go. Same external-tool requirement as gen-icon-webp.
+check-icon-webp:
+	go run ./cmd/gen_icon_webp/ --check
 
 eval-pages: ## Regenerate the evaluator results pages (pass DOC=path to also refresh the run table)
 	go run ./cmd/gen_eval_pages/ $(if $(DOC),--results-doc $(DOC))

@@ -41,6 +41,11 @@ development build running is just:
 - **Node.js with Corepack** (only for the docs site) — the site under `site/`
   pins `pnpm@11.8.0` via its `packageManager` field.
 - **Network access** (only for the gated end-to-end suite and the live probe).
+- **librsvg and libwebp** (only if you add or edit an MCP icon) — `rsvg-convert`
+  and `cwebp` on your `PATH`, e.g. `brew install librsvg webp`. They back
+  `make gen-icon-webp`, which regenerates the WebP fallbacks in
+  `internal/toolutil/icons/webp/`. Those assets are committed, so ordinary
+  builds, tests and CI never need these tools.
 
 ## Project Layout
 
@@ -51,7 +56,9 @@ cmd/
 ├── godoc_tool/             # Go doc-comment auditor (backs make godoc-check)
 ├── format_md_tables/       # Markdown pipe-table formatter (backs make check-md-tables)
 ├── gen_llms/               # Generates llms.txt / llms-full.txt (backs make check-llms)
+├── gen_lhm_manifest/       # Fills lhm.plugin.json's tools/prompts (backs make check-lhm-manifest)
 ├── gen_eval_pages/         # Regenerates the evaluator results docs (backs make check-eval-pages)
+├── gen_icon_webp/          # Rasterizes the icon SVGs to WebP (maintainer-only, not a CI gate)
 ├── audit_tokens/           # Reports the token footprint of the tool definitions
 ├── audit_surface_quality/  # Fails if the tool surface breaks a quality convention
 └── eval/                   # Live LLM-driven eval harness (build tag: eval, gated)
@@ -63,7 +70,8 @@ internal/
 ├── mirrors/           # Mirror discovery, caching, and failover
 ├── logging/           # Structured logging to stderr
 ├── prompts/           # MCP prompt definitions (acquire_book, research_topic, …)
-└── tools/             # MCP tool registration (search, get_details, download, read)
+├── tools/             # MCP tool registration (search, get_details, download, read)
+└── toolutil/          # Shared registration bits: the icon set (SVG + WebP fallbacks)
 test/e2e/              # Opt-in live end-to-end suite (build tag: e2e)
 docs/                  # Markdown guides (getting started, configuration, …)
 site/                  # Astro Starlight documentation site (bilingual EN/ES)
@@ -161,6 +169,13 @@ make vet      # go vet
   `make gen-llms` after changing a tool's name, description, or schema; CI runs
   `make check-llms` and fails if they are stale. The site build republishes them
   to `/llms.txt` and `/llms-full.txt` via its `prebuild` step.
+- The WebP files under `internal/toolutil/icons/webp/` are likewise generated —
+  from the `svg<Name>` constants in `internal/toolutil/icons.go` — and committed.
+  Run `make gen-icon-webp` after adding or editing an icon and commit the result;
+  `make check-icon-webp` verifies they still match. Unlike the gates above this
+  one is **not** run by CI, because it needs librsvg and libwebp installed, so
+  run it yourself. See `docs/architecture.md` § Icons for why every icon ships an
+  SVG plus a light/dark raster pair.
 
 ## Branch Naming
 

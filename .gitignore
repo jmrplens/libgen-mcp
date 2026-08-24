@@ -9,6 +9,7 @@
 /format_md_tables
 /gen_eval_pages
 /audit_surface_quality
+/gen_icon_webp
 /dist/
 coverage.out
 coverage.internal.out
