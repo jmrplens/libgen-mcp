@@ -1642,7 +1642,7 @@ func TestDownloadToolMD5Book(t *testing.T) {
 // carries an explicit caveat that downloaded content is untrusted third-party
 // data, never instructions to follow.
 func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
-	desc := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"})
+	desc := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false)
 	if !strings.Contains(desc, "untrusted") {
 		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
 	}
@@ -1659,7 +1659,7 @@ func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
 // it says nothing, because then there is nothing to name.
 func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"},
+		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, false,
 	)
 	for _, want := range []string{
 		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
@@ -1673,7 +1673,7 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
 		}
 	}
-	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"})
+	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"}, false)
 	if strings.Contains(clean, "shadow-library") {
 		t.Errorf("a chain with no shadow library needs no disclosure; got:\n%s", clean)
 	}
@@ -1703,7 +1703,7 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // and nothing else in the build can catch a description that lies.
 func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"},
+		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, false,
 	)
 	for _, banned := range []string{
 		"without the rightsholder's permission", "copyrighted works",
@@ -1766,21 +1766,79 @@ func TestReadOnlyToolsLeadWithTheirCapability(t *testing.T) {
 // identifier chains apart, so the model never pins an ISBN-only source for an md5
 // download (or the reverse), and mentions a key only when a source serves it.
 func TestDownloadDescriptionNamesEachKeysChain(t *testing.T) {
-	desc := downloadToolDescription([]string{"libgen", "annas"}, []string{"oapen", "archive"}, []string{"scihub"})
+	desc := downloadToolDescription([]string{"libgen", "annas"}, []string{"oapen", "archive"}, []string{"scihub"}, false)
 	for _, want := range []string{
 		"md5 (book)", "isbn (book)", "doi (article)",
-		"by md5 against libgen then annas",
-		"by isbn against oapen then archive",
-		"by doi against scihub",
+		"- md5 (book): libgen then annas",
+		"- isbn (book): oapen then archive",
+		"- doi (article): scihub",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Errorf("description should contain %q; got:\n%s", want, desc)
 		}
 	}
 
-	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"})
+	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"}, false)
 	if strings.Contains(noISBN, "isbn") {
 		t.Errorf("description should not mention isbn when no source serves it; got:\n%s", noISBN)
+	}
+}
+
+// TestDownloadDescriptionUsesParagraphs pins the opening's structure against
+// the sixteen-way article fallback chain and the six other topics it used to
+// share a single 2,100-character paragraph with: the resolution order renders
+// as a "- key: chain" line per identifier, and the description as a whole is
+// more than one paragraph, matching the convention search already sets.
+func TestDownloadDescriptionUsesParagraphs(t *testing.T) {
+	desc := downloadToolDescription(
+		[]string{"libgen"}, []string{"oapen"},
+		[]string{
+			"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
+			"scielo", "fao", "fatcat", "crossref", "oapen", "scihub", "scidb",
+		},
+		false,
+	)
+	paragraphs := strings.Split(desc, "\n\n")
+	if len(paragraphs) < 4 {
+		t.Fatalf("download description has %d paragraphs, want at least 4 (one dense block regressed); got:\n%s",
+			len(paragraphs), desc)
+	}
+	if !strings.Contains(desc, "Resolution order, by identifier:\n- md5 (book): libgen\n- isbn (book): oapen") {
+		t.Errorf("resolution order should list one identifier per line; got:\n%s", desc)
+	}
+}
+
+// TestDownloadDescriptionMatchesTheDeploymentsContract is the regression test
+// for the GEO-audit finding this rewrite fixes: a local server's opening claim
+// ("Download a file... Returns the saved path and size") was false for the only
+// publicly hosted deployment (mcp.jmrp.io, remote), corrected only by a note 359
+// words later. The opening paragraph must now state the contract the running
+// deployment actually honors, with no leftover claim from the other mode.
+func TestDownloadDescriptionMatchesTheDeploymentsContract(t *testing.T) {
+	local := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false)
+	if !strings.Contains(local, "Returns the saved path and size") {
+		t.Errorf("local description must state it returns the saved path and size; got:\n%s", local)
+	}
+	if strings.Contains(local, "ALWAYS returns a direct link") {
+		t.Errorf("local description must not claim it always returns a link; got:\n%s", local)
+	}
+
+	remote := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, true)
+	if !strings.Contains(remote, "ALWAYS returns a direct link") ||
+		!strings.Contains(remote, "cannot write to your disk") ||
+		!strings.Contains(remote, "resolve_only is implied") {
+		t.Errorf("remote description must state the link-only contract up front; got:\n%s", remote)
+	}
+	if strings.Contains(remote, "Returns the saved path and size") {
+		t.Errorf("remote description must not carry the local mode's saved-path claim; got:\n%s", remote)
+	}
+
+	// The opening paragraph — what a model reads before deciding whether to call
+	// the tool — is where the two descriptions must diverge, not a footnote.
+	localOpen, _, _ := strings.Cut(local, "\n\n")
+	remoteOpen, _, _ := strings.Cut(remote, "\n\n")
+	if localOpen == remoteOpen {
+		t.Error("local and remote opening paragraphs must differ in the return contract they state")
 	}
 }
 
