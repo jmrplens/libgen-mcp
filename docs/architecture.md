@@ -377,7 +377,7 @@ entirely: a client's own UI reads them, never the model.
 Every icon — the brand mark on `Implementation`, one per tool, one per prompt — is a
 three-entry `[]mcp.Icon` built by `internal/toolutil`:
 
-| Entry | Format | Sizes   | Theme    | For                                  |
+| Entry | Format | `Sizes` | `Theme`  | For                                  |
 | ----- | ------ | ------- | -------- | ------------------------------------ |
 | 1     | SVG    | `any`   | _(none)_ | Clients that accept `image/svg+xml`  |
 | 2     | WebP   | `16x16` | `light`  | Clients that reject SVG, light theme |

@@ -125,23 +125,40 @@ func runIn(root, source, out string, check bool, raster rasterizer) error {
 
 // generateAll (re)writes every icon's light/dark WebP file under dir,
 // returning how many files it wrote.
+//
+// Rasterization happens for ALL variants before the first file is written, so
+// a failure part-way through — a malformed SVG the maintainer just added is
+// the realistic case — leaves the committed assets untouched rather than
+// half-replaced. Regenerating an unchanged SVG is byte-identical (that is what
+// makes checkAll work at all), so a partial run would only corrupt the icons
+// actually being edited, which are exactly the ones the maintainer would then
+// have to notice were stale. Holding every icon's bytes in memory first costs
+// a few kilobytes and removes the failure mode outright.
 func generateAll(dir string, icons []iconSource, raster rasterizer) (int, error) {
+	type pending struct {
+		path string
+		data []byte
+	}
+	rendered := make([]pending, 0, len(icons)*len(variants()))
+	for _, ic := range icons {
+		for _, v := range variants() {
+			data, rasterErr := raster(ic.svg, v.color)
+			if rasterErr != nil {
+				return 0, fmt.Errorf("%s: %w", ic.name, rasterErr)
+			}
+			rendered = append(rendered, pending{filepath.Join(dir, ic.name+v.suffix+".webp"), data})
+		}
+	}
+
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return 0, err
 	}
 	written := 0
-	for _, ic := range icons {
-		for _, v := range variants() {
-			path := filepath.Join(dir, ic.name+v.suffix+".webp")
-			data, rasterErr := raster(ic.svg, v.color)
-			if rasterErr != nil {
-				return written, fmt.Errorf("%s: %w", ic.name, rasterErr)
-			}
-			if writeErr := os.WriteFile(path, data, 0o644); writeErr != nil { //nolint:gosec // generated asset, not sensitive
-				return written, writeErr
-			}
-			written++
+	for _, p := range rendered {
+		if writeErr := os.WriteFile(p.path, p.data, 0o644); writeErr != nil { //nolint:gosec // generated asset, not sensitive
+			return written, writeErr
 		}
+		written++
 	}
 	return written, nil
 }

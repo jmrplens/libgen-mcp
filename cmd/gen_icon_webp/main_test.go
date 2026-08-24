@@ -267,6 +267,57 @@ func TestGenerateAll_PropagatesRasterizerError(t *testing.T) {
 	}
 }
 
+// TestGenerateAll_LeavesAssetsUntouchedWhenALaterIconFails verifies a failure
+// part-way through does not leave a half-replaced asset set behind.
+//
+// The realistic trigger is a malformed SVG the maintainer just added: the
+// icons before it in declaration order would rasterize fine. If generateAll
+// wrote as it went, those would be replaced on disk while the rest kept their
+// previous bytes, and the run would exit non-zero having silently mutated the
+// working tree. Rendering everything before writing anything is what makes the
+// failed run a no-op instead.
+func TestGenerateAll_LeavesAssetsUntouchedWhenALaterIconFails(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "webp")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Seed the directory with recognizable "previous release" assets.
+	const sentinel = "PREVIOUS-ASSET"
+	seeded := []string{"good-light.webp", "good-dark.webp", "bad-light.webp", "bad-dark.webp"}
+	for _, name := range seeded {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(sentinel), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+
+	// "good" rasterizes; "bad" — declared after it — does not.
+	icons := []iconSource{{name: "good", svg: "<svg>good</svg>"}, {name: "bad", svg: "<svg>bad</svg>"}}
+	failOnBad := func(svg, color string) ([]byte, error) {
+		if strings.Contains(svg, "bad") {
+			return nil, errors.New("boom")
+		}
+		return fakeRasterizer(svg, color)
+	}
+
+	written, err := generateAll(dir, icons, failOnBad)
+	if err == nil {
+		t.Fatal("generateAll() error = nil, want the rasterizer's failure")
+	}
+	if written != 0 {
+		t.Errorf("generateAll() wrote %d files before failing, want 0", written)
+	}
+	for _, name := range seeded {
+		got, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil {
+			t.Errorf("%s: %v", name, readErr)
+			continue
+		}
+		if string(got) != sentinel {
+			t.Errorf("%s was replaced despite the run failing; got %q", name, got)
+		}
+	}
+}
+
 // TestGenerateAll_MkdirFailsWhenParentIsAFile verifies the output directory
 // being unusable is reported, not ignored.
 func TestGenerateAll_MkdirFailsWhenParentIsAFile(t *testing.T) {
