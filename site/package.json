@@ -42,7 +42,7 @@
     "eslint-plugin-astro": "^3.1.0",
     "html-validate": "^11.9.0",
     "htmlhint": "^1.9.2",
-    "js-yaml": "4.3.1",
+    "js-yaml": "5.3.0",
     "pa11y-ci": "^4.1.1",
     "playwright": "^1.62.1",
     "prettier": "^3.9.6",
