@@ -49,6 +49,7 @@ export const collections = {
 				"lgm.actions.openChatgpt": z.string().optional(),
 				"lgm.actions.openClaude": z.string().optional(),
 				"lgm.actions.prompt": z.string().optional(),
+				"lgm.legal.notice": z.string().optional(),
 			}),
 		}),
 	}),

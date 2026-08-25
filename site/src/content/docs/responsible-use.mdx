@@ -71,6 +71,8 @@ head:
       }
 ---
 
+import LegalNotice from "../../components/docs/LegalNotice.astro";
+
 import { Aside } from "@astrojs/starlight/components";
 
 libgen-mcp reaches services that host material of very different legal status,
@@ -79,11 +81,7 @@ page sets out what the software does about that: which sources it prefers, what
 it declines to serve, and where the line between the tool's responsibility and
 yours falls.
 
-<Aside type="caution">
-	This tool accesses third-party mirrors of Library Genesis. You are responsible
-	for respecting the copyright and intellectual-property laws that apply where
-	you live. Use it only for content you are legally entitled to access.
-</Aside>
+<LegalNotice />
 
 ## Is libgen-mcp legal to use?
 

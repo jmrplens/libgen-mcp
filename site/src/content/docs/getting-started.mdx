@@ -108,6 +108,8 @@ head:
 datePublished: "2026-07-19"
 ---
 
+import LegalNotice from "../../components/docs/LegalNotice.astro";
+
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 `libgen-mcp` installs three ways: a prebuilt static binary from the GitHub releases page, a Docker image (`ghcr.io/jmrplens/libgen-mcp`), or `go install`. It needs no account, API key or token. Once it is registered with an MCP client — Claude Code, Claude Desktop, Cursor or VS Code — its four tools (`search`, `get_details`, `download`, `read`) are available immediately.
@@ -318,11 +320,7 @@ See [Configuration](/libgen-mcp/configuration/) for the environment variables yo
 
 ## Your first search
 
-<Aside type="caution">
-	`libgen-mcp` accesses third-party Library Genesis mirrors. You are responsible
-	for respecting the copyright and intellectual-property laws that apply where
-	you live. Use it only for content you are legally entitled to access.
-</Aside>
+<LegalNotice />
 
 Once the client shows `libgen` as connected, ask it to search. A prompt such as:
 

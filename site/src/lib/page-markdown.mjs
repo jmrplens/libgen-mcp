@@ -82,6 +82,15 @@ export function toMarkdown(source, labels) {
 		},
 	);
 
+	// <LegalNotice /> prints one string from the i18n collection. It is expanded
+	// before the Aside pass below so it arrives as an ordinary caution alert,
+	// which means the Markdown copy carries the notice rather than dropping it —
+	// the one piece of text on these pages that must not go missing.
+	text = text.replace(
+		/<LegalNotice\s*\/>/g,
+		() => `<Aside type="caution">${labels["lgm.legal.notice"] ?? ""}</Aside>`,
+	);
+
 	// Asides become GitHub-style alerts, which every Markdown reader that
 	// matters renders and every LLM understands as emphasis.
 	text = text.replace(/<Aside([^>]*)>([\s\S]*?)<\/Aside>/g, (_, tag, body) => {

@@ -1,0 +1,23 @@
+---
+/**
+ * The copyright notice, stated once.
+ *
+ * It appeared on four pages per locale in two wordings that differed only in
+ * their opening subject — "`libgen-mcp` accesses third-party Library Genesis
+ * mirrors" on two of them, "This tool accesses third-party mirrors of Library
+ * Genesis" on the other two — which is the shape drift takes in text nobody
+ * means to change: both are correct, so neither reads as wrong, and a fifth
+ * copy would have picked one at random.
+ *
+ * The surviving wording is the one PRIVACY.md already uses, so the site now
+ * carries two copies rather than five, and scripts/check-facts.mjs asserts they
+ * agree. PRIVACY.md cannot become a component: it is byte-compared by
+ * sync-privacy.mjs, prettier-ignored for exactly that reason, and its Spanish
+ * page is gated on a digest of it.
+ */
+import { Aside } from "@astrojs/starlight/components";
+
+const t = Astro.locals.t;
+---
+
+<Aside type="caution">{t("lgm.legal.notice")}</Aside>

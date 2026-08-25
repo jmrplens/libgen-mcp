@@ -106,6 +106,8 @@ head:
       }
 ---
 
+import LegalNotice from "../../../components/docs/LegalNotice.astro";
+
 import { Aside } from "@astrojs/starlight/components";
 
 `libgen-mcp` expone cuatro herramientas MCP: [`search`](#search), [`get_details`](#get_details), [`download`](#download) y [`read`](#read). Las cuatro están anotadas con una pista de mundo abierto; `search`, `get_details` y `read` son de solo lectura, y `download` es no destructiva e idempotente. Cada handler es a prueba de panics: un fallo inesperado se devuelve como error de herramienta, nunca como una caída de la sesión.
@@ -285,12 +287,7 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 
 ## download
 
-<Aside type="caution">
-	`libgen-mcp` accede a mirrors de terceros de Library Genesis. Eres responsable
-	de respetar las leyes de derechos de autor y de propiedad intelectual que
-	apliquen en tu lugar de residencia. Úsalo solo para contenido al que tengas
-	derecho legal de acceder.
-</Aside>
+<LegalNotice />
 
 `download` es la herramienta que resuelve un ítem por la cadena ordenada de fuentes y lo guarda en un directorio local. Proporciona `md5` o `isbn` para un libro **o** `doi` para un artículo; se requiere al menos uno. Devuelve la ruta guardada y el tamaño. **No** informa de qué fuente sirvió el archivo — consulta [Lo que el resultado no revela](#lo-que-el-resultado-no-revela).
 

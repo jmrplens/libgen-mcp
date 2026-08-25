@@ -29,6 +29,13 @@
 // locale can quietly lose a chip, and a chip can quietly point at a page that
 // does not exist. Both are checked here.
 //
+// LEGAL NOTICE. The copyright notice used to sit on four pages per locale in
+// two wordings that differed only in their opening subject. <LegalNotice />
+// collapsed those eight to one string, but a ninth copy survives in PRIVACY.md
+// as plain prose — and has to, because sync-privacy.mjs byte-compares that file
+// and its Spanish twin is gated on a digest of it. Two copies cannot be one, so
+// they are asserted equal instead.
+//
 // Run: node scripts/check-facts.mjs [--json]
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -110,6 +117,39 @@ function knownRoutes() {
 
 /** A sheet describes a download source if it declares what identifier keys it. */
 const describesASource = (kinds) => kinds.includes("keyedBy");
+
+/**
+ * The English notice, as the i18n collection states it and as PRIVACY.md
+ * repeats it. PRIVACY.md is prose, so the sentences are located rather than
+ * parsed: the notice is whatever runs from its first sentence to the end of
+ * its last.
+ */
+function legalNoticeCopies() {
+	const strings = JSON.parse(
+		readFileSync(
+			new URL("../src/content/i18n/en.json", import.meta.url),
+			"utf8",
+		),
+	);
+	const fromI18n = strings["lgm.legal.notice"];
+	const privacy = readFileSync(
+		fileURLToPath(new URL("../../PRIVACY.md", import.meta.url)),
+		"utf8",
+	);
+	// Anchored on the CLOSING sentence, and the paragraph is taken backwards
+	// from it. Anchoring on the opening sentence instead makes the commonest
+	// drift — a reworded first clause — read as "the notice is gone" rather
+	// than as the mismatch it is.
+	const TAIL = "legally entitled to access.";
+	const end = privacy.indexOf(TAIL);
+	if (end === -1) return { fromI18n, fromPrivacy: null };
+	const paragraphStart = privacy.lastIndexOf("\n\n", end);
+	const fromPrivacy = privacy
+		.slice(paragraphStart === -1 ? 0 : paragraphStart, end + TAIL.length)
+		.replace(/\s+/g, " ")
+		.trim();
+	return { fromI18n, fromPrivacy };
+}
 
 const problems = [];
 const census = { withBoundary: [], withoutBoundary: [] };
@@ -195,8 +235,21 @@ for (const enPath of walk(docsDir)) {
 	});
 }
 
+const legal = legalNoticeCopies();
+if (!legal.fromI18n) {
+	problems.push("i18n/en.json declares no lgm.legal.notice");
+} else if (!legal.fromPrivacy) {
+	problems.push("PRIVACY.md no longer carries the copyright notice");
+} else if (legal.fromI18n !== legal.fromPrivacy) {
+	problems.push(
+		"the copyright notice differs between the i18n collection and PRIVACY.md:\n" +
+			`      i18n    : ${legal.fromI18n}\n` +
+			`      PRIVACY : ${legal.fromPrivacy}`,
+	);
+}
+
 if (process.argv.includes("--json")) {
-	console.log(JSON.stringify({ problems, census }, null, 2));
+	console.log(JSON.stringify({ problems, census, legal }, null, 2));
 } else {
 	const total = census.withBoundary.length + census.withoutBoundary.length;
 	console.log(
@@ -209,16 +262,23 @@ if (process.argv.includes("--json")) {
 	console.log(
 		`page chips: ${chipCount} in each locale, matching, every link resolving`,
 	);
+	console.log(
+		legal.fromI18n === legal.fromPrivacy
+			? "legal notice: the component and PRIVACY.md state it identically"
+			: "legal notice: MISMATCH (see below)",
+	);
 	for (const name of census.withoutBoundary) {
 		console.log(`  no "what it does not cover" row: ${name}`);
 	}
 	if (problems.length) {
-		console.error("\nspec-sheet parity check FAILED:");
+		console.error("\ncheck-facts FAILED:");
 		for (const p of problems) console.error(`  ${p}`);
-		console.error(
-			"\nA <Fact kind> is the language-independent half of the contract; the two " +
-				"locales must declare the same kinds in the same order.",
-		);
+		if (problems.some((p) => p.includes("declares"))) {
+			console.error(
+				"\nA <Fact kind> is the language-independent half of the contract; the " +
+					"two locales must declare the same kinds in the same order.",
+			);
+		}
 	}
 }
 

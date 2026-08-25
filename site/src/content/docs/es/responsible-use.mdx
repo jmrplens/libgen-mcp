@@ -71,6 +71,8 @@ head:
       }
 ---
 
+import LegalNotice from "../../../components/docs/LegalNotice.astro";
+
 import { Aside } from "@astrojs/starlight/components";
 
 libgen-mcp alcanza servicios que alojan material de estatus legal muy distinto,
@@ -79,12 +81,7 @@ bibliotecas en la sombra. Esta página explica qué hace el software al respecto
 qué fuentes prioriza, qué se niega a servir y dónde está la frontera entre la
 responsabilidad de la herramienta y la tuya.
 
-<Aside type="caution">
-	Esta herramienta accede a mirrors de terceros de Library Genesis. Eres
-	responsable de respetar las leyes de derechos de autor y de propiedad
-	intelectual que apliquen en tu lugar de residencia. Úsala solo para contenido
-	al que tengas derecho legal de acceder.
-</Aside>
+<LegalNotice />
 
 ## ¿Es legal usar libgen-mcp?
 

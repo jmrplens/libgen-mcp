@@ -82,6 +82,8 @@ hero:
 datePublished: "2026-07-19"
 ---
 
+import LegalNotice from "../../../components/docs/LegalNotice.astro";
+
 import Home from "../../../components/home/Home.astro";
 import { es } from "../../../data/home";
 import { Aside } from "@astrojs/starlight/components";
@@ -112,12 +114,7 @@ lugar de darse por supuesta.
 
 ## Uso responsable
 
-<Aside type="caution">
-	Esta herramienta accede a mirrors de terceros de Library Genesis. Eres
-	responsable de respetar las leyes de derechos de autor y de propiedad
-	intelectual que apliquen en tu lugar de residencia. Úsala solo para contenido
-	al que tengas derecho legal de acceder.
-</Aside>
+<LegalNotice />
 
 libgen-mcp prueba los proveedores legales de acceso abierto antes que cualquier
 reserva de biblioteca en la sombra, y rechaza el material que no puede

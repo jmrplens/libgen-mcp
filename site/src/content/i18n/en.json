@@ -16,5 +16,6 @@
   "lgm.actions.prompt": "Read this documentation page and answer questions about it:",
   "lgm.fact.symptom": "Symptom",
   "lgm.fact.meaning": "Meaning",
-  "lgm.fact.fixes": "Fixes"
+  "lgm.fact.fixes": "Fixes",
+  "lgm.legal.notice": "This tool accesses third-party mirrors of Library Genesis. You are responsible for respecting the copyright and intellectual-property laws that apply where you live. Use it only for content you are legally entitled to access."
 }
