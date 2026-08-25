@@ -60,13 +60,25 @@ done <"$CHECKSUMS_FILE"
 total=$(jq '.packages | length' "$SERVER_JSON")
 echo "Updated $updated of $total package entries"
 
-# 5. Stamp the LobeHub Marketplace manifest version (if present). The actual
-# publish to LobeHub is a manual step (`make publish-lobehub`) — the CLI has no
-# non-interactive auth — but the version is kept in sync here on every release.
-LHM_JSON="lhm.plugin.json"
-if [[ -f "$LHM_JSON" ]]; then
-  jq --arg v "$VERSION" '.version = $v' "$LHM_JSON" >tmp.$$.json && mv tmp.$$.json "$LHM_JSON"
-  echo "$LHM_JSON version set to $VERSION"
-else
-  echo "NOTE: $LHM_JSON not found, skipping LobeHub manifest update"
-fi
+# 5. Stamp the version into every other version-bearing manifest.
+#
+# server.json is handled above because it carries far more than a version —
+# per-package fields, pinned identifiers and digests. These three carry only the
+# one field, and they are exactly the rest of the set `make check-manifests`
+# gates against VERSION, so a tag now leaves all four consistent instead of the
+# two that happened to be wired first. That asymmetry was not harmless:
+# .plugin/plugin.json once spent a whole release cycle advertising a version the
+# repository had already left behind.
+#
+# lhm.plugin.json is among them for a second reason: the actual publish to
+# LobeHub is a manual step (`make publish-lobehub`, the CLI has no
+# non-interactive auth), so stamping here is what keeps its version honest
+# between the tag and that step.
+for manifest in lhm.plugin.json mcpb/manifest.json .plugin/plugin.json; do
+  if [[ -f "$manifest" ]]; then
+    jq --arg v "$VERSION" '.version = $v' "$manifest" >tmp.$$.json && mv tmp.$$.json "$manifest"
+    echo "$manifest version set to $VERSION"
+  else
+    echo "NOTE: $manifest not found, skipping"
+  fi
+done
