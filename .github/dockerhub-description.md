@@ -62,7 +62,7 @@ This tool accesses third-party mirrors of Library Genesis. You are responsible f
 ## Documentation
 
 - [Repository and full README](https://github.com/jmrplens/libgen-mcp)
-- [Documentation, install guides & configuration reference](https://jmrp.io/docs/libgen-mcp) (also in [Español](https://jmrplens.github.io/libgen-mcp/es/))
+- [Documentation, install guides & configuration reference](https://jmrp.io/docs/libgen-mcp) (also in [Español](https://jmrp.io/docs/libgen-mcp/es/))
 - [Releases and signed binaries](https://github.com/jmrplens/libgen-mcp/releases)
 
 ---
