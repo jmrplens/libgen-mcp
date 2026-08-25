@@ -9,7 +9,9 @@
 //	<name>-light.webp — near-black glyph (#1A1A1A), for Icon.Theme "light"
 //	<name>-dark.webp  — near-white glyph (#FAFAFA), for Icon.Theme "dark"
 //
-// It requires rsvg-convert (librsvg) and cwebp (libwebp) on PATH. This is a
+// It requires cwebp (libwebp) and a librsvg at least [minLibrsvg] on PATH,
+// because the assets are compared byte for byte and older renderers draw
+// them differently. This is a
 // maintainer-only, occasional regeneration step: the generated .webp files
 // are committed to the repository, so ordinary builds and CI never invoke
 // this tool. Run it after adding or editing an icon in icons.go.
@@ -31,6 +33,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +47,12 @@ const (
 
 	colorLight = "#1A1A1A" // near-black, for Icon.Theme "light" (light background)
 	colorDark  = "#FAFAFA" // near-white, for Icon.Theme "dark" (dark background)
+
+	// The two external tools, named once. Each is looked up three times over
+	// (the PATH check, the version probe and the render itself), and they are
+	// resolved by exec.LookPath rather than invoked by bare name.
+	toolRsvg  = "rsvg-convert"
+	toolCwebp = "cwebp"
 )
 
 // iconSource is one svg<Name> constant extracted from icons.go.
@@ -73,10 +82,14 @@ type rasterizer func(svg, color string) ([]byte, error)
 
 func main() {
 	check := flag.Bool("check", false, "verify the committed WebP assets match icons.go without writing them")
+	probe := flag.Bool("probe", false, "report whether the local toolchain can reproduce the committed assets, then exit")
 	flag.Parse()
 
-	if err := requireTools("rsvg-convert", "cwebp"); err != nil {
+	if err := requireRenderer(); err != nil {
 		fatal(err)
+	}
+	if *probe {
+		return
 	}
 	if err := run(*check, rasterize); err != nil {
 		fatal(err)
@@ -206,7 +219,7 @@ func rasterize(svg, color string) ([]byte, error) {
 	colored := strings.ReplaceAll(svg, "currentColor", color)
 	ctx := context.Background()
 
-	rsvgPath, err := exec.LookPath("rsvg-convert")
+	rsvgPath, err := exec.LookPath(toolRsvg)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +233,7 @@ func rasterize(svg, color string) ([]byte, error) {
 		return nil, fmt.Errorf("rsvg-convert: %w: %s", runErr, rsvgErr.String())
 	}
 
-	cwebpPath, err := exec.LookPath("cwebp")
+	cwebpPath, err := exec.LookPath(toolCwebp)
 	if err != nil {
 		return nil, err
 	}
@@ -314,6 +327,96 @@ func iconFileName(s string) string {
 	}, s))
 }
 
+// minLibrsvg is the oldest librsvg release measured to rasterize icons.go
+// into the committed WebP bytes exactly.
+//
+// The renderer's stroke antialiasing changed between 2.54 and 2.58. Debian
+// 12's 2.54.7 and Ubuntu 22.04's 2.52.5 each disagree with the committed
+// assets on three of the nine icons — the three drawn with rounded caps and
+// joins on diagonals — while Ubuntu 24.04's 2.58.0 and Debian 13's 2.60.0
+// reproduce all eighteen files byte for byte, across two different cwebp
+// releases. So 2.58.0 is the lowest version measured to agree, not the
+// release the behavior changed in: 2.55 through 2.57 were never tested and
+// are refused rather than assumed.
+var minLibrsvg = [3]int{2, 58, 0}
+
+// librsvgVersionRE matches the release number in rsvg-convert's --version
+// banner ("rsvg-convert version 2.54.7"). The patch component is optional
+// because some distribution builds print only major.minor.
+var librsvgVersionRE = regexp.MustCompile(`(\d+)\.(\d+)(?:\.(\d+))?`)
+
+// parseLibrsvgVersion extracts the release triple from rsvg-convert's
+// --version output. An absent patch component reads as zero.
+func parseLibrsvgVersion(out string) ([3]int, error) {
+	m := librsvgVersionRE.FindStringSubmatch(out)
+	if m == nil {
+		return [3]int{}, fmt.Errorf("no version number in rsvg-convert output %q", strings.TrimSpace(out))
+	}
+	var v [3]int
+	for i := range v {
+		if m[i+1] == "" {
+			continue
+		}
+		n, err := strconv.Atoi(m[i+1])
+		if err != nil {
+			return [3]int{}, fmt.Errorf("parse librsvg version %q: %w", m[0], err)
+		}
+		v[i] = n
+	}
+	return v, nil
+}
+
+// formatVersion renders a release triple as "major.minor.patch".
+func formatVersion(v [3]int) string {
+	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
+}
+
+// olderThan reports whether release a precedes release b.
+func olderThan(a, b [3]int) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// librsvgVersion reports the release of the rsvg-convert found on PATH.
+func librsvgVersion() ([3]int, error) {
+	path, err := exec.LookPath(toolRsvg)
+	if err != nil {
+		return [3]int{}, err
+	}
+	out, err := exec.CommandContext(context.Background(), path, "--version").Output()
+	if err != nil {
+		return [3]int{}, fmt.Errorf("rsvg-convert --version: %w", err)
+	}
+	return parseLibrsvgVersion(string(out))
+}
+
+// requireRenderer reports whether this machine can reproduce the committed
+// assets: both tools on PATH, and librsvg at least [minLibrsvg].
+//
+// The version is part of the requirement because the assets are compared
+// byte for byte. An older librsvg does not merely fail --check with a
+// misleading "stale assets" report; run without --check it would rewrite all
+// eighteen files in its own dialect and the divergence would be committed.
+// So generating is guarded as well as verifying.
+func requireRenderer() error {
+	if err := requireTools(toolRsvg, toolCwebp); err != nil {
+		return err
+	}
+	v, err := librsvgVersion()
+	if err != nil {
+		return err
+	}
+	if olderThan(v, minLibrsvg) {
+		return fmt.Errorf("librsvg %s renders these icons differently and cannot reproduce the committed assets (need >= %s); `make gen-icon-webp` and `make check-icon-webp` fall back to a pinned container when it is too old",
+			formatVersion(v), formatVersion(minLibrsvg))
+	}
+	return nil
+}
+
 // requireTools reports an actionable error naming every tool in names that
 // is missing from PATH, or nil if all are present.
 func requireTools(names ...string) error {
@@ -324,7 +427,7 @@ func requireTools(names ...string) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("required tool(s) not found on PATH: %s (install librsvg and libwebp, e.g. `brew install librsvg webp`)", strings.Join(missing, ", "))
+		return fmt.Errorf("required tool(s) not found on PATH: %s (install librsvg >= %s and libwebp — `apt install librsvg2-bin webp` or `brew install librsvg webp` — or run `make check-icon-webp`, which falls back to a pinned container)", strings.Join(missing, ", "), formatVersion(minLibrsvg))
 	}
 	return nil
 }

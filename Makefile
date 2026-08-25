@@ -202,20 +202,56 @@ gen-tool-schema: ## Regenerate site/src/data/tool-schema.json from the registere
 check-tool-schema: ## Fail if site/src/data/tool-schema.json is stale (CI mode)
 	go run ./cmd/gen_tool_schema/ --check
 
+# The WebP icon assets are compared byte for byte, which makes the renderer's
+# version part of the toolchain rather than an implementation detail: librsvg's
+# stroke antialiasing changed between 2.54 (Debian 12) and 2.58, and the two
+# disagree on three of the nine icons. So these targets do not assume the local
+# librsvg is usable — they ask the tool itself, via --probe, and fall back to a
+# pinned image when it is not, so every machine emits identical bytes.
+#
+# The threshold is deliberately NOT restated here; it lives beside the
+# comparison it governs, in cmd/gen_icon_webp (minLibrsvg).
+#
+# The tag follows go.mod so the image cannot drift behind the toolchain the
+# repository actually builds with. Override to move it: make ICON_IMAGE=...
+ICON_IMAGE ?= golang:$(shell sed -n 's/^go \([0-9]*\.[0-9]*\).*/\1/p' go.mod)-trixie
+
+# The one path restated from the Go side (outDir): the container writes as
+# root, so a non-root host would otherwise be left with root-owned assets.
+ICON_WEBP_DIR := internal/toolutil/icons/webp
+
+# run-icon-tool runs gen_icon_webp with $(1), locally when this machine can
+# reproduce the committed bytes and in $(ICON_IMAGE) when it cannot. The final
+# branch re-runs --probe for one reason only: to let it print its own diagnosis
+# rather than restating it in a second voice that could drift.
+define run-icon-tool
+@if go run ./cmd/gen_icon_webp/ --probe 2>/dev/null; then \
+	go run ./cmd/gen_icon_webp/ $(1); \
+elif command -v docker >/dev/null 2>&1; then \
+	echo "local librsvg cannot reproduce the committed assets; running in $(ICON_IMAGE)"; \
+	MODCACHE="$$(go env GOMODCACHE)"; MOUNT=""; \
+	[ -d "$$MODCACHE" ] && MOUNT="-v $$MODCACHE:/go/pkg/mod"; \
+	docker run --rm $$MOUNT -v "$(CURDIR)":/src -w /src -e DEBIAN_FRONTEND=noninteractive $(ICON_IMAGE) sh -c \
+		"apt-get update -qq >/dev/null && apt-get install -y -qq librsvg2-bin webp >/dev/null && go run ./cmd/gen_icon_webp/ $(1)" \
+		&& chown -R "$$(id -u):$$(id -g)" "$(ICON_WEBP_DIR)"; \
+else \
+	echo "make: no librsvg that can reproduce the committed assets, and no docker to fall back to" >&2; \
+	go run ./cmd/gen_icon_webp/ --probe; \
+fi
+endef
+
 ## gen-icon-webp: regenerate the light/dark WebP fallbacks for every icon in
-## internal/toolutil/icons.go. Maintainer-only: needs rsvg-convert (librsvg)
-## and cwebp (libwebp) on PATH — `brew install librsvg webp`, or the
-## equivalent apt/dnf packages. Deliberately NOT a CI gate: the generated
-## .webp files under internal/toolutil/icons/webp/ are committed, so ordinary
-## builds never invoke this and CI never needs those tools installed. Run it
-## after adding or editing an icon.
+## internal/toolutil/icons.go. Maintainer-only, and deliberately NOT a CI gate:
+## the generated .webp files under internal/toolutil/icons/webp/ are committed,
+## so ordinary builds never invoke this. Needs either a librsvg >= 2.58 and
+## cwebp on PATH, or docker. Run it after adding or editing an icon.
 gen-icon-webp:
-	go run ./cmd/gen_icon_webp/
+	$(call run-icon-tool,)
 
 ## check-icon-webp: verify the committed WebP icon assets still match
-## icons.go. Same external-tool requirement as gen-icon-webp.
+## icons.go. Same toolchain requirement as gen-icon-webp.
 check-icon-webp:
-	go run ./cmd/gen_icon_webp/ --check
+	$(call run-icon-tool,--check)
 
 eval-pages: ## Regenerate the evaluator results pages (pass DOC=path to also refresh the run table)
 	go run ./cmd/gen_eval_pages/ $(if $(DOC),--results-doc $(DOC))

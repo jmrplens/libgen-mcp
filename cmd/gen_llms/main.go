@@ -49,8 +49,14 @@ const (
 	llmsFullFileName      = "llms-full.txt"
 	llmsSummaryItemFormat = "- %s: %s\n"
 	llmsBoldTitleFormat   = "**%s**\n\n"
-	docsSiteURL           = "https://jmrplens.github.io/libgen-mcp/"
-	repoBlobURL           = "https://github.com/jmrplens/libgen-mcp/blob/main/"
+	// The personal domain, not the Pages host it 301s to, matching the repo
+	// homepage, server.json and the rest of the repository markdown. These
+	// files are the surface a model is pointed at from outside the site, so
+	// they carry the durable address; the site's own canonical URLs and
+	// JSON-LD @ids stay on the deployment host, since a canonical that
+	// redirects away contradicts itself.
+	docsSiteURL = "https://jmrp.io/docs/libgen-mcp/"
+	repoBlobURL = "https://github.com/jmrplens/libgen-mcp/blob/main/"
 )
 
 func main() {

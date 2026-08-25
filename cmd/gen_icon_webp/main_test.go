@@ -519,15 +519,107 @@ func TestRasterize_InvalidSVGFailsAtRsvgConvert(t *testing.T) {
 // TestRun_CheckModeAcceptsCommittedAssets verifies the real, committed WebP
 // assets under internal/toolutil/icons/webp/ still match icons.go, using the
 // real rasterize (rsvg-convert + cwebp) rather than a fake. This is the same
-// gate `make check-icon-webp` and CI would run if those tools were
-// installed; it is skipped here because they are a maintainer-only,
-// non-CI dependency (see the package doc comment).
+// gate `make check-icon-webp` runs; it is skipped when the machine cannot
+// reproduce the committed bytes, which covers both a missing tool (the
+// maintainer-only, non-CI dependency described in the package doc) and a
+// librsvg older than minLibrsvg.
+//
+// The version half of that guard matters as much as the missing-tool half:
+// Debian 12 ships librsvg 2.54.7, which renders three of the nine icons
+// differently, and without the guard this test reports the committed assets
+// as stale on every such machine — a failure about the renderer disguised as
+// a failure about the assets.
 func TestRun_CheckModeAcceptsCommittedAssets(t *testing.T) {
-	if err := requireTools("rsvg-convert", "cwebp"); err != nil {
+	if err := requireRenderer(); err != nil {
 		t.Skip("skipping: " + err.Error())
 	}
 
 	if err := run(true, rasterize); err != nil {
 		t.Fatalf("run(true) error: %v", err)
+	}
+}
+
+// TestParseLibrsvgVersion covers the banner rsvg-convert actually prints, the
+// major.minor-only form some distribution builds print, and output carrying
+// no version at all.
+func TestParseLibrsvgVersion(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		want [3]int
+		bad  bool
+	}{
+		{name: "debian 12 banner", out: "rsvg-convert version 2.54.7\n", want: [3]int{2, 54, 7}},
+		{name: "debian 13 banner", out: "rsvg-convert version 2.60.0\n", want: [3]int{2, 60, 0}},
+		{name: "major minor only", out: "rsvg-convert version 2.58\n", want: [3]int{2, 58, 0}},
+		{name: "no version", out: "rsvg-convert: command not understood\n", bad: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseLibrsvgVersion(tc.out)
+			if tc.bad {
+				if err == nil {
+					t.Fatalf("parseLibrsvgVersion(%q) error = nil, want an error", tc.out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLibrsvgVersion(%q) error: %v", tc.out, err)
+			}
+			if got != tc.want {
+				t.Errorf("parseLibrsvgVersion(%q) = %v, want %v", tc.out, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestOlderThan pins the comparison against the versions that decided
+// minLibrsvg, including that the floor itself is not older than itself.
+func TestOlderThan(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b [3]int
+		want bool
+	}{
+		{name: "ubuntu 22.04 below floor", a: [3]int{2, 52, 5}, b: minLibrsvg, want: true},
+		{name: "debian 12 below floor", a: [3]int{2, 54, 7}, b: minLibrsvg, want: true},
+		{name: "floor itself", a: minLibrsvg, b: minLibrsvg, want: false},
+		{name: "ubuntu 24.04 at floor", a: [3]int{2, 58, 0}, b: minLibrsvg, want: false},
+		{name: "debian 13 above floor", a: [3]int{2, 60, 0}, b: minLibrsvg, want: false},
+		{name: "patch decides", a: [3]int{2, 58, 0}, b: [3]int{2, 58, 1}, want: true},
+		{name: "major outranks minor", a: [3]int{3, 0, 0}, b: [3]int{2, 99, 99}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := olderThan(tc.a, tc.b); got != tc.want {
+				t.Errorf("olderThan(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFormatVersion checks the rendering used in requireRenderer's message,
+// which is the only place a user sees these triples.
+func TestFormatVersion(t *testing.T) {
+	if got, want := formatVersion([3]int{2, 58, 0}), "2.58.0"; got != want {
+		t.Errorf("formatVersion = %q, want %q", got, want)
+	}
+}
+
+// TestRequireRenderer_AgreesWithTheRealToolchain asserts requireRenderer's
+// verdict matches what the machine can actually do, rather than trusting it:
+// when it reports the toolchain usable, the committed assets must verify, and
+// when it refuses, the reason must name either a missing tool or the version.
+func TestRequireRenderer_AgreesWithTheRealToolchain(t *testing.T) {
+	err := requireRenderer()
+	if err == nil {
+		if runErr := run(true, rasterize); runErr != nil {
+			t.Fatalf("requireRenderer() = nil but run(true) failed: %v", runErr)
+		}
+		return
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "not found on PATH") && !strings.Contains(msg, "librsvg") {
+		t.Errorf("requireRenderer() error %q names neither a missing tool nor librsvg", msg)
 	}
 }
