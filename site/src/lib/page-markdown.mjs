@@ -33,6 +33,20 @@ const attr = (tag, name) => {
 	return m ? m[1].replace(/&quot;/g, '"') : undefined;
 };
 
+/**
+ * Strips the common leading indentation from a block, so the indentation a
+ * component's children carry as JSX does not survive into the Markdown, where
+ * four spaces would mean a code block.
+ */
+function dedent(text) {
+	const lines = text.replace(/^\n+/, "").replace(/\s+$/, "").split("\n");
+	const indents = lines
+		.filter((line) => line.trim())
+		.map((line) => /^[ \t]*/.exec(line)[0].length);
+	const common = indents.length ? Math.min(...indents) : 0;
+	return lines.map((line) => line.slice(common)).join("\n");
+}
+
 const unescape = (text) =>
 	text
 		.replace(/&#123;/g, "{")
@@ -43,9 +57,10 @@ const unescape = (text) =>
  * @param {string} source - The .mdx file's full text.
  * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
  * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
+ * @param {string[]} [chain] - The download chain's source ids, in order.
  * @returns {string} Markdown.
  */
-export function toMarkdown(source, labels, schema) {
+export function toMarkdown(source, labels, schema, chain) {
 	let text = source;
 
 	// Frontmatter and the import block are machinery, not content.
@@ -68,18 +83,38 @@ export function toMarkdown(source, labels, schema) {
 				key === "kind"
 					? (labels[`lgm.fact.${value}`] ?? value)
 					: unescape(value);
-			// The body may have been wrapped across lines by prettier; a bullet
-			// wants one paragraph per line, indented so the list holds together.
-			const paragraphs = body
-				.trim()
+			// A body arrives indented as JSX and wrapped by prettier, and it may
+			// contain lists and fenced code — troubleshooting's "Fixes" rows are
+			// four bullets each. Collapsing every newline turned those into one
+			// run-on line in the Markdown copy, which is the artifact the page
+			// actions hand to an assistant. So the body is dedented, and only the
+			// blocks that are genuinely wrapped prose get rejoined.
+			const blocks = dedent(body)
 				.split(/\n\s*\n/)
-				.map((p) => p.replace(/\s*\n\s*/g, " ").trim())
-				.filter(Boolean)
-				.map(unescape);
-			const [first, ...rest] = paragraphs;
-			return (
-				`- **${label}** ${first ?? ""}` + rest.map((p) => `\n\n  ${p}`).join("")
-			);
+				.filter((block) => block.trim());
+			const rendered = blocks.map((block) => {
+				const lines = block.split("\n");
+				const structured = lines.some((line) =>
+					/^\s*(?:[-*+] |\d+\. |```|> |\|)/.test(line),
+				);
+				return unescape(
+					structured
+						? block.replace(/\n+$/, "")
+						: lines.join(" ").replace(/\s+/g, " ").trim(),
+				);
+			});
+			const [first, ...rest] = rendered;
+			// A continuation block is indented two spaces so it stays inside the
+			// bullet instead of closing the list.
+			const inside = (block) =>
+				block
+					.split("\n")
+					.map((line) => (line.trim() ? `  ${line}` : line))
+					.join("\n");
+			const head = first?.includes("\n")
+				? `- **${label}**\n\n${inside(first)}`
+				: `- **${label}** ${first ?? ""}`;
+			return head + rest.map((block) => `\n\n${inside(block)}`).join("");
 		},
 	);
 
@@ -90,6 +125,32 @@ export function toMarkdown(source, labels, schema) {
 	text = text.replace(
 		/<LegalNotice\s*\/>/g,
 		() => `<Aside type="caution">${labels["lgm.legal.notice"] ?? ""}</Aside>`,
+	);
+
+	// <SourceChain> becomes the rendering it replaced: the inline order as a
+	// backticked arrow string, the positional form as a numbered list. The order
+	// comes from the same array the component reads, so the Markdown copy cannot
+	// state a different chain from the page.
+	text = text.replace(/<SourceChain([^>]*)\/>/g, (whole, tag) => {
+		if (attr(tag, "variant") !== "arrow" || !chain?.length) return whole;
+		return "`" + chain.join(" → ") + "`";
+	});
+	text = text.replace(
+		/<SourceChain([^>]*)>([\s\S]*?)<\/SourceChain>/g,
+		(whole, tag, body) => {
+			if (attr(tag, "variant") !== "position" || !chain?.length) return whole;
+			const described = new Map(
+				[
+					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
+				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
+			);
+			return chain
+				.map(
+					(id, index) =>
+						`${index + 1}. \`${id}\` — ${unescape(described.get(id) ?? "")}`,
+				)
+				.join("\n");
+		},
 	);
 
 	// A <SchemaTable> becomes the table it replaced on the page. The rendered
@@ -119,6 +180,21 @@ export function toMarkdown(source, labels, schema) {
 					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
 				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
 			);
+			// The reverse of SchemaTable's own check: it verifies every field has a
+			// slot, but cannot see a slot naming a field the schema does not have.
+			// That one is silently dropped from the page AND the copy, so removing
+			// a parameter from the Go struct would delete its prose with no signal.
+			const orphans = [...described.keys()].filter(
+				(slot) => !rows.some((row) => row.name === slot),
+			);
+			if (orphans.length > 0) {
+				throw new Error(
+					`SchemaTable ${name}.${section}: described ${orphans
+						.map((slot) => `"${slot}"`)
+						.join(", ")}, which the generated schema does not have. ` +
+						"Run `make gen-tool-schema`, or remove the slot.",
+				);
+			}
 			const head =
 				`| ${col("name", "Name")} | ${col("type", "Type")} | ` +
 				`${col("required", "Required")} | ${col("description", "Description")} |\n` +

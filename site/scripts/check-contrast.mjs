@@ -237,6 +237,15 @@ for (const [name, p] of Object.entries(PALETTES)) {
 		4.5,
 	);
 
+	// gray-4 is the palette's faintest ink and belongs to non-text: a chip's
+	// border, a rule. It is held to the 3:1 of WCAG 1.4.11 and NOT to 4.5:1,
+	// because it is not text — but that is exactly the trap. The chain's arrow
+	// separator was set in it and measured 3.45:1, which reads fine as a border
+	// and fails as a character; pa11y caught it and this file could not, since a
+	// token cannot say what it is being used for. Enforced at its real floor, so
+	// a regression in the token itself still fails here.
+	check(name, "faintest ink (non-text only)", p["--sl-color-gray-4"], bg, 3);
+
 	check(name, "decorative hairline on page", p["--lgm-border-strong"], bg, 0);
 
 	// The Mermaid diagrams are painted from these same tokens (see the alias

@@ -56,6 +56,8 @@ head:
 datePublished: "2026-07-19"
 ---
 
+import SourceChain from "../../components/docs/SourceChain.astro";
+
 import { Aside } from "@astrojs/starlight/components";
 
 `libgen-mcp` is configured entirely through environment variables. Every variable is optional: an empty or unset value uses the documented default.
@@ -155,7 +157,7 @@ Unset by default, which leaves the `core` source out of the chain entirely (and 
 
 ### `LIBGEN_MCP_SOURCES` and the source chain
 
-The download chain always runs in the fixed order `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → crossref → oapen → archive → scihub → scidb → libgen → randombook → annas`. Each source declares which items it supports, so in practice:
+The download chain always runs in the fixed order <SourceChain variant="arrow" />. Each source declares which items it supports, so in practice:
 
 - **Books** (identified by `md5`) are tried against `libgen`, then `randombook`, then `annas`.
 - **Books** (identified by `isbn`) are tried against the open-access book sources `oapen`, then `archive`. Both serve only openly licensed or public-domain copies.

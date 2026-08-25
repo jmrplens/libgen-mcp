@@ -1,0 +1,100 @@
+---
+/**
+ * The download chain, rendered from src/data/sources.ts.
+ *
+ * One ordered list of 21 sources exists in internal/config.KnownSources, and
+ * the site restated it on six pages in two locales — a position table, a role
+ * table, an inline arrow string, twenty-one prose spec blocks and a numbered
+ * list. The spec blocks became <Facts>; this component is for the rest, so that
+ * the order and the membership come from one place and a source added to the
+ * chain appears everywhere by itself.
+ *
+ * What is NOT generated is the prose. A source's one-line role, or its status in
+ * the chain, is authored per locale as a named slot keyed on the source id, for
+ * the same reason the tool reference keeps its descriptions: the vocabulary is
+ * shared, the sentences are not.
+ *
+ * `position` renders an ordered list rather than a table on purpose. Twenty-one
+ * rows read down a Position column are a sequence, not a comparison, and the
+ * table this replaces overflowed its container on a phone — a sequence that
+ * cannot be read without swiping sideways is the wrong shape for the claim it is
+ * making, which is precisely that the legal sources come first.
+ */
+import { SOURCES } from "../../data/sources";
+
+interface Props {
+	variant: "arrow" | "position";
+	/** Column heading for the authored column; supplied translated. */
+	label?: string;
+	/** Rendered before each source's identifier row; supplied translated. */
+	keyedByLabel?: string;
+}
+
+const { variant, label, keyedByLabel } = Astro.props;
+
+const KEYED_BY: Record<string, string> = {
+	doi: "DOI",
+	md5: "MD5",
+	isbn: "ISBN",
+	"doi-or-isbn": "DOI / ISBN",
+};
+
+// Every source must be described, or the page is quietly claiming a shorter
+// chain than the server runs. Same contract as SchemaTable's slot check.
+if (variant === "position") {
+	const undescribed = SOURCES.filter((source) => !Astro.slots.has(source.id));
+	if (undescribed.length > 0) {
+		throw new Error(
+			`SourceChain: no entry given for ` +
+				undescribed.map((source) => `"${source.id}"`).join(", ") +
+				`. Add a <Fragment slot="…"> for each source in src/data/sources.ts.`,
+		);
+	}
+}
+---
+
+{
+	/*
+	 * Inline, not a block. This form replaces a code span in the middle of a
+	 * sentence — "the chain always runs in the fixed order …" — so emitting a
+	 * <p> here nests one paragraph inside another, which HTML closes
+	 * implicitly and html-validate rejects.
+	 */
+	variant === "arrow" && (
+		<span class="source-arrow">
+			{SOURCES.map((source, index) => (
+				<>
+					{index > 0 && <span class="source-arrow-sep" aria-hidden="true">→</span>}
+					<code>{source.id}</code>
+				</>
+			))}
+		</span>
+	)
+}
+
+{
+	variant === "position" && (
+		<ol class="source-chain" data-source-chain>
+			{SOURCES.map((source, index) => (
+				<li data-source={source.id}>
+					<span class="chain-n" aria-hidden="true">
+						{String(index + 1).padStart(2, "0")}
+					</span>
+					<div class="chain-body">
+						<p class="chain-head">
+							<code>{source.id}</code>
+							<span class="chain-keyed">
+								{keyedByLabel && <span class="chain-keyed-label">{keyedByLabel}</span>}
+								{KEYED_BY[source.keyedBy] ?? source.keyedBy}
+							</span>
+						</p>
+						<p class="chain-status">
+							{label && <span class="sr-only">{label}: </span>}
+							<slot name={source.id} />
+						</p>
+					</div>
+				</li>
+			))}
+		</ol>
+	)
+}

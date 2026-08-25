@@ -27,6 +27,37 @@ const schema = JSON.parse(
 	readFileSync(join(root, "src/data/tool-schema.json"), "utf8"),
 );
 
+/**
+ * The download chain's source ids, in order, read from src/data/sources.ts.
+ *
+ * A .mjs script cannot import a .ts module, so the array is parsed rather than
+ * loaded. The parse is strict on purpose: it asserts the shape it expects and
+ * the count the chain is known to have, so a refactor that changes either
+ * aborts the build instead of quietly emitting a shorter chain into every
+ * Markdown copy.
+ */
+function downloadChain() {
+	const ts = readFileSync(join(root, "src/data/sources.ts"), "utf8");
+	const array = /export const SOURCES: Source\[\] = \[([\s\S]*?)\n\];/.exec(ts);
+	if (!array) {
+		throw new Error(
+			"[page-markdown] cannot find SOURCES in src/data/sources.ts",
+		);
+	}
+	const ids = [...array[1].matchAll(/\bid:\s*"([a-z0-9_]+)"/g)].map(
+		(m) => m[1],
+	);
+	const declared = (ts.match(/\bid:\s*"/g) ?? []).length;
+	if (ids.length === 0 || ids.length !== declared) {
+		throw new Error(
+			`[page-markdown] parsed ${ids.length} source ids but the file declares ${declared}`,
+		);
+	}
+	return ids;
+}
+
+const chain = downloadChain();
+
 const labels = {
 	en: JSON.parse(readFileSync(join(root, "src/content/i18n/en.json"), "utf8")),
 	es: JSON.parse(readFileSync(join(root, "src/content/i18n/es.json"), "utf8")),
@@ -54,6 +85,7 @@ for (const source of walk(docsDir)) {
 		readFileSync(source, "utf8"),
 		labels[locale],
 		schema,
+		chain,
 	);
 	const residual = residualComponents(markdown);
 	if (residual.length) {

@@ -342,8 +342,10 @@ export default defineConfig({
 	// here costs a headless Chromium at build time and nothing at all at runtime.
 	markdown: {
 		rehypePlugins: [
-			// After rehypeMermaid, so a diagram's own markup is never mistaken for
-			// a content table.
+			// BEFORE rehypeMermaid, deliberately: at this point a diagram is still
+			// a fenced code block, so its markup cannot be mistaken for a content
+			// table. Moving this after rehypeMermaid would hand it the rendered
+			// SVG instead.
 			rehypeWideTables,
 			[
 				rehypeMermaid,
@@ -587,6 +589,7 @@ export default defineConfig({
 				"./src/styles/home.css",
 				"./src/styles/facts.css",
 				"./src/styles/schema-table.css",
+				"./src/styles/source-chain.css",
 				"./src/styles/tables.css",
 				"./src/styles/page-actions.css",
 				"./src/styles/page-chips.css",
