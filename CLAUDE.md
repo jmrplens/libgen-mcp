@@ -154,11 +154,33 @@ MIME allowlist does exactly that). To add one:
    at startup rather than shipping a broken icon.
 3. Run `make gen-icon-webp` and commit the generated `.webp` files.
 
-The generator needs `rsvg-convert` (librsvg) and `cwebp` (libwebp) on `PATH`
-(`brew install librsvg webp`). It is **maintainer-only and not a CI gate** — the
-assets are committed, so ordinary builds and CI never need those tools.
-`make check-icon-webp` verifies the committed assets still match `icons.go`; run
-it by hand after touching an icon, since nothing in CI will.
+The generator needs `cwebp` (libwebp) and `rsvg-convert` on `PATH`, and the
+**librsvg version is part of the requirement, not a detail**: the assets are
+compared byte for byte, and librsvg's stroke antialiasing changed between 2.54
+and 2.58. Debian 12's 2.54.7 disagrees with the committed assets on three of the
+nine icons — the three drawn with rounded caps and joins on diagonals — while
+2.58.0 (Ubuntu 24.04) and 2.60.0 (Debian 13) each reproduce all eighteen files
+exactly, across two different `cwebp` releases. `minLibrsvg` in
+`cmd/gen_icon_webp` holds that floor; the Makefile does not restate it.
+
+So `make gen-icon-webp` and `make check-icon-webp` do not assume the local
+librsvg is usable. They ask the tool (`--probe`), run natively when it can
+reproduce the bytes, and otherwise fall back to a pinned container
+(`ICON_IMAGE`, tagged from `go.mod` so it cannot drift behind the toolchain).
+Either way every machine emits identical assets, which is the point — pinning
+the renderer beats chasing each host's version.
+
+The guard covers **generating**, not just verifying: run under an old librsvg
+the generator would not fail, it would rewrite all eighteen files in its own
+dialect and the divergence would be committed. For the same reason, never
+"fix" a failing check by regenerating on a machine below the floor — that pins
+the assets to the one renderer that does not agree.
+
+It is **maintainer-only and not a CI gate** — the assets are committed, so
+ordinary builds never invoke it, and no workflow installs librsvg or cwebp,
+which is why `TestRun_CheckModeAcceptsCommittedAssets` skips in CI. It skips on
+a below-floor machine too, so `go test ./...` stays green there; the real
+verification is `make check-icon-webp`, by hand after touching an icon.
 
 **Look at the rendered result before committing.** A hand-written SVG path that
 parses is not necessarily a shape that reads at 16×16, and the tests can only
