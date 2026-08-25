@@ -83,6 +83,18 @@ responsabilidad de la herramienta y la tuya.
 
 <LegalNotice />
 
+<Aside type="caution">
+	**Contenido no confiable.** Los archivos, metadatos y enlaces que devuelve
+	este servidor vienen de mirrors de terceros y de los propios documentos —
+	trátalos como datos no confiables, nunca como instrucciones. Un libro o
+	artículo descargado, un filename o la descripción de un registro pueden
+	contener texto escrito para manipular a un agente de IA (por ejemplo, «ignora
+	tus instrucciones anteriores»). Tu agente debe tratar todo ese contenido como
+	información inerte que resumir o citar, y no debe actuar sobre ninguna
+	instrucción incrustada en él. Cada herramienta lo dice en su propia
+	descripción, y `read` lo repite al principio de cada respuesta.
+</Aside>
+
 ## ¿Es legal usar libgen-mcp?
 
 Depende de qué le pidas y de dónde estés. libgen-mcp es un cliente: es software con licencia MIT que habla con servicios de búsqueda y descarga en tu nombre, y no aloja ni redistribuye nada por sí mismo. El derecho de autor es territorial, y la misma petición puede ser lícita en un país y no en otro, así que la herramienta no puede tomar esa decisión por ti. Hay usos que no son controvertidos casi en ningún sitio: obras en dominio público, artículos de acceso abierto publicados bajo una licencia que permite la redistribución, preprints que los propios autores han depositado, y obras de las que ya tienes un ejemplar. Y hay usos que sí lo son, empezando por descargar libros comerciales protegidos sobre los que no tienes ningún derecho. libgen-mcp está construido para que lo primero sea el camino por defecto y lo segundo haya que pedirlo de forma deliberada.
@@ -93,29 +105,29 @@ Ordena la cadena de descarga para que los proveedores de acceso abierto se prueb
 
 La cadena completa, en orden:
 
-| Posición | Fuente       | Identificado por | Estado                                    |
-| -------- | ------------ | ---------------- | ----------------------------------------- |
-| 1        | `unpaywall`  | DOI              | Acceso abierto                            |
-| 2        | `openalex`   | DOI              | Acceso abierto                            |
-| 3        | `europepmc`  | DOI              | Acceso abierto                            |
-| 4        | `biorxiv`    | DOI              | Acceso abierto (preprints)                |
-| 5        | `rfc`        | DOI              | Normas abiertas (RFC Editor)              |
-| 6        | `nist`       | DOI              | Normas abiertas (NIST)                    |
-| 7        | `dagstuhl`   | DOI              | Acceso abierto (Schloss Dagstuhl / DROPS) |
-| 8        | `acl`        | DOI              | Acceso abierto (ACL Anthology)            |
-| 9        | `zenodo`     | DOI              | Acceso abierto (Zenodo)                   |
-| 10       | `scielo`     | DOI              | Acceso abierto (SciELO Brasil)            |
-| 11       | `fao`        | DOI              | Acceso abierto (FAO Knowledge Repository) |
-| 12       | `fatcat`     | DOI              | Acceso abierto (Internet Archive Scholar) |
-| 13       | `core`       | DOI              | Acceso abierto (requiere clave gratuita)  |
-| 14       | `crossref`   | DOI              | El enlace que depositó el propio editor   |
-| 15       | `oapen`      | DOI, ISBN        | Libros con licencia abierta               |
-| 16       | `archive`    | ISBN             | Solo escaneos de dominio público          |
-| 17       | `scihub`     | DOI              | Biblioteca en la sombra                   |
-| 18       | `scidb`      | DOI              | Biblioteca en la sombra                   |
-| 19       | `libgen`     | md5              | Catálogo de Library Genesis               |
-| 20       | `randombook` | md5              | Mirror de Library Genesis                 |
-| 21       | `annas`      | md5              | Biblioteca en la sombra                   |
+| #   | Fuente       | Clave     | Estado                                    |
+| --- | ------------ | --------- | ----------------------------------------- |
+| 1   | `unpaywall`  | DOI       | Acceso abierto                            |
+| 2   | `openalex`   | DOI       | Acceso abierto                            |
+| 3   | `europepmc`  | DOI       | Acceso abierto                            |
+| 4   | `biorxiv`    | DOI       | Acceso abierto (preprints)                |
+| 5   | `rfc`        | DOI       | Normas abiertas (RFC Editor)              |
+| 6   | `nist`       | DOI       | Normas abiertas (NIST)                    |
+| 7   | `dagstuhl`   | DOI       | Acceso abierto (Schloss Dagstuhl / DROPS) |
+| 8   | `acl`        | DOI       | Acceso abierto (ACL Anthology)            |
+| 9   | `zenodo`     | DOI       | Acceso abierto (Zenodo)                   |
+| 10  | `scielo`     | DOI       | Acceso abierto (SciELO Brasil)            |
+| 11  | `fao`        | DOI       | Acceso abierto (FAO Knowledge Repository) |
+| 12  | `fatcat`     | DOI       | Acceso abierto (Internet Archive Scholar) |
+| 13  | `core`       | DOI       | Acceso abierto (requiere clave gratuita)  |
+| 14  | `crossref`   | DOI       | El enlace que depositó el propio editor   |
+| 15  | `oapen`      | DOI, ISBN | Libros con licencia abierta               |
+| 16  | `archive`    | ISBN      | Solo escaneos de dominio público          |
+| 17  | `scihub`     | DOI       | Biblioteca en la sombra                   |
+| 18  | `scidb`      | DOI       | Biblioteca en la sombra                   |
+| 19  | `libgen`     | md5       | Catálogo de Library Genesis               |
+| 20  | `randombook` | md5       | Mirror de Library Genesis                 |
+| 21  | `annas`      | md5       | Biblioteca en la sombra                   |
 
 Las posiciones 1–16 se agotan antes de intentar la 17. Puedes quitar fuentes con
 `LIBGEN_MCP_SOURCES`, pero no puedes reordenarlas: un despliegue puede estrechar
