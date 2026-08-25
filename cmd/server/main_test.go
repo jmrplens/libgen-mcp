@@ -554,10 +554,30 @@ func TestServeHTTPStateless(t *testing.T) {
 		}
 	})
 
+	// The transport spec's SHOULD. It is load-bearing here rather than
+	// cosmetic: download and read emit notifications/progress on this stream
+	// for the duration of a fetch, so a proxy that buffers holds every one of
+	// them until the transfer ends.
+	t.Run("sse response tells proxies not to buffer", func(t *testing.T) {
+		reply := postMCP(t, ts.URL, listToolsRequest)
+		if ct := reply.header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+			t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+		}
+		if got := reply.header.Get("X-Accel-Buffering"); got != "no" {
+			t.Errorf("X-Accel-Buffering = %q, want %q", got, "no")
+		}
+	})
+
 	t.Run("health is unaffected", func(t *testing.T) {
 		reply := getURL(t, ts.URL+"/health")
 		if reply.status != http.StatusOK {
 			t.Errorf("status = %d, want %d", reply.status, http.StatusOK)
+		}
+		// The no-buffering header is scoped to the MCP endpoint. A probe
+		// response is a small JSON body with nothing to stream, so it must
+		// not pick the header up.
+		if got := reply.header.Get("X-Accel-Buffering"); got != "" {
+			t.Errorf("X-Accel-Buffering = %q on /health, want none", got)
 		}
 	})
 }

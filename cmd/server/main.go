@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -256,6 +257,31 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
 }
 
+// sseNoBuffering sets X-Accel-Buffering: no on responses to requests that
+// negotiate Server-Sent Events, which every streamable HTTP client does. The
+// 2026-07-28 transport spec makes it a SHOULD: an nginx-class reverse proxy
+// otherwise accumulates events in a buffer instead of forwarding them.
+//
+// It is not decoration here. The POST response stream is a real stream —
+// download and read emit notifications/progress on it (see progressNotifier)
+// while a multi-megabyte file is being fetched — so a buffering proxy would
+// hold every progress event until the transfer finished, which is precisely
+// the failure mode the header exists to prevent. The go-sdk sets Cache-Control
+// and Content-Type on the SSE response but not this header.
+//
+// The header is written on the way in, before the SDK writes any of its own, so
+// it is already in the map when the response headers are flushed. Harmless on
+// the requests that negotiate down to application/json under --json-response: a
+// proxy simply does not buffer a small JSON body either.
+func sseNoBuffering(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			w.Header().Set("X-Accel-Buffering", "no")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // newHTTPHandler mounts the MCP handler at /, exposes GET /health, and serves
 // the server card when one was built. A nil card leaves the route unmounted, so
 // the path falls through to the MCP handler exactly as it did before.
@@ -270,7 +296,7 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 			_, _ = w.Write(cardJSON)
 		})
 	}
-	mux.Handle("/", mcpHandler)
+	mux.Handle("/", sseNoBuffering(mcpHandler))
 	return mux
 }
 
