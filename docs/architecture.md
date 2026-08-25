@@ -315,9 +315,13 @@ The server speaks MCP over one of two transports, selected at startup:
   `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport,
   suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
-  `status`, `version`, `commit`, `started_at` and `uptime_seconds`, plus the
-  server card at `GET /.well-known/mcp/server-card.json`, while the
-  server is serving — handy for container and load-balancer health checks.
+  `status`, `version`, `commit`, `started_at` and `uptime_seconds` while the
+  server is serving — handy for container and load-balancer health checks. It
+  also publishes a server card at `GET /.well-known/mcp/server-card.json`:
+  `serverInfo`, the `capabilities` the handshake negotiates, an `authentication`
+  block, and the full `tools` and `prompts` listings, served with
+  `Access-Control-Allow-Origin: *` so a directory or scanner — a browser-based
+  one included — can read the surface without opening an MCP session.
 
 Both transports share the same tools, HTTP client, and download pipeline; only the
 request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
@@ -395,9 +399,9 @@ light-theme WebP, `icons[2]` the dark-theme one — on every tool, every prompt 
 mark alike, in `tools/list`, in `prompts/list`, in the `_meta` SEP-2575 attaches to every
 response, and in the server card, which publishes the arrays verbatim. Select by `mimeType`
 and `theme` if you can, but a consumer that reads positionally — a registry rendering
-`icons[0]` as its thumbnail, say — can rely on the SVG staying first. `internal/toolutil/
-icons_test.go` pins the shape entry by entry, so the order cannot change without a test
-failing first.
+`icons[0]` as its thumbnail, say — can rely on the SVG staying first.
+`internal/toolutil/icons_test.go` pins the shape entry by entry, so the order
+cannot change without a test failing first.
 
 The SVG is authored by hand and uses `currentColor`, so one themeless entry adapts to any
 client theme. The raster pair exists because a client can support icons and still refuse this
@@ -443,8 +447,10 @@ occupies:
 
 Nothing else is ours, and the gaps are the point. There is not one vendor `_meta` key on the
 wire — the only `_meta` is the SDK's own `io.modelcontextprotocol/serverInfo` (SEP-2575). The
-binary requires no custom request header and sends no custom response header beyond
-`Content-Type` and the card's `Cache-Control`. Tool schemas use standard JSON Schema
+binary requires no custom request header, and every response header it sets is a
+standard one: `Content-Type`, the card's `Cache-Control` and CORS pair, and the
+transport spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None
+of them is vendor-defined. Tool schemas use standard JSON Schema
 vocabulary only; `annotations` carries the five standard `ToolAnnotations` fields;
 `ttlMs`/`cacheScope` are SEP-2549 fields set only on the result types that define them; and
 the download consent question uses the standard SEP-2322 `InputRequests`/`InputResponses`.

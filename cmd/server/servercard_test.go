@@ -284,7 +284,14 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	}
 
 	preflightRec := httptest.NewRecorder()
-	handler.ServeHTTP(preflightRec, httptest.NewRequestWithContext(t.Context(), http.MethodOptions, serverCardPath, nil))
+	preflight := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, serverCardPath, nil)
+	// The realistic preflight: a browser only sends one when the fetch carries
+	// a header of its own, and it names that header here. Without the echo
+	// below the browser refuses the request it was asking permission for.
+	preflight.Header.Set("Origin", "https://example.invalid")
+	preflight.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	preflight.Header.Set("Access-Control-Request-Headers", "x-scanner-id")
+	handler.ServeHTTP(preflightRec, preflight)
 	if preflightRec.Code != http.StatusNoContent {
 		t.Fatalf("OPTIONS status = %d, want %d", preflightRec.Code, http.StatusNoContent)
 	}
@@ -293,6 +300,9 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	}
 	if methods := preflightRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(methods, http.MethodGet) {
 		t.Errorf("Access-Control-Allow-Methods = %q, want it to name GET", methods)
+	}
+	if allowed := preflightRec.Header().Get("Access-Control-Allow-Headers"); allowed != "x-scanner-id" {
+		t.Errorf("Access-Control-Allow-Headers = %q, want the requested %q echoed back", allowed, "x-scanner-id")
 	}
 }
 

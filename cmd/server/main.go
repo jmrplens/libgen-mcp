@@ -297,9 +297,20 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 		// Allowing every origin gives away nothing: the card is served
 		// unauthenticated and is byte-identical for every caller, so there is
 		// no per-origin answer for a page to fish out.
-		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			// A plain fetch of the card is a simple request and never
+			// preflights, so this branch exists for the caller that adds a
+			// header of its own — a scanner stamping a request id, say. Its
+			// request is refused unless the preflight names that header back,
+			// and the browser sends the list to name: echoing it allows
+			// exactly what was asked for and nothing else, which a static list
+			// cannot do without guessing, and which "*" cannot do at all for a
+			// caller that sends credentials.
+			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
+				w.Header().Set("Access-Control-Allow-Headers", want)
+			}
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
