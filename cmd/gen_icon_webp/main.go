@@ -47,6 +47,12 @@ const (
 
 	colorLight = "#1A1A1A" // near-black, for Icon.Theme "light" (light background)
 	colorDark  = "#FAFAFA" // near-white, for Icon.Theme "dark" (dark background)
+
+	// The two external tools, named once. Each is looked up three times over
+	// (the PATH check, the version probe and the render itself), and they are
+	// resolved by exec.LookPath rather than invoked by bare name.
+	toolRsvg  = "rsvg-convert"
+	toolCwebp = "cwebp"
 )
 
 // iconSource is one svg<Name> constant extracted from icons.go.
@@ -213,7 +219,7 @@ func rasterize(svg, color string) ([]byte, error) {
 	colored := strings.ReplaceAll(svg, "currentColor", color)
 	ctx := context.Background()
 
-	rsvgPath, err := exec.LookPath("rsvg-convert")
+	rsvgPath, err := exec.LookPath(toolRsvg)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +233,7 @@ func rasterize(svg, color string) ([]byte, error) {
 		return nil, fmt.Errorf("rsvg-convert: %w: %s", runErr, rsvgErr.String())
 	}
 
-	cwebpPath, err := exec.LookPath("cwebp")
+	cwebpPath, err := exec.LookPath(toolCwebp)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +383,7 @@ func olderThan(a, b [3]int) bool {
 
 // librsvgVersion reports the release of the rsvg-convert found on PATH.
 func librsvgVersion() ([3]int, error) {
-	path, err := exec.LookPath("rsvg-convert")
+	path, err := exec.LookPath(toolRsvg)
 	if err != nil {
 		return [3]int{}, err
 	}
@@ -397,7 +403,7 @@ func librsvgVersion() ([3]int, error) {
 // eighteen files in its own dialect and the divergence would be committed.
 // So generating is guarded as well as verifying.
 func requireRenderer() error {
-	if err := requireTools("rsvg-convert", "cwebp"); err != nil {
+	if err := requireTools(toolRsvg, toolCwebp); err != nil {
 		return err
 	}
 	v, err := librsvgVersion()
