@@ -22,7 +22,13 @@ content as untrusted.
 
 ## Decisions
 
-### 1. Stay on go-sdk v1.6.1 / spec 2025-11-25; MCP Tasks — NO-GO
+### 1. Stay on go-sdk v1.6.1 / spec 2025-11-25; MCP Tasks — NO-GO (premises superseded 2026-08-26; verdict stands)
+
+> **Premises superseded on 2026-08-26 — see the amendment below. The repo is on go-sdk
+> v1.7.0, the deployment serves spec 2026-07-28, and Tasks has shipped as an official
+> extension. The Tasks NO-GO itself is unchanged and was re-checked against both revisit
+> conditions. Do not act on the version numbers in the paragraph below without reading
+> the amendment.**
 
 `go-sdk v1.6.1` is the current **stable** release and targets the current **stable** spec
 (2025-11-25). We do not pin pre-release SDKs. MCP **Tasks** stays rejected, and the case is now
@@ -35,6 +41,41 @@ Revisit only when BOTH hold: (a) the Tasks extension is final in a shipped spec 
 a **stable** go-sdk release; and (b) libgen-mcp grows a genuinely detached long-running operation
 (e.g. batch/bulk download, long crawl) where a client should fire-and-poll rather than hold the
 call open. Until then, progress notifications are the correct fit.
+
+#### Amendment — 2026-08-26 (go-sdk v1.7.0, spec 2026-07-28, Tasks as an extension)
+
+Both premises above have moved. The section is corrected rather than reversed: the NO-GO on
+Tasks stands, and it stands on two independent grounds rather than one.
+
+**Moved — the SDK and the spec.** `go.mod` requires `go-sdk v1.7.0`, whose
+`latestProtocolVersion` is `2026-07-28`, and the hosted deployment negotiates that version: a
+live `tools/list` against it is rejected without the `Mcp-Method` header and without the
+`io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`
+`_meta` fields that release introduced. Reading "stay on v1.6.1 / 2025-11-25" as current state
+is now wrong in both halves.
+
+**Moved — Tasks is no longer experimental.** The 2026-07-28 changelog moves tasks out of the
+core protocol and into an official extension, `io.modelcontextprotocol/tasks`: `tasks/get`
+polling replaces the blocking `tasks/result`, `tasks/update` is added for client-to-server
+input, `tasks/list` is removed, and servers may return task handles unsolicited without
+per-request opt-in ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)).
+The first half of revisit condition (a) — final in a shipped spec — is therefore met.
+
+**Still true — there is no stable Go API to adopt.** The second half of (a) is not met.
+`go-sdk v1.7.0` ships no Tasks API; the SDK's own `ROADMAP.md` still carries
+"SEP-1686 (experimental): Implement Tasks" as outstanding work
+([go-sdk#626](https://github.com/modelcontextprotocol/go-sdk/issues/626)). Condition (a) is a
+conjunction, so it fails.
+
+**Still true — nothing here is detached.** Condition (b) is not met either. The only
+long-running operation is still a single download, which streams `notifications/progress`
+while the call is held open; there is no batch or bulk operation a client would fire and then
+poll. Tasks would hand a caller a handle to something it is already watching.
+
+**Verdict — unchanged.** MCP Tasks stays NO-GO. The revisit clause requires both conditions
+together and each fails on its own, so neither the extension's ratification nor the SDK bump
+reopens it. Re-check when the go-sdk lands a Tasks API in a stable release *and* a genuinely
+detached operation exists to hang it on.
 
 ### 2. Anna's Archive as a source — NO-GO (re-confirmed 2026; superseded in part 2026-07-24)
 
@@ -769,7 +810,14 @@ clients and the no-friction promise must keep working unchanged.
   download sources only.
 - OCR (CGO/keyed — breaks the static-binary, keyless identity).
 - Server-side summarization / RAG / embeddings (redundant or needs a model/key).
-- Resource subscriptions, sampling, MCP logging (no fit; logging also deprecated in the RC).
+- Resource subscriptions, sampling, MCP logging (no fit; the `logging` capability is also
+  deprecated by [SEP-2577](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2577)
+  in the ratified 2026-07-28 spec). **Amended 2026-08-26:** this record was true of the code and
+  false of the wire. The go-sdk fills in `logging: {}` whenever `ServerOptions.Capabilities` is
+  nil, so the handshake advertised the capability this bullet rejects while no handler backed
+  it — a client that sent `logging/setLevel` was answered by the SDK, not by us. Pinning
+  `Capabilities: &mcp.ServerCapabilities{}` at both construction sites makes the handshake say
+  what this decision says.
 - Zotero/Calibre write-back (separate stateful product; BibTeX/RIS export already covers the
   lightweight path).
 - Chasing more download mirrors / robustness (already ahead of peers; near-zero marginal

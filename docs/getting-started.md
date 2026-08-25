@@ -189,10 +189,12 @@ In HTTP mode the server also exposes a `GET /health` readiness endpoint that ret
 while serving, handy for container and load-balancer health checks.
 
 In HTTP mode the server also publishes a **server card** at
-`GET /.well-known/mcp/server-card.json`: `serverInfo`, an `authentication` block (this server
-takes none), and the full `tools` and `prompts` listings, so a directory or scanner can read
-the whole surface — the four prompts included — without opening an MCP session. It is served
-unauthenticated and is unaffected by stateless mode's `405` on the MCP endpoint.
+`GET /.well-known/mcp/server-card.json`: `serverInfo`, the `capabilities` the handshake
+negotiates, an `authentication` block (this server takes none), and the full `tools` and
+`prompts` listings, so a directory or scanner can read the whole surface — the four prompts
+included — without opening an MCP session. It is served unauthenticated, answers CORS
+preflight and carries `Access-Control-Allow-Origin: *` so a browser-based directory can read
+it, and is unaffected by stateless mode's `405` on the MCP endpoint.
 
 The transport is **stateless by default**: there is no `Mcp-Session-Id`, each POST is a
 complete request, and `GET`/`DELETE` on the MCP endpoint return `405` (`/health` is

@@ -244,6 +244,10 @@ Logs go to **stderr** (stdout is reserved for the stdio MCP transport), so check
 client's server-log view or the terminal where the process runs. Valid levels are `debug`,
 `info` (default), `warn`, and `error`.
 
+These are the server's own diagnostic logs, written straight to stderr. They are not the MCP
+`logging` capability — that capability is deprecated (SEP-2577), this server declares no
+handler for it, and no log line ever reaches a client as an MCP notification.
+
 ## Disk space
 
 **Symptom.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.

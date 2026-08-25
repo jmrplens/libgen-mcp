@@ -154,6 +154,12 @@ MIME allowlist does exactly that). To add one:
    at startup rather than shipping a broken icon.
 3. Run `make gen-icon-webp` and commit the generated `.webp` files.
 
+The entry order — SVG, light WebP, dark WebP — is a **published contract**, documented in
+`docs/architecture.md` § Icons and pinned entry by entry in
+`internal/toolutil/icons_test.go`. Consumers may read `icons[0]` positionally, and the server
+card republishes the arrays verbatim, so reordering `icon()` is a breaking change to a public
+surface, not a refactor.
+
 The generator needs `cwebp` (libwebp) and `rsvg-convert` on `PATH`, and the
 **librsvg version is part of the requirement, not a detail**: the assets are
 compared byte for byte, and librsvg's stroke antialiasing changed between 2.54
