@@ -1716,8 +1716,10 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // until the call runs, and that the operator's source and credential configuration
 // is invisible from here.
 //
-// The middle fact has since been revised twice. The serving source is not disclosed
-// once the call HAS run either; and the flag that briefly stood in for it is gone
+// The middle fact has since been revised three times. A saved file still does not
+// disclose the serving source once the call HAS run; a resolved link does, because
+// the URL handed back names the provider by its own hostname and a remote deployment
+// resolves every call. The flag that briefly stood in for it is gone
 // too, because a pin narrows the chain to that one source, so the flag could only
 // ever be true. What the description carries in its place is the contract that makes
 // that so — a pinned download is served by the pinned source or it fails — which is
@@ -1740,9 +1742,12 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	for _, want := range []string{
 		// The source is not selected when the description is read.
 		"chosen while resolving",
-		// Nor disclosed after it has been. What stands in its place is the pin's own
-		// contract, stated where the source argument is introduced.
-		"is not named in the result",
+		// Nor disclosed after it has been, with one exception the description must state
+		// rather than paper over: a resolved link names its source, because the URL beside
+		// it identifies the provider anyway. A saved file still names nothing, and what
+		// stands in place of provenance is the pin's own contract, stated where the source
+		// argument is introduced.
+		"is named back only beside a resolved link — never for a saved file",
 		"restrict the download to one provider instead of all of them, with no substitution",
 		"a failure means it could not serve the item",
 		// The operator's configuration is the thing that settles this, and it is
