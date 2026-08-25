@@ -68,9 +68,16 @@ const webPage = {
     width: 1200,
     height: 630,
   },
+  // The lead sentence lives in a different element on the landing: it is a
+  // splash page, so its first words are the hero tagline, and the first
+  // paragraph of `.sl-markdown-content` is now several screens down inside a
+  // component. A selector that resolves to nothing is worse than a narrower
+  // one — it silently drops the page from the speakable claim.
   speakable: {
     "@type": "SpeakableSpecification",
-    cssSelector: ["h1", ".sl-markdown-content > p:first-of-type"],
+    cssSelector: isHome
+      ? ["h1", ".hero .tagline"]
+      : ["h1", ".sl-markdown-content > p:first-of-type"],
   },
   ...(updated ? { dateModified: updated } : {}),
   ...(data.datePublished ? { datePublished: data.datePublished } : {}),

@@ -20,15 +20,15 @@ import (
 var webpFS embed.FS
 
 // Brand icon: the same open-book-and-arrow mark published at
-// site/src/assets/logo-{light,dark}.svg, merged into one currentColor path
-// instead of copying either theme variant.
+// site/src/assets/logo.svg, merged into one currentColor path instead of
+// carrying that file's three separately painted sub-paths.
 //
 // That merge is possible because the three sub-paths (the arrow, the left
-// page, the right page) are each already a separate closed shape — they were
-// given three different fill colors for visual depth, not because any one of
-// them needs another to close. A currentColor render loses that depth but
-// keeps the exact outline; verified by rendering both side by side before
-// this replaced the two-file version.
+// page, the right page) are each already a separate closed shape — they carry
+// three different fills for visual depth, not because any one of them needs
+// another to close. A currentColor render loses that depth but keeps the exact
+// outline; verified by rendering both side by side before this replaced the
+// two-file version the site used to publish.
 //
 // Keeping the SVG itself themeless still matters for size: under SEP-2575
 // the whole Implementation — Icons included — rides in the `_meta` of every

@@ -1,0 +1,229 @@
+---
+/**
+ * The page-actions control: a split button offering this page as Markdown.
+ *
+ * This site documents an MCP server, so a fair share of its readers arrive with
+ * an assistant open beside them. `llms.txt` already serves that audience at the
+ * level of the tool surface; this serves it at the level of a page — copy this
+ * one, or hand it straight to ChatGPT or Claude.
+ *
+ * The Markdown copy is written at build time by scripts/emit-page-markdown.mjs,
+ * which renders the authored .mdx (components and all) back to plain Markdown.
+ * Its URL is this page's own with `index.md` appended, so no route data has to
+ * carry it.
+ *
+ * WHY IT TAKES A `variant`. Starlight renders the right-hand column TWICE —
+ * once for the mobile layout and once for the desktop one — and both copies are
+ * in the DOM, with only one displayed. The menu's id therefore has to be unique
+ * per instance or `aria-controls` resolves to whichever came first, and
+ * html-validate's `id-unique` rule fails the build. That is the whole job of
+ * the prop.
+ *
+ * WITHOUT JAVASCRIPT the split button is inert, so both halves start
+ * `disabled`, and the script enables them. A plain link to the Markdown is
+ * rendered in a <noscript> beside them, which is the one thing here that works
+ * with no script at all.
+ */
+interface Props {
+	variant: "mobile" | "sidebar";
+}
+
+const { variant } = Astro.props;
+const menuId = `page-actions-menu-${variant}`;
+
+const t = Astro.locals.t;
+const copy = {
+	copy: t("lgm.actions.copy"),
+	copied: t("lgm.actions.copied"),
+	failed: t("lgm.actions.failed"),
+	more: t("lgm.actions.more"),
+	copyLink: t("lgm.actions.copyLink"),
+	viewMarkdown: t("lgm.actions.viewMarkdown"),
+	openChatgpt: t("lgm.actions.openChatgpt"),
+	openClaude: t("lgm.actions.openClaude"),
+	prompt: t("lgm.actions.prompt"),
+};
+
+// The Markdown sits beside the HTML, so the URL is derivable rather than
+// carried: /libgen-mcp/sources/ -> /libgen-mcp/sources/index.md
+const path = Astro.url.pathname.endsWith("/")
+	? Astro.url.pathname
+	: `${Astro.url.pathname}/`;
+const markdownPath = `${path}index.md`;
+const markdownUrl = new URL(markdownPath, Astro.site ?? Astro.url).href;
+const ask = `${copy.prompt} ${markdownUrl}`;
+---
+
+<div
+	class="page-actions"
+	data-page-actions
+	data-md={markdownPath}
+	data-copied={copy.copied}
+	data-failed={copy.failed}
+	data-label={copy.copy}
+>
+	<div class="page-actions-split">
+		<button type="button" class="page-action-copy" data-copy disabled>
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				width="14"
+				height="14"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<rect x="5.5" y="5.5" width="8" height="9" rx="1"></rect>
+				<path d="M10.5 5.5v-3a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3"
+				></path>
+			</svg>
+			<span data-copy-label>{copy.copy}</span>
+		</button>
+		<button
+			type="button"
+			class="page-action-more"
+			aria-haspopup="true"
+			aria-expanded="false"
+			aria-controls={menuId}
+			aria-label={copy.more}
+			data-toggle
+			disabled
+		>
+			<svg
+				aria-hidden="true"
+				viewBox="0 0 16 16"
+				width="12"
+				height="12"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M3.5 6L8 10.5 12.5 6"></path>
+			</svg>
+		</button>
+	</div>
+
+	<div class="page-actions-menu" id={menuId} role="menu" hidden>
+		<button type="button" role="menuitem" data-copy-link>{copy.copyLink}</button>
+		<a role="menuitem" href={markdownPath}>{copy.viewMarkdown}</a>
+		<div role="separator"></div>
+		<a
+			role="menuitem"
+			href={`https://chatgpt.com/?hints=search&q=${encodeURIComponent(ask)}`}
+			target="_blank"
+			rel="noopener noreferrer">{copy.openChatgpt}</a
+		>
+		<a
+			role="menuitem"
+			href={`https://claude.ai/new?q=${encodeURIComponent(ask)}`}
+			target="_blank"
+			rel="noopener noreferrer">{copy.openClaude}</a
+		>
+	</div>
+
+	<noscript>
+		<a class="page-actions-noscript" href={markdownPath}>{copy.viewMarkdown}</a>
+	</noscript>
+</div>
+
+<script>
+	// One handler for every instance on the page — Starlight renders the right
+	// column twice, and both copies are in the DOM.
+	document.querySelectorAll<HTMLElement>("[data-page-actions]").forEach((root) => {
+		const copyButton = root.querySelector<HTMLButtonElement>("[data-copy]");
+		const toggle = root.querySelector<HTMLButtonElement>("[data-toggle]");
+		const menu = root.querySelector<HTMLElement>('[role="menu"]');
+		const label = root.querySelector<HTMLElement>("[data-copy-label]");
+		const copyLink = root.querySelector<HTMLButtonElement>("[data-copy-link]");
+		const mdPath = root.dataset.md;
+		if (!copyButton || !toggle || !menu || !label || !mdPath) return;
+
+		// Everything below needs a script, so nothing is offered until there is
+		// one. The markup ships disabled for readers who never get this far.
+		copyButton.disabled = false;
+		toggle.disabled = false;
+
+		let resetTimer: ReturnType<typeof setTimeout> | undefined;
+		const flash = (text: string) => {
+			clearTimeout(resetTimer);
+			label.textContent = text;
+			resetTimer = setTimeout(() => {
+				label.textContent = root.dataset.label ?? "";
+			}, 2000);
+		};
+
+		copyButton.addEventListener("click", async () => {
+			try {
+				const response = await fetch(mdPath);
+				if (!response.ok) throw new Error(String(response.status));
+				await navigator.clipboard.writeText(await response.text());
+				flash(root.dataset.copied ?? "");
+			} catch {
+				flash(root.dataset.failed ?? "");
+			}
+		});
+
+		copyLink?.addEventListener("click", async () => {
+			try {
+				await navigator.clipboard.writeText(new URL(mdPath, location.href).href);
+				flash(root.dataset.copied ?? "");
+			} catch {
+				flash(root.dataset.failed ?? "");
+			}
+			close();
+		});
+
+		const items = () =>
+			[...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].filter(
+				(el) => !el.hasAttribute("disabled"),
+			);
+
+		// Arrow consts rather than function declarations: a declaration is
+		// hoisted above the null guard, so TypeScript stops narrowing `menu` and
+		// `toggle` inside it and every use needs a non-null assertion.
+		const open = () => {
+			menu.hidden = false;
+			toggle.setAttribute("aria-expanded", "true");
+			items()[0]?.focus();
+		};
+		const close = (focusToggle = false) => {
+			menu.hidden = true;
+			toggle.setAttribute("aria-expanded", "false");
+			if (focusToggle) toggle.focus();
+		};
+
+		toggle.addEventListener("click", () => {
+			menu.hidden ? open() : close();
+		});
+
+		// Roving focus: a menu is one tab stop, and the arrow keys move within it.
+		menu.addEventListener("keydown", (event) => {
+			const list = items();
+			const here = list.indexOf(document.activeElement as HTMLElement);
+			if (event.key === "Escape") {
+				event.preventDefault();
+				close(true);
+			} else if (event.key === "ArrowDown") {
+				event.preventDefault();
+				list[(here + 1) % list.length]?.focus();
+			} else if (event.key === "ArrowUp") {
+				event.preventDefault();
+				list[(here - 1 + list.length) % list.length]?.focus();
+			} else if (event.key === "Home") {
+				event.preventDefault();
+				list[0]?.focus();
+			} else if (event.key === "End") {
+				event.preventDefault();
+				list[list.length - 1]?.focus();
+			}
+		});
+
+		document.addEventListener("click", (event) => {
+			if (!menu.hidden && !root.contains(event.target as Node)) close();
+		});
+	});
+</script>

@@ -66,11 +66,9 @@ head:
           }
         ]
       }
+template: splash
 hero:
   tagline: Ask your AI assistant for a book or a paper and get it — found, cited, downloaded and read back to you in plain language. Federated search across the Library Genesis catalog and eight further providers, twenty-one download sources with open access tried first. No account, no API key, one static binary.
-  image:
-    dark: ../../assets/logo-dark.svg
-    light: ../../assets/logo-light.svg
   actions:
     - text: Getting Started
       link: /libgen-mcp/getting-started/
@@ -83,21 +81,11 @@ hero:
 datePublished: "2026-07-19"
 ---
 
-import { Card, CardGrid, LinkCard, Aside } from "@astrojs/starlight/components";
+import Home from "../../components/home/Home.astro";
+import { en } from "../../data/home";
+import { Aside } from "@astrojs/starlight/components";
 
-**LibGen MCP** is an [MCP](https://modelcontextprotocol.io) server, written in Go, for **federated search, citation and reading** of books, papers, comics, magazines and standards across the **Library Genesis** catalog (the `libgen.li` mirror family) and open-access sources. It exposes four tools — `search`, `get_details`, `download`, and `read` — to any MCP-compatible client such as Claude Code, Claude Desktop, or your own agent.
-
-Mirrors are discovered automatically and cached, with transparent failover, so the server keeps working as individual mirrors go up and down. Openly licensed books can be fetched by ISBN from OAPEN and the Internet Archive, and articles by DOI, through the open-access providers first (Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, the publisher's own Crossref-deposited link, OAPEN) and then Sci-Hub and SciDB. `search` additionally consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged, deduped, and labeled by origin alongside the usual Library Genesis results; the default `auto` reaches for them automatically whenever the catalog comes up empty.
-
-## Install in one line
-
-```sh
-claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
-```
-
-Or point your client at a prebuilt binary — no account, API key or token at any
-step. Full instructions, including the `mcpServers` JSON for Claude Desktop,
-Cursor and VS Code, are in [Getting Started](/libgen-mcp/getting-started/).
+<Home content={en} lang="en" />
 
 ## Which libgen-mcp is this?
 
@@ -119,80 +107,6 @@ rather than guessed, lending-restricted Internet Archive scans are skipped, and
 permission-hosted Gutenberg records are dropped — and its tool surface is checked
 against a live, graded [LLM evaluation](/libgen-mcp/eval-results/) rather than
 asserted.
-
-<CardGrid>
-	<Card title="Four tools" icon="puzzle">
-		`search`, `get_details`, `download`, and `read` — read-only search,
-		metadata, and paginated text extraction plus a non-destructive, resumable
-		download.
-	</Card>
-	<Card title="Resilient mirrors" icon="random">
-		Automatic mirror discovery, failover, retry with cooldown, and a shared rate
-		limiter.
-	</Card>
-	<Card title="Books and articles" icon="open-book">
-		Books by MD5 from LibGen, or by ISBN from OAPEN and the Internet Archive;
-		articles by DOI from the open-access providers first (Unpaywall, Europe PMC,
-		bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology,
-		Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar,
-		CORE, the publisher's own Crossref-deposited link, OAPEN), then Sci-Hub and
-		SciDB.
-	</Card>
-	<Card title="Open access first" icon="approve-check">
-		Articles resolve through Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv,
-		the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO,
-		the FAO Knowledge Repository, Internet Archive Scholar and CORE, then the
-		publisher's own Crossref-deposited link and OAPEN, before any shadow-library
-		fallback is tried. Books by ISBN come only from OAPEN and public-domain
-		Internet Archive scans; lending-restricted copies are refused.
-	</Card>
-	<Card title="Extra-source discovery" icon="magnifier">
-		`search` reaches beyond the catalog to Anna's Archive, arXiv, Crossref,
-		OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — on by default when
-		the catalog finds nothing, and no account or API key needed.
-	</Card>
-	<Card title="Configured by env" icon="setting">
-		Every option is an environment variable with a documented default and
-		fail-fast validation.
-	</Card>
-</CardGrid>
-
-## Start here
-
-<LinkCard
-	title="Getting Started"
-	description="Install (prebuilt binary, Docker, or go install), wire the server into an MCP client, and run your first search."
-	href="/libgen-mcp/getting-started/"
-/>
-<LinkCard
-	title="Tools"
-	description="The search, get_details, download, and read tools — inputs, outputs, and error behavior."
-	href="/libgen-mcp/tools/"
-/>
-<LinkCard
-	title="Configuration"
-	description="Every environment variable, with its default, valid range, and meaning."
-	href="/libgen-mcp/configuration/"
-/>
-
-## Example prompts
-
-You talk to your assistant, not to the tools — it picks the tool and the
-arguments. Every prompt below is taken from the
-[evaluation suite](/libgen-mcp/eval-results/), where a real model is graded on
-handling it against the live site:
-
-| Ask your assistant                             | What libgen-mcp does                                                                                   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| "I want to read _Dune_ — can you find it?"     | Forms a catalog search unaided, with no collection or field hints                                      |
-| "Download _Clean Code_ for me"                 | Searches, picks an md5 from the results, and chooses the download source itself                        |
-| "Get me a PDF of _Hallmarks of Cancer_"        | Works out that articles are keyed by DOI, not md5, and resolves it through the open-access chain       |
-| "Find this paper and summarize the first page" | Calls `read` instead of `download`, and summarizes the extracted text rather than dumping it           |
-| "What does this book say about pointers?"      | Calls `read` with `find`, searching inside the document without fetching the whole file                |
-| "Give me its table of contents"                | Calls `read` with `outline=true`, and compiles one from the text when the file embeds none             |
-| "Get me this book by its ISBN"                 | Routes to OAPEN and public-domain Internet Archive scans — never a shadow-library fallback             |
-| "Give me the direct link, don't download it"   | Sets `resolve_only` and returns a URL instead of writing a file                                        |
-| "Also check the open-access literature"        | Sets `extra_sources` to `always` and merges arXiv, Crossref, PubMed and the rest alongside the catalog |
 
 ## Responsible use
 

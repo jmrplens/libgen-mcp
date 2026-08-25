@@ -1,0 +1,20 @@
+{
+  "lgm.fact.keyedBy": "Keyed by",
+  "lgm.fact.corpus": "Corpus",
+  "lgm.fact.resolves": "How it resolves",
+  "lgm.fact.notCovered": "What it does not cover",
+  "lgm.fact.keys": "Keys",
+  "lgm.fact.politeness": "Politeness",
+  "lgm.actions.copy": "Copy page",
+  "lgm.actions.copied": "Copied",
+  "lgm.actions.failed": "Copy failed",
+  "lgm.actions.more": "More actions for this page",
+  "lgm.actions.copyLink": "Copy link to the Markdown",
+  "lgm.actions.viewMarkdown": "View as Markdown",
+  "lgm.actions.openChatgpt": "Open in ChatGPT",
+  "lgm.actions.openClaude": "Open in Claude",
+  "lgm.actions.prompt": "Read this documentation page and answer questions about it:",
+  "lgm.fact.symptom": "Symptom",
+  "lgm.fact.meaning": "Meaning",
+  "lgm.fact.fixes": "Fixes"
+}
