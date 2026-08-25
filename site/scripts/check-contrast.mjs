@@ -123,9 +123,12 @@ for (const [name, p] of Object.entries(PALETTES)) {
 // beats Starlight's own light-theme default — which is how a plain
 // `--sl-color-hairline` paints a near-black rule on a white page. The converse
 // is allowed: the light theme may add tokens of its own, such as gray-7.
-const resolvedLight = resolve({ ...light });
+// Declaration, not resolvability. The question is whether the light theme states
+// a value for the token — an alias is a value. Comparing against the RESOLVED
+// light palette instead drops any token whose alias points at something only the
+// dark block declares, and then reports that legal token as missing.
 const inheritedFromDark = Object.keys(resolve({ ...dark })).filter(
-	(token) => !(token in resolvedLight),
+	(token) => !(token in light),
 );
 
 const srgb = (hex) => {

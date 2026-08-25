@@ -79,6 +79,44 @@ function collect(node, tagName, out = []) {
 	return out;
 }
 
+/**
+ * The verdict for a table, given its rows as plain text.
+ *
+ * Exported so scripts/check-facts.mjs can run the same decision over a page and
+ * its Spanish twin: the thresholds are a hard cliff evaluated per locale, and a
+ * translated heading is easily a few characters wider — architecture's source
+ * table sits within about a dozen pixels of flipping in one language only,
+ * which would silently give the two pages different layouts.
+ *
+ * @param {string[][]} rows - Every row's cells, header row first.
+ * @returns {null | "" | "always"} null when the table needs no help; "" when it
+ *   stacks below the breakpoint; "always" when it can never fit the column.
+ */
+export function classify(rows) {
+	if (rows.length === 0) return null;
+	const columns = Math.max(...rows.map((row) => row.length));
+	if (columns < MIN_COLUMNS) return null;
+
+	const bodyRows = rows.slice(1);
+	const longest = Math.max(
+		0,
+		...bodyRows.flatMap((row) =>
+			row.slice(1).map((cell) => cell.trim().length),
+		),
+	);
+	if (longest < MIN_PROSE) return null;
+
+	const perColumn = Array.from({ length: columns }, (_, index) =>
+		Math.max(0, ...rows.map((row) => (row[index] ?? "").trim().length)),
+	);
+	const estimated = perColumn.reduce(
+		(total, chars) =>
+			total + Math.min(chars, COMFORTABLE_CHARS) * CHAR_PX + CELL_PADDING_PX,
+		0,
+	);
+	return estimated > READING_COLUMN_PX ? "always" : "";
+}
+
 /** The `td`/`th` children of a row, in order. */
 const cellsOf = (row) =>
 	row.children.filter(
@@ -103,53 +141,15 @@ export function rehypeWideTables() {
 			const rows = collect(table, "tr");
 			if (rows.length === 0) continue;
 
-			const columns = Math.max(...rows.map((row) => cellsOf(row).length));
-			if (columns < MIN_COLUMNS) continue;
-
-			const bodyRows = rows.filter((row) =>
-				cellsOf(row).some((cell) => cell.tagName === "td"),
+			const asText = rows.map((row) =>
+				cellsOf(row).map((cell) => textOf(cell).trim()),
 			);
-			// Every column but the first, not just the last. The first is the
-			// record's name and is always short; the prose can be anywhere after
-			// it. tools.mdx's "How the saved file is named" table keeps its prose
-			// in column two and a 21-character last column, so a last-column-only
-			// test skipped it entirely — no stacking, no labels, no roles.
-			const longest = Math.max(
-				0,
-				...bodyRows.flatMap((row) =>
-					cellsOf(row)
-						.slice(1)
-						.map((cell) => textOf(cell).trim().length),
-				),
-			);
-			if (longest < MIN_PROSE) continue;
+			const verdict = classify(asText);
+			if (verdict === null) continue;
 
 			const headings = cellsOf(rows[0]).map((cell) => textOf(cell).trim());
 
-			// Can this table ever fit the reading column? Each column is credited
-			// with its longest cell, capped at a comfortable measure, since a
-			// column wider than that wraps rather than pushing the table out.
-			const perColumn = headings.map((_, index) =>
-				Math.max(
-					0,
-					...rows.map((row) => {
-						const cell = cellsOf(row)[index];
-						return cell ? textOf(cell).trim().length : 0;
-					}),
-				),
-			);
-			const estimated = perColumn.reduce(
-				(total, chars) =>
-					total +
-					Math.min(chars, COMFORTABLE_CHARS) * CHAR_PX +
-					CELL_PADDING_PX,
-				0,
-			);
-
-			set(table, {
-				"data-stacks": estimated > READING_COLUMN_PX ? "always" : "",
-				role: "table",
-			});
+			set(table, { "data-stacks": verdict, role: "table" });
 			for (const group of ["thead", "tbody"]) {
 				for (const node of collect(table, group))
 					set(node, { role: "rowgroup" });

@@ -29,6 +29,21 @@
 // locale can quietly lose a chip, and a chip can quietly point at a page that
 // does not exist. Both are checked here.
 //
+// TABLE LAYOUT. Whether a markdown table stacks on a narrow screen is decided
+// from its own contents, per file — so a page and its Spanish twin can land on
+// opposite sides of the threshold and silently render with different layouts. A
+// translated heading is easily a few characters wider, and architecture's source
+// table sits within about a dozen pixels of flipping. The two locales must reach
+// the same verdict for the same table.
+//
+// ENUM COVERAGE. A constrained parameter's allowed values are generated into
+// src/data/tool-schema.json from the live surface, and the pages spell the same
+// values out in prose because a reader needs them in a sentence, not a list. So
+// a value added to a Go enum can reach the tool surface while the page keeps
+// describing the old set — the docs would then be wrong in the one place a
+// reader looks for what they may pass. Every generated value must appear in the
+// slot that describes its field, in both locales.
+//
 // LEGAL NOTICE. The copyright notice used to sit on four pages per locale in
 // two wordings that differed only in their opening subject. <LegalNotice />
 // collapsed those eight to one string, but a ninth copy survives in PRIVACY.md
@@ -40,6 +55,9 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { answerText } from "../src/lib/faq-schema.mjs";
+import { classify } from "../src/lib/wide-tables.mjs";
 
 const docsDir = fileURLToPath(new URL("../src/content/docs", import.meta.url));
 const esDir = join(docsDir, "es");
@@ -235,6 +253,132 @@ for (const enPath of walk(docsDir)) {
 	});
 }
 
+/**
+ * Every generated enum value that its field's prose fails to mention.
+ *
+ * The prose is authored and the values are generated, so this compares two
+ * things that cannot be merged: the sentence a reader needs and the list the
+ * server advertises.
+ */
+function enumGaps() {
+	const schema = JSON.parse(
+		readFileSync(
+			new URL("../src/data/tool-schema.json", import.meta.url),
+			"utf8",
+		),
+	);
+	const gaps = [];
+	for (const [locale, page] of [
+		["EN", "tools.mdx"],
+		["ES", "es/tools.mdx"],
+	]) {
+		let text;
+		try {
+			text = readFileSync(join(docsDir, page), "utf8");
+		} catch {
+			gaps.push(`${page}: not found`);
+			continue;
+		}
+		for (const [tool, sections] of Object.entries(schema.tools)) {
+			for (const [section, rows] of Object.entries(sections)) {
+				const table = new RegExp(
+					`<SchemaTable name="${tool}" section="${section}">([\\s\\S]*?)</SchemaTable>`,
+				).exec(text);
+				if (!table) continue;
+				for (const row of rows) {
+					if (!row.enum?.length) continue;
+					const slot = new RegExp(
+						`<Fragment slot="${row.name}">([\\s\\S]*?)</Fragment>`,
+					).exec(table[1]);
+					if (!slot) continue;
+					const absent = row.enum.filter((value) => !slot[1].includes(value));
+					if (absent.length) {
+						gaps.push(
+							`${locale} ${tool}.${section}.${row.name}: the schema allows ` +
+								`${absent.join(", ")}, which the description never mentions`,
+						);
+					}
+				}
+			}
+		}
+	}
+	return gaps;
+}
+
+/**
+ * Every markdown table in a page, as rows of cell text.
+ *
+ * The cells are rendered to plain text first. The build classifies a table from
+ * the RENDERED tree, where a code span is its contents and a link is its label;
+ * measuring the raw Markdown instead counts backticks and `](…)` and reaches a
+ * different verdict, which is a gate reporting a divergence that does not exist.
+ * answerText is the same transform the FAQ schema uses.
+ */
+function markdownTables(text) {
+	const body = text.slice(text.indexOf("\n---\n", 3) + 5);
+	const tables = [];
+	for (const block of body.matchAll(/^\|.*\|\n\|[-: |]+\|\n(?:\|.*\|\n)+/gm)) {
+		tables.push(
+			block[0]
+				.trim()
+				.split("\n")
+				.filter((line, index) => index !== 1) // the separator row
+				.map((line) =>
+					line
+						.replace(/^\||\|$/g, "")
+						.split("|")
+						.map((cell) => answerText(cell.trim())),
+				),
+		);
+	}
+	return tables;
+}
+
+/**
+ * Pages whose two locales would render a table differently.
+ *
+ * Runs the site's own classifier — the one the build uses — over both sides, so
+ * the thresholds live in exactly one place.
+ */
+function layoutDisagreements() {
+	const out = [];
+	for (const enPath of walk(docsDir)) {
+		const rel = relative(docsDir, enPath);
+		let esText;
+		try {
+			esText = readFileSync(join(esDir, rel), "utf8");
+		} catch {
+			continue;
+		}
+		const en = markdownTables(readFileSync(enPath, "utf8"));
+		const es = markdownTables(esText);
+		if (en.length !== es.length) {
+			out.push(
+				`${rel}: ${en.length} markdown table(s) in EN, ${es.length} in ES`,
+			);
+			continue;
+		}
+		en.forEach((rows, index) => {
+			const a = classify(rows);
+			const b = classify(es[index]);
+			if (a !== b) {
+				out.push(
+					`${rel} — table ${index + 1} ("${rows[0]?.[0] ?? ""}"): ` +
+						`EN ${a === null ? "stays a table" : `stacks (${a || "below the breakpoint"})`}, ` +
+						`ES ${b === null ? "stays a table" : `stacks (${b || "below the breakpoint"})`}`,
+				);
+			}
+		});
+	}
+	return out;
+}
+
+const layoutProblems = layoutDisagreements();
+problems.push(...layoutProblems);
+
+const enumProblems = enumGaps();
+problems.push(...enumProblems);
+
 const legal = legalNoticeCopies();
 if (!legal.fromI18n) {
 	problems.push("i18n/en.json declares no lgm.legal.notice");
@@ -261,6 +405,16 @@ if (process.argv.includes("--json")) {
 	);
 	console.log(
 		`page chips: ${chipCount} in each locale, matching, every link resolving`,
+	);
+	console.log(
+		layoutProblems.length === 0
+			? "table layout: both locales reach the same stacking verdict for every table"
+			: "table layout: DISAGREEMENT (see below)",
+	);
+	console.log(
+		enumProblems.length === 0
+			? "enum coverage: every generated allowed value appears in its description"
+			: "enum coverage: MISSING (see below)",
 	);
 	console.log(
 		legal.fromI18n === legal.fromPrivacy
