@@ -59,7 +59,12 @@ func DocsConfig() *config.Config {
 // server, and returns the connected client session together with a cleanup
 // function the caller must invoke.
 func Session(setup func(*mcp.Server) error) (session *mcp.ClientSession, cleanup func(), err error) {
-	opts := &mcp.ServerOptions{PageSize: pageSize}
+	// Capabilities pinned empty for the same reason the real server pins them
+	// (see cmd/server/main.go): a nil value inherits the SDK's deprecated
+	// logging default. It matters here too — this session is what the audit
+	// and generator commands introspect, so an inherited capability would
+	// describe a server the repository does not ship.
+	opts := &mcp.ServerOptions{PageSize: pageSize, Capabilities: &mcp.ServerCapabilities{}}
 	server := mcp.NewServer(&mcp.Implementation{Name: "mcpsurface", Version: "0.0.1"}, opts)
 	if setupErr := setup(server); setupErr != nil {
 		return nil, nil, setupErr

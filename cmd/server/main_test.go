@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
@@ -803,5 +804,71 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 		if !strings.Contains(instructions, p.Name) {
 			t.Errorf("Instructions does not mention registered prompt %q", p.Name)
 		}
+	}
+}
+
+// TestNoResourcesIsConsistent asserts the handshake and the wire agree that
+// this server has no resources: it declares no resources capability, and the
+// three resource methods the SDK registers regardless answer -32601 rather
+// than a successful empty listing that would imply resources exist here.
+//
+// The two halves are asserted together on purpose. Registering a resource
+// makes the SDK infer the capability, which flips the first half and leaves a
+// server advertising resources it then refuses to list — so whoever adds one
+// is failed here and pointed at capguard.NoResources.
+func TestNoResourcesIsConsistent(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	server, err := newRegisteredServer(cfg, "")
+	if err != nil {
+		t.Fatalf("newRegisteredServer() error = %v", err)
+	}
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "resources-test", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if caps := session.InitializeResult().Capabilities; caps.Resources != nil {
+		t.Fatalf("handshake declares resources capability %+v; if that is intended, "+
+			"drop capguard.NoResources so the resource methods answer for real", caps.Resources)
+	}
+
+	calls := map[string]func() error{
+		"resources/list": func() error {
+			_, callErr := session.ListResources(t.Context(), nil)
+			return callErr
+		},
+		"resources/templates/list": func() error {
+			_, callErr := session.ListResourceTemplates(t.Context(), nil)
+			return callErr
+		},
+		"resources/read": func() error {
+			_, callErr := session.ReadResource(t.Context(), &mcp.ReadResourceParams{URI: "file:///nothing"})
+			return callErr
+		},
+	}
+	for method, call := range calls {
+		t.Run(method, func(t *testing.T) {
+			var wire *jsonrpc.Error
+			callErr := call()
+			if !errors.As(callErr, &wire) {
+				t.Fatalf("err = %v (%T), want a *jsonrpc.Error", callErr, callErr)
+			}
+			if wire.Code != jsonrpc.CodeMethodNotFound {
+				t.Errorf("code = %d, want %d (method not found)", wire.Code, jsonrpc.CodeMethodNotFound)
+			}
+		})
 	}
 }

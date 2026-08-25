@@ -21,6 +21,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/internal/capguard"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
@@ -169,10 +170,25 @@ func newMCPServer() *mcp.Server {
 		Version:     buildversion.Current(),
 		WebsiteURL:  implementationWebsiteURL,
 		Icons:       toolutil.IconBrand,
-	}, &mcp.ServerOptions{Instructions: serverInstructions})
+	}, &mcp.ServerOptions{
+		Instructions: serverInstructions,
+		// Pinned empty rather than left nil, because nil is not neutral: the
+		// SDK fills it with its own default of {"logging":{}}, and MCP logging
+		// is Deprecated as of revision 2026-07-28 (SEP-2577), whose prescribed
+		// migration is exactly what this server already does — slog to stderr.
+		// So the server was advertising a deprecated capability it neither
+		// implements nor wants, purely by omission. The SDK still adds tools
+		// and prompts on top of a non-nil value, so the advertised set becomes
+		// exactly what this server serves.
+		Capabilities: &mcp.ServerCapabilities{},
+	})
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
 	server.AddReceivingMiddleware(cachehints.Middleware())
+	// Nothing here registers a resource, so the resource methods the SDK wires
+	// up regardless must not answer as though something did (see
+	// internal/capguard).
+	server.AddReceivingMiddleware(capguard.NoResources())
 	return server
 }
 
