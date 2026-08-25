@@ -1,0 +1,96 @@
+/* ------------------------------------------------------------------ *
+ * The download chain (src/components/docs/SourceChain.astro).
+ *
+ * `position` was a four-column table of twenty-one rows, which overflowed its
+ * container on a phone: a sequence a reader cannot follow without swiping
+ * sideways, making a claim — the legal sources come first — that depends
+ * entirely on being read in order.
+ *
+ * As an ordered list it fits any width by construction, and the position takes
+ * the same monospaced gutter the landing page gives its numbered blocks, so the
+ * two renderings of the chain read as the same object.
+ * ------------------------------------------------------------------ */
+.sl-markdown-content ol.source-chain {
+	list-style: none;
+	padding: 0;
+	margin: 1rem 0 1.75rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.sl-markdown-content ol.source-chain > li {
+	display: flex;
+	gap: 0.9rem;
+	align-items: baseline;
+	padding: 0.6rem 0;
+	border-block-start: 1px solid var(--sl-color-hairline-light);
+	margin: 0;
+}
+.sl-markdown-content ol.source-chain > li:last-child {
+	border-block-end: 1px solid var(--sl-color-hairline-light);
+}
+
+/* A real box in the line, never an absolutely positioned marker: the number's
+   space is reserved by the layout at any text size or zoom level. */
+.chain-n {
+	flex: 0 0 1.9rem;
+	font-family: var(--lgm-mono);
+	font-size: var(--sl-text-2xs);
+	letter-spacing: 0.08em;
+	line-height: 1.7;
+	color: var(--lgm-mark);
+	font-variant-numeric: tabular-nums;
+}
+
+.chain-body {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.sl-markdown-content .chain-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.6rem;
+	margin: 0;
+}
+.sl-markdown-content .chain-head code {
+	font-size: var(--sl-text-xs);
+}
+.chain-keyed {
+	font-family: var(--lgm-mono);
+	font-size: var(--sl-text-2xs);
+	color: var(--sl-color-gray-3);
+}
+.chain-keyed-label {
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	margin-inline-end: 0.35rem;
+}
+
+.sl-markdown-content .chain-status {
+	margin: 0.15rem 0 0;
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-2);
+}
+
+/* The inline form: the whole order inside a sentence. It stays inline — it
+   replaces a code span mid-paragraph, so a block here would nest one paragraph
+   inside another — and wraps as text rather than scrolling. The arrows are
+   decorative: the order is carried by the sequence, which a screen reader
+   already reads in order. */
+.sl-markdown-content .source-arrow {
+	display: inline;
+}
+.sl-markdown-content .source-arrow code {
+	white-space: nowrap;
+}
+/* gray-3, not gray-4. The arrow is decorative in the sense that a screen reader
+   does not need it — the sequence already carries the order — but it is text a
+   sighted reader looks at, and gray-4 measures 3.45:1 on the light ground.
+   `aria-hidden` does not exempt something from being legible. */
+.source-arrow-sep {
+	color: var(--sl-color-gray-3);
+	padding-inline: 0.15rem;
+}

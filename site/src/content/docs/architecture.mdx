@@ -1,6 +1,12 @@
 ---
 title: Architecture
 description: The HTTP client, the download pipeline, and the multi-source chain that power libgen-mcp.
+chips:
+  - text: "Go, one static binary"
+  - text: "stdio and streamable HTTP"
+  - text: "Mirror discovery and failover"
+  - text: "Download sources"
+    href: "/libgen-mcp/sources/"
 datePublished: "2026-07-19"
 head:
   # Mirrors the "Frequently asked questions" section at the foot of this page
@@ -250,11 +256,11 @@ It suits this server: there is no authentication and no per-client state, so a s
 
 Every icon — the brand mark on `Implementation`, one per tool, one per prompt — is a three-entry `[]mcp.Icon` built by `internal/toolutil`:
 
-| Entry | Format | `Sizes` | `Theme`  | For                                  |
-| ----- | ------ | ------- | -------- | ------------------------------------ |
-| 1     | SVG    | `any`   | _(none)_ | Clients that accept `image/svg+xml`  |
-| 2     | WebP   | `16x16` | `light`  | Clients that reject SVG, light theme |
-| 3     | WebP   | `16x16` | `dark`   | Clients that reject SVG, dark theme  |
+| #   | Format | `Sizes` | `Theme`  | For                                  |
+| --- | ------ | ------- | -------- | ------------------------------------ |
+| 1   | SVG    | `any`   | _(none)_ | Clients that accept `image/svg+xml`  |
+| 2   | WebP   | `16x16` | `light`  | Clients that reject SVG, light theme |
+| 3   | WebP   | `16x16` | `dark`   | Clients that reject SVG, dark theme  |
 
 The SVG is authored by hand and uses `currentColor`, so one themeless entry adapts to any client theme. The raster pair exists because a client can support icons and still refuse this one: VS Code Copilot's MIME allowlist admits `image/webp` but not `image/svg+xml`, so an SVG-only icon silently failed to render there. A raster cannot inherit the theme's color, so it needs the light/dark pair the SVG does not.
 

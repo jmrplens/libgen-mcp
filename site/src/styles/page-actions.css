@@ -1,0 +1,118 @@
+/* ------------------------------------------------------------------ *
+ * The page-actions split button (src/components/PageActions.astro).
+ *
+ * On desktop it sits at the top of the right-hand column, above "On this
+ * page", where the column begins and nothing else competes. On a phone it sits
+ * directly under Starlight's sticky table-of-contents bar, on its own row: the
+ * bar is the one piece of chrome that follows the reader down a long page, and
+ * the actions belong beside it rather than inside the menu it opens.
+ * ------------------------------------------------------------------ */
+.page-actions {
+	position: relative;
+	margin-bottom: 1rem;
+}
+
+.page-actions-split {
+	display: inline-flex;
+	align-items: stretch;
+	border: 1px solid var(--lgm-border-strong);
+	border-radius: var(--lgm-radius);
+	background: var(--lgm-surface);
+	overflow: hidden;
+}
+
+.page-actions button {
+	font: inherit;
+	font-size: var(--sl-text-xs);
+	color: var(--sl-color-gray-2);
+	background: none;
+	border: 0;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.4rem 0.6rem;
+	line-height: 1.4;
+}
+/* Before the script runs there is nothing to click, and a control that looks
+   live but is not is worse than one that says so. */
+.page-actions button[disabled] {
+	cursor: default;
+	opacity: 0.55;
+}
+.page-actions button:not([disabled]):hover,
+.page-actions button:focus-visible {
+	color: var(--sl-color-white);
+	background: var(--lgm-surface-raised);
+}
+
+.page-action-more {
+	border-inline-start: 1px solid var(--lgm-border-strong) !important;
+	padding-inline: 0.45rem;
+}
+
+/* ---- The menu ---- */
+.page-actions-menu {
+	position: absolute;
+	z-index: var(--sl-z-index-menu, 5);
+	inset-inline-start: 0;
+	margin-top: 0.3rem;
+	min-width: 14rem;
+	display: flex;
+	flex-direction: column;
+	padding: 0.25rem;
+	border: 1px solid var(--lgm-border-strong);
+	border-radius: var(--lgm-radius);
+	background: var(--lgm-surface-raised);
+	box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+.page-actions-menu[hidden] {
+	display: none;
+}
+.page-actions-menu [role="menuitem"] {
+	font-size: var(--sl-text-xs);
+	text-align: start;
+	text-decoration: none;
+	color: var(--sl-color-gray-2);
+	padding: 0.4rem 0.55rem;
+	border-radius: 3px;
+	width: 100%;
+	/* The right-hand panel styles every `a` as a block with its own colour; the
+	   menu is not part of that list, so it states its own. */
+	display: block;
+}
+.page-actions-menu [role="menuitem"]:hover,
+.page-actions-menu [role="menuitem"]:focus-visible {
+	color: var(--sl-color-white);
+	background: var(--lgm-accent-soft);
+}
+.page-actions-menu [role="separator"] {
+	height: 1px;
+	margin: 0.25rem 0.15rem;
+	background: var(--lgm-border);
+}
+
+.page-actions-noscript {
+	font-size: var(--sl-text-xs);
+}
+
+/* ---- Mobile ---- *
+ *
+ * 71.9375rem is the exact complement of Starlight's `lg` breakpoint (72rem),
+ * below which the right column is the sticky bar rather than a panel. Written
+ * as a max-width so the two never overlap by a pixel at any zoom level.
+ */
+@media (max-width: 71.9375rem) {
+	.page-actions {
+		margin: 0;
+		padding: 0.5rem var(--sl-content-pad-x, 1rem);
+		border-bottom: 1px solid var(--sl-color-hairline-shade);
+		background: var(--sl-color-bg-nav);
+	}
+	/* The menu would otherwise open past the right edge on a narrow screen. */
+	.page-actions-menu {
+		inset-inline-start: var(--sl-content-pad-x, 1rem);
+		inset-inline-end: var(--sl-content-pad-x, 1rem);
+		min-width: 0;
+	}
+}

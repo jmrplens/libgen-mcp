@@ -1,0 +1,95 @@
+/* ------------------------------------------------------------------ *
+ * Tool parameter and field reference (src/components/docs/SchemaTable.astro).
+ *
+ * A description list, not a table, and the reason is measurable: these
+ * descriptions run to 500 characters. In the four-column table this replaces,
+ * the description column was about 400px on a 45rem content width — a
+ * ~50-character measure, well under the 45–75 a reader wants — and on a phone
+ * the same table either scrolled sideways or crushed the prose into a column
+ * three words wide.
+ *
+ * So the identity of a row (its name, its type, whether it is required) goes in
+ * a gutter the eye can run down, and the prose keeps the full width at every
+ * viewport. Below 45rem the gutter becomes a line above its paragraph, which is
+ * the only arrangement that works when the column would be eight characters
+ * wide. Same treatment as the source spec sheets, so the two kinds of reference
+ * page read as one thing.
+ * ------------------------------------------------------------------ */
+.sl-markdown-content .schema-table {
+	margin: 1rem 0 1.75rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.sl-markdown-content .schema-row {
+	display: grid;
+	gap: 0.15rem 1.25rem;
+	padding: 0.7rem 0;
+	border-block-start: 1px solid var(--sl-color-hairline-light);
+}
+.sl-markdown-content .schema-row:last-child {
+	border-block-end: 1px solid var(--sl-color-hairline-light);
+}
+
+.sl-markdown-content .schema-table dt {
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.5rem;
+}
+/* The name is the thing being looked up, so it keeps the code treatment it has
+   everywhere else on the site rather than becoming a bare label. */
+.sl-markdown-content .schema-table dt code {
+	font-size: var(--sl-text-xs);
+	background: var(--sl-color-bg-inline-code);
+	padding: 0.1em 0.35em;
+	border-radius: 3px;
+	overflow-wrap: anywhere;
+}
+
+.schema-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.4rem;
+	font-family: var(--lgm-mono);
+	font-size: var(--sl-text-2xs);
+	line-height: 1.5;
+}
+.schema-type {
+	color: var(--sl-color-gray-3);
+}
+/* "required" is the one thing in a row a reader scans for before anything else,
+   so it is the one thing here that takes the accent. */
+.schema-required {
+	color: var(--lgm-accent-ink);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.sl-markdown-content .schema-table dd {
+	margin: 0;
+	min-width: 0;
+}
+.sl-markdown-content .schema-table dd > :first-child {
+	margin-top: 0;
+}
+.sl-markdown-content .schema-table dd > :last-child {
+	margin-bottom: 0;
+}
+
+@media (min-width: 45rem) {
+	.sl-markdown-content .schema-row {
+		/* Wide enough for `results_per_page` plus its type on one line, which is
+		   the longest name on the surface. */
+		grid-template-columns: 11.5rem minmax(0, 1fr);
+	}
+	.sl-markdown-content .schema-table dt {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.25rem;
+		padding-top: 0.1rem;
+	}
+}

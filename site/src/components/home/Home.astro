@@ -1,0 +1,200 @@
+---
+/**
+ * Landing-page body.
+ *
+ * Replaces the six description cards and three link cards the splash page used
+ * to carry with four blocks that each answer one question a first-time visitor
+ * actually has: what is this, what does it look like in use, what does it
+ * reach, and where do I start. "Who it is for" and "What it is not" sit inside
+ * the first block as a pair, because a claim about an audience means little
+ * without the matching claim about the boundary.
+ *
+ * All the text comes from src/data/home.ts, one object per locale, so the
+ * English and Spanish landings cannot drift apart structurally. Every number
+ * comes from src/data/sources.ts and is counted here, never typed: the page
+ * used to state "twenty-one download sources" in prose that no gate compared
+ * against the chain, and the JSON-LD beside it still said seventeen.
+ */
+import { Code } from "@astrojs/starlight/components";
+import type { HomeContent } from "../../data/home";
+import {
+	DISCOVERY_PROVIDERS,
+	SOURCES,
+	TOOLS,
+	sourcesIn,
+} from "../../data/sources";
+
+interface Props {
+	content: HomeContent;
+	lang: "en" | "es";
+}
+
+const { content } = Astro.props;
+
+// Counted, not typed. The "0 keys" cell is the one literal here, and it is a
+// claim about the server rather than about the chain: two sources do read a
+// credential, but none is required to use libgen-mcp — an unconfigured one
+// simply stays out of the chain. See KEYLESS_COUNT in sources.ts.
+const stats = [
+	{ value: String(TOOLS.length), label: content.statLabels.tools, href: content.statHrefs.tools },
+	{ value: String(SOURCES.length), label: content.statLabels.sources, href: content.statHrefs.sources },
+	{ value: String(DISCOVERY_PROVIDERS.length), label: content.statLabels.providers, href: content.statHrefs.providers },
+	{ value: "0", label: content.statLabels.keys, href: content.statHrefs.keys },
+];
+---
+
+<div class="home">
+	<section class="readout" aria-label={content.statsLabel}>
+		{
+			stats.map((s) => (
+				<div class="readout-cell">
+					<span class="readout-value">{s.value}</span>
+					<span class="readout-label">
+						<a href={s.href}>{s.label}</a>
+					</span>
+				</div>
+			))
+		}
+	</section>
+
+	<section class="block">
+		<span class="block-n" aria-hidden="true"></span>
+		<div class="block-body">
+			<h2>{content.what.title}</h2>
+			<div class="prose">
+				{content.what.body.map((p) => <p set:html={p} />)}
+			</div>
+
+			<div class="two-up">
+				<div class="panel">
+					<h3>{content.who.title}</h3>
+					<ul class="tick">
+						{content.who.items.map((i) => <li>{i}</li>)}
+					</ul>
+				</div>
+				<div class="panel panel-quiet">
+					<h3>{content.honest.title}</h3>
+					<ul class="tick tick-minus">
+						{content.honest.items.map((i) => <li>{i}</li>)}
+					</ul>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="block">
+		<span class="block-n" aria-hidden="true"></span>
+		<div class="block-body">
+			<h2>{content.proof.title}</h2>
+			<p class="lead">{content.proof.lead}</p>
+
+			<div class="demo">
+				<h3>{content.proof.installTitle}</h3>
+				<p class="note">{content.proof.installNote}</p>
+				<Code code={content.proof.install} lang="sh" />
+			</div>
+
+			<div class="demo">
+				<h3>{content.proof.promptsTitle}</h3>
+				<p class="note">{content.proof.promptsNote}</p>
+				{/*
+					The explicit roles are the ones these elements already have
+					implicitly, restated for the stacked layout below 45rem:
+					`display: block` on a table element drops its role, so a narrow
+					reader would otherwise lose the link between a prompt and what
+					the server does with it, exactly where the column headers are
+					hidden too.
+				*/}
+				<table class="prompts" role="table">
+					<thead role="rowgroup">
+						<tr role="row">
+							<th scope="col" role="columnheader">{content.proof.promptHeaders[0]}</th>
+							<th scope="col" role="columnheader">{content.proof.promptHeaders[1]}</th>
+						</tr>
+					</thead>
+					<tbody role="rowgroup">
+						{
+							content.proof.prompts.map(([ask, does]) => (
+								<tr role="row">
+									<th scope="row" role="rowheader" set:html={ask} />
+									<td role="cell" set:html={does} />
+								</tr>
+							))
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+
+	<section class="block">
+		<span class="block-n" aria-hidden="true"></span>
+		<div class="block-body">
+			<h2>{content.chain.title}</h2>
+			<p class="lead">{content.chain.lead}</p>
+			<table class="chain" role="table">
+				<thead role="rowgroup">
+					<tr role="row">
+						<th scope="col" role="columnheader">{content.chain.headers[0]}</th>
+						<th scope="col" role="columnheader">{content.chain.headers[1]}</th>
+					</tr>
+				</thead>
+				<tbody role="rowgroup">
+					{
+						content.chain.groups.map((g) => (
+							<tr role="row">
+								<th scope="row" role="rowheader">
+									{g.name}
+									<span class="stage-summary">{g.summary}</span>
+								</th>
+								<td role="cell">
+									<span class="chips">
+										{sourcesIn(g.id).map((source) => (
+											<span
+												class:list={["chip", source.keys !== "none" && "chip-keyed"]}
+												title={[
+													content.chain.keyedBy[source.keyedBy],
+													source.keyVar,
+												]
+													.filter(Boolean)
+													.join(" · ")}
+											>
+												{source.id}
+											</span>
+										))}
+									</span>
+								</td>
+							</tr>
+						))
+					}
+				</tbody>
+			</table>
+			<p class="legend">{content.chain.legend}</p>
+		</div>
+	</section>
+
+	<section class="block">
+		<span class="block-n" aria-hidden="true"></span>
+		<div class="block-body">
+			<h2>{content.start.title}</h2>
+			<p class="lead">{content.start.lead}</p>
+			<ol class="steps">
+				{
+					content.start.steps.map((s, i) => (
+						<li>
+							<span class="step-n" aria-hidden="true">
+								{String(i + 1).padStart(2, "0")}
+							</span>
+							<h3>{s.title}</h3>
+							<p>{s.body}</p>
+							{s.code && <Code code={s.code} lang="bash" frame="none" />}
+							<a class="step-link" href={s.href}>
+								{s.linkText}
+							</a>
+						</li>
+					))
+				}
+			</ol>
+		</div>
+	</section>
+</div>

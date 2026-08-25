@@ -1,8 +1,17 @@
 ---
 title: Download sources
 description: Per-source reference for the twenty-one download sources — what each one reaches, how it resolves an identifier into a file, what it does not cover, and whether it needs a key.
+chips:
+  - text: "Open access first"
+  - text: "Fixed chain order"
+  - text: "Keyless by default"
+  - text: "Architecture"
+    href: "/libgen-mcp/architecture/"
 datePublished: "2026-07-30"
 ---
+
+import Facts from "../../components/docs/Facts.astro";
+import Fact from "../../components/docs/Fact.astro";
 
 `download` resolves an item through an ordered chain of twenty-one sources.
 [Architecture](/libgen-mcp/architecture/#multi-source-chain) describes the chain — how it is built,
@@ -31,124 +40,50 @@ providers lead, and the shadow libraries are reached only after all of them have
 Unpaywall, run by OurResearch, tracks whether a legally free copy of a Crossref-registered
 DOI exists anywhere, and where.
 
-- **Keyed by** any DOI — no prefix restriction.
-- **Corpus** every Crossref DOI Unpaywall knows an open-access location for: publisher
-  copies, repository deposits, accepted manuscripts.
-- **How it resolves** one GET to `api.unpaywall.org/v2/<doi>?email=…`. The DOI's slashes stay
-  literal in the path (that is the documented shape); other URL-unsafe characters are
-  percent-encoded. From the record it takes `best_oa_location.url_for_pdf`, else the first
-  `oa_location` that is the published/publisher version and carries a `url_for_pdf`, else any
-  location's `url_for_pdf`. When no location advertises a `url_for_pdf` at all, the last resort
-  is a location whose plain `url` still _looks_ like a file — a path ending in `.pdf`, `.epub`
-  or `.djvu`, or a last segment of `/pdf` — preferring a published/publisher copy. A record
-  that only lists landing pages is declined outright.
-- **Why it declines landing pages** it used to fall back to the best location's `url`, which is
-  a landing page far more often than not: for `10.1371/journal.pone.0000308` Unpaywall answers
-  with four locations, none carrying a `url_for_pdf`, whose best `url` is the bare
-  `https://doi.org/…` resolver. Fetching that cost a full redirect chain (measured: 3 redirects,
-  1.1 s, 170 kB) only to hand the download layer an HTML article page it correctly rejected.
-  Declining turns the commonest shape in the corpus into a clean miss costing one API call, and
-  the chain reaches a source that can actually serve the article sooner.
-- **Scheme preserved** the URL is returned with the scheme Unpaywall recorded, `http` included.
-  An unconditional `http`→`https` promotion was tried and dropped: it rescues nothing — the
-  publisher 403s that motivated it are bot blocks that answer identically over both schemes
-  (`10.1016/j.cell.2011.02.013` resolves to `http://www.cell.com/…/pdf`, and that host 403s a
-  non-browser client either way, the plain-`http` form simply redirecting to the `https` one
-  first) — while it would break the `http`-only institutional repositories Unpaywall still
-  indexes.
-- **What it does not cover** anything registered with DataCite rather than Crossref, because
-  Unpaywall is built on Crossref: a Dagstuhl `10.4230` DOI and a Zenodo `10.5281` DOI both
-  answer 404. `is_oa: true` also does not imply a fetchable file —
-  `10.18653/v1/N19-1423` (BERT) is reported open access with **zero** `url_for_pdf` across
-  every location. A paywalled DOI and an open-access DOI with no fetchable location are
-  reported as two different misses, so the chain log says which happened.
-- **Keys** gated on `LIBGEN_MCP_UNPAYWALL_EMAIL`. With it unset the source is absent from the
-  chain entirely and hidden from `download`'s `source` enum. A client may instead supply the
-  address per call; a per-call address is used for that request only and never stored.
-- **Politeness** the contact email is the API's own requirement — it identifies the caller on
-  every lookup, which is why there is no keyless path here to fall back to.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI — no prefix restriction.</Fact>
+  <Fact kind="corpus">every Crossref DOI Unpaywall knows an open-access location for: publisher copies, repository deposits, accepted manuscripts.</Fact>
+  <Fact kind="resolves">one GET to `api.unpaywall.org/v2/<doi>?email=…`. The DOI's slashes stay literal in the path (that is the documented shape); other URL-unsafe characters are percent-encoded. From the record it takes `best_oa_location.url_for_pdf`, else the first `oa_location` that is the published/publisher version and carries a `url_for_pdf`, else any location's `url_for_pdf`. When no location advertises a `url_for_pdf` at all, the last resort is a location whose plain `url` still _looks_ like a file — a path ending in `.pdf`, `.epub` or `.djvu`, or a last segment of `/pdf` — preferring a published/publisher copy. A record that only lists landing pages is declined outright.</Fact>
+  <Fact label="Why it declines landing pages">it used to fall back to the best location's `url`, which is a landing page far more often than not: for `10.1371/journal.pone.0000308` Unpaywall answers with four locations, none carrying a `url_for_pdf`, whose best `url` is the bare `https://doi.org/…` resolver. Fetching that cost a full redirect chain (measured: 3 redirects, 1.1 s, 170 kB) only to hand the download layer an HTML article page it correctly rejected. Declining turns the commonest shape in the corpus into a clean miss costing one API call, and the chain reaches a source that can actually serve the article sooner.</Fact>
+  <Fact label="Scheme preserved">the URL is returned with the scheme Unpaywall recorded, `http` included. An unconditional `http`→`https` promotion was tried and dropped: it rescues nothing — the publisher 403s that motivated it are bot blocks that answer identically over both schemes (`10.1016/j.cell.2011.02.013` resolves to `http://www.cell.com/…/pdf`, and that host 403s a non-browser client either way, the plain-`http` form simply redirecting to the `https` one first) — while it would break the `http`-only institutional repositories Unpaywall still indexes.</Fact>
+  <Fact kind="notCovered">anything registered with DataCite rather than Crossref, because Unpaywall is built on Crossref: a Dagstuhl `10.4230` DOI and a Zenodo `10.5281` DOI both answer 404. `is_oa: true` also does not imply a fetchable file — `10.18653/v1/N19-1423` (BERT) is reported open access with **zero** `url_for_pdf` across every location. A paywalled DOI and an open-access DOI with no fetchable location are reported as two different misses, so the chain log says which happened.</Fact>
+  <Fact kind="keys">gated on `LIBGEN_MCP_UNPAYWALL_EMAIL`. With it unset the source is absent from the chain entirely and hidden from `download`'s `source` enum. A client may instead supply the address per call; a per-call address is used for that request only and never stored.</Fact>
+  <Fact kind="politeness">the contact email is the API's own requirement — it identifies the caller on every lookup, which is why there is no keyless path here to fall back to.</Fact>
+</Facts>
 ### `openalex`
 
 OpenAlex is OurResearch's open catalogue of scholarly works, built on the same open-access
 index that backs Unpaywall — and reachable without a credential of any kind.
 
-- **Keyed by** any DOI — no prefix restriction.
-- **Corpus** the same open-access locations Unpaywall reports, since both are OurResearch
-  projects reading one index. Measured against twelve DOIs across Oxford, Elsevier, Frontiers,
-  Springer, Wiley, Copernicus, MDPI, Cambridge, JSTOR and Routledge, the two returned an
-  identical best location every time. This source is therefore **not** here to widen coverage
-  over Unpaywall; it is here because it needs no email, so it covers that ground on a keyless
-  deployment, where `unpaywall` declines to call its API at all.
-- **How it resolves** one GET to `api.openalex.org/works/doi:<doi>`, projected with
-  `select=open_access,best_oa_location,locations` so the response omits the authorships,
-  topics and citation lists that dwarf the part actually read. The DOI's slashes stay literal
-  in the path; other URL-unsafe characters are percent-encoded, and the identifier is matched
-  case-insensitively by the API. From the record it takes `best_oa_location.pdf_url`, else the
-  first open-access location that is the published version and carries a `pdf_url`, else any
-  open-access location's `pdf_url`. A location with `is_oa: false` is skipped — OpenAlex lists
-  the publisher's paywalled record for every work — and every candidate must be an absolute
-  http(s) URL before it reaches the pipeline.
-- **What it does not cover** a record with no `pdf_url` anywhere yields nothing. There is
-  deliberately no landing-page fallback: across the records that reach that branch the landing
-  URL is a `doi.org` resolver or a repository splash page answering HTML, which the pipeline
-  would store as a `.pdf`. Nine such records were checked and not one resolved to a PDF, so
-  the fallback would have bought recall it does not actually have. The address OpenAlex names
-  is also the publisher's, not its own: Wiley and Taylor & Francis among others answer an
-  automated request with 403 HTML, which is a resolved-but-unfetchable outcome rather than a
-  defect. A paywalled DOI and an open-access DOI with no fetchable location are reported as
-  two different misses, and a DOI outside the catalogue answers 404, which is read as a clean
-  miss so the source is never cooled down for being honest.
-- **Keys** keyless, and not merely by default. OpenAlex meters its API in credits — a search
-  costs 10 and a filtered list 1, against a daily budget of $0.10 without a key and $1 with
-  one — but the single-entity lookup this source uses is billed at **zero** and is not capped.
-  There is no key to supply and no environment variable to set; an API key would buy this
-  source nothing today. OpenAlex's own announcement does say "you'll need an API key for all
-  requests" and calls keyless access demo-only, so this is worth stating plainly: no cutoff
-  date has been published, the keyless lookup was verified working (HTTP 200, zero credits
-  billed) on 2026-08-03, and the free tier without a key is $0.10/day against operations this
-  source never performs. Should OpenAlex begin enforcing keys, the lookup would answer 401 or
-  403, which is neither a clean miss nor an unavailability — the chain simply advances to the
-  next source, so the failure mode is a lost resolution, never a wrong file.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI — no prefix restriction.</Fact>
+  <Fact kind="corpus">the same open-access locations Unpaywall reports, since both are OurResearch projects reading one index. Measured against twelve DOIs across Oxford, Elsevier, Frontiers, Springer, Wiley, Copernicus, MDPI, Cambridge, JSTOR and Routledge, the two returned an identical best location every time. This source is therefore **not** here to widen coverage over Unpaywall; it is here because it needs no email, so it covers that ground on a keyless deployment, where `unpaywall` declines to call its API at all.</Fact>
+  <Fact kind="resolves">one GET to `api.openalex.org/works/doi:<doi>`, projected with `select=open_access,best_oa_location,locations` so the response omits the authorships, topics and citation lists that dwarf the part actually read. The DOI's slashes stay literal in the path; other URL-unsafe characters are percent-encoded, and the identifier is matched case-insensitively by the API. From the record it takes `best_oa_location.pdf_url`, else the first open-access location that is the published version and carries a `pdf_url`, else any open-access location's `pdf_url`. A location with `is_oa: false` is skipped — OpenAlex lists the publisher's paywalled record for every work — and every candidate must be an absolute http(s) URL before it reaches the pipeline.</Fact>
+  <Fact kind="notCovered">a record with no `pdf_url` anywhere yields nothing. There is deliberately no landing-page fallback: across the records that reach that branch the landing URL is a `doi.org` resolver or a repository splash page answering HTML, which the pipeline would store as a `.pdf`. Nine such records were checked and not one resolved to a PDF, so the fallback would have bought recall it does not actually have. The address OpenAlex names is also the publisher's, not its own: Wiley and Taylor & Francis among others answer an automated request with 403 HTML, which is a resolved-but-unfetchable outcome rather than a defect. A paywalled DOI and an open-access DOI with no fetchable location are reported as two different misses, and a DOI outside the catalogue answers 404, which is read as a clean miss so the source is never cooled down for being honest.</Fact>
+  <Fact kind="keys">keyless, and not merely by default. OpenAlex meters its API in credits — a search costs 10 and a filtered list 1, against a daily budget of $0.10 without a key and $1 with one — but the single-entity lookup this source uses is billed at **zero** and is not capped. There is no key to supply and no environment variable to set; an API key would buy this source nothing today. OpenAlex's own announcement does say "you'll need an API key for all requests" and calls keyless access demo-only, so this is worth stating plainly: no cutoff date has been published, the keyless lookup was verified working (HTTP 200, zero credits billed) on 2026-08-03, and the free tier without a key is $0.10/day against operations this source never performs. Should OpenAlex begin enforcing keys, the lookup would answer 401 or 403, which is neither a clean miss nor an unavailability — the chain simply advances to the next source, so the failure mode is a lost resolution, never a wrong file.</Fact>
+</Facts>
 ### `europepmc`
 
 Europe PMC is EMBL-EBI's mirror of PubMed Central and its European partner content.
 
-- **Keyed by** any DOI.
-- **Corpus** the open-access subset of PubMed Central — the biomedical and life-science
-  literature whose full text Europe PMC both holds and may redistribute.
-- **How it resolves** a search request to
-  `www.ebi.ac.uk/europepmc/webservices/rest/search` with the DOI quoted as `DOI:"<doi>"`, so
-  it matches the identifier index rather than free text. The first result must carry a PMCID
-  **and** `inEPMC=Y` **and** `isOpenAccess=Y`. The file then comes from the PMC render backend
-  (`/backend/ptpmcrender.fcgi?accid=<pmcid>&blobtype=pdf`), with `/articles/<pmcid>?pdf=render`
-  as a fallback; whichever is used is confirmed with a few-byte range GET first, because the
-  backend can be unreachable from a given network while the article path stays up.
-- **What it does not cover** anything outside PubMed Central: Dagstuhl, ACL and Zenodo DOIs all
-  return zero hits. None of the three flags is redundant — Europe PMC indexes far more than it
-  holds, and holds full text it may not redistribute, so `isOpenAccess` is a licence check
-  rather than a restatement of `inEPMC`. Both render endpoints failing is treated as the
-  service being unreachable, never as the article being absent.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI.</Fact>
+  <Fact kind="corpus">the open-access subset of PubMed Central — the biomedical and life-science literature whose full text Europe PMC both holds and may redistribute.</Fact>
+  <Fact kind="resolves">a search request to `www.ebi.ac.uk/europepmc/webservices/rest/search` with the DOI quoted as `DOI:"<doi>"`, so it matches the identifier index rather than free text. The first result must carry a PMCID **and** `inEPMC=Y` **and** `isOpenAccess=Y`. The file then comes from the PMC render backend (`/backend/ptpmcrender.fcgi?accid=<pmcid>&blobtype=pdf`), with `/articles/<pmcid>?pdf=render` as a fallback; whichever is used is confirmed with a few-byte range GET first, because the backend can be unreachable from a given network while the article path stays up.</Fact>
+  <Fact kind="notCovered">anything outside PubMed Central: Dagstuhl, ACL and Zenodo DOIs all return zero hits. None of the three flags is redundant — Europe PMC indexes far more than it holds, and holds full text it may not redistribute, so `isOpenAccess` is a licence check rather than a restatement of `inEPMC`. Both render endpoints failing is treated as the service being unreachable, never as the article being absent.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `biorxiv`
 
 bioRxiv and medRxiv are the Cold Spring Harbor Laboratory preprint servers.
 
-- **Keyed by** a DOI under the `10.1101` registrant prefix, and only that prefix.
-- **Corpus** biology (bioRxiv) and health-sciences (medRxiv) preprints, openly licensed.
-- **How it resolves** `api.biorxiv.org/details/<server>/<doi>/na/json`, bioRxiv first and
-  medRxiv second — a `10.1101` DOI belongs to exactly one of them and the other simply misses.
-  The highest version number in the response is taken, and the URL is built as
-  `<host>/content/<doi>v<n>.full.pdf` on the matching content host, so a download is always the
-  most recent revision.
-- **What it does not cover** the published article: a preprint DOI resolves to the preprint.
-  Only when _both_ servers answer normally with no record is the DOI reported absent; if either
-  lookup broke, that failure is surfaced instead, because "not found on bioRxiv or medRxiv" is
-  a claim a failed request cannot support.
-- **Keys** keyless; no account and no quota.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI under the `10.1101` registrant prefix, and only that prefix.</Fact>
+  <Fact kind="corpus">biology (bioRxiv) and health-sciences (medRxiv) preprints, openly licensed.</Fact>
+  <Fact kind="resolves">`api.biorxiv.org/details/<server>/<doi>/na/json`, bioRxiv first and medRxiv second — a `10.1101` DOI belongs to exactly one of them and the other simply misses. The highest version number in the response is taken, and the URL is built as `<host>/content/<doi>v<n>.full.pdf` on the matching content host, so a download is always the most recent revision.</Fact>
+  <Fact kind="notCovered">the published article: a preprint DOI resolves to the preprint. Only when _both_ servers answer normally with no record is the DOI reported absent; if either lookup broke, that failure is surfaced instead, because "not found on bioRxiv or medRxiv" is a claim a failed request cannot support.</Fact>
+  <Fact kind="keys">keyless; no account and no quota.</Fact>
+</Facts>
 ## Publisher-direct sources
 
 The seven sources in this group each claim one or more explicitly named DOI registrant
@@ -161,360 +96,147 @@ other identifier, and none of them needed a new key space on `Item` or a new arg
 
 The RFC Editor publishes and archives the Internet standards series for the IETF.
 
-- **Keyed by** a DOI under `10.17487` whose suffix is `rfc<number>`. The `rfc` token is
-  matched case-insensitively, because a DOI is case-insensitive by specification and a caller
-  may reasonably pass `10.17487/rfc9110`. A `10.17487` DOI
-  naming anything else is declined rather than turned into a URL that cannot exist.
-- **Corpus** every published RFC, from RFC 1 (1969) onward. Free to read and redistribute
-  since publication.
-- **How it resolves** no request of its own — the document URL follows from the DOI's suffix.
-  The number is parsed rather than copied through, so a zero-padded spelling
-  (`10.17487/RFC0791`) still lands on `rfc791.txt`.
-- **What it does not cover** PDF. The file served is `.txt`, deliberately: the RFC Editor's PDF
-  coverage is irregular — `rfc9110.pdf`, `rfc2616.pdf`, `rfc9000.pdf` and `rfc9457.pdf` serve
-  real bytes while `rfc1.pdf`, `rfc791.pdf` and `rfc8446.pdf` all answer 404 — whereas `.txt`
-  answered 200 for every RFC sampled from 1 to 9457. It is the canonical RFC format, `read`
-  extracts it, and it is the smaller file; probing PDF first with a text fallback would add a
-  request to every download and leave the format the caller receives varying from one RFC to
-  the next.
-- **Why it exists** every other DOI source misses an RFC: `unpaywall` reports one as not open
-  access, `europepmc` does not index it, `fatcat` has no preserved copy, `core` and `oapen`
-  hold nothing, and neither `scihub` nor `scidb` embeds a PDF — while the RFC Editor has served
-  the document since publication.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI under `10.17487` whose suffix is `rfc<number>`. The `rfc` token is matched case-insensitively, because a DOI is case-insensitive by specification and a caller may reasonably pass `10.17487/rfc9110`. A `10.17487` DOI naming anything else is declined rather than turned into a URL that cannot exist.</Fact>
+  <Fact kind="corpus">every published RFC, from RFC 1 (1969) onward. Free to read and redistribute since publication.</Fact>
+  <Fact kind="resolves">no request of its own — the document URL follows from the DOI's suffix. The number is parsed rather than copied through, so a zero-padded spelling (`10.17487/RFC0791`) still lands on `rfc791.txt`.</Fact>
+  <Fact kind="notCovered">PDF. The file served is `.txt`, deliberately: the RFC Editor's PDF coverage is irregular — `rfc9110.pdf`, `rfc2616.pdf`, `rfc9000.pdf` and `rfc9457.pdf` serve real bytes while `rfc1.pdf`, `rfc791.pdf` and `rfc8446.pdf` all answer 404 — whereas `.txt` answered 200 for every RFC sampled from 1 to 9457. It is the canonical RFC format, `read` extracts it, and it is the smaller file; probing PDF first with a text fallback would add a request to every download and leave the format the caller receives varying from one RFC to the next.</Fact>
+  <Fact label="Why it exists">every other DOI source misses an RFC: `unpaywall` reports one as not open access, `europepmc` does not index it, `fatcat` has no preserved copy, `core` and `oapen` hold nothing, and neither `scihub` nor `scidb` embeds a PDF — while the RFC Editor has served the document since publication.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `nist`
 
 The US National Institute of Standards and Technology publishes through its own repository,
 `nvlpubs.nist.gov`.
 
-- **Keyed by** a DOI under `10.6028`. The whole prefix is claimed rather than only the `NIST.`
-  suffixes, because the Journal of Research of NIST shares it and resolves the same way
-  (`10.6028/jres.121.004` ends at `nvlpubs.nist.gov/nistpubs/jres/121/jres.121.004.pdf`).
-- **Corpus** the Special Publication series including the SP 800 security standards, FIPS,
-  Internal/Interagency Reports, Technical Notes, the Cybersecurity White Papers and the Journal
-  of Research — US government works served without an account.
-- **How it resolves** it hands the pipeline `https://doi.org/<doi>` and lets the redirect chain
-  run. `https://doi.org/10.6028/NIST.SP.800-53r5` ends at
-  `nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf` serving
-  `application/pdf`. No series→path table and no year lookup are involved, which is also why
-  the source keeps working when NIST reorganizes the repository.
-- **What it does not cover** a `10.6028` DOI NIST does not hold, which fails on the download's
-  own GET rather than at resolve time — no other source claims this prefix, so that costs
-  nothing. **HEAD is never used to pre-check**: nvlpubs answers **404 to HEAD on a URL whose GET
-  serves the file**, so a HEAD pre-check would report every NIST publication as missing.
-- **Why the redirect rather than a built path** the repository path is not derivable from the
-  DOI. The IR series is partitioned by publication year — `/nistpubs/ir/2020/NIST.IR.8259.pdf`
-  is served and the same filename under `2019/` is not — and the DOI carries no year.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI under `10.6028`. The whole prefix is claimed rather than only the `NIST.` suffixes, because the Journal of Research of NIST shares it and resolves the same way (`10.6028/jres.121.004` ends at `nvlpubs.nist.gov/nistpubs/jres/121/jres.121.004.pdf`).</Fact>
+  <Fact kind="corpus">the Special Publication series including the SP 800 security standards, FIPS, Internal/Interagency Reports, Technical Notes, the Cybersecurity White Papers and the Journal of Research — US government works served without an account.</Fact>
+  <Fact kind="resolves">it hands the pipeline `https://doi.org/<doi>` and lets the redirect chain run. `https://doi.org/10.6028/NIST.SP.800-53r5` ends at `nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf` serving `application/pdf`. No series→path table and no year lookup are involved, which is also why the source keeps working when NIST reorganizes the repository.</Fact>
+  <Fact kind="notCovered">a `10.6028` DOI NIST does not hold, which fails on the download's own GET rather than at resolve time — no other source claims this prefix, so that costs nothing. **HEAD is never used to pre-check**: nvlpubs answers **404 to HEAD on a URL whose GET serves the file**, so a HEAD pre-check would report every NIST publication as missing.</Fact>
+  <Fact label="Why the redirect rather than a built path">the repository path is not derivable from the DOI. The IR series is partitioned by publication year — `/nistpubs/ir/2020/NIST.IR.8259.pdf` is served and the same filename under `2019/` is not — and the DOI carries no year.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `dagstuhl`
 
 Schloss Dagstuhl runs DROPS, the publication server for its open-access proceedings series.
 
-- **Keyed by** a DOI under `10.4230`. The whole prefix is claimed, since every series is served
-  from the same server and advertises its PDF the same way.
-- **Corpus** LIPIcs (the proceedings of ICALP, STACS, ESA, SoCG, CPM, ECOOP, ITCS and most other
-  top-tier theoretical-computer-science conferences), OASIcs, DARTS and the Dagstuhl Reports —
-  all Creative Commons licensed and served without an account. Six documents spanning 2015–2023
-  across three series were measured serving real PDF bytes, 339 KB to 8.4 MB.
-- **How it resolves** one GET to `drops.dagstuhl.de/entities/document/<doi>`, which is exactly
-  where the public DOI resolver redirects, so the `doi.org` hop is skipped and a resolve costs
-  one request instead of two. The file comes from the page's single `citation_pdf_url` meta
-  tag, HTML-unescaped and required to be an absolute `http(s)` URL. Real document pages run to
-  about 88 KB.
-- **What it does not cover** nothing outside the prefix. The trap is on the other side: the PDF
-  URL **cannot be derived**, so the landing page has to be read. DROPS storage paths embed the
-  volume the paper appeared in, which the DOI does not carry —
-  `10.4230/LIPIcs.ICALP.2023.1` is served from `/storage/00lipics/lipics-vol261-icalp2023/…`,
-  `10.4230/LIPIcs.STACS.2015.1` from `lipics-vol030-stacs2015/…`, and `10.4230/DagRep.9.1.1`
-  from a different scheme again (`/storage/04dagstuhl-reports/volume09/issue01/19021/…`).
-  Nothing in the identifier predicts `vol261` or `19021`. A 200 that is not a document page (no
-  `citation_title` meta tag) is reported as the source being unavailable — a changed site — and
-  not as the DOI being unheld.
-- **Why it exists** nothing else in the chain reaches Dagstuhl. It registers with DataCite, so
-  `api.crossref.org` answers 404 for its DOIs and Unpaywall answers 404 in turn; Europe PMC
-  returns zero hits; Sci-Hub serves a 2 KB stub with no PDF; and fatcat does hold a release page
-  for the ICALP paper but advertises zero `citation_pdf_url` tags on it.
-- **Keys** keyless.
-- **Politeness** DROPS's `robots.txt` disallows `/api/*`, `/metadata/*/*` and
-  `/entities/*/metadata/*`. This source touches `/entities/document/…` and `/storage/…`,
-  neither of which is disallowed.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI under `10.4230`. The whole prefix is claimed, since every series is served from the same server and advertises its PDF the same way.</Fact>
+  <Fact kind="corpus">LIPIcs (the proceedings of ICALP, STACS, ESA, SoCG, CPM, ECOOP, ITCS and most other top-tier theoretical-computer-science conferences), OASIcs, DARTS and the Dagstuhl Reports — all Creative Commons licensed and served without an account. Six documents spanning 2015–2023 across three series were measured serving real PDF bytes, 339 KB to 8.4 MB.</Fact>
+  <Fact kind="resolves">one GET to `drops.dagstuhl.de/entities/document/<doi>`, which is exactly where the public DOI resolver redirects, so the `doi.org` hop is skipped and a resolve costs one request instead of two. The file comes from the page's single `citation_pdf_url` meta tag, HTML-unescaped and required to be an absolute `http(s)` URL. Real document pages run to about 88 KB.</Fact>
+  <Fact kind="notCovered">nothing outside the prefix. The trap is on the other side: the PDF URL **cannot be derived**, so the landing page has to be read. DROPS storage paths embed the volume the paper appeared in, which the DOI does not carry — `10.4230/LIPIcs.ICALP.2023.1` is served from `/storage/00lipics/lipics-vol261-icalp2023/…`, `10.4230/LIPIcs.STACS.2015.1` from `lipics-vol030-stacs2015/…`, and `10.4230/DagRep.9.1.1` from a different scheme again (`/storage/04dagstuhl-reports/volume09/issue01/19021/…`). Nothing in the identifier predicts `vol261` or `19021`. A 200 that is not a document page (no `citation_title` meta tag) is reported as the source being unavailable — a changed site — and not as the DOI being unheld.</Fact>
+  <Fact label="Why it exists">nothing else in the chain reaches Dagstuhl. It registers with DataCite, so `api.crossref.org` answers 404 for its DOIs and Unpaywall answers 404 in turn; Europe PMC returns zero hits; Sci-Hub serves a 2 KB stub with no PDF; and fatcat does hold a release page for the ICALP paper but advertises zero `citation_pdf_url` tags on it.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">DROPS's `robots.txt` disallows `/api/*`, `/metadata/*/*` and `/entities/*/metadata/*`. This source touches `/entities/document/…` and `/storage/…`, neither of which is disallowed.</Fact>
+</Facts>
 ### `acl`
 
 The ACL Anthology is the Association for Computational Linguistics' open archive of its own
 proceedings.
 
-- **Keyed by** a DOI under `10.18653` or `10.3115` that carries the `/v1/` segment. `10.18653`
-  covers 2015 onward plus the retro-registered older venues; `10.3115` is the ACL's original
-  prefix, reused for the Anthology under the same shape.
-- **Corpus** ACL, EMNLP, NAACL, EACL, COLING, CoNLL, TACL and the workshop proceedings — the
-  primary literature of computational linguistics. CC BY from 2016 on, CC BY-NC-SA before that,
-  served without an account.
-- **How it resolves** no request of its own, which makes it the cheapest source in the chain:
-  the DOI suffix after `/v1/` _is_ the Anthology identifier and the identifier _is_ the
-  filename, so the file is `aclanthology.org/<id>.pdf`.
-- **What it does not cover** the pre-2014 numeric form. `10.3115/1072228.1072256` resolves to
-  `portal.acm.org` and its suffix is an ACM article number naming no Anthology document, so a
-  DOI without the `/v1/` segment is declined rather than guessed at.
-- **The case trap** the identifier's case is load-bearing, and in opposite directions for the
-  two id generations. `N19-1423.pdf` is 200 (786,279 bytes) and `n19-1423.pdf` is 404;
-  `2024.emnlp-main.856.pdf` is 200 (1,068,216 bytes) and `2024.EMNLP-MAIN.856.pdf` is 404.
-  Uppercasing unconditionally would break every paper since 2020 and lowercasing
-  unconditionally every paper before it, so the case is normalized on the one bit that
-  separates them: an identifier opening with a letter is uppercased, one opening with a digit is
-  left exactly as given. The identifier is also checked to be ASCII letters, digits, dots and
-  hyphens only — this is the one source that builds a file URL from caller input with no lookup
-  in between, so nothing may escape the document root.
-- **Overlap, honestly** of thirteen real Anthology DOIs sampled, twelve carried a usable
-  `url_for_pdf` in their Unpaywall record. The gain is therefore keyless-default reach —
-  `unpaywall` is absent from a stock chain — plus the thirteenth case: `10.18653/v1/N19-1423`
-  is reported `is_oa: true` by Unpaywall with zero `url_for_pdf` anywhere, while
-  `aclanthology.org/N19-1423.pdf` returns 786,279 bytes.
-- **Keys** keyless.
-- **Politeness** the Anthology serves no `robots.txt` at all (404), so nothing is disallowed.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI under `10.18653` or `10.3115` that carries the `/v1/` segment. `10.18653` covers 2015 onward plus the retro-registered older venues; `10.3115` is the ACL's original prefix, reused for the Anthology under the same shape.</Fact>
+  <Fact kind="corpus">ACL, EMNLP, NAACL, EACL, COLING, CoNLL, TACL and the workshop proceedings — the primary literature of computational linguistics. CC BY from 2016 on, CC BY-NC-SA before that, served without an account.</Fact>
+  <Fact kind="resolves">no request of its own, which makes it the cheapest source in the chain: the DOI suffix after `/v1/` _is_ the Anthology identifier and the identifier _is_ the filename, so the file is `aclanthology.org/<id>.pdf`.</Fact>
+  <Fact kind="notCovered">the pre-2014 numeric form. `10.3115/1072228.1072256` resolves to `portal.acm.org` and its suffix is an ACM article number naming no Anthology document, so a DOI without the `/v1/` segment is declined rather than guessed at.</Fact>
+  <Fact label="The case trap">the identifier's case is load-bearing, and in opposite directions for the two id generations. `N19-1423.pdf` is 200 (786,279 bytes) and `n19-1423.pdf` is 404; `2024.emnlp-main.856.pdf` is 200 (1,068,216 bytes) and `2024.EMNLP-MAIN.856.pdf` is 404. Uppercasing unconditionally would break every paper since 2020 and lowercasing unconditionally every paper before it, so the case is normalized on the one bit that separates them: an identifier opening with a letter is uppercased, one opening with a digit is left exactly as given. The identifier is also checked to be ASCII letters, digits, dots and hyphens only — this is the one source that builds a file URL from caller input with no lookup in between, so nothing may escape the document root.</Fact>
+  <Fact label="Overlap, honestly">of thirteen real Anthology DOIs sampled, twelve carried a usable `url_for_pdf` in their Unpaywall record. The gain is therefore keyless-default reach — `unpaywall` is absent from a stock chain — plus the thirteenth case: `10.18653/v1/N19-1423` is reported `is_oa: true` by Unpaywall with zero `url_for_pdf` anywhere, while `aclanthology.org/N19-1423.pdf` returns 786,279 bytes.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">the Anthology serves no `robots.txt` at all (404), so nothing is disallowed.</Fact>
+</Facts>
 ### `zenodo`
 
 Zenodo is CERN's general-purpose open repository.
 
-- **Keyed by** a DOI matching `10.5281/zenodo.<digits>`, matched case-insensitively. That is
-  narrower than the bare `10.5281` registrant prefix, which is CERN's and carries more than
-  Zenodo records.
-- **Corpus** preprints, published papers, datasets, software releases, theses and conference
-  material, all served without an account.
-- **How it resolves** `GET /api/records/<id>/files`, then the chosen entry's content URL.
-- **How the file is chosen** a record is a deposit rather than a document — it may hold one file
-  or fourteen — and the caller named the record, not a file. The source prefers a format `read`
-  can extract text from: PDF, then EPUB, then plain text, first match wins. Failing that it
-  takes the record's largest file, on the reasoning that a deposit's payload is its biggest file
-  and the rest are READMEs, checksums and manifests. A sampled fourteen-file record bore this
-  out: the deposit is a 270 MB `.zip` and the other thirteen entries are a `README.md`, a
-  `CHANGELOG.md`, a manifest script and CSV templates.
-- **The concept-DOI trap** Zenodo mints **two** DOIs per deposit: one naming the specific
-  version and one naming the deposit across all its versions. The concept DOI is what Zenodo's
-  own "cite all versions" affordance hands out, and it has no file listing —
-  `/api/records/<concept>/files` answers 404. Sampling DataCite returned concept and version
-  DOIs in roughly equal numbers, so treating that 404 as "no such record" would silently lose
-  about half of all Zenodo DOIs. On the miss path the source therefore issues
-  `HEAD /records/<id>`, which answers 302 to the version for a concept id, 200 for a version id
-  and 404 for neither. The version id is not derivable: usually the concept id plus one
-  (21698240 → 21698241), but not always (19978417 → 21676215).
-- **The mimetype trap** the extension is read off the file's name and never off its mimetype.
-  In the listing Zenodo reports formats it does not recognize as `application/octet-stream`
-  (observed for `.md` and `.xlsx`); on the wire it is worse, because the file endpoint serves
-  _everything_ as `application/octet-stream` — three PDFs whose first bytes were `%PDF` came
-  back that way, as did a `.zip`.
-- **What it does not cover** a restricted record: a 403 from the files endpoint means Zenodo
-  holds the record but will not serve its files, which is a final and correct answer about that
-  item rather than a fault. A metadata-only deposit with no files is the same kind of miss.
-- **Keys** keyless.
-- **Politeness** Zenodo's `robots.txt` disallows `/api` wholesale and then allows one path back
-  out — `Allow: /api/records/*/files`, with `Disallow: /api/records/*/files-archive`
-  re-excluded — so the file listing is explicitly permitted while the record-_metadata_
-  endpoint `/api/records/<id>` is not. That is why the version hop goes through the
-  human-facing `/records/<id>` page, which carries no `Disallow` (only `/records/*/preview`
-  does), rather than through `/api/records/<id>/versions/latest`. `Crawl-delay: 10` is also
-  set; a resolve makes one request for a version DOI and three for a concept one — the 404
-  listing, the version `HEAD`, then the version's own listing — rather than
-  crawling. Because the metadata endpoint is deliberately never called, the source cannot see
-  the deposit's title or authors, which is why a Zenodo download is named from the file key
-  rather than from bibliographic metadata.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI matching `10.5281/zenodo.<digits>`, matched case-insensitively. That is narrower than the bare `10.5281` registrant prefix, which is CERN's and carries more than Zenodo records.</Fact>
+  <Fact kind="corpus">preprints, published papers, datasets, software releases, theses and conference material, all served without an account.</Fact>
+  <Fact kind="resolves">`GET /api/records/<id>/files`, then the chosen entry's content URL.</Fact>
+  <Fact label="How the file is chosen">a record is a deposit rather than a document — it may hold one file or fourteen — and the caller named the record, not a file. The source prefers a format `read` can extract text from: PDF, then EPUB, then plain text, first match wins. Failing that it takes the record's largest file, on the reasoning that a deposit's payload is its biggest file and the rest are READMEs, checksums and manifests. A sampled fourteen-file record bore this out: the deposit is a 270 MB `.zip` and the other thirteen entries are a `README.md`, a `CHANGELOG.md`, a manifest script and CSV templates.</Fact>
+  <Fact label="The concept-DOI trap">Zenodo mints **two** DOIs per deposit: one naming the specific version and one naming the deposit across all its versions. The concept DOI is what Zenodo's own "cite all versions" affordance hands out, and it has no file listing — `/api/records/<concept>/files` answers 404. Sampling DataCite returned concept and version DOIs in roughly equal numbers, so treating that 404 as "no such record" would silently lose about half of all Zenodo DOIs. On the miss path the source therefore issues `HEAD /records/<id>`, which answers 302 to the version for a concept id, 200 for a version id and 404 for neither. The version id is not derivable: usually the concept id plus one (21698240 → 21698241), but not always (19978417 → 21676215).</Fact>
+  <Fact label="The mimetype trap">the extension is read off the file's name and never off its mimetype. In the listing Zenodo reports formats it does not recognize as `application/octet-stream` (observed for `.md` and `.xlsx`); on the wire it is worse, because the file endpoint serves _everything_ as `application/octet-stream` — three PDFs whose first bytes were `%PDF` came back that way, as did a `.zip`.</Fact>
+  <Fact kind="notCovered">a restricted record: a 403 from the files endpoint means Zenodo holds the record but will not serve its files, which is a final and correct answer about that item rather than a fault. A metadata-only deposit with no files is the same kind of miss.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">Zenodo's `robots.txt` disallows `/api` wholesale and then allows one path back out — `Allow: /api/records/*/files`, with `Disallow: /api/records/*/files-archive` re-excluded — so the file listing is explicitly permitted while the record-_metadata_ endpoint `/api/records/<id>` is not. That is why the version hop goes through the human-facing `/records/<id>` page, which carries no `Disallow` (only `/records/*/preview` does), rather than through `/api/records/<id>/versions/latest`. `Crawl-delay: 10` is also set; a resolve makes one request for a version DOI and three for a concept one — the 404 listing, the version `HEAD`, then the version's own listing — rather than crawling. Because the metadata endpoint is deliberately never called, the source cannot see the deposit's title or authors, which is why a Zenodo download is named from the file key rather than from bibliographic metadata.</Fact>
+</Facts>
 ### `scielo`
 
 SciELO is the open-access publishing platform of Latin American science; this source serves
 its Brazilian collection.
 
-- **Keyed by** a DOI carrying the `10.1590` registrant prefix, matched case-insensitively.
-  That is FapUNIFESP's prefix and every DOI under it is a SciELO Brazil article.
-- **Corpus** roughly half a million articles across the health, agricultural, social and human
-  sciences, much of it published in Portuguese and Spanish. Everything SciELO carries is free
-  to read, served without an account, and Creative Commons licensed.
-- **How it resolves** `GET https://doi.org/<doi>` with redirects followed, then the
-  `citation_pdf_url` meta tag on the article page it lands on.
-- **Why the resolver hop cannot be skipped** the URL SciELO registers is the legacy form
-  `scielo.php?script=sci_arttext&pid=<PID>`, and that PID is embedded only in the older DOIs
-  (`10.1590/s0104-6632…`), not in the modern ones (`10.1590/1982-2553202568745`). It then
-  redirects on to a `/j/<journal>/a/<key>/` address whose key appears in no identifier the
-  caller holds. SciELO's own ArticleMeta API does map a DOI to its PID, but its 88 KB legacy
-  record carries no `/j/…/a/…` key either, so it would cost a request and still leave the
-  article page to fetch.
-- **The landing check** the source scans the page only when the resolver actually arrived on
-  `scielo.br` (or a subdomain of it, matched on a label boundary). All fourteen sampled DOIs
-  did; one that leads anywhere else is reported as a clean miss rather than scraped for a meta
-  tag it was never meant to carry.
-- **The entity trap** the advertised address is query-driven (`…/?lang=en&format=pdf`) and the
-  markup writes its separator as `&amp;`, so the tag's value is HTML-unescaped before use.
-  Requesting it literally would ask for a parameter named `amp;format` and receive HTML.
-- **Measured 2026-08-21: the article page is behind a browser check.** `scielo.br` answers 403
-  to this project's User-Agent and to a bare `curl` alike, and serves an "Establishing a secure
-  connection" interstitial to a third-party fetcher, so the block is not aimed at one address.
-  The DOI still resolves to the correct article URL, so the source is calling the right place;
-  it is the page that is now closed to automated clients.
-- **Why it is not a duplicate route** over fourteen real DOIs sampled from 1998 to 2025,
-  Unpaywall reported `is_oa: true` for all fourteen but supplied a downloadable `url_for_pdf`
-  for only eight — and for none of the four sampled from 2025, leaving its best OA location
-  pointing at the HTML article page, which `read` cannot extract. Internet Archive Scholar
-  advertised a preserved copy for ten and answered 404 for the most recent ones, its ingest
-  lagging publication as an archive's must. Three of the fourteen were reachable from no source
-  in the chain at all, keys or no keys, while scielo.br served them at 1,542,793, 737,104 and
-  610,410 bytes. The gap is systematic on recent material, which is the material a research
-  tool is usually asked for.
-- **What it does not cover** SciELO's oldest records are HTML-only. The 1998 article
-  `10.1590/s0104-66321998000100007` carries no `citation_pdf_url` and answers a request for one
-  with "PDF do Artigo não encontrado", so the source declines rather than handing the pipeline
-  a 404 — and no other source reaches it either. Other SciELO national collections (Chile,
-  Mexico, Spain, Colombia) register under different prefixes and are out of scope.
-- **Keys** keyless.
-- **Politeness** `www.scielo.br`'s `robots.txt` disallows only `/admin`; both paths used here
-  are permitted. A resolve is one request plus the download.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI carrying the `10.1590` registrant prefix, matched case-insensitively. That is FapUNIFESP's prefix and every DOI under it is a SciELO Brazil article.</Fact>
+  <Fact kind="corpus">roughly half a million articles across the health, agricultural, social and human sciences, much of it published in Portuguese and Spanish. Everything SciELO carries is free to read, served without an account, and Creative Commons licensed.</Fact>
+  <Fact kind="resolves">`GET https://doi.org/<doi>` with redirects followed, then the `citation_pdf_url` meta tag on the article page it lands on.</Fact>
+  <Fact label="Why the resolver hop cannot be skipped">the URL SciELO registers is the legacy form `scielo.php?script=sci_arttext&pid=<PID>`, and that PID is embedded only in the older DOIs (`10.1590/s0104-6632…`), not in the modern ones (`10.1590/1982-2553202568745`). It then redirects on to a `/j/<journal>/a/<key>/` address whose key appears in no identifier the caller holds. SciELO's own ArticleMeta API does map a DOI to its PID, but its 88 KB legacy record carries no `/j/…/a/…` key either, so it would cost a request and still leave the article page to fetch.</Fact>
+  <Fact label="The landing check">the source scans the page only when the resolver actually arrived on `scielo.br` (or a subdomain of it, matched on a label boundary). All fourteen sampled DOIs did; one that leads anywhere else is reported as a clean miss rather than scraped for a meta tag it was never meant to carry.</Fact>
+  <Fact label="The entity trap">the advertised address is query-driven (`…/?lang=en&format=pdf`) and the markup writes its separator as `&amp;`, so the tag's value is HTML-unescaped before use. Requesting it literally would ask for a parameter named `amp;format` and receive HTML.</Fact>
+  <Fact label="Measured 2026-08-21: the article page is behind a browser check.">`scielo.br` answers 403 to this project's User-Agent and to a bare `curl` alike, and serves an "Establishing a secure connection" interstitial to a third-party fetcher, so the block is not aimed at one address. The DOI still resolves to the correct article URL, so the source is calling the right place; it is the page that is now closed to automated clients.</Fact>
+  <Fact label="Why it is not a duplicate route">over fourteen real DOIs sampled from 1998 to 2025, Unpaywall reported `is_oa: true` for all fourteen but supplied a downloadable `url_for_pdf` for only eight — and for none of the four sampled from 2025, leaving its best OA location pointing at the HTML article page, which `read` cannot extract. Internet Archive Scholar advertised a preserved copy for ten and answered 404 for the most recent ones, its ingest lagging publication as an archive's must. Three of the fourteen were reachable from no source in the chain at all, keys or no keys, while scielo.br served them at 1,542,793, 737,104 and 610,410 bytes. The gap is systematic on recent material, which is the material a research tool is usually asked for.</Fact>
+  <Fact kind="notCovered">SciELO's oldest records are HTML-only. The 1998 article `10.1590/s0104-66321998000100007` carries no `citation_pdf_url` and answers a request for one with "PDF do Artigo não encontrado", so the source declines rather than handing the pipeline a 404 — and no other source reaches it either. Other SciELO national collections (Chile, Mexico, Spain, Colombia) register under different prefixes and are out of scope.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">`www.scielo.br`'s `robots.txt` disallows only `/admin`; both paths used here are permitted. A resolve is one request plus the download.</Fact>
+</Facts>
 ### `fao`
 
 The FAO Knowledge Repository is the Food and Agriculture Organization of the United Nations'
 DSpace 7 instance.
 
-- **Keyed by** a DOI carrying the `10.4060` registrant prefix, matched case-insensitively,
-  whose suffix could be a handle's local part (ASCII letters, digits, dots and hyphens, at
-  least one alphanumeric, no `..` run).
-- **Corpus** about 9,500 documents: the flagship reports (_The State of Food Security and
-  Nutrition in the World_, _The State of the World's Forests_), technical guidance, country
-  humanitarian response plans, standards work and statistical yearbooks, published under
-  Creative Commons licenses in all six UN languages and served without an account.
-- **How it resolves** `GET /handle/20.500.14283/<doi suffix>`, then the item page's
-  `citation_pdf_url` meta tag, rewritten as described below.
-- **Why the doi.org hop is skipped** the DOI's suffix is also the item's handle, so the page's
-  address follows from the identifier with no lookup — verified on eight of eight sampled DOIs,
-  including several the DOI resolver sends to `www.fao.org/documents/card/…` instead. That
-  matters for more than a saved request: `www.fao.org` answered HTTP 504 for five of the eight
-  while the repository served all eight.
-- **The frontend/backend trap** the `citation_pdf_url` tag names `/bitstreams/<uuid>/download`,
-  an Angular _frontend_ route. A browser gets the file from it; a plain HTTP client gets HTTP
-  200, `text/html` and 372,862 bytes of application shell. The source therefore lifts the UUID
-  out of the advertised URL and requests the _backend_ endpoint
-  `/server/api/core/bitstreams/<uuid>/content`, which returned `application/pdf` at 2,929,735,
-  12,549,068 and 8,677,202 bytes for three sampled items whose frontend URLs all served the
-  shell.
-- **Why there is no "not found" status** DSpace answers an unknown handle with HTTP **200** and
-  its ordinary shell carrying "No item found for the identifier", not a 404. The status line
-  therefore cannot distinguish an unheld DOI from a held one, and the absence of the full-text
-  tag reports both. That conflates an unknown item with a metadata-only one — a dataset
-  component such as `10.4060/cc2212en-fig07` is a figure with no PDF — which costs nothing,
-  since both are final, correct answers that this source cannot serve the item. A response
-  missing the repository's own `<ds-root` element is a different matter and is reported as the
-  source being unavailable.
-- **Why it is not a duplicate route** across eight sampled DOIs spanning 2019 to 2024,
-  Unpaywall reported `is_oa: false` for every one — FAO deposits no open-access location with
-  Crossref, so the corpus is invisible to a metadata-driven resolver however open its licenses
-  are — Europe PMC returned zero hits, and Internet Archive Scholar either held a release page
-  advertising no preserved full text or answered 404. The LibGen catalog carries a handful of
-  the flagship titles and none of the rest: a search for "FAO humanitarian response plan"
-  returns nothing. All eight resolved here.
-- **Keys** keyless.
-- **Politeness** the repository's `robots.txt` cuts the REST API down to exactly one usable
-  endpoint — `Allow: /server/api/core/bitstreams` and `Allow: /server/api/core/mapping` above
-  `Disallow: /server/api/*` — so the bitstream content endpoint this source uses is explicitly
-  permitted while everything else under `/server/api` is not, including the DSpace discovery
-  search `/server/api/discover/search/objects`, which is therefore never called. The item page
-  path `/handle/<prefix>/<id>` carries no `Disallow` at all; `/search`, `/browse`,
-  `/entities/*`, `/items/*/full`, `/statistics` and the login and submission routes do.
-  `Crawl-delay: 10` is set; a resolve makes one page request and then the download, rather than
-  crawling.
-
+<Facts>
+  <Fact kind="keyedBy">a DOI carrying the `10.4060` registrant prefix, matched case-insensitively, whose suffix could be a handle's local part (ASCII letters, digits, dots and hyphens, at least one alphanumeric, no `..` run).</Fact>
+  <Fact kind="corpus">about 9,500 documents: the flagship reports (_The State of Food Security and Nutrition in the World_, _The State of the World's Forests_), technical guidance, country humanitarian response plans, standards work and statistical yearbooks, published under Creative Commons licenses in all six UN languages and served without an account.</Fact>
+  <Fact kind="resolves">`GET /handle/20.500.14283/<doi suffix>`, then the item page's `citation_pdf_url` meta tag, rewritten as described below.</Fact>
+  <Fact label="Why the doi.org hop is skipped">the DOI's suffix is also the item's handle, so the page's address follows from the identifier with no lookup — verified on eight of eight sampled DOIs, including several the DOI resolver sends to `www.fao.org/documents/card/…` instead. That matters for more than a saved request: `www.fao.org` answered HTTP 504 for five of the eight while the repository served all eight.</Fact>
+  <Fact label="The frontend/backend trap">the `citation_pdf_url` tag names `/bitstreams/<uuid>/download`, an Angular _frontend_ route. A browser gets the file from it; a plain HTTP client gets HTTP 200, `text/html` and 372,862 bytes of application shell. The source therefore lifts the UUID out of the advertised URL and requests the _backend_ endpoint `/server/api/core/bitstreams/<uuid>/content`, which returned `application/pdf` at 2,929,735, 12,549,068 and 8,677,202 bytes for three sampled items whose frontend URLs all served the shell.</Fact>
+  <Fact label="Why there is no &quot;not found&quot; status">DSpace answers an unknown handle with HTTP **200** and its ordinary shell carrying "No item found for the identifier", not a 404. The status line therefore cannot distinguish an unheld DOI from a held one, and the absence of the full-text tag reports both. That conflates an unknown item with a metadata-only one — a dataset component such as `10.4060/cc2212en-fig07` is a figure with no PDF — which costs nothing, since both are final, correct answers that this source cannot serve the item. A response missing the repository's own `<ds-root` element is a different matter and is reported as the source being unavailable.</Fact>
+  <Fact label="Why it is not a duplicate route">across eight sampled DOIs spanning 2019 to 2024, Unpaywall reported `is_oa: false` for every one — FAO deposits no open-access location with Crossref, so the corpus is invisible to a metadata-driven resolver however open its licenses are — Europe PMC returned zero hits, and Internet Archive Scholar either held a release page advertising no preserved full text or answered 404. The LibGen catalog carries a handful of the flagship titles and none of the rest: a search for "FAO humanitarian response plan" returns nothing. All eight resolved here.</Fact>
+  <Fact kind="notCovered">anything not keyed by a well-formed `10.4060` DOI, and the refusal happens before a request rather than becoming a URL that cannot exist: another registrant's DOI, an md5- or ISBN-keyed book, and a `10.4060` DOI whose suffix could not be a handle's local part — `10.4060/cc7949en/extra`, `10.4060/..` and a bare `10.4060/` are all declined, since that suffix goes into the handle path with no lookup in between. Past the gate it serves exactly one file per item and only a PDF: a page whose `citation_pdf_url` names anything but a `/bitstreams/<uuid>/download` route on the repository itself is a clean miss, and so is a page carrying no such tag — the same signal an unheld handle gives, above.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">the repository's `robots.txt` cuts the REST API down to exactly one usable endpoint — `Allow: /server/api/core/bitstreams` and `Allow: /server/api/core/mapping` above `Disallow: /server/api/*` — so the bitstream content endpoint this source uses is explicitly permitted while everything else under `/server/api` is not, including the DSpace discovery search `/server/api/discover/search/objects`, which is therefore never called. The item page path `/handle/<prefix>/<id>` carries no `Disallow` at all; `/search`, `/browse`, `/entities/*`, `/items/*/full`, `/statistics` and the login and submission routes do. `Crawl-delay: 10` is set; a resolve makes one page request and then the download, rather than crawling.</Fact>
+</Facts>
 ## Aggregators and preservation
 
 ### `fatcat`
 
 fatcat is the catalog behind Internet Archive Scholar.
 
-- **Keyed by** any DOI.
-- **Corpus** releases the Internet Archive has preserved a full text for — Wayback captures of
-  the publisher's own PDF, which is what makes this a legal source.
-- **How it resolves** `scholar.archive.org/fatcat/release/lookup?doi=<doi>` (lowercased, since
-  fatcat normalizes DOIs) answers 302 to `/fatcat/release/<uuid>` for a known DOI and 404 for
-  one the catalog does not hold. The release page's `citation_pdf_url` meta tags name the
-  preserved copies, in page order; each value is HTML-unescaped, because a capture of a
-  query-driven PDF endpoint carries its separator as `&amp;` and requesting that literally
-  404s. Every candidate is liveness-probed before the chain commits, since a preserved capture
-  can go bad while the catalog still lists it. The download carries `Accept: */*`: the Wayback
-  Machine content-negotiates, and an Accept-less request for an archived PDF — Go's default —
-  gets the HTML toolbar page that wraps the capture for human readers, which the pipeline then
-  rightly rejects as an error page.
-- **What it does not cover** a release it holds but has preserved nothing for. A release page
-  with zero `citation_pdf_url` tags is a clean miss, and it is exactly the case that keeps
-  fatcat from reaching Dagstuhl. A 200 that is not a release page (no `citation_title` meta tag)
-  is the "Session Verification" interstitial the host serves to clients it wants to vet, and is
-  reported as unavailability rather than as empty coverage.
-- **Transport note** the `api.fatcat.wiki` JSON API this source originally used stopped
-  answering — DNS resolves, TCP never completes — with no deprecation notice, so it drives
-  fatcat's own web frontend instead. The decision is unchanged; only the transport is.
-- **Keys** keyless.
-- **Politeness** at most four preserved copies are probed per release. A heavily-preserved
-  article can list nine or more captures, and probing every one would turn a single resolve into
-  a burst of requests against a human-facing site; the earliest captures fatcat lists are the
-  ones it considers canonical.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI.</Fact>
+  <Fact kind="corpus">releases the Internet Archive has preserved a full text for — Wayback captures of the publisher's own PDF, which is what makes this a legal source.</Fact>
+  <Fact kind="resolves">`scholar.archive.org/fatcat/release/lookup?doi=<doi>` (lowercased, since fatcat normalizes DOIs) answers 302 to `/fatcat/release/<uuid>` for a known DOI and 404 for one the catalog does not hold. The release page's `citation_pdf_url` meta tags name the preserved copies, in page order; each value is HTML-unescaped, because a capture of a query-driven PDF endpoint carries its separator as `&amp;` and requesting that literally 404s. Every candidate is liveness-probed before the chain commits, since a preserved capture can go bad while the catalog still lists it. The download carries `Accept: */*`: the Wayback Machine content-negotiates, and an Accept-less request for an archived PDF — Go's default — gets the HTML toolbar page that wraps the capture for human readers, which the pipeline then rightly rejects as an error page.</Fact>
+  <Fact kind="notCovered">a release it holds but has preserved nothing for. A release page with zero `citation_pdf_url` tags is a clean miss, and it is exactly the case that keeps fatcat from reaching Dagstuhl. A 200 that is not a release page (no `citation_title` meta tag) is the "Session Verification" interstitial the host serves to clients it wants to vet, and is reported as unavailability rather than as empty coverage.</Fact>
+  <Fact label="Transport note">the `api.fatcat.wiki` JSON API this source originally used stopped answering — DNS resolves, TCP never completes — with no deprecation notice, so it drives fatcat's own web frontend instead. The decision is unchanged; only the transport is.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+  <Fact kind="politeness">at most four preserved copies are probed per release. A heavily-preserved article can list nine or more captures, and probing every one would turn a single resolve into a burst of requests against a human-facing site; the earliest captures fatcat lists are the ones it considers canonical.</Fact>
+</Facts>
 ### `core`
 
 CORE, run by the Open University's Knowledge Media Institute, aggregates open-access papers
 from repositories worldwide.
 
-- **Keyed by** any DOI.
-- **Corpus** repository-deposited open-access full text.
-- **How it resolves** a Bearer-authenticated GET to
-  `api.core.ac.uk/v3/search/works/?q=doi:"<doi>"&limit=1`. The trailing slash is requested
-  directly because CORE answers 301 to the slash form otherwise, and the DOI is quoted so the
-  query matches the exact identifier. The first result's `downloadUrl` is returned.
-- **What it does not cover** a DOI CORE holds without a live copy. CORE's download URLs go stale
-  often — they redirect to a fileserver that 404s — so the URL is liveness-probed and returned
-  only when it actually serves a PDF, and the chain falls through at resolve time instead of
-  wasting a download attempt on a dead URL. A rejected key, a DOI CORE does not hold, and a DOI
-  held without a live full text are three distinct errors; a rejected key is item-independent,
-  so it sets the source aside rather than reporting the item missing.
-- **Keys** gated on `LIBGEN_MCP_CORE_KEY` (free registration). With it unset the source is
-  absent from the chain entirely and hidden from `download`'s `source` enum. The key is sent
-  only to `api.core.ac.uk` and never travels with the resolved or probed file URL.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI.</Fact>
+  <Fact kind="corpus">repository-deposited open-access full text.</Fact>
+  <Fact kind="resolves">a Bearer-authenticated GET to `api.core.ac.uk/v3/search/works/?q=doi:"<doi>"&limit=1`. The trailing slash is requested directly because CORE answers 301 to the slash form otherwise, and the DOI is quoted so the query matches the exact identifier. The first result's `downloadUrl` is returned.</Fact>
+  <Fact kind="notCovered">a DOI CORE holds without a live copy. CORE's download URLs go stale often — they redirect to a fileserver that 404s — so the URL is liveness-probed and returned only when it actually serves a PDF, and the chain falls through at resolve time instead of wasting a download attempt on a dead URL. A rejected key, a DOI CORE does not hold, and a DOI held without a live full text are three distinct errors; a rejected key is item-independent, so it sets the source aside rather than reporting the item missing.</Fact>
+  <Fact kind="keys">gated on `LIBGEN_MCP_CORE_KEY` (free registration). With it unset the source is absent from the chain entirely and hidden from `download`'s `source` enum. The key is sent only to `api.core.ac.uk` and never travels with the resolved or probed file URL.</Fact>
+</Facts>
 ### `crossref`
 
 Crossref is the DOI registration agency most journal publishers deposit with, and the deposit
 includes the publisher's own full-text links. This source fetches them.
 
-- **Keyed by** any DOI — no prefix restriction.
-- **Corpus** whatever the publisher chose to deposit a full-text link for. That is not the same
-  as the open-access corpus: it spans paywalled articles the publisher exposes for syndication
-  and text-mining partners, and it omits open-access articles whose publisher deposited no link.
-- **How it resolves** a GET to `api.crossref.org/works/<doi>` (the raw DOI, slashes intact — the
-  route rejects a `select` parameter, so the whole record is read and bounded at 4 MiB), then
-  every `application/pdf` entry in the record's `link` array is collected as a candidate, the
-  publisher's reader-facing link (`intended-application` unset or `unspecified`) first. Each
-  candidate is confirmed with a ranged probe and the first one that actually serves a PDF is
-  returned; at most four are tried, since publishers deposit the same file repeatedly under
-  different tags.
-- **Why it probes** a deposited link states a syndication contract, not a right to read. Sampled
-  across twenty registrants, every `unspecified` link (6/6) and every `syndication` link (18/18)
-  answered 403 to an anonymous client, while eLife and the smaller open-access publishers tag
-  their reader-facing file `text-mining` and serve it to anyone. The tag predicts nothing; the
-  registrant does. Without the probe the pipeline would store a publisher's challenge page as a
-  `.pdf`.
-- **Why it exists** `search` surfaces a Crossref hit carrying the publisher's own `pdf_url`, and
-  before this source nothing in the download chain ever tried that link — `read` and `download`
-  went through the open-access indexes instead, so the two paths could reach opposite
-  conclusions about one article and the link the server had just published was reachable only by
-  a caller holding its own HTTP tool.
-- **What it does not cover** the large commercial publishers. ACS, AIP, IOP, Wiley, SAGE, Taylor
-  & Francis and Springer refuse anonymous clients whatever they deposited, so for their DOIs this
-  source reports a clean miss naming the browser as the route that remains — which is often the
-  truth, including for openly licensed articles: `10.1063/5.0282407` is CC-BY and readable in a
-  browser while AIP answers 403 to every automated client, and no repository holds a copy.
-- **Where it sits** last of the article-specific resolvers, after the open-access indexes and
-  the archives: a freely licensed copy is preferred wherever one exists, but a file the
-  publisher itself serves openly is always tried before a shadow library. Only the two book
-  sources (`oapen`, `archive`) and then the shadow libraries follow it.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI — no prefix restriction.</Fact>
+  <Fact kind="corpus">whatever the publisher chose to deposit a full-text link for. That is not the same as the open-access corpus: it spans paywalled articles the publisher exposes for syndication and text-mining partners, and it omits open-access articles whose publisher deposited no link.</Fact>
+  <Fact kind="resolves">a GET to `api.crossref.org/works/<doi>` (the raw DOI, slashes intact — the route rejects a `select` parameter, so the whole record is read and bounded at 4 MiB), then every `application/pdf` entry in the record's `link` array is collected as a candidate, the publisher's reader-facing link (`intended-application` unset or `unspecified`) first. Each candidate is confirmed with a ranged probe and the first one that actually serves a PDF is returned; at most four are tried, since publishers deposit the same file repeatedly under different tags.</Fact>
+  <Fact label="Why it probes">a deposited link states a syndication contract, not a right to read. Sampled across twenty registrants, every `unspecified` link (6/6) and every `syndication` link (18/18) answered 403 to an anonymous client, while eLife and the smaller open-access publishers tag their reader-facing file `text-mining` and serve it to anyone. The tag predicts nothing; the registrant does. Without the probe the pipeline would store a publisher's challenge page as a `.pdf`.</Fact>
+  <Fact label="Why it exists">`search` surfaces a Crossref hit carrying the publisher's own `pdf_url`, and before this source nothing in the download chain ever tried that link — `read` and `download` went through the open-access indexes instead, so the two paths could reach opposite conclusions about one article and the link the server had just published was reachable only by a caller holding its own HTTP tool.</Fact>
+  <Fact kind="notCovered">the large commercial publishers. ACS, AIP, IOP, Wiley, SAGE, Taylor & Francis and Springer refuse anonymous clients whatever they deposited, so for their DOIs this source reports a clean miss naming the browser as the route that remains — which is often the truth, including for openly licensed articles: `10.1063/5.0282407` is CC-BY and readable in a browser while AIP answers 403 to every automated client, and no repository holds a copy.</Fact>
+  <Fact label="Where it sits">last of the article-specific resolvers, after the open-access indexes and the archives: a freely licensed copy is preferred wherever one exists, but a file the publisher itself serves openly is always tried before a shadow library. Only the two book sources (`oapen`, `archive`) and then the shadow libraries follow it.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ## Open-access and public-domain books
 
 ### `oapen`
@@ -522,64 +244,26 @@ includes the publisher's own full-text links. This source fetches them.
 OAPEN is the Directory of Open Access Books' hosting platform, where scholarly publishers
 deposit the full text of openly licensed monographs.
 
-- **Keyed by** DOI **or** ISBN — the only source that serves both branches of the chain. It
-  claims no md5-keyed item: OAPEN indexes books by publisher identifier and knows nothing of
-  LibGen digests. When an item carries both, the DOI is used as the query, being the more
-  specific statement.
-- **Corpus** openly licensed scholarly monographs.
-- **How it resolves** the identifier goes to OAPEN's DSpace REST search (`/rest/search`); at
-  most three hits are inspected, each fetched as `/rest/items/<uuid>` expanded with its
-  bitstreams and metadata. The file is preferentially the PDF in the `ORIGINAL` bundle — as
-  opposed to `EXPORT` (MARC/ONIX/RIS records), `TEXT` (extracted plain text) and `THUMBNAIL`
-  (cover images) — falling back to a PDF in any other bundle when the record files none under
-  `ORIGINAL`, and the bitstream is probed before it is returned.
-- **The free-text trap** `/rest/search` has no exact-identifier mode, so an identifier OAPEN
-  does not hold still returns a page of unrelated monographs: a nonexistent DOI returned 13 hits
-  when this was measured. A candidate is therefore served only after the record's own metadata
-  states an identifier the caller asked about — any field whose name ends in `.doi` or `.isbn`,
-  so `dc.identifier.isbn` counts alongside `oapen.identifier.isbn`, and an item carrying both a
-  DOI and an ISBN is confirmed by either. Without that
-  re-check the source would occasionally hand back a _different book_ and report success, which
-  is worse than any failure mode the chain already has. The three-candidate cap follows from the
-  same property: the hit list is a ranked guess, the wanted record is first when OAPEN holds it,
-  and each extra candidate costs an item fetch.
-- **What it does not cover** a search returning nothing, a hit list in which no record states
-  the identifier, and a confirmed record carrying no PDF are all clean misses — OAPEN answered
-  correctly and simply holds no downloadable copy.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">DOI **or** ISBN — the only source that serves both branches of the chain. It claims no md5-keyed item: OAPEN indexes books by publisher identifier and knows nothing of LibGen digests. When an item carries both, the DOI is used as the query, being the more specific statement.</Fact>
+  <Fact kind="corpus">openly licensed scholarly monographs.</Fact>
+  <Fact kind="resolves">the identifier goes to OAPEN's DSpace REST search (`/rest/search`); at most three hits are inspected, each fetched as `/rest/items/<uuid>` expanded with its bitstreams and metadata. The file is preferentially the PDF in the `ORIGINAL` bundle — as opposed to `EXPORT` (MARC/ONIX/RIS records), `TEXT` (extracted plain text) and `THUMBNAIL` (cover images) — falling back to a PDF in any other bundle when the record files none under `ORIGINAL`, and the bitstream is probed before it is returned.</Fact>
+  <Fact label="The free-text trap">`/rest/search` has no exact-identifier mode, so an identifier OAPEN does not hold still returns a page of unrelated monographs: a nonexistent DOI returned 13 hits when this was measured. A candidate is therefore served only after the record's own metadata states an identifier the caller asked about — any field whose name ends in `.doi` or `.isbn`, so `dc.identifier.isbn` counts alongside `oapen.identifier.isbn`, and an item carrying both a DOI and an ISBN is confirmed by either. Without that re-check the source would occasionally hand back a _different book_ and report success, which is worse than any failure mode the chain already has. The three-candidate cap follows from the same property: the hit list is a ranked guess, the wanted record is first when OAPEN holds it, and each extra candidate costs an item fetch.</Fact>
+  <Fact kind="notCovered">a search returning nothing, a hit list in which no record states the identifier, and a confirmed record carrying no PDF are all clean misses — OAPEN answered correctly and simply holds no downloadable copy.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `archive`
 
 The Internet Archive's book scans, reached through OpenLibrary.
 
-- **Keyed by** ISBN, and nothing else: the route in is an OpenLibrary ISBN lookup, so an md5-
-  or DOI-keyed item has no way to address a scan.
-- **Corpus** scans OpenLibrary reports as freely readable in full.
-- **How it resolves** two hops. OpenLibrary is queried with a fielded `isbn:<value>` query — so
-  it matches the identifier index rather than free text — for the work's `ebook_access` tier and
-  its `ia` identifiers. Then each of at most four candidates is confirmed against
-  `archive.org/metadata/<id>`, and the file is fetched from the Archive's stable
-  `/download/<id>/<file>` URL, which redirects to whichever CDN node currently holds the item.
-  The preferred file is the full-resolution text PDF, then the grayscale derivative, then the
-  EPUB; page scans, DjVu text and cover images are never chosen.
-- **What it refuses** lending-restricted scans, and the gate is double because neither half is
-  sufficient on its own. A large share of the Archive's book items are controlled-digital-lending
-  copies that advertise ordinary `.pdf` and `.epub` files exactly like a public-domain scan does,
-  but downloading one either fails or yields a DRM-encrypted, unusable file — an outcome that
-  _looks_ like success. So the work must be both `ebook_access: public` and `has_fulltext` to
-  OpenLibrary **and** the
-  individual item must carry no `access-restricted-item` flag and belong to neither the
-  `inlibrary` nor the `printdisabled` collection, because a work can be publicly readable while
-  a particular scan of it is restricted. The check is deliberately conservative: any
-  `access-restricted-item` value other than an explicit false counts as restricted, filenames
-  marked `_encrypted.` or `_lcp.` are never candidates, and a candidate must be filed under the
-  `texts` mediatype. Skipping a downloadable book costs the caller the next source in the chain;
-  downloading a restricted one costs them a file that looks fine and is not.
-- **What it does not cover** a book OpenLibrary does not know, one it holds only for borrowing,
-  and one whose every candidate scan is restricted. A metadata lookup that _broke_ on either hop
-  is surfaced as unavailability and never reported as "no free copy exists".
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">ISBN, and nothing else: the route in is an OpenLibrary ISBN lookup, so an md5- or DOI-keyed item has no way to address a scan.</Fact>
+  <Fact kind="corpus">scans OpenLibrary reports as freely readable in full.</Fact>
+  <Fact kind="resolves">two hops. OpenLibrary is queried with a fielded `isbn:<value>` query — so it matches the identifier index rather than free text — for the work's `ebook_access` tier and its `ia` identifiers. Then each of at most four candidates is confirmed against `archive.org/metadata/<id>`, and the file is fetched from the Archive's stable `/download/<id>/<file>` URL, which redirects to whichever CDN node currently holds the item. The preferred file is the full-resolution text PDF, then the grayscale derivative, then the EPUB; page scans, DjVu text and cover images are never chosen.</Fact>
+  <Fact label="What it refuses">lending-restricted scans, and the gate is double because neither half is sufficient on its own. A large share of the Archive's book items are controlled-digital-lending copies that advertise ordinary `.pdf` and `.epub` files exactly like a public-domain scan does, but downloading one either fails or yields a DRM-encrypted, unusable file — an outcome that _looks_ like success. So the work must be both `ebook_access: public` and `has_fulltext` to OpenLibrary **and** the individual item must carry no `access-restricted-item` flag and belong to neither the `inlibrary` nor the `printdisabled` collection, because a work can be publicly readable while a particular scan of it is restricted. The check is deliberately conservative: any `access-restricted-item` value other than an explicit false counts as restricted, filenames marked `_encrypted.` or `_lcp.` are never candidates, and a candidate must be filed under the `texts` mediatype. Skipping a downloadable book costs the caller the next source in the chain; downloading a restricted one costs them a file that looks fine and is not.</Fact>
+  <Fact kind="notCovered">a book OpenLibrary does not know, one it holds only for borrowing, and one whose every candidate scan is restricted. A metadata lookup that _broke_ on either hop is surfaced as unavailability and never reported as "no free copy exists".</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ## Shadow-library fallbacks
 
 Everything below is reached only after every source above has declined, which is the whole
@@ -590,117 +274,76 @@ order is fixed in code and held by a test rather than left to configuration.
 
 Sci-Hub.
 
-- **Keyed by** any DOI.
-- **Corpus** the articles Sci-Hub indexed. It stopped taking new material, so recent papers are
-  commonly absent — the gap `scidb` fills, which is why `scidb` follows rather than replaces it.
-- **How it resolves** `https://<host>/<doi>` on each configured host in order, with the DOI kept
-  raw in the path. The PDF URL is scraped from the first page that serves an article: the
-  `id="pdf"` element's `src`, or a `location.href='….pdf'` download link as a fallback. The raw
-  value is normalized — JavaScript backslash escapes undone, a protocol-relative `//host/…`
-  reference promoted to https, any `#viewer` fragment dropped — and never reconstructed from the
-  DOI, because the CDN path is opaque. A `Referer` naming the winning mirror is carried into the
-  download.
-- **What it does not cover** a host that answers with a challenge page, a not-found page or a
-  transport error is skipped; when no host yields a PDF the chain advances. Mirrors rotate, which
-  is why the host list is configurable through `LIBGEN_MCP_SCIHUB_HOSTS` (default
-  `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf`).
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI.</Fact>
+  <Fact kind="corpus">the articles Sci-Hub indexed. It stopped taking new material, so recent papers are commonly absent — the gap `scidb` fills, which is why `scidb` follows rather than replaces it.</Fact>
+  <Fact kind="resolves">`https://<host>/<doi>` on each configured host in order, with the DOI kept raw in the path. The PDF URL is scraped from the first page that serves an article: the `id="pdf"` element's `src`, or a `location.href='….pdf'` download link as a fallback. The raw value is normalized — JavaScript backslash escapes undone, a protocol-relative `//host/…` reference promoted to https, any `#viewer` fragment dropped — and never reconstructed from the DOI, because the CDN path is opaque. A `Referer` naming the winning mirror is carried into the download.</Fact>
+  <Fact kind="notCovered">a host that answers with a challenge page, a not-found page or a transport error is skipped; when no host yields a PDF the chain advances. Mirrors rotate, which is why the host list is configurable through `LIBGEN_MCP_SCIHUB_HOSTS` (default `sci-hub.ee,sci-hub.se,sci-hub.st,sci-hub.ru,sci-hub.wf`).</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `scidb`
 
 Anna's Archive's SciDB article viewer.
 
-- **Keyed by** any DOI.
-- **Corpus** articles; sampled DOIs from 2011, 2016, 2021 and 2024 all resolved, so it also
-  reaches papers published after Sci-Hub stopped indexing.
-- **How it resolves** `<mirror>/scidb/<doi>` on each discovered Anna's mirror in turn. The PDF
-  URL is taken from the pdf.js viewer iframe's percent-encoded `file` parameter — the most
-  reliable marker on the page, present whenever the article is actually served — with the first
-  bare absolute `.pdf` URL in the body as a fallback. It is taken from the page and never
-  reconstructed from the DOI, because the CDN path is opaque. A `Referer` naming the winning
-  mirror is carried into the download.
-- **What it does not cover** a mirror that errors, answers non-200 or embeds no PDF is skipped;
-  when none yields a PDF the chain advances.
-- **Keys** keyless in the strong sense: no account, no API key, no CAPTCHA and no JS challenge
-  were involved when this route was verified.
-
+<Facts>
+  <Fact kind="keyedBy">any DOI.</Fact>
+  <Fact kind="corpus">articles; sampled DOIs from 2011, 2016, 2021 and 2024 all resolved, so it also reaches papers published after Sci-Hub stopped indexing.</Fact>
+  <Fact kind="resolves">`<mirror>/scidb/<doi>` on each discovered Anna's mirror in turn. The PDF URL is taken from the pdf.js viewer iframe's percent-encoded `file` parameter — the most reliable marker on the page, present whenever the article is actually served — with the first bare absolute `.pdf` URL in the body as a fallback. It is taken from the page and never reconstructed from the DOI, because the CDN path is opaque. A `Referer` naming the winning mirror is carried into the download.</Fact>
+  <Fact kind="notCovered">a mirror that errors, answers non-200 or embeds no PDF is skipped; when none yields a PDF the chain advances.</Fact>
+  <Fact kind="keys">keyless in the strong sense: no account, no API key, no CAPTCHA and no JS challenge were involved when this route was verified.</Fact>
+</Facts>
 ### `libgen`
 
 Library Genesis itself, through the `libgen.li` mirror family — the server's primary book
 provider.
 
-- **Keyed by** MD5.
-- **Corpus** the LibGen catalog: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`,
-  `standards` and `fiction_rus`. Its standards coverage is better than it is usually credited
-  for — the `standards` collection returns 76,709 files and carries ISO/IEC and BS in depth.
-- **How it resolves** the classic LibGen link chain: `ads.php?md5=…` yields a
-  `get.php?…&key=…` link, which redirects to the CDN. It runs through the mirror-failover
-  client, so mirror discovery, per-mirror cooldown and retry all apply — see
-  [Architecture](/libgen-mcp/architecture/#http-client).
-- **What it does not cover** anything not keyed by an md5 the catalog holds. MD5 verification is
-  required here: the streamed bytes are hashed and checked against the requested digest, and a
-  mismatch deletes the partial file rather than handing back the wrong book.
-- **Keys** keyless.
-
+<Facts>
+	<Fact kind="keyedBy">MD5.</Fact>
+	<Fact kind="corpus">
+		the LibGen catalog: `nonfiction`, `fiction`, `articles`, `magazines`,
+		`comics`, `standards` and `fiction_rus`. Its standards coverage is better
+		than it is usually credited for — the `standards` collection returns 76,709
+		files and carries ISO/IEC and BS in depth.
+	</Fact>
+	<Fact kind="resolves">
+		the classic LibGen link chain: `ads.php?md5=…` yields a `get.php?…&key=…`
+		link, which redirects to the CDN. It runs through the mirror-failover
+		client, so mirror discovery, per-mirror cooldown and retry all apply — see
+		[Architecture](/libgen-mcp/architecture/#http-client).
+	</Fact>
+	<Fact kind="notCovered">
+		anything not keyed by an md5 the catalog holds. MD5 verification is required
+		here: the streamed bytes are hashed and checked against the requested
+		digest, and a mismatch deletes the partial file rather than handing back the
+		wrong book.
+	</Fact>
+	<Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `randombook`
 
 randombook.org, a Library Genesis frontend that brands itself `libgen.pw`. It is a
 mirror-discovery fallback, not a primary file provider.
 
-- **Keyed by** MD5.
-- **Corpus** none of its own. What it adds is _reachability_ — fresh libgen-family hostnames
-  that can rescue a download when the primary mirror family is down.
-- **How it resolves** two API calls, by-id (md5 → numeric id) then links-by-id (id → a list of
-  mirror hostnames), and then per mirror the site's own `/api/download?id=<id>` route, falling
-  back to the classic `ads.php` link chain on that host. The download route is confirmed with a
-  cheap HEAD first; the endpoint is GET-only, so a 405 still proves the host is alive and
-  implements it, while a 404 — or any 5xx — means the host does not serve that route and the
-  `ads.php` fallback applies.
-- **What it does not cover** most of what its own API returns. The "list" it answers with is not
-  guaranteed to hold genuine libgen.li-family hosts — it has been observed consistently
-  returning `libgen.net`, `libgen.me` and `libgen.xyz` (client-rendered single-page apps with no
-  server-side `ads.php` route) plus `annas-archive.gl` (an unrelated `/md5/` scheme) — so only
-  bare `libgen.<tld>` hosts are attempted and the rest are skipped without a request. A libgen
-  host that answers with a Nuxt application shell instead of the classic page gets its own
-  diagnosable error, so a site-wide frontend migration does not look like a one-off missing
-  link. The sibling `links` array is ignored: its entries are opaque per-request tokens to
-  landing pages, and that route returns HTTP 400 even from inside a real browser session with
-  genuine cookies. Because the API is undocumented and private, a parse failure is tagged as a
-  layout change rather than read as a miss.
-- **Trust boundary** the mirror hostnames come from the randombook API and are then fetched, so
-  this source issues requests to whatever hosts that API returns. That is a deliberate trust
-  dependency — the API is the entire point of the fallback — and it is documented rather than
-  mitigated.
-- **Keys** keyless.
-
+<Facts>
+  <Fact kind="keyedBy">MD5.</Fact>
+  <Fact kind="corpus">none of its own. What it adds is _reachability_ — fresh libgen-family hostnames that can rescue a download when the primary mirror family is down.</Fact>
+  <Fact kind="resolves">two API calls, by-id (md5 → numeric id) then links-by-id (id → a list of mirror hostnames), and then per mirror the site's own `/api/download?id=<id>` route, falling back to the classic `ads.php` link chain on that host. The download route is confirmed with a cheap HEAD first; the endpoint is GET-only, so a 405 still proves the host is alive and implements it, while a 404 — or any 5xx — means the host does not serve that route and the `ads.php` fallback applies.</Fact>
+  <Fact kind="notCovered">most of what its own API returns. The "list" it answers with is not guaranteed to hold genuine libgen.li-family hosts — it has been observed consistently returning `libgen.net`, `libgen.me` and `libgen.xyz` (client-rendered single-page apps with no server-side `ads.php` route) plus `annas-archive.gl` (an unrelated `/md5/` scheme) — so only bare `libgen.<tld>` hosts are attempted and the rest are skipped without a request. A libgen host that answers with a Nuxt application shell instead of the classic page gets its own diagnosable error, so a site-wide frontend migration does not look like a one-off missing link. The sibling `links` array is ignored: its entries are opaque per-request tokens to landing pages, and that route returns HTTP 400 even from inside a real browser session with genuine cookies. Because the API is undocumented and private, a parse failure is tagged as a layout change rather than read as a miss.</Fact>
+  <Fact label="Trust boundary">the mirror hostnames come from the randombook API and are then fetched, so this source issues requests to whatever hosts that API returns. That is a deliberate trust dependency — the API is the entire point of the fallback — and it is documented rather than mitigated.</Fact>
+  <Fact kind="keys">keyless.</Fact>
+</Facts>
 ### `annas`
 
 Anna's Archive, as an md5-keyed rescue route.
 
-- **Keyed by** MD5.
-- **Corpus** largely the same libgen family this server already reaches: Anna's non-IPFS
-  external links point mostly back at it. The value added is download _reliability_ — an
-  independent route — rather than new corpus.
-- **How it resolves** keyless by default. `<mirror>/md5/<md5>` served anonymously with no
-  CAPTCHA or JS challenge when this was written — but see the measurement below — publishing the
-  item's IPFS CID (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern
-  gateways resolve it most reliably) along with the stored filepath the extension comes from. The source then streams from the first public gateway that
-  actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and
-  `gateway.pinata.cloud` in order. With `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API
-  is tried first — on the first mirror only — and IPFS remains the fallback.
-- **What it does not cover** the anonymous "slow download" tier, deliberately: it sits behind a
-  DDoS-Guard JS challenge (HTTP 403, "Checking your browser") that no pure-Go HTTP client can
-  satisfy. Public IPFS gateway availability also varies enough that this is a genuine fallback
-  rather than a fast path — an arbitrary item can be very slow or time out.
-- **Keys** optional. `LIBGEN_MCP_ANNAS_KEY` needs an _active paid membership_; a free account is
-  rejected. An unset, expired or rejected key costs one request and falls through to the keyless
-  IPFS path, so the key can only make the source better, never worse. A client may also supply
-  it per call, used once and never stored. The member API is called at most once per download,
-  because each call consumes the account's metered allowance regardless of which mirror
-  answered. The quota it reports uses field names saying "per day", but the site describes the
-  same counter as fast downloads used in the last 18 hours — read it as a rolling window.
-- **MD5 verification** enabled on both paths, since the item is keyed by the LibGen digest.
-
+<Facts>
+  <Fact kind="keyedBy">MD5.</Fact>
+  <Fact kind="corpus">largely the same libgen family this server already reaches: Anna's non-IPFS external links point mostly back at it. The value added is download _reliability_ — an independent route — rather than new corpus.</Fact>
+  <Fact kind="resolves">keyless by default. `<mirror>/md5/<md5>` served anonymously with no CAPTCHA or JS challenge when this was written — but see the measurement below — publishing the item's IPFS CID (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern gateways resolve it most reliably) along with the stored filepath the extension comes from. The source then streams from the first public gateway that actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and `gateway.pinata.cloud` in order. With `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API is tried first — on the first mirror only — and IPFS remains the fallback.</Fact>
+  <Fact kind="notCovered">the anonymous "slow download" tier, deliberately: it sits behind a DDoS-Guard JS challenge (HTTP 403, "Checking your browser") that no pure-Go HTTP client can satisfy. Public IPFS gateway availability also varies enough that this is a genuine fallback rather than a fast path — an arbitrary item can be very slow or time out.</Fact>
+  <Fact kind="keys">optional. `LIBGEN_MCP_ANNAS_KEY` needs an _active paid membership_; a free account is rejected. An unset, expired or rejected key costs one request and falls through to the keyless IPFS path, so the key can only make the source better, never worse. A client may also supply it per call, used once and never stored. The member API is called at most once per download, because each call consumes the account's metered allowance regardless of which mirror answered. The quota it reports uses field names saying "per day", but the site describes the same counter as fast downloads used in the last 18 hours — read it as a rolling window.</Fact>
+  <Fact label="MD5 verification">enabled on both paths, since the item is keyed by the LibGen digest.</Fact>
+</Facts>
 ## Politeness and identification
 
 - Every outbound request carries an honest User-Agent naming the project and its repository —

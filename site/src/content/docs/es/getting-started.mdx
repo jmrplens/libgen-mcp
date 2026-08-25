@@ -1,6 +1,12 @@
 ---
 title: Primeros pasos
 description: Instala libgen-mcp, conéctalo a un cliente MCP y ejecuta tu primera búsqueda.
+chips:
+  - text: "Sin cuenta"
+  - text: "Sin clave de API"
+  - text: "Un binario estático"
+  - text: "Configuración"
+    href: "/libgen-mcp/es/configuration/"
 head:
   # La única página del sitio con una forma realmente procedimental.
   - tag: script
@@ -101,6 +107,8 @@ head:
       }
 datePublished: "2026-07-19"
 ---
+
+import LegalNotice from "../../../components/docs/LegalNotice.astro";
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
@@ -315,12 +323,7 @@ Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de e
 
 ## Tu primera búsqueda
 
-<Aside type="caution">
-	`libgen-mcp` accede a mirrors de terceros de Library Genesis. Eres responsable
-	de respetar las leyes de derechos de autor y de propiedad intelectual que
-	apliquen en tu lugar de residencia. Úsalo solo para contenido al que tengas
-	derecho legal de acceder.
-</Aside>
+<LegalNotice />
 
 Cuando el cliente muestre `libgen` como conectado, pídele que busque. Una petición como:
 

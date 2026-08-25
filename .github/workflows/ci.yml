@@ -222,6 +222,11 @@ jobs:
       # previous release's tool surface to the marketplace with no warning.
       - name: lhm.plugin.json matches the registered tools and prompts
         run: make check-lhm-manifest
+      # The reference tables on the docs site render their names, types and
+      # required flags from this file. A stale copy publishes a parameter list
+      # that no longer matches what the server accepts.
+      - name: tool-schema.json matches the registered surface
+        run: make check-tool-schema
       - name: Markdown tables are normalized
         run: make check-md-tables
 

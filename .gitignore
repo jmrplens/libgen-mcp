@@ -4,6 +4,7 @@
 /eval
 /gen_llms
 /gen_lhm_manifest
+/gen_tool_schema
 /godoc_tool
 /audit_tokens
 /format_md_tables

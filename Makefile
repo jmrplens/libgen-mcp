@@ -196,6 +196,12 @@ gen-lhm-manifest: ## Regenerate the tools/prompts arrays in lhm.plugin.json from
 check-lhm-manifest: ## Fail if lhm.plugin.json no longer matches the registered surface (CI mode)
 	go run ./cmd/gen_lhm_manifest/ --check
 
+gen-tool-schema: ## Regenerate site/src/data/tool-schema.json from the registered surface
+	go run ./cmd/gen_tool_schema/
+
+check-tool-schema: ## Fail if site/src/data/tool-schema.json is stale (CI mode)
+	go run ./cmd/gen_tool_schema/ --check
+
 ## gen-icon-webp: regenerate the light/dark WebP fallbacks for every icon in
 ## internal/toolutil/icons.go. Maintainer-only: needs rsvg-convert (librsvg)
 ## and cwebp (libwebp) on PATH — `brew install librsvg webp`, or the

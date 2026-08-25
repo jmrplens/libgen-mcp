@@ -31,7 +31,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR." · "Read the first chapter and summarize it."
 
-**📖 Full documentation, install guides & configuration reference → [jmrplens.github.io/libgen-mcp](https://jmrplens.github.io/libgen-mcp/)** (also in [Español](https://jmrplens.github.io/libgen-mcp/es/)). Light context footprint: the four tools add **~6,700 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrplens.github.io/libgen-mcp/eval-results/).
+**📖 Full documentation, install guides & configuration reference → [jmrp.io/docs/libgen-mcp](https://jmrp.io/docs/libgen-mcp/)** (also in [Español](https://jmrp.io/docs/libgen-mcp/es/)). Light context footprint: the four tools add **~6,700 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrp.io/docs/libgen-mcp/eval-results/).
 
 ---
 
@@ -192,7 +192,7 @@ To use a native binary instead, set `"command"` to the binary path and drop the 
 
 ## Run with Docker
 
-Run the container directly (for a shell, a hosted deployment, or to try flags). The image runs on **stdio by default** — the correct mode for MCP clients — and the `-e` flags combine freely (full list in the [configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)).
+Run the container directly (for a shell, a hosted deployment, or to try flags). The image runs on **stdio by default** — the correct mode for MCP clients — and the `-e` flags combine freely (full list in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)).
 
 ```bash
 # Plain (stdio, zero config)
@@ -226,7 +226,7 @@ The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/ar
 
 ## Tools
 
-Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrplens.github.io/libgen-mcp/tools/)).
+Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/libgen-mcp/tools/)).
 
 <details>
 <summary><code>search</code> — federated search for books, papers, comics, magazines &amp; standards</summary>
@@ -343,7 +343,7 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 - **Consult the extra searchers on every search:** `LIBGEN_MCP_EXTRA_SOURCES=always` — makes `search` consult Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC on every call, alongside the catalog; the default `auto` consults them only when the catalog finds nothing or fails, and `never` restricts every search to the catalog.
 - **Always return a link instead of saving:** `LIBGEN_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 
-Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrplens.github.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
+Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
 ## How it works
 
@@ -398,7 +398,7 @@ You can restrict which sources participate with `LIBGEN_MCP_SOURCES`; the chain 
 ## Documentation
 
 - Guides live in [`docs/`](docs/): getting started, configuration, tools reference, architecture, and troubleshooting.
-- Full documentation site (bilingual EN/ES): <https://jmrplens.github.io/libgen-mcp/>
+- Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/libgen-mcp/>
 
 ## Building
 

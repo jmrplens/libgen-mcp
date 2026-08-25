@@ -1,6 +1,12 @@
 ---
 title: Configuración
 description: Todas las variables de entorno de libgen-mcp, con su valor por defecto, rango válido y significado.
+chips:
+  - text: "Solo variables de entorno"
+  - text: "Todas las opciones opcionales"
+  - text: "Validación que falla pronto"
+  - text: "Fuentes de descarga"
+    href: "/libgen-mcp/es/sources/"
 head:
   - tag: script
     attrs:
@@ -49,6 +55,8 @@ head:
       }
 datePublished: "2026-07-19"
 ---
+
+import SourceChain from "../../../components/docs/SourceChain.astro";
 
 import { Aside } from "@astrojs/starlight/components";
 
@@ -150,7 +158,7 @@ Sin fijar por defecto, lo que deja la fuente `core` completamente fuera de la ca
 
 ### `LIBGEN_MCP_SOURCES` y la cadena de fuentes
 
-La cadena de descarga siempre se ejecuta en el orden fijo `unpaywall → openalex → europepmc → biorxiv → rfc → nist → dagstuhl → acl → zenodo → scielo → fao → fatcat → core → crossref → oapen → archive → scihub → scidb → libgen → randombook → annas`. Cada fuente declara qué elementos admite, de modo que en la práctica:
+La cadena de descarga siempre se ejecuta en el orden fijo <SourceChain variant="arrow" />. Cada fuente declara qué elementos admite, de modo que en la práctica:
 
 - **Los libros** (identificados por `md5`) se prueban contra `libgen`, luego `randombook`, luego `annas`.
 - **Los libros** (identificados por `isbn`) se prueban contra las fuentes de libros de acceso abierto `oapen` y luego `archive`. Ambas sirven únicamente copias con licencia abierta o de dominio público.

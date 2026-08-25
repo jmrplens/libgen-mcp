@@ -1,6 +1,11 @@
 ---
 title: Solución de problemas
 description: Soluciones para mirrors inalcanzables, descargas fallidas, artículos no encontrados, búsquedas truncadas y errores de espacio en disco.
+chips:
+  - text: "Síntoma, significado, soluciones"
+  - text: "Mensajes de error literales"
+  - text: "Configuración"
+    href: "/libgen-mcp/es/configuration/"
 head:
   - tag: script
     attrs:
@@ -42,7 +47,7 @@ head:
             "name": "¿Dónde guarda libgen-mcp los archivos descargados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Por defecto en ~/Downloads. Puedes cambiar el directorio con la variable LIBGEN_MCP_DOWNLOAD_DIR o con el argumento path de la herramienta download en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID 10001. Eso aplica a un servidor local stdio/Docker; un servidor remoto/alojado iniciado con --http no puede escribir en disco en absoluto, así que download devuelve siempre un enlace (un resource_link más un objeto resolved) en lugar de guardar el archivo. Un servidor stdio alojado, por ejemplo detrás de mcp-proxy en un catálogo como Glama, debería fijar LIBGEN_MCP_REMOTE_DOWNLOADS=1 para que sus descargas también vuelvan como enlaces."
+              "text": "Por defecto en ~/Downloads. Puedes cambiar el directorio con la variable LIBGEN_MCP_DOWNLOAD_DIR o con el argumento path de la herramienta download en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker, el directorio de descargas debe estar montado y ser escribible por el UID 10001. Eso aplica a un servidor local stdio/Docker. Un servidor remoto/alojado (iniciado con --http) no puede escribir en disco en absoluto, así que nunca guarda ningún archivo: download devuelve siempre un enlace (un resource_link más un objeto resolved) en lugar de guardar el archivo — resolve_only queda implícito y no hace falta indicarlo. Un servidor stdio alojado —por ejemplo detrás de mcp-proxy en un catálogo como Glama— está en la misma situación remota/efímera aunque no tenga un listener HTTP; fija LIBGEN_MCP_REMOTE_DOWNLOADS=1 en él para que sus descargas también vuelvan como enlaces. Consulta Herramientas para más detalle."
             }
           }
         ]
@@ -50,123 +55,172 @@ head:
 datePublished: "2026-07-19"
 ---
 
+import Facts from "../../../components/docs/Facts.astro";
+import Fact from "../../../components/docs/Fact.astro";
+
 Los cuatro fallos que es más probable que encuentres con `libgen-mcp` son mirrors de Library Genesis inalcanzables, una discrepancia de MD5 al descargar un libro, un DOI sin copia de acceso abierto en toda la cadena, y un ISBN que solo coincide con escaneos del Internet Archive restringidos a préstamo. Todos los errores llevan un mensaje explicativo, y `LIBGEN_MCP_LOG_LEVEL=debug` traza cada intento de mirror, cada enfriamiento y cada conmutación (ver [más abajo](#subir-el-nivel-de-log)).
 
 ## Todos los mirrors inalcanzables
 
-**Síntoma.** Las búsquedas y descargas fallan con `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
+<Facts>
+	<Fact kind="symptom">
+		Las búsquedas y descargas fallan con `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
+	</Fact>
+	<Fact kind="meaning">
+		Al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente.
+	</Fact>
+	<Fact kind="fixes">
 
-**Significado.** Al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente.
+    	- Comprueba la conectividad básica y la resolución DNS a la familia `libgen.li`. Algunos ISPs y redes bloquean estos dominios; una VPN o un resolutor alternativo (p. ej. `1.1.1.1`) suele ayudar.
+    	- Si el propio descubrimiento está bloqueado, fija un mirror que puedas alcanzar con `LIBGEN_MIRROR=https://libgen.li` (u otro host vivo) para saltarte el autodescubrimiento.
+    	- Aumenta `LIBGEN_MCP_TIMEOUT` (p. ej. `45s` o `1m`) y/o `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos.
+    	- Los mirrors que fallan entran en un enfriamiento de 45 segundos; espera un momento y reintenta — el servidor hace failover automáticamente una vez que un mirror se recupera.
 
-**Soluciones.**
+    	Un error relacionado pero distinto, `request rejected by all mirrors`, significa que todos los mirrors devolvieron un error _permanente_ (p. ej. 404/403). Eso es un "no encontrado / rechazado" normal, no un problema de red — vuelve a revisar la consulta o el identificador en lugar de tu conexión.
+    </Fact>
 
-- Comprueba la conectividad básica y la resolución DNS a la familia `libgen.li`. Algunos ISPs y redes bloquean estos dominios; una VPN o un resolutor alternativo (p. ej. `1.1.1.1`) suele ayudar.
-- Si el propio descubrimiento está bloqueado, fija un mirror que puedas alcanzar con `LIBGEN_MIRROR=https://libgen.li` (u otro host vivo) para saltarte el autodescubrimiento.
-- Aumenta `LIBGEN_MCP_TIMEOUT` (p. ej. `45s` o `1m`) y/o `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos.
-- Los mirrors que fallan entran en un enfriamiento de 45 segundos; espera un momento y reintenta — el servidor hace failover automáticamente una vez que un mirror se recupera.
-
-Un error relacionado pero distinto, `request rejected by all mirrors`, significa que todos los mirrors devolvieron un error _permanente_ (p. ej. 404/403). Eso es un "no encontrado / rechazado" normal, no un problema de red — vuelve a revisar la consulta o el identificador en lugar de tu conexión.
+</Facts>
 
 ## Descarga fallida / discrepancia de MD5
 
-**Síntoma.** `download` devuelve un error, o `integrity check failed: MD5 mismatch`.
+<Facts>
+	<Fact kind="symptom">
+		`download` devuelve un error, o `integrity check failed: MD5 mismatch`.
+	</Fact>
+	<Fact label="Significado y soluciones">
 
-**Significado y soluciones.**
+    	- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos.
+    	- **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y hace failover a la siguiente fuente.
+    	- **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
+    	- **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
+    	- **Todas las fuentes fallaron** — la herramienta devuelve los errores por fuente unidos, una línea por cada fuente que probó. Léelos para ver si el elemento simplemente no se encontró o si todos los proveedores estaban inalcanzables.
+    </Fact>
 
-- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos.
-- **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y hace failover a la siguiente fuente.
-- **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
-- **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
-- **Todas las fuentes fallaron** — la herramienta devuelve los errores por fuente unidos, una línea por cada fuente que probó. Léelos para ver si el elemento simplemente no se encontró o si todos los proveedores estaban inalcanzables.
+</Facts>
 
 ## Artículo no encontrado (acceso abierto vs Sci-Hub)
 
-**Síntoma.** Un `download` con un `doi` falla, o no devuelve nada útil.
+<Facts>
+	<Fact kind="symptom">
+		Un `download` con un `doi` falla, o no devuelve nada útil.
+	</Fact>
+	<Fact kind="meaning">
+		Los artículos se obtienen por DOI a través de varias fuentes por orden — primero los proveedores legales de acceso abierto, luego `crossref` (el enlace que depositó la propia editorial, que no es un índice de acceso abierto), luego las reservas de bibliotecas en la sombra:
 
-**Significado.** Los artículos se obtienen por DOI a través de varias fuentes por orden — primero los proveedores legales de acceso abierto, luego `crossref` (el enlace que depositó la propia editorial, que no es un índice de acceso abierto), luego las reservas de bibliotecas en la sombra:
+    	1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, a un cliente con capacidad de elicitación se le pide un correo de contacto puntual, y rechazarlo simplemente pasa al siguiente proveedor.)
+    	2. **`openalex`** — el mismo índice de acceso abierto que lee Unpaywall, pero la consulta que usa es gratuita y no necesita credencial, así que es el único resolvedor de acceso abierto sin restricción de prefijo presente en un despliegue que no configura nada. Solo sirve un enlace directo a PDF; un registro cuyas ubicaciones no expongan ninguno reporta un fallo limpio en vez de entregar una página de destino.
+    	3. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
+    	4. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
+    	5. **`rfc`** — solo para DOI de RFC `10.17487`; construye la URL de texto plano del RFC Editor a partir del número de RFC, sin consulta propia.
+    	6. **`nist`** — solo para DOI `10.6028`; los entrega al resolutor de DOI, cuya redirección termina en el PDF del repositorio del NIST.
+    	7. **`dagstuhl`** — solo para DOI `10.4230`; obtiene la página del documento en el servidor DROPS de Schloss Dagstuhl y toma el PDF que anuncia. Cubre LIPIcs, OASIcs, DARTS y los Dagstuhl Reports. Ninguna otra fuente de la cadena los alcanza: Dagstuhl registra en DataCite, así que Crossref — y por tanto Unpaywall — no tiene registro alguno de ellos.
+    	8. **`acl`** — solo para DOI `10.18653`/`10.3115` con segmento `/v1/`; construye la URL del PDF en la ACL Anthology a partir del identificador que el DOI ya contiene, sin consulta propia. Un DOI numérico `10.3115` anterior a 2014 no lleva identificador de la Anthology y se rechaza.
+    	9. **`zenodo`** — solo para DOI `10.5281/zenodo.<id>`; lista los ficheros del registro y sirve el mejor (un PDF, EPUB o fichero de texto si el registro tiene alguno, y si no su fichero más grande). Un registro restringido y un depósito solo de metadatos informan ambos de una ausencia limpia.
+    	10. **`scielo`** — solo para DOI `10.1590`; sigue el DOI hasta su página de artículo en scielo.br y toma el PDF que esa página anuncia. Los artículos recientes de SciELO son los que el resto de la cadena no alcanza: Unpaywall los marca como de acceso abierto sin aportar enlace al PDF, e Internet Archive Scholar todavía no los ha ingerido.
+    	11. **`fao`** — solo para DOI `10.4060`; deriva la página del ítem en el FAO Knowledge Repository a partir del propio sufijo del DOI, que es también el handle del ítem. La FAO no deposita ninguna ubicación de acceso abierto en Crossref, así que Unpaywall informa de sus documentos como cerrados por muy abiertas que sean sus licencias, y ninguna otra fuente de la cadena los tiene.
+    	12. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando la página del release en Scholar anuncia una que sigue sirviendo un PDF; distingue un DOI que el catálogo no tiene, un release sin nada preservado y un release cuyas capturas preservadas han dejado de servir.
+    	13. **`core`** — solo forma parte de la cadena cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE cuando CORE aloja una copia viva.
+    	14. **`crossref`** — obtiene el enlace a texto completo que la propia editorial depositó en Crossref, para cualquier DOI. Cada candidato se comprueba antes de devolverlo, porque un enlace depositado es un acuerdo de sindicación y no un derecho de lectura: las grandes editoriales comerciales responden 403 a un cliente anónimo diga lo que diga el enlace. Cuando todos lo rechazan, el error lo dice y señala el navegador como la vía que queda.
+    	15. **`oapen`** — para el DOI de una monografía, devuelve el libro de acceso abierto que OAPEN aloja bajo él. La mayoría de los DOI de revistas simplemente no están en su catálogo, así que normalmente informa de una ausencia limpia y la cadena avanza.
+    	16. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
+    	17. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.
+    </Fact>
+    <Fact kind="fixes">
 
-1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, a un cliente con capacidad de elicitación se le pide un correo de contacto puntual, y rechazarlo simplemente pasa al siguiente proveedor.)
-2. **`openalex`** — el mismo índice de acceso abierto que lee Unpaywall, pero la consulta que usa es gratuita y no necesita credencial, así que es el único resolvedor de acceso abierto sin restricción de prefijo presente en un despliegue que no configura nada. Solo sirve un enlace directo a PDF; un registro cuyas ubicaciones no expongan ninguno reporta un fallo limpio en vez de entregar una página de destino.
-3. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
-4. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
-5. **`rfc`** — solo para DOI de RFC `10.17487`; construye la URL de texto plano del RFC Editor a partir del número de RFC, sin consulta propia.
-6. **`nist`** — solo para DOI `10.6028`; los entrega al resolutor de DOI, cuya redirección termina en el PDF del repositorio del NIST.
-7. **`dagstuhl`** — solo para DOI `10.4230`; obtiene la página del documento en el servidor DROPS de Schloss Dagstuhl y toma el PDF que anuncia. Cubre LIPIcs, OASIcs, DARTS y los Dagstuhl Reports. Ninguna otra fuente de la cadena los alcanza: Dagstuhl registra en DataCite, así que Crossref — y por tanto Unpaywall — no tiene registro alguno de ellos.
-8. **`acl`** — solo para DOI `10.18653`/`10.3115` con segmento `/v1/`; construye la URL del PDF en la ACL Anthology a partir del identificador que el DOI ya contiene, sin consulta propia. Un DOI numérico `10.3115` anterior a 2014 no lleva identificador de la Anthology y se rechaza.
-9. **`zenodo`** — solo para DOI `10.5281/zenodo.<id>`; lista los ficheros del registro y sirve el mejor (un PDF, EPUB o fichero de texto si el registro tiene alguno, y si no su fichero más grande). Un registro restringido y un depósito solo de metadatos informan ambos de una ausencia limpia.
-10. **`scielo`** — solo para DOI `10.1590`; sigue el DOI hasta su página de artículo en scielo.br y toma el PDF que esa página anuncia. Los artículos recientes de SciELO son los que el resto de la cadena no alcanza: Unpaywall los marca como de acceso abierto sin aportar enlace al PDF, e Internet Archive Scholar todavía no los ha ingerido.
-11. **`fao`** — solo para DOI `10.4060`; deriva la página del ítem en el FAO Knowledge Repository a partir del propio sufijo del DOI, que es también el handle del ítem. La FAO no deposita ninguna ubicación de acceso abierto en Crossref, así que Unpaywall informa de sus documentos como cerrados por muy abiertas que sean sus licencias, y ninguna otra fuente de la cadena los tiene.
-12. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando la página del release en Scholar anuncia una que sigue sirviendo un PDF; distingue un DOI que el catálogo no tiene, un release sin nada preservado y un release cuyas capturas preservadas han dejado de servir.
-13. **`core`** — solo forma parte de la cadena cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE cuando CORE aloja una copia viva.
-14. **`crossref`** — obtiene el enlace a texto completo que la propia editorial depositó en Crossref, para cualquier DOI. Cada candidato se comprueba antes de devolverlo, porque un enlace depositado es un acuerdo de sindicación y no un derecho de lectura: las grandes editoriales comerciales responden 403 a un cliente anónimo diga lo que diga el enlace. Cuando todos lo rechazan, el error lo dice y señala el navegador como la vía que queda.
-15. **`oapen`** — para el DOI de una monografía, devuelve el libro de acceso abierto que OAPEN aloja bajo él. La mayoría de los DOI de revistas simplemente no están en su catálogo, así que normalmente informa de una ausencia limpia y la cadena avanza.
-16. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
-17. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.
 
-**Soluciones.**
+    	- Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
+    	- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son las reservas.
+    	- Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
+    	- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
+    	- Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
+    	- Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
+    </Fact>
 
-- Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
-- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son las reservas.
-- Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
-- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
-- Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
-- Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
+</Facts>
 
 ## Libro no encontrado por ISBN (solo acceso abierto)
 
-**Síntoma.** Una `download` con `isbn` falla con algo como `no catalog entry states "9780141439518"` o `no freely downloadable scan ... (every candidate is lending-restricted or holds no book file)`.
+<Facts>
+	<Fact kind="symptom">
+		Una `download` con `isbn` falla con algo como `no catalog entry states "9780141439518"` o `no freely downloadable scan ... (every candidate is lending-restricted or holds no book file)`.
+	</Fact>
+	<Fact kind="meaning">
+		La vía `isbn` llega solo a las dos fuentes de libros de **acceso abierto** — `oapen` y `archive` — y ninguna sirve un libro que no puede redistribuir:
 
-**Significado.** La vía `isbn` llega solo a las dos fuentes de libros de **acceso abierto** — `oapen` y `archive` — y ninguna sirve un libro que no puede redistribuir:
+    	- `oapen` aloja monografías académicas con licencia abierta. Comprueba que el registro encontrado declara realmente el ISBN (o DOI) pedido antes de servir nada, porque su búsqueda es de texto libre y de lo contrario devolvería una monografía ajena. Un libro comercial sencillamente no está ahí.
+    	- `archive` sirve un escaneo de Internet Archive solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** el escaneo concreto no lleva la marca `access-restricted-item` ni está en una colección de préstamo. Un libro que en el Archive solo se presta se informa como ausencia en lugar de descargarse, porque los ficheros de un elemento en préstamo o rechazan la petición o llegan con DRM e inservibles.
+    </Fact>
+    <Fact kind="fixes">
 
-- `oapen` aloja monografías académicas con licencia abierta. Comprueba que el registro encontrado declara realmente el ISBN (o DOI) pedido antes de servir nada, porque su búsqueda es de texto libre y de lo contrario devolvería una monografía ajena. Un libro comercial sencillamente no está ahí.
-- `archive` sirve un escaneo de Internet Archive solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** el escaneo concreto no lleva la marca `access-restricted-item` ni está en una colección de préstamo. Un libro que en el Archive solo se presta se informa como ausencia en lugar de descargarse, porque los ficheros de un elemento en préstamo o rechazan la petición o llegan con DRM e inservibles.
 
-**Soluciones.**
+    	- Para un libro con derechos vigentes, usa la vía `md5`: busca en el catálogo y descarga por el `md5` del resultado.
+    	- Revisa el propio ISBN — una errata, o el ISBN de otra edición, es la causa habitual. Funcionan tanto la forma de 10 como la de 13 caracteres, con o sin guiones.
+    	- Si el libro es un clásico de dominio público, busca de nuevo y localiza un resultado `gutenberg` en `open_access`: su `full_text_url` es el propio fichero del ebook.
+    </Fact>
 
-- Para un libro con derechos vigentes, usa la vía `md5`: busca en el catálogo y descarga por el `md5` del resultado.
-- Revisa el propio ISBN — una errata, o el ISBN de otra edición, es la causa habitual. Funcionan tanto la forma de 10 como la de 13 caracteres, con o sin guiones.
-- Si el libro es un clásico de dominio público, busca de nuevo y localiza un resultado `gutenberg` en `open_access`: su `full_text_url` es el propio fichero del ebook.
+</Facts>
 
 ## Falta una fuente en los errores de una descarga repetida
 
-**Síntoma.** Una `download` falla y un segundo intento informa de menos fuentes que el primero — una que falló hace un momento no aparece en absoluto.
+<Facts>
+	<Fact kind="symptom">
+		Una `download` falla y un segundo intento informa de menos fuentes que el primero — una que falló hace un momento no aparece en absoluto.
+	</Fact>
+	<Fact kind="meaning">
+		Esa fuente está en **enfriamiento**. Cuando una fuente falla porque no está disponible (un error de transporte, un timeout, un 5xx o un 429) se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Se omite, no se elimina: el enfriamiento expira por sí solo, no se escribe nada en disco (un reinicio lo borra) y cuando todas las fuentes capaces de servir el elemento están en enfriamiento se prueban todas igualmente. Una fuente que solo informó de que no tiene el elemento nunca se aparta.
 
-**Significado.** Esa fuente está en **enfriamiento**. Cuando una fuente falla porque no está disponible (un error de transporte, un timeout, un 5xx o un 429) se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Se omite, no se elimina: el enfriamiento expira por sí solo, no se escribe nada en disco (un reinicio lo borra) y cuando todas las fuentes capaces de servir el elemento están en enfriamiento se prueban todas igualmente. Una fuente que solo informó de que no tiene el elemento nunca se aparta.
+    	El log del servidor dice qué fuentes se omitieron y por qué — `source in cooldown, skipping` con el instante en que vuelve a ser elegible, o `every capable source is in cooldown, trying them anyway`. Ejecuta con `LIBGEN_MCP_LOG_LEVEL=info` (el valor por defecto) para verlas.
+    </Fact>
+    <Fact kind="fixes">
 
-El log del servidor dice qué fuentes se omitieron y por qué — `source in cooldown, skipping` con el instante en que vuelve a ser elegible, o `every capable source is in cooldown, trying them anyway`. Ejecuta con `LIBGEN_MCP_LOG_LEVEL=info` (el valor por defecto) para verlas.
 
-**Soluciones.**
+    	- No hace falta nada: reintenta más tarde, o de inmediato con `source: "<nombre>"` para dirigirte a ese proveedor directamente — una fuente explícita siempre se prueba, esté en enfriamiento o no.
+    	- Si una fuente entra en enfriamiento repetidamente, es realmente inalcanzable desde este host. Compruébalo a mano antes de sospechar del servidor.
+    </Fact>
 
-- No hace falta nada: reintenta más tarde, o de inmediato con `source: "<nombre>"` para dirigirte a ese proveedor directamente — una fuente explícita siempre se prueba, esté en enfriamiento o no.
-- Si una fuente entra en enfriamiento repetidamente, es realmente inalcanzable desde este host. Compruébalo a mano antes de sospechar del servidor.
+</Facts>
 
 ## Resultados de búsqueda truncados
 
-**Síntoma.** Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.
+<Facts>
+	<Fact kind="symptom">
+		Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.
+	</Fact>
+	<Fact kind="meaning">
+		El mirror informa más coincidencias (`total_files`) de las que servirá realmente a través de las páginas (`reachable`). Las páginas más allá de `reachable` están vacías.
+	</Fact>
+	<Fact kind="fixes">
+		Refina en lugar de paginar más profundo, como sugiere el `hint`:
 
-**Significado.** El mirror informa más coincidencias (`total_files`) de las que servirá realmente a través de las páginas (`reachable`). Las páginas más allá de `reachable` están vacías.
+    	- Añade términos distintivos (autor, año).
+    	- Restringe los campos con `search_in` (p. ej. `["title"]`).
+    	- Acota `topics` a la(s) colección(es) relevante(s).
 
-**Solución.** Refina en lugar de paginar más profundo, como sugiere el `hint`:
+    	Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los campos exactos.
+    </Fact>
 
-- Añade términos distintivos (autor, año).
-- Restringe los campos con `search_in` (p. ej. `["title"]`).
-- Acota `topics` a la(s) colección(es) relevante(s).
-
-Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los campos exactos.
+</Facts>
 
 ## Un resultado que no se descarga (`origin: "annas"`)
 
-**Síntoma.** Una búsqueda devolvió un resultado etiquetado `origin: "annas"`, pero `download` falla con su md5 y da un error sobre la ausencia de CID de IPFS o de una pasarela que lo sirva.
+<Facts>
+	<Fact kind="symptom">
+		Una búsqueda devolvió un resultado etiquetado `origin: "annas"`, pero `download` falla con su md5 y da un error sobre la ausencia de CID de IPFS o de una pasarela que lo sirva.
+	</Fact>
+	<Fact kind="meaning">
+		Ese resultado vino de [una búsqueda escalada](/libgen-mcp/es/how-search-works/): el catálogo de Library Genesis no tiene el archivo, así que la única vía es Anna's Archive. La ruta sin clave lee la dirección IPFS del ítem en la página de Anna's — y **la mayoría de registros de Anna's no publica ninguna dirección IPFS**. Cuando no la hay, no hay nada que descargar sin clave, y esto es lo esperable, no un fallo.
+	</Fact>
+	<Fact kind="fixes">
+		Por orden de esfuerzo:
 
-**Significado.** Ese resultado vino de [una búsqueda escalada](/libgen-mcp/es/how-search-works/): el catálogo de Library Genesis no tiene el archivo, así que la única vía es Anna's Archive. La ruta sin clave lee la dirección IPFS del ítem en la página de Anna's — y **la mayoría de registros de Anna's no publica ninguna dirección IPFS**. Cuando no la hay, no hay nada que descargar sin clave, y esto es lo esperable, no un fallo.
+    	- Poner en `LIBGEN_MCP_ANNAS_KEY` una clave de membresía de Anna's Archive. La API de descarga rápida de socio sirve ítems sin dirección IPFS, y la ruta IPFS sin clave se mantiene como respaldo. Ver [Configuración](/libgen-mcp/es/configuration/).
+    	- Buscar de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, y esa sí se descarga por las fuentes ordinarias.
+    	- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año e idioma — más el ISBN cuando ese registro lo lleva, que es una minoría — aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
 
-**Solución.** Por orden de esfuerzo:
+    	Una pasarela que solo va lenta devuelve un timeout en su lugar; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían mucho en lo que tardan en localizar un ítem.
+    </Fact>
 
-- Poner en `LIBGEN_MCP_ANNAS_KEY` una clave de membresía de Anna's Archive. La API de descarga rápida de socio sirve ítems sin dirección IPFS, y la ruta IPFS sin clave se mantiene como respaldo. Ver [Configuración](/libgen-mcp/es/configuration/).
-- Buscar de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, y esa sí se descarga por las fuentes ordinarias.
-- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año e idioma — más el ISBN cuando ese registro lo lleva, que es una minoría — aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
-
-Una pasarela que solo va lenta devuelve un timeout en su lugar; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían mucho en lo que tardan en localizar un ítem.
+</Facts>
 
 ## Subir el nivel de log
 
@@ -193,15 +247,21 @@ Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así
 
 ## Espacio en disco
 
-**Síntoma.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.
+<Facts>
+	<Fact kind="symptom">
+		`not enough free disk space in <dir>: need ~<n> bytes, have <m>`.
+	</Fact>
+	<Fact kind="meaning">
+		Antes de transmitir una descarga cuyo tamaño se conoce, el servidor comprueba que el destino tiene espacio para el archivo más un margen de ~8 MiB, y se niega en lugar de llenar el disco.
+	</Fact>
+	<Fact kind="fixes">
 
-**Significado.** Antes de transmitir una descarga cuyo tamaño se conoce, el servidor comprueba que el destino tiene espacio para el archivo más un margen de ~8 MiB, y se niega en lugar de llenar el disco.
+    	- Libera espacio en el volumen de destino, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` (o el `path` por llamada) a un volumen con más espacio.
+    	- Elimina los archivos `.part` obsoletos que dejan las descargas interrumpidas si no piensas reanudarlas (viven en el directorio de descargas, con el nombre `.libgen-mcp-*.part`).
+    	- Bajo Docker, asegúrate de que el volumen de descargas montado sea lo bastante grande y escribible por el UID `10001`.
+    </Fact>
 
-**Soluciones.**
-
-- Libera espacio en el volumen de destino, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` (o el `path` por llamada) a un volumen con más espacio.
-- Elimina los archivos `.part` obsoletos que dejan las descargas interrumpidas si no piensas reanudarlas (viven en el directorio de descargas, con el nombre `.libgen-mcp-*.part`).
-- Bajo Docker, asegúrate de que el volumen de descargas montado sea lo bastante grande y escribible por el UID `10001`.
+</Facts>
 
 ## Preguntas frecuentes
 

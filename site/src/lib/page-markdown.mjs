@@ -1,0 +1,269 @@
+// Renders an authored .mdx page back to plain Markdown.
+//
+// The page actions offer every documentation page as Markdown, for readers who
+// want to paste one into an assistant. The obvious source for that is the .mdx
+// file itself — except that this site's pages are no longer plain Markdown:
+// a source's declarations are <Facts>/<Fact> elements, and handing an LLM raw
+// JSX is worse than handing it the bullets those elements replaced.
+//
+// So the component vocabulary is rendered back. That is only safe because the
+// vocabulary is small, closed and ours: the element names listed in COMPONENTS
+// below. Anything left over is an error rather than a passthrough — a page that
+// starts using a component this file has not been taught aborts the build,
+// which is what residualComponents() and the caller's check enforce.
+//
+// The labels come from the same i18n JSON the Fact component reads, so the
+// Markdown copy says "Qué no cubre" on a Spanish page for the same reason the
+// page does.
+
+/**
+ * Element names this renderer knows how to unwrap. Named in the build failure so
+ * whoever hits it can see what the vocabulary currently is, rather than being
+ * told only what is missing from it.
+ */
+export const COMPONENTS = [
+	"Facts",
+	"Fact",
+	"Aside",
+	"Tabs",
+	"TabItem",
+	"LinkCard",
+	"Home",
+];
+
+/** Reads a JSX-ish attribute off an opening tag. */
+const attr = (tag, name) => {
+	const m = new RegExp(`${name}="([^"]*)"`).exec(tag);
+	return m ? m[1].replace(/&quot;/g, '"') : undefined;
+};
+
+/**
+ * Strips the common leading indentation from a block, so the indentation a
+ * component's children carry as JSX does not survive into the Markdown, where
+ * four spaces would mean a code block.
+ */
+function dedent(text) {
+	const lines = text.replace(/^\n+/, "").replace(/\s+$/, "").split("\n");
+	const indents = lines
+		.filter((line) => line.trim())
+		.map((line) => /^[ \t]*/.exec(line)[0].length);
+	const common = indents.length ? Math.min(...indents) : 0;
+	return lines.map((line) => line.slice(common)).join("\n");
+}
+
+const unescape = (text) =>
+	text
+		.replace(/&#123;/g, "{")
+		.replace(/&#125;/g, "}")
+		.replace(/&quot;/g, '"');
+
+/**
+ * @param {string} source - The .mdx file's full text.
+ * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
+ * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
+ * @param {string[]} [chain] - The download chain's source ids, in order.
+ * @returns {string} Markdown.
+ */
+export function toMarkdown(source, labels, schema, chain) {
+	let text = source;
+
+	// Frontmatter and the import block are machinery, not content.
+	text = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+	text = text.replace(/^import .*$/gm, "");
+
+	// <Home /> renders the landing from src/data/home.ts. There is no Markdown
+	// equivalent of a component-built page, and the rest of the landing (the
+	// disambiguation table, the notice, the FAQ) is ordinary Markdown that
+	// survives on its own.
+	text = text.replace(/<Home[^>]*\/>/g, "");
+
+	// A spec sheet becomes the labelled list it replaced: the label in bold,
+	// then the prose, which is already Markdown.
+	text = text.replace(/<\/?Facts[^>]*>/g, "");
+	text = text.replace(
+		/^[ \t]*<Fact\s+(kind|label)="([^"]*)"\s*>([\s\S]*?)<\/Fact>/gm,
+		(_, key, value, body) => {
+			const label =
+				key === "kind"
+					? (labels[`lgm.fact.${value}`] ?? value)
+					: unescape(value);
+			// A body arrives indented as JSX and wrapped by prettier, and it may
+			// contain lists and fenced code — troubleshooting's "Fixes" rows are
+			// four bullets each. Collapsing every newline turned those into one
+			// run-on line in the Markdown copy, which is the artifact the page
+			// actions hand to an assistant. So the body is dedented, and only the
+			// blocks that are genuinely wrapped prose get rejoined.
+			const blocks = dedent(body)
+				.split(/\n\s*\n/)
+				.filter((block) => block.trim());
+			const rendered = blocks.map((block) => {
+				const lines = block.split("\n");
+				const structured = lines.some((line) =>
+					/^\s*(?:[-*+] |\d+\. |```|> |\|)/.test(line),
+				);
+				return unescape(
+					structured
+						? block.replace(/\n+$/, "")
+						: lines.join(" ").replace(/\s+/g, " ").trim(),
+				);
+			});
+			const [first, ...rest] = rendered;
+			// A continuation block is indented two spaces so it stays inside the
+			// bullet instead of closing the list.
+			const inside = (block) =>
+				block
+					.split("\n")
+					.map((line) => (line.trim() ? `  ${line}` : line))
+					.join("\n");
+			const head = first?.includes("\n")
+				? `- **${label}**\n\n${inside(first)}`
+				: `- **${label}** ${first ?? ""}`;
+			return head + rest.map((block) => `\n\n${inside(block)}`).join("");
+		},
+	);
+
+	// <LegalNotice /> prints one string from the i18n collection. It is expanded
+	// before the Aside pass below so it arrives as an ordinary caution alert,
+	// which means the Markdown copy carries the notice rather than dropping it —
+	// the one piece of text on these pages that must not go missing.
+	text = text.replace(
+		/<LegalNotice\s*\/>/g,
+		() => `<Aside type="caution">${labels["lgm.legal.notice"] ?? ""}</Aside>`,
+	);
+
+	// <SourceChain> becomes the rendering it replaced: the inline order as a
+	// backticked arrow string, the positional form as a numbered list. The order
+	// comes from the same array the component reads, so the Markdown copy cannot
+	// state a different chain from the page.
+	text = text.replace(/<SourceChain([^>]*)\/>/g, (whole, tag) => {
+		if (attr(tag, "variant") !== "arrow" || !chain?.length) return whole;
+		return "`" + chain.join(" → ") + "`";
+	});
+	text = text.replace(
+		/<SourceChain([^>]*)>([\s\S]*?)<\/SourceChain>/g,
+		(whole, tag, body) => {
+			if (attr(tag, "variant") !== "position" || !chain?.length) return whole;
+			const described = new Map(
+				[
+					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
+				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
+			);
+			return chain
+				.map(
+					(id, index) =>
+						`${index + 1}. \`${id}\` — ${unescape(described.get(id) ?? "")}`,
+				)
+				.join("\n");
+		},
+	);
+
+	// A <SchemaTable> becomes the table it replaced on the page. The rendered
+	// page uses a description list because these descriptions run to 500
+	// characters and a four-column table crushes them; a Markdown copy has no
+	// layout to crush, is read by machines as often as by people, and a table is
+	// the densest way to state four facts per row. Same data, and the type and
+	// required columns still come from the generated schema rather than from
+	// anything written here.
+	text = text.replace(
+		/<SchemaTable([^>]*)>([\s\S]*?)<\/SchemaTable>/g,
+		(whole, tag, body) => {
+			const name = attr(tag, "name");
+			const section = attr(tag, "section");
+			// The column headings are the locale's, like every other string the
+			// components print: a Spanish page's Markdown copy should not be
+			// headed in English.
+			const col = (key, fallback) => labels[`lgm.schema.${key}`] ?? fallback;
+			const rows =
+				section === "arguments"
+					? schema?.prompts?.[name]?.arguments
+					: schema?.tools?.[name]?.[section];
+			if (!rows) return whole;
+
+			const described = new Map(
+				[
+					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
+				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
+			);
+			// The reverse of SchemaTable's own check: it verifies every field has a
+			// slot, but cannot see a slot naming a field the schema does not have.
+			// That one is silently dropped from the page AND the copy, so removing
+			// a parameter from the Go struct would delete its prose with no signal.
+			const orphans = [...described.keys()].filter(
+				(slot) => !rows.some((row) => row.name === slot),
+			);
+			if (orphans.length > 0) {
+				throw new Error(
+					`SchemaTable ${name}.${section}: described ${orphans
+						.map((slot) => `"${slot}"`)
+						.join(", ")}, which the generated schema does not have. ` +
+						"Run `make gen-tool-schema`, or remove the slot.",
+				);
+			}
+			const head =
+				`| ${col("name", "Name")} | ${col("type", "Type")} | ` +
+				`${col("required", "Required")} | ${col("description", "Description")} |\n` +
+				"| --- | --- | --- | --- |";
+			// The backslash is escaped BEFORE the pipe, and the order is the whole
+			// point: escaping only the pipe turns a cell containing `a\|b` into
+			// `a\\|b`, which Markdown reads as an escaped backslash followed by a
+			// live cell separator — the row splits and the table is corrupt from
+			// there down. Escaping the backslash first makes the pipe's escape its
+			// own.
+			const escapeCell = (text) =>
+				text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+			const lines = rows.map((row) => {
+				const cell = escapeCell(unescape(described.get(row.name) ?? ""));
+				return `| \`${row.name}\` | ${row.type} | ${row.required ? "yes" : "no"} | ${cell} |`;
+			});
+			return [head, ...lines].join("\n");
+		},
+	);
+
+	// Asides become GitHub-style alerts, which every Markdown reader that
+	// matters renders and every LLM understands as emphasis.
+	text = text.replace(/<Aside([^>]*)>([\s\S]*?)<\/Aside>/g, (_, tag, body) => {
+		const type = (attr(tag, "type") ?? "note").toUpperCase();
+		const title = attr(tag, "title");
+		const lines = body
+			.trim()
+			.split("\n")
+			.map((l) => `> ${l.trim()}`.trimEnd());
+		return `> [!${type}]${title ? `\n> **${title}**\n>` : ""}\n${lines.join("\n")}`;
+	});
+
+	// A tab set has no Markdown equivalent, so each tab becomes a labelled
+	// section. Dropping the labels would silently merge alternatives that are
+	// meant to be read one instead of the other.
+	text = text.replace(/<\/?Tabs[^>]*>/g, "");
+	text = text.replace(
+		/<TabItem([^>]*)>([\s\S]*?)<\/TabItem>/g,
+		(_, tag, body) => `#### ${attr(tag, "label") ?? ""}\n${body.trim()}\n`,
+	);
+
+	text = text.replace(/<LinkCard([^>]*)\/>/g, (_, tag) => {
+		const title = attr(tag, "title") ?? "";
+		const href = attr(tag, "href") ?? "";
+		const description = attr(tag, "description");
+		return `- [${title}](${href})${description ? ` — ${description}` : ""}`;
+	});
+
+	return `${unescape(text)
+		.replace(/\n{3,}/g, "\n\n")
+		.trim()}\n`;
+}
+
+/**
+ * Any JSX-looking element left after rendering. Should always be empty.
+ *
+ * Code is excluded before scanning. A capital-letter tag inside a fence or a
+ * code span is content — `<PID>` is a placeholder in a shell command, and
+ * flagging it would make the check cry wolf on a page that renders perfectly.
+ */
+export function residualComponents(markdown) {
+	const prose = markdown
+		.replace(/```[\s\S]*?```/g, "")
+		.replace(/`[^`\n]*`/g, "");
+	return [
+		...new Set([...prose.matchAll(/<\/?([A-Z][A-Za-z]*)/g)].map((m) => m[1])),
+	];
+}

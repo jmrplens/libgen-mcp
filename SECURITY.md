@@ -81,7 +81,7 @@ wanted:
 ### Out of scope
 
 - **The legality or content of anything the tool retrieves.** That is addressed
-  in [Responsible use](https://jmrplens.github.io/libgen-mcp/responsible-use/),
+  in [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/),
   not here. This project hosts nothing and can take nothing down.
 - **Vulnerabilities in the third-party services** libgen-mcp talks to — Library
   Genesis mirrors, Sci-Hub, Anna's Archive, the open-access providers. Report
@@ -99,7 +99,7 @@ wanted:
 
 - No telemetry, no analytics and no backend of its own; every network request is
   a direct consequence of a tool call. See the
-  [privacy policy](https://jmrplens.github.io/libgen-mcp/privacy/).
+  [privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/).
 - No credentials are required for any core capability. The two optional keys are
   opt-in, and a key supplied per call is used for that request and never stored.
 - Externally sourced text is escaped through dedicated helpers and marked

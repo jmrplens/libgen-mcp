@@ -1,0 +1,93 @@
+---
+/**
+ * A tool's parameters or returned fields, or a prompt's arguments.
+ *
+ * STRUCTURE IS GENERATED, PROSE IS AUTHORED. The name, the type and the
+ * required flag come from src/data/tool-schema.json, which cmd/gen_tool_schema
+ * writes from a real tools/list round-trip. The description of each row is a
+ * named slot, so it stays markdown in the page, in the page's own language.
+ *
+ * That split is deliberate, and generating the descriptions too would be a
+ * regression. The jsonschema tags are written for a model — "array of
+ * collections to search: nonfiction fiction articles magazines comics standards
+ * fiction_rus (omit for all). Use fiction for novels comics for graphic novels"
+ * — and these tables are written for a reader: "Collections to search:
+ * `nonfiction`, `fiction`, … Omit for all collections." Both are right for their
+ * audience.
+ *
+ * What the generated half buys is that the two cannot drift. A field the server
+ * advertises with no slot to describe it fails the build, which is how the
+ * missing `resolved` row on download's output was found: it was in the schema,
+ * documented in prose below the table, and absent from the table that claims to
+ * list every field the tool returns.
+ *
+ * The layout is a description list rather than a <table> on purpose. These
+ * descriptions run to five hundred characters; in a four-column table that is a
+ * ~50-character measure on a wide screen and unreadable on a phone. The name and
+ * its type sit in a gutter the eye can run down, and the prose keeps the full
+ * width at every viewport — the same treatment the source spec sheets use, so
+ * the two kinds of reference read as one thing.
+ */
+import schema from "../../data/tool-schema.json";
+
+interface Row {
+	name: string;
+	type: string;
+	required: boolean;
+	enum?: string[];
+}
+
+interface Props {
+	/** A tool name for input/output, a prompt name for arguments. */
+	name: string;
+	section: "input" | "output" | "arguments";
+}
+
+const { name, section } = Astro.props;
+const requiredLabel = Astro.locals.t("lgm.schema.required");
+
+const tools = schema.tools as Record<string, Record<string, Row[]>>;
+const prompts = schema.prompts as Record<string, Record<string, Row[]>>;
+
+const rows: Row[] | undefined =
+	section === "arguments" ? prompts[name]?.arguments : tools[name]?.[section];
+
+if (!rows) {
+	throw new Error(
+		`SchemaTable: tool-schema.json has no ${section} for "${name}". ` +
+			`Run \`make gen-tool-schema\` if the surface changed.`,
+	);
+}
+
+// Every advertised field must be described. This is the whole point of reading
+// the structure from the generated file: a parameter that reaches the tool
+// surface without reaching the documentation is exactly the drift nothing else
+// on this site would notice.
+const undescribed = rows.filter((row) => !Astro.slots.has(row.name));
+if (undescribed.length > 0) {
+	throw new Error(
+		`SchemaTable "${name}" ${section}: no description given for ` +
+			undescribed.map((row) => `"${row.name}"`).join(", ") +
+			`. Add a <Fragment slot="…"> for each, or remove it from the surface.`,
+	);
+}
+---
+
+<dl class="schema-table" data-schema={`${name}.${section}`}>
+	{
+		rows.map((row) => (
+			<div class="schema-row" data-field={row.name} data-required={row.required}>
+				<dt>
+					<code>{row.name}</code>
+					<span class="schema-meta">
+						<span class="schema-type">{row.type}</span>
+						{row.required && <span class="schema-required">{requiredLabel}</span>}
+					</span>
+				</dt>
+				<dd>
+					<slot name={row.name} />
+				</dd>
+			</div>
+		))
+	}
+</dl>

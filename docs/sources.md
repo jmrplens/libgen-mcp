@@ -408,6 +408,7 @@ DSpace 7 instance.
   advertising no preserved full text or answered 404. The LibGen catalog carries a handful of
   the flagship titles and none of the rest: a search for "FAO humanitarian response plan"
   returns nothing. All eight resolved here.
+- **What it does not cover** anything not keyed by a well-formed `10.4060` DOI, and the refusal happens before a request rather than becoming a URL that cannot exist: another registrant's DOI, an md5- or ISBN-keyed book, and a `10.4060` DOI whose suffix could not be a handle's local part — `10.4060/cc7949en/extra`, `10.4060/..` and a bare `10.4060/` are all declined, since that suffix goes into the handle path with no lookup in between. Past the gate it serves exactly one file per item and only a PDF: a page whose `citation_pdf_url` names anything but a `/bitstreams/<uuid>/download` route on the repository itself is a clean miss, and so is a page carrying no such tag — the same signal an unheld handle gives, above.
 - **Keys** keyless.
 - **Politeness** the repository's `robots.txt` cuts the REST API down to exactly one usable
   endpoint — `Allow: /server/api/core/bitstreams` and `Allow: /server/api/core/mapping` above

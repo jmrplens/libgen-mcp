@@ -1,9 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
+
+import { devMarkdown } from "./src/lib/dev-markdown.mjs";
+import { rehypeWideTables } from "./src/lib/wide-tables.mjs";
 
 const siteDescription =
 	"Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required.";
@@ -63,7 +67,7 @@ const featureList = [
 	"Four MCP tools: search, get_details, download, read",
 	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
 	"Refuses what it may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
-	"Seventeen download sources in a fixed chain with transparent per-source failover",
+	"Twenty-one download sources in a fixed chain with transparent per-source failover",
 	"Automatic mirror discovery, caching and transparent failover",
 	"Single cross-platform static Go binary (Linux, macOS, Windows; amd64 and arm64)",
 	"stdio and streamable HTTP transports; no account or API key required",
@@ -340,6 +344,11 @@ export default defineConfig({
 	// here costs a headless Chromium at build time and nothing at all at runtime.
 	markdown: {
 		rehypePlugins: [
+			// BEFORE rehypeMermaid, deliberately: at this point a diagram is still
+			// a fenced code block, so its markup cannot be mistaken for a content
+			// table. Moving this after rehypeMermaid would hand it the rendered
+			// SVG instead.
+			rehypeWideTables,
 			[
 				rehypeMermaid,
 				{
@@ -352,17 +361,17 @@ export default defineConfig({
 						theme: "base",
 						themeVariables: {
 							background: "transparent",
-							textColor: "#171717",
+							textColor: "#1f2328",
 							primaryColor: "#f6f8fa",
-							primaryTextColor: "#171717",
-							primaryBorderColor: "#d0d7de",
-							lineColor: "#57606a",
+							primaryTextColor: "#1f2328",
+							primaryBorderColor: "#d1d9e0",
+							lineColor: "#59636e",
 							secondaryColor: "#f6f8fa",
 							tertiaryColor: "#ffffff",
 							mainBkg: "#f6f8fa",
-							nodeBorder: "#d0d7de",
+							nodeBorder: "#d1d9e0",
 							clusterBkg: "#ffffff",
-							clusterBorder: "#d0d7de",
+							clusterBorder: "#d1d9e0",
 							edgeLabelBackground: "#ffffff",
 							fontSize: "15px",
 						},
@@ -372,8 +381,17 @@ export default defineConfig({
 		],
 	},
 	integrations: [
+		// Serves each page's Markdown copy under `astro dev`; in a build they
+		// are written to dist by scripts/emit-page-markdown.mjs instead.
+		devMarkdown({
+			root: fileURLToPath(new URL(".", import.meta.url)),
+			base: basePath,
+		}),
 		starlight({
 			title: "LibGen MCP",
+			// Restores the mobile menu button on the two splash landings, which
+			// Starlight builds without a sidebar. See src/routeData.ts.
+			routeMiddleware: "./src/routeData.ts",
 			description: siteDescription,
 			expressiveCode: {
 				// Otherwise the code-block stylesheet is emitted as a <link> inside
@@ -398,11 +416,19 @@ export default defineConfig({
 				// header below the `md` breakpoint, where Starlight otherwise hides the
 				// whole header right-group.
 				Header: "./src/components/Header.astro",
-			},
-			logo: {
-				dark: "./src/assets/logo-dark.svg",
-				light: "./src/assets/logo-light.svg",
-				alt: "LibGen MCP",
+				// Inlines the brand mark so the palette can paint it, and sets the
+				// header's brand presence. Replaces the `logo` option, which renders an
+				// <img> that cannot follow the theme toggle.
+				SiteTitle: "./src/components/SiteTitle.astro",
+				// Supplies the landing hero's figure as inline markup, so the palette
+				// paints the mark and the brand SVG has one copy rather than one per
+				// locale.
+				Hero: "./src/components/Hero.astro",
+				// Mounts the page actions: under the sticky table-of-contents bar on a
+				// phone, above "On this page" on desktop.
+				PageSidebar: "./src/components/PageSidebar.astro",
+				// Renders the page title, then the chip row its frontmatter declares.
+				PageTitle: "./src/components/PageTitle.astro",
 			},
 			favicon: "/favicon.svg",
 			head: [
@@ -517,7 +543,7 @@ export default defineConfig({
 				// Theme color (brand teal accent)
 				{
 					tag: "meta",
-					attrs: { name: "theme-color", content: "#0d9488" },
+					attrs: { name: "theme-color", content: "#8a5a12" },
 				},
 				// rel="me" identity links
 				{
@@ -563,7 +589,20 @@ export default defineConfig({
 				root: { label: "English", lang: "en" },
 				es: { label: "Español", lang: "es" },
 			},
-			customCss: ["./src/styles/custom.css"],
+			customCss: [
+				"./src/styles/theme.css",
+				"./src/styles/typography.css",
+				"./src/styles/sidebar.css",
+				"./src/styles/splash-menu.css",
+				"./src/styles/home.css",
+				"./src/styles/facts.css",
+				"./src/styles/schema-table.css",
+				"./src/styles/source-chain.css",
+				"./src/styles/tables.css",
+				"./src/styles/page-actions.css",
+				"./src/styles/page-chips.css",
+				"./src/styles/custom.css",
+			],
 			sidebar: [
 				{
 					label: "Guide",
