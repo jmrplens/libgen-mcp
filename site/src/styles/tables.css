@@ -1,0 +1,101 @@
+/* ------------------------------------------------------------------ *
+ * Reference tables on a narrow screen.
+ *
+ * Below the `md` breakpoint a qualifying table stops being a table and becomes
+ * a stack of records: the row's first cell is its heading, and every other cell
+ * prints its column's label above its value. src/lib/wide-tables.mjs decides
+ * which tables qualify and supplies the labels and the ARIA roles.
+ *
+ * Why stack rather than scroll. Measured at 390px before this rule, the browser
+ * shrank the text column of these tables to 95–231px — twelve to twenty-eight
+ * characters a line. The alternative Starlight offers is a horizontal swipe,
+ * which is a poor way to read a reference you are consulting one row at a time.
+ * These rows are records, not comparisons — one variable, one source, one
+ * prompt each — and a record reads perfectly well stacked. It also gives the
+ * whole site one idiom: the same label-above-value treatment the source spec
+ * sheets and the tool parameter lists already use.
+ *
+ * Desktop is untouched. Above 50rem the reading column is wide enough that a
+ * table is the better rendering, and it stays one.
+ * ------------------------------------------------------------------ */
+/* A table whose estimated minimum exceeds the reading column can never fit, so
+   it stacks at every width rather than only on a phone. configuration.mdx's
+   variable table is the case that forced this: measured at 1440px it still
+   overflowed its container by 255px, which is a reference page nobody could
+   read without swiping, on any screen they own. */
+.sl-markdown-content table[data-stacks="always"] {
+	display: block;
+}
+.sl-markdown-content table[data-stacks="always"] thead {
+	display: none;
+}
+.sl-markdown-content table[data-stacks="always"] :is(tbody, tr, td, th) {
+	display: block;
+}
+
+@media (max-width: 50rem) {
+	.sl-markdown-content table[data-stacks] {
+		display: block;
+		border-collapse: collapse;
+	}
+	.sl-markdown-content table[data-stacks] tbody,
+	.sl-markdown-content table[data-stacks] tr {
+		display: block;
+	}
+
+	/* The header row has nothing to say once every cell carries its own label. */
+	.sl-markdown-content table[data-stacks] thead {
+		display: none;
+	}
+
+	/* One record per block, separated by the same hairline the spec sheets use. */
+	.sl-markdown-content table[data-stacks] :is(tbody, tr, td, th) {
+		display: block;
+	}
+}
+
+/* ---- Shared presentation of a stacked row ---- *
+ *
+ * Applies to both kinds, since a stacked row looks the same however it got
+ * there. The rules are written unconditionally and the `display` switches above
+ * are what turn them on.
+ */
+.sl-markdown-content table[data-stacks] tr {
+	padding: 0.85rem 0;
+	border-block-start: 1px solid var(--sl-color-hairline-light);
+}
+.sl-markdown-content table[data-stacks] tr:last-child {
+	border-block-end: 1px solid var(--sl-color-hairline-light);
+}
+.sl-markdown-content table[data-stacks] :is(td, th) {
+	border: 0;
+	padding: 0;
+	text-align: start;
+}
+.sl-markdown-content table[data-stacks] :is(td, th) + :is(td, th) {
+	margin-top: 0.55rem;
+}
+
+/* The label the hidden header row used to carry. Same treatment as a spec
+   sheet's gutter, so the two read as one system. */
+.sl-markdown-content table[data-stacks] :is(td, th)[data-label]::before {
+	content: attr(data-label);
+	display: block;
+	font-family: var(--lgm-mono);
+	font-size: var(--sl-text-2xs);
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	line-height: 1.6;
+	color: var(--sl-color-gray-3);
+	margin-bottom: 0.1rem;
+}
+
+/* The first cell is what the record is about, so it reads as the heading of its
+   block and does not repeat a label above itself. */
+.sl-markdown-content table[data-stacks] tr > :is(td, th):first-child {
+	font-weight: 600;
+	color: var(--sl-color-white);
+}
+.sl-markdown-content table[data-stacks] tr > :is(td, th):first-child::before {
+	content: none;
+}
