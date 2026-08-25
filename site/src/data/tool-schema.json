@@ -33,27 +33,27 @@
           "type": "string",
           "required": false,
           "enum": [
-            "acl",
-            "annas",
-            "archive",
-            "biorxiv",
-            "core",
-            "crossref",
-            "dagstuhl",
+            "unpaywall",
+            "openalex",
             "europepmc",
+            "biorxiv",
+            "rfc",
+            "nist",
+            "dagstuhl",
+            "acl",
+            "zenodo",
+            "scielo",
             "fao",
             "fatcat",
-            "libgen",
-            "nist",
+            "core",
+            "crossref",
             "oapen",
-            "openalex",
-            "randombook",
-            "rfc",
-            "scidb",
-            "scielo",
+            "archive",
             "scihub",
-            "unpaywall",
-            "zenodo"
+            "scidb",
+            "libgen",
+            "randombook",
+            "annas"
           ]
         },
         {
@@ -193,26 +193,26 @@
           "type": "string",
           "required": false,
           "enum": [
-            "acl",
-            "annas",
-            "biorxiv",
-            "core",
-            "crossref",
-            "dagstuhl",
+            "unpaywall",
+            "openalex",
             "europepmc",
+            "biorxiv",
+            "rfc",
+            "nist",
+            "dagstuhl",
+            "acl",
+            "zenodo",
+            "scielo",
             "fao",
             "fatcat",
-            "libgen",
-            "nist",
+            "core",
+            "crossref",
             "oapen",
-            "openalex",
-            "randombook",
-            "rfc",
-            "scidb",
-            "scielo",
             "scihub",
-            "unpaywall",
-            "zenodo"
+            "scidb",
+            "libgen",
+            "randombook",
+            "annas"
           ]
         },
         {
@@ -371,13 +371,13 @@
           "type": "string[]",
           "required": false,
           "enum": [
-            "articles",
-            "comics",
-            "fiction",
-            "fiction_rus",
-            "magazines",
             "nonfiction",
-            "standards"
+            "fiction",
+            "articles",
+            "magazines",
+            "comics",
+            "standards",
+            "fiction_rus"
           ]
         },
         {
@@ -398,9 +398,9 @@
           "type": "integer",
           "required": false,
           "enum": [
-            "100",
             "25",
-            "50"
+            "50",
+            "100"
           ]
         },
         {
@@ -435,8 +435,8 @@
           "type": "string",
           "required": false,
           "enum": [
-            "always",
             "auto",
+            "always",
             "never"
           ]
         }

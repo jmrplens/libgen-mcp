@@ -149,11 +149,13 @@ func enumValues(prop map[string]any) []string {
 			return nil
 		}
 	}
+	// NOT sorted. The download tool's `source` enum is pinned from the enabled
+	// chain in chain order, and that order is the thing it is telling the caller;
+	// alphabetising it here would publish `annas` first and `unpaywall` twelfth.
 	out := make([]string, 0, len(enum))
 	for _, v := range enum {
 		out = append(out, fmt.Sprint(v))
 	}
-	sort.Strings(out)
 	return out
 }
 

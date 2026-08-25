@@ -174,7 +174,9 @@ const ask = `${copy.prompt} ${markdownUrl}`;
 			} catch {
 				flash(root.dataset.failed ?? "");
 			}
-			close();
+			// Return focus to the toggle: hiding the menu while the focused button
+			// is still inside it drops focus to the document.
+			close(true);
 		});
 
 		const items = () =>

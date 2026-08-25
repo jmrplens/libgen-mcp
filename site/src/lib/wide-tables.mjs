@@ -23,8 +23,11 @@
  *
  * Which tables qualify is decided here rather than in a media query, because
  * `min-width` cannot ask whether it is needed. A blanket rule by column count —
- * the obvious one — would also catch responsible-use's four-column chain table,
- * whose longest cell is eleven characters and which very nearly fits already.
+ * the obvious one — would also catch responsible-use's four-column chain
+ * table, which is a comparison: stacking its 21 rows measured 2.15x taller,
+ * each block headed by a bare ordinal. (An earlier version of this comment said
+ * its longest cell was eleven characters. It is 38 — eleven is the Status of
+ * the first three rows only, which is what a one-row sample shows you.)
  */
 
 /** Below this many columns a table has room to wrap without help. */
@@ -106,13 +109,18 @@ export function rehypeWideTables() {
 			const bodyRows = rows.filter((row) =>
 				cellsOf(row).some((cell) => cell.tagName === "td"),
 			);
+			// Every column but the first, not just the last. The first is the
+			// record's name and is always short; the prose can be anywhere after
+			// it. tools.mdx's "How the saved file is named" table keeps its prose
+			// in column two and a 21-character last column, so a last-column-only
+			// test skipped it entirely — no stacking, no labels, no roles.
 			const longest = Math.max(
 				0,
-				...bodyRows.map((row) => {
-					const cells = cellsOf(row);
-					const last = cells[cells.length - 1];
-					return last ? textOf(last).trim().length : 0;
-				}),
+				...bodyRows.flatMap((row) =>
+					cellsOf(row)
+						.slice(1)
+						.map((cell) => textOf(cell).trim().length),
+				),
 			);
 			if (longest < MIN_PROSE) continue;
 
