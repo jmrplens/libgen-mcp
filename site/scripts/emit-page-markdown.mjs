@@ -23,6 +23,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const docsDir = join(root, "src/content/docs");
 const distDir = join(root, "dist");
 
+const schema = JSON.parse(
+	readFileSync(join(root, "src/data/tool-schema.json"), "utf8"),
+);
+
 const labels = {
 	en: JSON.parse(readFileSync(join(root, "src/content/i18n/en.json"), "utf8")),
 	es: JSON.parse(readFileSync(join(root, "src/content/i18n/es.json"), "utf8")),
@@ -46,7 +50,11 @@ for (const source of walk(docsDir)) {
 	const locale = rel.startsWith(`es${"/"}`) ? "es" : "en";
 	const slug = rel.replace(/\.mdx?$/, "").replace(/(^|\/)index$/, "");
 
-	const markdown = toMarkdown(readFileSync(source, "utf8"), labels[locale]);
+	const markdown = toMarkdown(
+		readFileSync(source, "utf8"),
+		labels[locale],
+		schema,
+	);
 	const residual = residualComponents(markdown);
 	if (residual.length) {
 		problems.push(`${rel}: unrendered component(s) ${residual.join(", ")}`);

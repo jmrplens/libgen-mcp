@@ -41,10 +41,11 @@ const unescape = (text) =>
 
 /**
  * @param {string} source - The .mdx file's full text.
- * @param {Record<string,string>} labels - The locale's `lgm.fact.*` strings.
+ * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
+ * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
  * @returns {string} Markdown.
  */
-export function toMarkdown(source, labels) {
+export function toMarkdown(source, labels, schema) {
 	let text = source;
 
 	// Frontmatter and the import block are machinery, not content.
@@ -89,6 +90,48 @@ export function toMarkdown(source, labels) {
 	text = text.replace(
 		/<LegalNotice\s*\/>/g,
 		() => `<Aside type="caution">${labels["lgm.legal.notice"] ?? ""}</Aside>`,
+	);
+
+	// A <SchemaTable> becomes the table it replaced on the page. The rendered
+	// page uses a description list because these descriptions run to 500
+	// characters and a four-column table crushes them; a Markdown copy has no
+	// layout to crush, is read by machines as often as by people, and a table is
+	// the densest way to state four facts per row. Same data, and the type and
+	// required columns still come from the generated schema rather than from
+	// anything written here.
+	text = text.replace(
+		/<SchemaTable([^>]*)>([\s\S]*?)<\/SchemaTable>/g,
+		(whole, tag, body) => {
+			const name = attr(tag, "name");
+			const section = attr(tag, "section");
+			// The column headings are the locale's, like every other string the
+			// components print: a Spanish page's Markdown copy should not be
+			// headed in English.
+			const col = (key, fallback) => labels[`lgm.schema.${key}`] ?? fallback;
+			const rows =
+				section === "arguments"
+					? schema?.prompts?.[name]?.arguments
+					: schema?.tools?.[name]?.[section];
+			if (!rows) return whole;
+
+			const described = new Map(
+				[
+					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
+				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
+			);
+			const head =
+				`| ${col("name", "Name")} | ${col("type", "Type")} | ` +
+				`${col("required", "Required")} | ${col("description", "Description")} |\n` +
+				"| --- | --- | --- | --- |";
+			const lines = rows.map((row) => {
+				const cell = unescape(described.get(row.name) ?? "").replace(
+					/\|/g,
+					"\\|",
+				);
+				return `| \`${row.name}\` | ${row.type} | ${row.required ? "yes" : "no"} | ${cell} |`;
+			});
+			return [head, ...lines].join("\n");
+		},
 	);
 
 	// Asides become GitHub-style alerts, which every Markdown reader that

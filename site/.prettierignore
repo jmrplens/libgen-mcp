@@ -18,3 +18,10 @@ src/content/docs/es/eval-results.mdx
 # Prettier reformatted it, `privacy:check` and `format:check` would each demand
 # a different file and CI could never be green.
 src/content/docs/privacy.md
+
+# Generated from the registered MCP surface by cmd/gen_tool_schema. Prettier
+# collapses its short enum arrays onto one line, which `check-tool-schema`
+# compares byte for byte — so `format:check` and that gate would each demand a
+# different file. Matching prettier's heuristics from Go would tie a Go
+# generator to a JavaScript formatter's line-width rules instead.
+src/data/tool-schema.json

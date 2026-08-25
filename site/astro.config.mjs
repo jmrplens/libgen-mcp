@@ -5,6 +5,8 @@ import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
 
+import { rehypeWideTables } from "./src/lib/wide-tables.mjs";
+
 const siteDescription =
 	"Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required.";
 
@@ -340,6 +342,9 @@ export default defineConfig({
 	// here costs a headless Chromium at build time and nothing at all at runtime.
 	markdown: {
 		rehypePlugins: [
+			// After rehypeMermaid, so a diagram's own markup is never mistaken for
+			// a content table.
+			rehypeWideTables,
 			[
 				rehypeMermaid,
 				{
@@ -581,6 +586,8 @@ export default defineConfig({
 				"./src/styles/splash-menu.css",
 				"./src/styles/home.css",
 				"./src/styles/facts.css",
+				"./src/styles/schema-table.css",
+				"./src/styles/tables.css",
 				"./src/styles/page-actions.css",
 				"./src/styles/page-chips.css",
 				"./src/styles/custom.css",
