@@ -1644,7 +1644,7 @@ func TestDownloadToolMD5Book(t *testing.T) {
 //
 // All four descriptions ship one, and until this became a table only download
 // and read were pinned — search's and get_details' could have been deleted with
-// every test still green. The caveat is the server's whole defence against
+// every test still green. The caveat is the server's whole defense against
 // prompt injection through a fetched document, and it is the one sentence a
 // model sees before it ever calls anything.
 func TestToolDescriptionsHaveUntrustedNote(t *testing.T) {

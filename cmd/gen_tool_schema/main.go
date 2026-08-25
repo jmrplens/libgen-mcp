@@ -192,10 +192,10 @@ func requiredSet(schema map[string]any) map[string]bool {
 // required flags all still come from the round-trip. If the two ever disagree,
 // fieldsOf reports it rather than quietly preferring one.
 var declaredOrder = map[string][2]reflect.Type{
-	"search":      {reflect.TypeOf(tools.SearchInput{}), reflect.TypeOf(tools.SearchOutput{})},
-	"get_details": {reflect.TypeOf(tools.DetailsInput{}), reflect.TypeOf(tools.DetailsOutput{})},
-	"download":    {reflect.TypeOf(tools.DownloadInput{}), reflect.TypeOf(tools.DownloadOutput{})},
-	"read":        {reflect.TypeOf(tools.ReadInput{}), reflect.TypeOf(tools.ReadOutput{})},
+	"search":      {reflect.TypeFor[tools.SearchInput](), reflect.TypeFor[tools.SearchOutput]()},
+	"get_details": {reflect.TypeFor[tools.DetailsInput](), reflect.TypeFor[tools.DetailsOutput]()},
+	"download":    {reflect.TypeFor[tools.DownloadInput](), reflect.TypeFor[tools.DownloadOutput]()},
+	"read":        {reflect.TypeFor[tools.ReadInput](), reflect.TypeFor[tools.ReadOutput]()},
 }
 
 // jsonNames lists a struct's JSON field names in declaration order, skipping
@@ -207,8 +207,7 @@ var declaredOrder = map[string][2]reflect.Type{
 // advertised-but-undeclared and fail the run.
 func jsonNames(t reflect.Type) []string {
 	names := make([]string, 0, t.NumField())
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		tag := f.Tag.Get("json")
 		if tag == "-" {
 			continue
@@ -258,7 +257,8 @@ func fieldsOf(tool, section string, raw any, order []string) ([]field, error) {
 		if !isMap {
 			return nil, fmt.Errorf(
 				"%s %s: the struct declares %q but the registered schema does not",
-				tool, section, name)
+				tool, section, name,
+			)
 		}
 		seen[name] = true
 		out = append(out, field{
@@ -279,7 +279,8 @@ func fieldsOf(tool, section string, raw any, order []string) ([]field, error) {
 		sort.Strings(missing)
 		return nil, fmt.Errorf(
 			"%s %s: the registered schema advertises %v, which the struct's field order does not cover",
-			tool, section, missing)
+			tool, section, missing,
+		)
 	}
 	return out, nil
 }
@@ -287,7 +288,7 @@ func fieldsOf(tool, section string, raw any, order []string) ([]field, error) {
 // build reads the registered surface and reduces it to the generated document.
 func build() (*document, error) {
 	cfg := mcpsurface.DocsConfig()
-	tools, err := mcpsurface.Tools(cfg)
+	registered, err := mcpsurface.Tools(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("read tools: %w", err)
 	}
@@ -298,21 +299,21 @@ func build() (*document, error) {
 
 	doc := &document{
 		Note:    note,
-		Tools:   make(map[string]toolSchema, len(tools)),
+		Tools:   make(map[string]toolSchema, len(registered)),
 		Prompts: make(map[string]promptSchema, len(prompts)),
 	}
-	for _, tool := range tools {
+	for _, tool := range registered {
 		types, known := declaredOrder[tool.Name]
 		if !known {
 			return nil, fmt.Errorf("tool %q has no entry in declaredOrder", tool.Name)
 		}
-		in, err := fieldsOf(tool.Name, "input", tool.InputSchema, jsonNames(types[0]))
-		if err != nil {
-			return nil, err
+		in, inErr := fieldsOf(tool.Name, "input", tool.InputSchema, jsonNames(types[0]))
+		if inErr != nil {
+			return nil, inErr
 		}
-		out, err := fieldsOf(tool.Name, "output", tool.OutputSchema, jsonNames(types[1]))
-		if err != nil {
-			return nil, err
+		out, outErr := fieldsOf(tool.Name, "output", tool.OutputSchema, jsonNames(types[1]))
+		if outErr != nil {
+			return nil, outErr
 		}
 		doc.Tools[tool.Name] = toolSchema{Input: in, Output: out}
 	}
@@ -374,8 +375,8 @@ func run(check bool) error {
 	path := filepath.Join(root, relPath)
 
 	if !check {
-		if err := os.WriteFile(path, want, 0o644); err != nil {
-			return err
+		if writeErr := os.WriteFile(path, want, 0o600); writeErr != nil {
+			return writeErr
 		}
 		fmt.Printf("wrote %s (%d tools, %d prompts)\n", relPath, len(doc.Tools), len(doc.Prompts))
 		return nil
