@@ -1,4 +1,11 @@
-// Server card: the SEP-1649 document served at /.well-known/mcp/server-card.json.
+// Server card: the vendor document served at /.well-known/mcp/server-card.json.
+//
+// Its shape descends from SEP-1649, which is closed and superseded by SEP-2127 —
+// that one relocates the card to GET <url>/server-card behind
+// /.well-known/ai-catalog.json and explicitly rejects .well-known/mcp paths. So
+// this is a vendor document with a SEP-1649 lineage, not an implementation of a
+// live specification; the standard pre-connection channel is server/discover,
+// which the SDK already answers. Migrate when SEP-2127 lands.
 
 package main
 
@@ -59,7 +66,17 @@ type serverCard struct {
 	// server does: it previously hardcoded name and version and silently
 	// dropped Title, Description, WebsiteURL and Icons — exactly the fields a
 	// registry listing renders.
-	ServerInfo     *mcp.Implementation `json:"serverInfo"`
+	ServerInfo *mcp.Implementation `json:"serverInfo"`
+	// Capabilities is taken from the same handshake, for the same reason: a
+	// directory reading the card could not otherwise learn what this server
+	// negotiates — that it advertises tools and prompts and, since the
+	// Capabilities pin in newMCPServer, no deprecated logging capability —
+	// except by grepping English prose. The card follows the original
+	// SEP-1649 shape, which required this key; its successor SEP-2127
+	// deliberately carries neither capabilities nor primitives, but this card
+	// already enumerates tools and prompts, so it is a SEP-1649-lineage
+	// document and states its capabilities structurally too.
+	Capabilities   *mcp.ServerCapabilities `json:"capabilities"`
 	Authentication struct {
 		Required bool     `json:"required"`
 		Schemes  []string `json:"schemes"`
@@ -98,6 +115,7 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 
 	var card serverCard
 	card.ServerInfo = session.InitializeResult().ServerInfo
+	card.Capabilities = session.InitializeResult().Capabilities
 	// Keyless by design: no account, no API key, nothing to present. Saying so
 	// explicitly is more useful to a scanner than omitting the block.
 	card.Authentication.Required = false

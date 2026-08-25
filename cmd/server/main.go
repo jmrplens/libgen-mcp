@@ -282,15 +282,29 @@ func sseNoBuffering(next http.Handler) http.Handler {
 	})
 }
 
-// newHTTPHandler mounts the MCP handler at /, exposes GET /health, and serves
-// the server card when one was built. A nil card leaves the route unmounted, so
-// the path falls through to the MCP handler exactly as it did before.
+// newHTTPHandler mounts the MCP handler at / behind sseNoBuffering, exposes
+// GET /health, and serves the server card when one was built. A nil card leaves
+// both card routes unmounted, so the path falls through to the MCP handler
+// exactly as it did before.
 func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	if cardJSON != nil {
+		// The card's audience is browser-based registries and scanners, and a
+		// browser discards a cross-origin response that carries no CORS header
+		// however public the document is — so without this the card is
+		// readable by curl and by nothing that would list this server.
+		// Allowing every origin gives away nothing: the card is served
+		// unauthenticated and is byte-identical for every caller, so there is
+		// no per-origin answer for a page to fish out.
+		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.WriteHeader(http.StatusNoContent)
+		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			// The card only changes with a release, so a scanner may hold it.
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 			_, _ = w.Write(cardJSON)
