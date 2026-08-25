@@ -15,6 +15,17 @@ on:
       # node, so a release bump must republish the site or the deployed schema,
       # releaseNotes and llms.txt keep advertising the previous release.
       - "VERSION"
+      # The build embeds three further files from the repository root, so a
+      # change to any of them reaches readers only when the site is rebuilt:
+      # copy-llms.mjs publishes both llms files at /llms.txt and /llms-full.txt
+      # (check-facts.mjs reads llms-full.txt too), and sync-privacy.mjs derives
+      # the privacy pages from PRIVACY.md. Without these paths such a change
+      # merges green while the deployed copy silently keeps the previous
+      # content — which is what happened when llms.txt moved to the
+      # documentation domain and the site went on serving the Pages URLs.
+      - "llms.txt"
+      - "llms-full.txt"
+      - "PRIVACY.md"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
