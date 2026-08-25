@@ -7,16 +7,20 @@
 // JSX is worse than handing it the bullets those elements replaced.
 //
 // So the component vocabulary is rendered back. That is only safe because the
-// vocabulary is small, closed and ours: six element names, listed in
-// COMPONENTS below and asserted by the caller. Anything left over is an error
-// rather than a passthrough — a page that starts using a seventh component must
-// teach this file about it, not silently ship JSX to a reader.
+// vocabulary is small, closed and ours: the element names listed in COMPONENTS
+// below. Anything left over is an error rather than a passthrough — a page that
+// starts using a component this file has not been taught aborts the build,
+// which is what residualComponents() and the caller's check enforce.
 //
 // The labels come from the same i18n JSON the Fact component reads, so the
 // Markdown copy says "Qué no cubre" on a Spanish page for the same reason the
 // page does.
 
-/** Element names this renderer knows how to unwrap. */
+/**
+ * Element names this renderer knows how to unwrap. Named in the build failure so
+ * whoever hits it can see what the vocabulary currently is, rather than being
+ * told only what is missing from it.
+ */
 export const COMPONENTS = [
 	"Facts",
 	"Fact",

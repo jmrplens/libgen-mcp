@@ -17,51 +17,18 @@ import {
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { residualComponents, toMarkdown } from "../src/lib/page-markdown.mjs";
+import {
+	COMPONENTS,
+	residualComponents,
+	toMarkdown,
+} from "../src/lib/page-markdown.mjs";
+import { loadInputs } from "../src/lib/page-markdown-inputs.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const docsDir = join(root, "src/content/docs");
+
+const { labels, schema, chain } = loadInputs(root);
 const distDir = join(root, "dist");
-
-const schema = JSON.parse(
-	readFileSync(join(root, "src/data/tool-schema.json"), "utf8"),
-);
-
-/**
- * The download chain's source ids, in order, read from src/data/sources.ts.
- *
- * A .mjs script cannot import a .ts module, so the array is parsed rather than
- * loaded. The parse is strict on purpose: it asserts the shape it expects and
- * the count the chain is known to have, so a refactor that changes either
- * aborts the build instead of quietly emitting a shorter chain into every
- * Markdown copy.
- */
-function downloadChain() {
-	const ts = readFileSync(join(root, "src/data/sources.ts"), "utf8");
-	const array = /export const SOURCES: Source\[\] = \[([\s\S]*?)\n\];/.exec(ts);
-	if (!array) {
-		throw new Error(
-			"[page-markdown] cannot find SOURCES in src/data/sources.ts",
-		);
-	}
-	const ids = [...array[1].matchAll(/\bid:\s*"([a-z0-9_]+)"/g)].map(
-		(m) => m[1],
-	);
-	const declared = (ts.match(/\bid:\s*"/g) ?? []).length;
-	if (ids.length === 0 || ids.length !== declared) {
-		throw new Error(
-			`[page-markdown] parsed ${ids.length} source ids but the file declares ${declared}`,
-		);
-	}
-	return ids;
-}
-
-const chain = downloadChain();
-
-const labels = {
-	en: JSON.parse(readFileSync(join(root, "src/content/i18n/en.json"), "utf8")),
-	es: JSON.parse(readFileSync(join(root, "src/content/i18n/es.json"), "utf8")),
-};
 
 function walk(dir) {
 	const out = [];
@@ -80,6 +47,13 @@ for (const source of walk(docsDir)) {
 	const rel = relative(docsDir, source);
 	const locale = rel.startsWith(`es${"/"}`) ? "es" : "en";
 	const slug = rel.replace(/\.mdx?$/, "").replace(/(^|\/)index$/, "");
+
+	// The 404 is the one page Astro emits as `<slug>.html` rather than
+	// `<slug>/index.html`, so mirroring the layout would leave an orphan
+	// directory holding nothing but a Markdown file. It is also the one page
+	// with no table of contents, which means no page actions and nothing to
+	// read the copy.
+	if (/(^|\/)404$/.test(slug)) continue;
 
 	const markdown = toMarkdown(
 		readFileSync(source, "utf8"),
@@ -105,7 +79,8 @@ if (problems.length) {
 	console.error("[page-markdown] FAILED:");
 	for (const p of problems) console.error(`  ${p}`);
 	console.error(
-		"\nTeach src/lib/page-markdown.mjs to render it, or the Markdown copy ships JSX.",
+		"\nTeach src/lib/page-markdown.mjs to render it, or the Markdown copy ships JSX." +
+			`\nIt currently knows: ${COMPONENTS.join(", ")}.`,
 	);
 	process.exit(1);
 }

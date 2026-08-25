@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
 
+import { devMarkdown } from "./src/lib/dev-markdown.mjs";
 import { rehypeWideTables } from "./src/lib/wide-tables.mjs";
 
 const siteDescription =
@@ -379,6 +381,12 @@ export default defineConfig({
 		],
 	},
 	integrations: [
+		// Serves each page's Markdown copy under `astro dev`; in a build they
+		// are written to dist by scripts/emit-page-markdown.mjs instead.
+		devMarkdown({
+			root: fileURLToPath(new URL(".", import.meta.url)),
+			base: basePath,
+		}),
 		starlight({
 			title: "LibGen MCP",
 			// Restores the mobile menu button on the two splash landings, which
