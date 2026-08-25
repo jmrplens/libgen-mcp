@@ -315,8 +315,8 @@ publish-lobehub:
 	fi
 	@$(MAKE) --no-print-directory check-lhm-manifest
 	@VER=$$(tr -d '[:space:]' < VERSION); \
-	echo "Publishing jmrplens-libgen-mcp v$$VER to LobeHub..."; \
-	npx -y @lobehub/market-cli plugin publish --dir "$(CURDIR)"
+	echo "Updating jmrplens-libgen-mcp to v$$VER on LobeHub..."; \
+	npx -y @lobehub/market-cli plugin update --dir "$(CURDIR)"
 
 sonar: ## Run the SonarCloud scanner locally (needs sonar-scanner + SONAR_TOKEN)
 	@command -v sonar-scanner >/dev/null || { echo "sonar-scanner not installed"; exit 1; }
