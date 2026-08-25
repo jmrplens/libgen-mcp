@@ -150,13 +150,17 @@ jobs:
           git fetch origin main
           git checkout main
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
-          git add server.json
-          [ -f lhm.plugin.json ] && git add lhm.plugin.json
+          # Every manifest the script stamps, not just the two it stamped first;
+          # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
+          # step under `set -e` the day a manifest is renamed away.
+          for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json; do
+            if [ -f "${manifest}" ]; then git add "${manifest}"; fi
+          done
           if git diff --cached --quiet; then
             echo "::notice::No manifest changes to commit"
             exit 0
           fi
-          git commit -m "chore: pin server.json + stamp lhm.plugin.json for v${VERSION}"
+          git commit -m "chore: stamp v${VERSION} into the version-bearing manifests"
           git push origin main
 
   docker:

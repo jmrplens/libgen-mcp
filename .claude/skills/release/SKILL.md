@@ -24,7 +24,9 @@ release:
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
 per-package versions, its six asset identifiers and their `fileSha256` digests,
-plus `lhm.plugin.json`'s version, and commits the result back to main. The manual
+then stamps the version into the other three manifests (`lhm.plugin.json`,
+`mcpb/manifest.json`, `.plugin/plugin.json`) — the same set `check-manifests`
+gates — and commits the result back to main. The manual
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.
 
@@ -54,8 +56,9 @@ with a one-time interactive `lhm login` + `lhm github connect`; its own
 documentation states there is no token-only, non-interactive path, and the
 machine-to-machine credentials it does offer carry no publish permission. The
 release workflow therefore only *stamps* the version into `lhm.plugin.json`
-(step 5 of `scripts/update-server-json-sha.sh`, committed back to main); the
-actual publish is a human running the target above.
+(step 5 of `scripts/update-server-json-sha.sh`, alongside the other two
+manifests, committed back to main); the actual publish is a human running the
+target above.
 
 The manifest also carries the full `tools` and `prompts` arrays, and it has to:
 LobeHub derives a listing's capability badges from those arrays, because its
