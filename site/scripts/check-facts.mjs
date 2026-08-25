@@ -29,6 +29,17 @@
 // locale can quietly lose a chip, and a chip can quietly point at a page that
 // does not exist. Both are checked here.
 //
+// UNTRUSTED CONTENT. Every tool whose shipped description warns that its output
+// is untrusted third-party text must have that warning stated on the page that
+// documents it, in both locales. This is the exact defect the audit found:
+// get_details, download and the prompts each ship one and the site said nothing,
+// while `read` was covered six times over. The comparison is against
+// llms-full.txt, which cmd/gen_llms writes from the live surface and `make
+// check-llms` keeps fresh — so this reads what the server actually advertises
+// rather than a copy of it. It does NOT require the wordings to match: the
+// server writes for a model and the page writes for a reader, and forcing them
+// together would make one of the two worse.
+//
 // TABLE LAYOUT. Whether a markdown table stacks on a narrow screen is decided
 // from its own contents, per file — so a page and its Spanish twin can land on
 // opposite sides of the threshold and silently render with different layouts. A
@@ -373,6 +384,51 @@ function layoutDisagreements() {
 	return out;
 }
 
+/** Tools that warn about untrusted content in the surface but not on the page. */
+function untrustedGaps() {
+	const out = [];
+	let llms;
+	try {
+		llms = readFileSync(
+			fileURLToPath(new URL("../../llms-full.txt", import.meta.url)),
+			"utf8",
+		);
+	} catch {
+		return ["llms-full.txt not found — run `make llms`"];
+	}
+	const sections = [
+		...llms.matchAll(/^### (\w+)\n([\s\S]*?)(?=^### |^## |\Z)/gm),
+	];
+	const warns = sections
+		.filter(([, , body]) => /untrusted/i.test(body))
+		.map(([, tool]) => tool);
+
+	for (const [locale, page, marker] of [
+		["EN", "tools.mdx", /untrusted/i],
+		["ES", "es/tools.mdx", /no confiable|no fiable/i],
+	]) {
+		const text = readFileSync(join(docsDir, page), "utf8");
+		for (const tool of warns) {
+			// The tool's own section: from its `## <tool>` heading to the next one.
+			const section = new RegExp(
+				`^## \`?${tool}\`?\\s*$([\\s\\S]*?)(?=^## )`,
+				"m",
+			).exec(text);
+			if (!section) continue;
+			if (!marker.test(section[1])) {
+				out.push(
+					`${locale} ${tool}: the shipped description warns its output is ` +
+						"untrusted; the page's section for it never says so",
+				);
+			}
+		}
+	}
+	return out;
+}
+
+const untrustedProblems = untrustedGaps();
+problems.push(...untrustedProblems);
+
 const layoutProblems = layoutDisagreements();
 problems.push(...layoutProblems);
 
@@ -405,6 +461,11 @@ if (process.argv.includes("--json")) {
 	);
 	console.log(
 		`page chips: ${chipCount} in each locale, matching, every link resolving`,
+	);
+	console.log(
+		untrustedProblems.length === 0
+			? "untrusted content: every tool that ships the warning states it on its page"
+			: "untrusted content: MISSING (see below)",
 	);
 	console.log(
 		layoutProblems.length === 0

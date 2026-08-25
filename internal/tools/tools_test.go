@@ -1638,13 +1638,37 @@ func TestDownloadToolMD5Book(t *testing.T) {
 	}
 }
 
-// TestDownloadDescriptionHasUntrustedNote verifies the download tool's prose
-// carries an explicit caveat that downloaded content is untrusted third-party
-// data, never instructions to follow.
-func TestDownloadDescriptionHasUntrustedNote(t *testing.T) {
-	desc := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false)
-	if !strings.Contains(desc, "untrusted") {
-		t.Fatalf("download description should carry an untrusted-content caveat; got:\n%s", desc)
+// TestToolDescriptionsHaveUntrustedNote verifies that every tool's prose carries
+// an explicit caveat that what it returns is untrusted third-party data, never
+// instructions to follow.
+//
+// All four descriptions ship one, and until this became a table only download
+// and read were pinned — search's and get_details' could have been deleted with
+// every test still green. The caveat is the server's whole defence against
+// prompt injection through a fetched document, and it is the one sentence a
+// model sees before it ever calls anything.
+func TestToolDescriptionsHaveUntrustedNote(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		desc string
+	}{
+		{"search", searchDescription},
+		{"get_details", detailsDescription},
+		{"read", readToolDescription},
+		{
+			"download",
+			downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lower := strings.ToLower(tc.desc)
+			if !strings.Contains(lower, "untrusted") {
+				t.Fatalf("%s description should carry an untrusted-content caveat; got:\n%s", tc.name, tc.desc)
+			}
+			if !strings.Contains(lower, "never") && !strings.Contains(lower, "not as instructions") {
+				t.Errorf("%s says content is untrusted but never says not to follow it; got:\n%s", tc.name, tc.desc)
+			}
+		})
 	}
 }
 
