@@ -282,17 +282,20 @@ func TestRunManagerError(t *testing.T) {
 // request so the per-request server-getter closure runs, then cancels for a
 // graceful shutdown.
 func TestServeHTTPServesRequests(t *testing.T) {
+	// The listener is handed to serveHTTPOn still bound. Reserving the port and
+	// closing it here would leave a window for anything else on the machine —
+	// including another test in this package — to take it before serveHTTP
+	// rebinds.
 	var lc net.ListenConfig
 	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
 	addr := ln.Addr().String()
-	_ = ln.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serveHTTP(ctx, newTestServer(), addr, transport.DefaultOptions()) }()
+	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions()) }()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -331,13 +334,16 @@ func TestServeHTTPServesRequests(t *testing.T) {
 // deadline. serveHTTP must still come back clean, having cut the stream, rather
 // than reporting the deadline as a failure and leaving the listener held.
 func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
+	// The listener is handed to serveHTTPOn still bound. Reserving the port and
+	// closing it here would leave a window for anything else on the machine —
+	// including another test in this package — to take it before serveHTTP
+	// rebinds.
 	var lc net.ListenConfig
 	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
 	addr := ln.Addr().String()
-	_ = ln.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -345,7 +351,7 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 	// default answers GET with 405 and closes every POST stream on reply.
 	opts := transport.DefaultOptions()
 	opts.Stateless = false
-	go func() { done <- serveHTTP(ctx, newTestServer(), addr, opts) }()
+	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, opts) }()
 
 	base := "http://" + addr
 	waitForHealth(t, base)

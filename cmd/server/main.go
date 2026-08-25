@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -310,6 +311,28 @@ func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, erro
 // still streaming after httpShutdownTimeout are closed outright rather than
 // waited on.
 func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts transport.Options) error {
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", httpAddr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", httpAddr, err)
+	}
+	return serveHTTPOn(ctx, server, ln, opts)
+}
+
+// serveHTTPOn serves the MCP endpoint on a listener the caller has already
+// bound, and closes it on return.
+//
+// The split exists for the tests. Reserving a port by binding it, reading its
+// address and closing it before handing the address on leaves a window in which
+// anything else on the machine can take that port — and with the package's HTTP
+// tests running in parallel, the window is entered often enough to matter: a
+// health probe can even reach a different test's server. Handing over a live
+// listener removes the window by construction rather than narrowing it.
+//
+// Production still calls serveHTTP, which binds and delegates here, so the
+// address a deployment configures is bound exactly as before.
+func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options) error {
+	httpAddr := ln.Addr().String()
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, httpAddr, opts.Stateless, opts.JSONResponse)
@@ -328,13 +351,12 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts tr
 	}
 
 	srv := &http.Server{
-		Addr:              httpAddr,
 		Handler:           newHTTPHandler(mcpHandler, cardJSON),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.ListenAndServe() }()
+	go func() { serveErr <- srv.Serve(ln) }()
 
 	select {
 	case err := <-serveErr:
