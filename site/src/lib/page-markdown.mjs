@@ -203,11 +203,16 @@ export function toMarkdown(source, labels, schema, chain) {
 				`| ${col("name", "Name")} | ${col("type", "Type")} | ` +
 				`${col("required", "Required")} | ${col("description", "Description")} |\n` +
 				"| --- | --- | --- | --- |";
+			// The backslash is escaped BEFORE the pipe, and the order is the whole
+			// point: escaping only the pipe turns a cell containing `a\|b` into
+			// `a\\|b`, which Markdown reads as an escaped backslash followed by a
+			// live cell separator — the row splits and the table is corrupt from
+			// there down. Escaping the backslash first makes the pipe's escape its
+			// own.
+			const escapeCell = (text) =>
+				text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 			const lines = rows.map((row) => {
-				const cell = unescape(described.get(row.name) ?? "").replace(
-					/\|/g,
-					"\\|",
-				);
+				const cell = escapeCell(unescape(described.get(row.name) ?? ""));
 				return `| \`${row.name}\` | ${row.type} | ${row.required ? "yes" : "no"} | ${cell} |`;
 			});
 			return [head, ...lines].join("\n");
