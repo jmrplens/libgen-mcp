@@ -397,12 +397,15 @@ func writeSection(b *strings.Builder, heading string, results []libgen.Result, i
 // registerGetPaper registers the get_paper workflow prompt.
 func registerGetPaper(server *mcp.Server, client *libgen.Client) {
 	server.AddPrompt(&mcp.Prompt{
-		Name:        "get_paper",
-		Title:       "Get a Paper",
-		Description: "Resolve a specific paper by DOI or by a free-text citation and generate instructions to download it.",
+		Name:  "get_paper",
+		Title: "Get a Paper",
+		// Prompt arguments have no schema to state a required-group in, so the
+		// exactly-one rule the handler enforces is stated in every string a
+		// client shows: the description and both argument descriptions.
+		Description: "Resolve a specific paper by DOI or by a free-text citation and generate instructions to download it. Provide exactly one of doi or citation; a call with neither or both is refused.",
 		Arguments: []*mcp.PromptArgument{
-			arg("doi", "DOI of the paper to fetch directly (mutually exclusive with citation).", false),
-			arg("citation", "Free-text citation or reference to search for (mutually exclusive with doi).", false),
+			arg("doi", "DOI of the paper to fetch directly. Provide exactly one of doi or citation.", false),
+			arg("citation", "Free-text citation or reference to search for. Provide exactly one of doi or citation.", false),
 		},
 		Icons: toolutil.IconGetPaper,
 	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
