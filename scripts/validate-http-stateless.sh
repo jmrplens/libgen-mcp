@@ -159,6 +159,20 @@ if printf '%s' "$CARD" | grep -q '"prompts"'; then
 else
   fail "the card does not enumerate prompts"
 fi
+if printf '%s' "$CARD" | grep -q '"capabilities"'; then
+  pass "the card states the negotiated capabilities"
+else
+  fail "the card does not state capabilities"
+fi
+
+# A browser-based directory reads the card cross-origin, which no unit test can
+# assert end to end: the header has to survive the real handler and the wire.
+CARD_ORIGIN=$(curl -fsSI "${BASE}/.well-known/mcp/server-card.json" 2>/dev/null | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin" {print $2}')
+if [ "$CARD_ORIGIN" = "*" ]; then
+  pass "the card is readable cross-origin (Access-Control-Allow-Origin: *)"
+else
+  fail "server card Access-Control-Allow-Origin is '${CARD_ORIGIN}', want *"
+fi
 
 BODY=$(post_mcp "$HEADERS" "$TOOLS_LIST")
 STATUS=$(head -n1 "$HEADERS" | awk '{print $2}')
@@ -173,6 +187,15 @@ if [ -z "$SESSION" ]; then
   pass "no Mcp-Session-Id header"
 else
   fail "server handed out Mcp-Session-Id: $SESSION"
+fi
+
+# The transport SHOULD, asserted where it is actually observable: the unit test
+# proves the handler sets it, only this proves it survives to the wire.
+BUFFERING=$(header_value "$HEADERS" "X-Accel-Buffering")
+if [ "$BUFFERING" = "no" ]; then
+  pass "the SSE response tells proxies not to buffer"
+else
+  fail "X-Accel-Buffering is '${BUFFERING:-absent}', want 'no'"
 fi
 
 case "$BODY" in

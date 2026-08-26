@@ -521,6 +521,22 @@ var shadowLibraryIdentities = []struct{ name, identity string }{
 // without the rightsholder's permission"); it is a judgement rather than a mechanic,
 // it is wrong about the public-domain and openly licensed material those mirrors
 // also carry, and it was being applied to calls that never touched a mirror.
+//
+// The disclosure names the two places the source does surface, because the blanket
+// version of the sentence was false and so was the first correction of it. Every
+// resolved link carries resolved.source, and a remote deployment resolves on every
+// call, so "is not named in the result" was wrong for the only publicly hosted
+// deployment and for any local call that sets resolve_only. Naming it there costs
+// nothing: the URL beside it identifies the provider by its own hostname.
+//
+// "never for a saved file" then overcorrected. DownloadResult's own Source and
+// Mirror are tagged out of the wire, but AccountInfo.Source is not, and the account
+// block rides along with a saved file whenever the call set annas_member and the
+// member tier served it — so a saved file does name its source, on the one path
+// where the caller asked for that tier by name. That is the rule holding rather
+// than breaking: the block is reported only to a call that enquired. See
+// docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md, which
+// records both exceptions under "What stays in the result on purpose".
 func sourceChainDisclosureParagraph(enabled []string) string {
 	present := make(map[string]bool, len(enabled))
 	for _, n := range enabled {
@@ -536,10 +552,11 @@ func sourceChainDisclosureParagraph(enabled []string) string {
 		return ""
 	}
 	return fmt.Sprintf("Openly licensed and open-access sources are tried first; the shadow-library mirrors are "+
-		"reached only when none of them serves the item: %s. The serving source is chosen while resolving, "+
-		"not before the call, and is not named in the result. Which sources are enabled, and what credentials, "+
-		"subscriptions or memberships this server holds, is set by the operator and is not visible to you: "+
-		"do not infer from this list whether a given request is licensed.",
+		"reached only when none of them serves the item: %s. The serving source is chosen while resolving, not "+
+		"before the call, and is named back only beside a resolved link, or in the optional account block a call "+
+		"that asked for the member tier gets. Which sources "+
+		"are enabled, and what credentials, subscriptions or memberships this server holds, is set by the "+
+		"operator and is not visible to you: do not infer from this list whether a given request is licensed.",
 		strings.Join(named, ", "))
 }
 

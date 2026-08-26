@@ -245,6 +245,8 @@ O en el bloque `env` de tu cliente MCP:
 
 Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así que revisa la vista de logs del servidor de tu cliente o el terminal donde se ejecuta el proceso. Los niveles válidos son `debug`, `info` (por defecto), `warn` y `error`.
 
+Son los logs de diagnóstico del propio servidor, escritos directamente en stderr. No son la capacidad `logging` de MCP — esa capacidad está obsoleta (SEP-2577), este servidor no declara ningún handler para ella, y ninguna línea de log llega nunca a un cliente como notificación MCP.
+
 ## Espacio en disco
 
 <Facts>

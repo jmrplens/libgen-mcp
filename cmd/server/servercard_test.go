@@ -54,6 +54,28 @@ func buildTestCard(t *testing.T) serverCard {
 	return card
 }
 
+// handshakeCapabilities returns what a client actually negotiates with the stub
+// surface, read over its own in-memory session. The capabilities assertion is
+// then against the handshake itself rather than against a second hand-written
+// expectation that would have to be edited every time the surface grows.
+func handshakeCapabilities(t *testing.T) *mcp.ServerCapabilities {
+	t.Helper()
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := newCardTestServer().Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "capabilities-probe", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+	return session.InitializeResult().Capabilities
+}
+
 // TestServerCardIdentity checks the card names this server and the build serving it.
 func TestServerCardIdentity(t *testing.T) {
 	card := buildTestCard(t)
@@ -95,6 +117,68 @@ func TestServerCardDeclaresNoAuthentication(t *testing.T) {
 	}
 	if card.Authentication.Schemes == nil {
 		t.Error("authentication.schemes is null, want an empty list")
+	}
+}
+
+// TestServerCardCarriesHandshakeCapabilities pins the capabilities block to the
+// live handshake rather than to a restatement of it. It is the one part of the
+// card a reader cannot reconstruct from the tools and prompts listings: what
+// the server negotiates is a separate statement from what it registers, and
+// without this key a directory would have to grep English prose for it.
+func TestServerCardCarriesHandshakeCapabilities(t *testing.T) {
+	card := buildTestCard(t)
+	if card.Capabilities == nil {
+		t.Fatal("capabilities is absent; a reader learns nothing about what this server negotiates")
+	}
+	want, err := json.Marshal(handshakeCapabilities(t))
+	if err != nil {
+		t.Fatalf("marshal handshake capabilities: %v", err)
+	}
+	got, err := json.Marshal(card.Capabilities)
+	if err != nil {
+		t.Fatalf("marshal card capabilities: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("capabilities = %s, want the handshake's %s", got, want)
+	}
+	if card.Capabilities.Tools == nil || card.Capabilities.Prompts == nil {
+		t.Errorf("capabilities = %s, want the tools and prompts this surface registers", got)
+	}
+}
+
+// TestServerCardOmitsDeprecatedLoggingCapability guards the Capabilities pin in
+// newMCPServer from the card's side. Left nil, ServerOptions fills that field
+// with the SDK's default of {"logging":{}} — a capability deprecated in
+// revision 2026-07-28 (SEP-2577) that this server neither implements nor wants
+// — and the card would then publish it to every scanner that reads it.
+//
+// The assertion is on the raw JSON rather than the decoded struct because the
+// promise is about the key a scanner sees, and a typed nil pointer decodes the
+// same way whether the key was absent or explicitly null.
+func TestServerCardOmitsDeprecatedLoggingCapability(t *testing.T) {
+	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	var doc map[string]json.RawMessage
+	if uErr := json.Unmarshal(raw, &doc); uErr != nil {
+		t.Fatalf("card is not valid JSON: %v", uErr)
+	}
+	rawCaps, ok := doc["capabilities"]
+	if !ok {
+		t.Fatal("card carries no capabilities key")
+	}
+	var caps map[string]json.RawMessage
+	if uErr := json.Unmarshal(rawCaps, &caps); uErr != nil {
+		t.Fatalf("capabilities is not an object: %v", uErr)
+	}
+	if _, present := caps["logging"]; present {
+		t.Errorf("capabilities = %s, want no logging key: SEP-2577 deprecated it and this server logs to stderr", rawCaps)
+	}
+	for _, key := range []string{"tools", "prompts"} {
+		if _, present := caps[key]; !present {
+			t.Errorf("capabilities = %s, want the %s key this surface serves", rawCaps, key)
+		}
 	}
 }
 
@@ -177,22 +261,71 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 	}
 }
 
+// TestServerCardRouteAllowsCrossOriginReads covers the CORS wiring. The card's
+// audience is browser-based registries and scanners, and a browser drops a
+// cross-origin response that carries no Access-Control-Allow-Origin however
+// public the document is — so a card without it is readable by curl and by
+// nothing that would actually list this server. The preflight is asserted too,
+// because a scanner that sets any header of its own sends OPTIONS first.
+func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
+	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	handler := newHTTPHandler(stub, raw)
+
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil))
+	if origin := getRec.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+		t.Errorf("GET Access-Control-Allow-Origin = %q, want *", origin)
+	}
+
+	preflightRec := httptest.NewRecorder()
+	preflight := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, serverCardPath, nil)
+	// The realistic preflight: a browser only sends one when the fetch carries
+	// a header of its own, and it names that header here. Without the echo
+	// below the browser refuses the request it was asking permission for.
+	preflight.Header.Set("Origin", "https://example.invalid")
+	preflight.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	preflight.Header.Set("Access-Control-Request-Headers", "x-scanner-id")
+	handler.ServeHTTP(preflightRec, preflight)
+	if preflightRec.Code != http.StatusNoContent {
+		t.Fatalf("OPTIONS status = %d, want %d", preflightRec.Code, http.StatusNoContent)
+	}
+	if origin := preflightRec.Header().Get("Access-Control-Allow-Origin"); origin != "*" {
+		t.Errorf("OPTIONS Access-Control-Allow-Origin = %q, want *", origin)
+	}
+	if methods := preflightRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(methods, http.MethodGet) {
+		t.Errorf("Access-Control-Allow-Methods = %q, want it to name GET", methods)
+	}
+	if allowed := preflightRec.Header().Get("Access-Control-Allow-Headers"); allowed != "x-scanner-id" {
+		t.Errorf("Access-Control-Allow-Headers = %q, want the requested %q echoed back", allowed, "x-scanner-id")
+	}
+}
+
 // TestServerCardRouteAbsentWhenUnbuilt pins the failure path: a card that could
 // not be built must leave the route unmounted so the request falls through to
 // the MCP handler, rather than the server refusing to start or answering 200
-// with nothing in it.
+// with nothing in it. The CORS preflight is mounted with the card and must
+// disappear with it too: an OPTIONS route left behind would answer 204 for a
+// document that is not being served.
 func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
 	handler := newHTTPHandler(stub, nil)
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	for _, method := range []string{http.MethodGet, http.MethodOptions} {
+		req := httptest.NewRequestWithContext(t.Context(), method, serverCardPath, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusTeapot {
-		t.Errorf("status = %d, want the MCP handler to have seen it (%d)", rec.Code, http.StatusTeapot)
+		if rec.Code != http.StatusTeapot {
+			t.Errorf("%s status = %d, want the MCP handler to have seen it (%d)", method, rec.Code, http.StatusTeapot)
+		}
 	}
 }
 

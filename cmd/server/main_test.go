@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
@@ -553,10 +554,30 @@ func TestServeHTTPStateless(t *testing.T) {
 		}
 	})
 
+	// The transport spec's SHOULD. It is load-bearing here rather than
+	// cosmetic: download and read emit notifications/progress on this stream
+	// for the duration of a fetch, so a proxy that buffers holds every one of
+	// them until the transfer ends.
+	t.Run("sse response tells proxies not to buffer", func(t *testing.T) {
+		reply := postMCP(t, ts.URL, listToolsRequest)
+		if ct := reply.header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+			t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+		}
+		if got := reply.header.Get("X-Accel-Buffering"); got != "no" {
+			t.Errorf("X-Accel-Buffering = %q, want %q", got, "no")
+		}
+	})
+
 	t.Run("health is unaffected", func(t *testing.T) {
 		reply := getURL(t, ts.URL+"/health")
 		if reply.status != http.StatusOK {
 			t.Errorf("status = %d, want %d", reply.status, http.StatusOK)
+		}
+		// The no-buffering header is scoped to the MCP endpoint. A probe
+		// response is a small JSON body with nothing to stream, so it must
+		// not pick the header up.
+		if got := reply.header.Get("X-Accel-Buffering"); got != "" {
+			t.Errorf("X-Accel-Buffering = %q on /health, want none", got)
 		}
 	})
 }
@@ -804,4 +825,111 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 			t.Errorf("Instructions does not mention registered prompt %q", p.Name)
 		}
 	}
+}
+
+// TestNoResourcesIsConsistent asserts the handshake and the wire agree that
+// this server has no resources: it declares no resources capability, and the
+// three resource methods the SDK registers regardless answer -32601 rather
+// than a successful empty listing that would imply resources exist here.
+//
+// The two halves are asserted together on purpose. Registering a resource
+// makes the SDK infer the capability, which flips the first half and leaves a
+// server advertising resources it then refuses to list — so whoever adds one
+// is failed here and pointed at capguard.NoResources.
+func TestNoResourcesIsConsistent(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	server, err := newRegisteredServer(cfg, "")
+	if err != nil {
+		t.Fatalf("newRegisteredServer() error = %v", err)
+	}
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "resources-test", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if caps := session.InitializeResult().Capabilities; caps.Resources != nil {
+		t.Fatalf("handshake declares resources capability %+v; if that is intended, "+
+			"drop capguard.NoResources so the resource methods answer for real", caps.Resources)
+	}
+
+	calls := map[string]func() error{
+		"resources/list": func() error {
+			_, callErr := session.ListResources(t.Context(), nil)
+			return callErr
+		},
+		"resources/templates/list": func() error {
+			_, callErr := session.ListResourceTemplates(t.Context(), nil)
+			return callErr
+		},
+		"resources/read": func() error {
+			_, callErr := session.ReadResource(t.Context(), &mcp.ReadResourceParams{URI: "file:///nothing"})
+			return callErr
+		},
+	}
+	for method, call := range calls {
+		t.Run(method, func(t *testing.T) {
+			var wire *jsonrpc.Error
+			callErr := call()
+			if !errors.As(callErr, &wire) {
+				t.Fatalf("err = %v (%T), want a *jsonrpc.Error", callErr, callErr)
+			}
+			if wire.Code != jsonrpc.CodeMethodNotFound {
+				t.Errorf("code = %d, want %d (method not found)", wire.Code, jsonrpc.CodeMethodNotFound)
+			}
+		})
+	}
+}
+
+// TestServeHTTPValidatesOrigin covers the 2026-07-28 transport MUST — "Servers
+// MUST validate the Origin header on all incoming connections" — at the only
+// layer that can enforce it, the HTTP handler.
+//
+// It lives apart from TestServeHTTPStateless because the three cases below are
+// one contract of their own, and because folding them in pushed that function
+// past the cognitive-complexity budget.
+func TestServeHTTPValidatesOrigin(t *testing.T) {
+	ts := newTransportTestServer(t, transport.DefaultOptions())
+
+	// The 2026-07-28 transport MUST, at the only layer that can enforce it.
+	// The three cases are the whole contract: a browser POST from elsewhere is
+	// refused, the same POST with no browser headers is not (that is every
+	// non-browser client), and a safe method is never touched.
+	t.Run("cross-origin browser POST is refused", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL, strings.NewReader(listToolsRequest))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		req.Header.Set("Origin", "https://evil.invalid")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d for a cross-origin browser POST", resp.StatusCode, http.StatusForbidden)
+		}
+	})
+
+	t.Run("non-browser POST is unaffected", func(t *testing.T) {
+		reply := postMCP(t, ts.URL, listToolsRequest)
+		if reply.status != http.StatusOK {
+			t.Errorf("status = %d, want %d: a client sending neither Sec-Fetch-Site nor Origin must not be blocked", reply.status, http.StatusOK)
+		}
+	})
 }

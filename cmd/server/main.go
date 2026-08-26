@@ -15,12 +15,14 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/internal/capguard"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
@@ -169,10 +171,25 @@ func newMCPServer() *mcp.Server {
 		Version:     buildversion.Current(),
 		WebsiteURL:  implementationWebsiteURL,
 		Icons:       toolutil.IconBrand,
-	}, &mcp.ServerOptions{Instructions: serverInstructions})
+	}, &mcp.ServerOptions{
+		Instructions: serverInstructions,
+		// Pinned empty rather than left nil, because nil is not neutral: the
+		// SDK fills it with its own default of {"logging":{}}, and MCP logging
+		// is Deprecated as of revision 2026-07-28 (SEP-2577), whose prescribed
+		// migration is exactly what this server already does — slog to stderr.
+		// So the server was advertising a deprecated capability it neither
+		// implements nor wants, purely by omission. The SDK still adds tools
+		// and prompts on top of a non-nil value, so the advertised set becomes
+		// exactly what this server serves.
+		Capabilities: &mcp.ServerCapabilities{},
+	})
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
 	server.AddReceivingMiddleware(cachehints.Middleware())
+	// Nothing here registers a resource, so the resource methods the SDK wires
+	// up regardless must not answer as though something did (see
+	// internal/capguard).
+	server.AddReceivingMiddleware(capguard.NoResources())
 	return server
 }
 
@@ -240,21 +257,102 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
 }
 
-// newHTTPHandler mounts the MCP handler at /, exposes GET /health, and serves
-// the server card when one was built. A nil card leaves the route unmounted, so
-// the path falls through to the MCP handler exactly as it did before.
+// sseNoBuffering sets X-Accel-Buffering: no on responses to requests that
+// negotiate Server-Sent Events, which every streamable HTTP client does. The
+// 2026-07-28 transport spec makes it a SHOULD: an nginx-class reverse proxy
+// otherwise accumulates events in a buffer instead of forwarding them.
+//
+// It is not decoration here. The POST response stream is a real stream —
+// download and read emit notifications/progress on it (see progressNotifier)
+// while a multi-megabyte file is being fetched — so a buffering proxy would
+// hold every progress event until the transfer finished, which is precisely
+// the failure mode the header exists to prevent. The go-sdk sets Cache-Control
+// and Content-Type on the SSE response but not this header.
+//
+// The header is written on the way in, before the SDK writes any of its own, so
+// it is already in the map when the response headers are flushed. Harmless on
+// the requests that negotiate down to application/json under --json-response: a
+// proxy simply does not buffer a small JSON body either.
+func sseNoBuffering(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			w.Header().Set("X-Accel-Buffering", "no")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// crossOriginProtected wraps the MCP handler in the standard library's
+// cross-origin protection, which the 2026-07-28 streamable-HTTP transport
+// requires: "Servers MUST validate the Origin header on all incoming
+// connections to prevent DNS rebinding attacks", answering 403 when the header
+// is present and invalid.
+//
+// The SDK does not do this for us. StreamableHTTPOptions.CrossOriginProtection
+// is nil unless set — "If nil, no cross-origin protection is applied" — and the
+// field is deprecated in favor of exactly this wrapping; its only default
+// protection is a Host check that never fires on a public bind.
+//
+// Who this actually stops is narrow, and deliberately so. Safe methods are
+// always allowed, so the card and the health probe are untouched. A request
+// carrying neither Sec-Fetch-Site nor Origin is allowed too, which is every
+// non-browser client — stdio hosts, desktop apps, curl, the SDK's own client.
+// What remains is a state-changing POST issued by a browser from another
+// origin, which is the attack the requirement names.
+func crossOriginProtected(next http.Handler) http.Handler {
+	return http.NewCrossOriginProtection().Handler(next)
+}
+
+// newHTTPHandler mounts the MCP handler at / behind cross-origin protection and
+// sseNoBuffering, exposes GET /health, and serves the server card when one was
+// built. A nil card leaves both card routes unmounted, so the path falls
+// through to the MCP handler exactly as it did before.
 func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	if cardJSON != nil {
+		// The card's audience is browser-based registries and scanners, and a
+		// browser discards a cross-origin response that carries no CORS header
+		// however public the document is — so without this the card is
+		// readable by curl and by nothing that would list this server.
+		// Allowing every origin gives away nothing: the card is served
+		// unauthenticated and is byte-identical for every caller, so there is
+		// no per-origin answer for a page to fish out.
+		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			// A plain fetch of the card is a simple request and never
+			// preflights, so this branch exists for the caller that adds a
+			// header of its own — a scanner stamping a request id, say. Its
+			// request is refused unless the preflight names that header back,
+			// and the browser sends the list to name: echoing it allows
+			// exactly what was asked for and nothing else, which a static list
+			// cannot do without guessing, and which "*" cannot do at all for a
+			// caller that sends credentials.
+			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
+				w.Header().Set("Access-Control-Allow-Headers", want)
+			}
+			// Without a lifetime the browser preflights again on every fetch,
+			// which for a document that only changes with a release is two
+			// round-trips where one would do.
+			w.Header().Set("Access-Control-Max-Age", "3600")
+			w.WriteHeader(http.StatusNoContent)
+		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			// The card is fetched by scanners that may hand the bytes to a
+			// browser; nosniff keeps it read as the JSON it says it is. The
+			// rest of the usual hardening set — CSP, X-Frame-Options — guards
+			// against rendering and framing, neither of which happens to a
+			// document that is never a page.
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 			// The card only changes with a release, so a scanner may hold it.
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 			_, _ = w.Write(cardJSON)
 		})
 	}
-	mux.Handle("/", mcpHandler)
+	mux.Handle("/", crossOriginProtected(sseNoBuffering(mcpHandler)))
 	return mux
 }
 

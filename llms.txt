@@ -37,7 +37,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_DOWNLOAD_DIR: Download destination directory. (default: ~/Downloads)
 - LIBGEN_MCP_TIMEOUT: Timeout for ONE HTTP request that asks a question — a catalog search, a details lookup, a mirror health probe, a single hop made by a download source — as a Go duration string (e.g. 30s, 2m). (default: 10s)
 - LIBGEN_MCP_RESOLVE_BUDGET: Wall-clock budget one download source gets to turn an item into a direct URL, however many sequential hops that takes, before the chain abandons it and tries the next source. (default: 30s)
-- LIBGEN_MCP_LOG_LEVEL: Logging verbosity. (default: info)
+- LIBGEN_MCP_LOG_LEVEL: Verbosity of the server's own diagnostic logs on stderr. (default: info)
 - LIBGEN_MCP_RATE_RPS: Allowed outbound requests per second. (default: 1)
 - LIBGEN_MCP_RATE_BURST: Maximum rate-limiter burst. (default: 1)
 - LIBGEN_MCP_MAX_DOWNLOAD_BYTES: Maximum download size in bytes. (default: 0)

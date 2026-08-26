@@ -226,7 +226,7 @@ The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/ar
 
 ## Tools
 
-Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. Both channels lead with a `next_steps` guidance list. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/libgen-mcp/tools/)).
+Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/libgen-mcp/tools/)).
 
 <details>
 <summary><code>search</code> — federated search for books, papers, comics, magazines &amp; standards</summary>
@@ -427,7 +427,7 @@ By default the server speaks MCP over **stdio**. To serve **streamable HTTP** in
 
 The HTTP transport is **stateless by default** (MCP protocol `2026-07-28`, SEP-2567): no `Mcp-Session-Id`, every POST a complete request, `GET`/`DELETE` on the MCP endpoint answering `405` (`/health` is unaffected) — so replicas need no sticky routing. `--json-response` returns `application/json` instead of SSE, `--max-request-body-bytes` tightens the 4 MiB body cap, and `--stateless=false` restores the legacy session transport for a client that still needs it. See [Architecture → Stateless mode](docs/architecture.md#stateless-mode).
 
-In HTTP mode the server also publishes a **server card** at `GET /.well-known/mcp/server-card.json`: `serverInfo`, an `authentication` block (this server takes none), and the full `tools` and `prompts` listings, so a directory or scanner can read the whole surface — the four prompts included — without opening an MCP session. It is served unauthenticated and is unaffected by stateless mode's `405` on the MCP endpoint.
+In HTTP mode the server also publishes a **server card** at `GET /.well-known/mcp/server-card.json`: `serverInfo`, the `capabilities` the handshake negotiates, an `authentication` block (this server takes none), and the full `tools` and `prompts` listings, so a directory or scanner can read the whole surface — the four prompts included — without opening an MCP session. It is served unauthenticated, answers CORS preflight and carries `Access-Control-Allow-Origin: *` so a browser-based directory can read it, and is unaffected by stateless mode's `405` on the MCP endpoint.
 
 ## Maintenance
 

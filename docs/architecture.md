@@ -315,9 +315,13 @@ The server speaks MCP over one of two transports, selected at startup:
   `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport,
   suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
-  `status`, `version`, `commit`, `started_at` and `uptime_seconds`, plus the
-  server card at `GET /.well-known/mcp/server-card.json`, while the
-  server is serving — handy for container and load-balancer health checks.
+  `status`, `version`, `commit`, `started_at` and `uptime_seconds` while the
+  server is serving — handy for container and load-balancer health checks. It
+  also publishes a server card at `GET /.well-known/mcp/server-card.json`:
+  `serverInfo`, the `capabilities` the handshake negotiates, an `authentication`
+  block, and the full `tools` and `prompts` listings, served with
+  `Access-Control-Allow-Origin: *` so a directory or scanner — a browser-based
+  one included — can read the surface without opening an MCP session.
 
 Both transports share the same tools, HTTP client, and download pipeline; only the
 request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
@@ -349,6 +353,20 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 **Request cancellation.** A client that disconnects mid-call cancels the handler's context,
 so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
 only to protocol-`2026-07-28` requests, so older clients are unaffected.
+
+**Origin validation.** A state-changing POST that a browser sends from another origin is
+refused with `403`, which the transport spec requires of every streamable HTTP server to
+prevent DNS rebinding. The check is the standard library's, so its shape is worth knowing: safe
+methods are always allowed, and so is any request carrying neither `Sec-Fetch-Site` nor
+`Origin` — that is every non-browser client, from a desktop host to `curl`. What it stops is
+exactly the case the requirement names.
+
+**Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
+transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events
+in a buffer instead of forwarding them. That matters here because the POST response stream is a
+real stream — `download` and `read` emit `notifications/progress` on it while a file is being
+fetched, and a buffering proxy would hold every one of those events until the transfer finished.
+The header is scoped to the MCP endpoint; `GET /health` and the server card do not carry it.
 
 **Cache hints.** `tools/list`, `prompts/list` and `server/discover` carry a
 [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) hint of
@@ -383,6 +401,15 @@ three-entry `[]mcp.Icon` built by `internal/toolutil`:
 | 2     | WebP   | `16x16` | `light`  | Clients that reject SVG, light theme |
 | 3     | WebP   | `16x16` | `dark`   | Clients that reject SVG, dark theme  |
 
+That order is a contract, not an accident: `icons[0]` is always the SVG, `icons[1]` the
+light-theme WebP, `icons[2]` the dark-theme one — on every tool, every prompt and the brand
+mark alike, in `tools/list`, in `prompts/list`, in the `_meta` SEP-2575 attaches to every
+response, and in the server card, which publishes the arrays verbatim. Select by `mimeType`
+and `theme` if you can, but a consumer that reads positionally — a registry rendering
+`icons[0]` as its thumbnail, say — can rely on the SVG staying first.
+`internal/toolutil/icons_test.go` pins the shape entry by entry, so the order
+cannot change without a test failing first.
+
 The SVG is authored by hand and uses `currentColor`, so one themeless entry adapts to any
 client theme. The raster pair exists because a client can support icons and still refuse this
 one: VS Code Copilot's MIME allowlist admits `image/webp` but not `image/svg+xml`, so an
@@ -411,6 +438,31 @@ done — the annotation obliges the client to mirror the value into an `Mcp-Para
 and the server to reject the call without it, which browser-based clients structurally cannot
 satisfy. See
 [the decision record](decisions/2026-07-31-no-param-header-routing.md) for the measurements.
+
+### Vendor surface
+
+Everything this server puts on the wire that the MCP schema does not define, and the slot it
+occupies:
+
+| What                                                       | Where it rides                          | Slot                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The server card document                                   | `GET /.well-known/mcp/server-card.json` | A vendor document, never a JSON-RPC message. Not a specification: [SEP-1649](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1649), the draft it descends from, is closed, and its successor SEP-2127 relocates the card and rejects `.well-known/mcp` paths. The standard pre-connection channel is `server/discover`, which this server also answers. |
+| `next_steps`, and the "💡 Next steps" block that mirrors it | tool result                             | Result content — a field of the tool's own `outputSchema`, not a protocol extension.                                                                                                                                                                                                                                                                                      |
+| Markdown where the serialized JSON would go                | tool result `content`                   | A deliberate deviation from a SHOULD: the tools spec asks a tool returning structured content to also return the serialized JSON in a text block. This one returns Markdown instead — that channel is for the person reading the transcript, and repeating the JSON would double every payload for a reader that already has it in `structuredContent`.                   |
+| `GET /health` and its JSON body                            | its own HTTP path                       | Outside MCP entirely: the transport spec governs the MCP endpoint, not the rest of the origin.                                                                                                                                                                                                                                                                            |
+| The icon entry order                                       | icon arrays                             | See [Icons](#icons); the fields themselves are standard.                                                                                                                                                                                                                                                                                                                  |
+
+Nothing else is ours, and the gaps are the point. There is not one vendor `_meta` key on the
+wire — the only `_meta` is the SDK's own `io.modelcontextprotocol/serverInfo` (SEP-2575). The
+binary requires no custom request header, and every response header it sets is a
+standard one: `Content-Type`, the card's `Cache-Control` and CORS pair, and the
+transport spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None
+of them is vendor-defined. Tool schemas use standard JSON Schema
+vocabulary only; `annotations` carries the five standard `ToolAnnotations` fields;
+`ttlMs`/`cacheScope` are SEP-2549 fields set only on the result types that define them; and
+the download consent question uses the standard SEP-2322 `InputRequests`/`InputResponses`.
+`ServerCapabilities.experimental` and `extensions` — the schema's own home for _declaring_
+vendor behavior — are unused, and are where anything new would go.
 
 To check a deployment behaves as described, run `make validate-http-stateless` (or
 `scripts/validate-http-stateless.sh docker` to exercise the container entrypoint): it starts
