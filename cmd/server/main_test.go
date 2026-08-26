@@ -892,3 +892,44 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 		})
 	}
 }
+
+// TestServeHTTPValidatesOrigin covers the 2026-07-28 transport MUST — "Servers
+// MUST validate the Origin header on all incoming connections" — at the only
+// layer that can enforce it, the HTTP handler.
+//
+// It lives apart from TestServeHTTPStateless because the three cases below are
+// one contract of their own, and because folding them in pushed that function
+// past the cognitive-complexity budget.
+func TestServeHTTPValidatesOrigin(t *testing.T) {
+	ts := newTransportTestServer(t, transport.DefaultOptions())
+
+	// The 2026-07-28 transport MUST, at the only layer that can enforce it.
+	// The three cases are the whole contract: a browser POST from elsewhere is
+	// refused, the same POST with no browser headers is not (that is every
+	// non-browser client), and a safe method is never touched.
+	t.Run("cross-origin browser POST is refused", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL, strings.NewReader(listToolsRequest))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		req.Header.Set("Origin", "https://evil.invalid")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d for a cross-origin browser POST", resp.StatusCode, http.StatusForbidden)
+		}
+	})
+
+	t.Run("non-browser POST is unaffected", func(t *testing.T) {
+		reply := postMCP(t, ts.URL, listToolsRequest)
+		if reply.status != http.StatusOK {
+			t.Errorf("status = %d, want %d: a client sending neither Sec-Fetch-Site nor Origin must not be blocked", reply.status, http.StatusOK)
+		}
+	})
+}

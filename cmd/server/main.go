@@ -282,10 +282,31 @@ func sseNoBuffering(next http.Handler) http.Handler {
 	})
 }
 
-// newHTTPHandler mounts the MCP handler at / behind sseNoBuffering, exposes
-// GET /health, and serves the server card when one was built. A nil card leaves
-// both card routes unmounted, so the path falls through to the MCP handler
-// exactly as it did before.
+// crossOriginProtected wraps the MCP handler in the standard library's
+// cross-origin protection, which the 2026-07-28 streamable-HTTP transport
+// requires: "Servers MUST validate the Origin header on all incoming
+// connections to prevent DNS rebinding attacks", answering 403 when the header
+// is present and invalid.
+//
+// The SDK does not do this for us. StreamableHTTPOptions.CrossOriginProtection
+// is nil unless set — "If nil, no cross-origin protection is applied" — and the
+// field is deprecated in favor of exactly this wrapping; its only default
+// protection is a Host check that never fires on a public bind.
+//
+// Who this actually stops is narrow, and deliberately so. Safe methods are
+// always allowed, so the card and the health probe are untouched. A request
+// carrying neither Sec-Fetch-Site nor Origin is allowed too, which is every
+// non-browser client — stdio hosts, desktop apps, curl, the SDK's own client.
+// What remains is a state-changing POST issued by a browser from another
+// origin, which is the attack the requirement names.
+func crossOriginProtected(next http.Handler) http.Handler {
+	return http.NewCrossOriginProtection().Handler(next)
+}
+
+// newHTTPHandler mounts the MCP handler at / behind cross-origin protection and
+// sseNoBuffering, exposes GET /health, and serves the server card when one was
+// built. A nil card leaves both card routes unmounted, so the path falls
+// through to the MCP handler exactly as it did before.
 func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
@@ -311,17 +332,27 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
 				w.Header().Set("Access-Control-Allow-Headers", want)
 			}
+			// Without a lifetime the browser preflights again on every fetch,
+			// which for a document that only changes with a release is two
+			// round-trips where one would do.
+			w.Header().Set("Access-Control-Max-Age", "3600")
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+			// The card is fetched by scanners that may hand the bytes to a
+			// browser; nosniff keeps it read as the JSON it says it is. The
+			// rest of the usual hardening set — CSP, X-Frame-Options — guards
+			// against rendering and framing, neither of which happens to a
+			// document that is never a page.
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 			// The card only changes with a release, so a scanner may hold it.
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 			_, _ = w.Write(cardJSON)
 		})
 	}
-	mux.Handle("/", sseNoBuffering(mcpHandler))
+	mux.Handle("/", crossOriginProtected(sseNoBuffering(mcpHandler)))
 	return mux
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/capguard"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
@@ -36,7 +37,15 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 	}
 	client := libgen.New(mgr, cfg)
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-eval", Version: "0.0.1"}, nil)
+	// Capabilities pinned and the resource guard installed for the same reason
+	// newMCPServer does both: nil options inherit the SDK's deprecated logging
+	// default, and the SDK answers the resource methods whether or not any
+	// resource is registered. The evaluator is meant to measure the surface the
+	// repository ships, so a harness that advertised more than the server does
+	// would be measuring something else.
+	server := mcp.NewServer(&mcp.Implementation{Name: "libgen-eval", Version: "0.0.1"},
+		&mcp.ServerOptions{Capabilities: &mcp.ServerCapabilities{}})
+	server.AddReceivingMiddleware(capguard.NoResources())
 	// Remote block: register the download tool in remote mode (returns a link
 	// instead of writing to disk), matching a hosted HTTP deployment.
 	var regOpts []tools.RegisterOption

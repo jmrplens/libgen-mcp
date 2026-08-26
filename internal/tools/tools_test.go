@@ -1747,7 +1747,7 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 		// it identifies the provider anyway. A saved file still names nothing, and what
 		// stands in place of provenance is the pin's own contract, stated where the source
 		// argument is introduced.
-		"is named back only beside a resolved link — never for a saved file",
+		"is named back only beside a resolved link, or in the optional account block",
 		"restrict the download to one provider instead of all of them, with no substitution",
 		"a failure means it could not serve the item",
 		// The operator's configuration is the thing that settles this, and it is

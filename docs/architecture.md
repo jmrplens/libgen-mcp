@@ -354,6 +354,13 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
 only to protocol-`2026-07-28` requests, so older clients are unaffected.
 
+**Origin validation.** A state-changing POST that a browser sends from another origin is
+refused with `403`, which the transport spec requires of every streamable HTTP server to
+prevent DNS rebinding. The check is the standard library's, so its shape is worth knowing: safe
+methods are always allowed, and so is any request carrying neither `Sec-Fetch-Site` nor
+`Origin` — that is every non-browser client, from a desktop host to `curl`. What it stops is
+exactly the case the requirement names.
+
 **Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
 transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events
 in a buffer instead of forwarding them. That matters here because the POST response stream is a

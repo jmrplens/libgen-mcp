@@ -189,6 +189,15 @@ else
   fail "server handed out Mcp-Session-Id: $SESSION"
 fi
 
+# The transport SHOULD, asserted where it is actually observable: the unit test
+# proves the handler sets it, only this proves it survives to the wire.
+BUFFERING=$(header_value "$HEADERS" "X-Accel-Buffering")
+if [ "$BUFFERING" = "no" ]; then
+  pass "the SSE response tells proxies not to buffer"
+else
+  fail "X-Accel-Buffering is '${BUFFERING:-absent}', want 'no'"
+fi
+
 case "$BODY" in
   *'"search"'*) pass "tools/list advertises search" ;;
   *) fail "tools/list did not advertise search (body: $BODY)" ;;
