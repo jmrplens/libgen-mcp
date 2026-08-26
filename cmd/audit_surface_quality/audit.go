@@ -310,6 +310,13 @@ func walkProperties(node map[string]any, kind string, report func(category, deta
 		}
 		desc, _ := child["description"].(string)
 		switch {
+		case strings.TrimSpace(desc) == "" && isConstraintStub(child):
+			// A required-group branch (anyOf/oneOf) refines a field that the
+			// top level already declares and describes — {"pattern":"\\S"} on
+			// md5 inside a branch is a constraint, not a field, and demanding
+			// a description of it would force every branch to duplicate prose
+			// a model already has. The discriminator is type: every real field
+			// inference emits carries one, a pure refinement does not.
 		case strings.TrimSpace(desc) == "":
 			report("field-description",
 				fmt.Sprintf("%s field %q has no jsonschema description", kind, name))
@@ -320,6 +327,15 @@ func walkProperties(node map[string]any, kind string, report func(category, deta
 		}
 		walkSchema(child, kind, scope{field: name, description: desc}, report)
 	}
+}
+
+// isConstraintStub reports whether a property subschema is a pure value
+// refinement — no type, no description, no nested properties — the shape a
+// required-group branch uses to constrain a field declared at the top level.
+func isConstraintStub(node map[string]any) bool {
+	_, hasType := node["type"]
+	_, hasProps := node["properties"]
+	return !hasType && !hasProps
 }
 
 // walkNamedChildren recurses into schema nodes held under the given keys, each

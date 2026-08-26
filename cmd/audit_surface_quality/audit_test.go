@@ -354,3 +354,39 @@ func hasSubstr(list []string, sub string) bool {
 	}
 	return false
 }
+
+// TestAuditSchema_ConstraintStubsInGroupBranches pins the two halves of the
+// stub exemption. A required-group branch constrains a field the top level
+// already describes — {"pattern":"\\S"} on md5 inside anyOf is a refinement,
+// not a field, and must not be reported. The discriminator is type: a real
+// field always carries one, so an undescribed field inside the same branch is
+// still caught.
+func TestAuditSchema_ConstraintStubsInGroupBranches(t *testing.T) {
+	schema := objectSchema(map[string]any{
+		"md5": map[string]any{"type": "string", "description": "the file md5"},
+	})
+	schema["anyOf"] = []any{
+		map[string]any{
+			"required": []any{"md5"},
+			"properties": map[string]any{
+				"md5": map[string]any{"pattern": `\S`},
+			},
+		},
+	}
+	if vs := auditSchema("download", "input", schema); len(vs) != 0 {
+		t.Fatalf("a constraint stub in a group branch must pass; got %v", detailSet(vs))
+	}
+
+	schema["anyOf"] = []any{
+		map[string]any{
+			"required": []any{"md5"},
+			"properties": map[string]any{
+				"md5": map[string]any{"type": "string", "pattern": `\S`},
+			},
+		},
+	}
+	got := categorySet(auditSchema("download", "input", schema))
+	if !got["field-description"] {
+		t.Error("a typed, undescribed property inside a branch must still be reported")
+	}
+}

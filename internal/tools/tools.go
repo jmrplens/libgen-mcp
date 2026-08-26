@@ -54,20 +54,21 @@ var detailsSchemaFor = jsonschema.For[DetailsInput]
 // which is precisely the pair of errors the handler returns. anyOf would let
 // {md5, doi} through to fail at runtime; the whole point is failing it sooner.
 //
-// One knowing looseness: required checks key presence, not emptiness, so a
-// pathological {"md5":"","doi":"…"} fails the schema while the handler (which
-// counts non-empty values) would accept it. That call has no reason to exist,
-// and a schema slightly stricter than the validator beats prose constraining
-// nothing.
+// Each branch demands a non-blank value, not mere key presence: required alone
+// counts keys, so a pathological {"md5":"","doi":"…"} would match two branches
+// and fail oneOf while the handler — whose countKeys trims and ignores blank
+// values — accepts it and resolves the DOI. With the non-blank constraint the
+// empty md5 fails its own branch, exactly one branch matches, and schema and
+// handler agree on every input.
 func detailsInputSchema() *jsonschema.Schema {
 	schema, err := detailsSchemaFor(nil)
 	if err != nil {
 		return nil
 	}
 	schema.OneOf = []*jsonschema.Schema{
-		{Required: []string{"md5"}},
-		{Required: []string{"id"}},
-		{Required: []string{"doi"}},
+		requiresNonBlank("md5"),
+		requiresNonBlank("id"),
+		requiresNonBlank("doi"),
 	}
 	return schema
 }
@@ -287,14 +288,14 @@ func readInputSchema(enabled []string, remote bool) *jsonschema.Schema {
 	if remote {
 		delete(schema.Properties, "path")
 		schema.AnyOf = []*jsonschema.Schema{
-			{Required: []string{"md5"}},
-			{Required: []string{"doi"}},
+			requiresNonEmpty("md5"),
+			requiresNonEmpty("doi"),
 		}
 	} else {
 		schema.AnyOf = []*jsonschema.Schema{
-			{Required: []string{"md5"}},
-			{Required: []string{"doi"}},
-			{Required: []string{"path"}},
+			requiresNonEmpty("md5"),
+			requiresNonEmpty("doi"),
+			requiresNonEmpty("path"),
 		}
 	}
 	if src := schema.Properties["source"]; src != nil && len(enabled) > 0 {
@@ -340,6 +341,32 @@ func orderedEnabledSources(lists ...[]string) []string {
 // sources: an enum so the model cannot select a disabled provider, plus a matching
 // description. A nil result makes AddTool fall back to the default inferred schema
 // (no enum), which only happens if inference of the static struct ever fails.
+// requiresNonBlank returns a required-group branch: the key must be present and
+// contain at least one non-whitespace character. The branches that use it
+// belong to handlers that TrimSpace before deciding whether an identifier was
+// provided (parseDownloadIDs, countKeys), so to those a whitespace-only value
+// IS absence, and a branch that accepted it would declare a call the handler
+// refuses.
+func requiresNonBlank(key string) *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Required:   []string{key},
+		Properties: map[string]*jsonschema.Schema{key: {Pattern: `\S`}},
+	}
+}
+
+// requiresNonEmpty returns a required-group branch: the key must be present and
+// non-empty, whitespace allowed. read's validateReadInput compares the raw
+// values against "", without trimming, so its rule is minLength rather than
+// the non-blank pattern — the two helpers exist because the handlers genuinely
+// differ, and each schema states its own handler's rule, not a tidier one.
+func requiresNonEmpty(key string) *jsonschema.Schema {
+	one := 1
+	return &jsonschema.Schema{
+		Required:   []string{key},
+		Properties: map[string]*jsonschema.Schema{key: {MinLength: &one}},
+	}
+}
+
 // downloadSchemaFor is a seam for tests to exercise the defensive
 // schema-inference error guard below; it defaults to the real jsonschema.For.
 var downloadSchemaFor = jsonschema.For[DownloadInput]
@@ -357,9 +384,9 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 	// accepts. (download resolves them in md5 → doi → isbn order when several
 	// are given, so more than one is legal here, unlike get_details.)
 	schema.AnyOf = []*jsonschema.Schema{
-		{Required: []string{"md5"}},
-		{Required: []string{"isbn"}},
-		{Required: []string{"doi"}},
+		requiresNonBlank("md5"),
+		requiresNonBlank("isbn"),
+		requiresNonBlank("doi"),
 	}
 	if src := schema.Properties["source"]; src != nil && len(enabled) > 0 {
 		src.Enum = make([]any, len(enabled))

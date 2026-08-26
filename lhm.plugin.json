@@ -136,16 +136,31 @@
         "additionalProperties": false,
         "oneOf": [
           {
+            "properties": {
+              "md5": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "md5"
             ]
           },
           {
+            "properties": {
+              "id": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "id"
             ]
           },
           {
+            "properties": {
+              "doi": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "doi"
             ]
@@ -189,16 +204,31 @@
         "additionalProperties": false,
         "anyOf": [
           {
+            "properties": {
+              "md5": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "md5"
             ]
           },
           {
+            "properties": {
+              "isbn": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "isbn"
             ]
           },
           {
+            "properties": {
+              "doi": {
+                "pattern": "\\S"
+              }
+            },
             "required": [
               "doi"
             ]
@@ -278,16 +308,31 @@
         "additionalProperties": false,
         "anyOf": [
           {
+            "properties": {
+              "md5": {
+                "minLength": 1
+              }
+            },
             "required": [
               "md5"
             ]
           },
           {
+            "properties": {
+              "doi": {
+                "minLength": 1
+              }
+            },
             "required": [
               "doi"
             ]
           },
           {
+            "properties": {
+              "path": {
+                "minLength": 1
+              }
+            },
             "required": [
               "path"
             ]

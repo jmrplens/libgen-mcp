@@ -4111,7 +4111,11 @@ func TestNoParamHeaderAnnotations(t *testing.T) {
 
 // requiredGroupKeys flattens a list of single-key required branches into the
 // keys they name, failing on any branch that is not exactly that shape — the
-// shape is the contract, since a multi-key branch would mean AND, not OR.
+// shape is the contract, since a multi-key branch would mean AND, not OR. Each
+// branch must also constrain its key's value (pattern or minLength): required
+// alone counts key presence, so a blank identifier would satisfy a branch its
+// handler ignores, and schema and validator would disagree on inputs like
+// {"md5":"","doi":"…"}.
 func requiredGroupKeys(t *testing.T, branches []*jsonschema.Schema) []string {
 	t.Helper()
 	keys := make([]string, 0, len(branches))
@@ -4119,7 +4123,12 @@ func requiredGroupKeys(t *testing.T, branches []*jsonschema.Schema) []string {
 		if b == nil || len(b.Required) != 1 {
 			t.Fatalf("branch %d = %+v, want exactly one required key", i, b)
 		}
-		keys = append(keys, b.Required[0])
+		key := b.Required[0]
+		prop := b.Properties[key]
+		if prop == nil || (prop.Pattern == "" && prop.MinLength == nil) {
+			t.Errorf("branch %d (%s) does not constrain the value; a blank %s would satisfy it while the handler ignores blanks", i, key, key)
+		}
+		keys = append(keys, key)
 	}
 	return keys
 }
