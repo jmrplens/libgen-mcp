@@ -4108,3 +4108,123 @@ func TestNoParamHeaderAnnotations(t *testing.T) {
 		})
 	}
 }
+
+// requiredGroupKeys flattens a list of single-key required branches into the
+// keys they name, failing on any branch that is not exactly that shape — the
+// shape is the contract, since a multi-key branch would mean AND, not OR. Each
+// branch must also constrain its key's value (pattern or minLength): required
+// alone counts key presence, so a blank identifier would satisfy a branch its
+// handler ignores, and schema and validator would disagree on inputs like
+// {"md5":"","doi":"…"}.
+func requiredGroupKeys(t *testing.T, branches []*jsonschema.Schema) []string {
+	t.Helper()
+	keys := make([]string, 0, len(branches))
+	for i, b := range branches {
+		if b == nil || len(b.Required) != 1 {
+			t.Fatalf("branch %d = %+v, want exactly one required key", i, b)
+		}
+		key := b.Required[0]
+		prop := b.Properties[key]
+		if prop == nil || (prop.Pattern == "" && prop.MinLength == nil) {
+			t.Errorf("branch %d (%s) does not constrain the value; a blank %s would satisfy it while the handler ignores blanks", i, key, key)
+		}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// TestIdentifierGroupsMatchTheirValidators pins each input schema's
+// required-group to the rule its handler enforces, so the two cannot drift:
+// download's handler accepts any non-empty combination of md5/isbn/doi
+// (anyOf), get_details' handler demands exactly one of md5/id/doi (oneOf), and
+// read's accepts md5/doi/path locally while a remote server rejects any call
+// that sets path — so remotely the property itself is gone, not merely
+// unlisted.
+func TestIdentifierGroupsMatchTheirValidators(t *testing.T) {
+	t.Run("download states at least one of md5, isbn, doi", func(t *testing.T) {
+		schema := downloadInputSchema([]string{"libgen"})
+		if schema == nil {
+			t.Fatal("downloadInputSchema() = nil")
+		}
+		if got, want := requiredGroupKeys(t, schema.AnyOf), []string{"md5", "isbn", "doi"}; !slices.Equal(got, want) {
+			t.Errorf("anyOf keys = %v, want %v", got, want)
+		}
+		if schema.OneOf != nil {
+			t.Errorf("oneOf = %v, want none: the handler accepts several identifiers at once", schema.OneOf)
+		}
+	})
+
+	t.Run("get_details states exactly one of md5, id, doi", func(t *testing.T) {
+		schema := detailsInputSchema()
+		if schema == nil {
+			t.Fatal("detailsInputSchema() = nil")
+		}
+		if got, want := requiredGroupKeys(t, schema.OneOf), []string{"md5", "id", "doi"}; !slices.Equal(got, want) {
+			t.Errorf("oneOf keys = %v, want %v", got, want)
+		}
+		if schema.AnyOf != nil {
+			t.Errorf("anyOf = %v, want none: the handler refuses more than one identifier", schema.AnyOf)
+		}
+	})
+
+	t.Run("read local offers path, remote removes it", func(t *testing.T) {
+		local := readInputSchema([]string{"libgen"}, false)
+		if local == nil {
+			t.Fatal("readInputSchema(local) = nil")
+		}
+		if got, want := requiredGroupKeys(t, local.AnyOf), []string{"md5", "doi", "path"}; !slices.Equal(got, want) {
+			t.Errorf("local anyOf keys = %v, want %v", got, want)
+		}
+		if local.Properties["path"] == nil {
+			t.Error("local schema lost the path property")
+		}
+
+		remote := readInputSchema([]string{"libgen"}, true)
+		if got, want := requiredGroupKeys(t, remote.AnyOf), []string{"md5", "doi"}; !slices.Equal(got, want) {
+			t.Errorf("remote anyOf keys = %v, want %v", got, want)
+		}
+		if remote.Properties["path"] != nil {
+			t.Error("remote schema still offers path, which validateReadInput rejects whenever it is set")
+		}
+	})
+}
+
+// TestReadOnlyToolsDeclareIdempotent asserts every read-only tool also declares
+// idempotentHint over a real listing: a pure read re-run with the same
+// arguments has no additional effect, and a client may gate retries on either
+// hint independently, so declaring one without the other made the surface's
+// only writing tool look safer to repeat than its reads.
+func TestReadOnlyToolsDeclareIdempotent(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{}, cfg)
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
+	Register(server, client, cfg)
+
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(t.Context(), st, nil); err != nil {
+		t.Fatal(err)
+	}
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "0"}, nil).Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = session.Close() }()
+
+	seen := 0
+	for tool, err := range session.Tools(t.Context(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen++
+		if tool.Annotations == nil {
+			t.Errorf("%s: no annotations", tool.Name)
+			continue
+		}
+		if !tool.Annotations.IdempotentHint {
+			t.Errorf("%s: idempotentHint = false, want true", tool.Name)
+		}
+	}
+	if seen != 4 {
+		t.Errorf("listed %d tools, want 4", seen)
+	}
+}

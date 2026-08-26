@@ -3,7 +3,7 @@
   "name": "io.github.jmrplens/libgen-mcp",
   "title": "Books & Papers MCP Server",
   "description": "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading.",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "websiteUrl": "https://jmrp.io/docs/libgen-mcp",
   "repository": {
     "url": "https://github.com/jmrplens/libgen-mcp",
@@ -19,8 +19,8 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-linux-amd64",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-linux-amd64",
+      "version": "1.7.1",
       "fileSha256": "01a80f43803d00aa57ff3485da21de90d0753f6eff68823e0f21001297901a70",
       "transport": {
         "type": "stdio"
@@ -48,8 +48,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-linux-arm64",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-linux-arm64",
+      "version": "1.7.1",
       "fileSha256": "cd6f39741746f15bcbcfc87640fc7d3790770941b14eff353b34092b36a9a896",
       "transport": {
         "type": "stdio"
@@ -77,8 +77,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-darwin-amd64",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-darwin-amd64",
+      "version": "1.7.1",
       "fileSha256": "458d97793ccbbb4844c0c5f58e4336cf775c1cae42d14846e5a5fc242919c70b",
       "transport": {
         "type": "stdio"
@@ -106,8 +106,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-darwin-arm64",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-darwin-arm64",
+      "version": "1.7.1",
       "fileSha256": "b302d0f1224b35960a583cc23d73ba12c2ad302878c68b938ba8dfd814236aef",
       "transport": {
         "type": "stdio"
@@ -135,8 +135,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-windows-amd64.exe",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-windows-amd64.exe",
+      "version": "1.7.1",
       "fileSha256": "e449205c115ebc23f7685eb93802f542813817ba303edac4f081f2502ae0a1ab",
       "transport": {
         "type": "stdio"
@@ -164,8 +164,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.0/libgen-mcp-windows-arm64.exe",
-      "version": "1.7.0",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.1/libgen-mcp-windows-arm64.exe",
+      "version": "1.7.1",
       "fileSha256": "03eedcb8f9faab5f06cf03fe0605cd85f9a9f1b86873d580fa2a56b53fcb6061",
       "transport": {
         "type": "stdio"
