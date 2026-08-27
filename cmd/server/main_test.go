@@ -93,7 +93,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub, nil)
+	handler := newHTTPHandler(stub, nil, nil)
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -471,7 +471,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -932,4 +932,119 @@ func TestServeHTTPValidatesOrigin(t *testing.T) {
 			t.Errorf("status = %d, want %d: a client sending neither Sec-Fetch-Site nor Origin must not be blocked", reply.status, http.StatusOK)
 		}
 	})
+}
+
+// browserPOST issues the request a browser makes after a successful preflight:
+// a cross-site POST carrying an Origin.
+func browserPOST(t *testing.T, base, origin string) httpReply {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/", strings.NewReader(listToolsRequest))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	return do(t, req)
+}
+
+// preflight issues the OPTIONS a browser sends before a cross-origin POST that
+// carries a non-safelisted Content-Type.
+func preflight(t *testing.T, base, origin string) httpReply {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodOptions, base+"/", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	return do(t, req)
+}
+
+// TestServeHTTPTrustedOrigins covers the flag end to end over a real wire.
+//
+// The regression that matters most is the no-Origin case in every
+// configuration: every CLI and desktop client depends on it, and it is the
+// easiest to break while making the browser cases work.
+func TestServeHTTPTrustedOrigins(t *testing.T) {
+	const trusted, untrusted = "https://claude.ai", "https://evil.example"
+
+	t.Run("no allowlist refuses every browser origin", func(t *testing.T) {
+		ts := newTransportTestServer(t, transport.DefaultOptions())
+		if got := browserPOST(t, ts.URL, trusted).status; got != http.StatusForbidden {
+			t.Errorf("trusted-looking origin = %d, want %d when no allowlist is configured", got, http.StatusForbidden)
+		}
+		if got := postMCP(t, ts.URL, listToolsRequest).status; got != http.StatusOK {
+			t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
+		}
+		// Unchanged from before the flag existed: nothing answers the preflight,
+		// so it falls through to the MCP handler's method check.
+		if got := preflight(t, ts.URL, trusted).status; got != http.StatusMethodNotAllowed {
+			t.Errorf("preflight = %d, want %d without an allowlist", got, http.StatusMethodNotAllowed)
+		}
+	})
+
+	t.Run("an allowlisted origin is answered and admitted", func(t *testing.T) {
+		opts := transport.DefaultOptions()
+		opts.TrustedOrigins = []string{trusted}
+		ts := newTransportTestServer(t, opts)
+
+		pre := preflight(t, ts.URL, trusted)
+		if pre.status != http.StatusNoContent {
+			t.Fatalf("preflight = %d, want %d", pre.status, http.StatusNoContent)
+		}
+		// Echoed, not "*": a browser rejects the wildcard on a credentialed
+		// request, and Vary keeps a shared cache from serving one origin's
+		// answer to another.
+		if got := pre.header.Get("Access-Control-Allow-Origin"); got != trusted {
+			t.Errorf("preflight Allow-Origin = %q, want the origin echoed", got)
+		}
+		if got := pre.header.Get("Access-Control-Allow-Headers"); got != "content-type" {
+			t.Errorf("preflight Allow-Headers = %q, want the requested header echoed", got)
+		}
+		if !strings.Contains(pre.header.Get("Vary"), "Origin") {
+			t.Errorf("preflight Vary = %q, want it to name Origin", pre.header.Get("Vary"))
+		}
+
+		post := browserPOST(t, ts.URL, trusted)
+		if post.status != http.StatusOK {
+			t.Errorf("trusted POST = %d, want %d — the preflight promised it would be allowed", post.status, http.StatusOK)
+		}
+		if got := post.header.Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Mcp-Session-Id") {
+			t.Errorf("Expose-Headers = %q, want it to name Mcp-Session-Id; a browser cannot read it otherwise", got)
+		}
+
+		if got := browserPOST(t, ts.URL, untrusted).status; got != http.StatusForbidden {
+			t.Errorf("untrusted POST = %d, want %d: the allowlist must not widen to other origins", got, http.StatusForbidden)
+		}
+		if got := postMCP(t, ts.URL, listToolsRequest).status; got != http.StatusOK {
+			t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
+		}
+	})
+}
+
+// TestServeHTTPTrustedOriginsWildcard covers --trusted-origins=*, which turns
+// the protection off for browsers entirely. It is a function of its own rather
+// than a third subtest because the three together exceed the cognitive
+// complexity budget.
+func TestServeHTTPTrustedOriginsWildcard(t *testing.T) {
+	const trusted, untrusted = "https://claude.ai", "https://evil.example"
+	opts := transport.DefaultOptions()
+	opts.TrustedOrigins = []string{transport.AnyOrigin}
+	ts := newTransportTestServer(t, opts)
+
+	for _, origin := range []string{trusted, untrusted} {
+		reply := browserPOST(t, ts.URL, origin)
+		if reply.status != http.StatusOK {
+			t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)
+		}
+		if got := reply.header.Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("Allow-Origin = %q, want %q echoed even under the wildcard", got, origin)
+		}
+	}
+	if got := postMCP(t, ts.URL, listToolsRequest).status; got != http.StatusOK {
+		t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
+	}
 }

@@ -344,11 +344,12 @@ It suits this server: there is no authentication and no per-client state, so a s
 MCP server answers every request and a session bought nothing. Sessionless also means any
 number of replicas can sit behind a plain round-robin load balancer with no sticky routing.
 
-| Flag                       | Default | What it does                                                                                                                                                                 |
-| -------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--stateless`              | `true`  | Serve sessionless streamable HTTP. `--stateless=false` restores the legacy session transport, and clients then negotiate protocol `2025-11-25` or older.                     |
-| `--json-response`          | `false` | Return `application/json` response bodies instead of `text/event-stream` (SSE).                                                                                              |
-| `--max-request-body-bytes` | `0`     | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely. |
+| Flag                       | Default   | What it does                                                                                                                                                                                                                                                                                               |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--stateless`              | `true`    | Serve sessionless streamable HTTP. `--stateless=false` restores the legacy session transport, and clients then negotiate protocol `2025-11-25` or older.                                                                                                                                                   |
+| `--json-response`          | `false`   | Return `application/json` response bodies instead of `text/event-stream` (SSE).                                                                                                                                                                                                                            |
+| `--max-request-body-bytes` | `0`       | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely.                                                                                                                               |
+| `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent. |
 
 **Request cancellation.** A client that disconnects mid-call cancels the handler's context,
 so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
@@ -356,10 +357,25 @@ only to protocol-`2026-07-28` requests, so older clients are unaffected.
 
 **Origin validation.** A state-changing POST that a browser sends from another origin is
 refused with `403`, which the transport spec requires of every streamable HTTP server to
-prevent DNS rebinding. The check is the standard library's, so its shape is worth knowing: safe
-methods are always allowed, and so is any request carrying neither `Sec-Fetch-Site` nor
-`Origin` — that is every non-browser client, from a desktop host to `curl`. What it stops is
-exactly the case the requirement names.
+prevent DNS rebinding. The check is the standard library's, so its shape is worth knowing:
+safe methods are always allowed, and so is any request carrying neither `Sec-Fetch-Site`
+nor `Origin` — that is every non-browser client, from a desktop host to `curl`. What it
+stops is exactly the case the requirement names.
+
+**Naming an origin makes it usable, not merely allowed.** Validating the `Origin` header
+and refusing every origin are not the same instruction, so `--trusted-origins` names the
+browser origins this deployment vouches for. For those the server also answers the
+preflight `OPTIONS` itself — `204` with the allowed methods and the requested headers
+echoed back — and sets `Access-Control-Allow-Origin` on the response, echoing the origin
+rather than answering `*`, since a browser rejects the wildcard on a credentialed request.
+`Access-Control-Expose-Headers` names `Mcp-Session-Id`, which a browser cannot read
+otherwise and which only `--stateless=false` emits. An origin that is not named falls
+through to the validation above and is refused exactly as before.
+
+Without that answer the endpoint advertises access it does not grant: a reverse proxy
+that replies to the preflight itself tells the browser the request is allowed, and the
+POST that follows is then refused by the server. Whatever answers the preflight, the
+allowlist has to agree with it.
 
 **Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
 transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events

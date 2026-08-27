@@ -241,7 +241,7 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw)
+	handler := newHTTPHandler(stub, raw, nil)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil)
 	rec := httptest.NewRecorder()
@@ -275,7 +275,7 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw)
+	handler := newHTTPHandler(stub, raw, nil)
 
 	getRec := httptest.NewRecorder()
 	handler.ServeHTTP(getRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil))
@@ -316,7 +316,7 @@ func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, nil)
+	handler := newHTTPHandler(stub, nil, nil)
 
 	for _, method := range []string{http.MethodGet, http.MethodOptions} {
 		req := httptest.NewRequestWithContext(t.Context(), method, serverCardPath, nil)
