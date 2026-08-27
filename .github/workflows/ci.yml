@@ -31,13 +31,13 @@ jobs:
       - run: go mod download
       - name: Run tests with coverage
         run: |
-          go test -count=1 -coverpkg=./internal/...,./cmd/server/... -coverprofile=coverage.out ./cmd/... ./internal/...
+          go test -count=1 -coverpkg=./internal/...,./cmd/server/...,./cmd/internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
           go tool cover -func=coverage.out | grep '^total:'
           # The summary line is anchored: a plain "total" also matches any function
           # whose name contains it, which yields two values and turns the comparison
           # below into an awk syntax error that silently passes the gate.
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
-          echo "Total coverage (internal/ + cmd/server): ${COVERAGE}%"
+          echo "Total coverage (internal/, cmd/server, cmd/internal): ${COVERAGE}%"
           if [ -z "${COVERAGE}" ]; then
             echo "FAIL: no total coverage line in coverage.out"
             exit 1
