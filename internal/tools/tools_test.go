@@ -4228,3 +4228,66 @@ func TestReadOnlyToolsDeclareIdempotent(t *testing.T) {
 		t.Errorf("listed %d tools, want 4", seen)
 	}
 }
+
+// TestDetailsHandlerEnforcesExactlyOneIdentifier covers the runtime half of the
+// rule get_details' schema declares.
+//
+// The oneOf pinned in TestIdentifierGroupsMatchTheirValidators states the rule
+// to a client; this asserts the handler actually imposes it, which is what a
+// client that ignores the schema — or sends whitespace the schema counts as
+// present — runs into. Declaring a constraint and enforcing it are two
+// different things, and only one of them was being tested.
+func TestDetailsHandlerEnforcesExactlyOneIdentifier(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, nil)
+
+	cases := []struct {
+		name string
+		in   DetailsInput
+	}{
+		{name: "no identifier at all", in: DetailsInput{}},
+		// Whitespace is absence to both sides: countKeys trims, and the
+		// schema's branches demand a non-blank value.
+		{name: "only whitespace", in: DetailsInput{MD5: "   "}},
+		{name: "whitespace in every field", in: DetailsInput{MD5: " ", ID: "\t", DOI: "  "}},
+		{name: "md5 and doi", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", DOI: "10.1/x"}},
+		{name: "md5 and id", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", ID: "42"}},
+		{name: "id and doi", in: DetailsInput{ID: "42", DOI: "10.1/x"}},
+		{name: "all three", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", ID: "42", DOI: "10.1/x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := handler(t.Context(), nil, tc.in)
+			if err == nil {
+				t.Fatalf("handler accepted %+v; the schema says exactly one", tc.in)
+			}
+			if !strings.Contains(err.Error(), "exactly one of md5, id or doi") {
+				t.Errorf("error = %q, want it to state the rule", err)
+			}
+		})
+	}
+}
+
+// TestDetailsHandlerAgreesWithItsSchemaOnBlanks pins the input where the two
+// used to disagree, in the direction that matters.
+//
+// The schema's oneOf demands a non-blank value per branch, so
+// {md5:"   ", doi:"10.…"} matches exactly the doi branch and validates. The
+// handler used to reject it: countKeys trimmed and counted one identifier, then
+// the md5 arm compared against "" and took it anyway, failing on the format of
+// a value the caller never meant to send. A schema that accepts what the handler
+// refuses is the same defect as prose that promises what the code does not.
+func TestDetailsHandlerAgreesWithItsSchemaOnBlanks(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	handler := detailsHandler(emptyJSONClient(t), cfg, nil)
+
+	_, _, err := handler(t.Context(), nil, DetailsInput{MD5: "   ", DOI: "10.1371/journal.pone.0173664"})
+	if err != nil && strings.Contains(err.Error(), "md5 must be") {
+		t.Fatalf("a blank md5 beside a usable doi was judged as an md5: %v", err)
+	}
+	// Reaching the DOI path is the assertion; whether the lookup succeeds
+	// against a stub client is not what this test is about.
+	if err != nil && strings.Contains(err.Error(), "exactly one") {
+		t.Errorf("a blank md5 counted as an identifier: %v", err)
+	}
+}

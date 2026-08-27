@@ -1269,6 +1269,17 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 			out DetailsOutput
 			err error
 		)
+		// Trimmed once, so every arm below agrees with countKeys about which
+		// identifiers were provided. They did not: countKeys trims and the arms
+		// compared against "", so a whitespace-only md5 beside a usable doi
+		// counted as one identifier and then took the md5 arm anyway, failing
+		// on the format of a value the caller never meant to send. The schema's
+		// oneOf reads that same input as one branch matched and accepts it, so
+		// the two disagreed on the one shape neither would ever be asked about
+		// deliberately.
+		in.MD5 = strings.TrimSpace(in.MD5)
+		in.ID = strings.TrimSpace(in.ID)
+		in.DOI = strings.TrimSpace(in.DOI)
 		switch {
 		case countKeys(in.MD5, in.ID, in.DOI) > 1:
 			return nil, zero, errors.New("provide exactly one of md5, id or doi")

@@ -35,9 +35,9 @@ COVERAGE_MIN     := 85
 # it decides cross-origin access and mounts the middleware chain on the request
 # path. The rest of cmd/ stays out, being build tooling and a live diagnostic
 # whose value is gated by the check-* targets rather than by a coverage number.
-COVERAGE_PKGS    := ./internal/... ./cmd/server/...
+COVERAGE_PKGS    := ./internal/... ./cmd/server/... ./cmd/internal/...
 # The same list as one comma-separated argument, for -coverpkg.
-COVERAGE_COVERPKG := ./internal/...,./cmd/server/...
+COVERAGE_COVERPKG := ./internal/...,./cmd/server/...,./cmd/internal/...
 
 # Version from the VERSION file (single source of truth); commit from git.
 # Use shell `cat` (portable to GNU Make 3.81 on macOS; `$(file ...)` needs Make 4+).
@@ -136,7 +136,7 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
 
-cover-check: ## Fail if coverage over internal/ and cmd/server is below COVERAGE_MIN
+cover-check: ## Fail if coverage over internal/, cmd/server and cmd/internal is below COVERAGE_MIN
 	go test -count=1 -coverpkg=$(COVERAGE_COVERPKG) -coverprofile=coverage.internal.out $(COVERAGE_PKGS)
 	@go tool cover -func=coverage.internal.out | grep '^total:'
 	@# The summary line is anchored: a plain "total" also matches any function whose
