@@ -301,6 +301,20 @@ func sseNoBuffering(next http.Handler) http.Handler {
 	})
 }
 
+// The CORS response headers this server writes, named once because three
+// separate handlers set the origin header — the card's, its preflight, and the
+// MCP endpoint's — and a typo in any one of them is a header a browser silently
+// ignores rather than an error anything reports.
+const (
+	headerAllowOrigin   = "Access-Control-Allow-Origin"
+	headerAllowMethods  = "Access-Control-Allow-Methods"
+	headerAllowHeaders  = "Access-Control-Allow-Headers"
+	headerExposeHeaders = "Access-Control-Expose-Headers"
+	headerMaxAge        = "Access-Control-Max-Age"
+	headerRequestMethod = "Access-Control-Request-Method"
+	headerRequestHeader = "Access-Control-Request-Headers"
+)
+
 // browserCORS answers a cross-origin browser request from a trusted origin so
 // the browser will actually send it, and leaves every other request untouched.
 //
@@ -337,21 +351,21 @@ func browserCORS(trusted []string, next http.Handler) http.Handler {
 			return
 		}
 		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", origin)
+		h.Set(headerAllowOrigin, origin)
 		h.Add("Vary", "Origin")
-		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
-			h.Set("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS")
+		if r.Method == http.MethodOptions && r.Header.Get(headerRequestMethod) != "" {
+			h.Set(headerAllowMethods, "POST, GET, DELETE, OPTIONS")
 			// Echo what was asked for rather than guessing: a client may send
 			// Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID or its own,
 			// and a fixed list would refuse whichever one it forgot.
-			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
-				h.Set("Access-Control-Allow-Headers", want)
+			if want := r.Header.Get(headerRequestHeader); want != "" {
+				h.Set(headerAllowHeaders, want)
 			}
-			h.Set("Access-Control-Max-Age", "3600")
+			h.Set(headerMaxAge, "3600")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		h.Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
+		h.Set(headerExposeHeaders, "Mcp-Session-Id")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -415,8 +429,8 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string) 
 		// unauthenticated and is byte-identical for every caller, so there is
 		// no per-origin answer for a page to fish out.
 		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.Header().Set(headerAllowOrigin, "*")
+			w.Header().Set(headerAllowMethods, "GET, OPTIONS")
 			// A plain fetch of the card is a simple request and never
 			// preflights, so this branch exists for the caller that adds a
 			// header of its own — a scanner stamping a request id, say. Its
@@ -425,18 +439,18 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string) 
 			// exactly what was asked for and nothing else, which a static list
 			// cannot do without guessing, and which "*" cannot do at all for a
 			// caller that sends credentials.
-			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
-				w.Header().Set("Access-Control-Allow-Headers", want)
+			if want := r.Header.Get(headerRequestHeader); want != "" {
+				w.Header().Set(headerAllowHeaders, want)
 			}
 			// Without a lifetime the browser preflights again on every fetch,
 			// which for a document that only changes with a release is two
 			// round-trips where one would do.
-			w.Header().Set("Access-Control-Max-Age", "3600")
+			w.Header().Set(headerMaxAge, "3600")
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set(headerAllowOrigin, "*")
 			// The card is fetched by scanners that may hand the bytes to a
 			// browser; nosniff keeps it read as the JSON it says it is. The
 			// rest of the usual hardening set — CSP, X-Frame-Options — guards
