@@ -136,7 +136,7 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
 
-cover-check: ## Fail if coverage over internal/ and cmd/server is below COVERAGE_MIN
+cover-check: ## Fail if coverage over internal/, cmd/server and cmd/internal is below COVERAGE_MIN
 	go test -count=1 -coverpkg=$(COVERAGE_COVERPKG) -coverprofile=coverage.internal.out $(COVERAGE_PKGS)
 	@go tool cover -func=coverage.internal.out | grep '^total:'
 	@# The summary line is anchored: a plain "total" also matches any function whose

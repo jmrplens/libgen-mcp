@@ -55,9 +55,11 @@ serves it, and asserts the wire-level promises of stateless mode (no `Mcp-Sessio
 `GET` → 405 with `Allow: POST`, `--json-response` content type). Run it after touching
 `internal/transport` or the HTTP wiring in `cmd/server`.
 
-Coverage is scoped to `./internal/...` **and `./cmd/server/...`**
-(`COVERAGE_PKGS`, mirrored into `sonar-project.properties`). The rest of `cmd/`
-is not counted toward the 85% floor — but it must still have tests for its core
+Coverage is scoped to `./internal/...`, `./cmd/server/...` and
+`./cmd/internal/...` (`COVERAGE_PKGS`, mirrored into both
+`sonar-project.properties` and the CI profile — **all three have to agree**, or a
+package ends up counted and uninstrumented, which reports as 0% and is not).
+The rest of `cmd/` is not counted toward the 85% floor — but it must still have tests for its core
 logic (see `cmd/audit_tokens` and `cmd/audit_surface_quality` for the pattern).
 
 `cmd/server` was excluded until 2026-08-27, on the premise that it was thin
