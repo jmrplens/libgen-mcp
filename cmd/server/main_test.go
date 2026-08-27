@@ -1004,8 +1004,13 @@ func TestServeHTTPTrustedOrigins(t *testing.T) {
 		if got := pre.header.Get("Access-Control-Allow-Headers"); got != "content-type" {
 			t.Errorf("preflight Allow-Headers = %q, want the requested header echoed", got)
 		}
-		if !strings.Contains(pre.header.Get("Vary"), "Origin") {
-			t.Errorf("preflight Vary = %q, want it to name Origin", pre.header.Get("Vary"))
+		// Both request headers the answer is derived from: the origin it echoes
+		// and the header list it echoes. A cache that missed either could
+		// replay one caller's preflight for another.
+		for _, want := range []string{"Origin", headerRequestHeader} {
+			if !strings.Contains(pre.header.Get("Vary"), want) {
+				t.Errorf("preflight Vary = %q, want it to name %s", pre.header.Get("Vary"), want)
+			}
 		}
 
 		post := browserPOST(t, ts.URL, trusted)

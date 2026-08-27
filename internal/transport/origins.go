@@ -53,6 +53,17 @@ func ParseTrustedOrigins(raw string) ([]string, error) {
 // validateOrigin reports whether origin is an absolute scheme://host[:port]
 // with nothing after the host, which is the only shape an Origin header takes.
 func validateOrigin(origin string) error {
+	// Checked on the raw string, because url.Parse cannot report either case
+	// faithfully: a bare "?" survives only as ForceQuery with an empty
+	// RawQuery, and a bare "#" is discarded entirely, leaving Fragment and
+	// RawFragment empty. Both would therefore pass the field checks below and
+	// be stored verbatim — and since Trusts compares literally against the
+	// Origin header, which carries neither character, the result is an origin
+	// that can never match. A trust entry that silently cannot work is exactly
+	// what this validation exists to refuse.
+	if strings.ContainsAny(origin, "?#") {
+		return fmt.Errorf("trusted origin %q: want scheme://host[:port] with no query or fragment", origin)
+	}
 	u, err := url.Parse(origin)
 	if err != nil {
 		return fmt.Errorf("trusted origin %q: %w", origin, err)
@@ -62,8 +73,8 @@ func validateOrigin(origin string) error {
 		return fmt.Errorf("trusted origin %q: want an http or https scheme", origin)
 	case u.Host == "":
 		return fmt.Errorf("trusted origin %q: want scheme://host[:port]", origin)
-	case u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil:
-		return fmt.Errorf("trusted origin %q: want scheme://host[:port] with no path, query, fragment or userinfo", origin)
+	case u.Path != "" || u.User != nil:
+		return fmt.Errorf("trusted origin %q: want scheme://host[:port] with no path or userinfo", origin)
 	}
 	return nil
 }

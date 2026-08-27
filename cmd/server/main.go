@@ -352,7 +352,10 @@ func browserCORS(trusted []string, next http.Handler) http.Handler {
 		}
 		h := w.Header()
 		h.Set(headerAllowOrigin, origin)
-		h.Add("Vary", "Origin")
+		// One Vary header listing every request header the answer is derived
+		// from, rather than several: Header.Get reads only the first line, so
+		// two Vary headers are a value half of any reader will miss.
+		h.Set("Vary", "Origin")
 		if r.Method == http.MethodOptions && r.Header.Get(headerRequestMethod) != "" {
 			h.Set(headerAllowMethods, "POST, GET, DELETE, OPTIONS")
 			// Echo what was asked for rather than guessing: a client may send
@@ -361,6 +364,11 @@ func browserCORS(trusted []string, next http.Handler) http.Handler {
 			if want := r.Header.Get(headerRequestHeader); want != "" {
 				h.Set(headerAllowHeaders, want)
 			}
+			// The answer also echoes the requested headers, so it differs by
+			// them too: without this a shared cache could replay one header
+			// set's preflight for another and refuse a request this server
+			// allows.
+			h.Set("Vary", "Origin, "+headerRequestHeader)
 			h.Set(headerMaxAge, "3600")
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -442,6 +450,9 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string) 
 			if want := r.Header.Get(headerRequestHeader); want != "" {
 				w.Header().Set(headerAllowHeaders, want)
 			}
+			// Echoed, therefore varying by it — see the MCP preflight above.
+			// Not by Origin: this answer is the same "*" for every caller.
+			w.Header().Set("Vary", headerRequestHeader)
 			// Without a lifetime the browser preflights again on every fetch,
 			// which for a document that only changes with a release is two
 			// round-trips where one would do.

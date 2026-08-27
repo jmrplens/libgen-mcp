@@ -40,6 +40,14 @@ func TestParseTrustedOrigins(t *testing.T) {
 		{name: "control character", raw: "http://\x7f", wantErr: true},
 		{name: "bad percent escape", raw: "https://%zz", wantErr: true},
 		{name: "space in the host", raw: "http://a b", wantErr: true},
+		// url.Parse cannot report either of these faithfully — a bare "?"
+		// survives only as ForceQuery, a bare "#" is discarded — so both would
+		// be stored verbatim and never match an Origin header, which carries
+		// neither character.
+		{name: "trailing question mark", raw: "https://claude.ai?", wantErr: true},
+		{name: "trailing hash", raw: "https://claude.ai#", wantErr: true},
+		{name: "a query", raw: "https://claude.ai?a=1", wantErr: true},
+		{name: "a fragment", raw: "https://claude.ai#frag", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -304,6 +304,10 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	if allowed := preflightRec.Header().Get("Access-Control-Allow-Headers"); allowed != "x-scanner-id" {
 		t.Errorf("Access-Control-Allow-Headers = %q, want the requested %q echoed back", allowed, "x-scanner-id")
 	}
+	// The answer is derived from the requested header list, so it varies by it.
+	if vary := preflightRec.Header().Get("Vary"); !strings.Contains(vary, "Access-Control-Request-Headers") {
+		t.Errorf("Vary = %q, want it to name Access-Control-Request-Headers", vary)
+	}
 }
 
 // TestServerCardRouteAbsentWhenUnbuilt pins the failure path: a card that could
