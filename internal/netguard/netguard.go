@@ -48,9 +48,20 @@ var ErrTooManyRedirects = errors.New("too many redirects")
 const maxRedirects = 5
 
 // cgnatPrefix is the RFC 6598 shared address space used by carrier-grade NAT.
-// netip's IsPrivate does not cover it, but a host inside such a network is no
-// more reachable from the public internet than an RFC 1918 one.
-var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10")
+// netip's IsPrivate does not cover it — it implements RFC 1918 and RFC 4193 only,
+// and its own documentation warns it "does not describe a security property of
+// addresses, and should not be used for access control" — but a host inside such
+// a network is no more reachable from the public internet than an RFC 1918 one.
+//
+// The literal is the control rather than a risk, which is why the trailing
+// NOSONAR is there: S1313 asks whether a hardcoded address is safe to rely on,
+// and here relying on it is the point. This is a destination the server refuses
+// to reach, never one it dials. There is no library form to use instead — the
+// standard library carries this prefix in a test file and nowhere else — and
+// making it configurable would let the thing being defended against switch the
+// defense off. Suppressed at the line rather than for the file, so a genuinely
+// hardcoded destination added here later is still reported.
+var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10") // NOSONAR
 
 // sensitiveHeaders are stripped when a redirect leaves the origin. net/http
 // already drops them when the redirect leaves the DOMAIN, but it keeps them for
