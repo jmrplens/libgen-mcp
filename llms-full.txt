@@ -1,6 +1,6 @@
 # libgen-mcp — Full Reference
 
-> Version 1.7.1 | 4 tools | 4 prompts
+> Version 1.7.2 | 4 tools | 4 prompts
 
 ## Tools
 

@@ -31,13 +31,13 @@ jobs:
       - run: go mod download
       - name: Run tests with coverage
         run: |
-          go test -count=1 -coverpkg=./internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
+          go test -count=1 -coverpkg=./internal/...,./cmd/server/... -coverprofile=coverage.out ./cmd/... ./internal/...
           go tool cover -func=coverage.out | grep '^total:'
           # The summary line is anchored: a plain "total" also matches any function
           # whose name contains it, which yields two values and turns the comparison
           # below into an awk syntax error that silently passes the gate.
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
-          echo "Total coverage (internal/): ${COVERAGE}%"
+          echo "Total coverage (internal/ + cmd/server): ${COVERAGE}%"
           if [ -z "${COVERAGE}" ]; then
             echo "FAIL: no total coverage line in coverage.out"
             exit 1
@@ -136,6 +136,14 @@ jobs:
           go build -o /dev/null ./cmd/probe
       - name: Verify e2e tests compile
         run: go test -tags e2e -c -o /dev/null ./test/e2e/
+
+      # The live e2e suite cannot run here — it depends on third-party mirrors
+      # whose outages would be reported as our regressions. This module depends
+      # on nothing external: it builds the binary, drives it over a socket, and
+      # skips its nginx cases when the runner has no Docker. So unlike the suite
+      # above it is compiled *and* run.
+      - name: HTTP transport end-to-end
+        run: go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
       - name: Check Markdown tables are formatted
         run: go run ./cmd/format_md_tables/ --check
       - name: Check generated llms files are current

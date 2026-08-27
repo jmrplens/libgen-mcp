@@ -4,7 +4,7 @@
 # golangci-lint (bundles govet, staticcheck, gosec, ...) + govulncheck.
 
 .PHONY: all build build-probe build-all run version \
-        test test-short test-race test-e2e eval coverage cover-check \
+        test test-short test-race test-e2e test-e2e-http eval coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
@@ -29,9 +29,15 @@ MODE ?= binary
 PORT ?= 18080
 
 GO_ANALYSIS_PKGS := ./...
-GO_ANALYSIS_TAGS := e2e,eval
+GO_ANALYSIS_TAGS := e2e,eval,httpe2e
 COVERAGE_MIN     := 85
-COVERAGE_PKGS    := ./internal/...
+# cmd/server joins internal/ in the measured set: it is no longer thin wiring —
+# it decides cross-origin access and mounts the middleware chain on the request
+# path. The rest of cmd/ stays out, being build tooling and a live diagnostic
+# whose value is gated by the check-* targets rather than by a coverage number.
+COVERAGE_PKGS    := ./internal/... ./cmd/server/...
+# The same list as one comma-separated argument, for -coverpkg.
+COVERAGE_COVERPKG := ./internal/...,./cmd/server/...
 
 # Version from the VERSION file (single source of truth); commit from git.
 # Use shell `cat` (portable to GNU Make 3.81 on macOS; `$(file ...)` needs Make 4+).
@@ -109,6 +115,9 @@ test-e2e: ## Run the gated live e2e suite against the real site (needs network; 
 	set -a; [ -f .env ] && . ./.env; set +a; \
 	LIBGEN_E2E=1 go test -tags e2e -timeout 900s -count=1 ./test/e2e/
 
+test-e2e-http: ## Run the HTTP transport end-to-end module against the real binary (no network; nginx cases skip without Docker)
+	go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
+
 eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads; loads .env if present)
 	set -a; [ -f .env ] && . ./.env; set +a; \
 	LIBGEN_EVAL=1 go run -tags eval ./cmd/eval --record eval-record.jsonl \
@@ -127,8 +136,8 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
 
-cover-check: ## Fail if coverage over internal/ is below COVERAGE_MIN
-	go test -count=1 -coverpkg=$(COVERAGE_PKGS) -coverprofile=coverage.internal.out $(COVERAGE_PKGS)
+cover-check: ## Fail if coverage over internal/ and cmd/server is below COVERAGE_MIN
+	go test -count=1 -coverpkg=$(COVERAGE_COVERPKG) -coverprofile=coverage.internal.out $(COVERAGE_PKGS)
 	@go tool cover -func=coverage.internal.out | grep '^total:'
 	@# The summary line is anchored: a plain "total" also matches any function whose
 	@# name contains it (e.g. totalSizeLocked), which yields two values and turns the

@@ -293,6 +293,8 @@ Everything this server puts on the wire that the MCP schema does not define, and
 
 Nothing else is ours, and the gaps are the point. There is not one vendor `_meta` key on the wire — the only `_meta` is the SDK's own `io.modelcontextprotocol/serverInfo` (SEP-2575). The binary requires no custom request header, and every response header it sets is a standard one: `Content-Type`, the card's `Cache-Control` and CORS pair, and the transport spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None of them is vendor-defined. Tool schemas use standard JSON Schema vocabulary only; `annotations` carries the five standard `ToolAnnotations` fields; `ttlMs`/`cacheScope` are SEP-2549 fields set only on the result types that define them; and the download consent question uses the standard SEP-2322 `InputRequests`/`InputResponses`. `ServerCapabilities.experimental` and `extensions` — the schema's own home for _declaring_ vendor behavior — are unused, and are where anything new would go.
 
+**Verified before every release.** The transport promises above are not documentation alone: a suite builds this exact binary, starts it with each flag it exercises, one at a time, and drives it over a socket — the cross-origin decision, both preflights, every limit, an upstream mirror that misbehaves, and a real nginx in front where one is available. It runs on every change and gates the release, so a transport regression stops a version from being published rather than reaching you in one.
+
 ## Frequently asked questions
 
 ### How does libgen-mcp find a working Library Genesis mirror?
