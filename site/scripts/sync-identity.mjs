@@ -9,8 +9,15 @@
  * the file was first added.
  *
  * Usage:
- *   node scripts/sync-identity.mjs           # write the snapshot
- *   node scripts/sync-identity.mjs --check   # fail if it is stale
+ *   pnpm run identity:sync    # write the snapshot
+ *   pnpm run identity:check   # fail if it is stale
+ *
+ * Deliberately NOT part of `pnpm run lint`, and the distinction matters: this
+ * script fetches the live document, so a gate built on it would fail whenever
+ * the network or the source host is unreachable — turning a lint run into a
+ * connectivity test. It is a manual step, and it is named here so that being
+ * manual is a decision someone can see rather than an omission. The snapshot
+ * had drifted by 148 lines before `--check` was ever run.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
