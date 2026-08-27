@@ -377,6 +377,15 @@ that replies to the preflight itself tells the browser the request is allowed, a
 POST that follows is then refused by the server. Whatever answers the preflight, the
 allowlist has to agree with it.
 
+**One layer answers CORS, never two.** If a reverse proxy in front of this server adds its
+own `Access-Control-Allow-Origin`, the response leaves with two of them and a browser
+rejects it outright — _"the header contains multiple values … but only one is allowed"_ —
+which is worse than either layer alone, because a lone `*` from the proxy at least worked
+for uncredentialed requests. `curl` reports `200` throughout and will not show you this.
+So a deployment that sets `--trusted-origins` must drop the CORS block from its proxy in
+the same change, and if the two cannot be coordinated, drop the proxy block first: that
+returns the endpoint to refusing browsers, which is at least consistent.
+
 **Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
 transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events
 in a buffer instead of forwarding them. That matters here because the POST response stream is a
