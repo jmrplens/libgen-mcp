@@ -55,10 +55,19 @@ serves it, and asserts the wire-level promises of stateless mode (no `Mcp-Sessio
 `GET` → 405 with `Allow: POST`, `--json-response` content type). Run it after touching
 `internal/transport` or the HTTP wiring in `cmd/server`.
 
-Coverage is scoped to `./internal/...` (`COVERAGE_PKGS`), so command packages
-under `cmd/` are not counted toward the 85% floor — but they must still have
-tests for their core logic (see `cmd/audit_tokens` and `cmd/audit_surface_quality`
-for the pattern).
+Coverage is scoped to `./internal/...` **and `./cmd/server/...`**
+(`COVERAGE_PKGS`, mirrored into `sonar-project.properties`). The rest of `cmd/`
+is not counted toward the 85% floor — but it must still have tests for its core
+logic (see `cmd/audit_tokens` and `cmd/audit_surface_quality` for the pattern).
+
+`cmd/server` was excluded until 2026-08-27, on the premise that it was thin
+wiring. That premise expired: it now decides cross-origin access, answers both
+preflights and mounts the middleware chain on the request path, which is the
+code most worth measuring. **Excluding a package from the metric hides more than
+a number** — `cmd/gen_tool_schema` shipped with no test file at all and nothing
+reported it, because the rule above is prose and the exclusion was
+configuration. When adding a command, check it appears in a coverage report
+somewhere, not only that you remember writing tests.
 
 ## Key Development Patterns
 
