@@ -352,6 +352,41 @@ looks exactly like a full one: without the CORE key that source is out of the
 chain entirely, and without the Anna's key its case exercises keyless IPFS
 instead of the member fast-download.
 
+**HTTP end-to-end** (`test/e2e/http/`) starts the real binary and drives it over
+a socket, behind the `httpe2e` build tag:
+
+```bash
+make test-e2e-http
+```
+
+It exists because the handler chain — `newHTTPHandler`, `browserCORS`,
+`crossOriginProtected`, `sseNoBuffering` — is assembled in `package main` and
+cannot be imported, so a unit test would be testing its own reassembled copy
+rather than the binary that ships. Every behavior in it is configuration-
+dependent by nature: the same request must be refused with one flag and accepted
+with another.
+
+Unlike the live suite above, **this one runs in CI on every PR**, because it
+depends on nothing external. It is also the release gate: `release.yml`'s
+`http-e2e` job is a `needs:` of both GoReleaser and Docker, so a transport
+regression stops the tag before any binary, image or registry entry exists. That
+job deliberately declares `contents: read` and no secrets — a gate that fails
+must not be able to leak what the jobs behind it hold.
+
+Two things about it are easy to get wrong:
+
+- **`proxy_test.go` runs a real nginx in Docker and skips without it.** It is
+  not modeled, because the bug it exists for — the server's CORS headers and the
+  proxy's colliding into a response a browser rejects and `curl` reports as
+  `200` — only appears when a real proxy adds real headers. It also pins the
+  trap that hid it: with nginx answering `OPTIONS`, the preflight is `204` no
+  matter what the server behind it would say.
+- **The robustness cases assert survival, not correctness.** The bar is that the
+  process keeps serving, so every case ends by asking `/health`. That includes
+  the misbehaving-mirror suite, which is this repository's own addition: every
+  tool call reaches an upstream, so a mirror that is slow, broken or hostile is
+  a live input rather than a hypothetical.
+
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and
 downloads — never runs in ordinary CI):

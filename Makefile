@@ -4,7 +4,7 @@
 # golangci-lint (bundles govet, staticcheck, gosec, ...) + govulncheck.
 
 .PHONY: all build build-probe build-all run version \
-        test test-short test-race test-e2e eval coverage cover-check \
+        test test-short test-race test-e2e test-e2e-http eval coverage cover-check \
         lint golangci-lint govulncheck analyze fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
@@ -29,7 +29,7 @@ MODE ?= binary
 PORT ?= 18080
 
 GO_ANALYSIS_PKGS := ./...
-GO_ANALYSIS_TAGS := e2e,eval
+GO_ANALYSIS_TAGS := e2e,eval,httpe2e
 COVERAGE_MIN     := 85
 COVERAGE_PKGS    := ./internal/...
 
@@ -108,6 +108,9 @@ test-race: ## Run all tests under the race detector
 test-e2e: ## Run the gated live e2e suite against the real site (needs network; the suite loads .env itself)
 	set -a; [ -f .env ] && . ./.env; set +a; \
 	LIBGEN_E2E=1 go test -tags e2e -timeout 900s -count=1 ./test/e2e/
+
+test-e2e-http: ## Run the HTTP transport end-to-end module against the real binary (no network; nginx cases skip without Docker)
+	go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
 
 eval: ## Run the LIVE LLM-driven eval harness (needs ANTHROPIC_API_KEY; real API + mirrors + downloads; loads .env if present)
 	set -a; [ -f .env ] && . ./.env; set +a; \

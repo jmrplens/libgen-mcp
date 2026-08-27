@@ -23,8 +23,31 @@ env:
   DOCKERHUB_IMAGE: jmrplens/libgen-mcp
 
 jobs:
+  # The gate in front of everything a tag sets in motion.
+  #
+  # Nothing used to stand between a tag push and published binaries, a pushed
+  # image and a registry entry. The live e2e suite cannot fill that slot — it
+  # depends on third-party mirrors a release runner may not reach — but this
+  # module depends on nothing external, so it can.
+  #
+  # It deliberately declares no permissions beyond the default read and takes no
+  # secrets: a gate that fails must not be able to leak anything, and it needs
+  # none of what the jobs behind it hold.
+  http-e2e:
+    name: HTTP transport end-to-end
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
+
   release:
     name: GoReleaser
+    needs: [http-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -165,6 +188,7 @@ jobs:
 
   docker:
     name: Docker
+    needs: [http-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

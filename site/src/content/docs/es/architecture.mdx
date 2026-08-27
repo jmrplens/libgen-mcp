@@ -297,6 +297,8 @@ Todo lo que este servidor pone en el cable y que el esquema de MCP no define, y 
 
 No hay nada más nuestro, y los huecos vacíos son justo el punto. No hay ni una sola clave `_meta` propia en el cable — el único `_meta` es el `io.modelcontextprotocol/serverInfo` del propio SDK (SEP-2575). El binario no exige ninguna cabecera de petición propia, y todas las cabeceras de respuesta que pone son estándar: `Content-Type`, el `Cache-Control` y el par de CORS de la card, y el `X-Accel-Buffering: no` que pide la especificación de transporte en una respuesta que negocia SSE. Ninguna es propia. Los esquemas de las tools usan solo vocabulario JSON Schema estándar; `annotations` lleva los cinco campos estándar de `ToolAnnotations`; `ttlMs`/`cacheScope` son campos de SEP-2549 puestos solo en los tipos de resultado que los definen; y la pregunta de confirmación de descarga usa los `InputRequests`/`InputResponses` estándar de SEP-2322. `ServerCapabilities.experimental` y `extensions` — el hueco que el propio esquema reserva para _declarar_ comportamiento propio — están sin usar, y son donde iría cualquier cosa nueva.
 
+**Verificado antes de cada publicación.** Las garantías de transporte de arriba no son solo documentación: una batería construye este mismo binario, lo arranca con cada combinación de flags y lo maneja a través de un socket — la decisión cross-origin, los dos preflight, todos los límites, un mirror que se porta mal y un nginx real por delante donde lo hay. Se ejecuta en cada cambio y bloquea la publicación, así que una regresión del transporte impide que salga una versión en lugar de llegarte dentro de una.
+
 ## Preguntas frecuentes
 
 ### ¿Cómo encuentra libgen-mcp un mirror de Library Genesis que funcione?

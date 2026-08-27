@@ -492,3 +492,12 @@ vendor behavior — are unused, and are where anything new would go.
 To check a deployment behaves as described, run `make validate-http-stateless` (or
 `scripts/validate-http-stateless.sh docker` to exercise the container entrypoint): it starts
 a real server and asserts each guarantee above over the wire.
+
+`make test-e2e-http` asks the same question exhaustively. It builds the binary, starts it
+with each flag combination in turn and drives it over a socket — the cross-origin decision,
+both preflights, the resource guard, every limit, the raw-socket attacks Go's own client
+refuses to send, a misbehaving mirror, and `SIGTERM`. Where it can, it runs a real nginx in
+front rather than modelling one, because the failure that matters most there — the server's
+CORS headers and the proxy's colliding into a response a browser rejects and `curl` reports
+as `200` — does not appear against a stand-in. It runs on every pull request, and it gates
+the release: nothing is tagged, built or pushed if the transport regressed.
