@@ -16,6 +16,11 @@ type Options struct {
 	JSONResponse bool
 	// MaxRequestBodyBytes caps request bodies; 0 = SDK default (4 MiB).
 	MaxRequestBodyBytes int64
+	// TrustedOrigins are the browser origins this deployment vouches for, as
+	// absolute "scheme://host[:port]" strings, or the single entry AnyOrigin.
+	// Empty — the default — refuses every cross-origin browser request, which
+	// leaves non-browser clients unaffected since they send no Origin at all.
+	TrustedOrigins []string
 }
 
 // DefaultOptions returns the shipped defaults (stateless on).

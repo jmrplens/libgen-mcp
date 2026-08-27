@@ -198,6 +198,19 @@ else
   fail "X-Accel-Buffering is '${BUFFERING:-absent}', want 'no'"
 fi
 
+# The default refuses cross-origin browser calls, and must keep letting through
+# a client that sends no Origin at all — the regression that would break every
+# CLI and desktop client while the browser cases looked fine.
+CROSS=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${BASE}/" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Origin: https://evil.example' -H 'Sec-Fetch-Site: cross-site' \
+  -d "$TOOLS_LIST" || true)
+if [ "$CROSS" = "403" ]; then
+  pass "a cross-origin browser POST is refused without --trusted-origins"
+else
+  fail "cross-origin POST returned $CROSS, want 403"
+fi
+
 case "$BODY" in
   *'"search"'*) pass "tools/list advertises search" ;;
   *) fail "tools/list did not advertise search (body: $BODY)" ;;

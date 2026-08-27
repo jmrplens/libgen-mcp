@@ -20,6 +20,7 @@
     "facts:check": "node scripts/check-facts.mjs",
     "faq:check": "node scripts/gen-faq-schema.mjs --check",
     "identity:sync": "node scripts/sync-identity.mjs",
+    "identity:check": "node scripts/sync-identity.mjs --check",
     "eslint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

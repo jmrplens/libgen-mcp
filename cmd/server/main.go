@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -128,6 +129,7 @@ func mainWithExit() int {
 	stateless := flag.Bool("stateless", true, "stateless streamable HTTP (default; required for MCP protocol 2026-07-28): no Mcp-Session-Id, each POST self-contained, GET/DELETE return 405; use -stateless=false for legacy stateful sessions")
 	jsonResponse := flag.Bool("json-response", false, "return application/json responses instead of text/event-stream (SSE)")
 	maxBody := flag.Int64("max-request-body-bytes", 0, "maximum streamable HTTP request body size in bytes; 0 uses the SDK default (4 MiB)")
+	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	flag.Parse()
 
 	if *showVersion {
@@ -147,7 +149,24 @@ func mainWithExit() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	opts := transport.Options{Stateless: *stateless, JSONResponse: *jsonResponse, MaxRequestBodyBytes: *maxBody}
+	// Parsed before anything is served: a malformed origin fails startup rather
+	// than being dropped, because an operator who believes an origin is trusted
+	// and whose browser clients are refused anyway has nothing to look at.
+	trusted, originErr := transport.ParseTrustedOrigins(*trustedOrigins)
+	if originErr != nil {
+		log.Print(originErr)
+		return 1
+	}
+	if slices.Contains(trusted, transport.AnyOrigin) {
+		log.Printf("--trusted-origins=%s: cross-origin protection is off, every browser origin is accepted", transport.AnyOrigin)
+	}
+
+	opts := transport.Options{
+		Stateless:           *stateless,
+		JSONResponse:        *jsonResponse,
+		MaxRequestBodyBytes: *maxBody,
+		TrustedOrigins:      trusted,
+	}
 	if err := run(ctx, *httpAddr, opts); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
 		return 1
@@ -282,11 +301,93 @@ func sseNoBuffering(next http.Handler) http.Handler {
 	})
 }
 
+// The CORS response headers this server writes, named once because three
+// separate handlers set the origin header — the card's, its preflight, and the
+// MCP endpoint's — and a typo in any one of them is a header a browser silently
+// ignores rather than an error anything reports.
+const (
+	headerAllowOrigin   = "Access-Control-Allow-Origin"
+	headerAllowMethods  = "Access-Control-Allow-Methods"
+	headerAllowHeaders  = "Access-Control-Allow-Headers"
+	headerExposeHeaders = "Access-Control-Expose-Headers"
+	headerMaxAge        = "Access-Control-Max-Age"
+	headerRequestMethod = "Access-Control-Request-Method"
+	headerRequestHeader = "Access-Control-Request-Headers"
+)
+
+// browserCORS answers a cross-origin browser request from a trusted origin so
+// the browser will actually send it, and leaves every other request untouched.
+//
+// It exists because validating the Origin header and refusing every origin are
+// not the same instruction, and shipping the second as the first made this
+// endpoint unusable from a browser: nginx answered the preflight 204, the
+// browser believed the request was allowed, and crossOriginProtected then
+// refused the POST that followed. The endpoint advertised access it did not
+// grant.
+//
+// The middleware widens nothing. An origin that is not trusted falls straight
+// through to the protection, which refuses it exactly as before; all this does
+// is make an already-granted trust decision usable by the client it was granted
+// for. Three details are load-bearing:
+//
+//   - The origin is echoed rather than answered with "*", because a browser
+//     rejects the wildcard on a credentialed request. Even AnyOrigin echoes
+//     whatever asked.
+//   - Vary: Origin, because the response now differs by origin and a shared
+//     cache that missed that would serve one origin's answer to another.
+//   - Access-Control-Expose-Headers names Mcp-Session-Id only, and only because
+//     --stateless=false emits it: neither it nor Mcp-Protocol-Version is
+//     CORS-safelisted, so a browser cannot read what is not exposed. The
+//     default stateless transport emits neither, which is why the list is one
+//     header rather than the pair a session-based server needs.
+func browserCORS(trusted []string, next http.Handler) http.Handler {
+	if len(trusted) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if !transport.Trusts(trusted, origin) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		h := w.Header()
+		h.Set(headerAllowOrigin, origin)
+		// One Vary header listing every request header the answer is derived
+		// from, rather than several: Header.Get reads only the first line, so
+		// two Vary headers are a value half of any reader will miss.
+		h.Set("Vary", "Origin")
+		if r.Method == http.MethodOptions && r.Header.Get(headerRequestMethod) != "" {
+			h.Set(headerAllowMethods, "POST, GET, DELETE, OPTIONS")
+			// Echo what was asked for rather than guessing: a client may send
+			// Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID or its own,
+			// and a fixed list would refuse whichever one it forgot.
+			if want := r.Header.Get(headerRequestHeader); want != "" {
+				h.Set(headerAllowHeaders, want)
+			}
+			// The answer also echoes the requested headers, so it differs by
+			// them too: without this a shared cache could replay one header
+			// set's preflight for another and refuse a request this server
+			// allows.
+			h.Set("Vary", "Origin, "+headerRequestHeader)
+			h.Set(headerMaxAge, "3600")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.Set(headerExposeHeaders, "Mcp-Session-Id")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // crossOriginProtected wraps the MCP handler in the standard library's
 // cross-origin protection, which the 2026-07-28 streamable-HTTP transport
 // requires: "Servers MUST validate the Origin header on all incoming
 // connections to prevent DNS rebinding attacks", answering 403 when the header
 // is present and invalid.
+//
+// An explicit allowlist is validation, not an exemption from it: --trusted-origins
+// names the origins this deployment vouches for, and everything else is still
+// refused. With no allowlist the behavior is unchanged from before the flag
+// existed.
 //
 // The SDK does not do this for us. StreamableHTTPOptions.CrossOriginProtection
 // is nil unless set — "If nil, no cross-origin protection is applied" — and the
@@ -299,15 +400,32 @@ func sseNoBuffering(next http.Handler) http.Handler {
 // non-browser client — stdio hosts, desktop apps, curl, the SDK's own client.
 // What remains is a state-changing POST issued by a browser from another
 // origin, which is the attack the requirement names.
-func crossOriginProtected(next http.Handler) http.Handler {
-	return http.NewCrossOriginProtection().Handler(next)
+func crossOriginProtected(trusted []string, next http.Handler) http.Handler {
+	if slices.Contains(trusted, transport.AnyOrigin) {
+		// Every origin is trusted, so there is nothing left for the protection
+		// to refuse — and it must be removed rather than left in place, since
+		// browserCORS hands the request on to it rather than answering for it.
+		// The operator asked for this explicitly and was warned at startup.
+		return next
+	}
+	protection := http.NewCrossOriginProtection()
+	for _, origin := range trusted {
+		// The value was validated at startup, so an error here is unreachable;
+		// ignoring it silently would still be the wrong shape, because a
+		// deployment that believes an origin is trusted when it is not is the
+		// failure this whole path exists to avoid.
+		if err := protection.AddTrustedOrigin(origin); err != nil {
+			panic(fmt.Sprintf("trusted origin %q passed validation but AddTrustedOrigin rejected it: %v", origin, err))
+		}
+	}
+	return protection.Handler(next)
 }
 
 // newHTTPHandler mounts the MCP handler at / behind cross-origin protection and
 // sseNoBuffering, exposes GET /health, and serves the server card when one was
 // built. A nil card leaves both card routes unmounted, so the path falls
 // through to the MCP handler exactly as it did before.
-func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	if cardJSON != nil {
@@ -319,8 +437,8 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 		// unauthenticated and is byte-identical for every caller, so there is
 		// no per-origin answer for a page to fish out.
 		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.Header().Set(headerAllowOrigin, "*")
+			w.Header().Set(headerAllowMethods, "GET, OPTIONS")
 			// A plain fetch of the card is a simple request and never
 			// preflights, so this branch exists for the caller that adds a
 			// header of its own — a scanner stamping a request id, say. Its
@@ -329,18 +447,21 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 			// exactly what was asked for and nothing else, which a static list
 			// cannot do without guessing, and which "*" cannot do at all for a
 			// caller that sends credentials.
-			if want := r.Header.Get("Access-Control-Request-Headers"); want != "" {
-				w.Header().Set("Access-Control-Allow-Headers", want)
+			if want := r.Header.Get(headerRequestHeader); want != "" {
+				w.Header().Set(headerAllowHeaders, want)
 			}
+			// Echoed, therefore varying by it — see the MCP preflight above.
+			// Not by Origin: this answer is the same "*" for every caller.
+			w.Header().Set("Vary", headerRequestHeader)
 			// Without a lifetime the browser preflights again on every fetch,
 			// which for a document that only changes with a release is two
 			// round-trips where one would do.
-			w.Header().Set("Access-Control-Max-Age", "3600")
+			w.Header().Set(headerMaxAge, "3600")
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set(headerAllowOrigin, "*")
 			// The card is fetched by scanners that may hand the bytes to a
 			// browser; nosniff keeps it read as the JSON it says it is. The
 			// rest of the usual hardening set — CSP, X-Frame-Options — guards
@@ -352,7 +473,12 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte) http.Handler {
 			_, _ = w.Write(cardJSON)
 		})
 	}
-	mux.Handle("/", crossOriginProtected(sseNoBuffering(mcpHandler)))
+	// CORS outermost so a preflight is answered before the protection sees it,
+	// and the protection still guards the POST that follows. The card routes
+	// are mounted separately and carry their own permissive CORS: the card is
+	// a public document with no per-origin answer to fish out, whereas this
+	// endpoint executes tool calls, so its trust is named rather than open.
+	mux.Handle("/", browserCORS(trusted, crossOriginProtected(trusted, sseNoBuffering(mcpHandler))))
 	return mux
 }
 
@@ -449,7 +575,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	}
 
 	srv := &http.Server{
-		Handler:           newHTTPHandler(mcpHandler, cardJSON),
+		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
