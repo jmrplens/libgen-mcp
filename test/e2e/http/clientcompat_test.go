@@ -134,6 +134,12 @@ func TestClient_DesktopOriginBehaviour(t *testing.T) {
 		if err == nil {
 			t.Fatalf("the server accepted --trusted-origins=%q; the flag documents http or https only. Output:\n%s", desktop, out)
 		}
+		// The refusal has to be about this flag. A non-nil error alone would
+		// also be produced by a port collision or a bad download directory,
+		// and the test would pass without exercising the validation at all.
+		if !strings.Contains(out, "trusted origin") || !strings.Contains(out, desktop) {
+			t.Errorf("the server refused for some other reason than the origin:\n%s", out)
+		}
 	})
 }
 

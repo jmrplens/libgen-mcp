@@ -297,6 +297,55 @@ func (s *server) do(t *testing.T, r request) response {
 	return response{status: resp.StatusCode, header: resp.Header, body: string(raw)}
 }
 
+// try issues the request from a goroutine safely, returning the response or the
+// error rather than failing the test where it runs.
+//
+// (*server).do calls t.Fatalf, and t.Fatalf calls runtime.Goexit: from a
+// worker goroutine that kills the worker without failing the test, so a caller
+// waiting on a channel would block until its own timeout and report a hang that
+// never happened. Anything run off the test goroutine has to use this instead.
+func (s *server) try(t *testing.T, r request) (response, error) {
+	t.Helper()
+
+	method := r.method
+	if method == "" {
+		method = http.MethodPost
+	}
+	path := r.path
+	if path == "" {
+		path = "/"
+	}
+	var body io.Reader = http.NoBody
+	if r.body != "" {
+		body = strings.NewReader(r.body)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), method, s.baseURL+path, body)
+	if err != nil {
+		return response{}, err
+	}
+	if r.body != "" {
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", acceptHeader)
+		req.Header.Set("MCP-Protocol-Version", protocolVersion)
+	}
+	for k, v := range r.headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return response{}, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return response{}, err
+	}
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw)}, nil
+}
+
 // mcpPOST is the common case: a tools/list call with the headers a real client
 // sends, plus whatever the test adds.
 func mcpPOST(headers map[string]string) request {
@@ -309,8 +358,18 @@ func browserPOST(origin string) request {
 	return mcpPOST(map[string]string{"Origin": origin, "Sec-Fetch-Site": "cross-site"})
 }
 
+// preflightHeaders are the non-safelisted request headers browserPOST sends,
+// lowercased the way a browser lists them.
+//
+// Both of them, not just the content type: MCP-Protocol-Version is not
+// CORS-safelisted either, so a browser asks permission for it too. A preflight
+// that named only content-type would pass while a real browser blocked the POST
+// for the header it did not ask about — the exact shape of failure this module
+// exists to catch, one header along.
+const preflightHeaders = "content-type,mcp-protocol-version"
+
 // preflightFor is the OPTIONS a browser sends before a cross-origin POST that
-// carries a non-safelisted Content-Type.
+// carries non-safelisted headers.
 func preflightFor(origin string) request {
 	return request{
 		method: http.MethodOptions,
@@ -318,7 +377,7 @@ func preflightFor(origin string) request {
 		headers: map[string]string{
 			"Origin":                         origin,
 			"Access-Control-Request-Method":  http.MethodPost,
-			"Access-Control-Request-Headers": "content-type",
+			"Access-Control-Request-Headers": preflightHeaders,
 		},
 	}
 }
@@ -338,6 +397,14 @@ func runServerExpectingExit(t *testing.T, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, serverBinary(t), args...) //nolint:gosec // see above
 	cmd.Env = append(os.Environ(), "LIBGEN_MCP_LOG_LEVEL=info", "LIBGEN_MCP_DOWNLOAD_DIR="+t.TempDir())
 	out, err := cmd.CombinedOutput()
+	// A deadline kill is not a refusal. Without this check a server that
+	// happily accepted a bad flag and served for thirty seconds would be
+	// killed by the context, and the non-nil error that produced would read
+	// exactly like a refusal — the test passing for the opposite of the reason
+	// it was written.
+	if ctx.Err() != nil {
+		t.Fatalf("the server was still running when the deadline killed it; it did not refuse to start. Output:\n%s", out)
+	}
 	return string(out), err
 }
 

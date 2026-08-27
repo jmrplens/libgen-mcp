@@ -494,7 +494,8 @@ To check a deployment behaves as described, run `make validate-http-stateless` (
 a real server and asserts each guarantee above over the wire.
 
 `make test-e2e-http` asks the same question exhaustively. It builds the binary, starts it
-with each flag combination in turn and drives it over a socket — the cross-origin decision,
+with each flag it exercises in turn — one changed at a time from the shipped
+defaults, not their cartesian product — and drives it over a socket — the cross-origin decision,
 both preflights, the resource guard, every limit, the raw-socket attacks Go's own client
 refuses to send, a misbehaving mirror, and `SIGTERM`. Where it can, it runs a real nginx in
 front rather than modelling one, because the failure that matters most there — the server's

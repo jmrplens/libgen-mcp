@@ -157,8 +157,13 @@ func TestTransport_GracefulShutdownOnSIGTERM(t *testing.T) {
 	// fails a server which ignored the signal outright.
 	select {
 	case err := <-stopped:
+		// A clean exit is the assertion, not a detail to log. The default
+		// SIGTERM action and a crash while handling it both produce a non-zero
+		// wait — and a test that only logged that would pass for a server which
+		// was killed rather than one which drained, which is the difference
+		// this case exists to measure.
 		if err != nil {
-			t.Logf("exited with %v", err)
+			t.Fatalf("exited with %v after SIGTERM, want a clean exit: the signal was defaulted or handling it failed", err)
 		}
 	case <-time.After(15 * time.Second):
 		t.Fatal("the server did not exit within 15s of SIGTERM; the signal is not being handled")

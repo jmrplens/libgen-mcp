@@ -56,8 +56,16 @@ func TestCrossOrigin_AllowlistedOriginIsAnsweredAndAdmitted(t *testing.T) {
 	if got := pre.header.Get("Access-Control-Allow-Origin"); got != trustedOrigin {
 		t.Errorf("preflight Allow-Origin = %q, want the origin echoed", got)
 	}
-	if got := pre.header.Get("Access-Control-Allow-Headers"); got != "content-type" {
-		t.Errorf("preflight Allow-Headers = %q, want the requested header echoed", got)
+	// Every header asked for, echoed back. Missing one is not a partial answer:
+	// the browser blocks the request for the header it was not granted.
+	allowed := pre.header.Get("Access-Control-Allow-Headers")
+	if allowed != preflightHeaders {
+		t.Errorf("preflight Allow-Headers = %q, want %q — all of them echoed", allowed, preflightHeaders)
+	}
+	for want := range strings.SplitSeq(preflightHeaders, ",") {
+		if !strings.Contains(strings.ToLower(allowed), want) {
+			t.Errorf("Allow-Headers = %q does not grant %q, which browserPOST sends", allowed, want)
+		}
 	}
 	// The answer is derived from both request headers it echoes, so a shared
 	// cache must key on both.
@@ -91,6 +99,18 @@ func TestCrossOrigin_WildcardAcceptsAnyOriginAndStillEchoes(t *testing.T) {
 	s := startServer(t, nil, "--trusted-origins=*")
 
 	for _, origin := range []string{trustedOrigin, untrustedOrigin} {
+		// The preflight first, in the order a browser does it. http.Client
+		// sends the POST straight out, so a wildcard that admitted requests
+		// while refusing the OPTIONS that precedes them would pass a
+		// POST-only test and fail every actual browser.
+		pre := s.do(t, preflightFor(origin))
+		if pre.status != http.StatusNoContent {
+			t.Errorf("%s preflight = %d, want %d under the wildcard", origin, pre.status, http.StatusNoContent)
+		}
+		if got := pre.header.Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("preflight Allow-Origin = %q, want %q echoed", got, origin)
+		}
+
 		reply := s.do(t, browserPOST(origin))
 		if reply.status != http.StatusOK {
 			t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)

@@ -257,12 +257,29 @@ func TestRobust_MisbehavingMirrorLeavesTheServerServing(t *testing.T) {
 			m := startMirror(t, tc.respond)
 			s := startServer(t, mirrorEnv(m))
 
-			done := make(chan response, 1)
-			go func() { done <- s.do(t, request{body: searchBody}) }()
+			// s.try rather than s.do: do calls t.Fatalf, which calls
+			// runtime.Goexit, which would kill this worker without failing the
+			// test — and the select below would then wait out its full timeout
+			// and report a hang that never happened.
+			type outcome struct {
+				reply response
+				err   error
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				reply, err := s.try(t, request{body: searchBody})
+				done <- outcome{reply: reply, err: err}
+			}()
 
 			select {
-			case reply := <-done:
-				t.Logf("status %d after %d mirror calls", reply.status, m.calls())
+			case got := <-done:
+				if got.err != nil {
+					// A transport error is an acceptable answer here — the
+					// requirement is boundedness, not a particular status.
+					t.Logf("call returned an error after %d mirror calls: %v", m.calls(), got.err)
+					break
+				}
+				t.Logf("status %d after %d mirror calls", got.reply.status, m.calls())
 			case <-time.After(90 * time.Second):
 				t.Fatal("the tool call never returned; a bad mirror must not hold a request open indefinitely")
 			}

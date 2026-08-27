@@ -378,7 +378,9 @@ with another.
 Unlike the live suite above, **this one runs in CI on every PR**, because it
 depends on nothing external. It is also the release gate: `release.yml`'s
 `http-e2e` job is a `needs:` of both GoReleaser and Docker, so a transport
-regression stops the tag before any binary, image or registry entry exists. That
+regression stops everything the tag would have produced. It cannot stop the tag
+itself — `release.yml` triggers on the tag push, so by the time the gate runs the
+tag exists — but nothing is built, pushed or published behind a failing gate. That
 job deliberately declares `contents: read` and no secrets — a gate that fails
 must not be able to leak what the jobs behind it hold.
 
