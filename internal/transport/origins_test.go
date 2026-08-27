@@ -25,6 +25,21 @@ func TestParseTrustedOrigins(t *testing.T) {
 		{name: "bare host has no scheme", raw: "claude.ai", wantErr: true},
 		{name: "non-http scheme", raw: "ftp://claude.ai", wantErr: true},
 		{name: "userinfo", raw: "https://user@claude.ai", wantErr: true},
+		// An empty element is a typo an operator cannot see — a doubled or
+		// trailing comma — and skipping it silently is the one case where
+		// being lenient costs nothing, since there is no origin to get wrong.
+		{name: "a doubled comma is skipped", raw: "https://a.example,,https://b.example", want: []string{"https://a.example", "https://b.example"}},
+		{name: "a trailing comma is skipped", raw: "https://a.example,", want: []string{"https://a.example"}},
+		// The two ways a host can be missing: absent after the scheme, and
+		// displaced by a path. Both parse cleanly, so only the explicit check
+		// catches them.
+		{name: "scheme with no host", raw: "http://", wantErr: true},
+		{name: "empty host before a path", raw: "https:///x", wantErr: true},
+		// Inputs url.Parse itself rejects, which is a different branch from
+		// the shape checks above and returns the parser's own message.
+		{name: "control character", raw: "http://\x7f", wantErr: true},
+		{name: "bad percent escape", raw: "https://%zz", wantErr: true},
+		{name: "space in the host", raw: "http://a b", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

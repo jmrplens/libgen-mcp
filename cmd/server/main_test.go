@@ -1048,3 +1048,25 @@ func TestServeHTTPTrustedOriginsWildcard(t *testing.T) {
 		t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
 	}
 }
+
+// TestCrossOriginProtectedRejectsAnUnvalidatedOrigin covers the guard that
+// should never fire: crossOriginProtected is only ever handed origins
+// ParseTrustedOrigins has already accepted, so a value net/http refuses means
+// the two disagree about what an origin is.
+//
+// It panics rather than dropping the entry, and the test exists to keep that
+// choice deliberate: a silently dropped origin is a deployment that believes it
+// trusts something it does not, which is the exact failure the allowlist was
+// added to prevent.
+func TestCrossOriginProtectedRejectsAnUnvalidatedOrigin(t *testing.T) {
+	defer func() {
+		got := recover()
+		if got == nil {
+			t.Fatal("crossOriginProtected accepted an origin net/http rejects; a dropped origin must not pass silently")
+		}
+		if msg, ok := got.(string); !ok || !strings.Contains(msg, "AddTrustedOrigin") {
+			t.Errorf("panic = %v, want it to name AddTrustedOrigin so the cause is readable", got)
+		}
+	}()
+	crossOriginProtected([]string{"not-an-origin"}, http.NotFoundHandler())
+}
