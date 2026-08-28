@@ -106,6 +106,22 @@ wanted:
   untrusted before it reaches a client.
 - Every handler is panic-safe: an unexpected failure becomes a tool error rather
   than a crash of the session.
+- The HTTP transport answers on exactly three kinds of route — the MCP endpoint,
+  `GET /health` and the server card — and returns `404` for every other path,
+  rather than a `405` that would imply the route exists. `--http-path` moves the
+  whole set under a prefix; a value that could never match a request is refused at
+  startup.
+- Every HTTP response, including the ones an inner layer answers itself (a `403`
+  cross-origin refusal, a preflight `204`, the `405`, the `404`), carries
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and
+  `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` — nothing
+  this server returns is ever a page, and the headers say so. The server card
+  overrides the cache header with a lifetime of its own.
+  `Strict-Transport-Security` is deliberately not set: this process usually speaks
+  plain HTTP to a proxy or to localhost, where the header is either a claim it
+  cannot make or one that poisons the browser's HSTS cache for that host and port.
+  Set it at whatever terminates TLS.
 - CI runs `govulncheck`, `golangci-lint`, `go vet`, the race detector and a
   SonarCloud quality gate on every change; dependencies are updated by
   Dependabot.

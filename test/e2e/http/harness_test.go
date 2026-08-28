@@ -123,7 +123,12 @@ func freePort(t *testing.T) int {
 // server is a running binary under test.
 type server struct {
 	baseURL string
-	logs    func() string
+	// base is the normalized --http-path the server was started with: "" at the
+	// root, "/libgen" under a prefix. Every route the server mounts moves with
+	// it, the health probe included, so a harness that always looked at
+	// "/health" would time out on a prefixed server that started perfectly.
+	base string
+	logs func() string
 }
 
 // startServer launches the binary with the given extra flags and environment,
@@ -167,6 +172,7 @@ func startServerOnPort(t *testing.T, port int, env map[string]string, flags ...s
 
 	srv := &server{
 		baseURL: "http://" + addr,
+		base:    basePathFromFlags(flags),
 		logs: func() string {
 			mu.Lock()
 			defer mu.Unlock()
@@ -181,6 +187,45 @@ func startServerOnPort(t *testing.T, port int, env map[string]string, flags ...s
 
 	waitHealthy(t, srv)
 	return srv
+}
+
+// basePathFromFlags reports the mount point a caller asked for with
+// --http-path, in the normalized form the server itself computes.
+//
+// It reads the flags rather than taking a parameter of its own because the
+// mount reaches the harness the way every other setting does — as a flag on
+// startServer. A separate argument would be one more thing to remember, and
+// forgetting it would show up as a health poll timing out against a server that
+// started correctly and simply mounted /health somewhere else.
+//
+// Both spellings are recognized, since either is a reasonable way to write it
+// and only one of them would otherwise work.
+func basePathFromFlags(flags []string) string {
+	const name = "http-path"
+	for i, f := range flags {
+		trimmed := strings.TrimLeft(f, "-")
+		if value, ok := strings.CutPrefix(trimmed, name+"="); ok {
+			return normalizeBase(value)
+		}
+		if trimmed == name && i+1 < len(flags) {
+			return normalizeBase(flags[i+1])
+		}
+	}
+	return ""
+}
+
+// normalizeBase mirrors the server's own normalizeBasePath: "" for the root,
+// "/prefix" with no trailing slash otherwise.
+//
+// The test has to reach the same answer the server did, because that answer is
+// where the routes are — reproducing the rule is what lets a case pass
+// "libgen", "/libgen" or "/libgen/" and still know where to look.
+func normalizeBase(p string) string {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	if p == "" {
+		return ""
+	}
+	return "/" + p
 }
 
 // lockedWriter serializes writes from the process's two pipes into one buffer
@@ -203,7 +248,7 @@ func waitHealthy(t *testing.T, s *server) {
 	t.Helper()
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.baseURL+"/health", http.NoBody)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.baseURL+s.base+"/health", http.NoBody)
 		if err != nil {
 			t.Fatalf("building the health request: %v", err)
 		}
@@ -224,7 +269,7 @@ func waitHealthy(t *testing.T, s *server) {
 // error, it is that the process survives it and keeps serving everyone else.
 func (s *server) healthy(t *testing.T) bool {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.baseURL+"/health", http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, s.baseURL+s.base+"/health", http.NoBody)
 	if err != nil {
 		return false
 	}
@@ -262,8 +307,9 @@ func (s *server) do(t *testing.T, r request) response {
 	}
 	path := r.path
 	if path == "" {
-		// The MCP endpoint is the root: this server mounts the handler at "/"
-		// and the deployment's proxy is what adds a path prefix in front.
+		// The MCP endpoint is the root, which is where a server started
+		// without --http-path mounts it. A case that moves the mount names
+		// its paths in full, because the point there is which path answers.
 		path = "/"
 	}
 	var body io.Reader = http.NoBody

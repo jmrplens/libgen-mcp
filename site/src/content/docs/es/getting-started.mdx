@@ -322,7 +322,7 @@ Es la forma más rápida de probar el servidor. Ejecutarlo **en local** — con 
 - **Tus consultas pasan por la máquina de otra persona.** En local, lo que buscas no sale de tu ordenador. La instancia hospedada no guarda nada, pero "no guarda nada" es una promesa; "no se envió nunca" es un hecho.
 - **`download` no puede escribir en tu disco desde un servidor remoto**, así que devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero. Eso es inherente al MCP remoto, no una limitación de este endpoint — ver [Dónde acaba el fichero](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
 
-El endpoint habla el mismo HTTP en streaming sin estado que se describe más abajo: `POST` lleva el protocolo, `GET` sobre el endpoint responde `405` a propósito, y `https://mcp.jmrp.io/libgen/health` responde `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. Su versión sigue las releases de este repositorio, así que puede ir brevemente por detrás de una etiqueta recién publicada.
+El endpoint habla el mismo HTTP en streaming sin estado que se describe más abajo: `POST` lleva el protocolo, `GET` sobre el propio endpoint responde `405` a propósito — una ruta que el servidor no sirve responde `404` — y `https://mcp.jmrp.io/libgen/health` responde `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. Su versión sigue las releases de este repositorio, así que puede ir brevemente por detrás de una etiqueta recién publicada.
 
 Es uno de los servidores listados en **[mcp.jmrp.io](https://mcp.jmrp.io/)**, un directorio de los servidores MCP que mantiene el autor, cada uno accesible en su propio endpoint bajo el mismo dominio; [`servers.json`](https://mcp.jmrp.io/servers.json) es esa misma lista para clientes automáticos.
 
@@ -336,13 +336,21 @@ libgen-mcp --http :8080
 
 En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga.
 
-En modo HTTP el servidor publica además una **server card** en `GET /.well-known/mcp/server-card.json`: `serverInfo`, las `capabilities` que negocia el handshake, un bloque `authentication` (este servidor no pide ninguna) y los listados completos de `tools` y `prompts`, de modo que un directorio o un escáner puede leer toda la superficie — los cuatro prompts incluidos — sin abrir una sesión MCP. Se sirve sin autenticación, responde al preflight CORS y lleva `Access-Control-Allow-Origin: *` para que también pueda leerla un directorio que corra en el navegador, y no le afecta el `405` que el modo sin estado devuelve en el endpoint MCP.
+En modo HTTP el servidor publica además una **server card** en `GET /server-card` — la ubicación a la que la movió la extensión `ext-server-card`, servida como `application/mcp-server-card+json` — y, con los mismos bytes, en la ruta heredada `GET /.well-known/mcp/server-card.json`, que se mantiene porque los escáneres ya la piden ahí. Lleva `serverInfo`, las `capabilities` que negocia el handshake, un bloque `authentication` (este servidor no pide ninguna) y los listados completos de `tools` y `prompts`, de modo que un directorio o un escáner puede leer toda la superficie — los cuatro prompts incluidos — sin abrir una sesión MCP. Se sirve sin autenticación, responde al preflight CORS y lleva `Access-Control-Allow-Origin: *` para que también pueda leerla un directorio que corra en el navegador, y no le afecta el `405` que el modo sin estado devuelve en el endpoint MCP.
 
 El transporte es **sin estado por defecto**: no hay `Mcp-Session-Id`, cada POST es una petición completa y `GET`/`DELETE` sobre el endpoint MCP devuelven `405` (`/health` no se ve afectado). Es lo que la versión `2026-07-28` del protocolo MCP exige sobre HTTP, y permite poner cualquier número de réplicas detrás de un balanceador normal, sin enrutado pegajoso. Otras dos opciones ajustan el transporte — `--json-response` devuelve `application/json` en lugar de SSE, y `--max-request-body-bytes` estrecha el límite de 4 MiB del cuerpo:
 
 ```bash
 libgen-mcp --http :8080 --json-response --max-request-body-bytes 1048576
 ```
+
+Esas rutas — el endpoint MCP, `/health` y las dos rutas de la card — son toda la superficie HTTP. **Cualquier otra ruta responde `404`**, con un cuerpo JSON que nombra el endpoint que se debería haber pedido; un `405` significa ya solo lo que dice, que se llegó al endpoint MCP con el método equivocado. Si un proxy inverso reenvía su prefijo a este servidor en lugar de quitarlo, monta todo el conjunto bajo ese prefijo con `--http-path`:
+
+```bash
+libgen-mcp --http :8080 --http-path /libgen
+```
+
+El endpoint pasa a ser `POST /libgen`, la sonda `GET /libgen/health`, y las cards cuelgan también de `/libgen`; `libgen`, `/libgen` y `/libgen/` significan el mismo montaje, mientras que un valor con query, fragmento, segmento `..` o escapes porcentuales se rechaza al arrancar. Toda respuesta — incluidos el `404` y el `405` — lleva `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` y `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. La card sobrescribe la cabecera de caché con su propia duración de una hora. `Strict-Transport-Security` no está entre ellas: ponla en lo que termine TLS delante de este proceso.
 
 Si algún cliente tuyo todavía necesita el transporte con sesiones anterior, pasa `--stateless=false`; entonces negocia la versión `2025-11-25` del protocolo MCP o anterior. Consulta [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado) para lo demás que cambia, incluida la nota sobre la elicitación.
 

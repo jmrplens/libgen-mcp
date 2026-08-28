@@ -209,7 +209,8 @@ keep using it, for two concrete reasons rather than as a disclaimer:
   [Where the file goes](tools.md#where-the-file-goes-local-vs-remote).
 
 The endpoint speaks the same stateless streamable HTTP described below: `POST` carries the
-protocol, `GET` on the endpoint answers `405` by design, and `https://mcp.jmrp.io/libgen/health`
+protocol, `GET` on the endpoint itself answers `405` by design — a path the server does not
+serve answers `404` — and `https://mcp.jmrp.io/libgen/health`
 answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. Its version tracks the releases of this repository, so it can briefly lag a fresh
 tag.
 
@@ -229,8 +230,10 @@ libgen-mcp --http :8080
 In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200`
 while serving, handy for container and load-balancer health checks.
 
-In HTTP mode the server also publishes a **server card** at
-`GET /.well-known/mcp/server-card.json`: `serverInfo`, the `capabilities` the handshake
+In HTTP mode the server also publishes a **server card** at `GET /server-card` — the location
+the `ext-server-card` extension moved to, served as `application/mcp-server-card+json` — and,
+byte-identical, at the legacy `GET /.well-known/mcp/server-card.json`, kept because scanners
+already fetch it there. It carries `serverInfo`, the `capabilities` the handshake
 negotiates, an `authentication` block (this server takes none), and the full `tools` and
 `prompts` listings, so a directory or scanner can read the whole surface — the four prompts
 included — without opening an MCP session. It is served unauthenticated, answers CORS
@@ -247,6 +250,25 @@ tune the transport — `--json-response` returns `application/json` instead of S
 ```bash
 libgen-mcp --http :8080 --json-response --max-request-body-bytes 1048576
 ```
+
+Those routes — the MCP endpoint, `/health` and the two card paths — are the whole HTTP
+surface. **Every other path answers `404`**, with a JSON body naming the endpoint it should
+have asked for; a `405` now means only what it says, that the MCP endpoint was reached with
+the wrong method. If a reverse proxy forwards its prefix to this server instead of stripping
+it, mount the whole set under that prefix with `--http-path`:
+
+```bash
+libgen-mcp --http :8080 --http-path /libgen
+```
+
+The endpoint is then `POST /libgen`, the probe `GET /libgen/health`, and the cards live under
+`/libgen` too; `libgen`, `/libgen` and `/libgen/` all mean the same mount, while a value with
+a query, a fragment, a `..` segment or a percent-escape is refused at startup. Every response
+— the `404` and the `405` included — carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and
+`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The card overrides the
+cache header with its own one-hour lifetime. `Strict-Transport-Security` is not among them: set
+it at whatever terminates TLS in front of this process.
 
 If a client of yours still needs the old session-based transport, pass `--stateless=false`;
 it then negotiates MCP protocol `2025-11-25` or older. See

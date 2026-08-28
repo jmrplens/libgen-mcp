@@ -51,9 +51,13 @@ Everything is driven through the `Makefile`; run `make help` for the full list.
 Two things `make help` does not tell you:
 
 `validate-http-stateless` is a hand-run smoke check, not a CI gate: it builds the binary,
-serves it, and asserts the wire-level promises of stateless mode (no `Mcp-Session-Id`,
-`GET` → 405 with `Allow: POST`, `--json-response` content type). Run it after touching
-`internal/transport` or the HTTP wiring in `cmd/server`.
+serves it, and asserts the wire-level promises an HTTP deployment makes — no
+`Mcp-Session-Id`; `GET` on the MCP endpoint → 405 with `Allow: POST`; an unknown path → 404
+with a JSON body naming the endpoint, never the 405 a catch-all used to give; the five
+security headers, checked on a response an inner layer writes itself (the 404) as well as on
+a plain route; both server-card locations answering the same bytes under their own media
+types, with the card's `Cache-Control` override; and the `--json-response` content type. Run
+it after touching `internal/transport` or the HTTP wiring in `cmd/server`.
 
 Coverage is scoped to `./internal/...`, `./cmd/server/...` and
 `./cmd/internal/...` (`COVERAGE_PKGS`, mirrored into both

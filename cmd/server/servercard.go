@@ -17,8 +17,23 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// serverCardPath is where reputation scanners and directories look for the card.
+// serverCardPath is the legacy card location, kept because scanners and
+// directories written against the SEP-1649 draft still look there.
 const serverCardPath = "/.well-known/mcp/server-card.json"
+
+// serverCardCurrentPath is where the card belongs today. The ext-server-card
+// extension moved it here on 2026-06-08 (commit 10e958fa, "Server Cards:
+// recommend /server-card over .well-known") on the grounds that /.well-known is
+// for site-wide metadata whereas a server's card is application-level metadata.
+// Both are served: retiring the old one would break every scanner that already
+// fetches it, and the two answer with the same bytes.
+const serverCardCurrentPath = "/server-card"
+
+// serverCardMediaType is the content type the ext-server-card extension gives
+// the document. It is used on serverCardCurrentPath only; serverCardPath keeps
+// application/json, which is what the scanners already fetching it expect and
+// what a client comparing the header literally will accept.
+const serverCardMediaType = "application/mcp-server-card+json"
 
 // serverCardTool is one tool as the card presents it: the same fields tools/list
 // returns, so a reader gets the full surface without opening a session.
