@@ -116,11 +116,11 @@ import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 ## Install
 
-If you already have Node, **npm** is the shortest path — one command, and your MCP client can launch the server through `npx` without installing anything. Otherwise the **prebuilt binary** is a single static executable with nothing else to install: no Go toolchain, no Docker, no runtime. Docker and `go install` are offered as alternatives.
+If you already have Node 18 or newer, **npm** is the shortest path — one command, and your MCP client can launch the server through `npx` without installing anything. Otherwise the **prebuilt binary** is a single static executable with nothing else to install: no Go toolchain, no Docker, no runtime. Docker and `go install` are offered as alternatives.
 
 <Tabs>
 	<TabItem label="npm / npx">
-		The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). That package is a thin launcher over the same prebuilt binaries the releases page serves: the executable rides inside a per-platform package that npm unpacks only when its `os` and `cpu` match, so nothing is compiled and no script runs at install time — which is what keeps `npx`, `npm ci --ignore-scripts`, offline and proxied installs working.
+		The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). It needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: the executable rides inside a per-platform package that npm unpacks only when its `os` and `cpu` match, so nothing is compiled and no script runs at install time. Because the executable travels inside the package npm downloads anyway, `npx` and `npm ci --ignore-scripts` both work, and so does an install served from a private registry mirror — or from the local cache with `--offline`, once the tarballs are in it.
 
     	<Tabs syncKey="pkg">
     		<TabItem label="npx">
@@ -151,6 +151,8 @@ If you already have Node, **npm** is the shortest path — one command, and your
     			```
     		</TabItem>
     	</Tabs>
+
+    	A global install puts `libgen-mcp` in your package manager's global binary directory. If the command is not found afterwards, that directory is not on your `PATH` — `npm config get prefix` shows npm's, and pnpm's is set up by `pnpm setup`.
 
     	Prebuilt binaries exist for Linux, macOS and Windows on x64 and arm64. On any other platform the launcher exits with a message pointing at the release binaries and the option to build from source.
     </TabItem>

@@ -38,13 +38,13 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 ## Quick start
 
-The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
+The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node 18 or newer, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
 
 Then just ask your assistant: _"Search for the Rust book."_
 
 ### Run it with `npx` (no install)
 
-The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). The package is a thin launcher over the same prebuilt binaries the releases page serves: npm downloads only the one matching your OS and CPU, nothing is compiled, and no script runs at install time.
+The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp) and needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: npm downloads only the platform package matching your OS and CPU, nothing is compiled, and no script runs at install time.
 
 ```bash
 npx @jmrp.io/libgen-mcp              # run it, no install

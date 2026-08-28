@@ -340,7 +340,11 @@ sync-npm-version: ## Stamp VERSION into npm/libgen-mcp/package.json and its six 
 validate-npm: ## Build and validate the npm packages in Docker (NPM_BINARIES=<dir>)
 	@command -v docker >/dev/null || { echo "ERROR: Docker is required for isolated validation (or use validate-npm-local)"; exit 1; }
 	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
-	docker run --rm -v "$(CURDIR):/work" -v "$(abspath $(NPM_BINARIES)):/binaries:ro" -w /work node:22 sh -euc 'node scripts/build-npm.mjs --binaries /binaries --version $(VERSION) && node scripts/validate-npm.mjs --packages npm/packages --main npm/libgen-mcp --version $(VERSION)'
+	@# --user with a writable HOME: the container writes npm/packages/ and rewrites
+	@# npm/libgen-mcp/package.json through the bind mount, so running as root would
+	@# leave a tracked manifest root-owned on the host. HOME must move with the uid
+	@# or npm has nowhere to put its cache.
+	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(CURDIR):/work" -v "$(abspath $(NPM_BINARIES)):/binaries:ro" -w /work node:22 sh -euc 'node scripts/build-npm.mjs --binaries /binaries --version $(VERSION) && node scripts/validate-npm.mjs --packages npm/packages --main npm/libgen-mcp --version $(VERSION)'
 
 # Same validation without Docker, for the ephemeral CI runner — already
 # disposable, and the release job has no Docker-in-Docker to spare.

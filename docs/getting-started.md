@@ -5,21 +5,25 @@ running your first search.
 
 ## Install
 
-`libgen-mcp` installs four ways. If you already have Node, **npm/npx** is the
-shortest path — one command, nothing to place on your `PATH`. Otherwise the
+`libgen-mcp` installs four ways. If you already have Node 18 or newer,
+**npm/npx** is the shortest path — one command, nothing to download by hand.
+Otherwise the
 **prebuilt binary** is a single static executable with nothing else to install:
 no Go toolchain, no Docker, no runtime. Docker and `go install` are offered as
 alternatives if they fit your setup better.
 
-### 1. npm / npx (shortest path if you have Node)
+### 1. npm / npx (shortest path if you have Node 18 or newer)
 
 The server is published to npm as
 [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp).
-That package is a thin launcher over the same prebuilt binaries the releases
-page serves: the binary rides inside a per-platform package that npm installs
-only when its `os`/`cpu` match, so nothing is compiled and no script runs at
-install time — which is what keeps `npx`, `npm ci --ignore-scripts`, offline and
-proxied installs working.
+It needs Node 18 or newer. The package is a thin launcher over the same
+prebuilt binaries the releases page serves: the binary rides inside a
+per-platform package that npm installs only when its `os`/`cpu` match, so
+nothing is compiled and no script runs at install time. Because the binary
+travels inside the package npm downloads anyway, `npx` and
+`npm ci --ignore-scripts` both work, and so does an install served from a
+private registry mirror — or from the local cache with `--offline`, once the
+tarballs are in it.
 
 ```bash
 npx @jmrp.io/libgen-mcp              # run it, no install
@@ -37,6 +41,11 @@ nothing to install or keep updated by hand:
   }
 }
 ```
+
+A global install puts `libgen-mcp` in your package manager's global binary
+directory. If the command is not found afterwards, that directory is not on your
+`PATH` — `npm config get prefix` shows npm's (the binaries are in its `bin`
+subdirectory), and pnpm's is set up by `pnpm setup`.
 
 Prebuilt binaries exist for Linux, macOS and Windows on x64 and arm64. On any
 other platform the launcher exits with a message pointing at the release

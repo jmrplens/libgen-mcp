@@ -27,7 +27,7 @@ there is nothing to authenticate — skip straight to installation.
 If `node --version` reports v18 or newer, this is the least work: the package
 carries the same prebuilt binaries as Method B, and npm installs only the one
 matching the user's OS and CPU. Nothing is compiled and no script runs at
-install time.
+install time. Below v18, use Method B.
 
 ```json
 {
@@ -49,11 +49,16 @@ For VS Code / GitHub Copilot, use the `servers` key with an explicit
 claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
 ```
 
-A global install works too, and puts `libgen-mcp` on the `PATH`:
+A global install works too:
 
 ```bash
 npm install -g @jmrp.io/libgen-mcp   # or: pnpm add -g @jmrp.io/libgen-mcp
 ```
+
+It places `libgen-mcp` in the package manager's global binary directory, which
+is only callable by name if that directory is on the user's `PATH`
+(`npm config get prefix` for npm, `pnpm setup` for pnpm). If it is not, use the
+`npx` form above or an absolute `command` path.
 
 ### Method B: Native binary (no dependencies at all)
 

@@ -47,11 +47,30 @@ publish() {
   # OIDC exchange, or a maintainer's `npm login` / .npmrc for the bootstrap — so
   # this script never sees a credential.
   #
+  # The output is captured so a rejection can be classified rather than just
+  # propagated. The `npm view` check above is an optimisation, not the guarantee:
+  # a version published moments ago can still be missing from the read path while
+  # the write path already rejects it, and that window is exactly when a retried
+  # release job runs. Treating npm's own duplicate-version answer as success is
+  # what closes it — the version we wanted on the registry is on the registry.
+  log="$(mktemp)"
   # $DRY_RUN is empty or "--dry-run" and must word-split, not stay one argument.
   # The directive below must be bare: ShellCheck rejects a `disable=` line that
   # carries a trailing explanation and then skips the whole file.
   # shellcheck disable=SC2086
-  npm publish "$dir" --access public $DRY_RUN
+  if npm publish "$dir" --access public $DRY_RUN >"$log" 2>&1; then
+    cat "$log"
+    rm -f "$log"
+    return 0
+  fi
+  cat "$log"
+  if grep -qE 'EPUBLISHCONFLICT|cannot publish over the previously published versions' "$log"; then
+    echo "Skipping $name@$VERSION — the registry already has it."
+    rm -f "$log"
+    return 0
+  fi
+  rm -f "$log"
+  return 1
 }
 
 for key in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64; do

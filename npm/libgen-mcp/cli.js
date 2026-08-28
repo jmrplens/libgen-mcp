@@ -49,47 +49,60 @@ function resolveBinary(key) {
   }
 }
 
+// fail reports a diagnostic and marks the run failed. It sets `exitCode` rather
+// than calling process.exit(), which would drop a stderr write that has not
+// flushed yet — writes to a pipe are asynchronous, and the message explaining
+// why the launcher gave up is the one least worth losing. Callers return
+// immediately after; the process then exits on its own once stderr has drained.
 function fail(message) {
   process.stderr.write(`libgen-mcp: ${message}\n`);
-  process.exit(1);
+  process.exitCode = 1;
 }
 
-const key = platformKey();
-if (!key) {
-  fail(
-    `unsupported platform ${process.platform}/${process.arch}. ` +
-      "Prebuilt binaries exist for linux, macOS and Windows on x64 and arm64; " +
-      "for anything else, build from source or use a released binary directly " +
-      "(https://github.com/jmrplens/libgen-mcp/releases).",
-  );
+function main() {
+  const key = platformKey();
+  if (!key) {
+    fail(
+      `unsupported platform ${process.platform}/${process.arch}. ` +
+        "Prebuilt binaries exist for linux, macOS and Windows on x64 and arm64; " +
+        "for anything else, build from source or use a released binary directly " +
+        "(https://github.com/jmrplens/libgen-mcp/releases).",
+    );
+    return;
+  }
+
+  const binary = resolveBinary(key);
+  if (!binary) {
+    // The platform is supported but its package is absent. The usual cause is
+    // an install that skipped optional dependencies (npm install --no-optional,
+    // or a lockfile pinned on a different OS), not a broken release.
+    fail(
+      `the @jmrp.io/libgen-mcp-${key} package is not installed. ` +
+        "It is an optional dependency that carries the binary for this platform; " +
+        "reinstall without --no-optional, or delete node_modules and the lockfile " +
+        "and install again.",
+    );
+    return;
+  }
+
+  const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
+
+  if (result.error) {
+    fail(`failed to start the binary: ${result.error.message}`);
+    return;
+  }
+  // A child killed by a signal reports null status and a signal name. Re-raise
+  // it so the launcher dies the same way rather than masking a SIGINT as exit 0.
+  if (result.signal) {
+    process.kill(process.pid, result.signal);
+    // If the re-raise did not terminate us (signal ignored, or no default
+    // disposition), fall back to the conventional 128+signal code so the caller
+    // still sees the child's terminating signal rather than a bare failure.
+    const signum = os.constants.signals[result.signal];
+    process.exitCode = signum ? 128 + signum : 1;
+    return;
+  }
+  process.exitCode = result.status === null ? 1 : result.status;
 }
 
-const binary = resolveBinary(key);
-if (!binary) {
-  // The platform is supported but its package is absent. The usual cause is an
-  // install that skipped optional dependencies (npm install --no-optional, or
-  // a lockfile pinned on a different OS), not a broken release.
-  fail(
-    `the @jmrp.io/libgen-mcp-${key} package is not installed. ` +
-      "It is an optional dependency that carries the binary for this platform; " +
-      "reinstall without --no-optional, or delete node_modules and the lockfile " +
-      "and install again.",
-  );
-}
-
-const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
-
-if (result.error) {
-  fail(`failed to start the binary: ${result.error.message}`);
-}
-// A child killed by a signal reports null status and a signal name. Re-raise it
-// so the launcher dies the same way rather than masking a SIGINT as exit 0.
-if (result.signal) {
-  process.kill(process.pid, result.signal);
-  // If the re-raise did not terminate us (signal ignored, or no default
-  // disposition), exit with the conventional 128+signal code so the caller
-  // still sees the child's terminating signal rather than a bare failure.
-  const signum = os.constants.signals[result.signal];
-  process.exit(signum ? 128 + signum : 1);
-}
-process.exit(result.status === null ? 1 : result.status);
+main();

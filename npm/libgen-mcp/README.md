@@ -6,10 +6,11 @@ and standards across the [Library Genesis](https://en.wikipedia.org/wiki/Library
 catalog and a long list of open-access sources. It runs as a local binary over
 stdio (default) or HTTP, and needs **no account, API key or token**.
 
-This package is a thin launcher. The actual server is a prebuilt Go binary that
-ships inside a per-platform package; npm installs only the one matching your
-operating system and CPU, so there is nothing to compile and nothing is
-downloaded at install time.
+This package is a thin launcher and needs Node 18 or newer. The actual server is
+a prebuilt Go binary that ships inside a per-platform package, listed here as an
+optional dependency; npm resolves only the one whose `os` and `cpu` match your
+machine and downloads it with the launcher. Nothing is compiled, and no install
+script runs and fetches anything else — the binary is already in the package.
 
 ## Run without installing
 
@@ -33,9 +34,13 @@ Most MCP clients are configured to launch the server this way. For example:
 ## Install
 
 ```bash
-npm install -g @jmrp.io/libgen-mcp
+npm install -g @jmrp.io/libgen-mcp   # or: pnpm add -g @jmrp.io/libgen-mcp
 libgen-mcp --help
 ```
+
+This puts `libgen-mcp` in your package manager's global binary directory. If the
+command is not found afterwards, that directory is not on your `PATH` —
+`npm config get prefix` shows npm's, and pnpm's is set up by `pnpm setup`.
 
 ## Tools
 
