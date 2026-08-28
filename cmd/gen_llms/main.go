@@ -599,7 +599,10 @@ func writeLLMSFullDownloadSources(b *strings.Builder) {
 func writeLLMSFullTransports(b *strings.Builder) {
 	b.WriteString("## Transports\n\n")
 	b.WriteString("- **stdio (default):** used by MCP clients (Claude Desktop, Claude Code, Cursor, VS Code, GitHub Copilot). No flags required.\n")
-	b.WriteString("- **Streamable HTTP:** pass `--http host:port` (e.g. `--http :8080`) to serve over HTTP instead of stdio. The MCP handler is mounted at `/`, and a `GET /health` readiness endpoint returns HTTP 200 while the server is serving.\n\n")
+	b.WriteString("- **Streamable HTTP:** pass `--http` to serve over HTTP instead of stdio, with either a TCP address (`--http :8080`) or the path of a unix socket (`--http /run/mcp-libgen.sock`; a value containing a path separator is a path, and a bare `mcp.sock` is deliberately read as a host). The MCP handler is mounted at `/`, and a `GET /health` readiness endpoint returns HTTP 200 while the server is serving.\n")
+	b.WriteString("- **Unix socket options:** `--http-socket-mode` sets the socket's permission mode as octal (default `0660`, owner and group only, so a same-host reverse proxy reaches it by group membership); it is refused at startup for a TCP `--http` and on platforms without file permission modes. Prefer a socket over TLS for a proxy on the same machine: it removes the network segment instead of encrypting it.\n")
+	b.WriteString("- **TLS:** `--tls-cert` and `--tls-key` make this process terminate TLS itself, for a proxy on another host. Both or neither, the pair is loaded at startup (a bad file is a startup error, not a failed handshake), TLS 1.2 is the floor and HTTP/2 is negotiated. This is also the only case in which the server sends `Strict-Transport-Security`.\n")
+	b.WriteString("- **Remote downloads:** any non-empty `--http` value, a unix socket path included, puts the `download` tool in remote (link-only) mode.\n\n")
 }
 
 // writeLLMSFullInstall writes a compact machine-oriented install recap that

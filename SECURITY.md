@@ -118,10 +118,24 @@ wanted:
   `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` — nothing
   this server returns is ever a page, and the headers say so. The server card
   overrides the cache header with a lifetime of its own.
-  `Strict-Transport-Security` is deliberately not set: this process usually speaks
-  plain HTTP to a proxy or to localhost, where the header is either a claim it
-  cannot make or one that poisons the browser's HSTS cache for that host and port.
-  Set it at whatever terminates TLS.
+  `Strict-Transport-Security: max-age=31536000; includeSubDomains` is added when,
+  and only when, this process terminates TLS itself (`--tls-cert`). Over plain
+  HTTP the header would be either a claim the server cannot make or, on localhost,
+  one that poisons the browser's HSTS cache for that host and port for a year, and
+  a proxy that does terminate TLS is the layer that knows its own certificate
+  lifetime. No `preload` directive either way: that is a decision about a whole
+  domain, not one a single server behind it should make for the operator.
+- The HTTP listener can be a unix socket rather than a TCP port: `--http` treats a
+  value containing a path separator as a filesystem path. For a reverse proxy on
+  the same machine that is the stronger option — it removes the network segment
+  instead of encrypting it, so there is no bridge to read, no `docker-proxy` hop
+  and no certificate to issue or rotate. The socket is created `0660`
+  (`--http-socket-mode`), narrowing the process umask around the bind so it is
+  never briefly world-connectable, and a path that already exists is never
+  replaced unless it is a socket no live process answers on. `--tls-cert` and
+  `--tls-key` cover the remaining case, a proxy on another host: both or neither,
+  loaded at startup so a bad pair is a named startup error rather than a failed
+  handshake, TLS 1.2 as the floor, HTTP/2 negotiated.
 - CI runs `govulncheck`, `golangci-lint`, `go vet`, the race detector and a
   SonarCloud quality gate on every change; dependencies are updated by
   Dependabot.

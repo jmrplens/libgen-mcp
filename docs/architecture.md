@@ -311,8 +311,9 @@ The server speaks MCP over one of two transports, selected at startup:
   stdin and writing responses on stdout (logs go to stderr). This is the mode MCP clients
   such as Claude Code, Claude Desktop, Cursor, and VS Code use: the client launches the
   binary as a child process and speaks to it locally, one client per process.
-- **streamable HTTP (opt-in).** Started with `--http host:port` (for example
-  `libgen-mcp --http :8080`), the server instead serves the streamable HTTP transport,
+- **streamable HTTP (opt-in).** Started with `--http` — either a TCP address (for example
+  `libgen-mcp --http :8080`) or the path of a unix socket (`libgen-mcp --http
+  /run/mcp-libgen.sock`) — the server instead serves the streamable HTTP transport,
   suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
   `status`, `version`, `commit`, `started_at` and `uptime_seconds` while the
@@ -327,10 +328,123 @@ The server speaks MCP over one of two transports, selected at startup:
 
 Both transports share the same tools, HTTP client, and download pipeline; only the
 request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
-and shut the active transport down gracefully. Because a `--http` server runs elsewhere and
-cannot write to the client's disk, it flips `download` into remote download mode: every call
-returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. See
+and shut the active transport down gracefully. Because a `--http` server answers clients whose
+disk it cannot write to, it flips `download` into remote download mode: every call returns a
+link (a `resource_link` plus a `resolved` object) instead of saving a file. A unix socket is
+still a non-empty `--http` value, so it is in remote mode too — which is right, since a socket
+behind a reverse proxy serves clients that are not on this machine, but it does surprise people
+who read "unix socket" as "local". See
 [Tools](tools.md#where-the-file-goes-local-vs-remote) for details.
+
+### Where the server listens
+
+`--http` takes either a TCP address or the path of a unix socket, and one rule decides which:
+**a value containing a path separator is a filesystem path; anything else is a TCP address.**
+So `--http /run/mcp-libgen.sock` and `--http ./mcp.sock` bind a socket, while `--http :8080`,
+`--http 127.0.0.1:8080` and — deliberately — `--http mcp.sock` bind TCP. That last one is not
+an oversight: a bare name is indistinguishable from a hostname, and guessing wrong would
+silently bind something other than what was asked for. Give a socket a path, even a relative
+one.
+
+**Why a socket rather than TLS, for a proxy on the same machine.** Both make the hop between
+the proxy and this server unreadable, but not in the same way: TLS encrypts the network
+segment, a unix socket removes it. There is no bridge to read, no `docker-proxy` hop, no port
+another local process can reach or race for, and no certificate to issue, distribute or rotate
+— the permission bits on one inode are the whole access-control story. TLS is the answer when
+the proxy is on another host, where a network segment has to exist at all; on the same host,
+prefer the socket.
+
+**Socket permissions.** `--http-socket-mode` sets the mode, as octal with or without a leading
+`0`, and defaults to `0660`: read/write for the owner and the group, nothing for anyone else.
+Group-only is the default because a unix socket is reached through the filesystem, so the
+alternative is not "localhost only" but "every local account" — a wider audience than a
+same-host proxy needs. The proxy joins the socket's group instead. The mode is applied twice,
+and both halves matter: the kernel creates the inode as `0777 &^ umask` (`0755` on an ordinary
+process), so the bind runs under a narrowed umask to keep the socket from ever existing
+world-connectable, and a `chmod` right after makes the mode exact, since a umask can only clear
+bits and never set them. An explicit value is refused at startup when `--http` is a TCP address,
+and on a platform with no file permission modes (Windows), rather than accepted and quietly
+ignored.
+
+**A file already at that path** is dealt with before the bind, and the three cases differ. A
+path that exists and is _not_ a socket is refused and never removed — the operator pointed at
+something, and replacing it is not this program's call. A socket a live process still answers
+on (probed with a 200 ms connect) is refused too, so a second instance cannot silently steal
+the endpoint the first one is serving. A socket nothing answers is what a crashed predecessor
+leaves behind, so it is removed, with a warning in the log saying so. A clean shutdown unlinks
+the socket itself.
+
+**Terminating TLS in this process.** `--tls-cert` and `--tls-key` name a PEM certificate and
+its key, and it is both or neither — a certificate without a key is a deployment that believes
+it is serving TLS and is not, so the half-pair is refused at startup. The pair is also _loaded_
+at startup rather than at the first handshake, so an unreadable file or a key that does not
+match its certificate is a named startup error instead of a handshake failure days later, by
+which time nobody is watching the log. The listener pins TLS 1.2 as the floor and advertises
+`h2` and `http/1.1` over ALPN, so a client that speaks HTTP/2 gets HTTP/2. That protocol list
+has to be stated explicitly: `tls.NewListener` does not add it the way `http.Server.ServeTLS`
+does, and without it every client silently drops to HTTP/1.1.
+
+A certificate from a private CA needs the proxy in front to be told to trust it. In nginx that
+is `proxy_ssl_verify on` **plus** `proxy_ssl_trusted_certificate` naming the CA file:
+verification is off by default there, and turning it on without a CA file fails every
+connection instead.
+
+The startup line names what was actually bound — `listening on unix socket
+/run/mcp-libgen.sock (http)`, or `listening on https://127.0.0.1:8443` — because the listener's
+own address is misleading in both of these modes. A unix listener reports a bare path with
+nothing marking it as a socket, and a TLS listener reports the address of the plain listener it
+wraps, so an https endpoint would otherwise print as an unadorned `host:port`.
+
+**A worked example.** nginx reaches a unix upstream by path:
+
+```nginx
+upstream libgen {
+    server unix:/run/mcp-libgen.sock;
+}
+
+server {
+    listen 443 ssl;
+    server_name mcp.example.org;
+
+    location / {
+        proxy_pass         http://libgen;
+        proxy_http_version 1.1;
+        proxy_buffering    off;   # the POST response is a real SSE stream
+        proxy_read_timeout 1h;    # downloads emit progress for minutes
+    }
+}
+```
+
+The `http://` in that `proxy_pass` names the protocol spoken over the socket, not a port —
+there is none. Under Docker, the two containers share the socket's directory instead of a
+network:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:latest
+    command: ["--http", "/run/mcp/libgen.sock"]
+    user: "10001:10001"
+    volumes:
+      - ./run:/run/mcp # the socket lives here; no ports are published
+  proxy:
+    image: nginx:1.29-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./run:/run/mcp
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+```
+
+The server container publishes no port at all: the bind-mounted `./run` directory is the entire
+interface, so there is no host port to firewall and no `docker-proxy` in the path. What the
+proxy container does need is to reach a `0660` socket owned by GID `10001`, which means its
+_worker_ processes must run in that group — nginx's `user` directive takes one
+(`user nginx 10001;`), because nginx calls `initgroups()` when it drops privileges and so does
+not inherit a container-level `group_add`. The blunter alternative is `--http-socket-mode 0666`,
+which trades the group check for reachability by every account in that namespace; it is only
+reasonable when the socket's own directory is already restricted, since traversal permission on
+the directory gates access before the socket's mode is ever consulted.
 
 ### Stateless mode
 
@@ -355,6 +469,9 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--max-request-body-bytes` | `0`       | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely.                                                                                                                                                                                                                                           |
 | `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent.                                                                                                             |
 | `--http-path`              | `/`       | URL path prefix every route is mounted under: the MCP endpoint, `GET /health` and both server-card paths. `--http-path=/libgen` makes the endpoint `POST /libgen` and the probe `GET /libgen/health`; `libgen`, `/libgen` and `/libgen/` all mean the same mount. Set it when a reverse proxy forwards its prefix instead of stripping it. A query, a fragment, a traversal segment or a percent-escape fails startup. |
+| `--http-socket-mode`       | `0660`    | Permission mode for the unix socket `--http` names, as octal with or without a leading `0`. The default is owner+group read/write, so a same-host proxy reaches it by group membership and no other local account does. Refused at startup when `--http` is a TCP address, and on a platform with no file permission modes.                                                                                            |
+| `--tls-cert`               | _(empty)_ | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
+| `--tls-key`                | _(empty)_ | PEM private key file for `--tls-cert`. Both or neither — a certificate without a key is a deployment that believes it is serving TLS and is not, so the half-pair fails startup.                                                                                                                                                                                                                                       |
 
 **Routes, and a `404` for everything else.** The MCP endpoint is mounted on its own path
 rather than as a catch-all, alongside `GET /health` and the two server-card routes; every
@@ -394,12 +511,17 @@ them:
 Nothing this server returns is ever a page — no script, no style, no frame, no form — so that
 policy describes the surface rather than restricting it. The card overrides the cache header
 with its own `public, max-age=3600`, since it only changes with a release.
-`Strict-Transport-Security` is deliberately absent: this process usually speaks plain HTTP to a
-proxy or to localhost, where the header is either a claim it cannot make or one that poisons
-the browser's HSTS cache for that host and port — a deployment that terminates TLS sets it at
-the edge, which is the layer that knows. The middleware touches neither `Vary` nor any
-`Access-Control-*` header: those have one writer each, for the reason the CORS note below
-gives.
+The middleware touches neither `Vary` nor any `Access-Control-*` header: those have one writer
+each, for the reason the CORS note below gives.
+
+A sixth header joins them, and only there: `Strict-Transport-Security:
+max-age=31536000; includeSubDomains` is emitted **when and only when this process terminates
+TLS itself** — that is, when `--tls-cert` is set. Sent over plain HTTP it would be either a
+claim the server cannot make or, on localhost, one that poisons the browser's HSTS cache for
+that host and port for a year; and when a proxy in front terminates TLS, that proxy is the
+layer that knows its own certificate lifetime, so it sends its own. No `preload` directive
+either way: preloading is a decision about a whole domain, which one server behind it has no
+standing to make on the operator's behalf.
 
 **Request cancellation.** A client that disconnects mid-call cancels the handler's context,
 so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
@@ -533,7 +655,8 @@ binary requires no custom request header, and every response header it sets is a
 standard one: `Content-Type`; the five security headers every response carries
 (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
 `Content-Security-Policy` and `Cache-Control`, the last of which the card
-overrides with a lifetime of its own); the card's CORS pair; and the transport
+overrides with a lifetime of its own), plus `Strict-Transport-Security` on the
+listeners that terminate TLS; the card's CORS pair; and the transport
 spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None of them is
 vendor-defined — the security set is as standard as the rest, understood by every
 browser that reads it, and named in a spec that is not ours. Tool schemas use standard JSON Schema

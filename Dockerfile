@@ -38,8 +38,12 @@ COPY --from=builder /out/libgen-mcp /usr/local/bin/libgen-mcp
 
 USER appuser
 
-# Port used only when the server is started in streamable HTTP mode
-# (`--http 0.0.0.0:8080`). The default transport is stdio, which needs no port.
+# Port used only when the server is started in streamable HTTP mode on a TCP
+# address (`--http 0.0.0.0:8080`). The default transport is stdio, which needs no
+# port; nor does the other HTTP form, `--http /run/mcp/libgen.sock`, which binds a
+# unix socket in a mounted directory and publishes nothing at all — the shape to
+# use when a reverse proxy shares the host. The socket is created 0660, so the
+# proxy's worker processes must run in the group that owns it (10001 here).
 EXPOSE 8080
 
 ARG VERSION=""
@@ -58,5 +62,7 @@ LABEL org.opencontainers.image.title="libgen-mcp" \
 
 # Default transport is stdio (no args) — the mode MCP clients use, so
 # `docker run -i --rm ...` works out of the box. For the streamable HTTP
-# transport, override at run time: `docker run ... --http 0.0.0.0:8080`.
+# transport, override at run time: `docker run ... --http 0.0.0.0:8080`, or
+# `docker run -v ./run:/run/mcp ... --http /run/mcp/libgen.sock` to serve a
+# same-host proxy over a unix socket with no published port.
 ENTRYPOINT ["libgen-mcp"]

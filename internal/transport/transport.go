@@ -27,6 +27,11 @@ type Options struct {
 	// rather than rewriting it away — still resolves its own routes, instead of
 	// depending on the proxy to make the paths line up.
 	BasePath string
+	// ServesTLS reports that this process terminates TLS itself rather than
+	// sitting behind a proxy that does. It gates Strict-Transport-Security,
+	// which is a claim only the endpoint that actually negotiated the
+	// connection is in a position to make.
+	ServesTLS bool
 }
 
 // DefaultOptions returns the shipped defaults (stateless on).

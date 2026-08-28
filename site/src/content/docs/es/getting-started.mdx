@@ -350,11 +350,11 @@ Esas rutas — el endpoint MCP, `/health` y las dos rutas de la card — son tod
 libgen-mcp --http :8080 --http-path /libgen
 ```
 
-El endpoint pasa a ser `POST /libgen`, la sonda `GET /libgen/health`, y las cards cuelgan también de `/libgen`; `libgen`, `/libgen` y `/libgen/` significan el mismo montaje, mientras que un valor con query, fragmento, segmento `..` o escapes porcentuales se rechaza al arrancar. Toda respuesta — incluidos el `404` y el `405` — lleva `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` y `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. La card sobrescribe la cabecera de caché con su propia duración de una hora. `Strict-Transport-Security` no está entre ellas: ponla en lo que termine TLS delante de este proceso.
+El endpoint pasa a ser `POST /libgen`, la sonda `GET /libgen/health`, y las cards cuelgan también de `/libgen`; `libgen`, `/libgen` y `/libgen/` significan el mismo montaje, mientras que un valor con query, fragmento, segmento `..` o escapes porcentuales se rechaza al arrancar. Toda respuesta — incluidos el `404` y el `405` — lleva `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` y `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. La card sobrescribe la cabecera de caché con su propia duración de una hora. `Strict-Transport-Security` se les une solo cuando este proceso termina TLS él mismo (`--tls-cert`, más abajo); detrás de un proxy que lo termine, es el proxy quien la envía.
 
 Si algún cliente tuyo todavía necesita el transporte con sesiones anterior, pasa `--stateless=false`; entonces negocia la versión `2025-11-25` del protocolo MCP o anterior. Consulta [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado) para lo demás que cambia, incluida la nota sobre la elicitación.
 
-Como un servidor HTTP se ejecuta en otro sitio y no puede escribir en tu disco, `download` devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero — en este modo no hace falta que fijes `resolve_only`. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para el detalle.
+Como un servidor HTTP atiende a clientes en cuyo disco no puede escribir, `download` devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero — en este modo no hace falta que fijes `resolve_only`. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para el detalle.
 
 <Aside type="note">
 	Alojar en su lugar un servidor **stdio** — por ejemplo detrás de `mcp-proxy`
@@ -363,6 +363,76 @@ Como un servidor HTTP se ejecuta en otro sitio y no puede escribir en tu disco, 
 	a ese servidor stdio en el mismo modo de descarga remota que `--http` obtiene
 	automáticamente.
 </Aside>
+
+#### Detrás de un proxy en la misma máquina: un socket unix
+
+Si lo único que habla con este servidor es un proxy inverso en el mismo host, `--http` acepta también una ruta del sistema de archivos y abre ahí un socket unix en lugar de un puerto:
+
+```bash
+libgen-mcp --http /run/mcp-libgen.sock
+```
+
+La regla es que un valor que contiene `/` es una ruta: `/run/mcp-libgen.sock` y `./mcp.sock` son sockets, mientras que `:8080`, `127.0.0.1:8080` y — a propósito — un `mcp.sock` pelado son direcciones, porque un nombre pelado no se distingue de un nombre de host. Prefiérelo a TLS para un proxy en la misma máquina: no cifra el salto, lo elimina. No hay puente que espiar, ni salto por `docker-proxy`, ni puerto que otro proceso local pueda alcanzar, ni certificado que emitir o rotar.
+
+El socket se crea con `0660` — propietario y grupo, nada más —, así que el proxy llega compartiendo el grupo y no por ser cualquier cuenta local; `--http-socket-mode 0600` (o cualquier otro modo octal) lo cambia. nginx apunta un upstream directamente a la ruta:
+
+```nginx
+upstream libgen {
+    server unix:/run/mcp-libgen.sock;
+}
+
+server {
+    listen 443 ssl;
+    server_name mcp.example.org;
+
+    location / {
+        proxy_pass         http://libgen;
+        proxy_http_version 1.1;
+        proxy_buffering    off;   # la respuesta del POST es un flujo SSE real
+        proxy_read_timeout 1h;    # las descargas emiten progreso durante minutos
+    }
+}
+```
+
+Con Docker, los dos contenedores comparten el directorio del socket y no publican nada:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:latest
+    command: ["--http", "/run/mcp/libgen.sock"]
+    user: "10001:10001"
+    volumes:
+      - ./run:/run/mcp # aquí vive el socket; no se publica ningún puerto
+  proxy:
+    image: nginx:1.29-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./run:/run/mcp
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+```
+
+Los procesos worker del proxy tienen que correr en el grupo del socket (aquí el GID `10001`) para poder abrir un socket `0660` — en nginx eso es el segundo argumento de la directiva `user`, `user nginx 10001;`, porque nginx reinicializa sus grupos al soltar privilegios.
+
+<Aside type="caution">
+	Un socket unix sigue siendo un valor de `--http` no vacío, así que `download`
+	se queda en modo remoto (solo enlaces). Es lo correcto — un socket detrás de
+	un proxy atiende a clientes que no están en esta máquina —, pero "socket unix"
+	se lee como "local" y no lo es.
+</Aside>
+
+#### Terminar TLS en este proceso
+
+Cuando el proxy está en **otro** host sí hay un segmento de red que tiene que existir, y este servidor puede terminar TLS él mismo:
+
+```bash
+libgen-mcp --http 0.0.0.0:8443 --tls-cert /etc/ssl/mcp.crt --tls-key /etc/ssl/mcp.key
+```
+
+Las dos opciones o ninguna — un certificado sin clave aborta el arranque, igual que un archivo que no se puede leer o una clave que no case con su certificado, porque la pareja se carga al arrancar y no en el primer handshake. El listener exige TLS 1.2 o superior y negocia HTTP/2 con los clientes que lo ofrecen. Entonces toda respuesta lleva `Strict-Transport-Security: max-age=31536000; includeSubDomains`, que solo el endpoint que realmente terminó la conexión está en posición de afirmar.
+
+Si el certificado viene de una CA privada, hay que apuntar el proxy de delante a esa CA — en nginx, `proxy_ssl_verify on;` **junto con** `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` y un `proxy_ssl_name` que case con el certificado. nginx no verifica por defecto los certificados de los upstream, así que dejar `proxy_ssl_verify` desactivado oculta una cadena mala, y activarlo sin el archivo de la CA hace fallar todas las peticiones.
 
 Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de entorno que puedes fijar en cualquiera de estos casos, y [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo funcionan los transportes.
 

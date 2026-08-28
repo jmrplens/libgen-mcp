@@ -1,6 +1,7 @@
 /libgen-mcp
 /probe
 /server
+/server.exe
 /eval
 /gen_llms
 /gen_lhm_manifest
