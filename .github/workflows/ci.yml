@@ -1,14 +1,18 @@
 # CI pipeline for libgen-mcp
 #
-# Runs on: pull requests to main, pushes to main
+# Runs on: every pull request whatever its base branch, pushes to main
 # Jobs: test (+coverage gate), build, golangci-lint, godoc, govulncheck, markdown,
 #       hadolint, docker build (PR + Docker changes only), docs-site (Astro lint + a11y-less checks)
 
 name: CI
 
 on:
+  # Deliberately unfiltered by base branch. A stacked pull request is based on
+  # the branch below it rather than on main, so a `branches: [main]` filter
+  # silently gives every layer but the bottom one no CI at all — the checks do
+  # not fail, they never run, which reads as "nothing to report". Pushes stay
+  # filtered: a branch that is not yet a pull request has nothing to gate.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
