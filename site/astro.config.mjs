@@ -311,6 +311,7 @@ const jsonLd = JSON.stringify({
 				"https://hub.docker.com/r/jmrplens/libgen-mcp",
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
+				"https://verifymcp.io/servers/jmrplens-libgen-mcp/libgen",
 			],
 		},
 		{
