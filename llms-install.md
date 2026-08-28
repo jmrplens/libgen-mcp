@@ -52,7 +52,7 @@ claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
 A global install works too, and puts `libgen-mcp` on the `PATH`:
 
 ```bash
-npm install -g @jmrp.io/libgen-mcp
+npm install -g @jmrp.io/libgen-mcp   # or: pnpm add -g @jmrp.io/libgen-mcp
 ```
 
 ### Method B: Native binary (no dependencies at all)
