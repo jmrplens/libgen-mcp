@@ -13,6 +13,9 @@ ignores:
   # regenerated and checked. It is a machine artifact, not prose.
   - cmd/eval/testdata/latest-run.md
   - "**/node_modules/**"
+  # Generated per-platform npm packages: each README is emitted by
+  # scripts/build-npm.mjs at publish time and never committed.
+  - "npm/packages/**"
   - "**/dist/**"
   - "**/.astro/**"
   - docs/superpowers

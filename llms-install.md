@@ -22,10 +22,48 @@ there is nothing to authenticate — skip straight to installation.
 
 ## Step 1 — Choose an install method
 
-### Method A: Native binary (recommended — no dependencies)
+### Method A: npm / npx (shortest path when Node is present)
+
+If `node --version` reports v18 or newer, this is the least work: the package
+carries the same prebuilt binaries as Method B, and npm installs only the one
+matching the user's OS and CPU. Nothing is compiled and no script runs at
+install time. Below v18, use Method B.
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "npx",
+      "args": ["-y", "@jmrp.io/libgen-mcp"]
+    }
+  }
+}
+```
+
+For VS Code / GitHub Copilot, use the `servers` key with an explicit
+`"type": "stdio"` and the same `command`/`args`.
+
+**Claude Code CLI one-liner**:
+
+```bash
+claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
+```
+
+A global install works too:
+
+```bash
+npm install -g @jmrp.io/libgen-mcp   # or: pnpm add -g @jmrp.io/libgen-mcp
+```
+
+It places `libgen-mcp` in the package manager's global binary directory, which
+is only callable by name if that directory is on the user's `PATH`
+(`npm config get prefix` for npm, `pnpm setup` for pnpm). If it is not, use the
+`npx` form above or an absolute `command` path.
+
+### Method B: Native binary (no dependencies at all)
 
 A single static executable: no Docker, no Go, nothing else to install. If you
-cannot determine the user's OS and architecture, use Docker (Method B) instead.
+cannot determine the user's OS and architecture, use Docker (Method C) instead.
 
 1. Download the binary for the user's platform from the latest release at
    `https://github.com/jmrplens/libgen-mcp/releases/latest`. Asset names:
@@ -61,7 +99,7 @@ For VS Code / GitHub Copilot, use the `servers` key with an explicit
 claude mcp add libgen -- /usr/local/bin/libgen-mcp
 ```
 
-### Method B: Docker (no download; pulls on first run)
+### Method C: Docker (no download; pulls on first run)
 
 Requires Docker installed and running. Verify with `docker --version`. The image
 is pulled automatically on first run.
@@ -137,14 +175,14 @@ Full reference: <https://jmrp.io/docs/libgen-mcp/configuration/>
 
 ## Troubleshooting
 
-- **Docker: `docker: command not found`** — use Method A (native binary), the
-  recommended default anyway.
+- **Docker: `docker: command not found`** — use Method A (npm/npx) if Node is
+  installed, or Method B (native binary), which needs nothing at all.
 - **No search results / parse errors** — a mirror may be down or have changed
   layout. Mirrors fail over automatically; retry, or pin a known-good one with
   `LIBGEN_MIRROR`. Set `LIBGEN_MCP_LOG_LEVEL=debug` to trace per-mirror attempts.
 - **Downloads not appearing on the host (Docker)** — files land inside the
   container by default; mount a volume and set `LIBGEN_MCP_DOWNLOAD_DIR` (see the
-  note under Method A).
+  note under Method C).
 - **Article DOI lookups rate-limited** — set `LIBGEN_MCP_UNPAYWALL_EMAIL` to the
   user's own address to be a good API citizen.
 

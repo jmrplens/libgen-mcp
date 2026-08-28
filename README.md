@@ -5,6 +5,7 @@
 <p align="center">
 
 [![GitHub Release](https://img.shields.io/github/v/release/jmrplens/libgen-mcp?style=flat&logo=github&label=Release)](https://github.com/jmrplens/libgen-mcp/releases/latest)
+[![npm](https://img.shields.io/npm/v/%40jmrp.io%2Flibgen-mcp?style=flat&logo=npm&label=npm)](https://www.npmjs.com/package/@jmrp.io/libgen-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Windows%20%7C%20Linux%20%7C%20macOS-amd64%20%26%20arm64-lightgrey?style=flat&logo=windows-terminal&logoColor=white)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_libgen-mcp2&metric=alert_status)](https://sonarcloud.io/summary/overall?id=jmrplens_libgen-mcp2)
@@ -37,9 +38,29 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 ## Quick start
 
-The lowest-friction path is **Docker — no install, no Go, nothing to manage**. Pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
+The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node 18 or newer, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
 
 Then just ask your assistant: _"Search for the Rust book."_
+
+### Run it with `npx` (no install)
+
+The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp) and needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: npm downloads only the platform package matching your OS and CPU, nothing is compiled, and no script runs at install time.
+
+```bash
+npx @jmrp.io/libgen-mcp              # run it, no install
+npm install -g @jmrp.io/libgen-mcp   # or install it globally
+pnpm add -g @jmrp.io/libgen-mcp      # …with pnpm
+```
+
+Most MCP clients can launch it this way directly:
+
+```json
+{
+  "mcpServers": {
+    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
+  }
+}
+```
 
 ### Try it without installing anything
 

@@ -234,11 +234,24 @@ export function toMarkdown(source, labels, schema, chain) {
 	// A tab set has no Markdown equivalent, so each tab becomes a labelled
 	// section. Dropping the labels would silently merge alternatives that are
 	// meant to be read one instead of the other.
-	text = text.replace(/<\/?Tabs[^>]*>/g, "");
-	text = text.replace(
-		/<TabItem([^>]*)>([\s\S]*?)<\/TabItem>/g,
-		(_, tag, body) => `#### ${attr(tag, "label") ?? ""}\n${body.trim()}\n`,
-	);
+	//
+	// Tab sets nest — getting-started offers an npx/npm/pnpm choice inside its
+	// npm install method — so the innermost pair is rendered first and each pass
+	// works one level outwards. A single non-greedy pass would instead pair an
+	// outer <TabItem> with an inner </TabItem>, leaving the outer close tag in
+	// the output and shipping JSX in the Markdown copy. Every pass removes at
+	// least one tag, so the loop terminates.
+	// The indentation is taken with the tag: a nested <Tabs> is indented, and
+	// leaving its whitespace behind would emit a line of blanks that the
+	// blank-line collapse below cannot see.
+	text = text.replace(/[ \t]*<\/?Tabs[^>]*>/g, "");
+	const tabItem = "<TabItem([^>]*)>((?:(?!<TabItem)[\\s\\S])*?)</TabItem>";
+	while (new RegExp(tabItem).test(text)) {
+		text = text.replace(
+			new RegExp(tabItem, "g"),
+			(_, tag, body) => `#### ${attr(tag, "label") ?? ""}\n${body.trim()}\n`,
+		);
+	}
 
 	text = text.replace(/<LinkCard([^>]*)\/>/g, (_, tag) => {
 		const title = attr(tag, "title") ?? "";
