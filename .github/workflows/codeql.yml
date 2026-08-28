@@ -13,8 +13,10 @@ name: CodeQL
 on:
   push:
     branches: [main]
+  # Unfiltered, for the same reason as ci.yml: a stacked pull request is based
+  # on the branch below it, and a base-branch filter would leave every layer
+  # above the bottom one unanalyzed.
   pull_request:
-    branches: [main]
   schedule:
     - cron: "26 14 * * 2"
 
