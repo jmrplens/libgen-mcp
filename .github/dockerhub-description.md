@@ -53,7 +53,7 @@ Images are multi-arch (`linux/amd64`, `linux/arm64`), published for every releas
 
 ## Try it without installing anything
 
-A public instance runs at **`https://mcp.jmrp.io/libgen`** — no account, no key, nothing to install. It is stateless streamable HTTP: `POST` is the transport, a `GET` answers `405` by design, and `/health` answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`.
+A public instance runs at **`https://mcp.jmrp.io/libgen`** — no account, no key, nothing to install. It is stateless streamable HTTP: `POST` is the transport, a `GET` on the endpoint itself answers `405` by design (any path the server does not serve answers `404`), and `/health` answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`.
 
 ## Responsible use
 

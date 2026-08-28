@@ -247,6 +247,27 @@ Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así
 
 Son los logs de diagnóstico del propio servidor, escritos directamente en stderr. No son la capacidad `logging` de MCP — esa capacidad está obsoleta (SEP-2577), este servidor no declara ningún handler para ella, y ninguna línea de log llega nunca a un cliente como notificación MCP.
 
+## Todas las rutas HTTP responden 404 (despliegues con `--http`)
+
+<Facts>
+	<Fact kind="symptom">
+		Un servidor arrancado con `--http` responde `404` y `{"error":"not found","mcp_endpoint":"/"}` al cliente MCP, a `/health` o a ambos — en una ruta que antes funcionaba.
+	</Fact>
+	<Fact kind="meaning">
+		El endpoint MCP se monta en una ruta concreta y no como comodín, así que una petición que no casa con ninguna ruta montada da `404` en lugar del `405` engañoso que devolvía el comodín. Hay dos configuraciones que lo provocan: un proxy inverso que reenvía su prefijo — `https://example.org/libgen` redirigido aquí sin quitar `/libgen`, mientras que las rutas del servidor cuelgan de la raíz — o un `--http-path` con un prefijo distinto del que llega realmente en las peticiones, con el que `/health` en la raíz es un `404` como cualquier otra ruta.
+	</Fact>
+	<Fact kind="fixes">
+		El cuerpo del 404 nombra la ruta que este proceso sirve de verdad:
+
+    	- Lee su campo `mcp_endpoint` y compáralo con la ruta con la que llegó la petición — eso lo tiene el log de acceso del proxy, la URL de tu cliente puede que no.
+    	- Después elige una capa, nunca las dos: quita el prefijo en el proxy (en nginx, un `proxy_pass` cuya URI termine en `/`) o monta el servidor bajo él con `--http-path=/libgen`.
+    	- Apunta las sondas de contenedores y balanceadores a la ruta de salud montada, que se mueve con `--http-path` — `/libgen/health` en ese ejemplo.
+    	- Un `405` con `Allow: POST` es otro fallo distinto: la ruta es correcta y el método no. El endpoint MCP solo acepta `POST`.
+    	- Si el proceso aborta al arrancar quejándose de `--http-path`, el valor lleva query, fragmento, un segmento `..` o escapes porcentuales. Se rechaza a propósito — un servidor montado en una ruta que nunca puede casar respondería `404` a todo, y eso parece un fallo del proxy.
+    </Fact>
+
+</Facts>
+
 ## Espacio en disco
 
 <Facts>

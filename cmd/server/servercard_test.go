@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -241,7 +242,7 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil)
+	handler := newHTTPHandler(stub, raw, nil, "/")
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil)
 	rec := httptest.NewRecorder()
@@ -275,7 +276,7 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil)
+	handler := newHTTPHandler(stub, raw, nil, "/")
 
 	getRec := httptest.NewRecorder()
 	handler.ServeHTTP(getRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil))
@@ -311,24 +312,37 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 }
 
 // TestServerCardRouteAbsentWhenUnbuilt pins the failure path: a card that could
-// not be built must leave the route unmounted so the request falls through to
-// the MCP handler, rather than the server refusing to start or answering 200
-// with nothing in it. The CORS preflight is mounted with the card and must
-// disappear with it too: an OPTIONS route left behind would answer 204 for a
-// document that is not being served.
+// not be built must leave the route unmounted, rather than the server refusing
+// to start or answering 200 with nothing in it. The CORS preflight is mounted
+// with the card and must disappear with it too: an OPTIONS route left behind
+// would answer 204 for a document that is not being served.
+//
+// The status the unmounted route now answers is 404, not the teapot this used
+// to assert. Both are the same statement — "nothing serves this path" — but the
+// MCP handler is no longer the mux's catch-all, so an unserved path reaches
+// notFound instead of falling through to it. The old 405-shaped answer claimed
+// the route existed and that another method would work; neither is true of a
+// card that was never built.
 func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, nil, nil)
+	handler := newHTTPHandler(stub, nil, nil, "/")
 
-	for _, method := range []string{http.MethodGet, http.MethodOptions} {
-		req := httptest.NewRequestWithContext(t.Context(), method, serverCardPath, nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
+	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
+		for _, method := range []string{http.MethodGet, http.MethodOptions} {
+			req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusTeapot {
-			t.Errorf("%s status = %d, want the MCP handler to have seen it (%d)", method, rec.Code, http.StatusTeapot)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%s %s status = %d, want %d for a card that was never built",
+					method, path, rec.Code, http.StatusNotFound)
+			}
+			if rec.Body.String() == "" {
+				t.Errorf("%s %s answered %d with an empty body, want the not-found document",
+					method, path, rec.Code)
+			}
 		}
 	}
 }
@@ -427,5 +441,76 @@ func TestServerCardCarriesIcons(t *testing.T) {
 	}
 	if len(plain.Prompts) != 1 || plain.Prompts[0].Icons != nil {
 		t.Errorf("prompt icons = %+v, want none declared", plain.Prompts)
+	}
+}
+
+// TestServerCardOverridesCacheControl pins the ordering securityHeaders depends
+// on. The middleware writes on the way in, so a route that wants a different
+// value simply Sets its own over the top: the card states a lifetime a scanner
+// may honor, while the surface-wide no-store applies to everything else.
+//
+// Inverting the middleware to write after next.ServeHTTP would break this
+// silently — the card would go back to being refetched on every visit, and the
+// other four headers would still look right — so the four are asserted on the
+// very same response.
+func TestServerCardOverridesCacheControl(t *testing.T) {
+	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	handler := newHTTPHandler(teapotHandler(), raw, nil, "/")
+
+	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+		}
+		if got := sentHeader(rec).Get("Cache-Control"); got != "public, max-age=3600" {
+			t.Errorf("%s Cache-Control = %q, want the card's own lifetime rather than the middleware's no-store", path, got)
+		}
+		// Set over the top, not appended: two values here are two instructions,
+		// and a cache reading the first one wins by accident.
+		if values := sentHeader(rec).Values("Cache-Control"); len(values) != 1 {
+			t.Errorf("%s Cache-Control appears %d times (%q), want the override to replace it", path, len(values), values)
+		}
+		// The other four must survive the override on this same response.
+		assertSecurityHeaders(t, rec, "Cache-Control")
+	}
+}
+
+// TestServerCardRoutesServeIdenticalBytes pins the promise the two locations
+// make together. /server-card is where the ext-server-card extension moved the
+// document on 2026-06-08, and /.well-known/mcp/server-card.json is kept only
+// because scanners already fetch it — so a reader following either one must get
+// the same card. They close over one slice precisely so the older path cannot
+// become a quietly stale copy; this is what would fail if that stopped being
+// true.
+func TestServerCardRoutesServeIdenticalBytes(t *testing.T) {
+	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	handler := newHTTPHandler(teapotHandler(), raw, nil, "/")
+
+	bodies := make(map[string][]byte, 2)
+	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+		}
+		bodies[path] = rec.Body.Bytes()
+	}
+
+	if !bytes.Equal(bodies[serverCardPath], bodies[serverCardCurrentPath]) {
+		t.Errorf("the two card routes differ:\n%s = %s\n%s = %s",
+			serverCardPath, bodies[serverCardPath], serverCardCurrentPath, bodies[serverCardCurrentPath])
+	}
+	// And both are the bytes handed to the handler, not a re-serialization: the
+	// card is built once per process so the document cannot drift between reads.
+	if !bytes.Equal(bodies[serverCardCurrentPath], raw) {
+		t.Errorf("served card = %s, want the bytes buildServerCard produced", bodies[serverCardCurrentPath])
 	}
 }

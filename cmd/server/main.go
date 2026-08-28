@@ -12,8 +12,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -129,6 +131,7 @@ func mainWithExit() int {
 	stateless := flag.Bool("stateless", true, "stateless streamable HTTP (default; required for MCP protocol 2026-07-28): no Mcp-Session-Id, each POST self-contained, GET/DELETE return 405; use -stateless=false for legacy stateful sessions")
 	jsonResponse := flag.Bool("json-response", false, "return application/json responses instead of text/event-stream (SSE)")
 	maxBody := flag.Int64("max-request-body-bytes", 0, "maximum streamable HTTP request body size in bytes; 0 uses the SDK default (4 MiB)")
+	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	flag.Parse()
 
@@ -149,6 +152,14 @@ func mainWithExit() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Refused at startup rather than at the first request: a server mounted on a
+	// path it cannot match would answer 404 to everything, which looks like a
+	// proxy fault and is the hardest kind of misconfiguration to find.
+	if pathErr := validateBasePath(*httpPath); pathErr != nil {
+		log.Print(pathErr)
+		return 1
+	}
+
 	// Parsed before anything is served: a malformed origin fails startup rather
 	// than being dropped, because an operator who believes an origin is trusted
 	// and whose browser clients are refused anyway has nothing to look at.
@@ -166,6 +177,7 @@ func mainWithExit() int {
 		JSONResponse:        *jsonResponse,
 		MaxRequestBodyBytes: *maxBody,
 		TrustedOrigins:      trusted,
+		BasePath:            normalizeBasePath(*httpPath),
 	}
 	if err := run(ctx, *httpAddr, opts); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -211,6 +223,15 @@ func newMCPServer() *mcp.Server {
 	server.AddReceivingMiddleware(capguard.NoResources())
 	return server
 }
+
+// The content-type header and the media type this server answers most routes
+// with, named once because /health, the 404 and the legacy card location all
+// write the same pair and a typo in any of them is a body a strict client
+// refuses to parse rather than an error anything reports.
+const (
+	headerContentType = "Content-Type"
+	mediaTypeJSON     = "application/json"
+)
 
 // processStartTime marks when this process began serving.
 //
@@ -272,7 +293,7 @@ func newHealthResponse(startedAt, now time.Time) healthResponse {
 // number compiled in from VERSION, so a development build reports what it
 // actually is instead of a placeholder.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(headerContentType, mediaTypeJSON)
 	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
 }
 
@@ -421,65 +442,213 @@ func crossOriginProtected(trusted []string, next http.Handler) http.Handler {
 	return protection.Handler(next)
 }
 
-// newHTTPHandler mounts the MCP handler at / behind cross-origin protection and
-// sseNoBuffering, exposes GET /health, and serves the server card when one was
-// built. A nil card leaves both card routes unmounted, so the path falls
-// through to the MCP handler exactly as it did before.
-func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string) http.Handler {
+// securityHeaders sets the response headers this server is willing to state
+// about itself on every route, including the ones the layers beneath answer
+// themselves — a 403 from the cross-origin protection, a 204 preflight, the
+// SDK's 405, the 404 below.
+//
+// It sits outermost and writes on the way in, which is what makes that work: an
+// inner handler that never calls next has already had these headers put in the
+// map, and an inner handler that wants a different value simply Sets its own
+// over the top (the card's Cache-Control does exactly that). For the same reason
+// every header here is Set, never Add — the card also sets nosniff, and Add
+// would ship it twice.
+//
+// It deliberately does not touch Vary or any Access-Control-* header: three
+// handlers already own those, and a second writer there is how a browser ends up
+// rejecting a response that curl reports as fine.
+//
+// Strict-Transport-Security is absent on purpose. This server usually speaks
+// plain HTTP to a proxy or to localhost, where the header is either a claim it
+// cannot make or one that poisons the browser's HSTS cache for that host and
+// port. It is emitted only when this process terminates TLS itself.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		// Nothing this server returns is ever a page: no script, no style, no
+		// frame, no form. default-src 'none' says so, and frame-ancestors is
+		// the modern spelling of the X-Frame-Options above it.
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		// Tool results are per-request and a health probe is a point-in-time
+		// reading; neither is safe for a shared cache to replay. The card
+		// overrides this with its own lifetime.
+		h.Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// normalizeBasePath reduces a --http-path value to the form the route patterns
+// are built from: "" for the root, or "/prefix" with no trailing slash.
+//
+// It is lenient about how the value is written ("libgen", "/libgen", "/libgen/"
+// all mean the same mount) and strict about what it produces, so every caller
+// concatenates rather than deciding again whether a slash is needed.
+func normalizeBasePath(p string) string {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	if p == "" {
+		return ""
+	}
+	return "/" + p
+}
+
+// validateBasePath rejects a --http-path this server cannot mount on. A path
+// that is empty after normalization is the root, which is valid; anything
+// carrying a query, a fragment, a traversal segment or an escape is not, because
+// it would either never match a request or would match one the operator did not
+// mean.
+func validateBasePath(p string) error {
+	if strings.ContainsAny(p, "?#") {
+		return fmt.Errorf("--http-path %q must be a path, with no query or fragment", p)
+	}
+	base := normalizeBasePath(p)
+	if base == "" {
+		return nil
+	}
+	if base != path.Clean(base) {
+		return fmt.Errorf("--http-path %q must be a clean absolute path (got %q after cleaning)", p, path.Clean(base))
+	}
+	if u, err := url.Parse(base); err != nil || u.Path != base {
+		return fmt.Errorf("--http-path %q must not contain percent-escapes or a scheme", p)
+	}
+	return nil
+}
+
+// endpointPatterns lists the ServeMux patterns the MCP endpoint answers on for a
+// normalized base path.
+//
+// At the root that is "/{$}" — the exact-match wildcard — and nothing else,
+// which is the whole point of the change: mounting the MCP handler at "/" made
+// it a catch-all that answered every path, so an unknown route reported 405
+// ("wrong method for a route that exists") when the honest answer was 404.
+//
+// Under a prefix both "/prefix" and "/prefix/" are accepted, since a client
+// given a base URL may or may not keep the trailing slash and neither spelling
+// is a different endpoint.
+func endpointPatterns(base string) []string {
+	if base == "" {
+		return []string{"/{$}"}
+	}
+	return []string{base, base + "/{$}"}
+}
+
+// notFound answers a path this server does not serve, and names the one it does.
+//
+// The status is the point. Before this existed every unknown path reached the
+// MCP handler and came back 405 with Allow: POST, which asserted two things that
+// were not true — that the route exists, and that another method would work.
+// Scanners believed both: the hosted deployment answered 405 to OAuth discovery
+// probes for endpoints it does not implement, ninety-nine times a day.
+func notFound(base string) http.HandlerFunc {
+	endpoint := base
+	if endpoint == "" {
+		endpoint = "/"
+	}
+	body, err := json.Marshal(map[string]string{
+		"error":        "not found",
+		"mcp_endpoint": endpoint,
+	})
+	if err != nil {
+		// Two constant strings cannot fail to marshal; degrade rather than
+		// refuse to serve a 404 at all.
+		body = []byte(`{"error":"not found"}`)
+	}
+	body = append(body, '\n')
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(headerContentType, mediaTypeJSON)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write(body)
+	}
+}
+
+// serverCardPreflight answers a CORS preflight for either card route.
+//
+// The card's audience is browser-based registries and scanners, and a browser
+// discards a cross-origin response that carries no CORS header however public
+// the document is — so without this the card is readable by curl and by nothing
+// that would list this server. Allowing every origin gives away nothing: the
+// card is served unauthenticated and is byte-identical for every caller, so
+// there is no per-origin answer for a page to fish out.
+func serverCardPreflight(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(headerAllowOrigin, "*")
+	w.Header().Set(headerAllowMethods, "GET, OPTIONS")
+	// A plain fetch of the card is a simple request and never preflights, so
+	// this branch exists for the caller that adds a header of its own — a
+	// scanner stamping a request id, say. Its request is refused unless the
+	// preflight names that header back, and the browser sends the list to name:
+	// echoing it allows exactly what was asked for and nothing else, which a
+	// static list cannot do without guessing, and which "*" cannot do at all for
+	// a caller that sends credentials.
+	if want := r.Header.Get(headerRequestHeader); want != "" {
+		w.Header().Set(headerAllowHeaders, want)
+	}
+	// Echoed, therefore varying by it. Not by Origin: this answer is the same
+	// "*" for every caller.
+	w.Header().Set("Vary", headerRequestHeader)
+	// Without a lifetime the browser preflights again on every fetch, which for
+	// a document that only changes with a release is two round-trips where one
+	// would do.
+	w.Header().Set(headerMaxAge, "3600")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// serverCardGET serves the card bytes under the given media type. Both routes
+// close over the same slice, so the two locations cannot answer differently.
+func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(headerContentType, mediaType)
+		w.Header().Set(headerAllowOrigin, "*")
+		// The card is fetched by scanners that may hand the bytes to a browser;
+		// nosniff keeps it read as the JSON it says it is. It is set by
+		// securityHeaders too — repeated here so the route stays correct if it
+		// is ever mounted somewhere else.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// The card only changes with a release, so a scanner may hold it. This
+		// deliberately overrides the no-store securityHeaders sets for the rest
+		// of the surface.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = w.Write(cardJSON)
+	}
+}
+
+// newHTTPHandler mounts every route this server answers under opts.BasePath,
+// behind the security headers, and answers 404 for everything else.
+//
+// A nil card leaves the card routes unmounted, in which case those paths are
+// simply not served — unlike before, when an unmounted card fell through to the
+// MCP handler and answered 405.
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string) http.Handler {
+	base := normalizeBasePath(basePath)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", healthHandler)
+	mux.HandleFunc("GET "+base+"/health", healthHandler)
 	if cardJSON != nil {
-		// The card's audience is browser-based registries and scanners, and a
-		// browser discards a cross-origin response that carries no CORS header
-		// however public the document is — so without this the card is
-		// readable by curl and by nothing that would list this server.
-		// Allowing every origin gives away nothing: the card is served
-		// unauthenticated and is byte-identical for every caller, so there is
-		// no per-origin answer for a page to fish out.
-		mux.HandleFunc("OPTIONS "+serverCardPath, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set(headerAllowOrigin, "*")
-			w.Header().Set(headerAllowMethods, "GET, OPTIONS")
-			// A plain fetch of the card is a simple request and never
-			// preflights, so this branch exists for the caller that adds a
-			// header of its own — a scanner stamping a request id, say. Its
-			// request is refused unless the preflight names that header back,
-			// and the browser sends the list to name: echoing it allows
-			// exactly what was asked for and nothing else, which a static list
-			// cannot do without guessing, and which "*" cannot do at all for a
-			// caller that sends credentials.
-			if want := r.Header.Get(headerRequestHeader); want != "" {
-				w.Header().Set(headerAllowHeaders, want)
-			}
-			// Echoed, therefore varying by it — see the MCP preflight above.
-			// Not by Origin: this answer is the same "*" for every caller.
-			w.Header().Set("Vary", headerRequestHeader)
-			// Without a lifetime the browser preflights again on every fetch,
-			// which for a document that only changes with a release is two
-			// round-trips where one would do.
-			w.Header().Set(headerMaxAge, "3600")
-			w.WriteHeader(http.StatusNoContent)
-		})
-		mux.HandleFunc("GET "+serverCardPath, func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set(headerAllowOrigin, "*")
-			// The card is fetched by scanners that may hand the bytes to a
-			// browser; nosniff keeps it read as the JSON it says it is. The
-			// rest of the usual hardening set — CSP, X-Frame-Options — guards
-			// against rendering and framing, neither of which happens to a
-			// document that is never a page.
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			// The card only changes with a release, so a scanner may hold it.
-			w.Header().Set("Cache-Control", "public, max-age=3600")
-			_, _ = w.Write(cardJSON)
-		})
+		for _, c := range []struct {
+			path      string
+			mediaType string
+		}{
+			{serverCardPath, mediaTypeJSON},
+			{serverCardCurrentPath, serverCardMediaType},
+		} {
+			mux.HandleFunc("OPTIONS "+base+c.path, serverCardPreflight)
+			mux.HandleFunc("GET "+base+c.path, serverCardGET(cardJSON, c.mediaType))
+		}
 	}
 	// CORS outermost so a preflight is answered before the protection sees it,
-	// and the protection still guards the POST that follows. The card routes
-	// are mounted separately and carry their own permissive CORS: the card is
-	// a public document with no per-origin answer to fish out, whereas this
+	// and the protection still guards the POST that follows. The card routes are
+	// mounted separately and carry their own permissive CORS: the card is a
+	// public document with no per-origin answer to fish out, whereas this
 	// endpoint executes tool calls, so its trust is named rather than open.
-	mux.Handle("/", browserCORS(trusted, crossOriginProtected(trusted, sseNoBuffering(mcpHandler))))
-	return mux
+	endpoint := browserCORS(trusted, crossOriginProtected(trusted, sseNoBuffering(mcpHandler)))
+	for _, pattern := range endpointPatterns(base) {
+		mux.Handle(pattern, endpoint)
+	}
+	// The 404 wears the CORS layer too. A browser shown a bare 404 on a
+	// cross-origin request reports a CORS failure instead of the status, which
+	// hides exactly the mistake — a mistyped path — that the 404 exists to name.
+	mux.Handle("/", browserCORS(trusted, notFound(base)))
+	return securityHeaders(mux)
 }
 
 func run(ctx context.Context, httpAddr string, opts transport.Options) error {
@@ -575,7 +744,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	}
 
 	srv := &http.Server{
-		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins),
+		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

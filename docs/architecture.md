@@ -317,11 +317,13 @@ The server speaks MCP over one of two transports, selected at startup:
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
   `status`, `version`, `commit`, `started_at` and `uptime_seconds` while the
   server is serving — handy for container and load-balancer health checks. It
-  also publishes a server card at `GET /.well-known/mcp/server-card.json`:
+  also publishes a server card at `GET /server-card` — and, for the scanners that
+  already fetch it, at the legacy `GET /.well-known/mcp/server-card.json` — carrying
   `serverInfo`, the `capabilities` the handshake negotiates, an `authentication`
   block, and the full `tools` and `prompts` listings, served with
   `Access-Control-Allow-Origin: *` so a directory or scanner — a browser-based
-  one included — can read the surface without opening an MCP session.
+  one included — can read the surface without opening an MCP session. Those routes
+  and the MCP endpoint are the whole HTTP surface: every other path answers `404`.
 
 Both transports share the same tools, HTTP client, and download pipeline; only the
 request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
@@ -336,20 +338,68 @@ The HTTP transport is **stateless by default**
 ([SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567)): the
 server neither reads nor sets `Mcp-Session-Id`, every POST is a self-contained request served
 by a temporary session, and `GET`/`DELETE` on the MCP endpoint answer
-`405 Method Not Allowed` with `Allow: POST`. `GET /health` is a separate route and is
-unaffected. Stateless is what MCP protocol `2026-07-28` requires over HTTP; the session-based
-transport negotiates `2025-11-25` or older.
+`405 Method Not Allowed` with `Allow: POST`. That answer belongs to the endpoint and to
+nothing else: `GET /health` is a separate route and is unaffected, and a path this server does
+not serve answers `404` rather than `405` (see below). Stateless is what MCP protocol
+`2026-07-28` requires over HTTP; the session-based transport negotiates `2025-11-25` or
+older.
 
 It suits this server: there is no authentication and no per-client state, so a single shared
 MCP server answers every request and a session bought nothing. Sessionless also means any
 number of replicas can sit behind a plain round-robin load balancer with no sticky routing.
 
-| Flag                       | Default   | What it does                                                                                                                                                                                                                                                                                               |
-| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--stateless`              | `true`    | Serve sessionless streamable HTTP. `--stateless=false` restores the legacy session transport, and clients then negotiate protocol `2025-11-25` or older.                                                                                                                                                   |
-| `--json-response`          | `false`   | Return `application/json` response bodies instead of `text/event-stream` (SSE).                                                                                                                                                                                                                            |
-| `--max-request-body-bytes` | `0`       | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely.                                                                                                                               |
-| `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent. |
+| Flag                       | Default   | What it does                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--stateless`              | `true`    | Serve sessionless streamable HTTP. `--stateless=false` restores the legacy session transport, and clients then negotiate protocol `2025-11-25` or older.                                                                                                                                                                                                                                                               |
+| `--json-response`          | `false`   | Return `application/json` response bodies instead of `text/event-stream` (SSE).                                                                                                                                                                                                                                                                                                                                        |
+| `--max-request-body-bytes` | `0`       | Cap request bodies in bytes; a request over the cap gets `413`. `0` uses the SDK default of 4 MiB. A negative value is rejected at startup — it would lift the cap entirely.                                                                                                                                                                                                                                           |
+| `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent.                                                                                                             |
+| `--http-path`              | `/`       | URL path prefix every route is mounted under: the MCP endpoint, `GET /health` and both server-card paths. `--http-path=/libgen` makes the endpoint `POST /libgen` and the probe `GET /libgen/health`; `libgen`, `/libgen` and `/libgen/` all mean the same mount. Set it when a reverse proxy forwards its prefix instead of stripping it. A query, a fragment, a traversal segment or a percent-escape fails startup. |
+
+**Routes, and a `404` for everything else.** The MCP endpoint is mounted on its own path
+rather than as a catch-all, alongside `GET /health` and the two server-card routes; every
+other path answers `404` with `{"error":"not found","mcp_endpoint":"…"}`, naming the endpoint
+the caller should have asked for. Until the routes were split out the MCP handler answered
+everything, so a probe for something this server does not implement — OAuth discovery is the
+usual one, and the hosted deployment fielded about a hundred a day — came back
+`405 Method Not Allowed` with `Allow: POST`, asserting two things that were not true: that the
+route exists, and that another method would work. The `405` is still exactly right on the MCP
+endpoint itself, where a `GET` or a `DELETE` is a real method error. The `404` carries the same
+CORS answer as the endpoint, because a browser shown a bare cross-origin `404` reports a CORS
+failure instead of the status, hiding the mistyped path the `404` exists to name.
+
+**Mounting under a prefix.** `--http-path` moves the whole route set — the endpoint, `/health`
+and both card paths — under a prefix, for a reverse proxy that forwards its prefix verbatim
+instead of rewriting it away. Under `--http-path=/libgen` the endpoint is `POST /libgen` (and
+`POST /libgen/`, since a client handed a base URL may keep the trailing slash or drop it), the
+probe is `GET /libgen/health`, and `/health` at the root is a `404` like anything else;
+`libgen`, `/libgen` and `/libgen/` all mean the same mount. A value carrying a query, a
+fragment, a traversal segment or a percent-escape is refused at startup rather than at the
+first request — a server mounted on a path it can never match answers `404` to everything,
+which reads as a proxy fault and is the hardest kind of misconfiguration to find.
+
+**Security headers.** Every response carries the same five headers — tool results, the health
+probe, the card, the `403`, the preflight `204`, the `405` and the `404` alike — set by the
+outermost middleware on the way in, so a layer beneath it that answers on its own still carries
+them:
+
+| Header                    | Value                                        |
+| ------------------------- | -------------------------------------------- |
+| `X-Content-Type-Options`  | `nosniff`                                    |
+| `X-Frame-Options`         | `DENY`                                       |
+| `Referrer-Policy`         | `no-referrer`                                |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` |
+| `Cache-Control`           | `no-store`                                   |
+
+Nothing this server returns is ever a page — no script, no style, no frame, no form — so that
+policy describes the surface rather than restricting it. The card overrides the cache header
+with its own `public, max-age=3600`, since it only changes with a release.
+`Strict-Transport-Security` is deliberately absent: this process usually speaks plain HTTP to a
+proxy or to localhost, where the header is either a claim it cannot make or one that poisons
+the browser's HSTS cache for that host and port — a deployment that terminates TLS sets it at
+the edge, which is the layer that knows. The middleware touches neither `Vary` nor any
+`Access-Control-*` header: those have one writer each, for the reason the CORS note below
+gives.
 
 **Request cancellation.** A client that disconnects mid-call cancels the handler's context,
 so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
@@ -469,20 +519,24 @@ satisfy. See
 Everything this server puts on the wire that the MCP schema does not define, and the slot it
 occupies:
 
-| What                                                       | Where it rides                          | Slot                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The server card document                                   | `GET /.well-known/mcp/server-card.json` | A vendor document, never a JSON-RPC message. Not a specification: [SEP-1649](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1649), the draft it descends from, is closed, and its successor SEP-2127 relocates the card and rejects `.well-known/mcp` paths. The standard pre-connection channel is `server/discover`, which this server also answers. |
-| `next_steps`, and the "💡 Next steps" block that mirrors it | tool result                             | Result content — a field of the tool's own `outputSchema`, not a protocol extension.                                                                                                                                                                                                                                                                                      |
-| Markdown where the serialized JSON would go                | tool result `content`                   | A deliberate deviation from a SHOULD: the tools spec asks a tool returning structured content to also return the serialized JSON in a text block. This one returns Markdown instead — that channel is for the person reading the transcript, and repeating the JSON would double every payload for a reader that already has it in `structuredContent`.                   |
-| `GET /health` and its JSON body                            | its own HTTP path                       | Outside MCP entirely: the transport spec governs the MCP endpoint, not the rest of the origin.                                                                                                                                                                                                                                                                            |
-| The icon entry order                                       | icon arrays                             | See [Icons](#icons); the fields themselves are standard.                                                                                                                                                                                                                                                                                                                  |
+| What                                                       | Where it rides                                                             | Slot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The server card document                                   | `GET /server-card`, and the legacy `GET /.well-known/mcp/server-card.json` | A vendor document, never a JSON-RPC message. Not a specification: [SEP-1649](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1649), the draft it descends from, is closed, and its successor SEP-2127 relocates the card and rejects `.well-known/mcp` paths — which is why `/server-card`, served as `application/mcp-server-card+json`, is the current location and the `.well-known` one is kept only because scanners already fetch it. Both answer the same bytes. The standard pre-connection channel is `server/discover`, which this server also answers. |
+| `next_steps`, and the "💡 Next steps" block that mirrors it | tool result                                                                | Result content — a field of the tool's own `outputSchema`, not a protocol extension.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Markdown where the serialized JSON would go                | tool result `content`                                                      | A deliberate deviation from a SHOULD: the tools spec asks a tool returning structured content to also return the serialized JSON in a text block. This one returns Markdown instead — that channel is for the person reading the transcript, and repeating the JSON would double every payload for a reader that already has it in `structuredContent`.                                                                                                                                                                                                                             |
+| `GET /health` and its JSON body                            | its own HTTP path                                                          | Outside MCP entirely: the transport spec governs the MCP endpoint, not the rest of the origin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| The icon entry order                                       | icon arrays                                                                | See [Icons](#icons); the fields themselves are standard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 Nothing else is ours, and the gaps are the point. There is not one vendor `_meta` key on the
 wire — the only `_meta` is the SDK's own `io.modelcontextprotocol/serverInfo` (SEP-2575). The
 binary requires no custom request header, and every response header it sets is a
-standard one: `Content-Type`, the card's `Cache-Control` and CORS pair, and the
-transport spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None
-of them is vendor-defined. Tool schemas use standard JSON Schema
+standard one: `Content-Type`; the five security headers every response carries
+(`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Content-Security-Policy` and `Cache-Control`, the last of which the card
+overrides with a lifetime of its own); the card's CORS pair; and the transport
+spec's `X-Accel-Buffering: no` on a response that negotiates SSE. None of them is
+vendor-defined — the security set is as standard as the rest, understood by every
+browser that reads it, and named in a spec that is not ours. Tool schemas use standard JSON Schema
 vocabulary only; `annotations` carries the five standard `ToolAnnotations` fields;
 `ttlMs`/`cacheScope` are SEP-2549 fields set only on the result types that define them; and
 the download consent question uses the standard SEP-2322 `InputRequests`/`InputResponses`.

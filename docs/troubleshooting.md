@@ -248,6 +248,40 @@ These are the server's own diagnostic logs, written straight to stderr. They are
 `logging` capability — that capability is deprecated (SEP-2577), this server declares no
 handler for it, and no log line ever reaches a client as an MCP notification.
 
+## Every HTTP path answers 404 (`--http` deployments)
+
+**Symptom.** A server started with `--http` answers `404` and
+`{"error":"not found","mcp_endpoint":"/"}` to the MCP client, to `/health`, or to both — on a
+path that used to work.
+
+**Meaning.** The MCP endpoint is mounted on one path rather than as a catch-all, so a request
+that matches no mounted route is a `404` instead of the misleading `405` a catch-all used to
+return. Two configurations produce it:
+
+- **A reverse proxy that forwards its prefix.** If `https://example.org/libgen` is proxied to
+  this server without `/libgen` being stripped, the server sees `POST /libgen`, and by
+  default its routes live at the root.
+- **`--http-path` set to a prefix requests do not actually arrive with.** Under
+  `--http-path=/libgen` the routes are `POST /libgen` and `GET /libgen/health`, and `/health`
+  at the root is a `404` like anything else.
+
+**Fixes.**
+
+- Read the `mcp_endpoint` field in the 404 body: it names the path this process serves the
+  MCP endpoint on. Compare it with the path the request actually arrived with — the proxy's
+  access log has that, your client's URL may not.
+- Then pick one layer, never both: either strip the prefix at the proxy (in nginx, a
+  `proxy_pass` whose URI ends in `/`), or mount the server under it with
+  `--http-path=/libgen`.
+- Point container and load-balancer probes at the mounted health route, which moves with
+  `--http-path` (`/libgen/health` in the example above).
+- A `405` with `Allow: POST` is a different fault: the path is right and the method is wrong.
+  The MCP endpoint takes `POST` only.
+- If the process exits at startup complaining about `--http-path`, the value carries a query,
+  a fragment, a `..` segment or a percent-escape. That is refused deliberately — a server
+  mounted on a path it can never match would answer `404` to everything, which reads as a
+  proxy fault.
+
 ## Disk space
 
 **Symptom.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.

@@ -7,11 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +95,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub, nil, nil)
+	handler := newHTTPHandler(stub, nil, nil, "/")
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -134,8 +136,13 @@ func TestHealthEndpoint(t *testing.T) {
 		}
 	})
 
+	// The endpoint is the mounted path itself, not "any path that is not
+	// /health": the MCP handler used to be the mux's catch-all, and this
+	// subtest used to prove it by posting to /mcp. It now posts to the route
+	// that actually exists, because /mcp is a path this server does not serve
+	// and answers 404 (see TestNewHTTPHandlerRoutes).
 	t.Run("delegates to mcp handler", func(t *testing.T) {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if got := rec.Body.String(); got != "mcp" {
@@ -471,7 +478,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/"))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -1074,4 +1081,447 @@ func TestCrossOriginProtectedRejectsAnUnvalidatedOrigin(t *testing.T) {
 		}
 	}()
 	crossOriginProtected([]string{"not-an-origin"}, http.NotFoundHandler())
+}
+
+// teapotHandler stands in for the MCP handler in the routing tests. It answers
+// a status nothing else in the mux produces, so "this request reached the MCP
+// endpoint" is unambiguous rather than inferred from a body.
+func teapotHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+}
+
+// wantSecurityHeaders is the exact set securityHeaders states about this server
+// on every response, written once so each assertion below checks the same
+// contract instead of its own copy of it.
+var wantSecurityHeaders = map[string]string{
+	"X-Content-Type-Options":  "nosniff",
+	"X-Frame-Options":         "DENY",
+	"Referrer-Policy":         "no-referrer",
+	"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+	"Cache-Control":           "no-store",
+}
+
+// sentHeader returns the response headers as of WriteHeader — what a client
+// actually receives.
+//
+// rec.Header() would be the wrong thing to assert on here: it is the live map,
+// and it keeps accepting writes long after the status line has gone out, so a
+// middleware that set its headers on the way back would still look correct
+// through it while sending a client nothing.
+func sentHeader(rec *httptest.ResponseRecorder) http.Header {
+	// The recorder's Result carries a NopCloser over an in-memory buffer, so
+	// there is nothing here to leak by not closing.
+	return rec.Result().Header
+}
+
+// assertSecurityHeaders fails the test for every header in wantSecurityHeaders
+// that rec did not send exactly once with the expected value, and for a
+// Strict-Transport-Security this process is in no position to promise.
+//
+// overridden names the headers the route under test deliberately replaces — the
+// card's Cache-Control is the only one — which the caller checks itself.
+func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder, overridden ...string) {
+	t.Helper()
+	h := sentHeader(rec)
+	for name, want := range wantSecurityHeaders {
+		if slices.Contains(overridden, name) {
+			continue
+		}
+		if got := h.Get(name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+		// Set, never Add. The card route states nosniff itself, so an Add would
+		// ship that header twice on exactly the response a scanner reads.
+		if values := h.Values(name); len(values) > 1 {
+			t.Errorf("%s appears %d times (%q), want exactly one", name, len(values), values)
+		}
+	}
+	// Absent on purpose: this process usually speaks plain HTTP to a proxy or to
+	// localhost, where HSTS is either a claim it cannot make or one that poisons
+	// the browser's cache for that host and port.
+	if got := h.Get("Strict-Transport-Security"); got != "" {
+		t.Errorf("Strict-Transport-Security = %q, want none: this server does not terminate TLS", got)
+	}
+}
+
+// securedRequest is one request whose response must carry the security headers,
+// paired with the status written by whichever layer answers it.
+type securedRequest struct {
+	name       string
+	method     string
+	path       string
+	header     http.Header
+	wantStatus int
+}
+
+// TestSecurityHeadersAreSetOnEveryResponse pins the middleware's placement, not
+// just its contents. It sits outermost and writes on the way in, so a layer that
+// answers without ever calling next — the 403 from the cross-origin protection,
+// the 204 preflight, the 404 for an unserved path — still ships the headers.
+// Asserting only on a 200 would pass against a middleware that wrote them on the
+// way out and lost every one of those responses.
+func TestSecurityHeadersAreSetOnEveryResponse(t *testing.T) {
+	const trusted = "https://claude.ai"
+	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/")
+
+	cases := []securedRequest{
+		{
+			name:       "health, written by this package",
+			method:     http.MethodGet,
+			path:       "/health",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "mcp endpoint, written by the handler beneath",
+			method:     http.MethodPost,
+			path:       "/",
+			wantStatus: http.StatusTeapot,
+		},
+		{
+			name:       "404 for a path this server does not serve",
+			method:     http.MethodGet,
+			path:       "/nope",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:   "204 preflight, answered by browserCORS",
+			method: http.MethodOptions,
+			path:   "/",
+			header: http.Header{
+				"Origin":            {trusted},
+				headerRequestMethod: {http.MethodPost},
+				headerRequestHeader: {"content-type"},
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:   "403 refusal, answered by the cross-origin protection",
+			method: http.MethodPost,
+			path:   "/",
+			header: http.Header{
+				"Origin":         {"https://evil.invalid"},
+				"Sec-Fetch-Site": {"cross-site"},
+			},
+			wantStatus: http.StatusForbidden,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
+			maps.Copy(req.Header, tc.header)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body %q)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+			assertSecurityHeaders(t, rec)
+		})
+	}
+}
+
+// TestSecurityHeadersLeaveCORSAndVaryAlone pins what the middleware must not
+// touch. Three handlers already own Vary and the Access-Control-* headers, and a
+// second writer there is how a browser ends up rejecting a response that curl
+// reports as a clean 204.
+//
+// Both halves are needed. A middleware that introduced a Vary of its own would
+// still look correct on the routes that overwrite it, and one that clobbered a
+// handler's value would still look correct on the routes that set none.
+func TestSecurityHeadersLeaveCORSAndVaryAlone(t *testing.T) {
+	const origin = "https://claude.ai"
+
+	t.Run("states none of its own", func(t *testing.T) {
+		bare := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		rec := serveThrough(t, securityHeaders(bare))
+		assertSecurityHeaders(t, rec)
+		for name := range sentHeader(rec) {
+			if name == "Vary" || strings.HasPrefix(name, "Access-Control-") {
+				t.Errorf("%s = %q, want none: the middleware owns neither", name, sentHeader(rec).Values(name))
+			}
+		}
+	})
+
+	t.Run("leaves the answering handler's alone", func(t *testing.T) {
+		cors := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Vary", "Origin, "+headerRequestHeader)
+			w.Header().Set(headerAllowOrigin, origin)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		rec := serveThrough(t, securityHeaders(cors))
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+		}
+		assertSecurityHeaders(t, rec)
+		sent := sentHeader(rec)
+		if got := sent.Get("Vary"); got != "Origin, "+headerRequestHeader {
+			t.Errorf("Vary = %q, want the answering handler's value untouched", got)
+		}
+		// One Vary listing every header the answer derives from, not several:
+		// Header.Get reads only the first line, so a second is a value half of
+		// any reader misses.
+		if values := sent.Values("Vary"); len(values) != 1 {
+			t.Errorf("Vary appears %d times (%q), want exactly one", len(values), values)
+		}
+		if got := sent.Get(headerAllowOrigin); got != origin {
+			t.Errorf("%s = %q, want %q untouched", headerAllowOrigin, got, origin)
+		}
+	})
+}
+
+// serveThrough drives one plain OPTIONS request through handler and returns the
+// recorder, so a test asserting on headers alone does not restate the three
+// lines that produce them.
+func serveThrough(t *testing.T, handler http.Handler) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/", nil))
+	return rec
+}
+
+// TestNormalizeBasePath covers the shapes a --http-path may be written in. The
+// function is lenient about the input and strict about the output — "" for the
+// root, "/prefix" with no trailing slash otherwise — so every caller
+// concatenates instead of deciding again whether a slash is needed.
+func TestNormalizeBasePath(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"root", "/", ""},
+		{"bare word", "libgen", "/libgen"},
+		{"leading slash", "/libgen", "/libgen"},
+		{"trailing slash", "/libgen/", "/libgen"},
+		{"doubled slashes both ends", "//libgen//", "/libgen"},
+		{"surrounding whitespace", "  /libgen/  ", "/libgen"},
+		{"nested prefix", "/a/b/", "/a/b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeBasePath(tc.in); got != tc.want {
+				t.Errorf("normalizeBasePath(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidateBasePath covers the startup guard. A path this mux could never
+// match, or one that would match something the operator did not mean, is
+// refused before anything is served — and the message names the offending value,
+// because the symptom otherwise is a server answering 404 to everything, which
+// reads as a proxy fault.
+func TestValidateBasePath(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"root", "/", false},
+		{"empty is the root", "", false},
+		{"plain prefix", "/libgen", false},
+		{"nested prefix", "/a/b", false},
+		{"query", "/libgen?x=1", true},
+		{"fragment", "/libgen#frag", true},
+		{"traversal", "/a/../b", true},
+		{"percent escape", "/lib%2Fgen", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateBasePath(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateBasePath(%q) = %v, want error: %t", tc.in, err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), tc.in) {
+				t.Errorf("error = %q, want it to name the rejected value %q", err, tc.in)
+			}
+		})
+	}
+}
+
+// TestEndpointPatterns pins the patterns the MCP endpoint is mounted on. At the
+// root it is the exact-match wildcard and nothing else — mounting on a bare "/"
+// is what made the handler a catch-all that answered every path — and under a
+// prefix both spellings are accepted, since a client handed a base URL may or
+// may not keep the trailing slash.
+func TestEndpointPatterns(t *testing.T) {
+	cases := []struct {
+		name string
+		base string
+		want []string
+	}{
+		{"root", "", []string{"/{$}"}},
+		{"prefix", "/libgen", []string{"/libgen", "/libgen/{$}"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := endpointPatterns(tc.base); !slices.Equal(got, tc.want) {
+				t.Errorf("endpointPatterns(%q) = %q, want %q", tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNotFoundNamesTheMCPEndpoint covers the body and the status. The status is
+// the point: every unknown path used to reach the MCP handler and come back 405
+// with Allow: POST, asserting both that the route exists and that another method
+// would work. Naming the real endpoint in the body is what makes the 404
+// actionable for whoever mistyped the path.
+func TestNotFoundNamesTheMCPEndpoint(t *testing.T) {
+	cases := []struct {
+		name         string
+		base         string
+		wantEndpoint string
+	}{
+		{"root", "", "/"},
+		{"prefix", "/libgen", "/libgen"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil)
+			notFound(tc.base).ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
+			}
+			if got := sentHeader(rec).Get("Content-Type"); got != "application/json" {
+				t.Errorf("Content-Type = %q, want application/json", got)
+			}
+			var body struct {
+				Error       string `json:"error"`
+				MCPEndpoint string `json:"mcp_endpoint"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("body %q is not JSON: %v", rec.Body.String(), err)
+			}
+			if body.Error != "not found" {
+				t.Errorf("error = %q, want %q", body.Error, "not found")
+			}
+			if body.MCPEndpoint != tc.wantEndpoint {
+				t.Errorf("mcp_endpoint = %q, want %q", body.MCPEndpoint, tc.wantEndpoint)
+			}
+			if !strings.HasSuffix(rec.Body.String(), "\n") {
+				t.Errorf("body = %q, want a trailing newline so a terminal reading it does not run on", rec.Body.String())
+			}
+		})
+	}
+}
+
+// routeCase is one request the mounted handler must answer in a particular way:
+// the status, the Content-Type when the route states one, and the Cache-Control
+// when the route replaces the middleware's no-store.
+type routeCase struct {
+	name       string
+	method     string
+	path       string
+	wantStatus int
+	wantType   string
+	wantCache  string
+}
+
+// mountedRoutes lists what newHTTPHandler must answer for a normalized base
+// prefix — "" at the root, "/libgen" under a mount. Everything outside the mount
+// belongs to somebody else: the flag exists for a proxy that forwards its prefix
+// rather than rewriting it away, so a request arriving without the prefix was
+// not meant for this server.
+func mountedRoutes(prefix string) []routeCase {
+	cases := []routeCase{
+		{name: "health", method: http.MethodGet, path: prefix + "/health", wantStatus: http.StatusOK, wantType: "application/json"},
+		{name: "legacy card path", method: http.MethodGet, path: prefix + serverCardPath, wantStatus: http.StatusOK, wantType: "application/json", wantCache: "public, max-age=3600"},
+		{name: "current card path", method: http.MethodGet, path: prefix + serverCardCurrentPath, wantStatus: http.StatusOK, wantType: serverCardMediaType, wantCache: "public, max-age=3600"},
+		{name: "mcp endpoint with a trailing slash", method: http.MethodPost, path: prefix + "/", wantStatus: http.StatusTeapot},
+		{name: "unknown path under the mount", method: http.MethodGet, path: prefix + "/nope", wantStatus: http.StatusNotFound, wantType: "application/json"},
+		// The probe that started this: a scanner asking for OAuth discovery got
+		// 405 from the catch-all, which told it the endpoint exists.
+		{name: "oauth discovery probe", method: http.MethodGet, path: prefix + "/.well-known/oauth-protected-resource", wantStatus: http.StatusNotFound, wantType: "application/json"},
+	}
+	if prefix == "" {
+		return cases
+	}
+	return append(cases,
+		routeCase{name: "mcp endpoint without a trailing slash", method: http.MethodPost, path: prefix, wantStatus: http.StatusTeapot},
+		routeCase{name: "health outside the mount", method: http.MethodGet, path: "/health", wantStatus: http.StatusNotFound, wantType: "application/json"},
+		routeCase{name: "root outside the mount", method: http.MethodGet, path: "/", wantStatus: http.StatusNotFound, wantType: "application/json"},
+	)
+}
+
+// assertRoute drives one routeCase against handler and checks the status, the
+// Content-Type the route states, and the security headers every response of this
+// server carries.
+func assertRoute(t *testing.T, handler http.Handler, tc routeCase) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil))
+
+	if rec.Code != tc.wantStatus {
+		t.Fatalf("%s %s = %d, want %d (body %q)", tc.method, tc.path, rec.Code, tc.wantStatus, rec.Body.String())
+	}
+	if got := sentHeader(rec).Get("Content-Type"); tc.wantType != "" && got != tc.wantType {
+		t.Errorf("%s Content-Type = %q, want %q", tc.path, got, tc.wantType)
+	}
+	if tc.wantCache == "" {
+		assertSecurityHeaders(t, rec)
+		return
+	}
+	assertSecurityHeaders(t, rec, "Cache-Control")
+	if got := sentHeader(rec).Get("Cache-Control"); got != tc.wantCache {
+		t.Errorf("%s Cache-Control = %q, want the route's own %q", tc.path, got, tc.wantCache)
+	}
+}
+
+// TestNewHTTPHandlerRoutes covers the mount as a whole for both shapes of
+// --http-path. Every route this server answers lives under the base path, both
+// spellings of a prefixed endpoint reach the MCP handler, and everything else —
+// inside the mount or outside it — is a 404 naming the endpoint rather than a
+// 405 claiming the path exists.
+func TestNewHTTPHandlerRoutes(t *testing.T) {
+	card, err := buildServerCard(t.Context(), newCardTestServer())
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	for _, base := range []string{"/", "/libgen"} {
+		t.Run(base, func(t *testing.T) {
+			handler := newHTTPHandler(teapotHandler(), card, nil, base)
+			for _, tc := range mountedRoutes(normalizeBasePath(base)) {
+				t.Run(tc.name, func(t *testing.T) {
+					assertRoute(t, handler, tc)
+				})
+			}
+		})
+	}
+}
+
+// TestNewHTTPHandlerAcceptsEveryBasePathSpelling asserts the handler normalizes
+// its own argument, so a mount configured as "libgen", "/libgen" or "/libgen/"
+// answers on the same routes. Without it an operator's trailing slash would
+// silently produce a server whose every path is a 404.
+func TestNewHTTPHandlerAcceptsEveryBasePathSpelling(t *testing.T) {
+	for _, base := range []string{"libgen", "/libgen", "/libgen/"} {
+		t.Run(base, func(t *testing.T) {
+			handler := newHTTPHandler(teapotHandler(), nil, nil, base)
+			assertRoute(t, handler, routeCase{
+				method: http.MethodGet, path: "/libgen/health",
+				wantStatus: http.StatusOK, wantType: "application/json",
+			})
+			assertRoute(t, handler, routeCase{
+				method: http.MethodPost, path: "/libgen", wantStatus: http.StatusTeapot,
+			})
+		})
+	}
+}
+
+// TestMainWithExitRejectsAnUnmountablePath covers the startup guard from the
+// flag side: a --http-path carrying a traversal is refused before anything is
+// served. Deferring it to the first request would surface as a server answering
+// 404 to every path, which looks like a proxy fault and is the hardest kind of
+// misconfiguration to find.
+func TestMainWithExitRejectsAnUnmountablePath(t *testing.T) {
+	if code := callMainWithExit(t, "libgen-mcp", "--http-path", "/a/../b"); code != 1 {
+		t.Fatalf("mainWithExit(--http-path=/a/../b) = %d, want 1", code)
+	}
 }

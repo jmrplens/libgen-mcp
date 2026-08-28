@@ -7,11 +7,18 @@
 #
 #   1. GET /health           → 200 JSON status/version/commit/started_at/uptime_seconds
 #      GET server-card.json  → 200 JSON serverInfo/tools/prompts (discovery is unaffected)
+#      GET /server-card      → 200 application/mcp-server-card+json, byte-identical
+#                              (the current location; the .well-known one is legacy)
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
 #                               no session handshake)
-#   3. GET /                 → 405 with `Allow: POST`  (SEP-2567 / RFC 9110)
-#   4. POST with --json-response → Content-Type: application/json
+#   3. GET /                 → 405 with `Allow: POST`  (SEP-2567 / RFC 9110), and
+#                              only on the MCP endpoint
+#   4. GET /nope             → 404 JSON naming the endpoint, not the 405 a catch-all
+#                              used to give every unknown path
+#   5. the five security headers on every response, asserted where an inner layer
+#      writes the response itself (the 404) as well as on a plain route
+#   6. POST with --json-response → Content-Type: application/json
 #
 # Usage: validate-http-stateless.sh [binary|docker] [port]
 #
@@ -107,6 +114,29 @@ header_value() {
   grep -i "^${name}:" "$headers_file" | head -n1 | cut -d: -f2- | tr -d '\r' | sed 's/^ *//' || true
 }
 
+# assert_security_headers checks the headers the outermost middleware sets on
+# every response against the dump in $1, naming the response in $2. Passing a
+# dump written by a route the middleware does not itself answer is the point: the
+# headers have to survive whatever inner layer produced the response.
+assert_security_headers() {
+  local headers_file="$1" what="$2" name expected got
+  while IFS='|' read -r name expected; do
+    [ -n "$name" ] || continue
+    got=$(header_value "$headers_file" "$name")
+    if [ "$got" = "$expected" ]; then
+      pass "$what carries ${name}: ${expected}"
+    else
+      fail "$what has $name '${got:-absent}', want '${expected}'"
+    fi
+  done <<'HEADERS_EOF'
+X-Content-Type-Options|nosniff
+X-Frame-Options|DENY
+Referrer-Policy|no-referrer
+Content-Security-Policy|default-src 'none'; frame-ancestors 'none'
+Cache-Control|no-store
+HEADERS_EOF
+}
+
 echo "Building (mode: $MODE)..."
 case "$MODE" in
   binary) go build -o "$BIN" ./cmd/server ;;
@@ -163,6 +193,36 @@ if printf '%s' "$CARD" | grep -q '"capabilities"'; then
   pass "the card states the negotiated capabilities"
 else
   fail "the card does not state capabilities"
+fi
+
+# The card moved to /server-card on 2026-06-08 (ext-server-card); the .well-known
+# path above is kept because scanners already fetch it. Both are served, and a
+# client that follows either must get the same surface — so compare the bytes, not
+# just the status.
+CARD_CURRENT=$(curl -fsS "${BASE}/server-card" 2>/dev/null || true)
+if [ -n "$CARD_CURRENT" ] && [ "$CARD_CURRENT" = "$CARD" ]; then
+  pass "GET /server-card serves the same document as the legacy path"
+else
+  fail "GET /server-card did not serve the legacy path's bytes"
+fi
+
+# The media type differs by location on purpose: the extension gives the document
+# its own type, while the legacy path keeps the application/json its existing
+# readers compare literally.
+curl -sS -o /dev/null -D "$HEADERS" "${BASE}/server-card"
+CARD_TYPE=$(header_value "$HEADERS" "Content-Type")
+case "$CARD_TYPE" in
+  application/mcp-server-card+json*) pass "GET /server-card declares the server-card media type" ;;
+  *) fail "GET /server-card Content-Type was '${CARD_TYPE:-absent}', want application/mcp-server-card+json" ;;
+esac
+
+# The card is the one route that overrides the no-store above: it changes only
+# with a release, so a scanner may hold on to it.
+CARD_CACHE=$(header_value "$HEADERS" "Cache-Control")
+if [ "$CARD_CACHE" = "public, max-age=3600" ]; then
+  pass "the card overrides Cache-Control with its own lifetime"
+else
+  fail "server card Cache-Control is '${CARD_CACHE:-absent}', want 'public, max-age=3600'"
 fi
 
 # A browser-based directory reads the card cross-origin, which no unit test can
@@ -228,6 +288,40 @@ if [ "$ALLOW" = "POST" ]; then
 else
   fail "405 Allow header was '$ALLOW', want 'POST'"
 fi
+
+# That 405 belongs to the MCP endpoint and to nothing else. It used to be the
+# answer for every path, because the MCP handler was mounted as a catch-all — so a
+# probe for a route this server does not implement was told the route exists and
+# that another method would work, neither of which was true. OAuth discovery is
+# the probe that actually arrives, so it is the one asserted.
+for path in /nope-not-a-route /.well-known/oauth-protected-resource; do
+  NOT_FOUND=$(curl -sS -D "$HEADERS" "${BASE}${path}" || true)
+  STATUS=$(head -n1 "$HEADERS" | awk '{print $2}')
+  if [ "$STATUS" = "404" ]; then
+    pass "GET ${path} returns 404"
+  else
+    fail "GET ${path} returned $STATUS, want 404"
+  fi
+  CONTENT_TYPE=$(header_value "$HEADERS" "Content-Type")
+  case "$CONTENT_TYPE" in
+    application/json*) pass "the 404 for ${path} is JSON" ;;
+    *) fail "the 404 for ${path} was '${CONTENT_TYPE:-absent}', want application/json" ;;
+  esac
+  # The body names the endpoint the caller should have asked for, which is what
+  # makes the 404 diagnosable from the client side rather than only from the logs.
+  case "$NOT_FOUND" in
+    *'"mcp_endpoint"'*) pass "the 404 for ${path} names the MCP endpoint" ;;
+    *) fail "the 404 for ${path} did not name the MCP endpoint (body: ${NOT_FOUND})" ;;
+  esac
+done
+
+# $HEADERS still holds the last 404, which the mux answered without the MCP
+# handler ever running: exactly the response an outermost middleware is easiest to
+# get wrong on.
+assert_security_headers "$HEADERS" "the 404"
+
+curl -sS -o /dev/null -D "$HEADERS" "${BASE}/health"
+assert_security_headers "$HEADERS" "GET /health"
 
 stop_server
 

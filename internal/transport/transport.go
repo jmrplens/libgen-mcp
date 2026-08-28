@@ -21,6 +21,12 @@ type Options struct {
 	// Empty — the default — refuses every cross-origin browser request, which
 	// leaves non-browser clients unaffected since they send no Origin at all.
 	TrustedOrigins []string
+	// BasePath is the URL path prefix this server answers on, normalized to
+	// either "" (the root) or a "/prefix" with no trailing slash. It exists so a
+	// deployment behind a reverse proxy that forwards the prefix verbatim —
+	// rather than rewriting it away — still resolves its own routes, instead of
+	// depending on the proxy to make the paths line up.
+	BasePath string
 }
 
 // DefaultOptions returns the shipped defaults (stateless on).
