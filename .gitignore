@@ -12,6 +12,14 @@
 /audit_surface_quality
 /gen_icon_webp
 /dist/
+
+# npm publish set: the six per-platform packages are generated from the release
+# binaries at publish time and each carries a ~20 MB executable. The launcher
+# under /npm/libgen-mcp/ IS committed; everything below is not.
+/npm/packages/
+/npm/**/node_modules/
+/npm/**/*.tgz
+
 coverage.out
 coverage.internal.out
 coverage.html

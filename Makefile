@@ -13,7 +13,8 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         validate-http-stateless \
         install-tools release-check check-manifests \
-        mcpb publish-lobehub sonar clean help \
+        mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
+        publish-npm-dry publish-npm publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
 
@@ -290,8 +291,12 @@ release-check: ## Validate the GoReleaser config
 
 # Every JSON manifest that mirrors the VERSION file. A manifest listed here is
 # gated; one that is not silently ships the previous version's number, which is
-# how .plugin/plugin.json spent a release cycle claiming to be 1.2.0.
-VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plugin.json
+# how .plugin/plugin.json spent a release cycle claiming to be 1.2.0. The npm
+# launcher is in the set for the same reason: the release workflow re-stamps it
+# and commits it back, so a bump that skips `make sync-npm-version` would leave
+# main advertising the previous version on npm until the next tag.
+VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plugin.json \
+                     npm/libgen-mcp/package.json
 
 check-manifests: ## Verify every version-bearing manifest parses and matches the VERSION file
 	@VF=$$(tr -d '[:space:]' < VERSION); \
@@ -306,6 +311,55 @@ check-manifests: ## Verify every version-bearing manifest parses and matches the
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
+
+# ─── npm distribution ───────────────────────────────────────────────────────
+# The npm channel is a thin launcher package (@jmrp.io/libgen-mcp) plus six
+# per-platform packages, each carrying one release binary and gated by npm's
+# os/cpu fields so only the matching one is unpacked. Nothing runs at install
+# time, which is what keeps `npx`, `npm ci --ignore-scripts`, offline and
+# proxied installs working — a postinstall that downloads breaks all four, on
+# exactly the locked-down machines an MCP server gets dropped onto.
+#
+# NPM_BINARIES points at a directory holding the release assets under their
+# published names (libgen-mcp-linux-amd64, …) — `dist/` after GoReleaser, or a
+# directory of assets downloaded from a release.
+NPM_BINARIES ?=
+
+gen-npm: ## Assemble the npm distribution from release binaries (NPM_BINARIES=<dir>)
+	@command -v node >/dev/null || { echo "ERROR: Node.js is required"; exit 1; }
+	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
+	node scripts/build-npm.mjs --binaries "$(NPM_BINARIES)" --version "$(VERSION)"
+
+sync-npm-version: ## Stamp VERSION into npm/libgen-mcp/package.json and its six pins
+	@command -v node >/dev/null || { echo "ERROR: Node.js is required"; exit 1; }
+	node scripts/build-npm.mjs --sync-only --version "$(VERSION)"
+
+# Runs in a clean node:22 container so the check never installs anything on the
+# host: structural checks on all seven packages, plus a real install and MCP
+# handshake for the container's native platform (linux-x64).
+validate-npm: ## Build and validate the npm packages in Docker (NPM_BINARIES=<dir>)
+	@command -v docker >/dev/null || { echo "ERROR: Docker is required for isolated validation (or use validate-npm-local)"; exit 1; }
+	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
+	docker run --rm -v "$(CURDIR):/work" -v "$(abspath $(NPM_BINARIES)):/binaries:ro" -w /work node:22 sh -euc 'node scripts/build-npm.mjs --binaries /binaries --version $(VERSION) && node scripts/validate-npm.mjs --packages npm/packages --main npm/libgen-mcp --version $(VERSION)'
+
+# Same validation without Docker, for the ephemeral CI runner — already
+# disposable, and the release job has no Docker-in-Docker to spare.
+validate-npm-local: ## Same validation without Docker, for CI (NPM_BINARIES=<dir>)
+	@command -v node >/dev/null || { echo "ERROR: Node.js is required"; exit 1; }
+	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
+	node scripts/build-npm.mjs --binaries "$(NPM_BINARIES)" --version "$(VERSION)"
+	node scripts/validate-npm.mjs --packages npm/packages --main npm/libgen-mcp --version "$(VERSION)"
+
+publish-npm-dry: ## Assemble and pack the npm publish set without publishing (NPM_BINARIES=<dir>)
+	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-npm.sh "$(NPM_BINARIES)" "$(VERSION)" --dry-run
+
+# Auth is left to the environment (`npm login`, or a temporary .npmrc for the
+# one-time bootstrap). From the first tag after bootstrap on, the release
+# workflow publishes over OIDC and this target is only a fallback.
+publish-npm: ## Publish the npm distribution: platform packages first, then the launcher
+	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-npm.sh "$(NPM_BINARIES)" "$(VERSION)"
 
 ## publish-lobehub: publish the current version to the LobeHub Marketplace.
 ## Reads lhm.plugin.json (version kept in sync by scripts/update-server-json-sha.sh

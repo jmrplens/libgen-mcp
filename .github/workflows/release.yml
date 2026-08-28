@@ -74,6 +74,44 @@ jobs:
           bash scripts/build-mcpb.sh "${VERSION}"
           gh release upload "v${VERSION}" dist/libgen-mcp.mcpb --clobber
 
+      # npm publish via OIDC trusted publisher — no stored token. dist/ already
+      # holds the release binaries under their published names here, the same
+      # spot the .mcpb step above reads from. The workflow's id-token: write
+      # permission lets npm mint the OIDC token; npm >= 11.5.1 performs the
+      # exchange, so setup-node's Node 22 is upgraded first. Provenance is
+      # attached automatically under trusted publishing (no --provenance flag),
+      # and publish-npm.sh skips any version already on the registry, so
+      # re-running this job is safe.
+      #
+      # Bootstrap: a package cannot have a trusted publisher configured until it
+      # exists, so the first release's seven packages are created by a one-time
+      # tokened publish; from the next tag on, this runs with no credential. The
+      # trusted publisher on npmjs.com must name this workflow file
+      # (release.yml); this job declares no `environment:`, so that field stays
+      # blank there.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      # Validate the assembled packages before anything is published. A
+      # published npm version is permanent, so a broken tarball has to fail the
+      # release here rather than after it is irreversibly on the registry. This
+      # runs on the ephemeral runner, which is already disposable; the same
+      # check runs in Docker via `make validate-npm` on a developer's machine.
+      - name: Validate npm packages
+        run: make validate-npm-local NPM_BINARIES=dist VERSION="${GITHUB_REF#refs/tags/v}"
+
+      - name: Publish to npm
+        run: |
+          set -euo pipefail
+          # Pinned, not @latest: this CLI runs `npm publish` under the job's
+          # id-token: write, so a surprising or compromised `latest` could push
+          # altered packages. 11.5.1 is the floor npm trusted publishing
+          # requires; bump it deliberately.
+          npm install -g npm@11.5.1
+          bash scripts/publish-npm.sh dist "${GITHUB_REF#refs/tags/v}"
+
       - name: Pin server.json version and SHA256 hashes
         run: |
           set -euo pipefail
@@ -176,7 +214,7 @@ jobs:
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.
-          for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json; do
+          for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json npm/libgen-mcp/package.json; do
             if [ -f "${manifest}" ]; then git add "${manifest}"; fi
           done
           if git diff --cached --quiet; then

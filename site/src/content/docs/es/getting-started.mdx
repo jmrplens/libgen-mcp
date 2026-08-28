@@ -34,7 +34,7 @@ head:
             "@type": "HowToStep",
             "position": 1,
             "name": "Instala el servidor",
-            "text": "Descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH. Es un único ejecutable completamente estático sin nada más que instalar. Como alternativa, descarga la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compila desde el código con go install si tienes Go 1.27 o superior.",
+            "text": "Si tienes Node 18 o posterior, ejecuta npx @jmrp.io/libgen-mcp, o instálalo globalmente con npm install -g @jmrp.io/libgen-mcp. Si no, descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH: es un único ejecutable completamente estático sin nada más que instalar. También puedes descargar la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compilar desde el código con go install si tienes Go 1.27 o superior.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#instalación"
           },
           {
@@ -76,7 +76,7 @@ head:
             "name": "¿Cómo instalo libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp:latest o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
+              "text": "Si tienes Node 18 o posterior, el camino más corto es npm: ejecuta npx @jmrp.io/libgen-mcp, o instálalo globalmente con npm install -g @jmrp.io/libgen-mcp. Si no, usa el binario precompilado: descarga el archivo para tu plataforma desde la página de releases de GitHub (los archivos se llaman libgen-mcp-<os>-<arch>, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu PATH. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch ghcr.io/jmrplens/libgen-mcp:latest o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con go install github.com/jmrplens/libgen-mcp/cmd/server@latest."
             }
           },
           {
@@ -84,7 +84,7 @@ head:
             "name": "¿Qué método de instalación debería usar?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige go install solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión .mcpb de un clic del último release es la opción más sencilla."
+              "text": "Usa npm si ya hay Node en la máquina: npx @jmrp.io/libgen-mcp no necesita paso de instalación y mantiene el servidor al día por sí solo. Si no, usa el binario precompilado: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige go install solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión .mcpb de un clic del último release es la opción más sencilla."
             }
           },
           {
@@ -112,15 +112,50 @@ import LegalNotice from "../../../components/docs/LegalNotice.astro";
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
-`libgen-mcp` se instala de tres formas: un binario estático precompilado desde la página de releases de GitHub, una imagen Docker (`ghcr.io/jmrplens/libgen-mcp`) o `go install`. No necesita cuenta, clave de API ni token. En cuanto queda registrado en un cliente MCP — Claude Code, Claude Desktop, Cursor o VS Code — sus cuatro herramientas (`search`, `get_details`, `download`, `read`) están disponibles de inmediato.
+`libgen-mcp` se instala de cuatro formas: desde npm como [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp), como binario estático precompilado desde la página de releases de GitHub, como imagen Docker (`ghcr.io/jmrplens/libgen-mcp`) o con `go install`. No necesita cuenta, clave de API ni token. En cuanto queda registrado en un cliente MCP — Claude Code, Claude Desktop, Cursor o VS Code — sus cuatro herramientas (`search`, `get_details`, `download`, `read`) están disponibles de inmediato.
 
 ## Instalación
 
-La instalación recomendada es el **binario precompilado**: un único ejecutable estático sin nada más que instalar — sin toolchain de Go, sin Docker, sin runtime. Docker y `go install` se ofrecen como alternativas.
+Si ya tienes Node, **npm** es el camino más corto — un solo comando, y tu cliente MCP puede lanzar el servidor con `npx` sin instalar nada. Si no, el **binario precompilado** es un único ejecutable estático sin nada más que instalar: sin toolchain de Go, sin Docker, sin runtime. Docker y `go install` se ofrecen como alternativas.
 
 <Tabs>
-	<TabItem label="Binario (recomendado)">
-		Descarga un binario precompilado para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases). Los archivos se llaman `libgen-mcp-<os>-<arch>` (por ejemplo `libgen-mcp-linux-amd64` o `libgen-mcp-darwin-arm64`), cubriendo Linux, macOS y Windows en amd64 y arm64.
+	<TabItem label="npm / npx">
+		El servidor se publica en npm como [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). Ese paquete es un lanzador ligero sobre los mismos binarios precompilados que sirve la página de releases: el ejecutable viaja dentro de un paquete por plataforma que npm desempaqueta solo cuando coinciden su `os` y su `cpu`, así que no se compila nada y no se ejecuta ningún script en la instalación — que es lo que mantiene funcionando `npx`, `npm ci --ignore-scripts` y las instalaciones sin red o tras un proxy.
+
+    	<Tabs syncKey="pkg">
+    		<TabItem label="npx">
+    			```bash
+    			npx @jmrp.io/libgen-mcp
+    			```
+
+    			No se instala nada de forma permanente. La mayoría de clientes MCP pueden lanzar el servidor así, que es la configuración con menos fricción posible:
+
+    			```json
+    			{
+    			  "mcpServers": {
+    			    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
+    			  }
+    			}
+    			```
+    		</TabItem>
+    		<TabItem label="npm">
+    			```bash
+    			npm install -g @jmrp.io/libgen-mcp
+    			libgen-mcp --help
+    			```
+    		</TabItem>
+    		<TabItem label="pnpm">
+    			```bash
+    			pnpm add -g @jmrp.io/libgen-mcp
+    			libgen-mcp --help
+    			```
+    		</TabItem>
+    	</Tabs>
+
+    	Hay binarios precompilados para Linux, macOS y Windows en x64 y arm64. En cualquier otra plataforma el lanzador termina con un mensaje que apunta a los binarios del release y a la opción de compilar desde el código.
+    </TabItem>
+    <TabItem label="Binario">
+    	Descarga un binario precompilado para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases). Los archivos se llaman `libgen-mcp-<os>-<arch>` (por ejemplo `libgen-mcp-linux-amd64` o `libgen-mcp-darwin-arm64`), cubriendo Linux, macOS y Windows en amd64 y arm64.
 
     	```bash
     	# Ejemplo: Linux amd64
@@ -389,11 +424,11 @@ Consulta [Herramientas](/libgen-mcp/es/tools/#prompts) para ver la tabla complet
 
 ### ¿Cómo instalo libgen-mcp?
 
-La instalación recomendada es el binario precompilado: descarga el archivo para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp:latest` o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
+Si tienes Node 18 o posterior, el camino más corto es npm: ejecuta `npx @jmrp.io/libgen-mcp`, o instálalo globalmente con `npm install -g @jmrp.io/libgen-mcp`. Si no, usa el binario precompilado: descarga el archivo para tu plataforma desde la página de [releases de GitHub](https://github.com/jmrplens/libgen-mcp/releases) (los archivos se llaman `libgen-mcp-<os>-<arch>`, cubriendo Linux, macOS y Windows en amd64 y arm64), hazlo ejecutable y colócalo en tu `PATH`. Es un único ejecutable totalmente estático sin nada más que instalar. Como alternativas puedes usar la imagen de Docker multi-arch `ghcr.io/jmrplens/libgen-mcp:latest` o, si ya tienes Go 1.27 o posterior, compilar desde el código fuente con `go install github.com/jmrplens/libgen-mcp/cmd/server@latest`.
 
 ### ¿Qué método de instalación debería usar?
 
-Usa el binario precompilado en la mayoría de los casos: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige `go install` solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión `.mcpb` de un clic del último release es la opción más sencilla.
+Usa npm si ya hay Node en la máquina: `npx @jmrp.io/libgen-mcp` no necesita paso de instalación y mantiene el servidor al día por sí solo. Si no, usa el binario precompilado: es un único ejecutable estático que no necesita toolchain de Go, ni Docker, ni runtime. Elige Docker si prefieres contenedores o un comando sin instalación que tu cliente descarga en el primer arranque. Elige `go install` solo si ya tienes Go 1.27 o posterior y quieres compilar desde el código fuente. En Claude Desktop, la extensión `.mcpb` de un clic del último release es la opción más sencilla.
 
 ### ¿Cómo conecto libgen-mcp a Claude o VS Code?
 

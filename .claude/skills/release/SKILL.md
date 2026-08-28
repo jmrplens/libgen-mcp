@@ -1,17 +1,19 @@
 ---
 name: release
-description: Cut a libgen-mcp release — bump VERSION, mirror it into the four JSON manifests, regenerate llms.txt, tag, and publish to LobeHub. Use when cutting or preparing a release, bumping the version, or publishing to the MCP registry or LobeHub Marketplace.
+description: Cut a libgen-mcp release — bump VERSION, mirror it into the version-bearing manifests, regenerate llms.txt, tag, and publish to npm and LobeHub. Use when cutting or preparing a release, bumping the version, or publishing to the MCP registry, npm or LobeHub Marketplace.
 ---
 
 # Cutting a libgen-mcp release
 
-The version lives in `VERSION` and is mirrored into four JSON manifests. To cut a
+The version lives in `VERSION` and is mirrored into five manifests. To cut a
 release:
 
 1. Bump `VERSION`.
 2. Update the version in `server.json` (both `.version` and the six release-asset
-   URLs), `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`.
-3. Run `make check-manifests`. It gates all four against `VERSION`, and CI runs
+   URLs), `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`, and
+   run `make sync-npm-version` for `npm/libgen-mcp/package.json` (it moves the
+   version and all six dependency pins together — never hand-edit it).
+3. Run `make check-manifests`. It gates all five against `VERSION`, and CI runs
    it in the `server.json` job. Add any new version-bearing manifest to
    `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
    gated, and will silently ship the previous release's number.
@@ -24,9 +26,9 @@ release:
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
 per-package versions, its six asset identifiers and their `fileSha256` digests,
-then stamps the version into the other three manifests (`lhm.plugin.json`,
-`mcpb/manifest.json`, `.plugin/plugin.json`) — the same set `check-manifests`
-gates — and commits the result back to main. The manual
+then stamps the version into the other four manifests (`lhm.plugin.json`,
+`mcpb/manifest.json`, `.plugin/plugin.json`, `npm/libgen-mcp/package.json`) — the
+same set `check-manifests` gates — and commits the result back to main. The manual
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.
 
@@ -41,6 +43,39 @@ yours already publishes the same template.
 
 The `server.json` CI job is named for a required status check in the branch
 ruleset, not for its scope — do not rename it without updating the ruleset too.
+
+## Publishing to npm
+
+npm is part of the tagged release and needs no manual step. After GoReleaser
+writes `dist/`, the release job validates the assembled packages
+(`make validate-npm-local NPM_BINARIES=dist`) and then publishes them with
+`scripts/publish-npm.sh` — the six per-platform packages first, the launcher
+last, so an install racing the publish never finds a launcher pinning packages
+the registry does not have yet.
+
+Authentication is npm's **OIDC trusted publisher**: no stored token, no
+`NODE_AUTH_TOKEN`, and no `--provenance` flag (trusted publishing attaches
+provenance itself). The workflow already grants `id-token: write` at the top
+level, and the publish step installs `npm@11.5.1` first because that is the floor
+version that performs the OIDC exchange. The trusted publisher configured on
+npmjs.com for each of the seven packages names the GitHub account `jmrplens`,
+repository `libgen-mcp`, workflow `release.yml`, and a **blank** environment —
+the release job declares no `environment:`.
+
+Two failure modes worth knowing:
+
+- **Re-running the release job is safe.** `publish-npm.sh` asks `npm view` first
+  and skips any version already on the registry, so a job retried after a later
+  step failed does not die on npm's 409.
+- **A brand-new package 404s on `install` for a few minutes** after its first
+  publish while the registry propagates. Verify with `npm view`, and re-check
+  before concluding the publish failed.
+
+`make publish-npm NPM_BINARIES=<dir>` is the manual fallback (it was the
+bootstrap path, since a package cannot have a trusted publisher until it exists).
+It takes auth from the environment and never sees a credential itself; if it is
+ever needed again, put the token in a temporary `.npmrc` **outside the repo**,
+point npm at it with `NPM_CONFIG_USERCONFIG`, and delete it immediately after.
 
 ## Publishing to the LobeHub Marketplace
 

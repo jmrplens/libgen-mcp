@@ -82,3 +82,17 @@ for manifest in lhm.plugin.json mcpb/manifest.json .plugin/plugin.json; do
     echo "NOTE: $manifest not found, skipping"
   fi
 done
+
+# 6. Update the npm launcher package version and its optionalDependency pins.
+#
+# The generator owns the whole mapping — the version and all six pins move
+# together — so this stays a single call rather than a jq edit that could stamp
+# the version while leaving the dependency specs a release behind. The
+# per-platform packages are built from the release binaries at publish time,
+# not stamped here.
+NPM_MAIN="npm/libgen-mcp/package.json"
+if [[ -f "$NPM_MAIN" ]] && command -v node >/dev/null 2>&1; then
+  node scripts/build-npm.mjs --sync-only --version "$VERSION"
+else
+  echo "NOTE: $NPM_MAIN not found or node unavailable, skipping npm manifest update"
+fi

@@ -440,7 +440,40 @@ Spanish entry in `scenariosES`, or the generator fails.
 Cutting a release is a multi-step sequence with two gates that catch different
 things and a registry rule that has already broken one publish. It lives in the
 `release` skill (`.claude/skills/release/SKILL.md`) — invoke it when bumping the
-version, tagging, or publishing to the MCP registry or LobeHub.
+version, tagging, or publishing to the MCP registry, npm or LobeHub.
+
+### The npm channel
+
+`npm/libgen-mcp/` is the **committed** launcher package (`@jmrp.io/libgen-mcp`):
+`package.json`, `cli.js` and a README, and nothing else. The six per-platform
+packages that carry the binaries are **generated** from the release assets by
+`scripts/build-npm.mjs` at publish time and are gitignored — `npm/packages/`
+never enters a commit.
+
+Three things about it are easy to get wrong:
+
+- **`cli.js` lives at the package root, not in `bin/`.** The repo's `.gitignore`
+  has a global `bin/` rule, so a launcher under `npm/libgen-mcp/bin/` would be
+  silently untracked and every published tarball would be missing its entry
+  point.
+- **The launcher must never write to stdout.** The server speaks MCP over stdio,
+  so a stray byte there is a corrupted JSON-RPC stream, not a cosmetic wart. It
+  spawns the binary with `stdio: "inherit"`, prints only to stderr, and mirrors
+  the child's exit code and terminating signal. `scripts/validate-npm.mjs` drives
+  a real `initialize` handshake and asserts every stdout line parses as JSON-RPC
+  2.0, so a regression fails `make validate-npm` rather than a user's client.
+- **The version is stamped, not hand-edited.** `build-npm.mjs --sync-only`
+  rewrites the version and all six `optionalDependencies` pins together, which is
+  why `scripts/update-server-json-sha.sh` calls it rather than editing the JSON:
+  a jq edit could move the version and leave the pins a release behind.
+  `npm/libgen-mcp/package.json` is in `VERSION_MANIFESTS`, so `make
+  check-manifests` fails a bump that skipped `make sync-npm-version`.
+
+The scope is the npm **organization** `jmrp.io`, so packages are
+`@jmrp.io/libgen-mcp*`. `npm whoami` returns `jmrpio` (the maintainer's personal
+profile) and `npm org ls jmrp.io` lists `jmrpio` as the owner **member** — neither
+is the scope, and reading either as one publishes to the wrong place. A granular
+token cannot unpublish, so a mis-scoped publish cannot be undone.
 
 ## Commit & PR Conventions
 

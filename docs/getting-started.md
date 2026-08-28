@@ -5,12 +5,44 @@ running your first search.
 
 ## Install
 
-The recommended way to install `libgen-mcp` is the **prebuilt binary**: a single
-static executable with nothing else to install — no Go toolchain, no Docker, no
-runtime. Docker and `go install` are offered as alternatives if they fit your
-setup better.
+`libgen-mcp` installs four ways. If you already have Node, **npm/npx** is the
+shortest path — one command, nothing to place on your `PATH`. Otherwise the
+**prebuilt binary** is a single static executable with nothing else to install:
+no Go toolchain, no Docker, no runtime. Docker and `go install` are offered as
+alternatives if they fit your setup better.
 
-### 1. Release binary (recommended)
+### 1. npm / npx (shortest path if you have Node)
+
+The server is published to npm as
+[`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp).
+That package is a thin launcher over the same prebuilt binaries the releases
+page serves: the binary rides inside a per-platform package that npm installs
+only when its `os`/`cpu` match, so nothing is compiled and no script runs at
+install time — which is what keeps `npx`, `npm ci --ignore-scripts`, offline and
+proxied installs working.
+
+```bash
+npx @jmrp.io/libgen-mcp              # run it, no install
+npm install -g @jmrp.io/libgen-mcp   # or install it globally
+pnpm add -g @jmrp.io/libgen-mcp      # …with pnpm
+```
+
+Most MCP clients can launch it through `npx` directly, which means there is
+nothing to install or keep updated by hand:
+
+```json
+{
+  "mcpServers": {
+    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
+  }
+}
+```
+
+Prebuilt binaries exist for Linux, macOS and Windows on x64 and arm64. On any
+other platform the launcher exits with a message pointing at the release
+binaries and the option to build from source.
+
+### 2. Release binary
 
 Download a prebuilt binary for your platform from the
 [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named
@@ -29,7 +61,7 @@ The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothin
 the host and runs straight away. Each release also ships a `checksums.txt`; verify your
 download against it before running.
 
-### 2. Docker
+### 3. Docker
 
 Prefer containers, or want a zero-install command your client pulls on first run? A
 multi-arch image is published to the GitHub Container Registry:
@@ -61,7 +93,7 @@ docker run --rm -p 8080:8080 \
   ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
 ```
 
-### 3. `go install` (from source)
+### 4. `go install` (from source)
 
 If you already have Go 1.27 or newer and prefer building from source:
 

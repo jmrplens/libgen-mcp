@@ -1,0 +1,48 @@
+{
+  "name": "@jmrp.io/libgen-mcp",
+  "version": "1.7.2",
+  "description": "Model Context Protocol (MCP) server for federated search, citation and reading of books and papers across Library Genesis and open-access sources. Runs as a local binary over stdio or HTTP.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "libgen",
+    "library-genesis",
+    "open-access",
+    "arxiv",
+    "crossref",
+    "doi",
+    "ai",
+    "llm",
+    "claude",
+    "stdio",
+    "cli"
+  ],
+  "homepage": "https://jmrp.io/docs/libgen-mcp",
+  "bugs": "https://github.com/jmrplens/libgen-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmrplens/libgen-mcp.git",
+    "directory": "npm/libgen-mcp"
+  },
+  "license": "MIT",
+  "author": "José M. Requena Plens",
+  "type": "commonjs",
+  "bin": {
+    "libgen-mcp": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "README.md"
+  ],
+  "optionalDependencies": {
+    "@jmrp.io/libgen-mcp-linux-x64": "1.7.2",
+    "@jmrp.io/libgen-mcp-linux-arm64": "1.7.2",
+    "@jmrp.io/libgen-mcp-darwin-x64": "1.7.2",
+    "@jmrp.io/libgen-mcp-darwin-arm64": "1.7.2",
+    "@jmrp.io/libgen-mcp-win32-x64": "1.7.2",
+    "@jmrp.io/libgen-mcp-win32-arm64": "1.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
