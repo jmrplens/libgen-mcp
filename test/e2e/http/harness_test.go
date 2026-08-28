@@ -128,7 +128,24 @@ type server struct {
 	// it, the health probe included, so a harness that always looked at
 	// "/health" would time out on a prefixed server that started perfectly.
 	base string
-	logs func() string
+	// client dials whatever this server is listening on. A TCP port is reached
+	// by the default client and leaves this nil; a unix socket needs a dialer
+	// that ignores the address in the URL, and a TLS endpoint needs the
+	// generated certificate in its root pool. Every request goes through
+	// httpClient so the two new listeners are driven by the same case bodies as
+	// the old one — a handler that behaved differently per transport is exactly
+	// what these tests are for.
+	client *http.Client
+	logs   func() string
+}
+
+// httpClient is the client this server is reached with, defaulting to the
+// shared one so a zero-value server still works.
+func (s *server) httpClient() *http.Client {
+	if s.client == nil {
+		return http.DefaultClient
+	}
+	return s.client
 }
 
 // startServer launches the binary with the given extra flags and environment,
@@ -143,10 +160,23 @@ func startServer(t *testing.T, env map[string]string, flags ...string) *server {
 func startServerOnPort(t *testing.T, port int, env map[string]string, flags ...string) *server {
 	t.Helper()
 
-	bin := serverBinary(t)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	return launchServer(t, "http://"+addr, nil, env, append([]string{"--http", addr}, flags...))
+}
 
-	args := append([]string{"--http", addr}, flags...)
+// launchServer starts the binary with a complete argument list, waits for its
+// health route through client, and stops it when the test ends.
+//
+// It is the shared body of every constructor: a TCP port, a unix socket and a
+// TLS endpoint differ in exactly three things — the --http value inside args,
+// the URL a request is addressed to, and the client that dials it — so those
+// are parameters and the rest of the plumbing stays in one place. A nil client
+// means the default one, which is what every TCP caller has always used.
+func launchServer(t *testing.T, baseURL string, client *http.Client, env map[string]string, args []string) *server {
+	t.Helper()
+
+	bin := serverBinary(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, bin, args...)
 	// A download directory inside the test's own tree keeps a stray write from
@@ -171,8 +201,12 @@ func startServerOnPort(t *testing.T, port int, env map[string]string, flags ...s
 	}
 
 	srv := &server{
-		baseURL: "http://" + addr,
-		base:    basePathFromFlags(flags),
+		baseURL: baseURL,
+		// args carries the --http value ahead of the caller's flags, and
+		// neither "--http" nor an address matches the name being looked for, so
+		// scanning the whole list finds the same mount the caller asked for.
+		base:   basePathFromFlags(args),
+		client: client,
 		logs: func() string {
 			mu.Lock()
 			defer mu.Unlock()
@@ -252,7 +286,7 @@ func waitHealthy(t *testing.T, s *server) {
 		if err != nil {
 			t.Fatalf("building the health request: %v", err)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := s.httpClient().Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -273,7 +307,7 @@ func (s *server) healthy(t *testing.T) bool {
 	if err != nil {
 		return false
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		return false
 	}
@@ -294,6 +328,11 @@ type response struct {
 	status int
 	header http.Header
 	body   string
+	// proto is the protocol the reply came back on ("HTTP/1.1", "HTTP/2.0").
+	// It is the only visible sign that a TLS listener advertised h2: without
+	// NextProtos every client silently negotiates HTTP/1.1 and every other
+	// assertion in this suite still passes.
+	proto string
 }
 
 // do issues the request and returns the response, failing the test only when
@@ -330,7 +369,7 @@ func (s *server) do(t *testing.T, r request) response {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
@@ -340,7 +379,7 @@ func (s *server) do(t *testing.T, r request) response {
 	if err != nil && !errors.Is(err, io.EOF) {
 		t.Fatalf("reading the response body: %v", err)
 	}
-	return response{status: resp.StatusCode, header: resp.Header, body: string(raw)}
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto}
 }
 
 // try issues the request from a goroutine safely, returning the response or the
@@ -379,7 +418,7 @@ func (s *server) try(t *testing.T, r request) (response, error) {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient().Do(req)
 	if err != nil {
 		return response{}, err
 	}
@@ -389,7 +428,7 @@ func (s *server) try(t *testing.T, r request) (response, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return response{}, err
 	}
-	return response{status: resp.StatusCode, header: resp.Header, body: string(raw)}, nil
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto}, nil
 }
 
 // mcpPOST is the common case: a tools/list call with the headers a real client

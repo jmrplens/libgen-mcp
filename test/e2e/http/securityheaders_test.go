@@ -22,15 +22,14 @@ var constantSecurityHeaders = map[string]string{
 	"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 }
 
-// assertConstantSecurityHeaders checks the four headers that are the same on
-// every response, that each appears exactly once, and that HSTS is absent.
+// assertSecurityHeaderSet checks the four headers that are the same on every
+// response and that each appears exactly once, saying nothing about HSTS —
+// which is the one header that depends on how the server was started.
 //
-// The count is not pedantry. The middleware Sets rather than Adds precisely so
-// that a route writing its own copy — serverCardGET repeats nosniff — replaces
-// it instead of appending a second value, and a duplicated directive is the kind
-// of thing a scanner flags and a browser reads unpredictably. Nothing but the
-// count can tell the two apart, because Header.Get returns the first either way.
-func assertConstantSecurityHeaders(t *testing.T, what string, h http.Header) {
+// It is split out from assertConstantSecurityHeaders because a TLS listener
+// must carry HSTS and every other listener must not, so the two cannot share
+// one assertion about it while still sharing the four that never change.
+func assertSecurityHeaderSet(t *testing.T, what string, h http.Header) {
 	t.Helper()
 
 	for name, want := range constantSecurityHeaders {
@@ -44,6 +43,20 @@ func assertConstantSecurityHeaders(t *testing.T, what string, h http.Header) {
 			t.Errorf("%s: %s = %q, want %q", what, name, got[0], want)
 		}
 	}
+}
+
+// assertConstantSecurityHeaders checks the four headers that are the same on
+// every response, that each appears exactly once, and that HSTS is absent.
+//
+// The count is not pedantry. The middleware Sets rather than Adds precisely so
+// that a route writing its own copy — serverCardGET repeats nosniff — replaces
+// it instead of appending a second value, and a duplicated directive is the kind
+// of thing a scanner flags and a browser reads unpredictably. Nothing but the
+// count can tell the two apart, because Header.Get returns the first either way.
+func assertConstantSecurityHeaders(t *testing.T, what string, h http.Header) {
+	t.Helper()
+
+	assertSecurityHeaderSet(t, what, h)
 	// This process usually speaks plain HTTP to a proxy or to localhost, where
 	// HSTS is either a claim it cannot make or one that poisons the browser's
 	// cache for that host and port — including for whatever else the developer

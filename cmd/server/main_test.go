@@ -95,7 +95,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub, nil, nil, "/")
+	handler := newHTTPHandler(stub, nil, nil, "/", false)
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -157,7 +157,7 @@ func TestRunValidatesConfig(t *testing.T) {
 	// be rejected by cfg.Validate, so run returns before attempting to serve.
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "999")
 
-	err := run(context.Background(), "", transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want validation error")
 	}
@@ -193,7 +193,7 @@ func TestIsCleanShutdown(t *testing.T) {
 func TestServeHTTPGracefulShutdown(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(canceledContext(), newTestServer(), "127.0.0.1:0", transport.DefaultOptions())
+		err = serveHTTP(canceledContext(), newTestServer(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions())
 	})
 	if err != nil {
 		t.Fatalf("serveHTTP() = %v, want nil on graceful shutdown", err)
@@ -205,7 +205,7 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 func TestServeHTTPListenError(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(context.Background(), newTestServer(), "127.0.0.1:99999", transport.DefaultOptions())
+		err = serveHTTP(context.Background(), newTestServer(), listenSpec{addr: "127.0.0.1:99999"}, transport.DefaultOptions())
 	})
 	if err == nil {
 		t.Fatal("serveHTTP() = nil, want a listen error for an invalid port")
@@ -221,7 +221,7 @@ func TestServeHTTPListenError(t *testing.T) {
 func TestRunHTTP(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "127.0.0.1:0", transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(http) = %v, want a clean shutdown", err)
@@ -234,7 +234,7 @@ func TestRunStdio(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "", transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio) = %v, want a clean shutdown", err)
@@ -249,7 +249,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), "", transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions())
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio, remote downloads) = %v, want a clean shutdown", err)
@@ -260,7 +260,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 // unparseable duration makes Load itself (not Validate) return an error.
 func TestRunConfigLoadError(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_TIMEOUT", "not-a-duration")
-	err := run(context.Background(), "", transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a config-load error")
 	}
@@ -277,7 +277,7 @@ func TestRunManagerError(t *testing.T) {
 	// surfaces from NewManager (os.UserCacheDir) rather than the home-dir lookup.
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir())
 	t.Setenv("HOME", "")
-	err := run(context.Background(), "", transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")
 	}
@@ -478,7 +478,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/"))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/", false))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -1164,7 +1164,7 @@ type securedRequest struct {
 // way out and lost every one of those responses.
 func TestSecurityHeadersAreSetOnEveryResponse(t *testing.T) {
 	const trusted = "https://claude.ai"
-	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/")
+	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/", false)
 
 	cases := []securedRequest{
 		{
@@ -1236,7 +1236,7 @@ func TestSecurityHeadersLeaveCORSAndVaryAlone(t *testing.T) {
 		bare := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
-		rec := serveThrough(t, securityHeaders(bare))
+		rec := serveThrough(t, securityHeaders(false, bare))
 		assertSecurityHeaders(t, rec)
 		for name := range sentHeader(rec) {
 			if name == "Vary" || strings.HasPrefix(name, "Access-Control-") {
@@ -1251,7 +1251,7 @@ func TestSecurityHeadersLeaveCORSAndVaryAlone(t *testing.T) {
 			w.Header().Set(headerAllowOrigin, origin)
 			w.WriteHeader(http.StatusNoContent)
 		})
-		rec := serveThrough(t, securityHeaders(cors))
+		rec := serveThrough(t, securityHeaders(false, cors))
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
 		}
@@ -1486,7 +1486,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 	}
 	for _, base := range []string{"/", "/libgen"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), card, nil, base)
+			handler := newHTTPHandler(teapotHandler(), card, nil, base, false)
 			for _, tc := range mountedRoutes(normalizeBasePath(base)) {
 				t.Run(tc.name, func(t *testing.T) {
 					assertRoute(t, handler, tc)
@@ -1503,7 +1503,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 func TestNewHTTPHandlerAcceptsEveryBasePathSpelling(t *testing.T) {
 	for _, base := range []string{"libgen", "/libgen", "/libgen/"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), nil, nil, base)
+			handler := newHTTPHandler(teapotHandler(), nil, nil, base, false)
 			assertRoute(t, handler, routeCase{
 				method: http.MethodGet, path: "/libgen/health",
 				wantStatus: http.StatusOK, wantType: "application/json",

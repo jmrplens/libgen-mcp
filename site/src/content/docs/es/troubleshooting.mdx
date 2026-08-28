@@ -268,6 +268,48 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 </Facts>
 
+## El proxy da `502` en un socket unix (`permission denied`)
+
+<Facts>
+	<Fact kind="symptom">
+		El servidor registra `listening on unix socket /run/mcp-libgen.sock (http)` y sigue en pie, pero toda petición que pasa por el proxy inverso vuelve como `502 Bad Gateway`; el log de errores del proxy nombra el socket y dice `Permission denied` — en nginx, `connect() to unix:/… failed (13: Permission denied)`.
+	</Fact>
+	<Fact kind="meaning">
+		El socket existe y el proxy lo encontró, pero el proceso que intentó abrirlo ni es el propietario del socket ni está en su grupo. El socket se crea `0660` a propósito: a un socket unix se llega por el sistema de archivos, así que cualquier cosa más ancha que propietario+grupo significa que cualquier cuenta local puede hablar con el endpoint MCP.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- Mete los procesos **worker** del proxy en el grupo del socket. En nginx eso es el segundo argumento de la directiva `user` (`user nginx 10001;`), no un grupo suplementario del contenedor: nginx llama a `initgroups()` al soltar privilegios, así que un `group_add` de Docker se descarta antes del primer connect.
+    	- Revisa también el propio directorio del socket. Un directorio `0750` que el proxy no puede atravesar da el mismo `permission denied` sea cual sea el modo del socket.
+    	- Amplía el modo solo si no queda otra: `--http-socket-mode 0666` lo hace accesible a cualquier cuenta de ese espacio de nombres, y solo es razonable cuando el directorio de encima ya está restringido.
+    	- Con Docker, los dos contenedores tienen que ver el **mismo** directorio — un bind mount, o un volumen con nombre montado en ambos. Dos contenedores escribiendo cada uno su copia de `/run/mcp` dan un servidor que arranca tan contento y un proxy que recibe `No such file or directory`, no `permission denied`.
+    	- Si lo que ocurre es que el proceso aborta al arrancar diciendo `--http-socket-mode … applies to a unix socket, but --http … is an address`, el modo se pasó junto a un `--http` TCP; quita uno de los dos. En Windows un modo explícito también se rechaza, porque allí `os.Chmod` no puede cumplirlo.
+    	- Otros dos rechazos de arranque se explican solos: `exists and is not a socket` significa que la ruta ya contiene un archivo normal o un directorio, que nunca se borra por ti, y `is already served by another process` significa que hay un servidor vivo respondiendo ahí. Un socket que dejó una ejecución que se cayó se borra automáticamente, con un aviso en el log.
+    </Fact>
+
+</Facts>
+
+## El handshake TLS falla contra una CA privada
+
+<Facts>
+	<Fact kind="symptom">
+		Con `--tls-cert`/`--tls-key` puestos, un cliente o un proxy no consigue completar el handshake: nginx registra `upstream SSL certificate verify error: (20:unable to get local issuer certificate)`, `curl` informa de `SSL certificate problem: unable to get local issuer certificate`, y el log del propio servidor no muestra nada raro — está sirviendo.
+	</Fact>
+	<Fact kind="meaning">
+		El certificado está bien; lo que pasa es que nada del lado cliente confía en la CA que lo emitió. Una CA privada o interna no está en el almacén de confianza del sistema, y nginx no verifica en absoluto los certificados de los upstream salvo que se le diga.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- En nginx, activa la verificación **y** aporta la CA en el mismo cambio: `proxy_ssl_verify on;`, `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` y un `proxy_ssl_name` que case con un nombre del certificado. Lo primero sin lo segundo hace fallar todas las peticiones; ninguna de las dos cosas deja el salto cifrado pero sin autenticar, que es el estado del que suele partir este síntoma.
+    	- Asegúrate de que el certificado lleva como subjectAltName el nombre por el que conecta el proxy. Un certificado con solo CN lo rechazan de plano los clientes modernos, diga lo que diga el almacén de confianza.
+    	- Para un cliente y no un proxy, añade la CA a su almacén de confianza — antes `curl --cacert ca.pem`, para confirmar la cadena sin tocar nada del sistema.
+    	- Un handshake que falla por la versión del protocolo es el suelo de TLS 1.2: este listener rechaza TLS 1.0 y 1.1.
+    	- Si el proceso ni siquiera llegó a servir y salió con `loading the TLS certificate and key`, el problema es la propia pareja — un archivo que falta, uno ilegible, o una clave que no case con el certificado. Esa comprobación se hace al arrancar a propósito, para que no se descubra en un handshake que nadie está mirando. `--tls-cert was given without --tls-key` (o al revés) es la otra mitad de la misma guarda.
+    	- **Prefiere un socket unix cuando el proxy está en la misma máquina.** Elimina el segmento de red en lugar de cifrarlo, así que no hay certificado que emitir, en el que confiar ni que rotar, y toda esta clase de fallo desaparece. Consulta [Arquitectura](/libgen-mcp/es/architecture/#dónde-escucha-el-servidor).
+    </Fact>
+
+</Facts>
+
 ## Espacio en disco
 
 <Facts>

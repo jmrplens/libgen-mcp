@@ -348,11 +348,11 @@ Those routes — the MCP endpoint, `/health` and the two card paths — are the 
 libgen-mcp --http :8080 --http-path /libgen
 ```
 
-The endpoint is then `POST /libgen`, the probe `GET /libgen/health`, and the cards live under `/libgen` too; `libgen`, `/libgen` and `/libgen/` all mean the same mount, while a value with a query, a fragment, a `..` segment or a percent-escape is refused at startup. Every response — the `404` and the `405` included — carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The card overrides the cache header with its own one-hour lifetime. `Strict-Transport-Security` is not among them: set it at whatever terminates TLS in front of this process.
+The endpoint is then `POST /libgen`, the probe `GET /libgen/health`, and the cards live under `/libgen` too; `libgen`, `/libgen` and `/libgen/` all mean the same mount, while a value with a query, a fragment, a `..` segment or a percent-escape is refused at startup. Every response — the `404` and the `405` included — carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The card overrides the cache header with its own one-hour lifetime. `Strict-Transport-Security` joins them only when this process terminates TLS itself (`--tls-cert`, below); behind a proxy that terminates it, the proxy is the layer that sends it.
 
 If a client of yours still needs the old session-based transport, pass `--stateless=false`; it then negotiates MCP protocol `2025-11-25` or older. See [Architecture](/libgen-mcp/architecture/#stateless-mode) for what else changes, including the elicitation note.
 
-Because an HTTP server runs elsewhere and cannot write to your disk, `download` returns a link (a `resource_link` plus a `resolved` object) instead of saving a file — you don't need to set `resolve_only` in this mode. See [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote) for details.
+Because an HTTP server answers clients whose disk it cannot write to, `download` returns a link (a `resource_link` plus a `resolved` object) instead of saving a file — you don't need to set `resolve_only` in this mode. See [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote) for details.
 
 <Aside type="note">
 	Hosting a **stdio** server instead — for example behind `mcp-proxy` on a
@@ -360,6 +360,76 @@ Because an HTTP server runs elsewhere and cannot write to your disk, `download` 
 	without an HTTP listener. Set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` to put that
 	stdio server into the same remote-download mode `--http` gets automatically.
 </Aside>
+
+#### Behind a proxy on the same machine: a unix socket
+
+If the only thing that talks to this server is a reverse proxy on the same host, `--http` also takes a filesystem path and binds a unix socket there instead of a port:
+
+```bash
+libgen-mcp --http /run/mcp-libgen.sock
+```
+
+The rule is that a value containing `/` is a path: `/run/mcp-libgen.sock` and `./mcp.sock` are sockets, while `:8080`, `127.0.0.1:8080` and — deliberately — a bare `mcp.sock` are addresses, because a bare name cannot be told apart from a hostname. Prefer this over TLS for a same-host proxy: it does not encrypt the hop, it removes it. There is no bridge to read, no `docker-proxy` hop, no port another local process can reach, and no certificate to issue or rotate.
+
+The socket is created `0660` — owner and group only — so the proxy reaches it by sharing the group rather than by being any local account at all; `--http-socket-mode 0600` (or any other octal mode) changes that. nginx points an upstream straight at the path:
+
+```nginx
+upstream libgen {
+    server unix:/run/mcp-libgen.sock;
+}
+
+server {
+    listen 443 ssl;
+    server_name mcp.example.org;
+
+    location / {
+        proxy_pass         http://libgen;
+        proxy_http_version 1.1;
+        proxy_buffering    off;   # the POST response is a real SSE stream
+        proxy_read_timeout 1h;    # downloads emit progress for minutes
+    }
+}
+```
+
+Under Docker the two containers share the socket's directory and publish nothing:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:latest
+    command: ["--http", "/run/mcp/libgen.sock"]
+    user: "10001:10001"
+    volumes:
+      - ./run:/run/mcp # the socket lives here; no ports are published
+  proxy:
+    image: nginx:1.29-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./run:/run/mcp
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+```
+
+The proxy's worker processes have to run in the socket's group (GID `10001` here) to open a `0660` socket — in nginx that is the second argument of the `user` directive, `user nginx 10001;`, since nginx re-initializes its groups when it drops privileges.
+
+<Aside type="caution">
+	A unix socket is still a non-empty `--http` value, so `download` stays in
+	remote (link-only) mode. That is correct — a socket behind a proxy serves
+	clients that are not on this machine — but "unix socket" reads like "local",
+	and it is not.
+</Aside>
+
+#### Terminating TLS in this process
+
+When the proxy is on **another** host, there is a network segment that has to exist, and this server can terminate TLS itself:
+
+```bash
+libgen-mcp --http 0.0.0.0:8443 --tls-cert /etc/ssl/mcp.crt --tls-key /etc/ssl/mcp.key
+```
+
+Both flags or neither — a certificate without a key fails startup, as does a file that cannot be read or a key that does not match its certificate, because the pair is loaded at startup rather than at the first handshake. The listener requires TLS 1.2 or better and negotiates HTTP/2 with clients that offer it. Every response then carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`, which only the endpoint that actually terminated the connection is in a position to claim.
+
+If the certificate comes from a private CA, the proxy in front has to be pointed at that CA — in nginx, `proxy_ssl_verify on;` **together with** `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` and a `proxy_ssl_name` matching the certificate. nginx does not verify upstream certificates by default, so leaving `proxy_ssl_verify` off hides a bad chain, and turning it on without the CA file fails every request instead.
 
 See [Configuration](/libgen-mcp/configuration/) for the environment variables you can set on any of these, and [Architecture](/libgen-mcp/architecture/) for how the transports work.
 

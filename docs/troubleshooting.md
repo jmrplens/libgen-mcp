@@ -282,6 +282,77 @@ return. Two configurations produce it:
   mounted on a path it can never match would answer `404` to everything, which reads as a
   proxy fault.
 
+## The proxy gets `502` on a unix socket (`permission denied`)
+
+**Symptom.** The server logs `listening on unix socket /run/mcp-libgen.sock (http)` and stays
+up, but every request through the reverse proxy comes back `502 Bad Gateway`; the proxy's error
+log names the socket and says `Permission denied` (nginx: `connect() to unix:/… failed (13:
+Permission denied)`).
+
+**Meaning.** The socket exists and the proxy found it, but the process that tried to open it is
+not the socket's owner and not in its group. The socket is created `0660` on purpose — a unix
+socket is reached through the filesystem, so anything wider than owner+group means every local
+account can talk to the MCP endpoint.
+
+**Fixes.**
+
+- Put the proxy's **worker** processes in the socket's group. In nginx that is the second
+  argument of the `user` directive (`user nginx 10001;`), not a supplementary group on the
+  container: nginx calls `initgroups()` when it drops privileges, so a Docker `group_add` is
+  discarded before the first connect.
+- Check the socket's own directory as well. A `0750` directory the proxy cannot traverse
+  produces the same `permission denied` no matter what the socket's mode is.
+- Widen the mode only if you must: `--http-socket-mode 0666` makes it reachable by every
+  account in that namespace, which is reasonable only when the directory above it is already
+  restricted.
+- Under Docker, both containers must see the **same** directory — one bind mount or one named
+  volume mounted in both. Two containers each writing to their own copy of `/run/mcp` produce
+  a server that binds happily and a proxy that gets `No such file or directory`, not
+  `permission denied`.
+- If the process instead exits at startup saying `--http-socket-mode … applies to a unix
+  socket, but --http … is an address`, the mode was given alongside a TCP `--http`; drop one of
+  the two. On Windows an explicit mode is refused as well, since `os.Chmod` there cannot honor
+  it.
+- Two more startup refusals name themselves: `exists and is not a socket` means the path
+  already holds a regular file or a directory, which is never removed for you, and
+  `is already served by another process` means a live server is answering on it. A socket left
+  by a crashed run is removed automatically, with a warning in the log.
+
+## TLS handshake fails against a private CA
+
+**Symptom.** With `--tls-cert`/`--tls-key` set, a client or proxy cannot complete the
+handshake: nginx logs `upstream SSL certificate verify error: (20:unable to get local issuer
+certificate)`, `curl` reports `SSL certificate problem: unable to get local issuer
+certificate`, and the server's own log shows nothing wrong — it is serving.
+
+**Meaning.** The certificate is fine; nothing on the client side trusts the CA that issued it.
+A private or internal CA is not in the system trust store, and nginx does not verify upstream
+certificates at all unless told to.
+
+**Fixes.**
+
+- In nginx, turn verification on **and** supply the CA in the same change:
+  `proxy_ssl_verify on;`, `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` and a
+  `proxy_ssl_name` that matches a name in the certificate. Turning on the first without the
+  second fails every request; supplying neither means the hop is encrypted but unauthenticated,
+  which is the state this symptom usually starts from.
+- Make sure the certificate actually carries the name the proxy connects by, as a
+  subjectAltName. A CN-only certificate is rejected outright by modern clients, whatever the
+  trust store says.
+- For a client rather than a proxy, add the CA to its trust store (`curl --cacert ca.pem` to
+  confirm the chain before changing anything system-wide).
+- A handshake that fails with a protocol-version error is the TLS 1.2 floor: this listener
+  refuses TLS 1.0 and 1.1.
+- If the process never got as far as serving and exited with `loading the TLS certificate and
+  key`, the pair itself is the problem — a missing file, an unreadable one, or a key that does
+  not match the certificate. That check runs at startup on purpose, so it is not discovered at
+  a handshake nobody is watching. `--tls-cert was given without --tls-key` (or the reverse) is
+  the other half of the same guard.
+- **Prefer a unix socket when the proxy is on the same machine.** It removes the segment
+  instead of encrypting it, so there is no certificate to issue, trust or rotate, and this
+  whole class of failure disappears. See
+  [Architecture](architecture.md#where-the-server-listens).
+
 ## Disk space
 
 **Symptom.** `not enough free disk space in <dir>: need ~<n> bytes, have <m>`.

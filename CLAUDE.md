@@ -208,6 +208,40 @@ parses is not necessarily a shape that reads at 16×16, and the tests can only
 catch malformed XML and a wrong image size — not a glyph that renders as a
 smudge.
 
+### The HTTP listener: unix socket and TLS
+
+`--http` takes a TCP address **or** a unix socket path, and `cmd/server/listen.go` owns the
+whole decision. Four things there are easy to undo by accident:
+
+- **The detection rule is the path separator**, not a heuristic:
+  `isUnixSocketAddr` says "path" for anything containing `/`. A bare `mcp.sock` is therefore
+  TCP on purpose — it is indistinguishable from a hostname, and guessing would silently bind
+  something other than what was asked for. Do not "improve" this by sniffing for a `.sock`
+  suffix.
+- **`listenHTTP` is called from `serveHTTP`, never from `serveHTTPOn`.** `serveHTTPOn` hands
+  the listener to `http.Server`, whose `Serve` closes it; an early error return added inside
+  that function leaks the listener and leaves the socket file on disk.
+- **The socket mode is applied twice, and both halves are load-bearing.** The kernel creates
+  the inode as `0777 &^ umask`, so `withSocketUmask` narrows the umask around the bind (no
+  world-connectable window) and `chmodSocket` afterwards makes it exact (a umask can only
+  clear bits). Both are build-tagged: real in `listen_unix.go`, no-ops in `listen_other.go`,
+  which also sets `socketModesEnforced` false so `resolveSocketMode` can refuse an explicit
+  `--http-socket-mode` instead of accepting a guarantee the platform cannot give.
+- **`tlsConfigFor` must keep `NextProtos: {"h2", "http/1.1"}`.** `tls.NewListener` does not add
+  the protocol list the way `http.Server.ServeTLS` does, so dropping it drops every client to
+  HTTP/1.1 with no error anywhere. The pair is loaded eagerly through the `loadTLSKeyPair`
+  variable seam so a bad file is a named startup error.
+
+`Strict-Transport-Security` is emitted **only** when this process terminates TLS
+(`transport.Options.ServesTLS` → `securityHeaders`). It is the one conditional header on the
+surface; the other five are unconditional.
+
+The user-facing prose lives in `docs/architecture.md` § *Where the server listens* and its two
+Starlight twins, with the operational recipes (nginx, docker-compose) in
+`docs/getting-started.md` and the failure modes in `docs/troubleshooting.md`. The hardcoded
+`## Transports` block in `cmd/gen_llms/main.go` also names these flags — change it there and
+re-run `make gen-llms`, never edit `llms.txt`/`llms-full.txt` by hand.
+
 ### Error handling in handlers
 
 Handlers return `(*mcp.CallToolResult, Out, error)`. Return a real `error` for

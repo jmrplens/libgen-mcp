@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -126,11 +127,14 @@ func main() {
 // mainWithExit parses flags, wires the signal context and runs the server,
 // returning the process exit code.
 func mainWithExit() int {
-	httpAddr := flag.String("http", "", "serve streamable HTTP on this address (e.g. :8080) instead of stdio")
+	httpAddr := flag.String("http", "", "serve streamable HTTP here instead of stdio: an address (e.g. :8080) or a unix socket path (e.g. /run/mcp.sock, recognized by the path separator; a bare name like mcp.sock is read as a host)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	stateless := flag.Bool("stateless", true, "stateless streamable HTTP (default; required for MCP protocol 2026-07-28): no Mcp-Session-Id, each POST self-contained, GET/DELETE return 405; use -stateless=false for legacy stateful sessions")
 	jsonResponse := flag.Bool("json-response", false, "return application/json responses instead of text/event-stream (SSE)")
 	maxBody := flag.Int64("max-request-body-bytes", 0, "maximum streamable HTTP request body size in bytes; 0 uses the SDK default (4 MiB)")
+	socketMode := flag.String("http-socket-mode", "0660", "permission mode for a unix socket given to --http, as octal with or without a leading 0. Ignored for a TCP address, and refused on platforms without file modes")
+	tlsCert := flag.String("tls-cert", "", "PEM certificate file; terminate TLS in this process instead of leaving it to a proxy in front. Requires --tls-key")
+	tlsKey := flag.String("tls-key", "", "PEM private key file for --tls-cert")
 	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	flag.Parse()
@@ -151,6 +155,19 @@ func mainWithExit() int {
 	// shut down gracefully; a second signal restores the default behavior.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Both refused before anything is served, for the same reason the origin list
+	// is: a deployment that believes it is serving TLS, or that its socket is
+	// group-only, and is wrong about it has nothing to look at afterwards.
+	if tlsErr := validateTLSFiles(*tlsCert, *tlsKey); tlsErr != nil {
+		log.Print(tlsErr)
+		return 1
+	}
+	mode, modeErr := resolveSocketMode(*httpAddr, *socketMode)
+	if modeErr != nil {
+		log.Print(modeErr)
+		return 1
+	}
 
 	// Refused at startup rather than at the first request: a server mounted on a
 	// path it cannot match would answer 404 to everything, which looks like a
@@ -179,11 +196,33 @@ func mainWithExit() int {
 		TrustedOrigins:      trusted,
 		BasePath:            normalizeBasePath(*httpPath),
 	}
-	if err := run(ctx, *httpAddr, opts); err != nil && !isCleanShutdown(err) {
+	spec := listenSpec{addr: *httpAddr, socketMode: mode, tlsCert: *tlsCert, tlsKey: *tlsKey}
+	if err := run(ctx, spec, opts); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
 		return 1
 	}
 	return 0
+}
+
+// resolveSocketMode parses --http-socket-mode for the address actually given.
+//
+// A mode is meaningless for a TCP address and unenforceable on a platform whose
+// chmod does not carry permission bits, so an explicitly set value is refused in
+// both cases rather than accepted and quietly ignored — the operator asked for a
+// guarantee this build cannot give.
+func resolveSocketMode(httpAddr, value string) (os.FileMode, error) {
+	mode, err := parseSocketMode(value)
+	if err != nil {
+		return 0, err
+	}
+	explicit := mode != defaultSocketMode
+	if explicit && httpAddr != "" && !isUnixSocketAddr(httpAddr) {
+		return 0, fmt.Errorf("--http-socket-mode %q applies to a unix socket, but --http %q is an address", value, httpAddr)
+	}
+	if explicit && !socketModesEnforced {
+		return 0, fmt.Errorf("--http-socket-mode %q cannot be honored on %s, which has no file permission modes", value, runtime.GOOS)
+	}
+	return mode, nil
 }
 
 // isCleanShutdown reports whether err represents a normal shutdown of the MCP
@@ -458,11 +497,12 @@ func crossOriginProtected(trusted []string, next http.Handler) http.Handler {
 // handlers already own those, and a second writer there is how a browser ends up
 // rejecting a response that curl reports as fine.
 //
-// Strict-Transport-Security is absent on purpose. This server usually speaks
-// plain HTTP to a proxy or to localhost, where the header is either a claim it
-// cannot make or one that poisons the browser's HSTS cache for that host and
-// port. It is emitted only when this process terminates TLS itself.
-func securityHeaders(next http.Handler) http.Handler {
+// Strict-Transport-Security is emitted only when this process terminates TLS
+// itself. Sent over plain HTTP it is either a claim the server cannot make or,
+// on localhost, one that poisons the browser's HSTS cache for that host and port
+// for a year — and a proxy in front that does terminate TLS is the one that
+// knows its own certificate lifetime, so it sends its own.
+func securityHeaders(servesTLS bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -476,6 +516,12 @@ func securityHeaders(next http.Handler) http.Handler {
 		// reading; neither is safe for a shared cache to replay. The card
 		// overrides this with its own lifetime.
 		h.Set("Cache-Control", "no-store")
+		if servesTLS {
+			// One year, no preload directive: preloading is a decision about a
+			// whole domain, which a single server behind it has no standing to
+			// make on the operator's behalf.
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -619,7 +665,7 @@ func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
 // A nil card leaves the card routes unmounted, in which case those paths are
 // simply not served — unlike before, when an unmounted card fell through to the
 // MCP handler and answered 405.
-func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string) http.Handler {
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string, servesTLS bool) http.Handler {
 	base := normalizeBasePath(basePath)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+base+"/health", healthHandler)
@@ -648,10 +694,11 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, 
 	// cross-origin request reports a CORS failure instead of the status, which
 	// hides exactly the mistake — a mistyped path — that the 404 exists to name.
 	mux.Handle("/", browserCORS(trusted, notFound(base)))
-	return securityHeaders(mux)
+	return securityHeaders(servesTLS, mux)
 }
 
-func run(ctx context.Context, httpAddr string, opts transport.Options) error {
+func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
+	httpAddr := spec.addr
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -669,7 +716,7 @@ func run(ctx context.Context, httpAddr string, opts transport.Options) error {
 	}
 
 	if httpAddr != "" {
-		return serveHTTP(ctx, server, httpAddr, opts)
+		return serveHTTP(ctx, server, spec, opts)
 	}
 	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
 	return server.Run(ctx, &mcp.StdioTransport{})
@@ -703,12 +750,12 @@ func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, erro
 // ctx is canceled, tolerating the expected http.ErrServerClosed. Connections
 // still streaming after httpShutdownTimeout are closed outright rather than
 // waited on.
-func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts transport.Options) error {
-	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", httpAddr)
+func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts transport.Options) error {
+	ln, err := listenHTTP(ctx, spec)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", httpAddr, err)
+		return err
 	}
+	opts.ServesTLS = spec.servesTLS()
 	return serveHTTPOn(ctx, server, ln, opts)
 }
 
@@ -725,10 +772,9 @@ func serveHTTP(ctx context.Context, server *mcp.Server, httpAddr string, opts tr
 // Production still calls serveHTTP, which binds and delegates here, so the
 // address a deployment configures is bound exactly as before.
 func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options) error {
-	httpAddr := ln.Addr().String()
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
-		buildversion.Current(), commit, httpAddr, opts.Stateless, opts.JSONResponse)
+		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {
 		log.Print("stateless mode is off: legacy compatibility transport, clients negotiate MCP protocol 2025-11-25 or older")
 	}
@@ -744,7 +790,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	}
 
 	srv := &http.Server{
-		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath),
+		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
