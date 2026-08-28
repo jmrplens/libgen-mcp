@@ -22,11 +22,42 @@ func TestAuditMetadata_Clean(t *testing.T) {
 		Name:        "search",
 		Title:       "Search",
 		Description: "A sufficiently long description for the tool.",
-		Annotations: &mcp.ToolAnnotations{},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(bool)},
 		InputSchema: objectSchema(nil),
 	}
 	if vs := auditMetadata(tool); len(vs) != 0 {
 		t.Fatalf("auditMetadata() = %+v, want none", vs)
+	}
+}
+
+// TestAuditMetadata_UndeclaredDestructiveHint verifies a tool that leaves
+// destructiveHint unset is reported, and that a tool with nil Annotations is
+// reported once rather than twice.
+func TestAuditMetadata_UndeclaredDestructiveHint(t *testing.T) {
+	base := func() *mcp.Tool {
+		return &mcp.Tool{
+			Name:        "search",
+			Title:       "Search",
+			Description: "A sufficiently long description for the tool.",
+			InputSchema: objectSchema(nil),
+		}
+	}
+
+	unset := base()
+	unset.Annotations = &mcp.ToolAnnotations{ReadOnlyHint: true}
+	if !hasSubstr(detailSet(auditMetadata(unset)), "destructiveHint") {
+		t.Errorf("auditMetadata() = %+v, want a destructiveHint finding", auditMetadata(unset))
+	}
+
+	// A nil Annotations already fails on its own; it must not also be charged
+	// with omitting a field it has no room to declare.
+	missing := base()
+	vs := auditMetadata(missing)
+	if len(vs) != 1 || vs[0].Category != "annotations" {
+		t.Fatalf("auditMetadata() = %+v, want exactly one annotations finding", vs)
+	}
+	if hasSubstr(detailSet(vs), "destructiveHint") {
+		t.Errorf("nil Annotations reported as an undeclared destructiveHint: %+v", vs)
 	}
 }
 

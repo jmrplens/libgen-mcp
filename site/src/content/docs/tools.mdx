@@ -43,7 +43,7 @@ head:
             "@type": "ListItem",
             "position": 3,
             "name": "download",
-            "description": "Resolve and download a book by MD5 or ISBN, or an article by DOI, through an ordered source chain that tries the open-access providers before any shadow-library fallback. Saves to a local directory, or returns a resource link when the server runs remotely. Non-destructive, idempotent and open-world.",
+            "description": "Resolve and download a book by MD5 or ISBN, or an article by DOI, through an ordered source chain that tries the open-access providers before any shadow-library fallback. Saves to a local directory, or returns a resource link when the server runs remotely. Destructive when it saves a file, non-destructive when it returns a link; idempotent and open-world.",
             "url": "https://jmrplens.github.io/libgen-mcp/tools/#download"
           },
           {
@@ -112,7 +112,7 @@ import LegalNotice from "../../components/docs/LegalNotice.astro";
 
 import { Aside } from "@astrojs/starlight/components";
 
-`libgen-mcp` exposes four MCP tools: [`search`](#search), [`get_details`](#get_details), [`download`](#download), and [`read`](#read). All four are annotated with an open-world hint; `search`, `get_details`, and `read` are read-only, and `download` is non-destructive and idempotent. Every handler is panic-safe: an unexpected failure is returned as a tool error, never as a crash of the session.
+`libgen-mcp` exposes four MCP tools: [`search`](#search), [`get_details`](#get_details), [`download`](#download), and [`read`](#read). All four are annotated with an open-world hint and state an explicit destructive hint. `search`, `get_details`, and `read` are read-only, idempotent and non-destructive; `download` is idempotent and destructive when it saves a file, since it replaces a same-named file in the download directory, and non-destructive when the server runs remotely and returns a link instead. Every handler is panic-safe: an unexpected failure is returned as a tool error, never as a crash of the session.
 
 Every result is returned on two channels: the structured JSON output documented below, and a human-readable Markdown rendering in the text content. For `search`, the Markdown is a results table that includes each result's clickable download links. The structured output leads with a `next_steps` field; the Markdown rendering closes with the same guidance under a _Next steps_ heading. The search guidance tells the model to include the download links when it presents the results to you.
 

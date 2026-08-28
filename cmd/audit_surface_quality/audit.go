@@ -65,15 +65,23 @@ func auditTools(toolList []*mcp.Tool) []violation {
 	return vs
 }
 
-// auditMetadata checks a tool's top-level metadata: title, annotations,
-// description length, and that its input schema is an object.
+// auditMetadata checks a tool's top-level metadata: title, annotations
+// (including an explicitly declared destructiveHint), description length, and
+// that its input schema is an object.
 func auditMetadata(t *mcp.Tool) []violation {
 	var vs []violation
 	if t.Title == "" {
 		vs = append(vs, violation{t.Name, "title", "tool has no Title"})
 	}
-	if t.Annotations == nil {
+	switch {
+	case t.Annotations == nil:
 		vs = append(vs, violation{t.Name, "annotations", "tool has nil Annotations"})
+	case t.Annotations.DestructiveHint == nil:
+		// Absent is not neutral. The hint is a pointer so "not stated" survives
+		// the round-trip distinguishably from "stated false", and a client or
+		// scanner that gates on it reads the absence as destructive — which is
+		// how a read-only tool ends up refused by default.
+		vs = append(vs, violation{t.Name, "annotations", "tool does not declare annotations.destructiveHint"})
 	}
 	if len(t.Description) < minDescLen {
 		vs = append(vs, violation{

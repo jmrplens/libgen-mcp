@@ -162,34 +162,34 @@ func (p SearchParams) values() url.Values {
 
 // DownloadOption is a single labeled download link for a result.
 type DownloadOption struct {
-	Label string `json:"label" jsonschema:"human label for this download link"`
-	URL   string `json:"url" jsonschema:"direct download URL for this option"`
+	Label string `json:"label" jsonschema:"link label"`
+	URL   string `json:"url" jsonschema:"download URL"`
 }
 
 // Result is one catalog entry from a search page, with its metadata and download
 // options. The identifier fields are the pivot keys for the other tools.
 type Result struct {
-	EditionID string   `json:"edition_id,omitempty" jsonschema:"edition id; pass to get_details as id (with object=edition)"`
-	FileID    string   `json:"file_id,omitempty" jsonschema:"file id; pass to get_details as id with object=file"`
-	MD5       string   `json:"md5" jsonschema:"file MD5 hash (32 hex chars); pass to get_details or download to fetch this book"`
-	DOI       string   `json:"doi,omitempty" jsonschema:"article DOI; pass to download to fetch this article"`
+	EditionID string   `json:"edition_id,omitempty" jsonschema:"get_details object=edition"`
+	FileID    string   `json:"file_id,omitempty" jsonschema:"get_details object=file"`
+	MD5       string   `json:"md5" jsonschema:"file md5, 32 hex"`
+	DOI       string   `json:"doi,omitempty" jsonschema:"article DOI"`
 	Title     string   `json:"title" jsonschema:"record title"`
-	Issue     string   `json:"issue,omitempty" jsonschema:"volume/issue designator for a journal, magazine or comic record (e.g. vol. 26 iss. 2); absent for books"`
-	Edition   string   `json:"edition,omitempty" jsonschema:"edition marker for this record (e.g. 1, 1st ed), kept out of the title so the title compares cleanly"`
-	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs for this record, if any; absent for articles, whose identifier is the doi field"`
+	Issue     string   `json:"issue,omitempty" jsonschema:"volume/issue, e.g. vol. 26 iss. 2"`
+	Edition   string   `json:"edition,omitempty" jsonschema:"e.g. 1st ed; not in the title"`
+	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs"`
 	Authors   string   `json:"authors,omitempty" jsonschema:"authors"`
 	Publisher string   `json:"publisher,omitempty" jsonschema:"publisher"`
 	Year      string   `json:"year,omitempty" jsonschema:"publication year"`
 	Language  string   `json:"language,omitempty" jsonschema:"language"`
 	Pages     string   `json:"pages,omitempty" jsonschema:"page count"`
-	Size      string   `json:"size,omitempty" jsonschema:"human-readable file size"`
-	Extension string   `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub)"`
+	Size      string   `json:"size,omitempty" jsonschema:"human-readable size"`
+	Extension string   `json:"extension,omitempty" jsonschema:"file extension"`
 	Type      string   `json:"type,omitempty" jsonschema:"record type"`
 	// Origin labels which searcher produced this record, so a merged result list
 	// can tell a catalog hit from one federated in from elsewhere. "libgen" for
 	// catalog results; other searchers stamp their own name.
-	Origin    string           `json:"origin,omitempty" jsonschema:"which searcher produced this record: libgen for the catalog, annas for Anna's Archive"`
-	Downloads []DownloadOption `json:"downloads" jsonschema:"labeled download links; prefer the download tool, which handles mirrors and verification"`
+	Origin    string           `json:"origin,omitempty" jsonschema:"searcher: libgen or annas"`
+	Downloads []DownloadOption `json:"downloads" jsonschema:"raw links; prefer the download tool"`
 }
 
 // SearchPage is a parsed page of search results plus the total file count.

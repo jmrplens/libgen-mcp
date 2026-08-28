@@ -16,12 +16,12 @@ import (
 // corroborated (see doiForCitation), and Provenance always says where the rest
 // of the fields came from.
 type Citations struct {
-	BibTeX string `json:"bibtex,omitempty" jsonschema:"a BibTeX @book/@article entry built from this record's metadata"`
-	RIS    string `json:"ris,omitempty" jsonschema:"an RIS (TY..ER) entry built from this record's metadata"`
+	BibTeX string `json:"bibtex,omitempty" jsonschema:"@book/@article entry"`
+	RIS    string `json:"ris,omitempty" jsonschema:"TY..ER entry"`
 	// DOIStatus is machine-readable so a caller can branch on it without parsing
 	// Provenance; it is empty when the record carries no DOI at all.
-	DOIStatus  string `json:"doi_status,omitempty" jsonschema:"whether the record's DOI was corroborated against Crossref: confirmed (Crossref registers this DOI to the same title, so the entries above state it), unverified (the check could not be made, so the DOI is omitted from the entries), or mismatch (Crossref registers this DOI to a different work, so the catalog record is wrong and the DOI is omitted)"`
-	Provenance string `json:"provenance,omitempty" jsonschema:"where these bibliographic fields came from and what was verified; the metadata is third-party catalog data, so relay this caveat rather than presenting the citation as authoritative"`
+	DOIStatus  string `json:"doi_status,omitempty" jsonschema:"Crossref check on the DOI: confirmed (same title, entries state it), unverified (not checked) or mismatch (other work); the last two omit the DOI"`
+	Provenance string `json:"provenance,omitempty" jsonschema:"field sources and what was verified; relay it, do not present the citation as authoritative"`
 }
 
 type citeFields struct {

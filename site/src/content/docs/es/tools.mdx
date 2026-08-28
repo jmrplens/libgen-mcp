@@ -43,7 +43,7 @@ head:
             "@type": "ListItem",
             "position": 3,
             "name": "download",
-            "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de biblioteca en la sombra. Guarda en un directorio local, o devuelve un resource_link cuando el servidor se ejecuta en remoto. No destructiva, idempotente y de mundo abierto.",
+            "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de biblioteca en la sombra. Guarda en un directorio local, o devuelve un resource_link cuando el servidor se ejecuta en remoto. Destructiva cuando guarda un fichero, no destructiva cuando devuelve un enlace; idempotente y de mundo abierto.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#download"
           },
           {
@@ -112,7 +112,7 @@ import LegalNotice from "../../../components/docs/LegalNotice.astro";
 
 import { Aside } from "@astrojs/starlight/components";
 
-`libgen-mcp` expone cuatro herramientas MCP: [`search`](#search), [`get_details`](#get_details), [`download`](#download) y [`read`](#read). Las cuatro están anotadas con una pista de mundo abierto; `search`, `get_details` y `read` son de solo lectura, y `download` es no destructiva e idempotente. Cada handler es a prueba de panics: un fallo inesperado se devuelve como error de herramienta, nunca como una caída de la sesión.
+`libgen-mcp` expone cuatro herramientas MCP: [`search`](#search), [`get_details`](#get_details), [`download`](#download) y [`read`](#read). Las cuatro están anotadas con una pista de mundo abierto y declaran de forma explícita su pista de destructividad. `search`, `get_details` y `read` son de solo lectura, idempotentes y no destructivas; `download` es idempotente y destructiva cuando guarda un fichero, porque reemplaza a otro del mismo nombre en el directorio de descargas, y no destructiva cuando el servidor se ejecuta en remoto y devuelve un enlace. Cada handler es a prueba de panics: un fallo inesperado se devuelve como error de herramienta, nunca como una caída de la sesión.
 
 Cada resultado se devuelve por dos canales: la salida JSON estructurada que se documenta más abajo, y una representación Markdown legible en el contenido de texto. Para `search`, el Markdown es una tabla de resultados que incluye los enlaces de descarga de cada resultado. La salida estructurada empieza por un campo `next_steps`; la representación Markdown cierra con esa misma guía bajo un encabezado _Next steps_. La guía de búsqueda le indica al modelo que incluya los enlaces de descarga al presentarte los resultados.
 
