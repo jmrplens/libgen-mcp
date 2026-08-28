@@ -199,13 +199,13 @@ type Resolved struct {
 // "per rolling window" rather than "per midnight-to-midnight day".
 type AccountInfo struct {
 	// Source is the Name() of the source the allowance belongs to.
-	Source string `json:"source" jsonschema:"the download source this account belongs to"`
+	Source string `json:"source" jsonschema:"account's source"`
 	// DownloadsLeft is the remaining allowance for the current window.
-	DownloadsLeft int `json:"downloads_left" jsonschema:"downloads still available in the current window"`
+	DownloadsLeft int `json:"downloads_left" jsonschema:"downloads left this window"`
 	// DownloadsPerDay is the account's ceiling per rolling window.
-	DownloadsPerDay int `json:"downloads_per_day" jsonschema:"the account's download ceiling per rolling window (18h for Anna's despite the field name)"`
+	DownloadsPerDay int `json:"downloads_per_day" jsonschema:"per rolling window, not a day (Anna's: 18h)"`
 	// DownloadsDoneToday is how much of the ceiling has been consumed.
-	DownloadsDoneToday int `json:"downloads_done_today" jsonschema:"downloads already consumed in the current window"`
+	DownloadsDoneToday int `json:"downloads_done_today" jsonschema:"downloads used this window"`
 }
 
 // DownloadSource resolves an Item to a concrete, streamable URL. Implementations

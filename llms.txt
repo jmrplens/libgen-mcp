@@ -63,10 +63,10 @@ Configuration (environment variables, all optional):
 
 Tools:
 
-- search: Federated search for books, papers, comics, magazines and standards across multiple bibliographic catalogs and open-access sources, returning results with metadata, md5 hash and download options.
-- get_details: Full metadata for a bibliographic record — description, identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its citations field.
+- search: Federated search for books, papers, comics, magazines and standards, returning per-result metadata, md5 and download links.
+- get_details: Full metadata for one bibliographic record — identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its citations field.
 - download: Download a file to a local directory.
-- read: Extract and paginate the text of a book or paper so you can read it without downloading the whole file.
+- read: Read a book or paper's text in chunks without downloading the whole file.
 
 Prompts (guided workflows a client can offer by name):
 

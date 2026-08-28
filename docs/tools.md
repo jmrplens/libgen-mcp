@@ -1,9 +1,11 @@
 # Tools
 
 `libgen-mcp` exposes four MCP tools: [`search`](#search), [`get_details`](#get_details),
-[`download`](#download), and [`read`](#read). All four are annotated with an open-world hint;
-`search`, `get_details`, and `read` are read-only, and `download` is non-destructive and
-idempotent. Every handler is panic-safe: an unexpected failure is returned as a tool error,
+[`download`](#download), and [`read`](#read). All four are annotated with an open-world hint and
+state an explicit destructive hint. `search`, `get_details`, and `read` are read-only,
+idempotent and non-destructive; `download` is idempotent and destructive when it saves a
+file, since it replaces a same-named file in the download directory, and non-destructive
+when the server runs remotely and returns a link instead. Every handler is panic-safe: an unexpected failure is returned as a tool error,
 never as a crash of the session.
 
 Every result is returned on **two channels**: the structured JSON output (fields documented

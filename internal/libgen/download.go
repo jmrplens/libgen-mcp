@@ -159,9 +159,9 @@ func (c *Client) ResolveGetURL(ctx context.Context, md5 string) (getURL, base st
 // see which licenses, subscriptions or memberships this deployment holds, so any
 // verdict it forms from a source name is a guess.
 type DownloadResult struct {
-	Path             string `json:"path" jsonschema:"absolute path of the saved file"`
-	SizeBytes        int64  `json:"size_bytes" jsonschema:"final file size in bytes"`
-	OriginalFilename string `json:"original_filename,omitempty" jsonschema:"the name the mirror/CDN announced, if any"`
+	Path             string `json:"path" jsonschema:"absolute path"`
+	SizeBytes        int64  `json:"size_bytes" jsonschema:"size in bytes"`
+	OriginalFilename string `json:"original_filename,omitempty" jsonschema:"name the source announced"`
 	// Mirror is the scheme://host origin that served the bytes. Server-side only:
 	// it is logged for the operator and never serialized to the caller, which never
 	// asked for a host and cannot have named one.
@@ -173,22 +173,22 @@ type DownloadResult struct {
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
-	Verified bool `json:"verified" jsonschema:"true when the bytes' MD5 matched the requested md5 (an md5-keyed book download); false whenever there is no md5 to check against, i.e. every doi and isbn download"`
+	Verified bool `json:"verified" jsonschema:"bytes matched the requested md5; false for doi/isbn (none to check)"`
 	// NameOrigin reports where the saved file's name came from. It matters most on
 	// an unverified download: a "metadata" or "identifier" name was constructed
 	// here, not announced by the source, so it says what was ASKED FOR and is no
 	// evidence of what was delivered. See chooseFileName.
-	NameOrigin NameOrigin `json:"name_origin,omitempty" jsonschema:"where the saved file's name came from: caller (you supplied it), announced (the name the serving source sent, cleaned of mirror marks), metadata (built from the record's author/title/year), or identifier (built from the md5, DOI or ISBN because the source announced no usable name). On an unverified download a metadata or identifier name is derived from what you asked for, not evidence of what arrived"`
+	NameOrigin NameOrigin `json:"name_origin,omitempty" jsonschema:"caller, announced (source-sent), metadata or identifier; the last two say what was asked for, not what arrived"`
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
-	Resumed bool `json:"resumed" jsonschema:"true when the download resumed from a pre-existing partial via an HTTP Range request"`
+	Resumed bool `json:"resumed" jsonschema:"resumed from an existing partial"`
 
 	// Account reports the serving account's remaining metered allowance when the
 	// source used one (currently only Anna's member tier). Nil for keyless paths —
 	// and cleared by the tool layer (redactUnaskedAccount) for a call that never
 	// asked for the member tier, since an allowance the caller did not enquire
 	// about discloses the operator's paid membership rather than answering it.
-	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining metered download allowance of the account that served the file. Reported only when this call set annas_member, since a call that did not ask for the member tier is not told what account the server holds"`
+	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining allowance; only when annas_member was set"`
 }
 
 // errIntegrityCheckFailed is returned when the downloaded content's MD5 digest

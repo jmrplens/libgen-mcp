@@ -677,11 +677,12 @@ func compactToolDescription(description string) string {
 // writeAnnotations writes the tool annotation hints the server actually declares.
 //
 // A hint the server left unset is omitted rather than printed at its Go zero
-// value. destructiveHint and idempotentHint are pointers precisely so "not
-// stated" is distinguishable from "stated false", and search, get_details and
-// read set neither — publishing "destructive=false, idempotent=false" for them
-// turned an absent declaration into an asserted fact in the file written for
-// models to read.
+// value: destructiveHint is a pointer precisely so "not stated" is
+// distinguishable from "stated false", and printing a zero value would turn an
+// absent declaration into an asserted fact in the file written for models to
+// read. Every tool now declares destructiveHint — cmd/audit_surface_quality
+// fails the build otherwise — so in practice the branch prints it every time;
+// it stays because the distinction is the reason the field is a pointer.
 func writeAnnotations(b *strings.Builder, ann *mcp.ToolAnnotations) {
 	if ann == nil {
 		return

@@ -49,7 +49,7 @@ Images are multi-arch (`linux/amd64`, `linux/arm64`), published for every releas
 - 📄 **Papers that actually download.** An ordered source chain with transparent failover across Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, OAPEN and the Internet Archive.
 - 📚 **Reads what it fetches.** `read` extracts and paginates a PDF/EPUB/TXT so your assistant can summarize a book or paper, search inside it, or outline it.
 - 🔖 **Citations built in.** `get_details` returns a ready-to-paste BibTeX/RIS export, with opt-in Crossref/OpenLibrary enrichment.
-- 🪶 **Light context footprint.** The four tools add ~6,700 tokens to a request, and are verified against a real LLM by an automated evaluator.
+- 🪶 **Light context footprint.** The four tools add ~5,500 tokens to a request, and are verified against a real LLM by an automated evaluator.
 
 ## Try it without installing anything
 

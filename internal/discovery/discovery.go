@@ -45,48 +45,48 @@ func discoveryUserAgent() string { return version.UserAgent() }
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"which provider produced this result: arxiv, crossref, openlibrary, gutenberg, dblp, pubmed, eric or annas"`
+	Origin  string `json:"origin" jsonschema:"provider: arxiv, crossref, openlibrary, gutenberg, dblp, pubmed, eric, annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
-	DOI     string `json:"doi,omitempty" jsonschema:"article DOI; pass to read or download to fetch this paper"`
-	ISBN    string `json:"isbn,omitempty" jsonschema:"ISBN; use it to refine a libgen search"`
+	DOI     string `json:"doi,omitempty" jsonschema:"DOI; pass to read/download"`
+	ISBN    string `json:"isbn,omitempty" jsonschema:"book ISBN"`
 	// Venue is the publication venue when the source states one: arXiv's journal_ref
 	// (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the conference or journal dblp
 	// files a record under (e.g. "DAC", "Commun. ACM"), or PubMed's full journal name.
 	// It is a short citation string, never an abstract, so it stays cheap to carry.
-	Venue string `json:"venue,omitempty" jsonschema:"publication venue as the provider states it (arXiv journal_ref, dblp venue, PubMed journal): a short citation string, never an abstract"`
+	Venue string `json:"venue,omitempty" jsonschema:"publication venue"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
-	MD5 string `json:"md5,omitempty" jsonschema:"file md5 for an md5-keyed result (Anna's Archive); pass to get_details or download"`
+	MD5 string `json:"md5,omitempty" jsonschema:"file md5; pass to get_details/download"`
 	// Extension and Size describe the file behind an md5-keyed result, so it can be
 	// compared with a catalog result on the two attributes people sort by. Both are
 	// as the provider states them — the size is a human string like "12.0MB", not a
 	// byte count — and both are empty when it states neither.
-	Extension string `json:"extension,omitempty" jsonschema:"file extension (e.g. pdf, epub), as the provider states it"`
-	Size      string `json:"size,omitempty" jsonschema:"human-readable file size (e.g. 12.0MB), as the provider states it"`
+	Extension string `json:"extension,omitempty" jsonschema:"file extension"`
+	Size      string `json:"size,omitempty" jsonschema:"size text, e.g. 12.0MB"`
 	// PDFURL is a candidate full-text PDF link. For arxiv and eric it is the
 	// provider's own hosted file and is reliably fetchable; for crossref it is the
 	// link the PUBLISHER advertises, which is unverified — many publishers 403
 	// anonymous clients — so nothing may present it as proof the work is readable.
 	// A Gutenberg ebook is not an article PDF and rides FullTextURL instead.
-	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF URL. For an arxiv or eric result it is the provider's own hosted file and is fetchable (and for eric it is the whole way to get the file, since ERIC grey literature has no DOI to pass to download). For a crossref result it is the link the publisher advertises and is UNVERIFIED: major publishers serve it only to subscribers or refuse automated clients outright, so do not present it as proof the work is readable — pass the doi to read/download instead and let the source chain try it"`
+	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF: a real file for arxiv/eric (eric's only route, no doi); for crossref an UNVERIFIED publisher link, not proof it is readable"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"
 	// signal in the locator column.
-	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org details page for a publicly readable book"`
+	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org page"`
 	// FullTextURL is a directly-fetchable book FILE (EPUB, plain text or PDF) for a
 	// provider whose catalog is not keyed by any identifier the download tool
 	// accepts — Project Gutenberg, whose ebooks have no DOI, ISBN or md5. It is the
 	// whole value of such a hit: without it the record could only be described, not
 	// obtained. Distinct from PDFURL, which is specifically an article PDF.
-	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"a directly-fetchable open-access book file (epub, txt or pdf), for a record with no doi/isbn/md5 to download by; fetch it with your own HTTP tool"`
+	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"book file (epub/txt/pdf); fetch it directly"`
 	// OpenAccess states the record's LICENSING status as the provider reports it (a
 	// Creative Commons license for crossref, a hosted free copy for the rest). It is
 	// not a claim that the file can be fetched right now: an openly licensed article
 	// can still sit behind a publisher that refuses automated clients.
-	OpenAccess bool `json:"open_access" jsonschema:"true when the record is open access — a licensing fact (e.g. a Creative Commons license), not a guarantee the file can be fetched: an openly licensed article can still sit behind a publisher that blocks automated clients, so pass the doi to read/download to find out"`
+	OpenAccess bool `json:"open_access" jsonschema:"openly licensed; not proof it can be fetched"`
 }
 
 // Provider is a keyless open-access discovery source.

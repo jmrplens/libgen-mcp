@@ -6,6 +6,9 @@
 //
 //   - every tool has a Title, non-nil Annotations, and a description of at
 //     least [minDescLen] characters;
+//   - every tool states annotations.destructiveHint rather than leaving it
+//     unset, since a client that gates on the hint reads its absence as
+//     destructive;
 //   - every tool's InputSchema is a JSON Schema object;
 //   - every named input and output field carries a non-empty jsonschema
 //     description (so the model is never handed an unlabeled parameter);
