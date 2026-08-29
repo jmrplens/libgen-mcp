@@ -73,6 +73,10 @@ func detailsInputSchema() *jsonschema.Schema {
 		requiresNonBlank("id"),
 		requiresNonBlank("doi"),
 	}
+	// object names a closed set the handler enforces, so the schema says so too
+	// rather than leaving the model to read it out of the prose and learn it was
+	// wrong from an error.
+	setStringEnum(schema, "object", detailsObjectNames())
 	return schema
 }
 
@@ -1535,16 +1539,37 @@ func detailsByMD5(ctx context.Context, c *libgen.Client, md5 string) (DetailsOut
 	return DetailsOutput{File: file, Edition: edition}, nil
 }
 
+// The two records an id can name. They are constants rather than literals
+// because detailsInputSchema pins the object argument's enum from
+// [detailsObjectNames]: the schema a client validates against and the switch
+// below that enforces it now read from one list, so neither can drift into
+// accepting a value the other refuses.
+const (
+	detailsObjectEdition = "edition"
+	detailsObjectFile    = "file"
+)
+
+// detailsObjectNames lists the values the object argument accepts, in the order
+// the schema should advertise them — the default first.
+//
+// The empty string is not among them. It reaches the handler as "take the
+// default", which is what omitting the argument already means, so advertising it
+// would document a second spelling of the same thing.
+func detailsObjectNames() []string {
+	return []string{detailsObjectEdition, detailsObjectFile}
+}
+
 // detailsByID resolves a record by edition ("e", default) or file ("f") id,
 // mapping the caller-facing object name to the API code.
 func detailsByID(ctx context.Context, c *libgen.Client, objectName, id string) (DetailsOutput, error) {
 	object := "e"
 	switch objectName {
-	case "", "edition":
-	case "file":
+	case "", detailsObjectEdition:
+	case detailsObjectFile:
 		object = "f"
 	default:
-		return DetailsOutput{}, fmt.Errorf("object must be edition or file, got %q", objectName)
+		return DetailsOutput{}, fmt.Errorf("object must be %s or %s, got %q",
+			detailsObjectEdition, detailsObjectFile, objectName)
 	}
 	rec, err := c.DetailsByID(ctx, object, id)
 	if err != nil {

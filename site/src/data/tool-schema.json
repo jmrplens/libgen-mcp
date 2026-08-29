@@ -135,7 +135,11 @@
         {
           "name": "object",
           "type": "string",
-          "required": false
+          "required": false,
+          "enum": [
+            "edition",
+            "file"
+          ]
         },
         {
           "name": "enrich",
