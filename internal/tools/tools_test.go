@@ -4189,6 +4189,58 @@ func TestIdentifierGroupsMatchTheirValidators(t *testing.T) {
 	})
 }
 
+// TestDetailsObjectEnumMatchesItsValidator asserts get_details advertises the
+// object values its handler actually accepts.
+//
+// object names a closed set — edition or file — that used to live only in the
+// tool's prose, leaving a model free to invent a third value and learn it was
+// wrong from an error. Pinning the enum only helps if the schema and the switch
+// in detailsByID stay the same list, which is what this checks from both ends.
+func TestDetailsObjectEnumMatchesItsValidator(t *testing.T) {
+	schema := detailsInputSchema()
+	if schema == nil {
+		t.Fatal("detailsInputSchema() = nil")
+	}
+	object := schema.Properties["object"]
+	if object == nil {
+		t.Fatal("schema has no object property")
+	}
+	got := make([]string, len(object.Enum))
+	for i, v := range object.Enum {
+		got[i], _ = v.(string)
+	}
+	if want := detailsObjectNames(); !slices.Equal(got, want) {
+		t.Errorf("object enum = %v, want %v", got, want)
+	}
+
+	// The enum is only worth pinning if it matches what the handler will
+	// actually accept, so drive the handler with every advertised value and
+	// with one it does not advertise. The context is already canceled, so a
+	// value that clears the switch fails on the lookup instead — which is
+	// the point: the only error this asserts on is the validation one.
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	client := libgen.New(staticMirrors{}, cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, name := range object.Enum {
+		value, _ := name.(string)
+		if _, err := detailsByID(ctx, client, value, "1"); err != nil &&
+			strings.Contains(err.Error(), "object must be") {
+			t.Errorf("handler rejects advertised object %q: %v", value, err)
+		}
+	}
+	// Omitting the argument must keep working: the schema leaves it optional
+	// and the handler reads an absent value as the default.
+	if _, err := detailsByID(ctx, client, "", "1"); err != nil &&
+		strings.Contains(err.Error(), "object must be") {
+		t.Errorf("handler rejects an omitted object: %v", err)
+	}
+	if _, err := detailsByID(ctx, client, "chapter", "1"); err == nil ||
+		!strings.Contains(err.Error(), "object must be") {
+		t.Errorf("handler accepted an object the schema does not advertise: err = %v", err)
+	}
+}
+
 // TestReadOnlyToolsDeclareIdempotent asserts every read-only tool also declares
 // idempotentHint over a real listing: a pure read re-run with the same
 // arguments has no additional effect, and a client may gate retries on either

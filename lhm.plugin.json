@@ -186,6 +186,10 @@
           },
           "object": {
             "description": "with id, one value: edition (default) or file",
+            "enum": [
+              "edition",
+              "file"
+            ],
             "type": "string"
           }
         },
