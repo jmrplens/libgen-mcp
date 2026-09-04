@@ -32,16 +32,16 @@
     "analyze": "pnpm run build && pnpm run lint"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.41.8",
-    "astro": "^7.2.6",
-    "mermaid": "^11.17.1",
-    "sharp": "^0.35.3"
+    "@astrojs/starlight": "^0.41.9",
+    "astro": "^7.2.9",
+    "mermaid": "^11.17.2",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@typescript-eslint/eslint-plugin": "^8.67.0",
-    "@typescript-eslint/parser": "^8.67.0",
-    "eslint": "^10.9.0",
+    "@typescript-eslint/eslint-plugin": "^8.68.0",
+    "@typescript-eslint/parser": "^8.68.0",
+    "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-astro": "^3.1.0",
     "html-validate": "^11.10.0",
