@@ -30,6 +30,12 @@ func noopRelease() {
 // Only the first callback is used, and a cache hit reports nothing because
 // nothing is transferred.
 func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...ProgressFunc) (path string, release func(), err error) {
+	// Checked here as well as in DownloadItem, which this would call: refusing up
+	// front means no temp directory is created and no cached copy is handed out,
+	// so a deployment that does not fetch files serves none it fetched earlier.
+	if fetchErr := c.ensureFetchAllowed(); fetchErr != nil {
+		return "", noopRelease, fetchErr
+	}
 	key := item.MD5
 	if key == "" {
 		key = item.DOI

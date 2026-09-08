@@ -1657,7 +1657,7 @@ func TestToolDescriptionsHaveUntrustedNote(t *testing.T) {
 		{"read", readToolDescription},
 		{
 			"download",
-			downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false),
+			downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, contractSaves),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1683,7 +1683,7 @@ func TestToolDescriptionsHaveUntrustedNote(t *testing.T) {
 // it says nothing, because then there is nothing to name.
 func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, false,
+		[]string{"libgen", "randombook", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, contractSaves,
 	)
 	for _, want := range []string{
 		"shadow-library", "libgen is a Library Genesis mirror", "annas is Anna's Archive", "scihub is Sci-Hub",
@@ -1697,7 +1697,7 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
 		}
 	}
-	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"}, false)
+	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"}, contractSaves)
 	if strings.Contains(clean, "shadow-library") {
 		t.Errorf("a chain with no shadow library needs no disclosure; got:\n%s", clean)
 	}
@@ -1729,7 +1729,7 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 // and nothing else in the build can catch a description that lies.
 func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 	desc := downloadToolDescription(
-		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, false,
+		[]string{"libgen", "annas"}, []string{"oapen"}, []string{"unpaywall", "scihub", "scidb"}, contractSaves,
 	)
 	for _, banned := range []string{
 		"without the rightsholder's permission", "copyrighted works",
@@ -1795,7 +1795,7 @@ func TestReadOnlyToolsLeadWithTheirCapability(t *testing.T) {
 // identifier chains apart, so the model never pins an ISBN-only source for an md5
 // download (or the reverse), and mentions a key only when a source serves it.
 func TestDownloadDescriptionNamesEachKeysChain(t *testing.T) {
-	desc := downloadToolDescription([]string{"libgen", "annas"}, []string{"oapen", "archive"}, []string{"scihub"}, false)
+	desc := downloadToolDescription([]string{"libgen", "annas"}, []string{"oapen", "archive"}, []string{"scihub"}, contractSaves)
 	for _, want := range []string{
 		"md5 (book)", "isbn (book)", "doi (article)",
 		"- md5 (book): libgen then annas",
@@ -1807,7 +1807,7 @@ func TestDownloadDescriptionNamesEachKeysChain(t *testing.T) {
 		}
 	}
 
-	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"}, false)
+	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"}, contractSaves)
 	if strings.Contains(noISBN, "isbn") {
 		t.Errorf("description should not mention isbn when no source serves it; got:\n%s", noISBN)
 	}
@@ -1825,7 +1825,7 @@ func TestDownloadDescriptionUsesParagraphs(t *testing.T) {
 			"unpaywall", "openalex", "europepmc", "biorxiv", "rfc", "nist", "dagstuhl", "acl", "zenodo",
 			"scielo", "fao", "fatcat", "crossref", "oapen", "scihub", "scidb",
 		},
-		false,
+		contractSaves,
 	)
 	paragraphs := strings.Split(desc, "\n\n")
 	if len(paragraphs) < 4 {
@@ -1844,7 +1844,7 @@ func TestDownloadDescriptionUsesParagraphs(t *testing.T) {
 // words later. The opening paragraph must now state the contract the running
 // deployment actually honors, with no leftover claim from the other mode.
 func TestDownloadDescriptionMatchesTheDeploymentsContract(t *testing.T) {
-	local := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, false)
+	local := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, contractSaves)
 	if !strings.Contains(local, "Returns the saved path and size") {
 		t.Errorf("local description must state it returns the saved path and size; got:\n%s", local)
 	}
@@ -1852,7 +1852,7 @@ func TestDownloadDescriptionMatchesTheDeploymentsContract(t *testing.T) {
 		t.Errorf("local description must not claim it always returns a link; got:\n%s", local)
 	}
 
-	remote := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, true)
+	remote := downloadToolDescription([]string{"libgen"}, []string{"oapen"}, []string{"scihub"}, contractRemote)
 	if !strings.Contains(remote, "ALWAYS returns a direct link") ||
 		!strings.Contains(remote, "cannot write to your disk") ||
 		!strings.Contains(remote, "resolve_only is implied") {

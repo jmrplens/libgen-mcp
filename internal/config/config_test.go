@@ -450,6 +450,7 @@ func TestLoadBadNumericEnv(t *testing.T) {
 		"LIBGEN_MCP_RETRY_ATTEMPTS":           "some",
 		"LIBGEN_MCP_LOG_LEVEL":                "verbose",
 		"LIBGEN_MCP_REMOTE_DOWNLOADS":         "maybe",
+		"LIBGEN_MCP_SERVER_FETCH":             "perhaps",
 		"LIBGEN_MCP_ENRICH":                   "sometimes",
 		"LIBGEN_MCP_EXTRA_SOURCES":            "sometimes",
 	}
@@ -936,6 +937,100 @@ func TestLoadConfirmDownloads(t *testing.T) {
 		t.Setenv("LIBGEN_MCP_CONFIRM_DOWNLOADS", "banana")
 		if _, err := Load(); err == nil {
 			t.Fatal("Load() should reject a non-boolean LIBGEN_MCP_CONFIRM_DOWNLOADS")
+		}
+	})
+}
+
+// TestLoadServerFetch checks LIBGEN_MCP_SERVER_FETCH, the one boolean that is
+// loaded as a tri-state: unset must stay unset (nil) so the transport decides the
+// default, an explicit value is recorded either way, and a non-boolean value is a
+// load error rather than a silent fallback.
+func TestLoadServerFetch(t *testing.T) {
+	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir()) // keep Load() offline/valid
+
+	t.Run("unset stays nil", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_SERVER_FETCH", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.ServerFetch != nil {
+			t.Errorf("ServerFetch = %v, want nil so the transport picks the default", *cfg.ServerFetch)
+		}
+	})
+
+	for _, v := range []string{"1", "true", "TRUE", "t"} {
+		t.Run("true via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_SERVER_FETCH", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.ServerFetch == nil || !*cfg.ServerFetch {
+				t.Errorf("ServerFetch = %v for %q, want an explicit true", cfg.ServerFetch, v)
+			}
+		})
+	}
+
+	for _, v := range []string{"0", "false", "FALSE", "f"} {
+		t.Run("false via "+v, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_SERVER_FETCH", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.ServerFetch == nil || *cfg.ServerFetch {
+				t.Errorf("ServerFetch = %v for %q, want an explicit false", cfg.ServerFetch, v)
+			}
+		})
+	}
+
+	t.Run("invalid errors", func(t *testing.T) {
+		t.Setenv("LIBGEN_MCP_SERVER_FETCH", "banana")
+		if _, err := Load(); err == nil {
+			t.Fatal("Load() should reject a non-boolean LIBGEN_MCP_SERVER_FETCH")
+		}
+	})
+}
+
+// TestResolveServerFetch pins the defaults the tri-state resolves to: a remote
+// deployment does not pull file bytes unless its operator says so, a local stdio
+// one does, and an explicit value wins over both.
+func TestResolveServerFetch(t *testing.T) {
+	yes, no := true, false
+	cases := []struct {
+		name   string
+		set    *bool
+		remote bool
+		want   bool
+	}{
+		{"unset remote defaults off", nil, true, false},
+		{"unset local defaults on", nil, false, true},
+		{"explicit true wins on a remote server", &yes, true, true},
+		{"explicit false wins on a local server", &no, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{ServerFetch: tc.set}
+			if got := cfg.ResolveServerFetch(tc.remote); got != tc.want {
+				t.Errorf("ResolveServerFetch(%v) = %v, want %v", tc.remote, got, tc.want)
+			}
+			// The answer is recorded, so every later consumer reads one value
+			// instead of re-deriving it from a transport it cannot see.
+			if cfg.ServerFetch == nil || *cfg.ServerFetch != tc.want {
+				t.Errorf("ServerFetch = %v after resolving, want a pinned %v", cfg.ServerFetch, tc.want)
+			}
+			if got := cfg.ServerFetchAllowed(); got != tc.want {
+				t.Errorf("ServerFetchAllowed() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("unresolved allows the fetch", func(t *testing.T) {
+		// Every Config built directly (tests, the docs generators) leaves the
+		// tri-state unset, and those callers are local by construction.
+		if !(&Config{}).ServerFetchAllowed() {
+			t.Error("ServerFetchAllowed() = false on an unresolved Config, want true")
 		}
 	})
 }

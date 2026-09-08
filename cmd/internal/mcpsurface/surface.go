@@ -52,6 +52,12 @@ func DocsConfig() *config.Config {
 	if cfg.CoreKey == "" {
 		cfg.CoreKey = "docs-placeholder-key"
 	}
+	// The documented surface is the full one, so file fetching is pinned on here
+	// the way every source is: a maintainer whose shell exports
+	// LIBGEN_MCP_SERVER_FETCH=0 must not regenerate a smaller surface than the
+	// one the committed artifacts describe.
+	allowed := true
+	cfg.ServerFetch = &allowed
 	return cfg
 }
 

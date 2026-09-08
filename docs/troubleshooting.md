@@ -248,6 +248,27 @@ These are the server's own diagnostic logs, written straight to stderr. They are
 `logging` capability — that capability is deprecated (SEP-2577), this server declares no
 handler for it, and no log line ever reaches a client as an MCP notification.
 
+## The client lists three tools, not four (`read` is missing)
+
+**Symptom.** A hosted server shows `search`, `get_details` and `download`, and no `read`. A
+`tools/call` for `read` is refused by the protocol as an unknown tool.
+
+**Meaning.** This is deliberate, and it is the default for a remote deployment. `read` cannot
+return a single page without first pulling the whole file over the **server's** connection,
+and a hosted server's egress IP is shared by every user it serves — one caller's transfers can
+get that address throttled or blocked for everybody. So `LIBGEN_MCP_SERVER_FETCH` defaults to
+off under `--http`, on a unix socket, and with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, and with it off
+the tool is not registered at all rather than listed and failing every call.
+
+**What to do instead.** Call `download`, which returns a direct link (a `resource_link` plus a
+`resolved` object), fetch that link with your own HTTP tool, and read the file where it lands.
+`search`, `get_details` and `download`'s link resolution are unaffected.
+
+**To get it back.** If you run the deployment and its egress is yours to spend — a private
+instance, or one that is not shared — set `LIBGEN_MCP_SERVER_FETCH=1`. On a local stdio server
+the tool is present by default; if it is missing there, something has set that variable to a
+false value. See [Configuration](configuration.md#libgen_mcp_server_fetch).
+
 ## Every HTTP path answers 404 (`--http` deployments)
 
 **Symptom.** A server started with `--http` answers `404` and

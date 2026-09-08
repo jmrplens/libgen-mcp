@@ -326,8 +326,8 @@ The server speaks MCP over one of two transports, selected at startup:
   one included — can read the surface without opening an MCP session. Those routes
   and the MCP endpoint are the whole HTTP surface: every other path answers `404`.
 
-Both transports share the same tools, HTTP client, and download pipeline; only the
-request/response channel differs. Termination signals (SIGINT/SIGTERM) drain in-flight work
+Both transports share the same download pipeline and HTTP client; the surface they present
+differs in one place, below. Termination signals (SIGINT/SIGTERM) drain in-flight work
 and shut the active transport down gracefully. Because a `--http` server answers clients whose
 disk it cannot write to, it flips `download` into remote download mode: every call returns a
 link (a `resource_link` plus a `resolved` object) instead of saving a file. A unix socket is
@@ -335,6 +335,16 @@ still a non-empty `--http` value, so it is in remote mode too — which is right
 behind a reverse proxy serves clients that are not on this machine, but it does surprise people
 who read "unix socket" as "local". See
 [Tools](tools.md#where-the-file-goes-local-vs-remote) for details.
+
+A remote deployment also does not **fetch** files, which is a different claim from not saving
+them: `LIBGEN_MCP_SERVER_FETCH` defaults to off there, and with it off the `read` tool is not
+registered at all, because returning one page of text means pulling the whole file over an
+egress IP shared by every user of the deployment. The rule is drawn at the file body: link
+resolution, `search` and `get_details` still reach the mirrors, since those are small requests
+and moving them client-side would leave the server with nothing to do. An operator lifts it
+with `LIBGEN_MCP_SERVER_FETCH=1`. See
+[Configuration](configuration.md#libgen_mcp_server_fetch) and
+[Tools](tools.md#read-is-not-on-every-deployment).
 
 ### Where the server listens
 

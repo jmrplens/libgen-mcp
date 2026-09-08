@@ -97,6 +97,13 @@ type Config struct {
 	// set it for a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the
 	// client cannot reach, so downloads are delivered as links the client fetches.
 	RemoteDownloads bool
+	// ServerFetch governs whether this deployment may pull a file's BODY over its
+	// own internet connection — the read tool's fetch-to-temp, and the download
+	// tool's save-to-disk. LIBGEN_MCP_SERVER_FETCH, a bool, held as a tri-state:
+	// nil means the operator said nothing, so the transport picks the default
+	// (see ResolveServerFetch). It never gates resolving a link or querying a
+	// catalog; ErrServerFetchDisabled in internal/libgen records why.
+	ServerFetch *bool
 	// DownloadStartRetryWaits is the staged wait schedule between attempts to get a
 	// download to BEGIN (resolve + connect + first bytes). LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS,
 	// a comma-separated list of Go durations. len(waits) waits means len(waits)+1
@@ -424,7 +431,9 @@ func loadBools(cfg *Config) error {
 			return err
 		}
 	}
-	return nil
+	// SERVER_FETCH is the one boolean loaded as a tri-state, because its default
+	// is not a constant: it depends on the transport, which config cannot see.
+	return envBoolPtr("LIBGEN_MCP_SERVER_FETCH", &cfg.ServerFetch)
 }
 
 // loadNumeric fills the numeric and boolean scalar fields of cfg from the
@@ -497,6 +506,24 @@ func envBool(key string, dst *bool) error {
 		return fmt.Errorf("%s: %w", key, err)
 	}
 	*dst = b
+	return nil
+}
+
+// envBoolPtr fills *dst with the boolean read from the variable key if present,
+// leaving it nil when the variable is unset or empty. It is envBool's tri-state
+// twin, for a setting whose default is decided later rather than by the zero
+// value: nil is "the operator said nothing", which an explicit false does not
+// mean. An unparseable value is an error, the same as envBool's.
+func envBoolPtr(key string, dst **bool) error {
+	v := os.Getenv(key)
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+	*dst = &b
 	return nil
 }
 
@@ -698,6 +725,39 @@ func validateSources(sources []string) error {
 		}
 	}
 	return nil
+}
+
+// ResolveServerFetch settles the LIBGEN_MCP_SERVER_FETCH tri-state against the
+// transport and records the answer on the Config, so the tool registration and
+// the libgen client both read one decided value instead of re-deriving it from a
+// transport neither of them can see. It returns that value.
+//
+// Unset defaults to off for a remote deployment and on for a local stdio one,
+// because the two differ in whose internet connection and whose disk a fetch
+// consumes. A hosted server pulls a file over an egress IP shared by every user
+// it serves, so one caller's multi-megabyte transfers can get the address
+// throttled or blocked and take the deployment down for everybody; the client
+// fetching the link instead confines that cost to whoever caused it. On a local
+// stdio server the connection and the disk are the user's own, and fetching the
+// file is precisely what they asked for.
+//
+// An explicit value wins in both directions: an operator who has the egress
+// capacity can turn fetching on for a hosted deployment, and one running locally
+// can turn it off.
+func (c *Config) ResolveServerFetch(remote bool) bool {
+	if c.ServerFetch == nil {
+		allowed := !remote
+		c.ServerFetch = &allowed
+	}
+	return *c.ServerFetch
+}
+
+// ServerFetchAllowed reports whether this deployment may pull a file's body. An
+// unresolved tri-state reads as allowed: every Config built directly rather than
+// through the server's startup — tests, the documentation generators — is local
+// by construction, which is the case ResolveServerFetch also defaults to on.
+func (c *Config) ServerFetchAllowed() bool {
+	return c.ServerFetch == nil || *c.ServerFetch
 }
 
 // SourceEnabled reports whether the named download source should be part of the

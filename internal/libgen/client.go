@@ -152,6 +152,13 @@ type Client struct {
 	// by a total-size cap and a per-entry TTL and refcounts in-progress reads.
 	tempCache *tempCache
 
+	// serverFetch is the deployment's permission to pull a file's body over its
+	// own connection, decided at startup from LIBGEN_MCP_SERVER_FETCH and the
+	// transport. False makes DownloadItem and FetchToTemp refuse before they make
+	// any request; resolving a link is unaffected, for the reasons recorded on
+	// ErrServerFetchDisabled.
+	serverFetch bool
+
 	mu       sync.Mutex           // protects cooldown
 	cooldown map[string]time.Time // mirror base → instant at which the cooldown expires
 
@@ -319,6 +326,10 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		cooldown:         make(map[string]time.Time),
 		sourceCooldown:   make(map[string]time.Time),
 		tempCache:        newTempCache(cfg.ReadCacheBytes, cfg.ReadCacheTTL),
+		// Unset reads as allowed, so a Config built directly — every test, both
+		// documentation generators — keeps fetching. The server resolves the
+		// tri-state against its transport before it gets here.
+		serverFetch: cfg.ServerFetchAllowed(),
 	}
 	c.retryEverySource = cfg.RetryEverySource
 	c.sourceAllowed = allowedByOperator(cfg.Sources)

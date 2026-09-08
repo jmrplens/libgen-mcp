@@ -53,6 +53,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_CORE_KEY: Optional API key (free registration) enabling the core open-access article source. (default: empty (core disabled))
 - LIBGEN_MCP_SOURCES: Which download sources take part. (default: empty (all enabled))
 - LIBGEN_MCP_REMOTE_DOWNLOADS: Force the download tool to always return a direct link (a resource_link + resolved object) instead of saving a file. (default: false)
+- LIBGEN_MCP_SERVER_FETCH: Whether the server may fetch a file's bytes over its own connection. (default: false on a remote server (--http, a unix socket, or LIBGEN_MCP_REMOTE_DOWNLOADS); true on a local stdio server)
 - LIBGEN_MCP_READ_MAX_CHARS: Characters the read tool returns per call when a call omits max_chars. (default: 6000)
 - LIBGEN_MCP_READ_DEFAULT_PAGES: PDF pages the read tool returns per call when a call omits max_pages. (default: 5)
 - LIBGEN_MCP_READ_CACHE_BYTES: Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. (default: 536870912 (512 MiB))
