@@ -527,6 +527,8 @@ Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servid
 
 Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio. Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
 
+Un enlace es también lo único que devuelve `download` cuando `LIBGEN_MCP_SERVER_FETCH` está desactivada, incluso en un servidor local — consulta [read no está en todos los despliegues](#read-no-está-en-todos-los-despliegues) para saber qué es esa opción y por qué un despliegue remoto la trae así por defecto.
+
 ### Peticiones interactivas (elicitation)
 
 Cuando el cliente MCP conectado admite **elicitation** (pedir información al usuario), `download` puede preguntar hasta tres cosas — todas puramente opt-in, y todas no-ops en un cliente que no anuncia la capacidad. Una llamada que necesita más de una las pregunta juntas, en un solo intercambio:
@@ -551,6 +553,21 @@ Por dentro, la pregunta viaja de vuelta en el resultado de la herramienta y el c
 ## read
 
 `read` es la herramienta que extrae y pagina el texto de un libro o artículo para que un modelo pueda leerlo sin descargar el archivo entero. Identifica el archivo por `md5` (un libro) o `doi` (un artículo) de una búsqueda previa, o por una ruta `path` absoluta a un archivo ya descargado (solo servidor local). La extracción es Go puro — PDF (solo capa de texto), EPUB y TXT — sin OCR.
+
+<Aside type="caution" title="read no está por defecto en un despliegue remoto">
+	Para devolver una sola página de texto, `read` se trae antes el archivo entero
+	por la conexión del **servidor**, que es justo lo que un despliegue alojado no
+	hace. Consulta [read no está en todos los
+	despliegues](#read-no-está-en-todos-los-despliegues), aquí debajo.
+</Aside>
+
+### read no está en todos los despliegues
+
+`read` es la única herramienta que no puede hacer su trabajo sin traerse un archivo entero por la conexión del **servidor**: descarga el archivo a un temporal en el servidor y luego devuelve un fragmento de su texto. En un despliegue alojado esa conexión es una IP de salida compartida por todos los usuarios del servicio, así que las transferencias de uno solo pueden hacer que la dirección quede limitada o bloqueada para todos.
+
+Por eso `LIBGEN_MCP_SERVER_FETCH` decide si la herramienta existe siquiera. Está **desactivada** por defecto en un despliegue remoto (`--http`, un socket unix o `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) y **activada** en un servidor local por stdio, donde la conexión y el disco son tuyos. Con la opción desactivada, `read` **no se registra**: no aparece en `tools/list` y no se puede llamar. Está ausente en lugar de presente-y-fallando para que un modelo no gaste nunca un turno en descubrir el mismo rechazo.
+
+Qué hacer en su lugar en un despliegue así: llama a `download`, que devuelve un enlace directo, descarga ese enlace con tu propia herramienta HTTP y lee el archivo en local. `search` y `get_details` no se ven afectados, y la resolución de enlaces de `download` tampoco — solo el cuerpo del archivo se queda de tu lado de la conexión. Un operador que pueda asumir el coste de salida puede fijar `LIBGEN_MCP_SERVER_FETCH=1` y recuperar `read`. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch).
 
 ### entrada de read
 

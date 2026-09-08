@@ -356,6 +356,8 @@ Si algún cliente tuyo todavía necesita el transporte con sesiones anterior, pa
 
 Como un servidor HTTP atiende a clientes en cuyo disco no puede escribir, `download` devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero — en este modo no hace falta que fijes `resolve_only`. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para el detalle.
 
+Un servidor HTTP sirve además **tres** herramientas en lugar de cuatro por defecto: `read` no se registra, porque devolver una página de texto implica traerse el archivo entero por una IP de salida que comparten todos los que usan tu despliegue. Los clientes descargan el enlace que les da `download` y leen el archivo por su cuenta. Si esa salida a internet es tuya y puedes gastarla, `LIBGEN_MCP_SERVER_FETCH=1` vuelve a activar la herramienta — consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch).
+
 <Aside type="note">
 	Alojar en su lugar un servidor **stdio** — por ejemplo detrás de `mcp-proxy`
 	en un catálogo como Glama — también lo coloca en una máquina remota o efímera,

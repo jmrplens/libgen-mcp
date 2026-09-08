@@ -425,6 +425,12 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 // progress callback (only the first is used) reports throttled byte counts; pass
 // none to disable progress reporting.
 func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename string, progress ...ProgressFunc) (*DownloadResult, error) {
+	// Before the concurrency slot and before any request: a deployment that does
+	// not fetch file bodies must not even resolve one here, since resolving is
+	// only the first half of a transfer this call would go on to make.
+	if err := c.ensureFetchAllowed(); err != nil {
+		return nil, err
+	}
 	onProgress := firstProgress(progress)
 	// Acquire a concurrency slot before doing any work, releasing it on return.
 	// While waiting, honor context cancellation so a queued download can be

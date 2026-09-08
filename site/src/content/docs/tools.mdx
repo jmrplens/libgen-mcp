@@ -511,6 +511,8 @@ By default `download` fetches the file to the machine **running the server**. Wi
 
 A server flips into **remote download mode** when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set. The `--http` case is a server that runs elsewhere and cannot write to your disk. `LIBGEN_MCP_REMOTE_DOWNLOADS` covers the stdio equivalent: a **hosted stdio deployment** — for example the server running as stdio behind `mcp-proxy` on a catalog like Glama — whose process lives on a remote or ephemeral machine whose disk the client cannot reach, even though the transport itself is stdio. Either trigger has the same effect: every `download` call automatically returns a link — the direct URL as a `resource_link` plus a `resolved` object (with any required `headers`) — without saving a file. You don't need to set `resolve_only` there; it is implied, and the tool description says so. You — or your agent's own fetch/HTTP tool — retrieve that URL, so the file ends up wherever that fetch runs. On a **local** server you can still request the same behavior per call with `resolve_only: true`. MCP has no way for a tool to push bytes to the client, so a link is the only way a remote-mode server can deliver a multi-megabyte file.
 
+A link is also all `download` returns when `LIBGEN_MCP_SERVER_FETCH` is off, even on a local server — see [read is not on every deployment](#read-is-not-on-every-deployment) for what that setting is and why a remote deployment defaults to it.
+
 ### Interactive prompts (elicitation)
 
 When the connected MCP client supports **elicitation** (asking you for input), `download` may ask up to three things — all purely opt-in, and all no-ops on a client that doesn't advertise the capability. A call that needs more than one of them asks for them together, in a single exchange:
@@ -534,6 +536,24 @@ Under the hood, a question travels back on the tool result and the client answer
 ## read
 
 `read` is the tool that extracts and paginates the text of a book or paper so a model can read it without downloading the whole file. It identifies the file by `md5` (a book) or `doi` (an article) from a prior search, or by an absolute `path` to an already-downloaded local file (local server only). Extraction is pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
+
+<Aside
+	type="caution"
+	title="read is absent from a remote deployment by default"
+>
+	To return one page of text `read` first pulls the whole file over the
+	**server's** connection, which is the one thing a hosted deployment does not
+	do. See [read is not on every deployment](#read-is-not-on-every-deployment)
+	just below.
+</Aside>
+
+### read is not on every deployment
+
+`read` is the only tool that cannot do its job without pulling a whole file over the **server's** connection: it fetches the file to a server-side temp file and then returns one chunk of its text. On a hosted deployment that connection is an egress IP shared by every user of the service, so one caller's transfers can get the address throttled or blocked for everybody.
+
+So `LIBGEN_MCP_SERVER_FETCH` decides whether the tool exists at all. It defaults to **off** on a remote deployment (`--http`, a unix socket, or `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) and **on** for a local stdio server, where the connection and the disk are your own. With it off, `read` is **not registered**: it does not appear in `tools/list` and cannot be called. It is absent rather than present-and-failing so a model never spends a turn discovering the same refusal.
+
+What to do instead on such a deployment: call `download`, which returns a direct link, fetch that link with your own HTTP tool, and read the file locally. `search` and `get_details` are unaffected, and so is `download`'s link resolution — only the file body stays on your side of the connection. An operator who can afford the egress can set `LIBGEN_MCP_SERVER_FETCH=1` and get `read` back. See [Configuration](/libgen-mcp/configuration/#libgen_mcp_server_fetch).
 
 ### read input
 

@@ -160,6 +160,7 @@ user asks for the behavior:
 | `LIBGEN_MCP_LOG_LEVEL`       | `info`         | `debug`, `info`, `warn`, or `error`.                                      |
 | `LIBGEN_MCP_SOURCES`         | all enabled    | Restrict download sources to a subset of `unpaywall`, `europepmc`, `biorxiv`, `rfc`, `nist`, `dagstuhl`, `acl`, `zenodo`, `scielo`, `fao`, `fatcat`, `core`, `oapen`, `archive`, `scihub`, `scidb`, `libgen`, `randombook`, `annas`. The chain order is fixed; this only removes sources from it. |
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | `false`       | Set to `1` when hosting the stdio server remotely (e.g. behind `mcp-proxy`): `download` returns a link instead of saving a file to an unreachable disk. |
+| `LIBGEN_MCP_SERVER_FETCH`     | `true` locally, `false` on a remote server | Whether the server may fetch a file's bytes itself. Off, the `read` tool is not registered and `download` only returns links. A local stdio install (the one these instructions set up) has it on. |
 
 Full reference: <https://jmrp.io/docs/libgen-mcp/configuration/>
 

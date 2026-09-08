@@ -31,6 +31,13 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("load config: %w", err)
 	}
+	// File fetching is pinned on rather than left to the ambient environment, so
+	// the harness measures the same surface on every machine. The remote block
+	// below therefore models a hosted deployment whose operator has enabled
+	// LIBGEN_MCP_SERVER_FETCH — a supported configuration, and the only remote one
+	// that still serves read, which two of these scenarios grade.
+	allowFetch := true
+	cfg.ServerFetch = &allowFetch
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create mirror manager: %w", err)
@@ -47,7 +54,8 @@ func newHostSession(ctx context.Context, remote bool) (session *mcp.ClientSessio
 		&mcp.ServerOptions{Capabilities: &mcp.ServerCapabilities{}})
 	server.AddReceivingMiddleware(capguard.NoResources())
 	// Remote block: register the download tool in remote mode (returns a link
-	// instead of writing to disk), matching a hosted HTTP deployment.
+	// instead of writing to disk), matching a hosted HTTP deployment that has
+	// enabled server-side fetching (see the pin above).
 	var regOpts []tools.RegisterOption
 	if remote {
 		regOpts = append(regOpts, tools.WithRemoteDownloads())

@@ -429,6 +429,10 @@ call with `resolve_only: true`. MCP has no way for a tool to push bytes to the c
 link is the only way a remote server can deliver a multi-megabyte file. See
 [Configuration](configuration.md) for `LIBGEN_MCP_REMOTE_DOWNLOADS`.
 
+A link is also all `download` returns when `LIBGEN_MCP_SERVER_FETCH` is off, even on a local
+server — see [read is not on every deployment](#read-is-not-on-every-deployment) for what that
+setting is and why a remote deployment defaults to it.
+
 ### Interactive prompts (elicitation)
 
 When the connected MCP client supports **elicitation** (asking you for input), `download`
@@ -506,6 +510,33 @@ Extract and paginate the text of a book or paper so a model can read it without 
 the whole file. Identify the file by `md5` (a book) or `doi` (an article) from a prior search,
 or by an absolute `path` to an already-downloaded local file (local server only). Extraction is
 pure Go — PDF (text layer only), EPUB, and TXT — with **no OCR**.
+
+> **`read` is absent from a remote deployment by default.** To return one page it first
+> fetches the whole file over the server's own connection, which is the one thing a hosted
+> deployment does not do: see
+> [Not on every deployment](#read-is-not-on-every-deployment) below.
+
+### read is not on every deployment
+
+`read` is the only tool that cannot do its job without pulling a whole file over the
+**server's** connection: it fetches the file to a server-side temp file and then returns one
+chunk of its text. On a hosted deployment that connection is an egress IP shared by every user
+of the service, so one caller's transfers can get the address throttled or blocked for
+everybody.
+
+So `LIBGEN_MCP_SERVER_FETCH` decides whether the tool exists at all. It defaults to **off** on
+a remote deployment (`--http`, a unix socket, or `LIBGEN_MCP_REMOTE_DOWNLOADS=1`) and **on**
+for a local stdio server, where the connection and the disk are your own. With it off, `read`
+is **not registered**: it does not appear in `tools/list` and cannot be called. It is absent
+rather than present-and-failing so a model never spends a turn discovering the same refusal.
+
+What to do instead on such a deployment: call `download`, which returns a direct link, fetch
+that link with your own HTTP tool, and read the file locally. `search` and `get_details` are
+unaffected, and so is `download`'s link resolution — only the file body stays on your side of
+the connection. An operator who can afford the egress can set `LIBGEN_MCP_SERVER_FETCH=1` and
+get `read` back. See [Configuration](configuration.md#libgen_mcp_server_fetch), and
+[the file-body ADR](decisions/2026-09-08-a-hosted-server-does-not-fetch-file-bodies.md) for
+why the line is drawn at the file body and not at every mirror request.
 
 ### read input
 
@@ -626,8 +657,10 @@ chunk left off; there is no need to recompute `start_page`/`offset` by hand. A `
 is cached server-side as a temp file for the duration of `LIBGEN_MCP_READ_CACHE_TTL` so that
 successive pages of one read reuse a single download instead of re-fetching the file each call;
 the cache is bounded by `LIBGEN_MCP_READ_CACHE_BYTES` in aggregate (least-recently-used files
-are evicted past it, never one a `read` call currently holds). See
-[Configuration](configuration.md) for the tuning knobs.
+are evicted past it, never one a `read` call currently holds). Both knobs only apply where the
+server may fetch files at all — see [read is not on every
+deployment](#read-is-not-on-every-deployment). See [Configuration](configuration.md) for the
+tuning knobs.
 
 ### Search within a document
 

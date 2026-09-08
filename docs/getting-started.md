@@ -281,6 +281,12 @@ link (a `resource_link` plus a `resolved` object) instead of saving a file — y
 to set `resolve_only` in this mode. See [Tools](tools.md#where-the-file-goes-local-vs-remote)
 for details.
 
+An HTTP server also serves **three** tools rather than four by default: `read` is not registered, because
+returning a page of text means fetching the whole file over an egress IP shared by everyone
+using your deployment. Clients fetch the link `download` gives them and read the file
+themselves. If the egress is yours to spend, `LIBGEN_MCP_SERVER_FETCH=1` turns the tool back
+on — see [Configuration](configuration.md#libgen_mcp_server_fetch).
+
 Hosting a **stdio** server remotely instead (e.g. behind `mcp-proxy` so it can be listed on a
 catalog like Glama) puts you in the same situation without `--http`: the disk is remote and
 the client can't reach it. Set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` to put that stdio server into

@@ -185,7 +185,10 @@ type DownloadInput struct {
 }
 
 // registerOptions holds the optional Register knobs.
-type registerOptions struct{ remoteDownloads bool }
+type registerOptions struct {
+	remoteDownloads bool
+	noServerFetch   bool
+}
 
 // RegisterOption customizes Register.
 type RegisterOption func(*registerOptions)
@@ -196,6 +199,58 @@ type RegisterOption func(*registerOptions)
 // saving a file, and its description says so. Use it when serving over HTTP.
 func WithRemoteDownloads() RegisterOption {
 	return func(o *registerOptions) { o.remoteDownloads = true }
+}
+
+// WithoutServerFetch registers a surface for a deployment that may not pull a
+// file's body over its own connection (LIBGEN_MCP_SERVER_FETCH off, the default
+// for a remote server). It has two effects:
+//
+//   - read is not registered at all. Advertising a tool that would refuse every
+//     call costs a model one turn per attempt to learn what tools/list could have
+//     told it for free, and a listed tool is a tool that gets called.
+//   - download returns a link rather than saving a file, even on a local server,
+//     because writing the file to disk is a fetch like any other.
+//
+// What stays is everything that does not move a file body: search, get_details,
+// and download's link resolution. ErrServerFetchDisabled in internal/libgen
+// records why that line is drawn there.
+func WithoutServerFetch() RegisterOption {
+	return func(o *registerOptions) { o.noServerFetch = true }
+}
+
+// downloadContract names the return contract a deployment honors, which the
+// download tool's opening paragraph has to state correctly: a model reads it
+// before deciding to call the tool, so a claim that is true of another mode is
+// worse than no claim at all.
+type downloadContract int
+
+const (
+	// contractSaves is a server that fetches the file and reports where it saved it.
+	contractSaves downloadContract = iota
+	// contractRemote is a hosted server, which cannot write to the caller's disk.
+	contractRemote
+	// contractNoFetch is a server whose operator has not allowed it to pull file
+	// bodies. It is a distinct case from contractRemote because a local server can
+	// be in it, and telling that user their server "runs remotely" is simply false.
+	contractNoFetch
+)
+
+// linkOnly reports whether this contract returns a link instead of a saved file.
+func (d downloadContract) linkOnly() bool { return d != contractSaves }
+
+// downloadContractFor picks the contract from the registration options. Not
+// fetching wins over running remotely only in wording: both return links, and a
+// remote server is described as remote because that is the fact its caller most
+// needs.
+func downloadContractFor(o registerOptions) downloadContract {
+	switch {
+	case o.remoteDownloads:
+		return contractRemote
+	case o.noServerFetch:
+		return contractNoFetch
+	default:
+		return contractSaves
+	}
 }
 
 // Register wires the search, get_details, download and read tools onto the MCP
@@ -241,11 +296,12 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	isbnBook := client.EnabledISBNSources()
+	contract := downloadContractFor(o)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "download",
 		Title:       "Download file",
-		Description: downloadToolDescription(book, isbnBook, article, o.remoteDownloads),
-		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article)),
+		Description: downloadToolDescription(book, isbnBook, article, contract),
+		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article), contract),
 		// Destructive when it writes: the saved file is moved into place with
 		// os.Rename, which replaces any file of that name in the download directory
 		// without warning and without renaming around it. A remote server returns a
@@ -253,11 +309,18 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		// that gate destructive tools are the second safeguard behind the save
 		// confirmation, and unlike that one the model cannot waive it.
 		Annotations: &mcp.ToolAnnotations{
-			DestructiveHint: destructiveWhenWriting(o.remoteDownloads),
+			DestructiveHint: destructiveWhenWriting(contract),
 			IdempotentHint:  true, OpenWorldHint: &truthy,
 		},
 		Icons: toolutil.IconDownload,
-	}, withRecovery("download", downloadHandler(client, cfg, o.remoteDownloads, &downloadConsent{server: server})))
+	}, withRecovery("download", downloadHandler(client, cfg, contract.linkOnly(), &downloadConsent{server: server})))
+	// read is the one tool that cannot be served without pulling the whole file
+	// over the server's own connection, so a deployment that may not do that does
+	// not register it. Absent beats listed-and-always-failing: a model that can
+	// see a tool calls it, and would spend a turn on the same refusal every time.
+	if o.noServerFetch {
+		return
+	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read",
 		Title:       "Read file text",
@@ -319,8 +382,8 @@ func readInputSchema(enabled []string, remote bool) *jsonschema.Schema {
 
 // destructiveWhenWriting reports the download tool's destructiveHint: true for a
 // server that saves files, false for one that only returns links.
-func destructiveWhenWriting(remote bool) *bool {
-	destructive := !remote
+func destructiveWhenWriting(contract downloadContract) *bool {
+	destructive := !contract.linkOnly()
 	return &destructive
 }
 
@@ -345,10 +408,13 @@ func orderedEnabledSources(lists ...[]string) []string {
 }
 
 // downloadInputSchema infers the download tool's input schema from DownloadInput
-// (exactly as AddTool would) and constrains the source property to the enabled
-// sources: an enum so the model cannot select a disabled provider, plus a matching
-// description. A nil result makes AddTool fall back to the default inferred schema
-// (no enum), which only happens if inference of the static struct ever fails.
+// (exactly as AddTool would) and constrains it to what this deployment actually
+// honors: the source property gets an enum of the enabled sources so the model
+// cannot select a disabled provider, plus a matching description, and on a
+// link-only contract resolve_only says it is ignored rather than repeating the
+// struct tag's saves-to-disk contrast. A nil result makes AddTool fall back to
+// the default inferred schema (no enum), which only happens if inference of the
+// static struct ever fails.
 // requiresNonBlank returns a required-group branch: the key must be present and
 // contain at least one non-whitespace character. The branches that use it
 // belong to handlers that TrimSpace before deciding whether an identifier was
@@ -379,7 +445,7 @@ func requiresNonEmpty(key string) *jsonschema.Schema {
 // schema-inference error guard below; it defaults to the real jsonschema.For.
 var downloadSchemaFor = jsonschema.For[DownloadInput]
 
-func downloadInputSchema(enabled []string) *jsonschema.Schema {
+func downloadInputSchema(enabled []string, contract downloadContract) *jsonschema.Schema {
 	schema, err := downloadSchemaFor(nil)
 	if err != nil {
 		return nil
@@ -403,6 +469,15 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 		}
 		src.Description = "one source only: " + strings.Join(enabled, ", ") +
 			". Omit to try all compatible sources with failover"
+	}
+	// resolve_only is the argument a model sets to choose between the two
+	// behaviors, so on a deployment that has only one of them the struct tag's
+	// contrast ("False (default) saves to the server's disk") describes a
+	// deployment the caller is not talking to. Restated here for the same reason
+	// the enum above is pinned: the schema should describe this server.
+	if ro := schema.Properties["resolve_only"]; ro != nil && contract.linkOnly() {
+		ro.Description = "ignored here: this deployment always returns the direct download URL as a link " +
+			"and never saves a file, so the link comes back whether or not this is set"
 	}
 	return schema
 }
@@ -483,22 +558,23 @@ const sourceChainSep = " then "
 // names the chain that will actually be tried. At least one source is always
 // enabled.
 //
-// remote selects the return contract this deployment actually honors: a local
+// contract selects the return contract this deployment actually honors: a local
 // server saves the file and reports where, while a remote deployment cannot
-// write to the caller's disk and always resolves a link instead. That contract
-// belongs in the opening paragraph, not appended as a correction after it: a
-// model deciding whether to call the tool reads the first lines, and stating
-// the local contract unconditionally there — true only some of the time — is
-// wrong for exactly the deployment (remote, the only publicly hosted one) that
-// most needs the caller to get it right. See TestDownloadDescriptionMatchesTheDeploymentsContract.
+// write to the caller's disk and always resolves a link instead, as does one
+// whose operator has not allowed it to fetch files. That contract belongs in the
+// opening paragraph, not appended as a correction after it: a model deciding
+// whether to call the tool reads the first lines, and stating the local contract
+// unconditionally there — true only some of the time — is wrong for exactly the
+// deployment (remote, the only publicly hosted one) that most needs the caller to
+// get it right. See TestDownloadDescriptionMatchesTheDeploymentsContract.
 //
 // The result is several short paragraphs rather than one dense block, matching
 // the convention search already sets: one paragraph per topic, the sixteen-way
 // article fallback chain rendered as a list line rather than buried mid-sentence.
-func downloadToolDescription(book, isbnBook, article []string, remote bool) string {
+func downloadToolDescription(book, isbnBook, article []string, contract downloadContract) string {
 	keys := downloadKeyNames(book, isbnBook, article)
 	paragraphs := []string{
-		downloadContractParagraph(book, isbnBook, article, remote),
+		downloadContractParagraph(book, isbnBook, article, contract),
 		downloadResolutionParagraph(book, isbnBook, article),
 		sourceChainDisclosureParagraph(orderedEnabledSources(book, isbnBook, article)),
 		"Set source to restrict the download to one provider instead of all of them, with no substitution: " +
@@ -514,18 +590,22 @@ func downloadToolDescription(book, isbnBook, article []string, remote bool) stri
 // required parameters, and — critically — the return contract for the mode this
 // deployment actually runs, so the model never reads a claim ("returns the saved
 // path") that this call cannot honor.
-func downloadContractParagraph(book, isbnBook, article []string, remote bool) string {
+func downloadContractParagraph(book, isbnBook, article []string, contract downloadContract) string {
 	var b strings.Builder
-	if remote {
+	if contract.linkOnly() {
 		b.WriteString("Resolve a downloadable copy of a book or article. ")
 	} else {
 		b.WriteString("Download a file to a local directory. ")
 	}
 	b.WriteString(downloadKeysSentence(book, isbnBook, article))
-	if remote {
+	switch contract {
+	case contractRemote:
 		b.WriteString("This server runs remotely and cannot write to your disk: download ALWAYS returns a " +
 			"direct link (a resource_link) to fetch yourself, never a saved file, and resolve_only is implied.")
-	} else {
+	case contractNoFetch:
+		b.WriteString("This server does not fetch files: download ALWAYS returns a " +
+			"direct link (a resource_link) to fetch yourself, never a saved file, and resolve_only is implied.")
+	case contractSaves:
 		b.WriteString("Returns the saved path and size; resolve_only=true returns a link instead.")
 	}
 	return b.String()
@@ -1687,7 +1767,7 @@ func elicitAnnasKey(round *inputRound, cfg *config.Config, in DownloadInput) str
 	return strings.TrimSpace(key)
 }
 
-func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent *downloadConsent) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
+func downloadHandler(c *libgen.Client, cfg *config.Config, linkOnly bool, consent *downloadConsent) mcp.ToolHandlerFor[DownloadInput, DownloadOutput] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in DownloadInput) (*mcp.CallToolResult, DownloadOutput, error) {
 		var zero DownloadOutput
 		ids, err := validateDownloadInput(in)
@@ -1705,12 +1785,13 @@ func downloadHandler(c *libgen.Client, cfg *config.Config, remote bool, consent 
 		// Everything this download needs to ask the user is collected in one round,
 		// so a call that needs both a credential and a confirmation costs a single
 		// trip to the client instead of one per question.
-		if pending := call.prepare(ctx, req, remote); pending != nil {
+		if pending := call.prepare(ctx, req, linkOnly); pending != nil {
 			return pending, zero, nil
 		}
-		// A remote server cannot write to the client's disk, so it always resolves
-		// a link; a local server honors resolve_only per call.
-		if remote || in.ResolveOnly {
+		// A server that cannot write to the client's disk (remote) or may not pull
+		// the bytes at all (fetching off) always resolves a link; every other server
+		// honors resolve_only per call.
+		if linkOnly || in.ResolveOnly {
 			return resolveDownload(ctx, c, call.item, in.Filename, cfg.ExtraSources)
 		}
 		return localDownload(ctx, req, call)
@@ -1741,7 +1822,7 @@ type downloadCall struct {
 // names the file, and the save confirmation. It returns the result that puts the
 // outstanding questions to the client, or nil when there are none — on the call
 // that comes back with the answers, it runs again and finds them.
-func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, remote bool) *mcp.CallToolResult {
+func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, linkOnly bool) *mcp.CallToolResult {
 	// On-demand Unpaywall email: for a DOI download against a server with no
 	// contact email configured, ask the client (when it supports elicitation) for
 	// one to use for THIS request only. A declined/absent/invalid answer leaves
@@ -1769,7 +1850,7 @@ func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, re
 	// before anything is fetched, so every question travels together. Composing the
 	// prompt is guarded by willAsk because this method runs on BOTH passes of the
 	// call (ask, then act) and the second one would only throw the message away.
-	d.confirm = wantConfirmation(remote, d.cfg, d.consent, req, d.in)
+	d.confirm = wantConfirmation(linkOnly, d.cfg, d.consent, req, d.in)
 	if d.confirm && d.round.willAsk() {
 		askDownloadConfirm(d.round, d.item, downloadDir(d.cfg, d.in), d.in, d.size)
 	}
@@ -1903,8 +1984,8 @@ func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, d *downl
 // own description. Every waiver that remains is asserted by someone who can
 // actually consent: the operator through configuration, or the user through the
 // prompt's own "stop asking" answer.
-func wantConfirmation(remote bool, cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
-	if remote || in.ResolveOnly {
+func wantConfirmation(linkOnly bool, cfg *config.Config, consent *downloadConsent, req *mcp.CallToolRequest, in DownloadInput) bool {
+	if linkOnly || in.ResolveOnly {
 		return false
 	}
 	if cfg != nil && !cfg.ConfirmDownloads {

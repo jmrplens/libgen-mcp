@@ -22,8 +22,8 @@ import (
 )
 
 // This file mirrors the local capability coverage (capabilities_test.go /
-// remote_test.go) over the REAL streamable-HTTP transport, exactly as the public
-// --http deployment runs: the server is registered in remote mode
+// remote_test.go) over the REAL streamable-HTTP transport, as a public --http
+// deployment runs it: the server is registered in remote mode
 // (tools.WithRemoteDownloads), wrapped in mcp.NewStreamableHTTPHandler, served by
 // an httptest.Server, and driven by an MCP client connected over
 // StreamableClientTransport. It proves the remote-specific guarantees — download
@@ -32,6 +32,13 @@ import (
 // open-access search behave the same as on stdio. Network-dependent cases gate on
 // requireLive and SKIP (never fail) when the live site is unreachable; the prompt
 // and local-path-rejection cases are DETERMINISTIC and run without LIBGEN_E2E.
+//
+// Server-side fetching is left ON here (the registration passes no
+// WithoutServerFetch), so what this models is a hosted deployment whose operator
+// set LIBGEN_MCP_SERVER_FETCH=1 — the only remote configuration that still serves
+// read, which several cases below exercise. The default, where read is not
+// registered at all, is pinned in cmd/server and, against the real binary, in
+// test/e2e/http/serverfetch_test.go.
 
 // serveRemoteHTTP registers the given client in REMOTE mode plus the prompts on
 // a fresh MCP server and serves it over a real streamable-HTTP transport, with

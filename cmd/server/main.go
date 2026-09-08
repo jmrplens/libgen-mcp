@@ -98,21 +98,75 @@ const (
 	implementationWebsiteURL = "https://jmrp.io/docs/libgen-mcp"
 )
 
-// serverInstructions is the handshake's Instructions text: the one place that
-// tells a connecting model how the four tools chain together, since each
-// tool's own Description documents only itself. It goes straight into the
-// model's system prompt, so it stays short and names only what a client
-// cannot otherwise infer from the tool list — [TestServerInstructionsNameEveryToolAndPrompt]
-// guards that every name below still exists on the registered surface.
-const serverInstructions = `libgen-mcp searches, retrieves and reads books, papers, comics, magazines and standards — no account or API key needed for any tool.
+// The handshake's Instructions text, in the pieces serverInstructions assembles.
+// It is the one place that tells a connecting model how the tools chain
+// together, since each tool's own Description documents only itself. It goes
+// straight into the model's system prompt, so it stays short and names only what
+// a client cannot otherwise infer from the tool list —
+// [TestServerInstructionsNameEveryToolAndPrompt] guards that every name below
+// still exists on the registered surface, and the tests in serverfetch_test.go
+// guard the reverse for a deployment that registers fewer of them.
+const (
+	instructionsOpening = "libgen-mcp searches, retrieves and reads books, papers, comics, magazines and standards" +
+		" — no account or API key needed for any tool."
+	// The opening for a deployment that does not fetch files: it still searches
+	// and retrieves, but reading a file's text is the client's to do.
+	instructionsOpeningNoFetch = "libgen-mcp searches and retrieves books, papers, comics, magazines and standards" +
+		" — no account or API key needed for any tool."
 
-WORKFLOW — the tools chain by identifier: search returns each record's md5 (books) or doi (articles); carry that identifier into the next call.
-1. search — find candidate records across the catalog and, when needed, open-access sources.
-2. get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested.
-3. download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving.
-4. read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first.
+	instructionsWorkflow = "WORKFLOW — the tools chain by identifier: search returns each record's md5 (books)" +
+		" or doi (articles); carry that identifier into the next call."
 
-PROMPTS — acquire_book, research_topic, get_paper and download_troubleshoot wrap these tools into ready-made, step-by-step workflows. Prefer one of them over calling the tools ad hoc when the user's request matches its shape.`
+	stepSearch  = "search — find candidate records across the catalog and, when needed, open-access sources."
+	stepDetails = "get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested."
+	// Two download steps, because the two deployments honor different contracts
+	// and the numbered step is what a model follows. Telling it a link-only
+	// server saves the file is the same defect the tool's own description was
+	// rewritten to remove, one layer up.
+	stepDownload         = "download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving."
+	stepDownloadLinkOnly = "download — resolve a copy by md5 (book), doi (article) or isbn (openly licensed book sources); this deployment always returns a link to fetch yourself, never a saved file."
+	stepRead             = "read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
+
+	// Stated once, where a model that expected to read text will look: this
+	// deployment has no read tool, and the way to a file's contents is the link.
+	instructionsNoFetch = "THIS DEPLOYMENT DOES NOT FETCH FILES — there is no read tool here. download returns a" +
+		" direct link; fetch it yourself to read the file's text."
+
+	instructionsPrompts = "PROMPTS — acquire_book, research_topic, get_paper and download_troubleshoot wrap these" +
+		" tools into ready-made, step-by-step workflows. Prefer one of them over calling the tools ad hoc when the" +
+		" user's request matches its shape."
+)
+
+// serverInstructions renders the handshake Instructions for the surface this
+// deployment actually registers. A server that may not fetch file bodies has no
+// read tool, so the text neither numbers a step for it nor claims the server
+// reads files — instructions naming a tool that is not there cost the model the
+// same wasted turn that hiding the tool exists to save.
+//
+// linkOnly is the download tool's contract, which is not the same question:
+// a remote deployment with fetching enabled still serves read and still only
+// ever returns links. Not fetching implies link-only; the reverse does not hold.
+func serverInstructions(serverFetch, linkOnly bool) string {
+	download := stepDownload
+	if linkOnly {
+		download = stepDownloadLinkOnly
+	}
+	opening, steps := instructionsOpening, []string{stepSearch, stepDetails, download, stepRead}
+	if !serverFetch {
+		opening, steps = instructionsOpeningNoFetch, []string{stepSearch, stepDetails, download}
+	}
+	numbered := make([]string, 0, len(steps))
+	for i, step := range steps {
+		numbered = append(numbered, fmt.Sprintf("%d. %s", i+1, step))
+	}
+	workflow := instructionsWorkflow + "\n" + strings.Join(numbered, "\n")
+
+	paragraphs := []string{opening, workflow}
+	if !serverFetch {
+		paragraphs = append(paragraphs, instructionsNoFetch)
+	}
+	return strings.Join(append(paragraphs, instructionsPrompts), "\n\n")
+}
 
 func main() {
 	// Before anything else, and before any request can be made: the release
@@ -232,8 +286,10 @@ func isCleanShutdown(err error) bool {
 }
 
 // newMCPServer builds the bare MCP server with its receiving middleware in
-// place; the caller registers the tools and prompts on top.
-func newMCPServer() *mcp.Server {
+// place; the caller registers the tools and prompts on top. instructions is the
+// handshake text for the surface the caller is about to register, which is not
+// the same on every deployment — see serverInstructions.
+func newMCPServer(instructions string) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:        "libgen-mcp",
 		Title:       implementationTitle,
@@ -242,7 +298,7 @@ func newMCPServer() *mcp.Server {
 		WebsiteURL:  implementationWebsiteURL,
 		Icons:       toolutil.IconBrand,
 	}, &mcp.ServerOptions{
-		Instructions: serverInstructions,
+		Instructions: instructions,
 		// Pinned empty rather than left nil, because nil is not neutral: the
 		// SDK fills it with its own default of {"logging":{}}, and MCP logging
 		// is Deprecated as of revision 2026-07-28 (SEP-2577), whose prescribed
@@ -727,19 +783,36 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
 func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, error) {
+	// A deployment is remote when its disk is not the caller's: an HTTP listener
+	// (a TCP address or a unix socket) or a hosted stdio process that says so with
+	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
+	// not, whether the server may pull a file's body over its own connection —
+	// resolved here, before the client is built, because this is the only place
+	// that knows the transport.
+	remote := httpAddr != "" || cfg.RemoteDownloads
+	serverFetch := cfg.ResolveServerFetch(remote)
+
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {
 		return nil, err
 	}
 	client := libgen.New(mgr, cfg)
-	server := newMCPServer()
+	// Either trigger puts download in link-only mode: a remote server cannot
+	// write to the caller's disk, and a server that may not fetch has no bytes
+	// to write. The handshake text states whichever contract results.
+	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch))
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via
 	// LIBGEN_MCP_REMOTE_DOWNLOADS, since its filesystem is unreachable/ephemeral too.
 	var regOpts []tools.RegisterOption
-	if httpAddr != "" || cfg.RemoteDownloads {
+	if remote {
 		regOpts = append(regOpts, tools.WithRemoteDownloads())
+	}
+	// Fetching off drops read from the surface entirely and puts download in
+	// link-only mode, whatever the transport.
+	if !serverFetch {
+		regOpts = append(regOpts, tools.WithoutServerFetch())
 	}
 	tools.Register(server, client, cfg, regOpts...)
 	prompts.Register(server, client, cfg)

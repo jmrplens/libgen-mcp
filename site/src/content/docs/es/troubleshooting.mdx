@@ -247,6 +247,24 @@ Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así
 
 Son los logs de diagnóstico del propio servidor, escritos directamente en stderr. No son la capacidad `logging` de MCP — esa capacidad está obsoleta (SEP-2577), este servidor no declara ningún handler para ella, y ninguna línea de log llega nunca a un cliente como notificación MCP.
 
+## El cliente lista tres herramientas, no cuatro (falta `read`)
+
+<Facts>
+	<Fact kind="symptom">
+		Un servidor alojado muestra `search`, `get_details` y `download`, y ningún `read`. Un `tools/call` a `read` lo rechaza el protocolo como herramienta desconocida.
+	</Fact>
+	<Fact kind="meaning">
+		Es deliberado, y es el valor por defecto de un despliegue remoto. `read` no puede devolver una sola página sin traerse antes el archivo entero por la conexión del **servidor**, y la IP de salida de un servidor alojado la comparten todos los usuarios a los que sirve: las transferencias de uno solo pueden hacer que esa dirección quede limitada o bloqueada para todos. Por eso `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto con `--http`, en un socket unix y con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, y con ella desactivada la herramienta no se registra en absoluto en lugar de aparecer y fallar en cada llamada.
+	</Fact>
+	<Fact kind="fixes">
+		- Llama a `download` en su lugar: devuelve un enlace directo (un `resource_link` más un objeto `resolved`). Descarga ese enlace con tu propia herramienta HTTP y lee el archivo donde caiga.
+    	- `search`, `get_details` y la resolución de enlaces de `download` no se ven afectados — solo el cuerpo del archivo se queda de tu lado de la conexión.
+    	- Si el despliegue es tuyo y su salida a internet la puedes gastar (una instancia privada, o una que no sea compartida), fija `LIBGEN_MCP_SERVER_FETCH=1` para recuperar la herramienta.
+    	- En un servidor local por stdio `read` está por defecto. Si falta ahí, algo ha puesto esa variable a un valor falso.
+    </Fact>
+
+</Facts>
+
 ## Todas las rutas HTTP responden 404 (despliegues con `--http`)
 
 <Facts>
