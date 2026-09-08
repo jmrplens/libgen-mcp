@@ -462,7 +462,7 @@ func healthOK(base string) bool {
 func newSearchToolServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newMCPServer(serverInstructions(true))
+	srv := newMCPServer(serverInstructions(true, false))
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil

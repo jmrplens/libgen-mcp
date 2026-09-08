@@ -117,10 +117,15 @@ const (
 	instructionsWorkflow = "WORKFLOW — the tools chain by identifier: search returns each record's md5 (books)" +
 		" or doi (articles); carry that identifier into the next call."
 
-	stepSearch   = "search — find candidate records across the catalog and, when needed, open-access sources."
-	stepDetails  = "get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested."
-	stepDownload = "download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving."
-	stepRead     = "read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
+	stepSearch  = "search — find candidate records across the catalog and, when needed, open-access sources."
+	stepDetails = "get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested."
+	// Two download steps, because the two deployments honor different contracts
+	// and the numbered step is what a model follows. Telling it a link-only
+	// server saves the file is the same defect the tool's own description was
+	// rewritten to remove, one layer up.
+	stepDownload         = "download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving."
+	stepDownloadLinkOnly = "download — resolve a copy by md5 (book), doi (article) or isbn (openly licensed book sources); this deployment always returns a link to fetch yourself, never a saved file."
+	stepRead             = "read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
 
 	// Stated once, where a model that expected to read text will look: this
 	// deployment has no read tool, and the way to a file's contents is the link.
@@ -137,10 +142,18 @@ const (
 // read tool, so the text neither numbers a step for it nor claims the server
 // reads files — instructions naming a tool that is not there cost the model the
 // same wasted turn that hiding the tool exists to save.
-func serverInstructions(serverFetch bool) string {
-	opening, steps := instructionsOpening, []string{stepSearch, stepDetails, stepDownload, stepRead}
+//
+// linkOnly is the download tool's contract, which is not the same question:
+// a remote deployment with fetching enabled still serves read and still only
+// ever returns links. Not fetching implies link-only; the reverse does not hold.
+func serverInstructions(serverFetch, linkOnly bool) string {
+	download := stepDownload
+	if linkOnly {
+		download = stepDownloadLinkOnly
+	}
+	opening, steps := instructionsOpening, []string{stepSearch, stepDetails, download, stepRead}
 	if !serverFetch {
-		opening, steps = instructionsOpeningNoFetch, []string{stepSearch, stepDetails, stepDownload}
+		opening, steps = instructionsOpeningNoFetch, []string{stepSearch, stepDetails, download}
 	}
 	numbered := make([]string, 0, len(steps))
 	for i, step := range steps {
@@ -784,7 +797,10 @@ func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, erro
 		return nil, err
 	}
 	client := libgen.New(mgr, cfg)
-	server := newMCPServer(serverInstructions(serverFetch))
+	// Either trigger puts download in link-only mode: a remote server cannot
+	// write to the caller's disk, and a server that may not fetch has no bytes
+	// to write. The handshake text states whichever contract results.
+	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch))
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via

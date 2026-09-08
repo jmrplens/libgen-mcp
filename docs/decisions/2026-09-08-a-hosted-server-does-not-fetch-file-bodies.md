@@ -64,7 +64,8 @@ be unreachable through MCP; it is the second line, not the first.
 
 ## Consequences
 
-- A remote deployment serves three tools, not four.
+- A remote deployment serves three tools by default, not four. Its operator can
+  still choose the fourth, which is the next consequence.
 - `download` returns a link whenever fetching is off, including on a local
   server whose operator turned it off. Saving to disk is a fetch like any other.
 - An operator with egress to spare sets `LIBGEN_MCP_SERVER_FETCH=1` and gets the

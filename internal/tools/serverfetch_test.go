@@ -268,3 +268,69 @@ func TestNoServerFetchDownloadDescriptionExplainsItself(t *testing.T) {
 
 // contains reports whether names holds want.
 func contains(names []string, want string) bool { return slices.Contains(names, want) }
+
+// TestLinkOnlyResolveOnlyDescriptionIsHonest asserts the one argument a model
+// sets to choose between the two behaviors does not describe the behavior this
+// deployment cannot honor. On a link-only server `resolve_only: false` does not
+// save to disk, so a schema that says it does is telling the model to expect a
+// file it will never get — the same defect the tool's own description was fixed
+// for, one field lower down.
+func TestLinkOnlyResolveOnlyDescriptionIsHonest(t *testing.T) {
+	var bodyHits atomic.Int32
+	session, _, _, _ := noFetchSession(t, &bodyHits, WithoutServerFetch())
+
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range listed.Tools {
+		if tl.Name != "download" {
+			continue
+		}
+		schema, ok := tl.InputSchema.(map[string]any)
+		if !ok {
+			t.Fatalf("download InputSchema = %T, want a JSON object", tl.InputSchema)
+		}
+		props, _ := schema["properties"].(map[string]any)
+		field, _ := props["resolve_only"].(map[string]any)
+		desc, _ := field["description"].(string)
+		if desc == "" {
+			t.Fatal("resolve_only has no description")
+		}
+		if strings.Contains(desc, "saves to the server's disk") {
+			t.Errorf("a link-only server must not say resolve_only=false saves to disk; got:\n%s", desc)
+		}
+		if !strings.Contains(desc, "always") {
+			t.Errorf("resolve_only should say a link is always returned here; got:\n%s", desc)
+		}
+		return
+	}
+	t.Fatal("download is missing")
+}
+
+// TestSavingServerKeepsTheResolveOnlyContrast is the other half: where the
+// server does save files, the argument must still say so, since that is the
+// choice it exists to offer.
+func TestSavingServerKeepsTheResolveOnlyContrast(t *testing.T) {
+	var bodyHits atomic.Int32
+	session, _, _, _ := noFetchSession(t, &bodyHits)
+
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range listed.Tools {
+		if tl.Name != "download" {
+			continue
+		}
+		schema, _ := tl.InputSchema.(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		field, _ := props["resolve_only"].(map[string]any)
+		desc, _ := field["description"].(string)
+		if !strings.Contains(desc, "saves to the server's disk") {
+			t.Errorf("a saving server should keep the default-saves wording; got:\n%s", desc)
+		}
+		return
+	}
+	t.Fatal("download is missing")
+}

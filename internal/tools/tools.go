@@ -301,7 +301,7 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Name:        "download",
 		Title:       "Download file",
 		Description: downloadToolDescription(book, isbnBook, article, contract),
-		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article)),
+		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article), contract),
 		// Destructive when it writes: the saved file is moved into place with
 		// os.Rename, which replaces any file of that name in the download directory
 		// without warning and without renaming around it. A remote server returns a
@@ -408,10 +408,13 @@ func orderedEnabledSources(lists ...[]string) []string {
 }
 
 // downloadInputSchema infers the download tool's input schema from DownloadInput
-// (exactly as AddTool would) and constrains the source property to the enabled
-// sources: an enum so the model cannot select a disabled provider, plus a matching
-// description. A nil result makes AddTool fall back to the default inferred schema
-// (no enum), which only happens if inference of the static struct ever fails.
+// (exactly as AddTool would) and constrains it to what this deployment actually
+// honors: the source property gets an enum of the enabled sources so the model
+// cannot select a disabled provider, plus a matching description, and on a
+// link-only contract resolve_only says it is ignored rather than repeating the
+// struct tag's saves-to-disk contrast. A nil result makes AddTool fall back to
+// the default inferred schema (no enum), which only happens if inference of the
+// static struct ever fails.
 // requiresNonBlank returns a required-group branch: the key must be present and
 // contain at least one non-whitespace character. The branches that use it
 // belong to handlers that TrimSpace before deciding whether an identifier was
@@ -442,7 +445,7 @@ func requiresNonEmpty(key string) *jsonschema.Schema {
 // schema-inference error guard below; it defaults to the real jsonschema.For.
 var downloadSchemaFor = jsonschema.For[DownloadInput]
 
-func downloadInputSchema(enabled []string) *jsonschema.Schema {
+func downloadInputSchema(enabled []string, contract downloadContract) *jsonschema.Schema {
 	schema, err := downloadSchemaFor(nil)
 	if err != nil {
 		return nil
@@ -466,6 +469,15 @@ func downloadInputSchema(enabled []string) *jsonschema.Schema {
 		}
 		src.Description = "one source only: " + strings.Join(enabled, ", ") +
 			". Omit to try all compatible sources with failover"
+	}
+	// resolve_only is the argument a model sets to choose between the two
+	// behaviors, so on a deployment that has only one of them the struct tag's
+	// contrast ("False (default) saves to the server's disk") describes a
+	// deployment the caller is not talking to. Restated here for the same reason
+	// the enum above is pinned: the schema should describe this server.
+	if ro := schema.Properties["resolve_only"]; ro != nil && contract.linkOnly() {
+		ro.Description = "ignored here: this deployment always returns the direct download URL as a link " +
+			"and never saves a file, so the link comes back whether or not this is set"
 	}
 	return schema
 }

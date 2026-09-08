@@ -1893,7 +1893,7 @@ func TestValidateDownloadInputISBN(t *testing.T) {
 // TestDownloadInputSchemaEmptyEnabled covers the branch where no sources are
 // enabled: the schema is returned unconstrained (no enum) rather than restricted.
 func TestDownloadInputSchemaEmptyEnabled(t *testing.T) {
-	schema := downloadInputSchema(nil)
+	schema := downloadInputSchema(nil, contractSaves)
 	if schema == nil {
 		t.Fatal("downloadInputSchema(nil) returned nil")
 	}
@@ -1911,7 +1911,7 @@ func TestDownloadInputSchemaInferenceError(t *testing.T) {
 	downloadSchemaFor = func(*jsonschema.ForOptions) (*jsonschema.Schema, error) {
 		return nil, errors.New("inference failed")
 	}
-	if got := downloadInputSchema([]string{"libgen"}); got != nil {
+	if got := downloadInputSchema([]string{"libgen"}, contractSaves); got != nil {
 		t.Errorf("schema inference error should yield a nil schema; got %v", got)
 	}
 }
@@ -4142,7 +4142,7 @@ func requiredGroupKeys(t *testing.T, branches []*jsonschema.Schema) []string {
 // unlisted.
 func TestIdentifierGroupsMatchTheirValidators(t *testing.T) {
 	t.Run("download states at least one of md5, isbn, doi", func(t *testing.T) {
-		schema := downloadInputSchema([]string{"libgen"})
+		schema := downloadInputSchema([]string{"libgen"}, contractSaves)
 		if schema == nil {
 			t.Fatal("downloadInputSchema() = nil")
 		}

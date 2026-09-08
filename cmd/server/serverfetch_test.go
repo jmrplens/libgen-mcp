@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -138,4 +139,34 @@ func TestRemoteDownloadsImpliesNoFetch(t *testing.T) {
 		t.Errorf("a hosted stdio server advertises read by default; tools = %v", names)
 	}
 	assertInstructionsMatchSurface(t, names, instructions)
+}
+
+// TestInstructionsStateTheDownloadContract guards the handshake text the way
+// TestDownloadDescriptionMatchesTheDeploymentsContract guards the tool's own
+// description: a deployment that only ever resolves links must not walk the
+// model through a download step that says it saves the file. The correction two
+// paragraphs later is not enough — the numbered step is what a model follows.
+func TestInstructionsStateTheDownloadContract(t *testing.T) {
+	saves := serverInstructions(true, false)
+	if !strings.Contains(saves, "download — save the file") {
+		t.Errorf("a saving deployment should say download saves the file; got:\n%s", saves)
+	}
+
+	for _, tc := range []struct {
+		name        string
+		serverFetch bool
+	}{
+		{"remote with fetching enabled", true},
+		{"fetching disabled", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			linkOnly := serverInstructions(tc.serverFetch, true)
+			if strings.Contains(linkOnly, "save the file") {
+				t.Errorf("a link-only deployment must not say download saves the file; got:\n%s", linkOnly)
+			}
+			if !strings.Contains(linkOnly, "returns a link") {
+				t.Errorf("a link-only deployment should say download returns a link; got:\n%s", linkOnly)
+			}
+		})
+	}
 }
