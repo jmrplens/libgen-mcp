@@ -23,6 +23,27 @@ env:
   GO_VERSION: "1.27.0"
   COVERAGE_MIN: "85"
 
+  # Whether this run checks that the committed generated artifacts — llms.txt,
+  # llms-full.txt, lhm.plugin.json, tool-schema.json, the evaluator pages and the
+  # normalized Markdown tables — are current.
+  #
+  # They are regenerated once, in the layer that changes the surface, and a lower
+  # layer of a stack is not that layer. Every layer of a stacked pull request is
+  # built as the whole stack up to it merged into the stack's base, so a bottom
+  # layer that adds a tool would have to carry regenerated artifacts describing a
+  # surface only the top layer finishes — and a top layer that regenerates them
+  # would make every layer below it red. Deferring below the top is what lets a
+  # stack land one reviewable layer at a time.
+  #
+  # The layer is told from its position in the stack, not from its own base
+  # branch: GitHub reports base.ref as the stack's base for the bottom layer and
+  # as the branch below for the others, while the stack's own position and size
+  # are exact. Verified against this repository on 2026-09-16: the payload for a
+  # two-layer stack carries stack.position 1 and 2 with stack.size 2. A pull
+  # request outside a stack keeps the old rule, deferring whenever its base is
+  # not main; a push to main always checks.
+  FRESHNESS: ${{ github.event_name == 'pull_request' && ((github.event.pull_request.stack != null && github.event.pull_request.stack.position != github.event.pull_request.stack.size) || (github.event.pull_request.stack == null && github.event.pull_request.base.ref != 'main')) && 'deferred' || 'checked' }}
+
 jobs:
   test:
     name: Test
@@ -149,11 +170,14 @@ jobs:
       - name: HTTP transport end-to-end
         run: go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
       - name: Check Markdown tables are formatted
+        if: env.FRESHNESS == 'checked'
         run: go run ./cmd/format_md_tables/ --check
       - name: Check generated llms files are current
+        if: env.FRESHNESS == 'checked'
         run: go run ./cmd/gen_llms/ --check
 
       - name: Evaluator results pages are generated, not hand-edited
+        if: env.FRESHNESS == 'checked'
         run: go run ./cmd/gen_eval_pages/ --check
 
   golangci-lint:
@@ -226,20 +250,25 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - run: go mod download
       - name: Evaluator results pages match the scenario list and the run
+        if: env.FRESHNESS == 'checked'
         run: make check-eval-pages
       - name: llms.txt and llms-full.txt match the registered tools
+        if: env.FRESHNESS == 'checked'
         run: make check-llms
       # LobeHub reads the capability arrays straight out of lhm.plugin.json — its
       # crawler cannot introspect a Go binary — so a stale manifest publishes the
       # previous release's tool surface to the marketplace with no warning.
       - name: lhm.plugin.json matches the registered tools and prompts
+        if: env.FRESHNESS == 'checked'
         run: make check-lhm-manifest
       # The reference tables on the docs site render their names, types and
       # required flags from this file. A stale copy publishes a parameter list
       # that no longer matches what the server accepts.
       - name: tool-schema.json matches the registered surface
+        if: env.FRESHNESS == 'checked'
         run: make check-tool-schema
       - name: Markdown tables are normalized
+        if: env.FRESHNESS == 'checked'
         run: make check-md-tables
 
   analyze-md:
