@@ -291,7 +291,14 @@ func TestGuardedRead_CancelsTheWorkItAbandons(t *testing.T) {
 // sample document loses the race — which is the point: the guarantee under test
 // is that a read always comes back, whatever the file turns out to be.
 func TestReadModes_ReturnWithinTheBudget(t *testing.T) {
-	shrinkReadBudget(t, time.Nanosecond)
+	// A budget already in the past rather than one nanosecond, for the reason
+	// TestGuardedRead_AnExpiredBudgetWinsTheTie sets out at length: on Windows the
+	// monotonic clock is coarse enough that time.Until on a deadline one
+	// nanosecond away can still be positive, so context.WithTimeout does not
+	// cancel synchronously and the read finishes first. This test passed on the
+	// first Windows run and failed on the second, which is what a race looks like
+	// when only one platform is close enough to the edge to lose it.
+	shrinkReadBudget(t, -time.Second)
 	awaitNoStuckReads(t)
 
 	chunk, err := Extract(context.Background(), "testdata/sample.pdf", Req{})
