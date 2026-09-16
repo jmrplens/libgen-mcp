@@ -1,0 +1,47 @@
+# The race detector, deliberately not on every push.
+#
+# The unit suite takes minutes without it and considerably longer with it. That
+# is a cost a pull request should not pay for a class of defect that is rare and
+# that most changes cannot introduce — so it runs where a slow job is affordable
+# and where a miss would be expensive: at release, and once a week on main.
+#
+# It is reusable and called rather than copied, so the commands a maintainer runs
+# by hand from the dispatch menu are the same ones the release gate runs. A
+# second copy of these commands in release.yml would be a second thing to keep in
+# step, and the one that drifts is always the one nobody looks at.
+name: Race
+
+on:
+  # Called by release.yml, in parallel with the transport end-to-end gate, so a
+  # data race cannot reach a tag.
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    # 04:17 on Mondays. Off the hour on purpose: every scheduled workflow on
+    # GitHub that asks for :00 is queued together.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.27.0"
+
+jobs:
+  race:
+    name: Race detector
+    runs-on: ubuntu-latest
+    # An explicit bound, because the default is six hours and the detector makes
+    # the suite slow enough that a hang looks like ordinary slowness.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go mod download
+      # The per-test timeout is passed explicitly: go test defaults to ten
+      # minutes, and under the detector a package that is merely slow reaches it
+      # and dies partway through, which reads as a hang rather than as a budget.
+      - name: Unit suite under the race detector
+        run: go test -race -count=1 -timeout 40m ./...
