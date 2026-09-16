@@ -3614,7 +3614,14 @@ func TestDetailsByDOIFallsBackToEnrichment(t *testing.T) {
 		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
 		RetryAttempts: 1, EnrichEnabled: true, UnpaywallEmail: "test@example.com",
 	}
-	handler := detailsHandler(libgen.New(staticMirrors{srv.URL}, cfg), cfg, nil)
+	// The enrichment this asserts on is internal/libgen's, not discovery's, and it
+	// reads its own base URLs: overriding discovery alone left the assertion running
+	// against the live Crossref API, which answers a shared CI address differently
+	// from a developer's machine. Both bases are pointed at the fixture, per the rule
+	// SetBasesForTest states for its own — leaving one at its live default is what
+	// makes a test reach the real service — even though only the DOI half is used.
+	client := libgen.New(staticMirrors{srv.URL}, cfg, libgen.WithEnrichBaseURLs(crossref.URL, crossref.URL))
+	handler := detailsHandler(client, cfg, nil)
 	_, out, err := handler(context.Background(), nil, DetailsInput{DOI: "10.1016/j.cell.2011.02.013", Enrich: true})
 	if err != nil {
 		t.Fatalf("a DOI the catalog lacks should still answer from Crossref, got: %v", err)
