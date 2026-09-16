@@ -277,11 +277,18 @@ func TestRunManagerError(t *testing.T) {
 	// surfaces from NewManager (os.UserCacheDir) rather than the home-dir lookup.
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir())
 	// os.UserCacheDir reads a different variable per platform — XDG_CACHE_HOME
-	// then HOME on Unix, LocalAppData on Windows — so clearing HOME alone made
-	// this a test that only failed the lookup on one of the three.
+	// then HOME on Unix, LocalAppData on Windows — so clearing HOME alone left
+	// Windows with a perfectly good cache directory and run() returned no error.
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CACHE_HOME", "")
 	t.Setenv("LocalAppData", "")
+	// Verified rather than assumed, which is the convention the sibling tests in
+	// internal/mirrors and cmd/audit_tokens already follow: if the lookup still
+	// resolves, there is no manager error to provoke and the assertion below
+	// would be reporting something else.
+	if _, err := os.UserCacheDir(); err == nil {
+		t.Skip("os.UserCacheDir still resolves a cache directory on this platform")
+	}
 	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")

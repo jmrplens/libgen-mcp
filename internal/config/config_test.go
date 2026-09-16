@@ -697,14 +697,25 @@ func TestValidateEmptyDownloadDir(t *testing.T) {
 // not writable is rejected: MkdirAll succeeds on the existing dir, then the
 // write-test CreateTemp fails.
 func TestValidateReadOnlyDownloadDir(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root bypasses directory write permissions")
-	}
 	dir := filepath.Join(t.TempDir(), "ro")
 	if err := os.Mkdir(dir, 0o500); err != nil {
 		t.Fatalf("Mkdir() error = %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) }) //nolint:gosec // restore write bits so TempDir cleanup can remove the dir
+
+	// The fixture is checked rather than assumed. A 0500 directory is not
+	// read-only to everyone everywhere: root ignores the bits, and Windows does
+	// not model directory write permission this way at all, so on both this test
+	// would be asserting that a writable directory fails to be written to.
+	//
+	// Probing subsumes the euid check this replaces, and covers the cases that
+	// check could not see.
+	probe := filepath.Join(dir, "probe")
+	if f, err := os.Create(probe); err == nil { //#nosec G304 -- the path is the test's own temp dir.
+		_ = f.Close()
+		_ = os.Remove(probe)
+		t.Skip("a 0500 directory is writable for this user on this platform, so the fixture is not read-only")
+	}
 	cfg := validConfig(t)
 	cfg.DownloadDir = dir
 	if cfg.Validate() == nil {

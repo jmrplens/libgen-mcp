@@ -192,9 +192,10 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 // or proceeding without a directory. The identifier is a cache miss so the fast
 // path does not short-circuit before the MkdirTemp call.
 func TestFetchToTemp_TempDirCreateError(t *testing.T) {
-	// Point TMPDIR at a path that does not exist and cannot be created under, so
-	// os.MkdirTemp("", …) fails deterministically.
-	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no", "such", "dir"))
+	// Point the process temp directory at a path that does not exist and cannot
+	// be created under, so os.MkdirTemp("", …) fails deterministically.
+	missing := filepath.Join(t.TempDir(), "no", "such", "dir")
+	isolateTempDir(t, missing)
 
 	c := newFetchTempClient(staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
@@ -202,9 +203,12 @@ func TestFetchToTemp_TempDirCreateError(t *testing.T) {
 	// stat the missing TMPDIR base), so a future download/cache error occurring
 	// before the MkdirTemp call cannot masquerade as this coverage. The path in the
 	// error is the unwritable TMPDIR base we set above.
+	// The wanted fragment is built with filepath.Join rather than written with
+	// slashes: on Windows the separator is a backslash, so a literal "no/such/dir"
+	// never matches and the assertion would fail even when the error is right.
 	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) || !strings.Contains(pathErr.Path, "no/such/dir") {
-		t.Fatalf("want an *os.PathError from MkdirTemp under the missing TMPDIR, got %v", err)
+	if !errors.As(err, &pathErr) || !strings.Contains(pathErr.Path, filepath.Join("no", "such", "dir")) {
+		t.Fatalf("want an *os.PathError from MkdirTemp under the missing temp dir, got %v", err)
 	}
 	if path != "" {
 		t.Errorf("path = %q, want empty on error", path)
