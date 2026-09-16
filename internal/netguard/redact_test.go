@@ -26,6 +26,14 @@ func TestRedactURLString(t *testing.T) {
 		{"keeps the port", "https://e.org:8443/f.pdf?key=s3cret", "https://e.org:8443/f.pdf"},
 		{"unparseable is still truncated", "://nope?key=s3cret", "://nope"},
 		{"a bare path names no host and is truncated", "/local/f.pdf?key=s3cret", "/local/f.pdf"},
+		// Both of these reach the textual fallback carrying a credential, by the two
+		// different routes redactTextually documents: the first is rejected by
+		// url.Parse for the bad escape, and the second parses cleanly as the scheme
+		// "user" with everything after it opaque, so it has no host either. Cutting
+		// at "?" alone would leave the password in both.
+		{"unparseable still loses the userinfo", "https://user:s3cret@e.org/%zz?key=x", "https://e.org/%zz"},
+		{"hostless but parseable loses it too", "user:s3cret@e.org/f.pdf?key=x", "e.org/f.pdf"},
+		{"an @ in the path is not userinfo", "https://e.org/a@b.pdf?key=s3cret", "https://e.org/a@b.pdf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

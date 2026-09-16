@@ -28,15 +28,47 @@ func RedactURL(u *url.URL) string {
 // RedactURLString parses raw and renders it through [RedactURL], so a URL can be
 // named in an error without carrying whatever credential it was signed with.
 //
-// A URL that will not parse, or that names no host, is truncated at the first
-// "?" or "#" textually rather than echoed: falling back to the raw string would
-// defeat the whole point on exactly the inputs least likely to be well formed.
+// A URL that will not parse, or that names no host, goes through
+// [redactTextually] rather than being echoed: falling back to the raw string
+// would defeat the whole point on exactly the inputs least likely to be well
+// formed.
 func RedactURLString(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return strings.SplitN(strings.SplitN(raw, "?", 2)[0], "#", 2)[0]
+		return redactTextually(raw)
 	}
 	return RedactURL(u)
+}
+
+// redactTextually applies [RedactURL]'s rule to a string net/url could not give
+// a host for, by cutting the same three parts out of the text: the query and the
+// fragment at the first "?" or "#", and the userinfo at the last "@" of whatever
+// precedes the first path separator.
+//
+// The userinfo half is not optional, and both routes here can carry one. A URL
+// that fails to parse keeps whatever it had ("https://u:pw@h/%zz" is rejected
+// for the bad escape, not for the credential), and one that parses with no host
+// can too: "u:pw@h/p" is read as the scheme "u" with everything after it opaque,
+// so it never reaches [RedactURL] either. Truncating at "?" alone would leave
+// the credential in both.
+func redactTextually(raw string) string {
+	s, _, _ := strings.Cut(raw, "?")
+	s, _, _ = strings.Cut(s, "#")
+
+	// The authority starts after "//" when there is one. Without it there is no
+	// telling scheme from userinfo, so the whole head is treated as suspect.
+	start := 0
+	if i := strings.Index(s, "//"); i >= 0 {
+		start = i + 2
+	}
+	end := strings.IndexByte(s[start:], '/')
+	if end < 0 {
+		end = len(s) - start
+	}
+	if at := strings.LastIndexByte(s[start:start+end], '@'); at >= 0 {
+		return s[:start] + s[start+at+1:]
+	}
+	return s
 }
 
 // RedactTransportError replaces the URL inside a *url.Error with the origin and
