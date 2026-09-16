@@ -357,7 +357,16 @@ func TestFormatHint(t *testing.T) {
 // statement of the rule everywhere else. That is worth having, and it is worth
 // saying rather than leaving a loop that looks like proof.
 func TestGuardedRead_AnExpiredBudgetWinsTheTie(t *testing.T) {
-	shrinkReadBudget(t, time.Nanosecond)
+	// A budget already in the past, not one nanosecond.
+	//
+	// context.WithTimeout cancels synchronously only when time.Until(deadline) is
+	// already <= 0, and on Windows the monotonic clock is coarse enough that
+	// time.Until on a deadline one nanosecond away still returns a positive value
+	// — the clock has not ticked. The context then cancels on a timer roughly
+	// fifteen milliseconds later, long after the check this test is about, and it
+	// failed on the Windows leg of the matrix for exactly that reason. A negative
+	// budget is unambiguous on every platform.
+	shrinkReadBudget(t, -time.Second)
 
 	for i := range 200 {
 		awaitNoStuckReads(t)
