@@ -106,12 +106,52 @@ func Blocked(addr netip.Addr) bool {
 	return cgnatPrefix.Contains(a)
 }
 
-// control returns the dialer Control hook that enforces Blocked, or nil when
-// private destinations are permitted (see Client).
+// metadataAddresses are the link-local and shared-space addresses cloud
+// providers answer instance credentials on. Reaching one of these on somebody
+// else's behalf hands out the credentials of the machine this server runs on,
+// which is a different and worse thing than reaching the operator's LAN.
+//
+// They are named one by one rather than derived from their enclosing ranges
+// because this rule holds for every client and every hop, including a
+// deployment that has deliberately opened private space, and a rule that broad
+// must be as narrow as it can be. Nothing legitimate serves a book, an article
+// or a presigned download URL from one of these, so the false-positive cost is
+// as close to zero as a guard of this kind gets.
+var metadataAddresses = map[netip.Addr]string{
+	netip.MustParseAddr("169.254.169.254"): "the cloud instance metadata address",
+	netip.MustParseAddr("169.254.170.2"):   "the AWS container credentials address",
+	netip.MustParseAddr("fd00:ec2::254"):   "the AWS instance metadata address over IPv6",
+	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address",
+}
+
+// metadataEndpoint returns what an address is the metadata endpoint of, and
+// whether it is one at all.
+//
+// The address is unmapped first for the same reason [Blocked] does it: an IPv4
+// address wearing an IPv6 coat (::ffff:169.254.169.254) is judged as the IPv4
+// address it is, which is the standard way past a filter that only reasons
+// about one family.
+func metadataEndpoint(addr netip.Addr) (string, bool) {
+	what, ok := metadataAddresses[addr.Unmap()]
+	return what, ok
+}
+
+// control returns the dialer Control hook that enforces the address policy.
+//
+// There are two tiers and only one of them answers to allowPrivate. The
+// metadata endpoints above are refused whatever the configuration says: the
+// escape hatch exists so an operator can point this server at a mirror on their
+// own network, and nothing about that intent extends to letting a URL deposited
+// in an open-access index fetch the host's cloud credentials. Everything
+// [Blocked] covers is the second tier, and that is what the flag opens.
+//
+// The hook is therefore installed unconditionally, where it used to be nil when
+// the flag was set. One consequence is deliberate: a destination that cannot be
+// parsed is now refused under the flag too, where before it was dialed. Control
+// is always handed a resolved IP literal, so that path is defensive rather than
+// reachable, and refusing is what the rest of this package already does with an
+// address it cannot judge.
 func control(allowPrivate bool) func(network, address string, c syscall.RawConn) error {
-	if allowPrivate {
-		return nil
-	}
 	return func(_, address string, _ syscall.RawConn) error {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
@@ -122,6 +162,12 @@ func control(allowPrivate bool) func(network, address string, c syscall.RawConn)
 		addr, err := netip.ParseAddr(host)
 		if err != nil {
 			return fmt.Errorf("%w: unparseable destination %q", ErrBlockedAddress, host)
+		}
+		if what, ok := metadataEndpoint(addr); ok {
+			return fmt.Errorf("%w: %s is %s", ErrBlockedAddress, addr, what)
+		}
+		if allowPrivate {
+			return nil
 		}
 		if Blocked(addr) {
 			return fmt.Errorf("%w: %s", ErrBlockedAddress, addr)
@@ -171,8 +217,16 @@ func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 		if len(via) >= maxRedirects {
 			return fmt.Errorf("%w: stopped after %d", ErrTooManyRedirects, len(via))
 		}
-		if !allowPrivate {
-			if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil && Blocked(addr) {
+		// The same two tiers as the dialer: a metadata endpoint is refused
+		// whatever the flag says, and everything else is refused only when
+		// private destinations are not permitted. A redirect is the cheaper half
+		// of the attack — a URL deposited in an index need only bounce once —
+		// so the tiers must not disagree between the two halves of one client.
+		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil {
+			if what, ok := metadataEndpoint(addr); ok {
+				return fmt.Errorf("%w: redirect to %s, %s", ErrBlockedAddress, addr, what)
+			}
+			if !allowPrivate && Blocked(addr) {
 				return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
 			}
 		}
@@ -224,10 +278,15 @@ func effectivePort(u *url.URL) string {
 // A non-positive timeout leaves the client without one, for the streaming
 // download path whose lifetime is governed by its context instead.
 //
-// allowPrivate disables the address policy entirely. It is the escape hatch for
-// the one legitimate case — an operator who points the server at a mirror on
-// their own network — and for the test suites, which serve every fixture from
-// loopback. It must never be set from anything but explicit configuration.
+// allowPrivate opens private destinations. It is the escape hatch for the one
+// legitimate case — an operator who points the server at a mirror on their own
+// network — and for the test suites, which serve every fixture from loopback. It
+// must never be set from anything but explicit configuration.
+//
+// It does not open everything. The cloud metadata endpoints are refused under it
+// too: the hatch exists so this server can reach a machine the operator owns,
+// and nothing in that intent covers handing out the credentials of the machine
+// it is running on.
 func Client(timeout time.Duration, allowPrivate bool) *http.Client {
 	// One decision, applied to both halves of the policy: the dialer and the
 	// redirect check must never disagree about what this client may reach.
@@ -260,6 +319,11 @@ var privateAllowedForTest atomic.Bool
 // The consequence is that the policy is not exercised by those suites, so it is
 // tested here instead, against real dials: see TestClientRefusesLoopbackServer.
 // NEVER call this from production code.
+//
+// It lifts the private-address tier only. A fixture cannot be served from a
+// cloud metadata endpoint, so there is nothing for it to lift there, and a test
+// seam that could switch off the tier that holds unconditionally would be a way
+// to reach production with it off.
 func SetAllowPrivateForTest(allow bool) (restore func()) {
 	previous := privateAllowedForTest.Swap(allow)
 	return func() { privateAllowedForTest.Store(previous) }

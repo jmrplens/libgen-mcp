@@ -227,14 +227,25 @@ func TestTransportKeepsStandardTuning(t *testing.T) {
 	}
 }
 
-// TestControlIsAbsentWhenPrivateIsAllowed verifies the allowance removes the hook
-// entirely rather than making it a no-op check on every dial.
-func TestControlIsAbsentWhenPrivateIsAllowed(t *testing.T) {
-	if control(true) != nil {
-		t.Error("control(true) returned a hook, want nil")
+// TestControlIsInstalledWhateverTheAllowanceSays verifies the hook is always
+// there.
+//
+// It used to be nil when private destinations were permitted, which is what made
+// the allowance switch off the whole policy rather than one tier of it. The hook
+// now runs on every dial so the metadata endpoints can be refused under the
+// allowance too; what the flag decides is what happens after that check, not
+// whether any check happens at all.
+func TestControlIsInstalledWhateverTheAllowanceSays(t *testing.T) {
+	if control(true) == nil {
+		t.Fatal("control(true) returned nil; the metadata tier has nowhere to run")
 	}
 	if control(false) == nil {
 		t.Fatal("control(false) returned nil, want the guard")
+	}
+	// Under the allowance a private destination is the point of the flag and must
+	// still be dialed.
+	if err := control(true)("tcp", "10.0.0.1:80", nil); err != nil {
+		t.Errorf("control(true) refused a private address (%v); that is what the flag exists to permit", err)
 	}
 	if err := control(false)("tcp", "10.0.0.1:80", nil); !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("control error %v is not ErrBlockedAddress", err)

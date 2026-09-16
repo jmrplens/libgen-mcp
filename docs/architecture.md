@@ -42,6 +42,15 @@ the original.
 running their own mirror on their own network. It is off by default and applies to every
 source at once, in both directions.
 
+It does **not** lift everything. Four addresses are refused whatever the flag says — the cloud
+instance metadata endpoints (`169.254.169.254`, `169.254.170.2`, `fd00:ec2::254` and
+`100.100.100.200`) — in the dialer and on every redirect hop alike. The hatch exists so this
+server can reach a machine you own; nothing in that intent covers letting a URL someone
+deposited in an open-access index fetch the cloud credentials of the machine the server runs
+on and hand them back as a file. The four are named individually rather than derived from the
+ranges around them, because a rule that holds even for a deployment which has deliberately
+opened its own network must be as narrow as it can be.
+
 ### Mirror discovery
 
 Candidate mirrors are supplied by a `Manager`:
