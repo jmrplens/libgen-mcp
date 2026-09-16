@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
 const (
@@ -247,10 +249,7 @@ func applyPage(path string, regions []region, check bool) error {
 	if updated == string(original) {
 		return nil
 	}
-	if check {
-		return fmt.Errorf("%s is out of date; run `make eval-pages`", path)
-	}
-	return os.WriteFile(path, []byte(updated), 0o600)
+	return docgen.WriteOrCheck(path, []byte(updated), check, "`make eval-pages`")
 }
 
 // readModel reads the model banner a run writes above its results table.
@@ -549,7 +548,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err = os.WriteFile(dst, body, 0o600); err != nil {
+	if err = os.WriteFile(dst, body, docgen.GeneratedFileMode); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil

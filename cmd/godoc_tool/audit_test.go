@@ -791,7 +791,16 @@ func TestRun_AuditModes(t *testing.T) {
 			"go.mod": documentedModule,
 			"tm.go":  "// Package tm is a fixture.\npackage tm\n",
 		})
-		badPath := filepath.Join(t.TempDir(), "missing-dir", "report.md")
+		// The path is under a regular file, so neither the parent directory nor
+		// the report itself can be created. A merely missing directory is no
+		// longer an error: docgen.WriteReport creates one, so --output may name
+		// a path in a tree that does not exist yet.
+		dir := t.TempDir()
+		notADir := filepath.Join(dir, "occupied")
+		if err := os.WriteFile(notADir, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		badPath := filepath.Join(notADir, "report.md")
 		if err := run([]string{"--output=" + badPath}, &failingWriter{}); err == nil {
 			t.Fatal("run(bad output path) expected a write error")
 		}

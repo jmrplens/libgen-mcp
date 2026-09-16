@@ -39,6 +39,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
 )
@@ -374,20 +375,12 @@ func run(check bool) error {
 	}
 	path := filepath.Join(root, relPath)
 
+	if writeErr := docgen.WriteOrCheck(path, want, check, "`make gen-tool-schema`"); writeErr != nil {
+		return writeErr
+	}
 	if !check {
-		if writeErr := os.WriteFile(path, want, 0o600); writeErr != nil {
-			return writeErr
-		}
 		fmt.Printf("wrote %s (%d tools, %d prompts)\n", relPath, len(doc.Tools), len(doc.Prompts))
 		return nil
-	}
-
-	got, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("%s: %w (run `make gen-tool-schema`)", relPath, err)
-	}
-	if !bytes.Equal(got, want) {
-		return fmt.Errorf("%s is stale — run `make gen-tool-schema`", relPath)
 	}
 	fmt.Printf("%s is up to date\n", relPath)
 	return nil

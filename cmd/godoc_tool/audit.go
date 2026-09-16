@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
 const (
@@ -122,13 +124,8 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if opts.outputPath != "" {
-		// #nosec G304,G703 -- output path is an explicit local developer CLI destination.
-		if writeErr := os.WriteFile(filepath.Clean(opts.outputPath), rendered, 0o600); writeErr != nil {
-			return fmt.Errorf("write report: %w", writeErr)
-		}
-	} else if _, writeErr := stdout.Write(rendered); writeErr != nil {
-		return fmt.Errorf("write stdout: %w", writeErr)
+	if writeErr := docgen.WriteReport(stdout, opts.outputPath, rendered); writeErr != nil {
+		return fmt.Errorf("write report: %w", writeErr)
 	}
 
 	if opts.failOnFindings && len(auditReport.Findings) > 0 {
