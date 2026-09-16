@@ -276,7 +276,12 @@ func TestRunManagerError(t *testing.T) {
 	// A writable download dir keeps config.Load/Validate happy so failure
 	// surfaces from NewManager (os.UserCacheDir) rather than the home-dir lookup.
 	t.Setenv("LIBGEN_MCP_DOWNLOAD_DIR", t.TempDir())
+	// os.UserCacheDir reads a different variable per platform — XDG_CACHE_HOME
+	// then HOME on Unix, LocalAppData on Windows — so clearing HOME alone made
+	// this a test that only failed the lookup on one of the three.
 	t.Setenv("HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("LocalAppData", "")
 	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")

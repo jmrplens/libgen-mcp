@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -104,9 +105,49 @@ func writePEM(t *testing.T, path, blockType string, der []byte) {
 // The basename is one character on purpose: a unix address is capped at about
 // 108 bytes by the kernel, and going over it fails as an opaque bind error
 // rather than as anything this package would name.
+// Every caller goes on to bind the path it returns, so the platform check lives
+// here rather than at each of them.
 func tempSocketPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join(t.TempDir(), "s.sock")
+	requireUnixSockets(t)
+	return filepath.Join(shortTempDir(t), "s.sock")
+}
+
+// shortTempDir is t.TempDir for a path that has to fit in a sockaddr_un.
+//
+// sun_path is 104 bytes on macOS and 108 on Linux, and t.TempDir embeds the
+// test's own name in the directory it makes. On macOS, where TMPDIR is already
+// around fifty characters of /var/folders/…, a test with a descriptive name and
+// a subtest produces a path over the limit and every bind fails with EINVAL —
+// which reads as a broken listener rather than as a path that is too long.
+//
+// os.MkdirTemp with a one-character prefix drops the test name, which is the
+// part that overflows.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	//nolint:usetesting // t.TempDir is the thing being avoided: its name is what overflows sun_path.
+	dir, err := os.MkdirTemp("", "s")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// requireUnixSockets skips the test when this platform cannot bind one at all.
+//
+// The probe binds through net.Listen rather than through listenUnix, so it
+// reports what the platform can do rather than what this package does with it: a
+// regression in listenUnix still fails the test on a platform that supports
+// sockets, because the probe would succeed and the test would go on to run.
+func requireUnixSockets(t *testing.T) {
+	t.Helper()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "unix", filepath.Join(shortTempDir(t), "probe.sock"))
+	if err != nil {
+		t.Skipf("this platform cannot bind a unix socket: %v", err)
+	}
+	_ = ln.Close()
 }
 
 // stubLoadTLSKeyPair replaces the certificate loader for one test and restores
@@ -496,6 +537,13 @@ func TestClearStaleSocketRefusesALiveSocket(t *testing.T) {
 // can be neither confirmed absent nor identified: a regular file used as a
 // directory makes Lstat fail with ENOTDIR, which goes back untouched.
 func TestClearStaleSocketReportsAnUnreadablePath(t *testing.T) {
+	// The fixture is an errno: a regular file used as a directory component is
+	// ENOTDIR on Unix, and Windows maps the same shape to a not-found error, at
+	// which point the path reads as absent and there is nothing to report. The
+	// branch under test is reachable on Unix only.
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reports a file-as-directory as not-found, not as a stat failure")
+	}
 	parent := filepath.Join(t.TempDir(), "plain")
 	if err := os.WriteFile(parent, []byte("x"), 0o600); err != nil {
 		t.Fatalf("write file: %v", err)
