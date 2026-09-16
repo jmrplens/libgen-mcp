@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/tiktoken-go/tokenizer v0.8.1
 	golang.org/x/image v0.45.0
