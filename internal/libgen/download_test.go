@@ -2513,29 +2513,21 @@ func TestHostRefusal(t *testing.T) {
 	}
 }
 
-// TestRedactQuery verifies an error naming a URL never carries its query string: a
-// resolved file URL can be signed with an account key or a one-time token, and
-// error text travels into logs and into a model's context.
-func TestRedactQuery(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"drops a signed query", "https://cdn.example.org/f.pdf?key=s3cret&exp=1", "https://cdn.example.org/f.pdf"},
-		{"drops a fragment", "https://e.org/f.pdf#page=2", "https://e.org/f.pdf"},
-		{"keeps a plain url", "https://e.org/f.pdf", "https://e.org/f.pdf"},
-		{"unparseable is still truncated", "://nope?key=s3cret", "://nope"},
+// TestHostRefusalRedactsTheURL verifies the refusal message never carries the
+// query string of the URL it names: a resolved file URL can be signed with an
+// account key or a one-time token, and error text travels into logs and into a
+// model's context. The rule itself is tested in internal/netguard, which owns it;
+// what this pins is that hostRefusal still routes through it.
+func TestHostRefusalRedactsTheURL(t *testing.T) {
+	err := hostRefusal(http.StatusForbidden, "https://cdn.example.org/f.pdf?key=s3cret&exp=1")
+	if err == nil {
+		t.Fatal("hostRefusal returned nil for a refusal status")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := redactQuery(tt.in); got != tt.want {
-				t.Errorf("redactQuery(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-			if strings.Contains(redactQuery(tt.in), "s3cret") && !strings.Contains(tt.want, "s3cret") {
-				t.Errorf("redactQuery(%q) leaked the secret", tt.in)
-			}
-		})
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("hostRefusal leaked the signed query: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://cdn.example.org/f.pdf") {
+		t.Errorf("hostRefusal dropped the endpoint it was meant to name: %v", err)
 	}
 }
 

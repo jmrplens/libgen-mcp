@@ -24,6 +24,7 @@ import (
 	xhtml "golang.org/x/net/html"
 
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // ProgressFunc reports live download progress: done is the number of bytes
@@ -869,31 +870,16 @@ var refusalStatuses = map[int]bool{
 //
 // The URL is reported without its query string: a resolved file URL can carry a
 // signed token or an account key, and an error message travels into logs and model
-// context.
+// context. netguard.RedactURLString is the one implementation of that rule, shared
+// with the transport-failure path, so the two cannot drift apart.
 func hostRefusal(status int, fileURL string) error {
 	if !refusalStatuses[status] {
 		return nil
 	}
 	return fmt.Errorf(
 		"host refused automated access (HTTP %d) to %s — retrying cannot change that; the file may still open in a browser",
-		status, redactQuery(fileURL),
+		status, netguard.RedactURLString(fileURL),
 	)
-}
-
-// redactQuery returns fileURL without its query string or fragment, so a URL can be
-// named in an error without carrying whatever credential it was signed with.
-//
-// A URL that will not parse is truncated at the first "?" or "#" textually rather
-// than echoed: falling back to the raw string would defeat the whole point on
-// exactly the inputs least likely to be well formed.
-func redactQuery(fileURL string) string {
-	u, err := url.Parse(fileURL)
-	if err != nil || u.Host == "" {
-		return strings.SplitN(strings.SplitN(fileURL, "?", 2)[0], "#", 2)[0]
-	}
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u.String()
 }
 
 // firstProgress returns the first progress callback from the variadic optional
@@ -945,7 +931,7 @@ func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, netguard.RedactTransportError(err)
 	}
 	req.Header.Set("User-Agent", userAgent())
 	// Apply any source-specific headers (e.g. a Referer) on top of the defaults.
@@ -959,7 +945,10 @@ func (c *Client) fetchFile(ctx context.Context, fileURL string, resumeFrom int64
 	}
 	resp, err := c.dl.Do(req) // c.dl has no global timeout: long downloads are governed by ctx
 	if err != nil {
-		return nil, fmt.Errorf("downloading file: %w", err)
+		// What Anna's member API hands back is a time-limited presigned URL, so the
+		// URL this failed on is itself a working credential: it is redacted before
+		// the error is wrapped, not after.
+		return nil, fmt.Errorf("downloading file: %w", netguard.RedactTransportError(err))
 	}
 	return resp, nil
 }

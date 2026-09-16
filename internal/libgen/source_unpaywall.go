@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // unpaywallAPIBase is the default Unpaywall REST endpoint used to look up the
@@ -198,14 +200,17 @@ func (s unpaywallSource) Resolve(ctx context.Context, it Item) (Resolved, error)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return Resolved{}, fmt.Errorf("unpaywall: building request: %w", err)
+		return Resolved{}, fmt.Errorf("unpaywall: building request: %w", netguard.RedactTransportError(err))
 	}
 	req.Header.Set("User-Agent", userAgent())
 
 	httpClient := httpClientOr(s.http)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return Resolved{}, unavailable(fmt.Errorf("unpaywall: requesting %q: %w", it.DOI, err))
+		// The endpoint carries the contact address in its query string, and a
+		// *url.Error prints the whole URL, so the failure is redacted before it is
+		// wrapped. Naming the DOI with %q is what keeps the diagnostic useful.
+		return Resolved{}, unavailable(fmt.Errorf("unpaywall: requesting %q: %w", it.DOI, netguard.RedactTransportError(err)))
 	}
 	defer func() { _ = resp.Body.Close() }()
 

@@ -10,6 +10,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // annasMaxBody bounds how many bytes of an Anna's Archive book page are read
@@ -262,10 +264,14 @@ func (s annasSource) probe(ctx context.Context, httpClient *http.Client, candida
 }
 
 // get issues a GET carrying the shared User-Agent plus any extra headers.
+//
+// Both failures are redacted here rather than at each caller: the member
+// endpoint carries the account key in its query string, and net/http reports a
+// transport failure as a *url.Error whose message is the whole URL.
 func (s annasSource) get(ctx context.Context, httpClient *http.Client, endpoint string, extra http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, netguard.RedactTransportError(err)
 	}
 	req.Header.Set("User-Agent", userAgent())
 	for k, vs := range extra {
@@ -273,7 +279,11 @@ func (s annasSource) get(ctx context.Context, httpClient *http.Client, endpoint 
 			req.Header.Add(k, v)
 		}
 	}
-	return httpClient.Do(req)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, netguard.RedactTransportError(err)
+	}
+	return resp, nil
 }
 
 // extractIPFSCID extracts the item's IPFS CID from an Anna's book page body,
