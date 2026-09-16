@@ -309,9 +309,12 @@ func Defaults() *Config {
 // silently falling back to the default.
 func Load() (*Config, error) {
 	cfg := Defaults()
+	// LIBGEN_MIRROR is read bare on purpose and is the one variable that does
+	// not go through Getenv: it is the mirror family's own convention, not a
+	// name this server invented. See EnvPrefix.
 	cfg.Mirror = strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/")
 	loadStringVars(cfg)
-	if dir := os.Getenv("LIBGEN_MCP_DOWNLOAD_DIR"); dir != "" {
+	if dir := Getenv("DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
 	} else {
 		home, err := os.UserHomeDir()
@@ -320,17 +323,17 @@ func Load() (*Config, error) {
 		}
 		cfg.DownloadDir = filepath.Join(home, "Downloads")
 	}
-	if v := os.Getenv("LIBGEN_MCP_TIMEOUT"); v != "" {
+	if v := Getenv("TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return nil, fmt.Errorf("LIBGEN_MCP_TIMEOUT: %w", err)
+			return nil, fmt.Errorf("%s: %w", EnvName("TIMEOUT"), err)
 		}
 		cfg.Timeout = d
 	}
-	if v := os.Getenv("LIBGEN_MCP_LOG_LEVEL"); v != "" {
+	if v := Getenv("LOG_LEVEL"); v != "" {
 		level, err := logging.ParseLevel(v)
 		if err != nil {
-			return nil, fmt.Errorf("LIBGEN_MCP_LOG_LEVEL: %w", err)
+			return nil, fmt.Errorf("%s: %w", EnvName("LOG_LEVEL"), err)
 		}
 		cfg.LogLevel = level
 	}
@@ -346,19 +349,19 @@ func Load() (*Config, error) {
 // loadStringVars applies the simple string-based environment overrides that need
 // no validation. Extracted from Load to keep its cognitive complexity in check.
 func loadStringVars(cfg *Config) {
-	if v := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); v != "" {
+	if v := Getenv("UNPAYWALL_EMAIL"); v != "" {
 		cfg.UnpaywallEmail = v
 	}
-	if v := os.Getenv("LIBGEN_MCP_ANNAS_KEY"); v != "" {
+	if v := Getenv("ANNAS_KEY"); v != "" {
 		cfg.AnnasKey = v
 	}
-	if v := os.Getenv("LIBGEN_MCP_CORE_KEY"); v != "" {
+	if v := Getenv("CORE_KEY"); v != "" {
 		cfg.CoreKey = v
 	}
-	if v := os.Getenv("LIBGEN_MCP_SCIHUB_HOSTS"); v != "" {
+	if v := Getenv("SCIHUB_HOSTS"); v != "" {
 		cfg.ScihubHosts = splitHosts(v)
 	}
-	if v := os.Getenv("LIBGEN_MCP_SOURCES"); v != "" {
+	if v := Getenv("SOURCES"); v != "" {
 		cfg.Sources = splitHosts(v)
 	}
 }
@@ -367,24 +370,24 @@ func loadStringVars(cfg *Config) {
 // budget, the stall timeout and the start-retry schedule) from the environment,
 // leaving the spec defaults in place when the variables are unset.
 func loadDownloadTuning(cfg *Config) error {
-	if v := os.Getenv("LIBGEN_MCP_RESOLVE_BUDGET"); v != "" {
+	if v := Getenv("RESOLVE_BUDGET"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return fmt.Errorf("LIBGEN_MCP_RESOLVE_BUDGET: %w", err)
+			return fmt.Errorf("%s: %w", EnvName("RESOLVE_BUDGET"), err)
 		}
 		cfg.ResolveBudget = d
 	}
-	if v := os.Getenv("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT"); v != "" {
+	if v := Getenv("DOWNLOAD_STALL_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT: %w", err)
+			return fmt.Errorf("%s: %w", EnvName("DOWNLOAD_STALL_TIMEOUT"), err)
 		}
 		cfg.DownloadStallTimeout = d
 	}
-	if v := os.Getenv("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS"); v != "" {
+	if v := Getenv("DOWNLOAD_START_RETRY_WAITS"); v != "" {
 		waits, err := parseDurations(v)
 		if err != nil {
-			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS: %w", err)
+			return fmt.Errorf("%s: %w", EnvName("DOWNLOAD_START_RETRY_WAITS"), err)
 		}
 		cfg.DownloadStartRetryWaits = waits
 	}
@@ -421,11 +424,11 @@ func loadBools(cfg *Config) error {
 		key string
 		dst *bool
 	}{
-		{"LIBGEN_MCP_REMOTE_DOWNLOADS", &cfg.RemoteDownloads},
-		{"LIBGEN_MCP_ENRICH", &cfg.EnrichEnabled},
-		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
-		{"LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
-		{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", &cfg.AllowPrivateAddresses},
+		{"REMOTE_DOWNLOADS", &cfg.RemoteDownloads},
+		{"ENRICH", &cfg.EnrichEnabled},
+		{"CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
+		{"DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
+		{"ALLOW_PRIVATE_ADDRESSES", &cfg.AllowPrivateAddresses},
 	} {
 		if err := envBool(b.key, b.dst); err != nil {
 			return err
@@ -433,7 +436,7 @@ func loadBools(cfg *Config) error {
 	}
 	// SERVER_FETCH is the one boolean loaded as a tri-state, because its default
 	// is not a constant: it depends on the transport, which config cannot see.
-	return envBoolPtr("LIBGEN_MCP_SERVER_FETCH", &cfg.ServerFetch)
+	return envBoolPtr("SERVER_FETCH", &cfg.ServerFetch)
 }
 
 // loadNumeric fills the numeric and boolean scalar fields of cfg from the
@@ -442,40 +445,40 @@ func loadNumeric(cfg *Config) error {
 	if err := loadBools(cfg); err != nil {
 		return err
 	}
-	if v := os.Getenv("LIBGEN_MCP_EXTRA_SOURCES"); v != "" {
+	if v := Getenv("EXTRA_SOURCES"); v != "" {
 		mode, err := ParseExtraSourcesMode(v)
 		if err != nil {
 			// Startup names the variable; the parser cannot, because the same parse
 			// also serves the per-call search argument.
-			return fmt.Errorf("LIBGEN_MCP_EXTRA_SOURCES: %w", err)
+			return fmt.Errorf("%s: %w", EnvName("EXTRA_SOURCES"), err)
 		}
 		cfg.ExtraSources = mode
 	}
-	if err := envFloat("LIBGEN_MCP_RATE_RPS", &cfg.RateRPS); err != nil {
+	if err := envFloat("RATE_RPS", &cfg.RateRPS); err != nil {
 		return err
 	}
-	if err := envInt("LIBGEN_MCP_RATE_BURST", &cfg.RateBurst); err != nil {
+	if err := envInt("RATE_BURST", &cfg.RateBurst); err != nil {
 		return err
 	}
-	if err := envInt64("LIBGEN_MCP_MAX_DOWNLOAD_BYTES", &cfg.MaxDownloadBytes); err != nil {
+	if err := envInt64("MAX_DOWNLOAD_BYTES", &cfg.MaxDownloadBytes); err != nil {
 		return err
 	}
-	if err := envInt("LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS", &cfg.MaxConcurrentDownloads); err != nil {
+	if err := envInt("MAX_CONCURRENT_DOWNLOADS", &cfg.MaxConcurrentDownloads); err != nil {
 		return err
 	}
-	if err := envInt("LIBGEN_MCP_RETRY_ATTEMPTS", &cfg.RetryAttempts); err != nil {
+	if err := envInt("RETRY_ATTEMPTS", &cfg.RetryAttempts); err != nil {
 		return err
 	}
-	if err := envInt("LIBGEN_MCP_READ_MAX_CHARS", &cfg.ReadMaxChars); err != nil {
+	if err := envInt("READ_MAX_CHARS", &cfg.ReadMaxChars); err != nil {
 		return err
 	}
-	if err := envInt("LIBGEN_MCP_READ_DEFAULT_PAGES", &cfg.ReadDefaultPages); err != nil {
+	if err := envInt("READ_DEFAULT_PAGES", &cfg.ReadDefaultPages); err != nil {
 		return err
 	}
-	if err := envInt64("LIBGEN_MCP_READ_CACHE_BYTES", &cfg.ReadCacheBytes); err != nil {
+	if err := envInt64("READ_CACHE_BYTES", &cfg.ReadCacheBytes); err != nil {
 		return err
 	}
-	if err := envDuration("LIBGEN_MCP_READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
+	if err := envDuration("READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
 		return err
 	}
 	return nil
@@ -494,16 +497,33 @@ func splitHosts(v string) []string {
 	return hosts
 }
 
-// envBool overwrites *dst with the boolean read from the variable key if present.
-// It accepts the forms strconv.ParseBool understands (1/0, t/f, true/false).
-func envBool(key string, dst *bool) error {
-	v := os.Getenv(key)
+// The six helpers below all take the SHORT name of a setting and read it through
+// [Getenv], which applies [EnvPrefix]. They report a bad value against the full
+// name, because that is what an operator has in their environment.
+//
+// Every one of them treats an unparseable value as an error rather than a
+// warning, which is stricter than merely noticing it: a variable that is set but
+// unreadable is a deployment that does not do what its configuration says, and
+// falling back to the default in silence is how that survives to production.
+
+// envBool overwrites *dst with the boolean read from the variable name if
+// present. It accepts the forms strconv.ParseBool understands (1/0, t/f,
+// true/false).
+//
+// That house grammar covers every LIBGEN_MCP_* boolean, including any telemetry
+// switch. It is deliberately looser than the OpenTelemetry specification's,
+// which accepts "true" alone: an operator typing 1 is right everywhere else on
+// this configuration surface, and being right here too is worth more than
+// agreeing with a specification that governs the OTEL_* names rather than ours.
+// A specification-grammar variable is parsed where it is read, not here.
+func envBool(name string, dst *bool) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = b
 	return nil
@@ -514,71 +534,71 @@ func envBool(key string, dst *bool) error {
 // twin, for a setting whose default is decided later rather than by the zero
 // value: nil is "the operator said nothing", which an explicit false does not
 // mean. An unparseable value is an error, the same as envBool's.
-func envBoolPtr(key string, dst **bool) error {
-	v := os.Getenv(key)
+func envBoolPtr(name string, dst **bool) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = &b
 	return nil
 }
 
-// envInt overwrites *dst with the integer read from the variable key if present.
-func envInt(key string, dst *int) error {
-	v := os.Getenv(key)
+// envInt overwrites *dst with the integer read from the variable name if present.
+func envInt(name string, dst *int) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = n
 	return nil
 }
 
-// envInt64 overwrites *dst with the int64 read from the variable key if present.
-func envInt64(key string, dst *int64) error {
-	v := os.Getenv(key)
+// envInt64 overwrites *dst with the int64 read from the variable name if present.
+func envInt64(name string, dst *int64) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = n
 	return nil
 }
 
-// envFloat overwrites *dst with the float64 read from the variable key if present.
-func envFloat(key string, dst *float64) error {
-	v := os.Getenv(key)
+// envFloat overwrites *dst with the float64 read from the variable name if present.
+func envFloat(name string, dst *float64) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	n, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = n
 	return nil
 }
 
-// envDuration overwrites *dst with the Go duration read from the variable key if
-// present.
-func envDuration(key string, dst *time.Duration) error {
-	v := os.Getenv(key)
+// envDuration overwrites *dst with the Go duration read from the variable name
+// if present.
+func envDuration(name string, dst *time.Duration) error {
+	v := Getenv(name)
 	if v == "" {
 		return nil
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
+		return fmt.Errorf("%s: %w", EnvName(name), err)
 	}
 	*dst = d
 	return nil

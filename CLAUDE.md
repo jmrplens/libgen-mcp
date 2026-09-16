@@ -273,6 +273,42 @@ server declares no resources, so the resource methods the SDK wires up
 regardless answer `-32601` instead of an empty listing that would imply
 resources exist here.
 
+### Environment variables
+
+**Every variable this server defines carries `LIBGEN_MCP_`**, and every read of
+one goes through `config.Getenv` (or `TrimmedGetenv`), which applies the prefix.
+The code passes the short name — `Getenv("TIMEOUT")` — and names the full one in
+a message with `config.EnvName`.
+
+The prefix is not decoration. A stdio server runs in whatever shell its client
+was started from, beside every other tool that person uses, and a bare `TIMEOUT`
+or `LOG_LEVEL` may already belong to one of them. The collision is silent: the
+server reads a value nobody gave it.
+
+Two spellings stay bare, both because the name is not ours to choose:
+`LIBGEN_MIRROR`, which is the mirror family's own convention, and every `OTEL_*`
+name, which the OpenTelemetry exporters read themselves — a prefixed spelling
+would simply not be seen.
+
+**Adding a variable means adding its short name to `knownNames` in
+`internal/config/env_name.go`.** `TestEveryEnvNameIsKnown` walks the package's
+syntax and fails on a read the list does not cover, on a message naming a
+variable that does not exist, and on an `os.Getenv` that spells a prefixed name
+itself. There is no legacy-name fallback and no deprecation warning to write: no
+bare spelling has ever shipped.
+
+**Booleans use the house grammar**, `strconv.ParseBool` — `1/0`, `t/f`,
+`true/false` — for every `LIBGEN_MCP_*` variable, telemetry switches included. It
+is deliberately looser than the OpenTelemetry specification's, which accepts
+`true` alone, and the disagreement is the accepted cost: an operator typing `1`
+is right everywhere else on this surface. A variable the specification governs
+(`OTEL_SDK_DISABLED`) is parsed under its own grammar where it is read, never
+through `envBool`.
+
+**A value that is set but unparseable is an error, not a warning.** Falling back
+to the default in silence is how a deployment that does not match its
+configuration survives to production.
+
 ### Escaping untrusted content
 
 Record titles, authors, and any other externally-sourced text are **untrusted**.
