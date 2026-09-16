@@ -315,7 +315,11 @@ func resolveReadPath(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen
 	}
 	if in.Path != "" {
 		// A caller-supplied local path owns no temp file, so its release is a no-op.
-		canonical, cerr := pathguard.CanonicalFile(in.Path, readRoots(cfg))
+		// No size bound here: which leg runs is decided later by the file's format,
+		// the text legs already cap themselves at 8 MiB inside internal/extract, and
+		// a PDF is read by seeking rather than loaded whole, so a byte cap would
+		// refuse large legitimate books without bounding the work.
+		canonical, cerr := pathguard.CanonicalReadableFile(in.Path, 0, readRoots(cfg))
 		if cerr != nil {
 			return "", noRelease, cerr
 		}

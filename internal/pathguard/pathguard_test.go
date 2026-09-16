@@ -135,9 +135,9 @@ func TestRefusesASymlinkEscapingItsRoot(t *testing.T) {
 	}
 }
 
-// TestRefusesAPathThatIsNotARegularFile covers what OpenFile adds over the path
-// checks: a directory, a device node or a fifo is not a document, and handing
-// one to a reader is at best a confusing failure.
+// TestRefusesAPathThatIsNotARegularFile covers what CanonicalReadableFile adds
+// over the containment: a directory, a device node or a fifo is not a document,
+// and handing one to a reader is at best a confusing failure.
 func TestRefusesAPathThatIsNotARegularFile(t *testing.T) {
 	allowLocal(t)
 	dir := t.TempDir()
@@ -146,31 +146,65 @@ func TestRefusesAPathThatIsNotARegularFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err := OpenFile(sub, 0, rootsFor(dir))
+	_, err := CanonicalReadableFile(sub, 0, rootsFor(dir))
 	if err == nil {
-		t.Fatal("a directory was opened as a file")
+		t.Fatal("a directory was accepted as a file to read")
 	}
 	if !strings.Contains(err.Error(), "not a regular file") {
 		t.Errorf("err = %v, want it to say the path is not a regular file", err)
 	}
 }
 
-// TestOpenFileEnforcesTheSizeBound covers the maxSize argument, which is passed
-// on the text legs and deliberately left at zero on the ones that seek.
-func TestOpenFileEnforcesTheSizeBound(t *testing.T) {
+// TestSizeBoundIsEnforcedAndOptional covers the maxSize argument: a positive
+// value bounds the file, and zero means no bound, which is what the read tool
+// passes because the leg that will run is not known yet.
+func TestSizeBoundIsEnforcedAndOptional(t *testing.T) {
 	allowLocal(t)
 	dir := t.TempDir()
 	path := writeFile(t, dir, "big.txt", strings.Repeat("x", 100))
 
-	if _, _, err := OpenFile(path, 10, rootsFor(dir)); err == nil {
-		t.Error("a file over the bound was opened")
+	if _, err := CanonicalReadableFile(path, 10, rootsFor(dir)); err == nil {
+		t.Error("a file over the bound was accepted")
+	}
+	if _, err := CanonicalReadableFile(path, 0, rootsFor(dir)); err != nil {
+		t.Errorf("a zero bound must mean no bound, got %v", err)
+	}
+}
+
+// TestCanonicalReadableFileReportsAMissingFile covers the stat arm: a path that
+// resolves but is gone by the time it is described is reported as what it is,
+// not as a containment refusal.
+func TestCanonicalReadableFileReportsAMissingFile(t *testing.T) {
+	allowLocal(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "gone.txt", "x")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
 	}
 
-	f, _, err := OpenFile(path, 0, rootsFor(dir))
-	if err != nil {
-		t.Fatalf("a zero bound must mean no bound, got %v", err)
+	_, err := CanonicalReadableFile(path, 0, rootsFor(dir))
+	if err == nil {
+		t.Fatal("a missing file was accepted")
 	}
-	_ = f.Close()
+	if strings.Contains(err.Error(), "outside the allowed directories") {
+		t.Errorf("err = %v, want a resolution failure rather than a containment refusal", err)
+	}
+}
+
+// TestLocalAccessAllowedReportsWhatWasSet pins the accessor the tools package
+// uses to save and restore the setting around a test of its own.
+func TestLocalAccessAllowedReportsWhatWasSet(t *testing.T) {
+	previous := localAccessAllowed.Load()
+	t.Cleanup(func() { SetLocalAccess(previous) })
+
+	SetLocalAccess(true)
+	if !LocalAccessAllowed() {
+		t.Error("LocalAccessAllowed() = false after SetLocalAccess(true)")
+	}
+	SetLocalAccess(false)
+	if LocalAccessAllowed() {
+		t.Error("LocalAccessAllowed() = true after SetLocalAccess(false)")
+	}
 }
 
 // TestFailsClosedWithoutLocalAccess pins the transport gate, and pins that it
@@ -363,5 +397,80 @@ func TestNoExistingAncestorIsReported(t *testing.T) {
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		t.Errorf("err = %v, want something other than a bare not-exist", err)
+	}
+}
+
+// TestHomeLookupFailureKeepsTheWorkingDirectory covers the safe direction when
+// the home directory cannot be determined.
+//
+// Answering "this is not home" keeps the working directory as a root, which is
+// the behavior every deployment already has. Answering the other way would
+// silently narrow the allow-list on a platform where os.UserHomeDir happens to
+// fail, and a containment that narrows itself by accident is one an operator
+// cannot reason about.
+func TestHomeLookupFailureKeepsTheWorkingDirectory(t *testing.T) {
+	allowLocal(t)
+	dir, _ := sandbox(t)
+
+	previousHome := userHomeDir
+	userHomeDir = func() (string, error) { return "", errors.New("no home on this platform") }
+	t.Cleanup(func() { userHomeDir = previousHome })
+	t.Chdir(dir)
+
+	doc := writeFile(t, dir, "notes.txt", "hello")
+	if _, err := CanonicalFile(doc, Roots{EnvName: "LIBGEN_MCP_ALLOWED_READ_DIRS"}); err != nil {
+		t.Errorf("CanonicalFile() error = %v; the working directory stopped being a root because home could not be found", err)
+	}
+}
+
+// TestAConfiguredRootThatIsAFileIsDropped covers the other way an allow-list
+// entry can be wrong: it exists, and it is not a directory. It must be skipped
+// rather than silently matching the file itself.
+func TestAConfiguredRootThatIsAFileIsDropped(t *testing.T) {
+	allowLocal(t)
+	outside, allowed := sandbox(t)
+	notADir := writeFile(t, outside, "notadir", "x")
+	doc := writeFile(t, allowed, "book.pdf", "%PDF-1.7")
+
+	roots := Roots{
+		Implicit:   []string{allowed},
+		Configured: []string{notADir},
+		EnvName:    "LIBGEN_MCP_ALLOWED_READ_DIRS",
+	}
+	if _, err := CanonicalFile(doc, roots); err != nil {
+		t.Errorf("CanonicalFile() error = %v; a file used as an allow-list entry took the good roots with it", err)
+	}
+	// And the file named as a root does not become readable by being named.
+	if _, err := CanonicalFile(notADir, roots); err == nil {
+		t.Error("a file named as an allow-list directory made itself readable")
+	}
+}
+
+// TestOutputPathRefusesAnExistingNonFile covers the destination that exists and
+// is neither a file to overwrite nor a directory to write into: writing through
+// a fifo or a device node is not a download anyone asked for.
+func TestOutputPathRefusesAnExistingNonFile(t *testing.T) {
+	allowLocal(t)
+	_, allowed := sandbox(t)
+	fifo := filepath.Join(allowed, "pipe")
+	if err := makeFIFO(fifo); err != nil {
+		t.Skipf("this platform cannot create a fifo: %v", err)
+	}
+
+	_, err := CanonicalOutputPath(fifo, rootsFor(allowed))
+	if err == nil {
+		t.Fatal("a fifo was accepted as a download destination")
+	}
+	if !strings.Contains(err.Error(), "neither a file nor a directory") {
+		t.Errorf("err = %v, want it to say what the destination is", err)
+	}
+}
+
+// TestOutputPathRequiresAPath pins the empty-argument message on the write side,
+// which names the argument differently from the read side.
+func TestOutputPathRequiresAPath(t *testing.T) {
+	allowLocal(t)
+	if _, err := CanonicalOutputPath("", rootsFor(t.TempDir())); err == nil {
+		t.Error(`CanonicalOutputPath("") = nil, want an error`)
 	}
 }

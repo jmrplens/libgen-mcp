@@ -129,51 +129,40 @@ func CanonicalOutputPath(path string, roots Roots) (string, error) {
 	return canonicalPath, nil
 }
 
-// OpenFile resolves path with [CanonicalFile] and opens it, refusing anything
-// that is not a regular file and, when maxSize is positive, anything larger.
+// CanonicalReadableFile is [CanonicalFile] plus the two conditions a reader
+// needs: the path must name a regular file, and when maxSize is positive it must
+// not be larger.
 //
-// The checks run twice: once on the path and once on the open descriptor. The
-// second is not redundant. Between resolving a path and opening it, a local
-// principal able to write in an allowed root — and the OS temporary directory is
-// always one, and is world-writable — can replace the leaf, so the file that was
-// checked and the file that is read would not be the same. Where the platform
-// has O_NOFOLLOW the open itself refuses a swapped-in symlink; where it does not,
-// these two checks are the whole of the containment.
+// It returns a path rather than an open descriptor, and that is a real
+// limitation rather than a preference. Handing back a *os.File would close the
+// window between checking a path and opening it — a local principal able to
+// write in an allowed root, and the OS temporary directory is always one and is
+// world-writable, can replace the leaf in between. Closing it needs the code
+// that finally reads the document to accept a descriptor, which here means five
+// call sites in internal/extract, each of which opens the file itself. That is
+// its own change; what is here is the containment, and the leaf swap is
+// documented rather than claimed.
 //
-// maxSize of zero means no size bound. That is the right answer for a format
-// read by seeking rather than by being loaded whole: a byte cap there would
-// refuse large legitimate documents without bounding the work.
-func OpenFile(path string, maxSize int64, roots Roots) (*os.File, os.FileInfo, error) {
+// maxSize of zero means no size bound. The caller decides: the text legs of
+// internal/extract already cap themselves at 8 MiB, and a PDF is read by seeking
+// rather than loaded whole, so a byte cap there would refuse large legitimate
+// books without bounding the work.
+func CanonicalReadableFile(path string, maxSize int64, roots Roots) (string, error) {
 	canonicalPath, err := CanonicalFile(path, roots)
 	if err != nil {
-		return nil, nil, err
+		return "", err
 	}
-
 	// Lstat, not Stat: canonicalPath is already symlink-free, so the two agree
 	// unless the leaf became a symlink between resolution and here — and in that
 	// race Lstat is the answer that refuses.
 	info, err := os.Lstat(canonicalPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
+		return "", fmt.Errorf("stat %s: %w", canonicalPath, err)
 	}
 	if checkErr := checkRegularAndSize(canonicalPath, info, maxSize); checkErr != nil {
-		return nil, nil, checkErr
+		return "", checkErr
 	}
-
-	f, err := OpenNoFollow(canonicalPath, os.O_RDONLY, 0)
-	if err != nil {
-		return nil, nil, fmt.Errorf("open %s: %w", canonicalPath, err)
-	}
-	opened, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil, nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
-	}
-	if checkErr := checkRegularAndSize(canonicalPath, opened, maxSize); checkErr != nil {
-		_ = f.Close()
-		return nil, nil, checkErr
-	}
-	return f, opened, nil
+	return canonicalPath, nil
 }
 
 // OpenNoFollow opens path with the caller's flags and mode, refusing a symlink
@@ -190,14 +179,6 @@ func OpenFile(path string, maxSize int64, roots Roots) (*os.File, os.FileInfo, e
 // destination wants O_TRUNC. What they must not differ on is the leaf.
 func OpenNoFollow(path string, flag int, perm os.FileMode) (*os.File, error) {
 	return os.OpenFile(path, flag|noFollowFlag, perm) //#nosec G304 -- the caller resolved the path through symlinks and confined it to the allowed roots.
-}
-
-// CreateOutputFile creates or truncates the destination a download writes to.
-//
-// Truncating an existing regular file is still allowed: overwriting a
-// destination the caller named is what a download does.
-func CreateOutputFile(path string) (*os.File, error) {
-	return OpenNoFollow(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 }
 
 // NoFollowSupported reports whether this platform refuses a leaf symlink in the
