@@ -248,6 +248,31 @@ Handlers return `(*mcp.CallToolResult, Out, error)`. Return a real `error` for
 unexpected failures; the `withRecovery` wrapper also converts panics into
 `IsError` results. Human-readable Markdown output is built with `markdownResult`.
 
+### What the handshake advertises
+
+`Capabilities` in `newMCPServer` is **pinned, and every field in it is a
+promise**. A nil capability is not neutral: the SDK fills one in with its own
+defaults — `{"logging":{}}` for the whole block, and `ListChanged: true` on
+`Tools` and `Prompts` as soon as anything is registered — so a capability this
+server does not serve gets advertised purely by omission.
+
+`ListChanged` is false because the catalog is fixed at registration and only
+changes with a release, the same fact `cachehints` rests on. It is not cosmetic:
+a client that believes `listChanged` opens a `subscriptions/listen` stream, and
+the SDK parks that handler on a context this server never cancels, since it
+sends no list-changed notification and configures no `KeepAlive`. Before the pin
+that was a goroutine and a session held per request, for the life of the
+process, on any POST with no `MCP-Protocol-Version` header.
+
+So: **do not add a capability here without the code that honours it, and do not
+let one appear by leaving a field nil.** The two halves are asserted together by
+`TestAdvertisedCapabilitiesAreWhatThisServerServes` in `cmd/server` and by
+`test/e2e/http/subscriptions_test.go`, which drives the method on the wire. The
+same rule, pointing the other way, is why `capguard.NoResources` exists: this
+server declares no resources, so the resource methods the SDK wires up
+regardless answer `-32601` instead of an empty listing that would imply
+resources exist here.
+
 ### Escaping untrusted content
 
 Record titles, authors, and any other externally-sourced text are **untrusted**.

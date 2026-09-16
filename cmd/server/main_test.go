@@ -900,6 +900,69 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 	}
 }
 
+// TestAdvertisedCapabilitiesAreWhatThisServerServes asserts the handshake
+// advertises exactly what this server can do, and nothing it cannot.
+//
+// listChanged is the half worth a test of its own. The SDK fills in a nil Tools
+// or Prompts capability with ListChanged: true as soon as anything is
+// registered, and a client that believes it opens a subscriptions/listen stream
+// the server parks for the life of the request — for a notification this server
+// will never send, because the catalog is fixed at registration and only changes
+// with a release. Pinning both to false is the truth, and it is what stops the
+// stream being opened at all.
+func TestAdvertisedCapabilitiesAreWhatThisServerServes(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	server, err := newRegisteredServer(cfg, "")
+	if err != nil {
+		t.Fatalf("newRegisteredServer() error = %v", err)
+	}
+
+	st, ct := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "capabilities-test", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	caps := session.InitializeResult().Capabilities
+
+	if caps.Tools == nil {
+		t.Fatal("no tools capability advertised, but this server registers four tools")
+	}
+	if caps.Tools.ListChanged {
+		t.Error("tools.listChanged is true: this server sends no notifications/tools/list_changed, " +
+			"and advertising it invites a subscriptions/listen stream that is then parked forever")
+	}
+	if caps.Prompts == nil {
+		t.Fatal("no prompts capability advertised, but this server registers four prompts")
+	}
+	if caps.Prompts.ListChanged {
+		t.Error("prompts.listChanged is true: this server sends no notifications/prompts/list_changed, " +
+			"and advertising it invites a subscriptions/listen stream that is then parked forever")
+	}
+	// Reading the deprecated field is the point of the assertion: the pin exists
+	// so this capability is never advertised, and the only way to check that is
+	// to look at it.
+	//nolint:staticcheck // SA1019: asserting a deprecated capability stays absent.
+	if caps.Logging != nil {
+		t.Error("logging capability advertised; MCP logging is deprecated as of 2026-07-28 (SEP-2577) " +
+			"and this server's migration is slog to stderr")
+	}
+	if caps.Resources != nil {
+		t.Errorf("resources capability advertised (%+v); see TestNoResourcesIsConsistent", caps.Resources)
+	}
+}
+
 // TestServeHTTPValidatesOrigin covers the 2026-07-28 transport MUST — "Servers
 // MUST validate the Origin header on all incoming connections" — at the only
 // layer that can enforce it, the HTTP handler.

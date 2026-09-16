@@ -299,15 +299,38 @@ func newMCPServer(instructions string) *mcp.Server {
 		Icons:       toolutil.IconBrand,
 	}, &mcp.ServerOptions{
 		Instructions: instructions,
-		// Pinned empty rather than left nil, because nil is not neutral: the
-		// SDK fills it with its own default of {"logging":{}}, and MCP logging
+		// Pinned rather than left nil, because nil is not neutral: the SDK
+		// fills it with its own default of {"logging":{}}, and MCP logging
 		// is Deprecated as of revision 2026-07-28 (SEP-2577), whose prescribed
 		// migration is exactly what this server already does — slog to stderr.
 		// So the server was advertising a deprecated capability it neither
-		// implements nor wants, purely by omission. The SDK still adds tools
-		// and prompts on top of a non-nil value, so the advertised set becomes
-		// exactly what this server serves.
-		Capabilities: &mcp.ServerCapabilities{},
+		// implements nor wants, purely by omission.
+		//
+		// Tools and Prompts are pinned for the same reason one layer down. The
+		// SDK leaves a non-nil capability alone but fills in a nil one with
+		// ListChanged: true as soon as anything is registered, and that is a
+		// promise this server cannot keep: the catalog is fixed at registration
+		// and only changes with a release (the same fact the cachehints
+		// middleware below is built on). A client that believes it opens a
+		// subscriptions/listen stream, which the SDK then parks on a context
+		// nothing here will ever cancel — no list-changed notification is ever
+		// sent, and no KeepAlive is configured, so there is never even a failed
+		// write to unwind it. Declaring false is the truth, and it stops the
+		// stream being opened at all.
+		//
+		// If this server ever gains a list-changed notification — a hot reload
+		// of LIBGEN_MCP_SOURCES, say — the truth changes and this flips back,
+		// but a ceiling on concurrent listen streams has to land with it. Size
+		// that ceiling for the legacy path, not the modern one: from 2026-07-28
+		// the SDK ties the handler to its POST, so the cost is per open
+		// connection, while an older request or one with no protocol header
+		// leaks a goroutine and a session per request, for the life of the
+		// process. The sibling project gitlab-mcp-server carries such a ceiling
+		// in cmd/server/subscriptions.go, which is the shape to copy.
+		Capabilities: &mcp.ServerCapabilities{
+			Tools:   &mcp.ToolCapabilities{ListChanged: false},
+			Prompts: &mcp.PromptCapabilities{ListChanged: false},
+		},
 	})
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
