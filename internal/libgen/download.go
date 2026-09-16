@@ -25,6 +25,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 )
 
 // ProgressFunc reports live download progress: done is the number of bytes
@@ -1034,7 +1035,11 @@ func openPartForStream(partPath string, opts streamOpts, digest io.Writer) (*os.
 	if !opts.resume {
 		flag |= os.O_TRUNC // restart: discard any stale partial
 	}
-	f, err := os.OpenFile(partPath, flag, 0o600)
+	// The partial's path is deterministic, so a local principal able to write in
+	// the download directory can plant a symlink at it and have this process write
+	// the downloaded bytes wherever that link points. pathguard refuses a symlink
+	// at the leaf where the platform can.
+	f, err := pathguard.OpenNoFollow(partPath, flag, 0o600)
 	if err != nil {
 		return nil, 0, err
 	}

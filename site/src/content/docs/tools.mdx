@@ -340,7 +340,10 @@ Set `enrich: true` to add a best-effort `enrichment` object with keyless data fr
 	</Fragment>
 	<Fragment slot="path">
 		Destination directory. Defaults to `LIBGEN_MCP_DOWNLOAD_DIR` (or
-		`~/Downloads`). Ignored when `resolve_only` is true.
+		`~/Downloads`). Ignored when `resolve_only` is true. A directory named here
+		is confined to the working directory, the OS temp directory,
+		`LIBGEN_MCP_DOWNLOAD_DIR` and anything listed in
+		`LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS`.
 	</Fragment>
 	<Fragment slot="filename">
 		Destination filename, used as given once sanitized into a single name
@@ -564,7 +567,9 @@ What to do instead on such a deployment: call `download`, which returns a direct
 	<Fragment slot="doi">DOI from an article search result.</Fragment>
 	<Fragment slot="path">
 		Read an already-downloaded local file by absolute path. Local server only —
-		rejected on a remote server.
+		rejected on a remote server. Confined to the working directory, the OS temp
+		directory, `LIBGEN_MCP_DOWNLOAD_DIR` and anything listed in
+		`LIBGEN_MCP_ALLOWED_READ_DIRS`; symlinks are resolved before the check.
 	</Fragment>
 	<Fragment slot="source">
 		Restrict the fetch to one source (`libgen`/`randombook`/`annas` for `md5`;

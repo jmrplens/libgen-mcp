@@ -34,6 +34,8 @@ const EnvPrefix = "LIBGEN_MCP_"
 //   - every OTEL_* name belongs to the OpenTelemetry specification and is read
 //     by the exporters themselves, so a prefixed spelling would not be seen.
 var knownNames = []string{
+	"ALLOWED_DOWNLOAD_DIRS",
+	"ALLOWED_READ_DIRS",
 	"ALLOW_PRIVATE_ADDRESSES",
 	"ANNAS_KEY",
 	"CONFIRM_DOWNLOADS",
