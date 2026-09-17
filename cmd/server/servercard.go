@@ -84,9 +84,10 @@ type serverCard struct {
 	ServerInfo *mcp.Implementation `json:"serverInfo"`
 	// Capabilities is taken from the same handshake, for the same reason: a
 	// directory reading the card could not otherwise learn what this server
-	// negotiates — that it advertises tools and prompts and, since the
-	// Capabilities pin in newMCPServer, no deprecated logging capability —
-	// except by grepping English prose. The card follows the original
+	// negotiates — that it advertises tools and prompts, and, since the
+	// Capabilities pin in newMCPServer, no deprecated logging capability and no
+	// list-changed notification it cannot send — except by grepping English
+	// prose. The card follows the original
 	// SEP-1649 shape, which required this key; its successor SEP-2127
 	// deliberately carries neither capabilities nor primitives, but this card
 	// already enumerates tools and prompts, so it is a SEP-1649-lineage
