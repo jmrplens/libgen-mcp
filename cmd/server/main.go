@@ -41,6 +41,19 @@ import (
 // in-flight connections are forcibly closed.
 const httpShutdownTimeout = 5 * time.Second
 
+// The listener's own timeouts. Both guard a peer that opens a connection and
+// then does nothing with it, which costs a file descriptor either way.
+//
+// httpWriteTimeout is the one with a catch: it bounds the whole handler, not
+// just the write, so it would sever a tool call that is doing exactly what it
+// was asked to do. That is why it arrived with [sseAware], which clears it on
+// the MCP endpoint; on every other route the response is a small body and a
+// minute is already generous.
+const (
+	httpReadHeaderTimeout = 10 * time.Second
+	httpWriteTimeout      = 60 * time.Second
+)
+
 // version and commit are injected at release time with
 // -ldflags "-X main.version=<v> -X main.commit=<sha>".
 //
@@ -488,31 +501,6 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
 }
 
-// sseNoBuffering sets X-Accel-Buffering: no on responses to requests that
-// negotiate Server-Sent Events, which every streamable HTTP client does. The
-// 2026-07-28 transport spec makes it a SHOULD: an nginx-class reverse proxy
-// otherwise accumulates events in a buffer instead of forwarding them.
-//
-// It is not decoration here. The POST response stream is a real stream —
-// download and read emit notifications/progress on it (see progressNotifier)
-// while a multi-megabyte file is being fetched — so a buffering proxy would
-// hold every progress event until the transfer finished, which is precisely
-// the failure mode the header exists to prevent. The go-sdk sets Cache-Control
-// and Content-Type on the SSE response but not this header.
-//
-// The header is written on the way in, before the SDK writes any of its own, so
-// it is already in the map when the response headers are flushed. Harmless on
-// the requests that negotiate down to application/json under --json-response: a
-// proxy simply does not buffer a small JSON body either.
-func sseNoBuffering(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
-			w.Header().Set("X-Accel-Buffering", "no")
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 // The CORS response headers this server writes, named once because three
 // separate handlers set the origin header — the card's, its preflight, and the
 // MCP endpoint's — and a typo in any one of them is a header a browser silently
@@ -867,7 +855,7 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, 
 	// mounted separately and carry their own permissive CORS: the card is a
 	// public document with no per-origin answer to fish out, whereas this
 	// endpoint executes tool calls, so its trust is named rather than open.
-	endpoint := browserCORS(trusted, crossOriginProtected(trusted, sseNoBuffering(mcpHandler)))
+	endpoint := browserCORS(trusted, crossOriginProtected(trusted, sseAware(mcpHandler)))
 	for _, pattern := range endpointPatterns(base) {
 		mux.Handle(pattern, endpoint)
 	}
@@ -1106,7 +1094,14 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 
 	srv := &http.Server{
 		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS),
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		// The slow-reader guard, and it is only safe because sseAware clears it
+		// on the MCP endpoint. Everything else this server answers — /health,
+		// both card paths, the 404 — is a small body with no business taking a
+		// minute to write, so a client that stops reading one is holding a
+		// connection for nothing. Before the writer existed there was no
+		// deadline at all, which is why this lands with it rather than before.
+		WriteTimeout: httpWriteTimeout,
 	}
 
 	serveErr := make(chan error, 1)
