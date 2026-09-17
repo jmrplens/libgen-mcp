@@ -126,6 +126,20 @@ const (
 	// The names of fields, never credentials.
 	LogFieldAnnasKey       = "annas_key"
 	LogFieldUnpaywallEmail = "unpaywall_email"
+	// LogFieldChargedAddress is the address a request was charged to, which the
+	// wildcard-bind warning writes so an operator can see what their deployment
+	// is treating as the caller.
+	//
+	// It is the one field in this list that the tree already writes today
+	// (`cmd/server/rate_limit.go`), and it is here because the identity policy
+	// is not scoped to one signal: under `none` nothing about who made a call
+	// leaves this process, and a log record naming the charged address is that
+	// claim arriving by the other door. The value in that particular record is
+	// by construction an address no public client could have — that is the
+	// condition it fires on — but the rule is applied by field name, not by
+	// inspecting the value, because the next record to carry one will not have
+	// that property.
+	LogFieldChargedAddress = "charged_address"
 )
 
 // ExportStrippedFields are the log fields removed from the exported copy at any
@@ -153,6 +167,7 @@ var ExportStrippedFields = map[string]bool{
 	LogFieldTitle:          true,
 	LogFieldAnnasKey:       true,
 	LogFieldUnpaywallEmail: true,
+	LogFieldChargedAddress: true,
 }
 
 // StripExported removes every field in [ExportStrippedFields] from a set of log

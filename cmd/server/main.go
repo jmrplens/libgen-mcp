@@ -1055,6 +1055,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 			digest:     configDigest(cfg, opts.BasePath, opts.Stateless),
 			drainDelay: spec.drainDelay,
 			publicURL:  spec.publicURL,
+			identity:   identity.policy,
 		})
 	}
 	// Said before the first read, because after it the process looks idle and
@@ -1239,7 +1240,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// server that serves its tools is more useful than one that refuses to start
 	// over a discovery document.
 	var cards serverCards
-	enumerating, cardErr := buildServerCard(ctx, server)
+	enumerating, cardErr := buildServerCard(ctx, server, policy.identity)
 	if cardErr != nil {
 		slog.Warn("server card unavailable; "+serverCardPath+" will not be served", "error", cardErr)
 	}

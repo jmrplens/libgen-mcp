@@ -347,6 +347,43 @@ The same applies to a resolved file URL, which on Anna's member path is itself a
 working credential: a presigned URL published in an error is usable by whoever
 reads the log.
 
+### Telemetry: whose namespace a name is in, and what may leave the process
+
+**A name goes in a namespace its owner defines.** A span attribute, a metric or a
+log field that this server invented is `libgen_mcp.*` — never `mcp.*`, never
+`gen_ai.*`, never anything else OpenTelemetry or the MCP convention owns. Their
+keys are used only where the value really is what the registry says it is
+(`error.type`, `server.address`, `mcp.method.name`, `user.hash`), because a key
+in somebody else's namespace is a claim a backend reads structurally: putting an
+observed address under `user.id` tells it a person was identified. The rule runs
+the other way too, which is why `OTEL_*` variables are the only unprefixed ones
+this server reads — see *Environment variables* above.
+
+**An instrument name is a published surface.** It cannot be renamed without
+breaking every dashboard built on it, so pick it once, write it out in
+`internal/mcpotel/resources.go` rather than composing it at a call site, and give
+its dimensions a closed Go type so a value outside the set does not compile.
+
+**A field that must not be exported must not be logged either.** The OTLP log leg
+(`internal/telemetry/slog_handler.go`) is a fan-out from the same records that
+reach stderr, so it adds nothing and only subtracts: the names in
+`telemetry.ExportStrippedFields`, every error's text (replaced by its type, since
+the bridge would otherwise promote `err.Error()` into `exception.message`), and
+anything over one attribute's budget. Adding a log field that carries a query, a
+title, a per-call credential or a caller's address means adding its name to that
+list in the same change — the list is a named list rather than a memory precisely
+because the export-side redactor cannot know about a field nobody told it about.
+It cannot help when the value is *inside* something else; that shape is
+`netguard.RedactTransportError`'s, one section above.
+
+**The bridge goes in after `telemetry.Start` and before the announcement.** The
+logs signal is only real once something writes into the global logger provider,
+and the startup line that says what this deployment exports about its callers is
+the one an operator running several replicas reads from the collector rather than
+from a terminal. Both halves are driven by
+`TestALogRecordReachesTheCollectorOnlyAfterTheBridgeIsInstalled` against a real
+OTLP endpoint.
+
 ### Doc comments
 
 Every exported (and, per the audit config, every) declaration needs a godoc

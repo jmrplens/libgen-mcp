@@ -11,6 +11,7 @@ require (
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/tiktoken-go/tokenizer v0.8.1
+	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.22.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.22.0

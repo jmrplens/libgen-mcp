@@ -6,9 +6,11 @@ package logging
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,7 +37,87 @@ func ParseLevel(s string) (slog.Level, error) {
 // Setup installs a slog.JSONHandler over os.Stderr filtered to the given level
 // as the default logger.
 func Setup(level slog.Level) {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+	slog.SetDefault(slog.New(newStderrHandler(level)))
+}
+
+// SetupWrapped installs the same stderr handler with wrap applied to it, and
+// returns the function that puts the previous default logger back.
+//
+// It exists so the telemetry bridge wraps a handler whose behavior is known —
+// the one this package builds — rather than whatever the global default happened
+// to hold when it ran. Reading slog.Default() and wrapping that would work every
+// time it was tried and fail the once it mattered: a test, a library, or a later
+// startup step that replaced the default would silently become the stderr leg,
+// and with it the thing an operator's whole log stream depends on.
+//
+// The wrapper may decline by returning nil, in which case the plain stderr
+// handler is installed; a caller that cannot build its wrapper does not thereby
+// take the logs down.
+//
+// The restore is not tidiness either. The default logger is a process global, so
+// a bridge left installed after its provider shut down routes every later record
+// at a stopped exporter — in a test binary, one test's collector receiving the
+// rest of the suite.
+func SetupWrapped(level slog.Level, wrap func(slog.Handler) slog.Handler) (restore func()) {
+	previous := slog.Default()
+	handler := newStderrHandler(level)
+	if wrap != nil {
+		if wrapped := wrap(handler); wrapped != nil {
+			handler = wrapped
+		}
+	}
+	slog.SetDefault(slog.New(handler))
+	return func() { slog.SetDefault(previous) }
+}
+
+// newStderrHandler builds the JSON handler every logger in this process writes
+// through.
+func newStderrHandler(level slog.Level) slog.Handler {
+	return slog.NewJSONHandler(destination(), &slog.HandlerOptions{Level: level})
+}
+
+// stream is where records are written.
+//
+// os.Stderr in every deployment, and not configurable: stdout is reserved for
+// the stdio MCP transport, so there is exactly one place a log record may go.
+var stream struct {
+	mu sync.Mutex
+	to io.Writer
+}
+
+// destination reports where records are written.
+func destination() io.Writer {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	if stream.to == nil {
+		return os.Stderr
+	}
+	return stream.to
+}
+
+// SetDestination redirects the log stream and returns the function that puts it
+// back.
+//
+// It is here for tests, and for one specific thing they cannot otherwise do:
+// [SetupWrapped] builds its own stderr handler rather than wrapping whatever the
+// default logger happens to hold, so a test that substitutes slog.Default() has
+// its substitute replaced the moment the telemetry bridge is installed. Reading
+// the stream is then the only way to observe what the server actually wrote —
+// which is also closer to what such a test claims to assert.
+//
+// Nothing in the server calls it. The rebuild is the property worth keeping: a
+// bridge that wrapped the ambient default would work every time it was tried and
+// fail the once it mattered, when something else had replaced it.
+func SetDestination(w io.Writer) (restore func()) {
+	stream.mu.Lock()
+	previous := stream.to
+	stream.to = w
+	stream.mu.Unlock()
+	return func() {
+		stream.mu.Lock()
+		defer stream.mu.Unlock()
+		stream.to = previous
+	}
 }
 
 // SourceAttempt records one download source's outcome inside the chain.

@@ -12,7 +12,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -45,7 +47,7 @@ func newCardTestServer() *mcp.Server {
 // a failure names the part of the contract that broke.
 func buildTestCard(t *testing.T) serverCard {
 	t.Helper()
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -158,7 +160,7 @@ func TestServerCardCarriesHandshakeCapabilities(t *testing.T) {
 // promise is about the key a scanner sees, and a typed nil pointer decodes the
 // same way whether the key was absent or explicitly null.
 func TestServerCardOmitsDeprecatedLoggingCapability(t *testing.T) {
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -236,7 +238,7 @@ func TestServerCardEmitsEmptyResourceLists(t *testing.T) {
 // TestServerCardRouteServesTheDocument covers the wiring: the path, the content
 // type and the cache header a scanner reads.
 func TestServerCardRouteServesTheDocument(t *testing.T) {
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -270,7 +272,7 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 // nothing that would actually list this server. The preflight is asserted too,
 // because a scanner that sets any header of its own sends OPTIONS first.
 func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -370,7 +372,7 @@ func TestServerCardListsBeyondOnePage(t *testing.T) {
 			})
 	}
 
-	raw, err := buildServerCard(t.Context(), srv)
+	raw, err := buildServerCard(t.Context(), srv, telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -403,7 +405,7 @@ func TestServerCardCarriesIcons(t *testing.T) {
 			return &mcp.GetPromptResult{}, nil
 		})
 
-	raw, err := buildServerCard(t.Context(), srv)
+	raw, err := buildServerCard(t.Context(), srv, telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -429,7 +431,7 @@ func TestServerCardCarriesIcons(t *testing.T) {
 	// key, not a null one. The Implementation itself is a different story:
 	// newMCPServer always sets IconBrand, so serverInfo carries icons
 	// regardless (see TestServerCardIdentityCarriesDisplayMetadata).
-	plainRaw, err := buildServerCard(t.Context(), newCardTestServer())
+	plainRaw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -455,7 +457,7 @@ func TestServerCardCarriesIcons(t *testing.T) {
 // other four headers would still look right — so the four are asserted on the
 // very same response.
 func TestServerCardOverridesCacheControl(t *testing.T) {
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -494,7 +496,7 @@ func TestServerCardOverridesCacheControl(t *testing.T) {
 // re-serialization — the cards are built once per process, so neither can drift
 // between reads.
 func TestServerCardRoutesServeTheirOwnDocument(t *testing.T) {
-	enumerating, err := buildServerCard(t.Context(), newCardTestServer())
+	enumerating, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
@@ -535,4 +537,76 @@ func testCards(t *testing.T, enumerating []byte) serverCards {
 		t.Fatalf("buildDiscoveryCard() error = %v", err)
 	}
 	return serverCards{enumerating: enumerating, discovery: discovery}
+}
+
+// TestTheCardSaysWhatThisDeploymentRecords covers the block a stranger reads.
+//
+// A caller reaching a public MCP endpoint has no relationship with the operator
+// through which to ask whether their searches are traced. The card is the answer,
+// which makes both halves of it load-bearing: it appears when there is something
+// to disclose, and it says what is recorded without naming the operator's own
+// collector.
+func TestTheCardSaysWhatThisDeploymentRecords(t *testing.T) {
+	t.Run("a deployment that records nothing publishes no block", func(t *testing.T) {
+		raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
+		if err != nil {
+			t.Fatalf("buildServerCard() error = %v", err)
+		}
+		var card map[string]any
+		if unmarshalErr := json.Unmarshal(raw, &card); unmarshalErr != nil {
+			t.Fatalf("the card is not JSON: %v", unmarshalErr)
+		}
+		// Absent rather than "enabled": false — a consumer should not have to
+		// parse a negation to learn that nothing is recorded.
+		if _, present := card["observability"]; present {
+			t.Errorf("a card published an observability block with telemetry off: %s", raw)
+		}
+	})
+
+	t.Run("an instrumented deployment says so, without naming its collector", func(t *testing.T) {
+		endpoint, _ := recordingCollector(t)
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+		captureTelemetryLog(t)
+
+		_, stop, err := startTelemetry(t.Context(), &config.Config{
+			Telemetry:         true,
+			TelemetryIdentity: string(telemetry.IdentityPseudonymous),
+		})
+		if err != nil {
+			t.Fatalf("startTelemetry() error = %v", err)
+		}
+		t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
+
+		raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityPseudonymous)
+		if err != nil {
+			t.Fatalf("buildServerCard() error = %v", err)
+		}
+		var card struct {
+			Observability *serverCardObservability `json:"observability"`
+		}
+		if unmarshalErr := json.Unmarshal(raw, &card); unmarshalErr != nil {
+			t.Fatalf("the card is not JSON: %v", unmarshalErr)
+		}
+		if card.Observability == nil {
+			t.Fatalf("an instrumented deployment published no observability block: %s", raw)
+		}
+		if !card.Observability.Enabled || len(card.Observability.Signals) == 0 {
+			t.Errorf("the block says nothing about what is exported: %+v", card.Observability)
+		}
+		if card.Observability.Identity != string(telemetry.IdentityPseudonymous) {
+			t.Errorf("identity = %q, want the resolved policy", card.Observability.Identity)
+		}
+		// In words as well as by name: "pseudonymous" means nothing to somebody
+		// who did not read the configuration reference, which is most of the
+		// people this block exists for.
+		if card.Observability.Discloses != telemetry.PolicyDescription(telemetry.IdentityPseudonymous) {
+			t.Errorf("discloses = %q, want the policy in words", card.Observability.Discloses)
+		}
+		// The whole card, not only the block: the collector's address names the
+		// operator's own infrastructure, and this document is fetched by every
+		// client that asks.
+		if strings.Contains(string(raw), endpoint) {
+			t.Errorf("the card names the collector: %s", raw)
+		}
+	})
 }
