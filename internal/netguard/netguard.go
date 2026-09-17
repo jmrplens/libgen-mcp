@@ -23,6 +23,7 @@ package netguard
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -68,7 +69,19 @@ var cgnatPrefix = netip.MustParsePrefix("100.64.0.0/10") // NOSONAR
 // any subdomain of the original — so a redirect from example.com to
 // internal.example.com still carries the Authorization header. Any change of
 // scheme, host or port is treated as reason enough here.
-var sensitiveHeaders = []string{"Authorization", "Proxy-Authorization", "Cookie", "Cookie2", "Www-Authenticate"}
+//
+// Referer is on the list for a reason the other five do not share: it is not a
+// credential header, and net/http sets it itself on every redirect it follows,
+// carrying the previous request's full URL. Two of this server's outbound URLs
+// put a secret in that URL's query string — Anna's Archive's member key and
+// Unpaywall's contact address — and a resolved file URL on the member path is a
+// presigned URL, which is a working credential in its own right. So a redirect
+// off-origin would hand the next host the previous one's query string, and this
+// is the only place that can be stopped: net/http has already decided to send
+// it by the time any of our code sees the request.
+var sensitiveHeaders = []string{
+	"Authorization", "Proxy-Authorization", "Cookie", "Cookie2", "Www-Authenticate", "Referer",
+}
 
 // Blocked reports whether addr is one this server must not be talked into
 // reaching on someone else's behalf.
@@ -122,6 +135,14 @@ var metadataAddresses = map[netip.Addr]string{
 	netip.MustParseAddr("169.254.170.2"):   "the AWS container credentials address",
 	netip.MustParseAddr("fd00:ec2::254"):   "the AWS instance metadata address over IPv6",
 	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address",
+}
+
+// addressLiteral parses host as an IP address, reporting whether it was spelled
+// as one at all. A host that is a name is nobody's decision to make before the
+// dialer: what it resolves to is the only thing worth judging.
+func addressLiteral(host string) (netip.Addr, bool) {
+	addr, err := netip.ParseAddr(host)
+	return addr, err == nil
 }
 
 // metadataEndpoint returns what an address is the metadata endpoint of, and
@@ -217,26 +238,60 @@ func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 		if len(via) >= maxRedirects {
 			return fmt.Errorf("%w: stopped after %d", ErrTooManyRedirects, len(via))
 		}
-		// The same two tiers as the dialer: a metadata endpoint is refused
-		// whatever the flag says, and everything else is refused only when
-		// private destinations are not permitted. A redirect is the cheaper half
-		// of the attack — a URL deposited in an index need only bounce once —
-		// so the tiers must not disagree between the two halves of one client.
-		if addr, err := netip.ParseAddr(req.URL.Hostname()); err == nil {
-			if what, ok := metadataEndpoint(addr); ok {
-				return fmt.Errorf("%w: redirect to %s, %s", ErrBlockedAddress, addr, what)
-			}
-			if !allowPrivate && Blocked(addr) {
-				return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
-			}
+		if err := redirectAddressAllowed(req, allowPrivate); err != nil {
+			return err
 		}
 		if len(via) > 0 && !sameOrigin(via[len(via)-1].URL, req.URL) {
-			for _, h := range sensitiveHeaders {
-				req.Header.Del(h)
-			}
+			stripSensitiveHeaders(req, via[len(via)-1].URL)
 		}
 		return nil
 	}
+}
+
+// redirectAddressAllowed applies the dialer's two tiers to a hop whose target is
+// spelled as an address literal, which is the only case this check can decide on
+// its own: a hop named by hostname is judged by the dialer, on what it resolves
+// to.
+//
+// The tiers are the dialer's, deliberately: a metadata endpoint is refused
+// whatever the flag says, and everything else is refused only when private
+// destinations are not permitted. A redirect is the cheaper half of the attack,
+// since a URL deposited in an index need only bounce once, so the two halves of
+// one client must not disagree about what is reachable.
+func redirectAddressAllowed(req *http.Request, allowPrivate bool) error {
+	addr, spelledAsAddress := addressLiteral(req.URL.Hostname())
+	if !spelledAsAddress {
+		return nil
+	}
+	if what, ok := metadataEndpoint(addr); ok {
+		return fmt.Errorf("%w: redirect to %s, %s", ErrBlockedAddress, addr, what)
+	}
+	if !allowPrivate && Blocked(addr) {
+		return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
+	}
+	return nil
+}
+
+// stripSensitiveHeaders removes the headers that must not follow a redirect off
+// the origin they were set for, and logs which ones were actually dropped.
+func stripSensitiveHeaders(req *http.Request, previous *url.URL) {
+	dropped := make([]string, 0, len(sensitiveHeaders))
+	for _, h := range sensitiveHeaders {
+		if req.Header.Get(h) != "" {
+			dropped = append(dropped, h)
+		}
+		req.Header.Del(h)
+	}
+	if len(dropped) == 0 {
+		return
+	}
+	// Scheme and host only, on both sides. Naming either URL would undo the
+	// strip in the log: the previous one is what Referer carries, and it is the
+	// URL with the secret in its query string.
+	slog.Info("dropped request headers on an off-origin redirect",
+		"headers", dropped,
+		"from", previous.Scheme+"://"+previous.Hostname(),
+		"to", req.URL.Scheme+"://"+req.URL.Hostname())
 }
 
 // sameOrigin reports whether two URLs address the same service, comparing scheme,

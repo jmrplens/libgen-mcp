@@ -696,6 +696,19 @@ Anna's Archive, as an md5-keyed rescue route.
   because each call consumes the account's metered allowance regardless of which mirror
   answered. The quota it reports uses field names saying "per day", but the site describes the
   same counter as fast downloads used in the last 18 hours — read it as a rolling window.
+- **Where the key travels** in the query string, because that is the only place the API takes
+  it. Probed on 2026-09-17 against `/dyn/api/fast_download.json`, whose own response documents
+  its surface: it lists `md5`, `key`, `path_index` and `domain_index` under *Accepted query
+  parameters* and names no header. An `Authorization: Bearer` header changes nothing — the
+  response to a request carrying one is byte-identical to the response to a request carrying no
+  key at all. The endpoint also issues no redirect on that path; it answers `401` directly.
+
+  That matters because a URL with a secret in its query string is one `Referer` header away from
+  reaching another host: `net/http` attaches the previous request's full URL on every redirect
+  it follows. Since the key cannot leave the query string, `Referer` is stripped on any redirect
+  that changes scheme, host or port (`internal/netguard`), and a transport failure naming the
+  URL is redacted before it is wrapped (`netguard.RedactTransportError`). The same applies to
+  the presigned URL the member API hands back, which is itself a working credential.
 - **MD5 verification** enabled on both paths, since the item is keyed by the LibGen digest.
 
 ## Politeness and identification

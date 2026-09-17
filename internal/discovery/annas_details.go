@@ -54,9 +54,12 @@ type AnnasRecord struct {
 // mirrors is an error, so a caller can tell "Anna's has no such record" apart
 // from "Anna's could not be reached".
 func (p *AnnasProvider) Details(ctx context.Context, md5 string) (*AnnasRecord, error) {
+	// The same fallback, and for the same reason it is not http.DefaultClient:
+	// that client carries none of this package's address policy, so a provider
+	// built without one would be the single outbound path with no dialer guard.
 	httpClient := p.http
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = newDiscoveryClient()
 	}
 	var lastErr error
 	for _, mirror := range p.mirrors.Mirrors(ctx) {
