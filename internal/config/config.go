@@ -356,7 +356,14 @@ func Defaults() *Config {
 // Every new variable is optional; an empty string uses the default value. A
 // numeric value that is present but invalid produces an error instead of
 // silently falling back to the default.
+//
+// The dotenv files this server reads are loaded first, and the order is the
+// whole of their precedence: godotenv never overwrites a variable that is
+// already set, so the process environment the MCP client passed wins over the
+// file LIBGEN_MCP_ENV_FILE names, which wins over ~/.libgen-mcp.env. A .env in
+// the working directory is on no part of that list; see env_file.go for why.
 func Load() (*Config, error) {
+	LoadEnvFiles()
 	cfg := Defaults()
 	// LIBGEN_MIRROR is read bare on purpose and is the one variable that does
 	// not go through Getenv: it is the mirror family's own convention, not a
@@ -833,6 +840,14 @@ func validateSources(sources []string) error {
 // An explicit value wins in both directions: an operator who has the egress
 // capacity can turn fetching on for a hosted deployment, and one running locally
 // can turn it off.
+//
+// "Explicit" includes a line in ~/.libgen-mcp.env, and that is worth saying out
+// loud because of what it decides: this value determines whether the read tool
+// is registered at all. A home file turning fetching off makes a local server
+// serve three tools instead of four, which a client reports as a tool that
+// vanished rather than as a setting that changed. The dotenv loader announces
+// the file it read at startup for exactly this class of surprise; see
+// env_file.go.
 func (c *Config) ResolveServerFetch(remote bool) bool {
 	if c.ServerFetch == nil {
 		allowed := !remote

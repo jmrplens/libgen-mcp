@@ -191,7 +191,13 @@ func mainWithExit() int {
 	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	transportSelector := flag.String("transport", "", "which transport to serve: stdio, http, or auto. Empty (default) keeps the historical rule — a --http value means HTTP, no value means stdio. auto reads it off standard input: a pipe, terminal, file or socket means stdio, and only /dev/null (a container started without -i) means HTTP. --http still supplies the address HTTP binds, defaulting to "+defaultHTTPAddr)
+	registerEnvBackedFlags()
 	flag.Parse()
+
+	// Before anything reads configuration, and before the dotenv loader resolves
+	// LIBGEN_MCP_ENV_FILE — which it does once per process, so a write after
+	// that point would do nothing and say nothing.
+	applyEnvBackedFlags()
 
 	if *showVersion {
 		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
@@ -803,6 +809,18 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, 
 // truth for it rather than two that can drift: mainWithExit resolves the
 // transport first and builds the spec from the answer.
 func run(ctx context.Context, spec listenSpec, opts transport.Options, decision transportDecision) error {
+	// The JSON handler is installed before the configuration is read, and then
+	// again at the level the configuration chose.
+	//
+	// config.Load reads the dotenv files, and that announces where configuration
+	// came from. Those records would otherwise go through whatever handler
+	// happened to be default — the standard library's text one — putting plain
+	// lines onto a stream that is otherwise JSON records, on every start of a
+	// deployment that uses a home file. The starting level is not the configured
+	// one on purpose either: the announcement is the only local evidence that a
+	// file outside the client's configuration was read, and the level is one of
+	// the settings such a file would like to set.
+	logging.Setup(slog.LevelInfo)
 	cfg, err := config.Load()
 	if err != nil {
 		return err
