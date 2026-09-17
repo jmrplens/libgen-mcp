@@ -224,17 +224,46 @@ func startSession(t *testing.T, env map[string]string) *session {
 // here passes arguments.
 func startSessionWithArgs(t *testing.T, env map[string]string, args ...string) *session {
 	t.Helper()
+	return startSessionIn(t, "", env, args...)
+}
+
+// startSessionInDir is [startSession] with the process's working directory
+// chosen by the caller.
+//
+// It exists because the working directory is untrusted input on stdio: an MCP
+// client sets it to whatever workspace it has open, and neither Claude Desktop
+// (which uses "/") nor a client that uses the user's home asks first. Whether
+// the server reads anything out of it is a property of the process and can only
+// be tested by choosing one.
+func startSessionInDir(t *testing.T, dir string, env map[string]string) *session {
+	t.Helper()
+	return startSessionIn(t, dir, env)
+}
+
+// startSessionIn is what the three wrappers above share. An empty dir keeps the
+// Go default, which is this package's own directory, so a caller that does not
+// care about the working directory is unaffected by one that does.
+func startSessionIn(t *testing.T, dir string, env map[string]string, args ...string) *session {
+	t.Helper()
 
 	bin := serverBinary(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, bin, args...)
 	prepareForTermination(cmd)
+	cmd.Dir = dir
 
 	// Built from nothing, so an exported LIBGEN_MIRROR or LIBGEN_MCP_SOURCES on
 	// the machine running the tests cannot decide what they measure. PATH is
 	// kept because the process needs to be executable; HOME because the server
 	// resolves its cache and its default download directory through it.
+	// A case that chooses the server's home (the containment cases do, since
+	// the home directory is what they are about) wins here, and the cache is
+	// seeded into the home the server will actually resolve — seeding the other
+	// one would leave the session fetching the live catalog page.
 	home := t.TempDir()
+	if chosen := env["HOME"]; chosen != "" {
+		home = chosen
+	}
 	seedMirrorCache(t, home, env["LIBGEN_MIRROR"])
 	environ := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home}
 	// Before the caller's own entries, so a test that needs to say something

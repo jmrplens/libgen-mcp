@@ -570,11 +570,22 @@ but JSON-RPC** (one stray `Println` breaks every client, and the npm launcher's
 `validate-npm.mjs` was checking this after the code was already tagged), logs go
 to stderr with their severities intact, the handshake is answered before a
 client would give up and retry it, the catalog comes back whole when it is asked
-for during startup, an idle session is not closed by the server, and both
-shutdowns the binding prescribes exit 0.
+for during startup, an idle session is not closed by the server, both shutdowns
+the binding prescribes exit 0, and **a caller-supplied local `path` cannot reach
+the home directory the client started the server in**.
+
+That last one can only live here. `internal/pathguard` computes its roots from
+the process — the working directory, `os.TempDir`, the download directory — so a
+unit test can only ask it about the directory the test binary happens to run in,
+which is the package directory and never the interesting one. Claude Desktop
+starts its servers in `/` and other clients start them in the user's home; the
+only way to produce that is to start a process there. The case is three rows —
+refused, restored by `LIBGEN_MCP_ALLOWED_READ_DIRS`, and an ordinary workspace
+read that must keep working — because any one alone passes against a broken
+guard.
 
 It runs **on every PR and on all three platforms**, and it is the other half of
-the `transport-e2e` release gate. Three things about it are easy to undo:
+the `transport-e2e` release gate. Four things about it are easy to undo:
 
 - **It reaches nothing it did not start itself, and that is arranged rather than
   assumed.** The mirror cache is seeded in each session's `HOME` so discovery
@@ -591,6 +602,12 @@ the `transport-e2e` release gate. Three things about it are easy to undo:
   reply, so waiting for the startup banner — which the server writes before it
   serves anything — returns a buffer the records under test have not reached.
   That mistake passes silently, which is how it got written the first time.
+- **A fixture a tool cannot read asserts nothing about the tool.** The
+  containment case first used a `.env` as the file a home directory holds, which
+  is what this server's own dotenv is called — and `read` declines it outright as
+  an unsupported extension, so the guard was never what refused it and the leak
+  check beside the refusal could not fail. The fixture is a `.txt`, which is what
+  the exposure actually looks like.
 
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and
