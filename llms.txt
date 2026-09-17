@@ -61,6 +61,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_READ_CACHE_BYTES: Total-size cap of the server-side temp cache that lets successive read pages reuse one fetch; the least recently used files past it are evicted. (default: 536870912 (512 MiB))
 - LIBGEN_MCP_READ_CACHE_TTL: How long an unreferenced read temp file lingers before eviction. (default: 10m)
 - LIBGEN_MCP_STDIO_MAX_LINE_BYTES: Largest inbound JSON-RPC line accepted on stdio. (default: 4194304 (4 MiB))
+- LIBGEN_MCP_ACTION_TIMEOUT: Wall-clock cap on one tool call. (default: 1h)
 - LIBGEN_MCP_PPROF_ADDR: Serve Go's profiling handlers (net/http/pprof) on this address. (default: (nothing served))
 - LIBGEN_MCP_ENV_FILE: Load settings from this file in addition to ~/.libgen-mcp.env. (default: (none))
 - LIBGEN_MCP_ENRICH: Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. (default: true)

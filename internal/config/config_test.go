@@ -1078,3 +1078,48 @@ func TestOperatorHostsReportsOnlyWhatWasConfigured(t *testing.T) {
 		t.Errorf("OperatorHosts() = %v, want nothing for a configuration that named nothing", got)
 	}
 }
+
+// TestDefaultActionTimeoutExceedsTheBoundsBeneathIt keeps the wall clock from
+// quietly becoming the binding constraint.
+//
+// The cap is a judgement, not a derivation — there is no protocol number to read
+// it off — so what makes it defensible is the inequalities it stands in, and
+// those are made of values a later change can move. Lower the cap, lengthen the
+// retry schedule, or raise the resolve budget far enough and a download that was
+// going to succeed is refused instead; nothing else in the tree would notice,
+// because the symptom is a slow call failing, which is what a slow call looks
+// like anyway.
+func TestDefaultActionTimeoutExceedsTheBoundsBeneathIt(t *testing.T) {
+	defaults := Defaults()
+
+	// The worst legitimate wait before a byte moves: the whole start-retry
+	// schedule, plus one resolve budget for every source the chain may try.
+	var retrySchedule time.Duration
+	for _, wait := range defaults.DownloadStartRetryWaits {
+		retrySchedule += wait
+	}
+	worstResolve := retrySchedule + time.Duration(len(KnownSources))*defaults.ResolveBudget
+	if DefaultActionTimeout <= worstResolve {
+		t.Errorf("DefaultActionTimeout is %v but a call may legitimately spend %v resolving (%v of retry waits plus %d sources at %v); "+
+			"the cap would refuse downloads that were going to work",
+			DefaultActionTimeout, worstResolve, retrySchedule, len(KnownSources), defaults.ResolveBudget)
+	}
+	// And comfortably above it, not merely past it: the margin is what absorbs a
+	// source added to the chain or a slower link, and losing it should be a test
+	// failure rather than a surprise in production.
+	if DefaultActionTimeout < 3*worstResolve {
+		t.Errorf("DefaultActionTimeout is %v, less than three times the worst legitimate resolve (%v); "+
+			"either raise it or write down why this margin is enough", DefaultActionTimeout, worstResolve)
+	}
+
+	// The other side: the cap is only worth having if it bounds a transfer the
+	// stall guard cannot, which means it must be many stall windows long. A cap
+	// near the stall window would end healthy slow transfers instead.
+	if DefaultActionTimeout < 10*defaults.DownloadStallTimeout {
+		t.Errorf("DefaultActionTimeout is %v, under ten stall windows of %v; a transfer that is merely slow would be cut",
+			DefaultActionTimeout, defaults.DownloadStallTimeout)
+	}
+	if DefaultActionTimeout > MaxActionTimeout {
+		t.Errorf("DefaultActionTimeout %v is past the ceiling %v the configuration accepts", DefaultActionTimeout, MaxActionTimeout)
+	}
+}

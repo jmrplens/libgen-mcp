@@ -91,6 +91,15 @@ type Config struct {
 	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
 	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
 	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	// ActionTimeout bounds one tool call's handler on both transports.
+	// LIBGEN_MCP_ACTION_TIMEOUT, a Go duration; 0 disables it.
+	//
+	// It is the only wall clock on a call. ResolveBudget bounds one source's
+	// attempt to turn an item into a URL, and DownloadStallTimeout ends a
+	// transfer that has stopped — neither ends one that is merely slow, and a
+	// mirror trickling below the stall window holds a concurrent-download slot
+	// indefinitely. See DefaultActionTimeout for where the default comes from.
+	ActionTimeout time.Duration
 	// StdioMaxLineBytes bounds one inbound JSON-RPC line on the stdio
 	// transport. LIBGEN_MCP_STDIO_MAX_LINE_BYTES, a byte count.
 	//
@@ -290,6 +299,35 @@ var KnownSources = []string{
 	"scihub", "scidb", "libgen", "randombook", "annas",
 }
 
+// DefaultActionTimeout bounds one tool call's handler.
+//
+// There is no derivation from a protocol here, so this is a judgement, and the
+// numbers it is judged against are this server's own. The longest a legitimate
+// call can spend before a byte moves is the start-retry schedule (about 60s of
+// waits) plus one resolve budget per source it tries — twenty-one sources at
+// 30s is about ten and a half minutes, so roughly twelve minutes of resolving
+// before a download that is going to work has begun. After that the stall guard
+// is the only bound, and it is not a wall clock: a mirror delivering one byte
+// every fifty-nine seconds runs forever.
+//
+// An hour is over five times the worst legitimate resolve, so no call that was
+// going to succeed reaches it, and it is sixty stall windows, so a trickle is
+// bounded. TestDefaultActionTimeoutExceedsTheBoundsBeneathIt pins both
+// inequalities, because a later change to the retry schedule or the resolve
+// budget could otherwise make this cap the binding constraint without anybody
+// noticing.
+//
+// Expect to revise it once there is a measurement of what a large download
+// actually costs on the hosted deployment. Until then it is deliberately
+// generous: the failure it prevents is a held slot, and the failure it would
+// cause if set too low is a refused download that would have worked.
+const DefaultActionTimeout = time.Hour
+
+// MaxActionTimeout is the ceiling the cap itself may be raised to. It refuses a
+// typo — a value in the wrong unit is the shape to catch — rather than bounding
+// anything a deployment would legitimately want.
+const MaxActionTimeout = 24 * time.Hour
+
 // defaultStdioMaxLineBytes is the inbound line ceiling on stdio when nothing
 // configures one.
 //
@@ -343,6 +381,7 @@ func Defaults() *Config {
 		ReadDefaultPages:        5,
 		ReadCacheBytes:          512 << 20, // 512 MiB
 		StdioMaxLineBytes:       defaultStdioMaxLineBytes,
+		ActionTimeout:           DefaultActionTimeout,
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
 		ConfirmDownloads:        true,
@@ -546,6 +585,9 @@ func loadNumeric(cfg *Config) error {
 	if err := envInt("STDIO_MAX_LINE_BYTES", &cfg.StdioMaxLineBytes); err != nil {
 		return err
 	}
+	if err := envDuration("ACTION_TIMEOUT", &cfg.ActionTimeout); err != nil {
+		return err
+	}
 	if err := envDuration("READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
 		return err
 	}
@@ -720,13 +762,30 @@ func (c *Config) validateRanges() error {
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
 	}
-	// Refused rather than clamped, and refused at startup rather than at the
-	// first oversized message: a deployment whose client sends 8 MiB messages
-	// and whose operator typed 80000000 has a server that will cut every one of
-	// them off, and the only sign is a client reporting a refusal it cannot
-	// explain.
+	return c.validateProcessLimits()
+}
+
+// validateProcessLimits checks the two bounds that are about what one call may
+// cost this PROCESS rather than about the shape of a request: how large a
+// message it will assemble, and how long it will spend on one call.
+//
+// Separate from validateRanges because they answer a different question and are
+// refused for different reasons — and because both are refused at startup rather
+// than at the first message or the first slow download, where the symptom would
+// be indistinguishable from an upstream being unhelpful.
+func (c *Config) validateProcessLimits() error {
+	// Refused rather than clamped: a deployment whose client sends 8 MiB
+	// messages and whose operator typed 80000000 has a server that will cut
+	// every one of them off, and the only sign is a client reporting a refusal
+	// it cannot explain.
 	if c.StdioMaxLineBytes < 1 || c.StdioMaxLineBytes > maxStdioMaxLineBytes {
 		return fmt.Errorf("LIBGEN_MCP_STDIO_MAX_LINE_BYTES must be in [1, %d], got %d", maxStdioMaxLineBytes, c.StdioMaxLineBytes)
+	}
+	// Zero is a value rather than an omission here: it turns the cap off, which
+	// is a deployment saying it would rather hold a slot than refuse a download.
+	// Negative is a typo, and anything past a day is a unit mistake.
+	if c.ActionTimeout < 0 || c.ActionTimeout > MaxActionTimeout {
+		return fmt.Errorf("LIBGEN_MCP_ACTION_TIMEOUT must be in [0, %v] (0 disables it), got %v", MaxActionTimeout, c.ActionTimeout)
 	}
 	return nil
 }

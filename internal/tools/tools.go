@@ -277,6 +277,10 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	// to the package once here so every path argument inherits it instead of each
 	// carrying its own copy of the rule.
 	pathguard.SetLocalAccess(!o.remoteDownloads)
+	// And the wall clock one call runs under, for the same reason: it is a
+	// property of the deployment rather than of a call, and withRecovery reads
+	// it on every invocation without needing a Config in reach.
+	toolutil.SetActionTimeout(cfg.ActionTimeout)
 	// One lister for both tools, so a single discovery and a single cache serve
 	// the search escalation and the get_details fallback instead of each building
 	// its own manager.
@@ -1113,6 +1117,12 @@ func searchWiderClause(policy config.ExtraSourcesMode) string {
 // surface that builds an IsError result directly, and it meters itself.
 func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (result *mcp.CallToolResult, output Out, err error) {
+		// The deployment's wall clock on one call. Every tool handler passes
+		// through here, which is what makes this the one place it reaches all
+		// four — and the derived context has to be the one handed on below.
+		// Passing the original compiles, runs, meters, and bounds nothing.
+		ctx, cancel := toolutil.WithActionDeadline(ctx)
+		defer cancel()
 		start := time.Now()
 		defer func() {
 			if r := recover(); r != nil {
