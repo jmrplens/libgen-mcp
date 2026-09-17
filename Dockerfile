@@ -60,6 +60,20 @@ LABEL org.opencontainers.image.title="libgen-mcp" \
 	org.opencontainers.image.authors="jmrplens" \
 	org.opencontainers.image.vendor="jmrplens"
 
+# The binary probes itself, rather than the image carrying a curl or wget line
+# that restates the flags. Such a line is right for the default command and
+# wrong for every other listener this server supports — another port, a unix
+# socket, TLS this process terminates, a mount under --http-path — each of which
+# would report unhealthy while serving perfectly, and an orchestrator would then
+# restart a container whose restart changes nothing. --healthcheck reads the
+# listener off the running instance's own command line instead.
+#
+# The interval budget: one attempt is bounded at 3s and the whole run at 4s, so
+# the 5s timeout below is a ceiling the check answers inside rather than one it
+# is killed by.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+	CMD ["libgen-mcp", "--healthcheck"]
+
 # Default transport is stdio (no args) — the mode MCP clients use, so
 # `docker run -i --rm ...` works out of the box. For the streamable HTTP
 # transport, override at run time: `docker run ... --http 0.0.0.0:8080`, or
