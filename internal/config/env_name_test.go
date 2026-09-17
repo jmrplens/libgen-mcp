@@ -4,7 +4,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -198,39 +200,69 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 	return value, true
 }
 
+// knownNamesFile is where knownNames itself lives, and the one file a search for
+// a reader must not look in: every name appears there by definition, so counting
+// it makes the assertion below true for anything on the list.
+const knownNamesFile = "env_name.go"
+
 // TestEveryKnownNameIsRead is the other direction: a name on the list that
 // nothing reads is a setting an operator would set to no effect, and a docs
 // generator would publish it.
 //
-// It searches every non-test file in the package rather than config.go alone.
-// That used to be the same thing and stopped being it when the dotenv loader
-// arrived with a setting of its own; keeping the narrow spelling would have made
-// this test refuse a variable that is read, which is the failure mode that gets
-// a test deleted rather than fixed.
+// It searches the whole module rather than this package, because a setting's
+// reader is not always here: --pprof-addr writes LIBGEN_MCP_PPROF_ADDR and
+// cmd/server is what reads it back. It used to search config.go alone, which was
+// the same thing as "this package" until the dotenv loader arrived with a
+// setting of its own — and widening it to the package silently made it VACUOUS,
+// since env_name.go carries every name in the list it is checking. Both
+// corrections are here because the second was found by adding a name whose only
+// reader is outside the package and watching this pass.
 func TestEveryKnownNameIsRead(t *testing.T) {
-	entries, err := os.ReadDir(".")
+	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var body strings.Builder
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		source, readErr := os.ReadFile(name)
+		if d.IsDir() {
+			// Neither this module's own source nor anything a name could be read
+			// from lives in these.
+			switch d.Name() {
+			case ".git", "node_modules", "site", "dist", "plan":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == knownNamesFile {
+			return nil
+		}
+		//#nosec G304,G122 -- a walk of this module's own checked-out tree in a test; there is no untrusted path and nothing to race with.
+		source, readErr := os.ReadFile(path)
 		if readErr != nil {
-			t.Fatalf("reading %s: %v", name, readErr)
+			return readErr
 		}
 		body.Write(source)
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatal(walkErr)
 	}
 	if body.Len() == 0 {
 		t.Fatal("no source files were read, so this test checked nothing")
 	}
+	// The guard against the vacuity above: a name nothing reads must be absent
+	// from what was searched, and this proves the search can tell.
+	if strings.Contains(body.String(), strconv.Quote("NO_SUCH_SETTING_ANYWHERE")) {
+		t.Fatal("the search found a setting that does not exist, so it is not looking at source")
+	}
 
 	for _, name := range knownNames {
 		if !strings.Contains(body.String(), strconv.Quote(name)) {
-			t.Errorf("knownNames carries %q but nothing in this package reads it; "+
+			t.Errorf("knownNames carries %q but nothing in this module reads it; "+
 				"either wire it up or take it off the list", name)
 		}
 	}

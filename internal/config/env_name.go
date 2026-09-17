@@ -58,6 +58,7 @@ var knownNames = []string{
 	"READ_MAX_CHARS",
 	"REMOTE_DOWNLOADS",
 	"ENV_FILE",
+	"PPROF_ADDR",
 	"RESOLVE_BUDGET",
 	"RETRY_ATTEMPTS",
 	"SCIHUB_HOSTS",

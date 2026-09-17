@@ -7,8 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -837,51 +835,42 @@ func TestReadVersion_ReadFileError(t *testing.T) {
 	}
 }
 
-// configGoPath resolves internal/config/config.go relative to this test file, so
-// the lookup survives the t.Chdir calls other tests in this package make.
-func configGoPath(t *testing.T) string {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller(0) failed; cannot locate config.go")
-	}
-	return filepath.Join(filepath.Dir(thisFile), "..", "..", "internal", "config", "config.go")
-}
-
-// envVarRe matches a LIBGEN_MIRROR or LIBGEN_MCP_* variable name as it appears in
-// a Go string literal.
-var envVarRe = regexp.MustCompile(`LIBGEN_(?:MCP_[A-Z0-9_]+|MIRROR)`)
-
-// TestConfigEnvVarsCoversConfigGo is the drift gate for the generated
-// Configuration table: every environment variable internal/config/config.go names
-// must be documented in configEnvVars and vice versa, so adding one to the config
-// without documenting it fails here instead of silently leaving a hole in
-// llms-full.txt.
-func TestConfigEnvVarsCoversConfigGo(t *testing.T) {
-	src, err := os.ReadFile(configGoPath(t))
-	if err != nil {
-		t.Fatalf("read config.go: %v", err)
-	}
+// TestConfigEnvVarsCoversTheSettingsThisServerReads is the drift gate for the
+// generated Configuration table: every setting must be documented in
+// configEnvVars and vice versa, so adding one without documenting it fails here
+// instead of silently leaving a hole in llms-full.txt.
+//
+// The authority is config.KnownEnvNames, not a regex over config.go. It used to
+// be the file, which worked only while every setting was both read and named
+// there: LIBGEN_MCP_PPROF_ADDR is read by cmd/server, so the scan reported a
+// documented variable as undocumented — a gate failing on a correct change,
+// which is how a gate gets deleted. internal/config keeps that list honest in
+// both directions of its own (TestEveryEnvNameIsKnown, TestEveryKnownNameIsRead),
+// so pointing at it is pointing at the one place that already has to be right.
+func TestConfigEnvVarsCoversTheSettingsThisServerReads(t *testing.T) {
 	documented := map[string]bool{}
 	for _, v := range configEnvVars() {
 		documented[v.name] = true
 	}
-	seen := map[string]bool{}
-	for _, name := range envVarRe.FindAllString(string(src), -1) {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if !documented[name] {
-			t.Errorf("%s is named by internal/config/config.go but missing from configEnvVars", name)
-		}
+
+	// LIBGEN_MIRROR carries no prefix — the name is the mirror family's own
+	// convention — so it is not in KnownEnvNames and is named here instead.
+	known := map[string]bool{"LIBGEN_MIRROR": true}
+	for _, name := range config.KnownEnvNames() {
+		known[name] = true
 	}
-	if len(seen) == 0 {
-		t.Fatal("found no environment variables in config.go; the scan is broken")
+	if len(known) < 2 {
+		t.Fatal("config.KnownEnvNames returned nothing; the gate is checking an empty list")
+	}
+
+	for name := range known {
+		if !documented[name] {
+			t.Errorf("%s is a setting this server reads but is missing from configEnvVars", name)
+		}
 	}
 	for name := range documented {
-		if !seen[name] {
-			t.Errorf("configEnvVars documents %s, which internal/config/config.go never names", name)
+		if !known[name] {
+			t.Errorf("configEnvVars documents %s, which this server never reads", name)
 		}
 	}
 }

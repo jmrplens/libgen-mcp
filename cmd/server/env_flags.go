@@ -64,6 +64,11 @@ var envBackedFlags = []struct {
 		usage:        "Comma-separated download sources to enable, in the chain's own fixed order; empty enables all",
 	},
 	{
+		flagName:     "pprof-addr",
+		envShortName: "PPROF_ADDR",
+		usage:        "Serve Go's profiling handlers (net/http/pprof) on this loopback address, e.g. 127.0.0.1:6060; empty serves nothing. Refused unless the host is loopback, because a heap profile is a copy of this process's memory",
+	},
+	{
 		flagName:     "allow-private-addresses",
 		envShortName: "ALLOW_PRIVATE_ADDRESSES",
 		usage:        "Permit outbound connections to loopback, link-local, private and carrier-grade-NAT addresses: true or false. A host named in LIBGEN_MIRROR or LIBGEN_MCP_SCIHUB_HOSTS is already exempt without it, and the cloud metadata addresses stay refused either way. Refused at startup on an HTTP listener other machines can reach",
