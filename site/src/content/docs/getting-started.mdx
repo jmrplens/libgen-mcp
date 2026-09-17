@@ -232,7 +232,6 @@ them, you can add it from there instead of writing the configuration by hand:
 | MCP registry          | Listing                                                                                                                     |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Official MCP Registry | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
-| Smithery              | [smithery.ai/servers/@jmrp/libgen-mcp](https://smithery.ai/servers/@jmrp/libgen-mcp)                                        |
 | mcp.so                | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
 | LobeHub               | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
 
@@ -315,7 +314,7 @@ A public instance runs at **`https://mcp.jmrp.io/libgen`**. It needs no account,
 }
 ```
 
-It is the fastest way to try the server. Running it **locally** — Docker or a binary, above — or through [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) remains the better way to keep using it, for two concrete reasons rather than as a disclaimer:
+It is the fastest way to try the server. Running it **locally** — Docker or a binary, above — remains the better way to keep using it, for two concrete reasons rather than as a disclaimer:
 
 - **Your queries travel through someone else's machine.** Locally, what you search for never leaves your computer. The hosted instance stores nothing, but "stores nothing" is a promise; "never sent" is a fact.
 - **`download` cannot write to your disk from a remote server**, so it returns a link (a `resource_link` plus a `resolved` object) instead of saving a file. That is inherent to remote MCP rather than a property of this endpoint — see [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote).
