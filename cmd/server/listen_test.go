@@ -29,6 +29,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // headerHSTS is the header this server states only when it terminates TLS
@@ -913,4 +915,46 @@ func TestSecurityHeadersHSTSFollowsTLS(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestThePrivateHatchIsRefusedOnWhatWasActuallyBound closes the window between
+// the startup check and the bind.
+//
+// The refusal at startup reads a configured address, and a host name has to be
+// resolved to judge it; the bind resolves the same name again. A resolver that
+// answers differently the second time — a rebind, a rotation, an attacker who
+// controls the record — passes validation as loopback and binds an address other
+// machines can reach, with the private-address hatch open behind it. The kernel's
+// answer is the one that cannot change.
+func TestThePrivateHatchIsRefusedOnWhatWasActuallyBound(t *testing.T) {
+	var lc net.ListenConfig
+	// 0.0.0.0 stands in for what a changed answer produces: a listener that is
+	// not loopback, arrived at without the operator asking for one.
+	reachable, err := lc.Listen(t.Context(), "tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("binding a reachable listener: %v", err)
+	}
+	defer func() { _ = reachable.Close() }()
+
+	err = refusePrivateHatchOnBoundListener(reachable, true)
+	if err == nil {
+		t.Fatal("the hatch was left open on a listener other machines can reach")
+	}
+	if !strings.Contains(err.Error(), config.EnvName("ALLOW_PRIVATE_ADDRESSES")) {
+		t.Errorf("the refusal does not name the variable an operator would unset: %v", err)
+	}
+
+	// The two cases that must keep working, or this refuses every deployment
+	// that legitimately uses the hatch.
+	loopback, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("binding a loopback listener: %v", err)
+	}
+	defer func() { _ = loopback.Close() }()
+	if loopbackErr := refusePrivateHatchOnBoundListener(loopback, true); loopbackErr != nil {
+		t.Errorf("a loopback listener was refused: %v", loopbackErr)
+	}
+	if unsetErr := refusePrivateHatchOnBoundListener(reachable, false); unsetErr != nil {
+		t.Errorf("a deployment that never set the variable was refused: %v", unsetErr)
+	}
 }

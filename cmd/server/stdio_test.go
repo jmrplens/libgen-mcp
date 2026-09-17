@@ -86,6 +86,14 @@ func TestFilterAnswersUnreadableLines(t *testing.T) {
 	}{
 		{name: "not JSON at all", line: `hello`, wantCode: codeParseError},
 		{name: "truncated JSON", line: `{"jsonrpc":"2.0",`, wantCode: codeParseError},
+		// A batch, refused here rather than passed to the SDK. Measured: on a
+		// session that negotiated a protocol newer than 2025-06-18 — which is
+		// every ordinary client — the SDK treats a top-level array as a protocol
+		// violation, ends the session and the process exits non-zero, which is
+		// the failure this filter exists to prevent. The filter sits under the
+		// SDK and cannot know the negotiated version, so it gives one answer for
+		// both: an Invalid Request an old client can read beats a dead server
+		// for everyone else.
 		{name: "a JSON array", line: `[1,2,3]`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON number", line: `42`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON string", line: `"hello"`, wantCode: codeInvalidRequest},
@@ -95,6 +103,11 @@ func TestFilterAnswersUnreadableLines(t *testing.T) {
 		// an object id would itself be an invalid response.
 		{name: "an object id is not echoed", line: `{"id":{"k":1},"method":"x"}`, wantCode: codeInvalidRequest},
 		{name: "an array id is not echoed", line: `{"id":[1],"method":"x"}`, wantCode: codeInvalidRequest},
+		// A boolean is not one of the three types the specification allows
+		// there either, and echoing it makes the refusal an invalid response —
+		// so a client that sent something malformed cannot parse the reply
+		// telling it so.
+		{name: "a boolean id is not echoed", line: `{"jsonrpc":"1.0","id":true}`, wantCode: codeInvalidRequest},
 	}
 
 	for _, tt := range tests {

@@ -74,7 +74,13 @@ func rendered(record sdklog.Record) string {
 	var out strings.Builder
 	out.WriteString(record.Body().AsString())
 	record.WalkAttributes(func(kv attribute.KeyValue) bool {
-		out.WriteString("\x00" + string(kv.Key) + "=" + kv.Value.AsString())
+		// String, not AsString: AsString returns the string field alone and
+		// renders nothing for a map or a slice, so a planted value that
+		// survived one group deep would be absent from what this returns while
+		// being present in what the collector holds — a leak assertion that
+		// passes because it cannot see. String renders composite values
+		// recursively.
+		out.WriteString("\x00" + string(kv.Key) + "=" + kv.Value.String())
 		return true
 	})
 	return out.String()
@@ -182,6 +188,8 @@ func TestAStrippedFieldNeverLeavesTheProcess(t *testing.T) {
 		{LogFieldAnnasKey, "the-planted-members-key"},
 		{LogFieldUnpaywallEmail, "planted@example.org"},
 		{LogFieldChargedAddress, "203.0.113.7"},
+		{LogFieldPanic, "runtime error: the-planted-panic-value"},
+		{LogFieldStack, "goroutine 1 [running]: /home/planted/path/main.go:42"},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
 			logger, exporter, stderr := bridged(t, slog.LevelInfo)

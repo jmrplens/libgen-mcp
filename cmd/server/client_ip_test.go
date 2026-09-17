@@ -394,3 +394,65 @@ func TestCommaSeparatedDropsEmptyEntries(t *testing.T) {
 		t.Errorf("commaSeparated = %q, want [a b]", got)
 	}
 }
+
+// TestAnIPv4MappedRangeMatchesTheIPv4ItDescribes closes a rule that reads as
+// configured and matches nothing.
+//
+// `::ffff:192.0.2.0/120` is a legal way to write `192.0.2.0/24`, and
+// netip.ParsePrefix accepts it — but every peer this server compares against has
+// been through Unmap by then, so the mapped prefix matches no connection that
+// will ever arrive. The forwarded header is then ignored and every caller behind
+// the proxy is charged to the proxy, which is the failure the two flags exist to
+// prevent.
+func TestAnIPv4MappedRangeMatchesTheIPv4ItDescribes(t *testing.T) {
+	proxies, err := parseTrustedProxies([]string{"::ffff:192.0.2.0/120"})
+	if err != nil {
+		t.Fatalf("parseTrustedProxies() error = %v", err)
+	}
+
+	peer := netip.MustParseAddr("192.0.2.1")
+	if !proxies.contains(peer) {
+		t.Errorf("the mapped range does not match %s, so the header it guards is never read", peer)
+	}
+	if outside := netip.MustParseAddr("198.51.100.1"); proxies.contains(outside) {
+		t.Errorf("the range matched %s, which it does not name", outside)
+	}
+}
+
+// TestAMappedRangeTooShortToMeanIPv4IsRefused is the other half.
+//
+// A mapped prefix shorter than /96 covers addresses outside the mapped block, so
+// there is no IPv4 range it means. Guessing one would trust more than the
+// operator wrote, and silently keeping it would trust nothing at all.
+func TestAMappedRangeTooShortToMeanIPv4IsRefused(t *testing.T) {
+	_, err := parseTrustedProxies([]string{"::ffff:0.0.0.0/64"})
+	if err == nil {
+		t.Fatal("a mapped range shorter than /96 was accepted")
+	}
+	if !strings.Contains(err.Error(), "/96") {
+		t.Errorf("the refusal does not say what is wrong with it: %v", err)
+	}
+}
+
+// TestAHeaderNameNoRequestCanCarryIsRefusedAtStartup keeps a rule that reads
+// nothing from looking like one that works.
+//
+// Go's HTTP server cannot put a name with a space in a request's header map, so
+// r.Header.Get returns the empty string for it whatever the proxy sent: the
+// forwarded address is ignored and every caller is charged to the proxy. The
+// deployment looks configured and is not, which is the state these flags are
+// most dangerous in.
+func TestAHeaderNameNoRequestCanCarryIsRefusedAtStartup(t *testing.T) {
+	err := validateTrustedProxyConfig([]string{"172.19.0.1/32"}, "X Real IP", "127.0.0.1:8080")
+	if err == nil {
+		t.Fatal("a header name no request can carry was accepted")
+	}
+	if !strings.Contains(err.Error(), "X Real IP") {
+		t.Errorf("the refusal does not name the value an operator would fix: %v", err)
+	}
+
+	// The ordinary spelling still passes, or this would refuse every deployment.
+	if validErr := validateTrustedProxyConfig([]string{"172.19.0.1/32"}, "X-Real-IP", "127.0.0.1:8080"); validErr != nil {
+		t.Errorf("a valid configuration was refused: %v", validErr)
+	}
+}

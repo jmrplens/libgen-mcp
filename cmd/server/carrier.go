@@ -175,6 +175,17 @@ func (c *requestCarriers) bind(next mcp.MethodHandler) mcp.MethodHandler {
 			// what contextcheck sees and objects to, and it is the point.
 			stop := context.AfterFunc(carrier, func() { cancel(errCallerGone) }) //nolint:contextcheck // the carrier is a cancellation source, not a parent
 			defer stop()
+			// AfterFunc runs its callback on another goroutine, so a carrier
+			// that is already done can still hand a live context to the handler
+			// — which is exactly the entry a POST that ended between the lookup
+			// and here leaves behind. Checked once, synchronously, so the
+			// already-abandoned case cannot start work at all. A carrier that
+			// ends after this check is still asynchronous, and that race is the
+			// ordinary one: the handler has begun, and cancellation reaches it
+			// when it reaches it.
+			if carrier.Err() != nil {
+				cancel(errCallerGone)
+			}
 		} else {
 			cancel(errCallerGone)
 		}

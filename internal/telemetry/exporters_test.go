@@ -60,6 +60,21 @@ func TestRedactEndpointUserinfo_CredentialsNeverReachTheSummary(t *testing.T) {
 			want:     "https://collector.example.com:4318",
 		},
 		{
+			// The spelling the OTLP variables accept and url.Parse does not:
+			// with no scheme it reads "user" as one and the rest as opaque, so
+			// the userinfo is never populated and the credential travels to the
+			// startup log and, through the bridge, to the collector it
+			// authenticates to.
+			name:     "a scheme-less endpoint still hides its credential",
+			endpoint: "user:hunter2@collector.example.com:4318",
+			want:     "redacted@collector.example.com:4318",
+		},
+		{
+			name:     "a scheme-less endpoint without credentials is untouched",
+			endpoint: "collector.example.com:4318",
+			want:     "collector.example.com:4318",
+		},
+		{
 			name:     "an unparseable endpoint is returned as it was written",
 			endpoint: "://not-a-url",
 			want:     "://not-a-url",

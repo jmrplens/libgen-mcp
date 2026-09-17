@@ -113,7 +113,10 @@ func probePDF(ctx context.Context, httpClient *http.Client, candidate string) bo
 // It is a value carrying the per-source constants (which client, which error
 // prefix, how much body to read) with the per-call endpoint passed to get.
 type jsonFetch struct {
-	// client is the HTTP client to use; nil selects http.DefaultClient.
+	// client is the HTTP client to use. Nil selects the guarded fallback
+	// ([fallbackClient]) rather than http.DefaultClient — an unguarded client
+	// would take a source off the address policy every other one is on, which is
+	// the opposite of what leaving this unset should mean.
 	client *http.Client
 	// source is the source's name, used as the error-message prefix the e2e
 	// suite's failure classification anchors on.

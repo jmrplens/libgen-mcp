@@ -415,7 +415,12 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 		if elapsed := time.Since(start); elapsed < gracefulBudget/2 {
 			t.Errorf("returned after %v, want the %v graceful phase to have been waited out", elapsed, gracefulBudget)
 		}
-		if elapsed := time.Since(start); elapsed > httpShutdownTimeout {
+		// The caller's own deadline, not the server's budget. Comparing against
+		// httpShutdownTimeout lets a shutdown that ignored the deadline
+		// entirely pass whenever the server's budget is the larger of the two,
+		// which is the regression this case exists to catch. The tolerance is
+		// for scheduling, not for the clamp.
+		if elapsed := time.Since(start); elapsed > gracefulBudget+2*time.Second {
 			t.Errorf("returned after %v, want no more than the caller's own %v deadline allowed", elapsed, gracefulBudget)
 		}
 	case <-time.After(httpShutdownTimeout + 15*time.Second):

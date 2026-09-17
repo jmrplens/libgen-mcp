@@ -272,6 +272,12 @@ func TestConfigDigestChangesWithEverySettingItCovers(t *testing.T) {
 		{name: "a source removed", mutate: func(c *config.Config) { c.Sources = c.Sources[:2] }},
 		{name: "the base path", mutate: func(*config.Config) {}, basePath: "/libgen"},
 		{name: "statelessness", mutate: func(*config.Config) {}, stateless: &off},
+		// The limits that decide what an identical call gets back: one refuses
+		// a file outright, and the other two change the answer whenever the
+		// caller leaves its own limits out.
+		{name: "max_download_bytes", mutate: func(c *config.Config) { c.MaxDownloadBytes = 1 << 20 }},
+		{name: "read_max_chars", mutate: func(c *config.Config) { c.ReadMaxChars = 5000 }},
+		{name: "read_default_pages", mutate: func(c *config.Config) { c.ReadDefaultPages = 3 }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

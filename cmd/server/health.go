@@ -244,6 +244,14 @@ func configDigest(cfg *config.Config, basePath string, stateless bool) string {
 		"confirm_downloads=" + strconv.FormatBool(cfg.ConfirmDownloads),
 		"base_path=" + basePath,
 		"stateless=" + strconv.FormatBool(stateless),
+		// The three limits that decide what an identical call gets back.
+		// MaxDownloadBytes refuses a file outright, and the read limits change
+		// the answer whenever a caller leaves its own limits out — which is
+		// most calls. Two replicas that differ on any of them serve different
+		// results, and a digest that matched would say they did not.
+		"max_download_bytes=" + strconv.FormatInt(cfg.MaxDownloadBytes, 10),
+		"read_max_chars=" + strconv.Itoa(cfg.ReadMaxChars),
+		"read_default_pages=" + strconv.Itoa(cfg.ReadDefaultPages),
 	}
 	sum := sha256.Sum256([]byte(strings.Join(fields, "\n")))
 	return hex.EncodeToString(sum[:])[:12]

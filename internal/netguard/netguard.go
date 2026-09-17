@@ -329,10 +329,17 @@ func stripSensitiveHeaders(req *http.Request, previous *url.URL) {
 	// Scheme and host only, on both sides. Naming either URL would undo the
 	// strip in the log: the previous one is what Referer carries, and it is the
 	// URL with the secret in its query string.
+	//
+	// URL.Host rather than Hostname, so the port is there. A different port on
+	// the same host is off-origin by the rule above — that is why the headers
+	// were dropped — and a log that prints the host without it says the two
+	// sides are the same origin, which is precisely the case a reader is trying
+	// to understand. A port is not a secret; a path or a query string is, and
+	// neither is here.
 	slog.Info("dropped request headers on an off-origin redirect",
 		"headers", dropped,
-		"from", previous.Scheme+"://"+previous.Hostname(),
-		"to", req.URL.Scheme+"://"+req.URL.Hostname())
+		"from", previous.Scheme+"://"+previous.Host,
+		"to", req.URL.Scheme+"://"+req.URL.Host)
 }
 
 // sameOrigin reports whether two URLs address the same service, comparing scheme,

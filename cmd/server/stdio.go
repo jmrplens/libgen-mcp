@@ -200,6 +200,23 @@ func refuseUnreadable(line string) (refusal []byte, refuse bool) {
 		// telling a client that about valid JSON sends it looking for a syntax
 		// problem it does not have.
 		if json.Valid([]byte(trimmed)) {
+			// A top-level array is refused here too, and that is deliberate
+			// rather than an oversight about batches.
+			//
+			// It is true that the SDK accepts a batch for a protocol version
+			// negotiated before 2025-06-18, and that refusing one here takes
+			// that away from a client old enough to send it. Passing it through
+			// was tried and measured instead: on a session that negotiated a
+			// newer version — which is every ordinary client — the SDK treats
+			// the array as a protocol violation, ends the session and the
+			// process exits non-zero. That is exactly the failure this filter
+			// exists to prevent, reintroduced for the common case to serve a
+			// case nothing in this project has seen.
+			//
+			// The filter cannot tell the two apart: it sits under the SDK and
+			// the negotiated version is the SDK's to know. Given one answer for
+			// both, an Invalid Request a legacy client can read beats a dead
+			// server for everyone else.
 			return errorLine(nil, codeInvalidRequest, "Invalid Request"), true
 		}
 		// Genuinely not JSON. The id is unknowable, so it is null, which is
@@ -218,9 +235,19 @@ func refuseUnreadable(line string) (refusal []byte, refuse bool) {
 }
 
 // scalarID returns the id if JSON-RPC may echo it, or nothing.
+//
+// String, number and null are the whole of what the specification allows there,
+// so an object, an array and a boolean are all ids this server must not echo:
+// answering `{"id":true}` with `{"id":true}` makes the refusal itself an invalid
+// response, which leaves a client that sent something malformed unable to parse
+// the reply telling it so.
 func scalarID(id json.RawMessage) json.RawMessage {
 	trimmed := bytes.TrimSpace(id)
-	if len(trimmed) == 0 || trimmed[0] == '{' || trimmed[0] == '[' {
+	if len(trimmed) == 0 {
+		return nil
+	}
+	switch trimmed[0] {
+	case '{', '[', 't', 'f':
 		return nil
 	}
 	return id

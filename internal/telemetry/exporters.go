@@ -234,10 +234,21 @@ func endpointForSignal(signalKey string) string {
 // is itself exported through the log bridge, so without this the credential
 // would travel to the very collector it authenticates to.
 func redactEndpointUserinfo(endpoint string) string {
-	parsed, err := url.Parse(endpoint)
+	if parsed, err := url.Parse(endpoint); err == nil && parsed.User != nil {
+		parsed.User = url.User("redacted")
+		return parsed.String()
+	}
+	// A value with no scheme, which the OTLP variables accept: url.Parse reads
+	// "user:password@host:4318" as a scheme and an opaque body, so the userinfo
+	// this function exists to remove is never populated and the credential is
+	// handed back unchanged. Parsed again as a bare authority, it is found.
+	if !strings.Contains(endpoint, "@") {
+		return endpoint
+	}
+	parsed, err := url.Parse("//" + endpoint)
 	if err != nil || parsed.User == nil {
 		return endpoint
 	}
 	parsed.User = url.User("redacted")
-	return parsed.String()
+	return strings.TrimPrefix(parsed.String(), "//")
 }

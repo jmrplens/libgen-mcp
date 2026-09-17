@@ -369,9 +369,16 @@ its dimensions a closed Go type so a value outside the set does not compile.
 reach stderr, so it adds nothing and only subtracts: the names in
 `telemetry.ExportStrippedFields`, every error's text (replaced by its type, since
 the bridge would otherwise promote `err.Error()` into `exception.message`), and
-anything over one attribute's budget. Adding a log field that carries a query, a
-title, a per-call credential or a caller's address means adding its name to that
-list in the same change — the list is a named list rather than a memory precisely
+anything over one attribute's budget.
+
+**`ExportStrippedFields` governs the collector leg alone.** stderr keeps the whole
+record, deliberately — it is the operator's own terminal, and a search this server
+ran is theirs to see. So the list is not a licence to log a secret: a value that
+must not be written at all must not be written at all, and the list is for the
+fields that are legitimately on stderr and must not travel (a query, a title, the
+charged address, a recovered panic and its stack). A per-call credential is in it
+as a backstop, not as permission. Adding a log field of that kind means adding its
+name in the same change — the list is a named list rather than a memory precisely
 because the export-side redactor cannot know about a field nobody told it about.
 It cannot help when the value is *inside* something else; that shape is
 `netguard.RedactTransportError`'s, one section above.

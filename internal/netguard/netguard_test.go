@@ -525,3 +525,34 @@ type observingRoundTripper struct {
 func (o observingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return o.base.RoundTrip(req)
 }
+
+// TestCheckRedirectLogsThePortThatMadeItOffOrigin keeps the log from reporting
+// the case it exists to explain as its opposite.
+//
+// A different port on the same host is off-origin by this package's own rule —
+// there is no reason the service on :9443 should receive the key meant for the
+// one on :8443 — so a drop between them is correct. A log line that printed the
+// hostname without the port would then show the same origin on both sides, and a
+// reader debugging a missing header would conclude the strip was a bug.
+func TestCheckRedirectLogsThePortThatMadeItOffOrigin(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	req := &http.Request{URL: mustParse(t, "https://mirror.invalid:9443/f.pdf"), Header: http.Header{}}
+	req.Header.Set("Authorization", "Bearer s3cret")
+
+	if err := CheckRedirect(false)(req, []*http.Request{
+		{URL: mustParse(t, "https://mirror.invalid:8443/get")},
+	}); err != nil {
+		t.Fatalf("CheckRedirect() error = %v", err)
+	}
+
+	logged := buf.String()
+	for _, want := range []string{"mirror.invalid:8443", "mirror.invalid:9443"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("the log line does not carry %q, so it reports two origins as one:\n%s", want, logged)
+		}
+	}
+}

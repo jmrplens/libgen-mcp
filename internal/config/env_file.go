@@ -28,6 +28,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -130,8 +131,12 @@ type EnvFileReport struct {
 	// file that was loaded is whichever one sits in the working directory the
 	// client chose. Meaningless when ExplicitPath is empty.
 	ExplicitRelative bool
-	// HomePath is the home file that was loaded. Empty when there is none.
+	// HomePath is the home file that was read, or attempted. Empty when there is
+	// none.
 	HomePath string
+	// HomeErr is why the home file could not be read. A missing file is not an
+	// error and leaves both this and HomePath empty.
+	HomeErr error
 	// IgnoredPath is the absolute path of a working-directory .env that was
 	// found and deliberately not loaded. Empty when there is none.
 	IgnoredPath string
@@ -169,8 +174,16 @@ func LoadEnvFiles() EnvFileReport {
 
 	if home, err := os.UserHomeDir(); err == nil {
 		homePath := filepath.Join(home, EnvFileName)
-		if godotenv.Load(homePath) == nil {
+		switch loadErr := godotenv.Load(homePath); {
+		case loadErr == nil:
 			report.HomePath = homePath
+		case !errors.Is(loadErr, os.ErrNotExist):
+			// A file that exists and cannot be read is not the normal case, and
+			// dropping the error made it a silent one: the settings the operator
+			// wrote are simply absent, and the server starts with defaults that
+			// contradict them. Absence is the ordinary case and stays quiet.
+			report.HomePath = homePath
+			report.HomeErr = loadErr
 		}
 	}
 
@@ -236,6 +249,7 @@ func absolutePath(path string) string {
 // file would like to set.
 func (r EnvFileReport) announce() {
 	r.announceExplicit()
+	r.announceHome()
 	if r.IgnoredPath != "" {
 		slog.Warn("ignoring the .env file in the working directory",
 			"path", r.IgnoredPath,
@@ -243,6 +257,25 @@ func (r EnvFileReport) announce() {
 			"keys", announcedKeys(r.IgnoredKeys),
 			"reason", "the working directory belongs to whoever wrote it, not to this server",
 			"hint", "put these settings in ~/"+EnvFileName+", or name the file with "+EnvFileVar)
+	}
+}
+
+// announceHome reports the home file, which is the one source of configuration
+// this server reads that nobody passed it.
+//
+// The announcement is the only local evidence that a file outside the client's
+// configuration decided something — and on this server that can be which tools
+// exist, since the home file may carry LIBGEN_MCP_SERVER_FETCH. A read that
+// failed says so at WARN, because the operator's settings are then absent and
+// the defaults contradicting them are what the server is running on. A file that
+// is not there says nothing at all: that is every ordinary deployment.
+func (r EnvFileReport) announceHome() {
+	switch {
+	case r.HomeErr != nil:
+		slog.Warn("the env file in the home directory could not be read; its settings are not in effect",
+			"path", r.HomePath, "error", r.HomeErr)
+	case r.HomePath != "":
+		slog.Info("loaded configuration from the env file in the home directory", "path", r.HomePath)
 	}
 }
 

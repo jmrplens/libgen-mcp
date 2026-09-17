@@ -111,6 +111,10 @@ type httpPolicy struct {
 	// misleading — a listen address is frequently loopback or a socket behind a
 	// proxy.
 	publicURL string
+	// allowPrivate is LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES as the configuration
+	// resolved it, carried here because the bound listener is checked against it
+	// again — see refusePrivateHatchOnBoundListener.
+	allowPrivate bool
 	// identity is the telemetry identity policy this deployment resolved, for
 	// the block the enumerating card publishes about what it records.
 	//

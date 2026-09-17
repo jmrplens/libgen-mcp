@@ -940,13 +940,22 @@ func TestSpanLimits_BoundAnAttributeValueUnlessTheOperatorChose(t *testing.T) {
 			env:  "128",
 			want: 128,
 		},
+		{
+			// An orchestrator injecting an empty variable for a setting nobody
+			// provided is not an operator taking charge, and the SDK's answer
+			// for a blank value is no limit at all — the opposite of the floor
+			// this wrapper documents.
+			name: "a blank value is not a decision",
+			env:  "   ",
+			want: defaultAttributeValueLength,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.env != "" {
-				t.Setenv("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT", tt.env)
-			}
+			// Set on every row, including to empty, so an ambient value on a
+			// developer's machine cannot decide what the table measures.
+			t.Setenv("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT", tt.env)
 
 			limits := spanLimits()
 			if limits.AttributeValueLengthLimit != tt.want {
@@ -1333,6 +1342,11 @@ func TestEnvHasServiceName_OnlyTheServiceNameAttributeCounts(t *testing.T) {
 		{name: "surrounding whitespace on the key is trimmed", attributes: " service.name =billing", want: true},
 		{name: "another attribute names nothing", attributes: "deployment.environment=prod", want: false},
 		{name: "a key with no value names nothing", attributes: "service.name", want: false},
+		// The SDK keeps the empty attribute and lets it overwrite its own
+		// unknown_service fallback, so reading this as "the operator named it"
+		// ships every signal with an empty service name.
+		{name: "service.name with an empty value names nothing", attributes: "service.name=", want: false},
+		{name: "service.name with a blank value names nothing", attributes: "service.name=   ", want: false},
 		{name: "an empty attributes variable names nothing", attributes: "", want: false},
 	}
 

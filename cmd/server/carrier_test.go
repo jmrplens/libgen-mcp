@@ -268,3 +268,31 @@ func TestCarrierTokensAreDistinct(t *testing.T) {
 		seen[token] = true
 	}
 }
+
+// TestCarrierCancelsACallWhoseCarrierIsDoneButStillRegistered closes the window
+// between the lookup and the callback.
+//
+// The entry is removed by a context.AfterFunc, and AfterFunc runs its callback
+// on another goroutine — so a POST that ended a moment ago leaves a carrier that
+// is already canceled and still in the map. Registering a second AfterFunc and
+// going straight on would hand that call a live context and start work for an
+// answer that can never be delivered; the check has to be synchronous.
+func TestCarrierCancelsACallWhoseCarrierIsDoneButStillRegistered(t *testing.T) {
+	var c requestCarriers
+
+	// A carrier that is done and stays in the map, which is what the window
+	// looks like from inside bind.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	const token = "a-token-whose-post-has-ended"
+	c.contexts.Store(token, ctx)
+
+	seen := contextSeenBy(t, &c, "tools/call", token)
+
+	if seen.Err() == nil {
+		t.Error("a call whose POST had already ended ran under a live context")
+	}
+	if cause := context.Cause(seen); !errors.Is(cause, errCallerGone) {
+		t.Errorf("cause = %v, want errCallerGone", cause)
+	}
+}

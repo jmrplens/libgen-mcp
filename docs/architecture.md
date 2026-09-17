@@ -675,10 +675,13 @@ standing to make on the operator's behalf.
 
 **Request cancellation, for every client and not only the newest.** A client that disconnects
 mid-call cancels the handler's context, so an abandoned mirror fetch stops instead of running to
-completion. The SDK's own propagation covers protocol-`2026-07-28` requests, where cancellation
-arrives as a `notifications/cancelled` an older client cannot send — so for everyone else an
-abandoned `tools/call` was not a signal this server dropped: nothing was signaled at all, and
-the handler kept working. Here that handler is usually a download, holding one of
+completion. The SDK's own propagation (`PropagateRequestCancellation`) covers requests on
+protocol `2026-07-28` or newer, where the POST is the whole request lifecycle: it ties the
+handler's context to the HTTP request's, so an aborted POST cancels it directly — no
+`notifications/cancelled` is involved, and an older client's requests are unaffected by the
+option whether or not it can send that notification. So for everyone else an abandoned
+`tools/call` was not a signal this server dropped: nothing was signaled at all, and the handler
+kept working. Here that handler is usually a download, holding one of
 `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` slots and a temp-cache slot and spending the shared
 outbound bucket, for megabytes nobody will read — while the callers still waiting queue behind
 it.
@@ -799,7 +802,10 @@ Go pseudo-version with a timestamp in it.
 `config_digest` is twelve hex characters fingerprinting the settings that decide the served
 surface and the answers it can give: the enabled sources, `extra_sources`, `server_fetch` (which
 decides whether `read` is registered at all), `remote_downloads`, `enrich`, `confirm_downloads`,
-the base path and statelessness. Replicas behind one balancer must agree on every one of them, or
+the base path, statelessness, and the three limits that decide what an identical call gets back —
+`max_download_bytes`, which can refuse a file outright, and `read_max_chars` and
+`read_default_pages`, which change the answer whenever the caller leaves its own limits out.
+Replicas behind one balancer must agree on every one of them, or
 a client gets a different catalog depending on which node it reaches and nothing else notices. It
 is order-free wherever the setting is a set. **It is a fingerprint for comparison, not a secret**:
 the settings it covers are few and public, so whoever reads it can work out which combination
