@@ -20,7 +20,7 @@ func registeredSurface(t *testing.T, httpAddr string) (names []string, instructi
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, httpAddr)
+	server, err := newRegisteredServer(cfg, httpAddr, nil)
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}

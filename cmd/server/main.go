@@ -207,6 +207,8 @@ func mainWithExit() int {
 	publicURL := flag.String("public-url", "", "origin clients reach this deployment at, e.g. https://mcp.example.org/libgen. Its host is the one this server answers to in the Host header, which a reverse proxy forwards from the client; without it, or without --trusted-proxies naming the proxy, a proxied request carrying a public name is refused as a DNS-rebinding attempt")
 	trustedProxyHeader := flag.String("trusted-proxy-header", "", "header a trusted proxy fills with the address it heard the request from (e.g. X-Real-IP or X-Forwarded-For). Read only from a peer listed in --trusted-proxies, and required together with it; without both, every caller is told apart by the address the connection came from")
 	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
+	rateLimitRPS := flag.Float64("rate-limit-rps", defaultRateLimitRPS, "inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. 0 or less turns the limit off. On a listener whose every peer is this machine — a loopback bind or a unix socket — it is off unless --trusted-proxies names the proxy in front, because otherwise every caller is charged to one address; passing it explicitly there is refused rather than downgraded")
+	rateLimitBurst := flag.Int("rate-limit-burst", defaultRateLimitBurst, "how many of those requests one charged address may make at once before the refill rate applies")
 	registerEnvBackedFlags()
 	flag.Parse()
 
@@ -276,13 +278,25 @@ func mainWithExit() int {
 		log.Print(urlErr)
 		return 1
 	}
+	charge := chargePolicy{header: strings.TrimSpace(*trustedProxyHeader), proxies: proxies}
 	if len(proxyEntries) > 0 {
 		// Said once at startup because it is the only place it can be seen: the
 		// rule decides which address every later per-caller budget is keyed on,
 		// and a list that names the wrong hop looks exactly like a correct one
 		// from outside — every caller simply shares the proxy's key.
 		log.Printf("--trusted-proxy-header %s is read from %s, and from no other peer; every other caller is told apart by the address it connects from",
-			strings.TrimSpace(*trustedProxyHeader), strings.Join(proxyEntries, ", "))
+			charge.header, strings.Join(proxyEntries, ", "))
+	}
+	// Refused rather than downgraded when the listener cannot tell two callers
+	// apart: an operator who asked for a bound deserves to be told it cannot do
+	// what they think it does.
+	limit, limitErr := resolveRateLimit(decision.Addr, charge, *rateLimitRPS, *rateLimitBurst, isFlagPassed("rate-limit-rps"))
+	if limitErr != nil {
+		log.Print(limitErr)
+		return 1
+	}
+	if decision.HTTP {
+		log.Printf("inbound rate limit: %s", limit.describe())
 	}
 
 	// Refused at startup rather than at the first request: a server mounted on a
@@ -321,7 +335,12 @@ func mainWithExit() int {
 		// hatch reads it too: a `--transport http` deployment with no --http
 		// binds an address nobody typed, and a guard built from the flag would
 		// declare a host the listener never had.
-		guard: newHostGuard(decision.Addr, *publicURL, proxies),
+		guard:  newHostGuard(decision.Addr, *publicURL, proxies),
+		charge: charge,
+		// Nil on stdio and wherever the limit is off, which every layer that
+		// reads it treats as "no per-caller state at all" rather than as an
+		// empty table.
+		records: newClientRecordsFor(limit, charge),
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -369,7 +388,12 @@ func isCleanShutdown(err error) bool {
 // place; the caller registers the tools and prompts on top. instructions is the
 // handshake text for the surface the caller is about to register, which is not
 // the same on every deployment — see serverInstructions.
-func newMCPServer(instructions string) *mcp.Server {
+//
+// records is the per-caller state this deployment keeps, or nil when it keeps
+// none — stdio, and any listener where an address cannot tell two callers apart.
+// Nil leaves the metering middlewares out entirely rather than installing ones
+// that would allow everything.
+func newMCPServer(instructions string, records *clientRecords) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:        "libgen-mcp",
 		Title:       implementationTitle,
@@ -412,10 +436,20 @@ func newMCPServer(instructions string) *mcp.Server {
 			Prompts: &mcp.PromptCapabilities{ListChanged: false},
 		},
 	})
-	// First, and that is what puts it INNERMOST: a handler runs under the bound
-	// context, and the two layers above it have nothing to cancel — cachehints
-	// annotates a result and capguard refuses a method outright. Both still run
-	// under recoverPanics, which is added last and wraps all three.
+	// The metering pair goes on first, which makes it INNERMOST, and the order
+	// within it is not interchangeable: the limiter reads the caller's bucket
+	// off the context, so whatever resolves it has to run before — that is,
+	// wrap — the limiter. Nothing is installed at all when this deployment keeps
+	// no per-caller state; a limiter that allowed everything would be a layer
+	// with nothing to say.
+	if records != nil {
+		toolutil.AttachRateLimit(server, limiterFrom)
+		server.AddReceivingMiddleware(records.meter)
+	}
+	// Then the carrier, so a handler runs under the bound context. The layers
+	// above it have nothing to cancel — cachehints annotates a result and
+	// capguard refuses a method outright — and all of them still run under
+	// recoverPanics, which is added last and wraps every one.
 	server.AddReceivingMiddleware(mcpCarriers.bind)
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
@@ -918,7 +952,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	}
 	defer profiler.stop()
 
-	server, err := newRegisteredServer(cfg, spec.addr)
+	server, err := newRegisteredServer(cfg, spec.addr, spec.records)
 	if err != nil {
 		return err
 	}
@@ -1000,7 +1034,7 @@ func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
-func newRegisteredServer(cfg *config.Config, listenAddr string) (*mcp.Server, error) {
+func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords) (*mcp.Server, error) {
 	// A deployment is remote when its disk is not the caller's: an HTTP listener
 	// (a TCP address or a unix socket) or a hosted stdio process that says so with
 	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
@@ -1024,7 +1058,7 @@ func newRegisteredServer(cfg *config.Config, listenAddr string) (*mcp.Server, er
 	// Either trigger puts download in link-only mode: a remote server cannot
 	// write to the caller's disk, and a server that may not fetch has no bytes
 	// to write. The handshake text states whichever contract results.
-	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch))
+	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch), records)
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via
@@ -1053,7 +1087,7 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 		return err
 	}
 	opts.ServesTLS = spec.servesTLS()
-	return serveHTTPOn(ctx, server, ln, opts, spec.guard)
+	return serveHTTPOn(ctx, server, ln, opts, spec.guard, spec.charge)
 }
 
 // serveHTTPOn serves the MCP endpoint on a listener the caller has already
@@ -1068,7 +1102,7 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 //
 // Production still calls serveHTTP, which binds and delegates here, so the
 // address a deployment configures is bound exactly as before.
-func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options, guard hostGuard) error {
+func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options, guard hostGuard, charge chargePolicy) error {
 	// The Host check wraps the MCP endpoint and nothing else: /health is what a
 	// balancer and a container runtime probe, and the server card is a public
 	// document, so both answer whatever Host the prober sends. It is applied
@@ -1080,7 +1114,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// it, the body read for a JSON-RPC id included. The version guard sits
 	// directly in front of the SDK because that is the answer it replaces.
 	mcpHandler := hostGuarded(guard, protocolVersionGuarded(opts.Stateless,
-		carriedMCPHandler(
+		carriedMCPHandler(charge,
 			mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)),
 		)))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",

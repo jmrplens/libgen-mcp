@@ -72,6 +72,26 @@ func parseTrustedProxies(entries []string) (trustedProxies, error) {
 	return t, nil
 }
 
+// chargePolicy is the pair of flags that decide which address a request is
+// charged to, carried together so the rule is applied from one value rather than
+// from two that can drift apart.
+type chargePolicy struct {
+	header  string
+	proxies trustedProxies
+}
+
+// charge returns the address r is charged to under this policy.
+func (p chargePolicy) charge(r *http.Request) string {
+	return clientIP(r, p.header, p.proxies)
+}
+
+// namesAProxy reports whether the operator vouched for anybody's forwarded
+// address. It is what tells "every caller is told apart" from "every caller
+// behind the proxy shares one key", which several rules turn on.
+func (p chargePolicy) namesAProxy() bool {
+	return strings.TrimSpace(p.header) != "" && !p.proxies.empty()
+}
+
 // commaSeparated splits a comma-separated flag value into its non-empty
 // entries, with surrounding whitespace removed. An empty or whitespace-only
 // value yields no entries at all, which is what "the operator did not pass this
