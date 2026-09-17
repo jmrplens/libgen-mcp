@@ -439,6 +439,10 @@ func docPages(toolNameList string) []docPage {
 			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
 		},
 		{
+			"telemetry/", "Telemetry", "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records",
+			"Telemetría", "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal",
+		},
+		{
 			"troubleshooting/", "Troubleshooting", "Common setup and runtime issues",
 			"Solución de problemas", "Problemas habituales de configuración y ejecución",
 		},

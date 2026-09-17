@@ -20,6 +20,7 @@ open-access and Sci-Hub sources by DOI.
 | [Architecture](architecture.md)         | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, and the multi-source chain.                         |
 | [Download sources](sources.md)          | Per-source reference for the twenty-one download sources: corpus, resolve mechanics, measured traps, keys, and crawl-rule constraints.   |
 | [How search works](how-search-works.md) | A conceptual walk through what a search queries, when it escalates beyond the catalog, and how each result's origin guides the download. |
+| [Telemetry](telemetry.md)               | OpenTelemetry: off by default, exported to a collector you run, what each signal records and what none of them ever will.                |
 | [Troubleshooting](troubleshooting.md)   | Fixes for unreachable mirrors, failed downloads, missing articles, truncated searches, and disk-space errors.                            |
 
 ## Responsible use

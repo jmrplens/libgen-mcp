@@ -1,0 +1,234 @@
+---
+title: Telemetría
+description: "OpenTelemetry en libgen-mcp: apagada por defecto, exportada a un colector que ejecutas tú, y qué registra y qué no cada señal."
+chips:
+  - text: "Apagada por defecto"
+  - text: "Tu colector, nunca el del mantenedor"
+  - text: "Política de privacidad"
+    href: "/libgen-mcp/es/privacy/"
+datePublished: "2026-09-17"
+---
+
+`libgen-mcp` puede exportar trazas, métricas y registros de OpenTelemetry a un colector que ejecutas tú. Está **apagada por defecto**, y apagada significa que no se crea nada, no se arranca nada y no se envía nada: el interruptor es lo único que separa los dos estados.
+
+Esta página es el detalle que hay detrás del párrafo de [Privacidad](/libgen-mcp/es/privacy/#opentelemetry-si-lo-activas).
+
+## Encenderla
+
+```bash
+LIBGEN_MCP_TELEMETRY=1
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Todo lo relativo a _cómo_ se exporta —el endpoint, el protocolo, las cabeceras, los tiempos de espera, el muestreo, el tamaño de los lotes, los atributos de recurso, el nombre del servicio— procede de las variables estándar `OTEL_*`, que el SDK lee por su cuenta. Más allá del interruptor, estos nombres son propios de este servidor:
+
+| Variable                                 | Por defecto  | Qué hace                                                                                                                |
+| ---------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_TELEMETRY`                   | `false`      | El interruptor. `1`/`0`, `true`/`false`; un valor que no sea ninguno de ellos hace fallar el arranque.                  |
+| `LIBGEN_MCP_TELEMETRY_SIGNALS`           | las tres     | Un subconjunto separado por comas de `traces`, `metrics`, `logs`.                                                       |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY`          | `none`       | Qué puede decir una señal sobre quién hizo una llamada. Ver [Registrar quién llamó](#registrar-quién-hizo-una-llamada). |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY`      | _(generada)_ | El secreto con el que se calculan los seudónimos. **Es una credencial.**                                                |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION` | `0`          | Cuánto vive una clave _generada_. Se ignora cuando la clave está configurada.                                           |
+
+Las señales son separables porque sus costes difieren: las trazas son por llamada, las métricas van agregadas, y los registros duplican un flujo que ya estás recogiendo si envías stderr a una tubería de logs.
+
+`OTEL_SDK_DISABLED=true` veta el interruptor desde fuera, y es la única variable de esta superficie que se interpreta con la gramática de la especificación (la palabra `true` sin distinguir mayúsculas, y nada más) en lugar de con la más laxa de este servidor.
+
+### Las cuatro trampas de las variables estándar
+
+Estas pillan a la gente, no son cosa de este servidor, y cada una falla en silencio.
+
+**`http://` no es el valor por defecto.** Los exportadores de Go usan por defecto `https://localhost:4318`, no `http`. Encender la telemetría sin fijar endpoint intenta TLS contra un colector local en texto plano y fallan todos los lotes, en las tres señales. Escribe el esquema:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Escribir `localhost:4318` a secas también da https.
+
+**Las duraciones son milisegundos enteros, nunca duraciones de Go.** La especificación es explícita: «Cualquier valor que represente un tiempo de espera DEBE ser un entero que represente un número de milisegundos». Así que `OTEL_EXPORTER_OTLP_TIMEOUT=30s` no significa treinta segundos. No se interpreta como nada, y se mantiene el valor por defecto de 10 s.
+
+```bash
+OTEL_EXPORTER_OTLP_TIMEOUT=30000   # treinta segundos
+OTEL_EXPORTER_OTLP_TIMEOUT=30s     # nada; se mantiene el valor por defecto
+```
+
+Todas las `OTEL_BSP_*`, `OTEL_BLRP_*`, `OTEL_METRIC_EXPORT_INTERVAL` y `OTEL_METRIC_EXPORT_TIMEOUT` se comportan igual. Ten en cuenta que todas las variables que define _este_ servidor toman una duración de Go, lo que empeora la incoherencia en lugar de mejorarla. Merece leerse dos veces.
+
+**`http/json` se rechaza, y la razón es más estrecha de lo que parece.** Desde la v1.46.0 el exportador de trazas de Go lo implementa; los de métricas y registros no. Aceptarlo daría a un mismo despliegue dos codificaciones a la vez —spans en JSON junto a métricas en protobuf— a partir de un único ajuste que se lee como si seleccionara una sola cosa. Así que falla al arrancar, por su nombre, en lugar de degradarse o partirse en silencio.
+
+**`OTEL_EXPORTER_OTLP_INSECURE=true` anula un endpoint `https`, para trazas y métricas.** La especificación dice que la variable «solo se aplica a OTLP/gRPC cuando se proporciona un endpoint sin el esquema http o https». Los exportadores de trazas y métricas de Go no lo leen así: su configuración por entorno aplica primero el esquema y después las opciones de `INSECURE`, así que gana la última y un endpoint `https` se degrada a texto plano, llevándose consigo cualquier credencial que hayas fijado. Los exportadores de registros, más nuevos, resuelven primero el esquema y son correctos, y por eso un mismo despliegue puede acabar exportando dos señales en claro y la tercera sobre TLS.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
+OTEL_EXPORTER_OTLP_INSECURE=true   # las trazas y las métricas salen igualmente en texto plano
+```
+
+La precedencia funciona también al revés: un `INSECURE=false` junto a un endpoint `http` sube las trazas y las métricas a TLS. Este servidor emula la desviación por señal en lugar de leer el esquema de la URL, así que el aviso de texto plano de abajo nombra las señales realmente afectadas. No rechaza la configuración: el endpoint es cosa tuya.
+
+## Autenticarte ante tu colector
+
+Un colector que quiera una credencial la lee de la variable estándar de cabeceras:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
+OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer%20abc123
+```
+
+El valor va codificado como URL según la especificación, que es por lo que el espacio es `%20`.
+
+Cuando hay una credencial configurada contra un **endpoint en texto plano en otra máquina**, el servidor avisa una vez al arrancar y nombra las señales afectadas:
+
+```text
+a collector credential is configured against a plaintext endpoint on another host;
+it crosses the network in the clear on every export
+```
+
+Es un aviso y nunca un rechazo: un colector en una red privada de confianza alcanzado en texto plano es un despliegue legítimo, y tanto el endpoint como las cabeceras son configuración tuya. Un colector en loopback queda exento: una credencial que no sale de la máquina no puede observarse en una red.
+
+## Qué se registra
+
+### Spans
+
+Un span por petición MCP, con el nombre del método y con la herramienta o el prompt que llevaba:
+
+| Atributo                     | Ejemplo             | Notas                                                                                    |
+| ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
+| `mcp.method.name`            | `tools/call`        | El método del protocolo.                                                                 |
+| `gen_ai.tool.name`           | `download`          | Solo para una herramienta que este servidor registra; un nombre desconocido se descarta. |
+| `gen_ai.prompt.name`         | `acquire_book`      | La misma regla para los prompts.                                                         |
+| `mcp.protocol.version`       | `2026-07-28`        | Solo una revisión que este servidor admite.                                              |
+| `mcp.session.id`             | _(solo con estado)_ | Ausente bajo el modo sin estado por defecto, donde no hay sesión.                        |
+| `network.transport`          | `pipe` / `tcp`      | stdio es `pipe`; un listener HTTP, socket unix incluido, es `tcp`.                       |
+| `error.type`                 | `unavailable`       | Una clasificación, nunca un mensaje.                                                     |
+| `rpc.response.status_code`   | `-32602`            | El código JSON-RPC, cuando lo hay.                                                       |
+| `libgen_mcp.source`          | `unpaywall`         | Qué fuente de descarga sirvió el ítem.                                                   |
+| `libgen_mcp.source_attempts` | `3`                 | Cuántas se probaron antes.                                                               |
+| `libgen_mcp.mirror_host`     | `libgen.li`         | El host del que vinieron los bytes.                                                      |
+| `libgen_mcp.refusal_reason`  | `rate_limited`      | Por qué se rechazó una petición antes de llegar a un handler.                            |
+
+Un despliegue HTTP añade un span por delante de todos ellos, que cubre los guardianes capaces de rechazar una petición antes de que exista la capa MCP: la comprobación de Host, la protección de origen cruzado, el tope de cuerpo, el límite de tasa. Sin él, el tráfico que rechaza un endpoint publicado es invisible, y es justo el que quien lo opera más quiere ver.
+
+Cada petición saliente que hace este servidor es un span hijo con el método, el host y el estado — y **nunca `url.full`**, porque la mayoría de las URLs que este servidor obtiene las eligió un tercero y varias llevan una credencial en su cadena de consulta.
+
+**Nada de lo que este servidor envía hacia fuera lleva contexto de traza.** El `traceparent` y el `baggage` de quien llama se leen a la entrada y se descartan a la salida, así que un mirror de Sci-Hub o una editorial nunca reciben un identificador de correlación de tu despliegue. En [Arquitectura](/libgen-mcp/es/architecture/) está por qué eso difiere del consejo habitual.
+
+### Métricas
+
+| Instrumento                                | Tipo       | Dimensiones                                                               |
+| ------------------------------------------ | ---------- | ------------------------------------------------------------------------- |
+| `mcp.server.operation.duration`            | histograma | método, herramienta o prompt, resultado, versión de protocolo, transporte |
+| `mcp.server.session.duration`              | histograma | transporte                                                                |
+| `mcp.client.operation.duration`            | histograma | las llamadas que este servidor hace de vuelta a un cliente                |
+| `http.server.request.duration`             | histograma | método, estado, esquema                                                   |
+| `http.client.request.duration`             | histograma | método, estado y el host — acotado, ver abajo                             |
+| `libgen_mcp.read_cache.bytes`              | gauge      | cuán llena está la caché de `read`, junto a `.capacity`                   |
+| `libgen_mcp.read_cache.evictions`          | contador   | `reason`: `ttl` o `size_pressure`                                         |
+| `libgen_mcp.downloads.inflight`            | gauge      | descargas concurrentes, junto a `.capacity`                               |
+| `libgen_mcp.source_cooldown.entries`       | gauge      | fuentes que se están saltando, junto a `.capacity` (la cadena)            |
+| `libgen_mcp.source_cooldown.bypassed`      | contador   | todas las fuentes capaces en cooldown y probadas igualmente, por `kind`   |
+| `libgen_mcp.client_records.entries`        | gauge      | la tabla por llamante, junto a `.capacity`                                |
+| `libgen_mcp.client_records.evictions`      | contador   | `reason`: `lapsed` o `size_pressure`                                      |
+| `libgen_mcp.client_records.busy_evictions` | contador   | un desalojo hecho sin nada ocioso que soltar                              |
+
+**Una dimensión de métrica nunca es un valor que elija quien llama.** Un nombre de herramienta que este servidor no registra, una versión de protocolo que no admite, un método HTTP que no conoce y un host al que no fue configurado para llegar se agrupan todos en un único cubo en vez de acuñar una serie temporal cada uno. El span conserva el valor real: una traza no tiene presupuesto de series y una métrica sí.
+
+`libgen_mcp.mirror_host` deliberadamente **no** es dimensión de métrica. A qué mirror rotó el descubrimiento es decisión de un tercero, y una lista de hosts descubiertos no es un espacio de etiquetas acotado.
+
+### Registros
+
+Cada registro va primero a stderr, sin cambios, y —por encima de un umbral INFO que es **independiente de `LIBGEN_MCP_LOG_LEVEL`**— también al colector. Depurar en tu propio terminal no empieza por tanto a enviar un registro por petición a un mirror; ejecutar en `warn` sigue exportando aquello de lo que se compone un incidente.
+
+La copia exportada es el registro de stderr menos tres cosas:
+
+- **los campos de la lista de exclusión**: una consulta de búsqueda, el título de un registro, una credencial por llamada, la dirección a la que se cargó la petición, y un panic recuperado con su traza de pila;
+- **el texto de todo error**, sustituido por su tipo. Si no, el puente promocionaría el error a `exception.message` con el valor de `err.Error()`, que en este servidor es el `GET esquema://host/ruta: motivo` de net/http — un mirror, y una ruta que en una descarga es el identificador del ítem;
+- **todo lo que pase del presupuesto de un atributo**, truncado con una marca y reparado a UTF-8 válido, ya que un solo carácter partido hace fallar la subida de todo un lote.
+
+### Qué no se registra nunca
+
+Bajo cualquier política, con cualquier variable fijada a cualquier valor:
+
+- **la consulta de búsqueda.** No hay ajuste que la exporte, porque no hay ningún operador para quien un colector con «lo que esta persona buscó» sea el resultado correcto;
+- **el título de un registro** devuelto, que es la misma revelación por la otra dirección;
+- **los argumentos y los resultados de las herramientas**, enteros;
+- **una credencial suministrada para una sola llamada** —una clave de Anna's Archive o una dirección de contacto de Unpaywall—, que se usa una vez y no se almacena, mucho menos se exporta;
+- **el contenido de nada de lo descargado o leído.**
+
+**El identificador del ítem tampoco se exporta hoy.** Un md5, un DOI o un ISBN nombra un libro o un artículo concreto, que es la misma revelación por otra vía, así que ningún span, métrica ni registro lleva uno. La maquinaria para exportarlo como digest con clave (`libgen_mcp.item.ref`, y el literal `libgen_mcp.item.id` solo bajo `full`) existe en el código y nada la invoca: el digest mantendría distinguible «este libro concreto falla en todas las fuentes» de «todas las descargas están fallando», que son dos situaciones con respuestas opuestas. Cuando se active, lo dirán esta página y la card del servidor — y un digest sigue siendo reversible por quien tenga tu clave de identidad y una lista de identificadores candidatos, algo inherente a la seudonimia y por lo que la clave es una credencial.
+
+## Registrar quién hizo una llamada
+
+`LIBGEN_MCP_TELEMETRY_IDENTITY` tiene tres valores.
+
+| Valor          | Qué se exporta                                                                  |
+| -------------- | ------------------------------------------------------------------------------- |
+| `none`         | Nada sobre quien llama. El valor por defecto.                                   |
+| `pseudonymous` | `user.hash`, un digest con clave de la dirección a la que se cargó la petición. |
+| `full`         | `client.address`, más `mcp.client.name` y `mcp.client.version` del handshake.   |
+
+**Aquí no hay ningún usuario.** Este servidor no autentica a nadie, así que quien llama es una dirección — y en un endpoint público eso es la dirección de un desconocido, que es dato personal bajo el RGPD siempre que quien opera pueda atribuirla. Por eso `none` es el valor por defecto y `full` es una decisión con forma jurídica, y no un ajuste de verbosidad.
+
+`user.hash` es un HMAC bajo una clave de 32 bytes, no un digest a secas: sin la clave no hay nada contra lo que enumerar, que es lo que lo hace utilizable en un endpoint público.
+
+### La clave decide si las réplicas coinciden
+
+Deja `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY` sin definir y se genera una clave al arrancar que no se escribe en ningún sitio: el seudónimo muere con el proceso, y dos réplicas informan de un mismo llamante como dos. Fíjala y todas las réplicas derivan el mismo digest para un llamante, a través de reinicios — que es lo que quiere un despliegue con varias réplicas, y por lo que la clave nunca rota cuando la suministraste tú (`LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION` se ignora, con un aviso, en ese caso).
+
+### Un `user.hash` constante es un síntoma de configuración
+
+El digest se calcula sobre la dirección a la que se **cargó** la petición, que es la misma dirección sobre la que se lleva cada presupuesto por llamante. Tres formas de despliegue, tres resultados:
+
+1. **Un listener al que otras máquinas llegan directamente.** El par es quien llama, y el seudónimo es un seudónimo real por llamante.
+2. **Un listener TCP en loopback detrás de un proxy en la misma máquina** — que es lo que suele ser un endpoint publicado. Sin `--trusted-proxies` y `--trusted-proxy-header`, el par es el proxy para todos los llamantes vivos, así que **un único digest cubre todo el despliegue**.
+3. **Un socket unix.** El par no es siquiera una dirección, así que sin `--trusted-proxies unix` pasa lo mismo por otra vía.
+
+Así que un `user.hash` que nunca cambia no es la política funcionando inusualmente bien: significa que faltan los flags del proxy. Fija los dos con la dirección desde la que conecta el proxy y la cabecera que pone, y vuelve a mirar.
+
+## Apagarla
+
+Deja `LIBGEN_MCP_TELEMETRY` sin definir, o fija `OTEL_SDK_DISABLED=true` para vetarla desde fuera sin tocar la configuración del propio despliegue. En cualquiera de los dos casos no se crea ni se arranca nada; las llamadas de instrumentación del código cuestan una comprobación de nil contra las operaciones nulas de la API.
+
+## Ver si está encendida
+
+Dos sitios, y responden a personas distintas.
+
+**El registro de arranque**, en WARN, porque es la única evidencia local de que algo sobre este despliegue sale de la máquina y `LIBGEN_MCP_LOG_LEVEL` es libre de suprimir todo lo que esté por debajo:
+
+```json
+{"level":"WARN","msg":"telemetry enabled","protocol":"http/protobuf","endpoint":"http://localhost:4318","signals":["traces","metrics","logs"]}
+{"level":"WARN","msg":"telemetry identity policy","policy":"pseudonymous","exports":"a keyed digest of the caller's address, with no readable identity","key":"configured (LIBGEN_MCP_TELEMETRY_IDENTITY_KEY), shared across replicas and never rotated here"}
+```
+
+**La card del servidor**, en `GET /.well-known/mcp/server-card.json`, que es como quien _llama_ a un despliegue puede ver que sus llamadas están instrumentadas sin tener que preguntar a quien lo opera:
+
+```json
+{
+	"observability": {
+		"enabled": true,
+		"signals": ["traces", "metrics", "logs"],
+		"protocol": "http/protobuf",
+		"conventions": "OpenTelemetry, following the MCP semantic conventions",
+		"identity": "none",
+		"discloses": "nothing about who made a call",
+		"recorded": { "traces": "…", "metrics": "…", "logs": "…" },
+		"not_recorded": "search queries, record titles, tool arguments, tool results, and any credential supplied for a single call"
+	}
+}
+```
+
+El bloque está ausente cuando la telemetría está apagada, así que nada hay que interpretar como una negación — y deliberadamente **no** lleva la dirección del colector, que nombra la infraestructura de quien opera.
+
+## Cuando va mal
+
+Un colector inalcanzable se registra y se traga: un servidor que sigue pudiendo llegar a los mirrors sigue haciéndolo. Lo que _no_ se traga es un valor de una de las variables propias de este servidor que no se pueda interpretar —un nombre de señal desconocido, una política de identidad que nadie definió, una rotación fuera de rango—, porque un despliegue que no se corresponde con su propia configuración no debe llegar a producción con aspecto de estar sano.
+
+Los fallos del propio SDK llegan a tu flujo de registro y no a la salida de error de lo que fuera el escritor por defecto del proceso: el manejador de errores y el logger interno se instalan sobre el handler de este servidor al arrancar. En stdio eso no es un detalle: una librería escribiendo en stdout corrompe el flujo JSON-RPC.
+
+### En stdio, nunca uses un exportador de consola
+
+`OTEL_TRACES_EXPORTER=console` escribe los spans en stdout, que en un servidor stdio es el protocolo. Usa `otlp` y un colector local, o deja la telemetría apagada.
+
+## Estándares que sigue
+
+Las [convenciones semánticas de MCP](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/) para la capa de protocolo, las convenciones HTTP para los dos spans HTTP, y las claves del propio registro allí donde el valor es realmente lo que el registro dice (`error.type`, `server.address`, `user.hash`). Todo lo que ha inventado este proyecto va bajo `libgen_mcp.*`, que es la regla de espacios de nombres en ambas direcciones: un nombre en el espacio de otro es una afirmación que un backend lee estructuralmente.

@@ -665,6 +665,11 @@ export default defineConfig({
 							translations: { es: "Cómo funciona la búsqueda" },
 						},
 						{
+							slug: "telemetry",
+							label: "Telemetry",
+							translations: { es: "Telemetría" },
+						},
+						{
 							slug: "eval-results",
 							label: "LLM eval results",
 							translations: { es: "Resultados del eval con LLM" },
