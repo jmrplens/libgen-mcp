@@ -488,7 +488,7 @@ func healthOK(base string) bool {
 func newSearchToolServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newMCPServer(serverInstructions(true, false), nil)
+	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil
@@ -819,7 +819,7 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil)
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -874,7 +874,7 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil)
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -941,7 +941,7 @@ func TestAdvertisedCapabilitiesAreWhatThisServerServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil)
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}

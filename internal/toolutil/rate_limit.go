@@ -246,16 +246,27 @@ func refuse(ctx context.Context, limiter *RateLimiter, method string, req mcp.Re
 	if method != methodToolsCall || limiter.allow() {
 		return nil, false
 	}
-	name := toolNameOf(req)
+	name := ToolNameOf(req)
 	limiter.reportRefusal(ctx, name)
 	what := name
 	if what == "" {
 		what = methodToolsCall
 	}
+	return RefusalResult(RateLimitRefusalPrefix + what + rateLimitRetrySuffix), true
+}
+
+// RefusalResult is a tool result a model is meant to read and act on.
+//
+// IsError rather than a Go error, and that is the whole point of the shape: a
+// JSON-RPC error reaches the client's transport layer and never the model, so
+// nothing in the loop learns to wait. Every refusal the deployment makes about a
+// tool call — the bucket, the ceiling, the wall-clock cap — uses this one, so a
+// model meets one shape for "this is your side to fix".
+func RefusalResult(message string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{
 		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: RateLimitRefusalPrefix + what + rateLimitRetrySuffix}},
-	}, true
+		Content: []mcp.Content{&mcp.TextContent{Text: message}},
+	}
 }
 
 // refuseWithError answers the methods whose result carries no error flag, and
@@ -284,12 +295,17 @@ func refuseWithError(ctx context.Context, limiter *RateLimiter, method string) e
 	}
 }
 
-// toolNameOf returns the tool a tools/call names, when it can be read.
+// ToolNameOf returns the tool a tools/call names, when it can be read.
 //
 // The SDK delivers tools/call params as *mcp.CallToolParamsRaw to receiving
 // middleware; the typed form arrives later, once the handler decodes Arguments.
 // Both are read so this keeps working if that changes.
-func toolNameOf(req mcp.Request) string {
+//
+// Exported because a second layer has to tell one tool from another — a ceiling
+// on the calls that move bytes cannot apply to a metadata lookup — and reading
+// the params a second way there is how two layers come to disagree about what a
+// request is.
+func ToolNameOf(req mcp.Request) string {
 	if req == nil {
 		return ""
 	}

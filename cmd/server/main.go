@@ -209,6 +209,7 @@ func mainWithExit() int {
 	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
 	rateLimitRPS := flag.Float64("rate-limit-rps", defaultRateLimitRPS, "inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. 0 or less turns the limit off. On a listener whose every peer is this machine — a loopback bind or a unix socket — it is off unless --trusted-proxies names the proxy in front, because otherwise every caller is charged to one address; passing it explicitly there is refused rather than downgraded")
 	rateLimitBurst := flag.Int("rate-limit-burst", defaultRateLimitBurst, "how many of those requests one charged address may make at once before the refill rate applies")
+	maxInflight := flag.Int("max-inflight-per-client", 0, "how many download or read calls one charged address may have in flight. Unset means the configured "+config.EnvName("MAX_CONCURRENT_DOWNLOADS")+", so the bound starts at the whole download semaphore; 0 or less turns the per-caller bound off. A ceiling is exactly as real as the identity underneath it, so behind a proxy it needs --trusted-proxy-header and --trusted-proxies too")
 	registerEnvBackedFlags()
 	flag.Parse()
 
@@ -337,10 +338,10 @@ func mainWithExit() int {
 		// declare a host the listener never had.
 		guard:  newHostGuard(decision.Addr, *publicURL, proxies),
 		charge: charge,
-		// Nil on stdio and wherever the limit is off, which every layer that
-		// reads it treats as "no per-caller state at all" rather than as an
-		// empty table.
-		records: newClientRecordsFor(limit, charge),
+		// Nil on stdio, which every layer that reads it treats as "no per-caller
+		// state at all" rather than as an empty table.
+		records:  newClientRecordsFor(decision.HTTP, limit, charge),
+		inflight: inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -393,7 +394,7 @@ func isCleanShutdown(err error) bool {
 // none — stdio, and any listener where an address cannot tell two callers apart.
 // Nil leaves the metering middlewares out entirely rather than installing ones
 // that would allow everything.
-func newMCPServer(instructions string, records *clientRecords) *mcp.Server {
+func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeiling) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:        "libgen-mcp",
 		Title:       implementationTitle,
@@ -436,13 +437,16 @@ func newMCPServer(instructions string, records *clientRecords) *mcp.Server {
 			Prompts: &mcp.PromptCapabilities{ListChanged: false},
 		},
 	})
-	// The metering pair goes on first, which makes it INNERMOST, and the order
-	// within it is not interchangeable: the limiter reads the caller's bucket
-	// off the context, so whatever resolves it has to run before — that is,
-	// wrap — the limiter. Nothing is installed at all when this deployment keeps
-	// no per-caller state; a limiter that allowed everything would be a layer
-	// with nothing to say.
+	// The per-caller trio goes on first, which makes it INNERMOST, and the order
+	// within it is not interchangeable. Each layer reads the caller's record off
+	// the context, so whatever resolves it has to run before — that is, wrap —
+	// both of them; and the ceiling sits inside the limiter so a call refused at
+	// the ceiling has already spent a token, which is what keeps a caller from
+	// retrying into it for free. Nested, that is
+	// meter(limiter(ceiling(handler))). Nothing is installed at all when this
+	// deployment keeps no per-caller state.
 	if records != nil {
+		server.AddReceivingMiddleware(records.limitHeavyCalls(ceiling))
 		toolutil.AttachRateLimit(server, limiterFrom)
 		server.AddReceivingMiddleware(records.meter)
 	}
@@ -952,7 +956,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	}
 	defer profiler.stop()
 
-	server, err := newRegisteredServer(cfg, spec.addr, spec.records)
+	server, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight)
 	if err != nil {
 		return err
 	}
@@ -1034,7 +1038,7 @@ func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
-func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords) (*mcp.Server, error) {
+func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords, inflight inflightFlag) (*mcp.Server, error) {
 	// A deployment is remote when its disk is not the caller's: an HTTP listener
 	// (a TCP address or a unix socket) or a hosted stdio process that says so with
 	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
@@ -1058,7 +1062,14 @@ func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientR
 	// Either trigger puts download in link-only mode: a remote server cannot
 	// write to the caller's disk, and a server that may not fetch has no bytes
 	// to write. The handshake text states whichever contract results.
-	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch), records)
+	// Resolved here rather than beside the flag, because its default is the
+	// configured download concurrency and the configuration is not read until
+	// after the flags are parsed.
+	ceiling := resolveHeavyCeiling(inflight.value, inflight.explicit, cfg.MaxConcurrentDownloads)
+	if records != nil {
+		slog.Info("in-flight ceiling on download and read", "ceiling", ceiling.describe())
+	}
+	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch), records, ceiling)
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via

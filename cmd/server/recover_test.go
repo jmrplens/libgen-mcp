@@ -163,7 +163,7 @@ func TestAPanickingPromptDoesNotEndTheSession(t *testing.T) {
 func connectToServerWithPanickingPrompt(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
-	server := newMCPServer(serverInstructions(true, false), nil)
+	server := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
 	// One tool, so tools/list below has something to answer with and the
 	// survival check is about the session rather than an empty catalog.
 	mcp.AddTool(server, &mcp.Tool{Name: "ping", Description: "returns nothing in particular"},
@@ -204,7 +204,7 @@ func TestAPanickingToolKeepsWithRecoverysResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load(): %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil)
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer(): %v", err)
 	}
