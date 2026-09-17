@@ -585,7 +585,15 @@ type mirror struct {
 	// reached is closed by the first request to arrive, so a test can wait for
 	// a call to be genuinely in flight rather than sleeping and hoping.
 	reached chan struct{}
+	// requests counts everything that arrived, for the cases whose claim is that
+	// a host was NOT contacted. "The other one answered" is a weaker assertion
+	// than "this one was never asked", and only the second one rules out a
+	// server that tried both.
+	requests atomic.Int64
 }
+
+// requestCount reports how many requests reached this mirror.
+func (m *mirror) requestCount() int64 { return m.requests.Load() }
 
 // startMirror serves a catalog page, which is enough for a search to come back
 // with something rather than with a network error.
@@ -606,6 +614,7 @@ func startMirrorWith(t *testing.T, hold <-chan struct{}) *mirror {
 	m := &mirror{reached: make(chan struct{})}
 	var once sync.Once
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.requests.Add(1)
 		once.Do(func() { close(m.reached) })
 		if hold != nil {
 			select {

@@ -201,16 +201,36 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // TestEveryKnownNameIsRead is the other direction: a name on the list that
 // nothing reads is a setting an operator would set to no effect, and a docs
 // generator would publish it.
+//
+// It searches every non-test file in the package rather than config.go alone.
+// That used to be the same thing and stopped being it when the dotenv loader
+// arrived with a setting of its own; keeping the narrow spelling would have made
+// this test refuse a variable that is read, which is the failure mode that gets
+// a test deleted rather than fixed.
 func TestEveryKnownNameIsRead(t *testing.T) {
-	source, err := os.ReadFile("config.go")
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(source)
+	var body strings.Builder
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		source, readErr := os.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("reading %s: %v", name, readErr)
+		}
+		body.Write(source)
+	}
+	if body.Len() == 0 {
+		t.Fatal("no source files were read, so this test checked nothing")
+	}
 
 	for _, name := range knownNames {
-		if !strings.Contains(body, strconv.Quote(name)) {
-			t.Errorf("knownNames carries %q but config.go never reads it; "+
+		if !strings.Contains(body.String(), strconv.Quote(name)) {
+			t.Errorf("knownNames carries %q but nothing in this package reads it; "+
 				"either wire it up or take it off the list", name)
 		}
 	}

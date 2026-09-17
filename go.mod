@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/google/jsonschema-go v0.4.3
+	github.com/joho/godotenv v1.5.1
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pdfcpu/pdfcpu v0.15.0

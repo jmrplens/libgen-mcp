@@ -1,13 +1,35 @@
 # Configuration
 
-`libgen-mcp` is configured entirely through environment variables. Every variable is
-optional: an empty or unset value uses the documented default. A variable that is present
-but malformed (a bad number, an out-of-range value, an unwritable directory, an unknown
-source name) causes the server to **fail fast at startup** with an explanatory error rather
-than silently falling back to the default.
+`libgen-mcp` is configured through environment variables. Every variable is optional: an
+empty or unset value uses the documented default. A variable that is present but malformed
+(a bad number, an out-of-range value, an unwritable directory, an unknown source name)
+causes the server to **fail fast at startup** with an explanatory error rather than silently
+falling back to the default.
 
-Set these in your MCP client's `env` block (see [Getting started](getting-started.md)), in
-your shell, or with `-e` flags on `docker run`.
+There are three places a setting can come from, and they are tried in this order — the
+first one that has a value wins:
+
+1. **The process environment**, which is what your MCP client passed. Set these in the
+   client's `env` block (see [Getting started](getting-started.md)), in your shell, or with
+   `-e` flags on `docker run`. A handful also have flags; see below.
+2. **The file `LIBGEN_MCP_ENV_FILE` names**, if you named one. Give it an absolute path.
+3. **`~/.libgen-mcp.env`**, a dotenv file in your home directory.
+
+**A `.env` in the working directory is never loaded.** When one is there the server names
+it and its keys at startup and carries on without it. That is deliberate: a stdio server
+inherits its working directory from the client, and every client that opens a workspace
+sets it to that workspace — so the file's contents arrive with a cloned repository rather
+than from you. A two-line `.env` could point `LIBGEN_MIRROR` at a host of its choosing,
+open the outbound address guard, or widen the directories `read` accepts, and none of it
+would need a tool call or a model turn. If you want a repository-local file to configure
+the server, name it: `--env-file /abs/path/.env`, or the variable.
+
+A few settings also have flags, which are written into their variables only when you
+actually type them — so an exported value survives a flag you did not pass:
+`--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses` and
+`--env-file`. The credential-shaped settings (`LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`,
+`LIBGEN_MCP_UNPAYWALL_EMAIL`) deliberately have none: a secret on a command line is visible
+to every user on the machine through `ps` and lands in your shell history.
 
 ## Reference
 

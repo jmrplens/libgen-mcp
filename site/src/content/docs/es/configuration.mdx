@@ -60,7 +60,7 @@ import SourceChain from "../../../components/docs/SourceChain.astro";
 
 import { Aside } from "@astrojs/starlight/components";
 
-`libgen-mcp` se configura por completo mediante variables de entorno. Todas las variables son opcionales: un valor vacío o sin definir usa el valor por defecto documentado.
+`libgen-mcp` se configura mediante variables de entorno. Todas las variables son opcionales: un valor vacío o sin definir usa el valor por defecto documentado.
 
 <Aside type="caution">
 	Una variable presente pero mal formada (un número incorrecto, un valor fuera
@@ -69,7 +69,26 @@ import { Aside } from "@astrojs/starlight/components";
 	en lugar de recurrir silenciosamente al valor por defecto.
 </Aside>
 
-Fija estas variables en el bloque `env` de tu cliente MCP (consulta [Primeros pasos](/libgen-mcp/es/getting-started/)), en tu shell, o con flags `-e` en `docker run`.
+Un ajuste puede venir de tres sitios, que se prueban en este orden — gana el primero que tenga valor:
+
+1. **El entorno del proceso**, que es lo que pasó tu cliente MCP. Fíjalo en el bloque `env` del cliente (consulta [Primeros pasos](/libgen-mcp/es/getting-started/)), en tu shell, o con flags `-e` en `docker run`. Unos pocos tienen además flag; véase más abajo.
+2. **El fichero que nombre `LIBGEN_MCP_ENV_FILE`**, si nombras alguno. Dale una ruta absoluta.
+3. **`~/.libgen-mcp.env`**, un fichero dotenv en tu directorio personal.
+
+<Aside type="danger">
+	**Un `.env` del directorio de trabajo no se carga nunca.** Si hay uno, el
+	servidor lo nombra a él y a sus claves al arrancar y sigue sin él. Un servidor
+	stdio hereda su directorio de trabajo del cliente, y todo cliente que abre un
+	espacio de trabajo lo fija a ese espacio — así que el contenido del fichero
+	llega con un repositorio clonado y no de ti. Un `.env` de dos líneas podría
+	apuntar `LIBGEN_MIRROR` al host que quisiera, abrir el guardián de direcciones
+	salientes, o ensanchar los directorios que `read` acepta, y nada de eso
+	necesitaría una llamada a herramienta ni un turno del modelo. Si quieres que
+	un fichero del repositorio configure el servidor, nómbralo: `--env-file
+	/ruta/absoluta/.env`, o la variable.
+</Aside>
+
+Unos cuantos ajustes tienen además flag, y esos flags escriben su variable solo cuando los tecleas de verdad — así que un valor exportado sobrevive a un flag que no pasaste: `--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses` y `--env-file`. Los ajustes con forma de credencial (`LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_UNPAYWALL_EMAIL`) no tienen ninguno a propósito: un secreto en la línea de órdenes es visible para cualquier usuario de la máquina mediante `ps` y acaba en tu historial de shell.
 
 ## Referencia
 

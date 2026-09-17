@@ -332,3 +332,23 @@ func TestPrivateHatchRefusedWhenTransportHTTPSuppliesTheAddress(t *testing.T) {
 // harness gives the process a pipe on stdin. It has to: the claim is that a
 // stdio session was served, and a module whose every server is expected to
 // answer on a socket cannot make it.
+
+// TestPrivateHatchRefusedWhenTheFlagSetsIt is the third way the hatch
+// precondition can be silently defeated.
+//
+// --allow-private-addresses writes LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES, and the
+// refusal reads that variable. If the flag were applied after the check — or
+// were read directly instead of written — an operator would type it on a
+// wildcard listener and get exactly the request-forgery proxy the refusal
+// exists to prevent, with the startup line saying nothing at all.
+func TestPrivateHatchRefusedWhenTheFlagSetsIt(t *testing.T) {
+	out, err := runServerExpectingExit(t, "--http", ":0", "--allow-private-addresses=true")
+	if err == nil {
+		t.Fatalf("the server started with --allow-private-addresses on a wildcard listener. Output:\n%s", out)
+	}
+	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":0"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+		}
+	}
+}
