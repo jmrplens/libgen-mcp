@@ -91,6 +91,16 @@ type Config struct {
 	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
 	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
 	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	// StdioMaxLineBytes bounds one inbound JSON-RPC line on the stdio
+	// transport. LIBGEN_MCP_STDIO_MAX_LINE_BYTES, a byte count.
+	//
+	// The default matches what an HTTP deployment refuses with
+	// --max-request-body-bytes left at 0, which is the SDK's 4 MiB, so the two
+	// transports refuse the same messages rather than one being quietly
+	// stricter. The SDK's own line default is 16 MiB; raising this is the
+	// operator's call, and a client that genuinely sends larger messages is the
+	// case it exists for.
+	StdioMaxLineBytes int
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
 	// transport. LIBGEN_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
@@ -280,6 +290,23 @@ var KnownSources = []string{
 	"scihub", "scidb", "libgen", "randombook", "annas",
 }
 
+// defaultStdioMaxLineBytes is the inbound line ceiling on stdio when nothing
+// configures one.
+//
+// Deliberately above the largest legitimate message rather than below it, and
+// deliberately the same number an HTTP deployment refuses at with
+// --max-request-body-bytes left at 0 — the SDK's own 4 MiB — so a message
+// accepted on one transport is not refused on the other.
+const defaultStdioMaxLineBytes = 4 << 20
+
+// maxStdioMaxLineBytes is the ceiling the ceiling itself may be raised to.
+//
+// It is the SDK's own line default, which is the most the transport underneath
+// will buffer: a larger value here would be a number the filter honors and the
+// SDK does not, so a message between the two would pass one and be cut off by
+// the other.
+const maxStdioMaxLineBytes = 16 << 20
+
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
 // LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
 // the list until one serves an article page.
@@ -315,6 +342,7 @@ func Defaults() *Config {
 		ReadMaxChars:            6000,
 		ReadDefaultPages:        5,
 		ReadCacheBytes:          512 << 20, // 512 MiB
+		StdioMaxLineBytes:       defaultStdioMaxLineBytes,
 		ReadCacheTTL:            10 * time.Minute,
 		EnrichEnabled:           true,
 		ConfirmDownloads:        true,
@@ -508,6 +536,9 @@ func loadNumeric(cfg *Config) error {
 	if err := envInt64("READ_CACHE_BYTES", &cfg.ReadCacheBytes); err != nil {
 		return err
 	}
+	if err := envInt("STDIO_MAX_LINE_BYTES", &cfg.StdioMaxLineBytes); err != nil {
+		return err
+	}
 	if err := envDuration("READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
 		return err
 	}
@@ -681,6 +712,14 @@ func (c *Config) validateRanges() error {
 	}
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
 		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
+	}
+	// Refused rather than clamped, and refused at startup rather than at the
+	// first oversized message: a deployment whose client sends 8 MiB messages
+	// and whose operator typed 80000000 has a server that will cut every one of
+	// them off, and the only sign is a client reporting a refusal it cannot
+	// explain.
+	if c.StdioMaxLineBytes < 1 || c.StdioMaxLineBytes > maxStdioMaxLineBytes {
+		return fmt.Errorf("LIBGEN_MCP_STDIO_MAX_LINE_BYTES must be in [1, %d], got %d", maxStdioMaxLineBytes, c.StdioMaxLineBytes)
 	}
 	return nil
 }

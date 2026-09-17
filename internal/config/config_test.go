@@ -558,6 +558,7 @@ func validConfig(t *testing.T) *Config {
 		ReadDefaultPages:        5,
 		ReadCacheBytes:          512 << 20,
 		ReadCacheTTL:            10 * time.Minute,
+		StdioMaxLineBytes:       defaultStdioMaxLineBytes,
 	}
 }
 

@@ -65,14 +65,53 @@ func TestShutdown_ExitStatusSaysItWasClean(t *testing.T) {
 			}
 
 			code, exited := tt.stop(t, s)
-			if !exited {
-				t.Fatalf("the server was still running %s after %s; it had to be killed\nstderr: %s",
-					shutdownGrace, tt.name, s.stderrText())
-			}
-			if code != 0 {
-				t.Errorf("exit status %d after %s, want 0: an ordinary shutdown reported as a failure restarts services and fails jobs\nstderr: %s",
-					code, tt.name, s.stderrText())
-			}
+			assertCleanExit(t, s, tt.name, code, exited)
 		})
+	}
+}
+
+// TestShutdown_MidCallHangupIsStillClean is the case the idle one above cannot
+// see.
+//
+// A client closing its pipe while a tool call is running is the everyday shape
+// of a client exiting, not an exotic one, and it is the only shutdown with
+// something in flight to unwind. The SDK reports the closed pipe as an error
+// mentioning EOF, formatted in a way that does not survive errors.Is, so a
+// server matching on the sentinel cannot tell it from the transport breaking
+// and reports an ordinary exit as a failure — which systemd restarts on, a CI
+// wrapper fails a job on, and the npm launcher passes outward.
+//
+// The mirror is held open rather than slept against: what makes this the
+// interesting case is that the request has genuinely left the server, and a
+// fixed delay would assert on the scheduler instead.
+func TestShutdown_MidCallHangupIsStillClean(t *testing.T) {
+	hold := make(chan struct{})
+	defer close(hold)
+	m := startMirrorWith(t, hold)
+
+	s := startSession(t, baseEnv(t, m))
+	if got := s.call(t, initializeRequest(1)); got["error"] != nil {
+		t.Fatalf("initialize failed: %v", got["error"])
+	}
+
+	// Sent, not called: the answer never comes, which is the point.
+	s.send(t, request(2, "tools/call", searchCall))
+	m.awaitInFlightCall(t, 30*time.Second)
+
+	code, exited := s.closeStdinAndWait(t, shutdownGrace)
+	assertCleanExit(t, s, "a mid-call hangup", code, exited)
+}
+
+// assertCleanExit checks that a shutdown finished and was reported as ordinary.
+func assertCleanExit(t *testing.T, s *session, what string, code int, exited bool) {
+	t.Helper()
+
+	if !exited {
+		t.Fatalf("the server was still running %s after %s; it had to be killed\nstderr: %s",
+			shutdownGrace, what, s.stderrText())
+	}
+	if code != 0 {
+		t.Errorf("exit status %d after %s, want 0: an ordinary shutdown reported as a failure restarts services and fails jobs\nstderr: %s",
+			code, what, s.stderrText())
 	}
 }

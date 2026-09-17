@@ -167,6 +167,14 @@ func TestRunValidatesConfig(t *testing.T) {
 }
 
 // TestIsCleanShutdown covers IsCleanShutdown with table-driven subtests.
+//
+// io.EOF used to be two rows here, and they were the reason an unreachable arm
+// looked load-bearing for as long as it did: the predicate accepted the
+// sentinel, so the test passed, while nothing that reaches the predicate ever
+// carries it. Measured against SDK v1.8.0, Run returns nil when the client
+// closes its pipe — idle or mid-call — so the nil row below is what actually
+// covers a client hanging up, and test/e2e/stdio's shutdown cases are what
+// assert the exit status a supervisor reads.
 func TestIsCleanShutdown(t *testing.T) {
 	cases := []struct {
 		name string
@@ -174,9 +182,11 @@ func TestIsCleanShutdown(t *testing.T) {
 		want bool
 	}{
 		{"nil", nil, true},
-		{"eof", io.EOF, true},
-		{"wrapped eof", fmt.Errorf("wrap: %w", io.EOF), true},
 		{"canceled", context.Canceled, true},
+		{"wrapped canceled", fmt.Errorf("wrap: %w", context.Canceled), true},
+		// A closed pipe does not arrive here as io.EOF, and a predicate that
+		// said it did would be describing a path that does not exist.
+		{"eof", io.EOF, false},
 		{"other", errors.New("boom"), false},
 	}
 	for _, tc := range cases {

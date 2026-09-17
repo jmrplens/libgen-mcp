@@ -28,6 +28,7 @@ const startupLine = "serving on stdio"
 // logged nothing either, since the metering wrapper is inside the handler. A
 // test written against an invented "limit" field passed its stdout assertion
 // and silently measured nothing.
+//
 // extra_sources is "never" so the call stays on the fixture. Left at its
 // default, an empty catalog page escalates the search to the open-access
 // providers, which are real hosts on the public internet — and a transport
@@ -264,5 +265,61 @@ func TestAliveReportsADeadProcess(t *testing.T) {
 	}
 	if s.alive() {
 		t.Error("alive() still reports the process as running after it exited, so every assertion resting on it is vacuous")
+	}
+}
+
+// TestMalformedInput_IsAnsweredAndTheSessionSurvives is the defect the input
+// filter exists for.
+//
+// The SDK's read loop ends its reader goroutine on any error from the decoder,
+// and the session ends with it — which on stdio is the process. So a message
+// that fails to parse is handled exactly like a closed pipe: the client is left
+// with EOF on a stream it can still write to, and nothing is written explaining
+// why. One malformed line from a buggy client takes the server down.
+//
+// Every row asserts both halves, because either alone would pass against a
+// broken server: the sender gets the JSON-RPC error its input deserves, and the
+// session still answers the next ordinary request. The framing here is one
+// message per line, so resynchronizing costs nothing and there is no reason for
+// a bad line to be fatal.
+func TestMalformedInput_IsAnsweredAndTheSessionSurvives(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		// wantCode is the JSON-RPC error code the sender must be told.
+		wantCode float64
+	}{
+		{name: "not JSON at all", line: `this is not json`, wantCode: -32700},
+		{name: "truncated JSON", line: `{"jsonrpc":"2.0","id":1,`, wantCode: -32700},
+		{name: "valid JSON that is not an object", line: `[1,2,3]`, wantCode: -32600},
+		{name: "a JSON object that is not JSON-RPC", line: `{"hello":"world","id":9}`, wantCode: -32600},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := startSession(t, baseEnv(t, startMirror(t)))
+			if got := s.call(t, initializeRequest(1)); got["error"] != nil {
+				t.Fatalf("initialize failed: %v", got["error"])
+			}
+
+			s.send(t, tt.line)
+			answer := s.readMessage(t, 15*time.Second)
+			failure, ok := answer["error"].(map[string]any)
+			if !ok {
+				t.Fatalf("the malformed line was not answered with a JSON-RPC error: %v", answer)
+			}
+			if code, _ := failure["code"].(float64); code != tt.wantCode {
+				t.Errorf("error code = %v, want %v: %v", failure["code"], tt.wantCode, answer)
+			}
+
+			// The session, not just the answer. A server that replied and then
+			// died would satisfy everything above.
+			if got := s.call(t, request(3, "tools/list", "")); got["error"] != nil {
+				t.Fatalf("the session did not survive the malformed line: %v", got["error"])
+			}
+			if !s.alive() {
+				t.Errorf("the server exited after one malformed line:\n%s", s.stderrText())
+			}
+		})
 	}
 }

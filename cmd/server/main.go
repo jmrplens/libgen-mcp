@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
 	"net"
@@ -280,9 +279,17 @@ func resolveSocketMode(httpAddr, value string) (os.FileMode, error) {
 }
 
 // isCleanShutdown reports whether err represents a normal shutdown of the MCP
-// client: nil, io.EOF (stdin closed) or context.Canceled.
+// client: nil, or context.Canceled from the signal handler.
+//
+// It used to test errors.Is(err, io.EOF) as well, for a client closing stdin.
+// That arm was measured to be unreachable: the SDK swallows the EOF and Run
+// returns nil, so the first arm already covers it, and the one place an EOF
+// could travel outward formats it with %v into an error errors.Is cannot see
+// through. An arm that cannot fire is worse than no arm — it reads as a
+// guarantee the code does not make. The guarantee itself is pinned where it can
+// be observed, in test/e2e/stdio's shutdown cases.
 func isCleanShutdown(err error) bool {
-	return err == nil || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled)
+	return err == nil || errors.Is(err, context.Canceled)
 }
 
 // newMCPServer builds the bare MCP server with its receiving middleware in
@@ -800,8 +807,35 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
 	if httpAddr != "" {
 		return serveHTTP(ctx, server, spec, opts)
 	}
+	return serveStdio(ctx, server, cfg)
+}
+
+// serveStdio runs the MCP server over stdin and stdout, with input the SDK
+// cannot read already answered.
+//
+// The filter sits in front rather than the bare StdioTransport because the SDK
+// treats a message it cannot decode exactly like a closed pipe: the reader
+// goroutine ends, the session ends, and on this transport that is the process.
+// One malformed line from a buggy client took the server down with nothing
+// written to say why (see cmd/server/stdio.go).
+//
+// MaxLineLength carries the same ceiling the filter enforces, so the SDK is the
+// backstop rather than a second, different answer: a message the filter refuses
+// never reaches it, and a message it accepts is one the SDK will buffer.
+//
+// Nothing here translates a closed pipe into a clean exit, because nothing has
+// to: measured against SDK v1.8.0, Run returns nil when the client hangs up,
+// both while idle and with a tool call in flight. That is not documented API, so
+// it is pinned from outside instead — test/e2e/stdio's shutdown cases assert the
+// exit status a supervisor reads, and would catch the day it changes.
+func serveStdio(ctx context.Context, server *mcp.Server, cfg *config.Config) error {
+	reader, writer := resilientStdio(os.Stdin, os.Stdout, cfg.StdioMaxLineBytes)
 	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
-	return server.Run(ctx, &mcp.StdioTransport{})
+	return server.Run(ctx, &mcp.IOTransport{
+		Reader:        reader,
+		Writer:        writer,
+		MaxLineLength: cfg.StdioMaxLineBytes,
+	})
 }
 
 // refusePrivateHatchOnOpenListener rejects the private-address hatch on a

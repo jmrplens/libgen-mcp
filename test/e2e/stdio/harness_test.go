@@ -580,18 +580,61 @@ func initializeRequest(id int) string {
 // LIBGEN_MIRROR at a domain that does not resolve exercises the failure path
 // rather than the transport. What is under test here is the pipe, so the
 // upstream has to answer.
-type mirror struct{ url string }
+type mirror struct {
+	url string
+	// reached is closed by the first request to arrive, so a test can wait for
+	// a call to be genuinely in flight rather than sleeping and hoping.
+	reached chan struct{}
+}
 
-// startMirror serves a catalog page with one result, which is enough for a
-// search to come back with something rather than with a network error.
+// startMirror serves a catalog page, which is enough for a search to come back
+// with something rather than with a network error.
 func startMirror(t *testing.T) *mirror {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return startMirrorWith(t, nil)
+}
+
+// startMirrorWith is [startMirror] with a handler of the test's own, for a case
+// about what happens while a request is outstanding.
+//
+// A nil hold answers immediately. A non-nil one is waited on before the
+// response is written, which is how a case produces a tool call that is still
+// running when the client goes away — the everyday shape of a client exiting,
+// not an exotic one.
+func startMirrorWith(t *testing.T, hold <-chan struct{}) *mirror {
+	t.Helper()
+	m := &mirror{reached: make(chan struct{})}
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(m.reached) })
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, `<html><body><table id="tablelibgen"><tbody></tbody></table></body></html>`)
 	}))
 	t.Cleanup(srv.Close)
-	return &mirror{url: srv.URL}
+	m.url = srv.URL
+	return m
+}
+
+// awaitInFlightCall waits until a request has reached the mirror.
+//
+// Waiting for the request rather than sleeping is what keeps a case about "a
+// call in flight" from quietly becoming the idle case: a fixed delay asserts on
+// the scheduler, and if the call had not left the server yet the case would
+// pass for the opposite of the reason it was written.
+func (m *mirror) awaitInFlightCall(t *testing.T, within time.Duration) {
+	t.Helper()
+	select {
+	case <-m.reached:
+	case <-time.After(within):
+		t.Fatalf("no request reached the mirror within %s, so nothing was in flight", within)
+	}
 }
 
 // seedMirrorCache writes a fresh mirror cache into the session's home so the
