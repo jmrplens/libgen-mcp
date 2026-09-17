@@ -450,6 +450,7 @@ go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 go test ./...                                              # unit tests
 go test -race ./...                                        # race detector
 make test-e2e-http && make test-e2e-stdio                  # the two transport modules (CI runs both)
+make test-e2e-collector                                    # only if you touched telemetry (needs Docker; no CI job)
 make cover-check                                           # internal/ >= 85%
 make check-md-tables                                       # Markdown tables normalized
 make check-llms                                            # llms.txt fresh + valid
@@ -671,6 +672,30 @@ the `transport-e2e` release gate. Four things about it are easy to undo:
   an unsupported extension, so the guard was never what refused it and the leak
   check beside the refusal could not fail. The fixture is a `.txt`, which is what
   the exposure actually looks like.
+
+**Collector acceptance** (`test/e2e/collector/`, tag `collectore2e`) starts a real
+OpenTelemetry Collector in Docker and reads back what it decoded:
+
+```bash
+make test-e2e-collector        # needs Docker; skips without it
+```
+
+It exists because **a stub answers 200 to anything.** The OTLP stub in
+`test/e2e/http` is the right shape for asking what a payload does *not* contain —
+it keeps the bytes and never decodes — and it cannot tell a valid export from a
+malformed protobuf, a resource missing an attribute a pipeline requires, a metric
+whose unit contradicts its name or a span kind out of range. Every one of those
+ships telemetry no backend can read behind a green suite. Here the pipeline ends
+in a file exporter, so a document appearing in that file means a real
+implementation parsed, routed and re-encoded what this server sent.
+
+It is **hand-run and has no CI job**, the same decision as
+`validate-http-stateless`: nothing in CI installs a daemon. If that changes, the
+race workflow is where it would hang. Two things about it are easy to undo: the
+image tag is pinned (a floating one makes the suite's meaning change without a
+commit), and `-race` is passed through to the *server* build — `go test -race`
+instruments the test binary and nothing else, and the goroutines worth watching
+are the exporter's.
 
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and
