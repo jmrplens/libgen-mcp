@@ -412,6 +412,11 @@ func newMCPServer(instructions string) *mcp.Server {
 			Prompts: &mcp.PromptCapabilities{ListChanged: false},
 		},
 	})
+	// First, and that is what puts it INNERMOST: a handler runs under the bound
+	// context, and the two layers above it have nothing to cancel — cachehints
+	// annotates a result and capguard refuses a method outright. Both still run
+	// under recoverPanics, which is added last and wraps all three.
+	server.AddReceivingMiddleware(mcpCarriers.bind)
 	// The catalog is identical for every client and only changes with a release,
 	// so tell clients how long they may hold on to it (SEP-2549).
 	server.AddReceivingMiddleware(cachehints.Middleware())
@@ -1075,7 +1080,9 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// it, the body read for a JSON-RPC id included. The version guard sits
 	// directly in front of the SDK because that is the answer it replaces.
 	mcpHandler := hostGuarded(guard, protocolVersionGuarded(opts.Stateless,
-		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))))
+		carriedMCPHandler(
+			mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)),
+		)))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {
