@@ -253,3 +253,52 @@ func jsonFrame(body string) string {
 	}
 	return strings.TrimSpace(body)
 }
+
+// privateHatch is the environment a deployment sets to let this server reach
+// addresses only its own network can.
+var privateHatch = map[string]string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES": "true"}
+
+// TestPrivateHatchRefusedOnAnOpenListener drives the real binary at the pairing
+// the unit tests state in the abstract: the hatch plus a listener anyone on the
+// network can open a connection to.
+//
+// It is here rather than only in cmd/server because the refusal has to happen at
+// startup, in the process, before anything is served — a check that ran but let
+// the server come up anyway would look identical to a unit test and be worth
+// nothing to the deployment it protects.
+func TestPrivateHatchRefusedOnAnOpenListener(t *testing.T) {
+	for _, addr := range []string{":0", "0.0.0.0:0"} {
+		t.Run(addr, func(t *testing.T) {
+			out, err := runServerWithEnvExpectingExit(t, privateHatch, "--http", addr)
+			if err == nil {
+				t.Fatalf("the server started with the hatch set on %q. Output:\n%s", addr, out)
+			}
+			for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", addr} {
+				if !strings.Contains(out, want) {
+					t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+// TestPrivateHatchAcceptedOnAHostLocalListener is the half that has to keep
+// working, and it is the reason the refusal is keyed on the listener rather than
+// on HTTP mode.
+//
+// Both shapes here serve a deployment whose caller is somebody with an account
+// on this machine: a loopback port, and a unix socket, which no remote peer can
+// reach at all. Each is asserted by the server actually coming up and answering,
+// not by the absence of an error.
+func TestPrivateHatchAcceptedOnAHostLocalListener(t *testing.T) {
+	t.Run("loopback port", func(t *testing.T) {
+		if !startServer(t, privateHatch).healthy(t) {
+			t.Error("the server came up but /health does not answer")
+		}
+	})
+	t.Run("unix socket", func(t *testing.T) {
+		if !startUnixServer(t, privateHatch).healthy(t) {
+			t.Error("the server came up but /health does not answer")
+		}
+	})
+}

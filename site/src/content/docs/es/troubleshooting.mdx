@@ -307,6 +307,24 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 </Facts>
 
+## El servidor no arranca: la escotilla de direcciones privadas en un listener abierto
+
+<Facts>
+	<Fact kind="symptom">
+		Tras una actualización, un despliegue que llevaba meses funcionando sale de inmediato en vez de servir, diciendo `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http 0.0.0.0:8080 binds a listener other machines can reach`. Nada del despliegue ha cambiado; el health check no se pone verde nunca porque el proceso ya no está.
+	</Fact>
+	<Fact kind="meaning">
+		Dos ajustes que eran independientes ahora van emparejados. La variable permite que este servidor marque loopback, tu LAN y el espacio de NAT de operador; un listener HTTP que no sea una dirección de loopback ni un socket unix lo alcanza cualquiera que esté en esa red. Juntos, basta una llamada a herramienta que nombre una URL para que el servidor descargue una dirección que quien llama no podría alcanzar y le devuelva la respuesta — un proxy de request forgery hacia tu red, encendido por una variable que no dice nada sobre quién puede alcanzar el endpoint. Es un rechazo al arrancar y no un aviso porque un aviso lo lee una vez quien desplegó, mientras que la exposición dura toda la vida del proceso. Un bind comodín se considera abierto **aunque el puerto del contenedor se publique en loopback** (`-p 127.0.0.1:8811:8080`): nada dentro del proceso lo distingue del mismo contenedor publicado en todas las interfaces.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- **Quita la variable.** Es muy probable que ya no haga nada. El guardián de destinos exime los hosts que tú mismo nombraste — `LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` y los hosts propios de cada familia de mirrors —, así que un mirror en tu propia red es alcanzable sin ella, y también un redirect de ese mirror a un hermano privado. Véase [el ADR del host nombrado por el operador](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
+    	- **Enlaza loopback**, `--http 127.0.0.1:8080`, y deja que el proxy inverso de delante lo alcance ahí. Con Docker eso implica que el proxy comparta el espacio de red del contenedor; si no puede, un socket unix es la forma mejor y también se acepta.
+    	- **Conserva la variable solo si has medido que la necesitas**: un mirror que configuraste que resuelve público y luego redirige a espacio privado es el único caso que la exención anterior no cubre. Entonces enlaza loopback o un socket, que es lo que el rechazo está pidiendo — no una razón para mantener un bind comodín.
+    </Fact>
+
+</Facts>
+
 ## El handshake TLS falla contra una CA privada
 
 <Facts>

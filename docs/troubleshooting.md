@@ -339,6 +339,41 @@ account can talk to the MCP endpoint.
   `is already served by another process` means a live server is answering on it. A socket left
   by a crashed run is removed automatically, with a warning in the log.
 
+## The server will not start: the private-address hatch on an open listener
+
+**Symptom.** After an upgrade, a deployment that had been running for months exits immediately
+instead of serving, saying `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http 0.0.0.0:8080
+binds a listener other machines can reach`. Nothing about the deploy changed; the health check
+never goes green because the process is gone.
+
+**Meaning.** Two settings that were independent are now paired. The variable lets this server
+dial loopback, your LAN and carrier-grade-NAT space; an HTTP listener anything but a loopback
+address or a unix socket can be reached by whoever else is on that network. Together, a tool
+call naming a URL is enough to have the server fetch an address the caller could not reach and
+hand back the answer — a request-forgery proxy into your network, turned on by a variable that
+says nothing about who may reach the endpoint. It is a startup refusal rather than a warning
+because a warning is read once by whoever deployed it and the exposure lasts for the life of
+the process.
+
+A wildcard bind is judged open **even when the container port is published on loopback**
+(`-p 127.0.0.1:8811:8080`): nothing inside the process distinguishes that from the same
+container published on every interface.
+
+**Fixes**, best first.
+
+- **Drop the variable.** It is very probably no longer doing anything. Since the destination
+  guard exempts the hosts you named yourself — `LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` and
+  each mirror family's own hosts — a mirror on your own network is reachable without it, and so
+  is a redirect from that mirror to a private sibling. See
+  [the operator-named-host ADR](decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
+- **Bind loopback instead**, `--http 127.0.0.1:8080`, and let the reverse proxy in front reach
+  it there. Under Docker this means the proxy must share the container's network namespace;
+  if it cannot, a unix socket is the better shape and is accepted too.
+- **Keep the variable only if you have measured that you need it**: a mirror you configured
+  that resolves publicly and then redirects into private space is the one case the exemption
+  above does not cover. Then bind loopback or a socket, which is what the refusal is asking
+  for — not a reason to keep a wildcard bind.
+
 ## TLS handshake fails against a private CA
 
 **Symptom.** With `--tls-cert`/`--tls-key` set, a client or proxy cannot complete the

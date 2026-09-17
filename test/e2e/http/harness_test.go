@@ -472,6 +472,13 @@ func preflightFor(origin string) request {
 // supposed to refuse to run.
 func runServerExpectingExit(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return runServerWithEnvExpectingExit(t, nil, args...)
+}
+
+// runServerWithEnvExpectingExit is [runServerExpectingExit] for a refusal the
+// environment takes part in, rather than the flags alone.
+func runServerWithEnvExpectingExit(t *testing.T, env map[string]string, args ...string) (string, error) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -481,6 +488,9 @@ func runServerExpectingExit(t *testing.T, args ...string) (string, error) {
 	// from outside the test binary.
 	cmd := exec.CommandContext(ctx, serverBinary(t), args...) //nolint:gosec // see above
 	cmd.Env = append(os.Environ(), "LIBGEN_MCP_LOG_LEVEL=info", "LIBGEN_MCP_DOWNLOAD_DIR="+t.TempDir())
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 	out, err := cmd.CombinedOutput()
 	// A deadline kill is not a refusal. Without this check a server that
 	// happily accepted a bad flag and served for thirty seconds would be
