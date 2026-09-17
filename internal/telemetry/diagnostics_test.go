@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -130,12 +131,25 @@ func TestSetDiagnosticSinks_NeverWritesToStdout(t *testing.T) {
 // the first handler. Once is the only correct number, and a second Start in one
 // process (a test, a reload) must therefore be harmless rather than confusing.
 func TestInstallDiagnostics_IsIdempotent(t *testing.T) {
+	// The guard is package state, and Start calls installDiagnostics — so in a
+	// package whose tests start providers, both calls below are no-ops and the
+	// assertion "the second buffer is empty" holds with both buffers empty,
+	// proving nothing whatever. Resetting it is what makes this test measure the
+	// guard rather than the order the suite happened to run in.
+	diagnosticsOnce = sync.Once{}
+	t.Cleanup(func() { diagnosticsOnce = sync.Once{} })
+
 	var first, second bytes.Buffer
 	installDiagnostics(slog.New(slog.NewJSONHandler(&first, nil)))
 	installDiagnostics(slog.New(slog.NewJSONHandler(&second, nil)))
 
 	otel.Handle(errors.New("only the first logger should see this"))
 
+	// Both sides. Without the positive one the case passes when nothing was
+	// installed at all.
+	if first.Len() == 0 {
+		t.Error("the first call installed nothing, so this case is vacuous")
+	}
 	if second.Len() != 0 {
 		t.Errorf("the second call replaced the sinks; got %q", second.String())
 	}

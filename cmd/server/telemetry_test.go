@@ -9,13 +9,18 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 )
@@ -605,3 +610,114 @@ func TestAnUnusableIdentityPolicyStopsStartup(t *testing.T) {
 		t.Errorf("the refusal does not name the variable an operator would fix: %v", err)
 	}
 }
+
+// TestTheOutboundMetricNamesTheHostsThisDeploymentReaches keeps the closed set
+// from closing on nothing.
+//
+// The dimension is bounded so a caller cannot mint a time series by causing a
+// fetch, and everything outside the set is recorded as one bucket. Leaving the
+// built-in mirror families out of it does not make that safer: it puts every
+// catalog request and every download this server makes on its ordinary path into
+// the bucket reserved for hosts nobody configured, which is the same as not
+// having the metric.
+func TestTheOutboundMetricNamesTheHostsThisDeploymentReaches(t *testing.T) {
+	got := outboundMetricHosts(&config.Config{
+		Mirror:      "https://libgen.example/index.php",
+		ScihubHosts: []string{"sci-hub.example"},
+	})
+
+	for _, want := range []string{"libgen.example", "sci-hub.example"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("hosts = %v, want the configured %q", got, want)
+		}
+	}
+	// A URL never reaches the comparison, which is against a hostname: an entry
+	// with a scheme in it is one that can never match, so a set full of them is
+	// a set of nothing.
+	for _, host := range got {
+		if strings.Contains(host, "/") {
+			t.Errorf("hosts = %v, want hostnames: %q can never match a request's host", got, host)
+		}
+	}
+	// The families this server ships with, which are what an unconfigured
+	// deployment actually reaches.
+	families := outboundMetricHosts(&config.Config{})
+	if len(families) == 0 {
+		t.Fatal("an unconfigured deployment names no hosts, so every request it makes is recorded as _OTHER")
+	}
+	// One from each built-in family's own definition: the page a mirror list is
+	// discovered from, and a mirror the chain reaches on the ordinary path.
+	for _, want := range []string{"shadowlibraries.github.io", mirrors.LibgenFamily.Preferred} {
+		host := want
+		if parsed, err := url.Parse(want); err == nil && parsed.Hostname() != "" {
+			host = parsed.Hostname()
+		}
+		if !slices.Contains(families, host) {
+			t.Errorf("hosts = %v, want the built-in mirror family host %q", families, host)
+		}
+	}
+}
+
+// TestAFailedStartStillTakesTheObserverBackOut covers the exit nobody looks at.
+//
+// The outbound observer is installed before the providers, deliberately, because
+// it is also what strips trace context from every outbound request. That makes
+// the failure path the one that leaks it: the process-global wrapper stays
+// installed for the life of the process, which in a test binary is one test's
+// telemetry reaching every later test's clients.
+func TestAFailedStartStillTakesTheObserverBackOut(t *testing.T) {
+	// A wrapper of the test's own, so what is asserted is which observer is
+	// installed rather than whether one is.
+	var observed atomic.Bool
+	t.Cleanup(netguard.SetOutboundObserver(func(base http.RoundTripper) http.RoundTripper {
+		return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			observed.Store(true)
+			return base.RoundTrip(r)
+		})
+	}))
+
+	// A protocol nothing implements is the startup failure that needs no
+	// network: it is refused where the exporters are built.
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "not-a-protocol")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+	logged := captureTelemetryLog(t)
+
+	_, stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
+	if err != nil {
+		t.Fatalf("startTelemetry() error = %v", err)
+	}
+	stop(context.WithoutCancel(t.Context()))
+
+	// Asserted, because this whole case is about the failure path: if the start
+	// succeeded, the restore under test is the one on the ordinary path and the
+	// rest of this proves nothing.
+	if _, failed := findLogRecord(t, logged(), "telemetry disabled: it could not be started"); !failed {
+		t.Fatalf("telemetry started, so this test did not drive the failure path:\n%s", logged())
+	}
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(upstream.Close)
+
+	client := netguard.ClientFor(time.Second, netguard.NewPolicy(nil, true))
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL, nil)
+	if err != nil {
+		t.Fatalf("building the request: %v", err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("the request failed: %v", err)
+	}
+	_ = response.Body.Close()
+
+	if !observed.Load() {
+		t.Error("the test's own observer was not restored, so the failed start left its wrapper installed for the rest of the process")
+	}
+}
+
+// roundTripperFunc adapts a function to [http.RoundTripper].
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+// RoundTrip implements [http.RoundTripper].
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

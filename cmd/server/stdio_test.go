@@ -86,7 +86,6 @@ func TestFilterAnswersUnreadableLines(t *testing.T) {
 	}{
 		{name: "not JSON at all", line: `hello`, wantCode: codeParseError},
 		{name: "truncated JSON", line: `{"jsonrpc":"2.0",`, wantCode: codeParseError},
-		{name: "a JSON array", line: `[1,2,3]`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON number", line: `42`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON string", line: `"hello"`, wantCode: codeInvalidRequest},
 		{name: "an object without jsonrpc", line: `{"id":7,"method":"x"}`, wantCode: codeInvalidRequest, wantID: "7"},
@@ -95,6 +94,11 @@ func TestFilterAnswersUnreadableLines(t *testing.T) {
 		// an object id would itself be an invalid response.
 		{name: "an object id is not echoed", line: `{"id":{"k":1},"method":"x"}`, wantCode: codeInvalidRequest},
 		{name: "an array id is not echoed", line: `{"id":[1],"method":"x"}`, wantCode: codeInvalidRequest},
+		// A boolean is not one of the three types the specification allows
+		// there either, and echoing it makes the refusal an invalid response —
+		// so a client that sent something malformed cannot parse the reply
+		// telling it so.
+		{name: "a boolean id is not echoed", line: `{"jsonrpc":"1.0","id":true}`, wantCode: codeInvalidRequest},
 	}
 
 	for _, tt := range tests {
@@ -331,4 +335,25 @@ func decodeRefusal(t *testing.T, answered string) (code float64, id string) {
 		t.Errorf("the refusal carries no message, so the client is told a number and nothing else: %q", answered)
 	}
 	return decoded.Error.Code, string(decoded.ID)
+}
+
+// TestFilterPassesABatchToTheSDK keeps a client this server still supports from
+// being refused by the filter in front of it.
+//
+// A top-level array is a JSON-RPC batch, and whether one is allowed depends on
+// the negotiated protocol version: the SDK accepts batches for every version
+// before 2025-06-18. Refusing them here takes that decision away from the one
+// place that knows the version, and turns a legacy client's valid request into
+// an Invalid Request it cannot act on.
+func TestFilterPassesABatchToTheSDK(t *testing.T) {
+	const batch = `[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`
+
+	passed, answered := drive(t, batch+"\n", 1<<20)
+
+	if passed != batch+"\n" {
+		t.Errorf("the batch did not reach the SDK: passed %q", passed)
+	}
+	if answered != "" {
+		t.Errorf("the filter answered a batch itself: %s", answered)
+	}
 }

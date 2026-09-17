@@ -15,6 +15,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
 	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
@@ -75,6 +76,14 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 			// anyway: the span middleware is installed whether or not an
 			// exporter is, because the OpenTelemetry API's no-ops cost nothing,
 			// and it must redact the same way either way.
+			//
+			// The observer is restored here too. It was installed above, before
+			// the start that failed, and it is process-global — so leaving it
+			// behind on this path outlives what it writes into, which in a test
+			// binary is one test's telemetry reaching every later test's
+			// clients. That is the same leak the successful path takes care to
+			// avoid, reached by the door nobody looks at.
+			restoreObserver()
 		}, nil
 	}
 
@@ -147,10 +156,35 @@ func installSlogBridge(level slog.Level) func() {
 // The span still carries the real host either way. A trace has no series budget;
 // a metric does.
 func outboundMetricHosts(cfg *config.Config) []string {
-	hosts := make([]string, 0, len(cfg.ScihubHosts)+1)
-	hosts = append(hosts, cfg.ScihubHosts...)
-	if mirror := strings.TrimSpace(cfg.Mirror); mirror != "" {
-		if parsed, err := url.Parse(mirror); err == nil && parsed.Hostname() != "" {
+	// The built-in mirror families as well as the operator's own settings. They
+	// are what this deployment reaches on the ordinary path, and leaving them
+	// out does not make the metric safer — it makes it useless, since every
+	// catalog and download request then lands in the one bucket reserved for
+	// hosts nobody configured.
+	//
+	// OperatorHosts returns URLs for the families and bare hosts for the
+	// Sci-Hub list, and the dimension is compared against a hostname, so both
+	// shapes are reduced here rather than at the comparison.
+	named := mirrors.OperatorHosts(cfg)
+	hosts := make([]string, 0, len(named)+len(cfg.ScihubHosts)+1)
+	hosts = appendHostOf(hosts, named...)
+	hosts = appendHostOf(hosts, cfg.ScihubHosts...)
+	hosts = appendHostOf(hosts, cfg.Mirror)
+	return hosts
+}
+
+// appendHostOf adds each value's hostname, accepting a URL or a bare host.
+func appendHostOf(hosts []string, values ...string) []string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if !strings.Contains(value, "//") {
+			hosts = append(hosts, value)
+			continue
+		}
+		if parsed, err := url.Parse(value); err == nil && parsed.Hostname() != "" {
 			hosts = append(hosts, parsed.Hostname())
 		}
 	}

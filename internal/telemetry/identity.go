@@ -140,6 +140,19 @@ const (
 	// inspecting the value, because the next record to carry one will not have
 	// that property.
 	LogFieldChargedAddress = "charged_address"
+	// LogFieldPanic and LogFieldStack are what a recovered panic writes.
+	//
+	// Both are values this server does not compose: a panic message is whatever
+	// the panicking code passed, which on these paths can hold a URL, a query
+	// fragment or a per-call credential, and a stack trace holds the filesystem
+	// layout of the machine it ran on. The recovery paths write them
+	// deliberately — an operator debugging a crash needs the whole thing — and
+	// the collector is the one place they must not go.
+	//
+	// They are stripped rather than truncated, because what makes them unsafe
+	// is their content and not their length.
+	LogFieldPanic = "panic"
+	LogFieldStack = "stack"
 )
 
 // ExportStrippedFields are the log fields removed from the exported copy at any
@@ -168,6 +181,8 @@ var ExportStrippedFields = map[string]bool{
 	LogFieldAnnasKey:       true,
 	LogFieldUnpaywallEmail: true,
 	LogFieldChargedAddress: true,
+	LogFieldPanic:          true,
+	LogFieldStack:          true,
 }
 
 // StripExported removes every field in [ExportStrippedFields] from a set of log

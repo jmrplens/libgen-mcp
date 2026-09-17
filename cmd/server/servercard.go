@@ -150,8 +150,45 @@ type serverCardObservability struct {
 	// Recorded and NotRecorded are the two halves a caller actually wants, and
 	// the second is the one worth writing down: it is a commitment, and a
 	// commitment in a machine-readable document is one somebody can check.
-	Recorded    string `json:"recorded"`
-	NotRecorded string `json:"not_recorded"`
+	//
+	// Recorded is per signal rather than one sentence for the process, because
+	// one sentence is false for every partial configuration: a metrics-only
+	// deployment records no mirror host, and a logs-only one records no MCP
+	// method. A caller reading a claim that covers what is not exported has been
+	// told something untrue about their own call.
+	Recorded    map[string]string `json:"recorded"`
+	NotRecorded string            `json:"not_recorded"`
+}
+
+// recordedBySignal is what each signal carries, written per signal because the
+// three differ.
+//
+// Traces are the detailed leg; metrics drop the mirror host on purpose, since a
+// discovered host is a dimension a third party chooses and a metric is where
+// cardinality costs; logs are this server's own records, which name the source
+// chain and never the protocol method.
+var recordedBySignal = map[string]string{
+	"traces": "the method called, the tool named, the outcome, the duration, " +
+		"which download source served a file, and the mirror host it came from",
+	"metrics": "counts and durations by method, tool, outcome and download source — " +
+		"never the mirror host, which a third party chooses",
+	"logs": "this server's own operational records: the tool named, the outcome, " +
+		"the duration, which download source served and the mirror host it came from",
+}
+
+// recordedFor describes only the signals this deployment actually exports.
+//
+// A signal that is off says nothing, rather than saying nothing is recorded:
+// absence here means "this leg does not exist", which is what the signals list
+// beside it already states.
+func recordedFor(signals []string) map[string]string {
+	recorded := make(map[string]string, len(signals))
+	for _, signal := range signals {
+		if description, known := recordedBySignal[signal]; known {
+			recorded[signal] = description
+		}
+	}
+	return recorded
 }
 
 // cardObservability describes this deployment's instrumentation, or nothing when
@@ -172,8 +209,7 @@ func cardObservability(identity telemetry.IdentityPolicy) *serverCardObservabili
 		Conventions: "OpenTelemetry, following the MCP semantic conventions",
 		Identity:    string(policy),
 		Discloses:   telemetry.PolicyDescription(policy),
-		Recorded: "the method called, the tool named, the outcome and the duration, " +
-			"which download source served a file, and the mirror host it came from",
+		Recorded:    recordedFor(snapshot.Signals),
 		NotRecorded: "search queries, record titles, tool arguments, tool results, " +
 			"and any credential supplied for a single call",
 	}

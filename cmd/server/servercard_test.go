@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -539,74 +540,111 @@ func testCards(t *testing.T, enumerating []byte) serverCards {
 	return serverCards{enumerating: enumerating, discovery: discovery}
 }
 
-// TestTheCardSaysWhatThisDeploymentRecords covers the block a stranger reads.
+// cardObservabilityFor starts telemetry with these settings and returns the
+// block the card publishes for it, beside the whole card.
 //
-// A caller reaching a public MCP endpoint has no relationship with the operator
-// through which to ask whether their searches are traced. The card is the answer,
-// which makes both halves of it load-bearing: it appears when there is something
-// to disclose, and it says what is recorded without naming the operator's own
-// collector.
-func TestTheCardSaysWhatThisDeploymentRecords(t *testing.T) {
-	t.Run("a deployment that records nothing publishes no block", func(t *testing.T) {
-		raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
-		if err != nil {
-			t.Fatalf("buildServerCard() error = %v", err)
-		}
-		var card map[string]any
-		if unmarshalErr := json.Unmarshal(raw, &card); unmarshalErr != nil {
-			t.Fatalf("the card is not JSON: %v", unmarshalErr)
-		}
-		// Absent rather than "enabled": false — a consumer should not have to
-		// parse a negation to learn that nothing is recorded.
-		if _, present := card["observability"]; present {
-			t.Errorf("a card published an observability block with telemetry off: %s", raw)
-		}
-	})
+// The whole card comes back too because one of the assertions is about the
+// absence of a value anywhere in the document rather than in the block.
+func cardObservabilityFor(t *testing.T, cfg *config.Config, identity telemetry.IdentityPolicy) (*serverCardObservability, []byte) {
+	t.Helper()
 
-	t.Run("an instrumented deployment says so, without naming its collector", func(t *testing.T) {
+	if cfg.Telemetry {
 		endpoint, _ := recordingCollector(t)
 		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
 		captureTelemetryLog(t)
 
-		_, stop, err := startTelemetry(t.Context(), &config.Config{
-			Telemetry:         true,
-			TelemetryIdentity: string(telemetry.IdentityPseudonymous),
-		})
+		_, stop, err := startTelemetry(t.Context(), cfg)
 		if err != nil {
 			t.Fatalf("startTelemetry() error = %v", err)
 		}
 		t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
+	}
 
-		raw, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityPseudonymous)
-		if err != nil {
-			t.Fatalf("buildServerCard() error = %v", err)
-		}
-		var card struct {
-			Observability *serverCardObservability `json:"observability"`
-		}
-		if unmarshalErr := json.Unmarshal(raw, &card); unmarshalErr != nil {
-			t.Fatalf("the card is not JSON: %v", unmarshalErr)
-		}
-		if card.Observability == nil {
-			t.Fatalf("an instrumented deployment published no observability block: %s", raw)
-		}
-		if !card.Observability.Enabled || len(card.Observability.Signals) == 0 {
-			t.Errorf("the block says nothing about what is exported: %+v", card.Observability)
-		}
-		if card.Observability.Identity != string(telemetry.IdentityPseudonymous) {
-			t.Errorf("identity = %q, want the resolved policy", card.Observability.Identity)
-		}
-		// In words as well as by name: "pseudonymous" means nothing to somebody
-		// who did not read the configuration reference, which is most of the
-		// people this block exists for.
-		if card.Observability.Discloses != telemetry.PolicyDescription(telemetry.IdentityPseudonymous) {
-			t.Errorf("discloses = %q, want the policy in words", card.Observability.Discloses)
-		}
-		// The whole card, not only the block: the collector's address names the
-		// operator's own infrastructure, and this document is fetched by every
-		// client that asks.
-		if strings.Contains(string(raw), endpoint) {
-			t.Errorf("the card names the collector: %s", raw)
-		}
-	})
+	raw, err := buildServerCard(t.Context(), newCardTestServer(), identity)
+	if err != nil {
+		t.Fatalf("buildServerCard() error = %v", err)
+	}
+	var card struct {
+		Observability *serverCardObservability `json:"observability"`
+	}
+	if unmarshalErr := json.Unmarshal(raw, &card); unmarshalErr != nil {
+		t.Fatalf("the card is not JSON: %v", unmarshalErr)
+	}
+	return card.Observability, raw
+}
+
+// TestACardPublishesNoObservabilityBlockWhenNothingIsRecorded keeps a consumer
+// from having to parse a negation.
+//
+// Absent rather than "enabled": false, because a block that is always present
+// invites one written by hand that says the wrong thing.
+func TestACardPublishesNoObservabilityBlockWhenNothingIsRecorded(t *testing.T) {
+	block, raw := cardObservabilityFor(t, &config.Config{}, telemetry.IdentityNone)
+	if block != nil {
+		t.Errorf("a card published an observability block with telemetry off: %s", raw)
+	}
+}
+
+// TestAnInstrumentedCardSaysWhatItRecordsAndNotWhereItGoes covers the block a
+// stranger reads.
+//
+// A caller reaching a public MCP endpoint has no relationship with the operator
+// through which to ask whether their searches are traced, which is what makes
+// this worth publishing at all — and what makes the collector's address worth
+// withholding: it names the operator's own infrastructure, and the card is
+// fetched by whoever asks.
+func TestAnInstrumentedCardSaysWhatItRecordsAndNotWhereItGoes(t *testing.T) {
+	block, raw := cardObservabilityFor(t, &config.Config{
+		Telemetry:         true,
+		TelemetryIdentity: string(telemetry.IdentityPseudonymous),
+	}, telemetry.IdentityPseudonymous)
+
+	if block == nil {
+		t.Fatalf("an instrumented deployment published no observability block: %s", raw)
+	}
+	if !block.Enabled || len(block.Signals) == 0 {
+		t.Errorf("the block says nothing about what is exported: %+v", block)
+	}
+	if block.Identity != string(telemetry.IdentityPseudonymous) {
+		t.Errorf("identity = %q, want the resolved policy", block.Identity)
+	}
+	// In words as well as by name: "pseudonymous" means nothing to somebody who
+	// did not read the configuration reference, which is most of the people this
+	// block exists for.
+	if block.Discloses != telemetry.PolicyDescription(telemetry.IdentityPseudonymous) {
+		t.Errorf("discloses = %q, want the policy in words", block.Discloses)
+	}
+	// The whole card, not only the block.
+	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); strings.Contains(string(raw), endpoint) {
+		t.Errorf("the card names the collector: %s", raw)
+	}
+}
+
+// TestTheCardsClaimCoversTheExportedSignalsAndNoOthers keeps the disclosure true
+// for a partial configuration.
+//
+// One sentence for the process is false for every deployment that exports some
+// of the three: a metrics-only one records no mirror host, and a logs-only one
+// records no MCP method. A caller reading a claim that covers a leg this
+// deployment does not export has been told something untrue about their own
+// call.
+func TestTheCardsClaimCoversTheExportedSignalsAndNoOthers(t *testing.T) {
+	block, raw := cardObservabilityFor(t, &config.Config{
+		Telemetry:        true,
+		TelemetrySignals: "metrics",
+	}, telemetry.IdentityNone)
+
+	if block == nil {
+		t.Fatalf("an instrumented deployment published no observability block: %s", raw)
+	}
+	if _, present := block.Recorded["traces"]; present {
+		t.Errorf("the card claims a signal it does not export: %+v", block.Recorded)
+	}
+	metrics, present := block.Recorded["metrics"]
+	if !present {
+		t.Fatalf("the card says nothing about the signal it does export: %+v", block.Recorded)
+	}
+	if strings.Contains(metrics, "mirror host it came from") {
+		t.Errorf("the metrics claim includes the mirror host, which metrics deliberately omit: %q", metrics)
+	}
 }

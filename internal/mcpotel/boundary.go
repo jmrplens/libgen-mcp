@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // propagationHeaders are the headers that carry trace context and baggage
@@ -18,7 +19,8 @@ import (
 var propagationHeaders = []string{"traceparent", "tracestate", "baggage"}
 
 // StripOutbound removes every propagation header from a request this server is
-// about to make, and clears baggage from its context.
+// about to make, and clears both the baggage and the span context from the
+// context it carries.
 //
 // # Why this is an action rather than a default
 //
@@ -80,7 +82,21 @@ func StripOutbound(req *http.Request) *http.Request {
 	// request", and the download pipeline reuses request objects across its own
 	// retry schedule — a header deleted in place would stay deleted for a retry
 	// that was meant to carry it.
-	stripped := req.Clone(baggage.ContextWithoutBaggage(req.Context()))
+	//
+	// The span context goes with the baggage, on the clone alone. Deleting the
+	// headers is enough for the transport this server installs, which does not
+	// inject — but NewTransport wraps whatever RoundTripper it is given, and a
+	// lower one that propagates from the context would put the trace back on the
+	// wire behind this function's own promise. What is cut is cut at the
+	// boundary, not at the one implementation that happens to be underneath it.
+	//
+	// The original request keeps its context: the caller's span is what the
+	// outbound child span is recorded under, and that decision belongs to the
+	// caller rather than to this clone.
+	ctx := trace.ContextWithSpanContext(
+		baggage.ContextWithoutBaggage(req.Context()), trace.SpanContext{},
+	)
+	stripped := req.Clone(ctx)
 	for _, header := range propagationHeaders {
 		stripped.Header.Del(header)
 	}

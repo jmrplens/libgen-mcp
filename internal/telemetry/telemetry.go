@@ -689,8 +689,14 @@ func envHasServiceName() bool {
 		return true
 	}
 	for pair := range strings.SplitSeq(os.Getenv("OTEL_RESOURCE_ATTRIBUTES"), ",") {
-		key, _, found := strings.Cut(pair, "=")
-		if found && strings.TrimSpace(key) == string(semconv.ServiceNameKey) {
+		key, value, found := strings.Cut(pair, "=")
+		// The value has to be there, not merely the key. With
+		// `service.name=` the SDK keeps the empty attribute and resource
+		// merging lets it overwrite its own `unknown_service` fallback, so
+		// treating the key alone as "the operator named the service" ships a
+		// deployment whose signals carry an empty service name — worse than
+		// either answer it could have had.
+		if found && strings.TrimSpace(key) == string(semconv.ServiceNameKey) && strings.TrimSpace(value) != "" {
 			return true
 		}
 	}
@@ -740,7 +746,12 @@ const defaultAttributeValueLength = 4096
 // unconditional limit would silently override an operator who chose one.
 func spanLimits() sdktrace.SpanLimits {
 	limits := sdktrace.NewSpanLimits()
-	if _, set := os.LookupEnv("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT"); !set {
+	// Blank reads as unset, as it does for every other variable on this
+	// surface. LookupEnv alone would hand a container that injected an empty
+	// value for a setting nobody provided the SDK's own answer, which for this
+	// one is "no limit" — the opposite of what this wrapper documents, on the
+	// attribute most likely to carry a third party's bytes.
+	if strings.TrimSpace(os.Getenv("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT")) == "" {
 		limits.AttributeValueLengthLimit = defaultAttributeValueLength
 	}
 	return limits

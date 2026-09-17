@@ -178,6 +178,38 @@ func TestStripOutboundLeavesTheOriginalRequestAlone(t *testing.T) {
 	}
 }
 
+// TestStripOutboundClearsTheSpanFromTheClonedContext closes the door the header
+// deletion leaves open.
+//
+// Deleting the headers is enough for the transport this server installs, which
+// injects nothing — but NewTransport wraps whatever RoundTripper it is given,
+// and a lower one that propagates from the context would put the trace back on
+// the wire behind this function's own promise. The boundary is what is asserted,
+// not the one implementation that happens to be underneath it.
+func TestStripOutboundClearsTheSpanFromTheClonedContext(t *testing.T) {
+	t.Parallel()
+
+	provider := sdktrace.NewTracerProvider()
+	ctx, span := provider.Tracer("test").Start(t.Context(), "download")
+	defer span.End()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.org/", http.NoBody)
+	if err != nil {
+		t.Fatalf("building the request: %v", err)
+	}
+
+	stripped := StripOutbound(req)
+
+	if trace.SpanContextFromContext(stripped.Context()).IsValid() {
+		t.Error("the clone still carries a span context, so a lower transport can re-inject the trace")
+	}
+	// The original keeps it: the outbound child span is recorded under the
+	// caller's, and that decision is the caller's rather than this clone's.
+	if !trace.SpanContextFromContext(req.Context()).IsValid() {
+		t.Error("the original request lost its span, so the outbound span has no parent")
+	}
+}
+
 // TestOutboundMetricBoundsAHostSomebodyElseChose is the series-budget rule for
 // this server's shape.
 //

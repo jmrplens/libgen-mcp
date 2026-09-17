@@ -200,6 +200,15 @@ func refuseUnreadable(line string) (refusal []byte, refuse bool) {
 		// telling a client that about valid JSON sends it looking for a syntax
 		// problem it does not have.
 		if json.Valid([]byte(trimmed)) {
+			// A top-level array is a batch, and whether a batch is allowed is
+			// the protocol version's business rather than this filter's: the
+			// SDK accepts one for every version it negotiates before
+			// 2025-06-18, and refusing it here would take that away from a
+			// client this server still supports. Passed through, so the one
+			// place that knows the negotiated version decides.
+			if trimmed[0] == '[' {
+				return nil, false
+			}
 			return errorLine(nil, codeInvalidRequest, "Invalid Request"), true
 		}
 		// Genuinely not JSON. The id is unknowable, so it is null, which is
@@ -218,9 +227,19 @@ func refuseUnreadable(line string) (refusal []byte, refuse bool) {
 }
 
 // scalarID returns the id if JSON-RPC may echo it, or nothing.
+//
+// String, number and null are the whole of what the specification allows there,
+// so an object, an array and a boolean are all ids this server must not echo:
+// answering `{"id":true}` with `{"id":true}` makes the refusal itself an invalid
+// response, which leaves a client that sent something malformed unable to parse
+// the reply telling it so.
 func scalarID(id json.RawMessage) json.RawMessage {
 	trimmed := bytes.TrimSpace(id)
-	if len(trimmed) == 0 || trimmed[0] == '{' || trimmed[0] == '[' {
+	if len(trimmed) == 0 {
+		return nil
+	}
+	switch trimmed[0] {
+	case '{', '[', 't', 'f':
 		return nil
 	}
 	return id
