@@ -965,7 +965,13 @@ func newHTTPHandler(mcpHandler http.Handler, cards serverCards, trusted []string
 	// cross-origin request reports a CORS failure instead of the status, which
 	// hides exactly the mistake — a mistyped path — that the 404 exists to name.
 	mux.Handle("/", browserCORS(trusted, notFound(base)))
-	return securityHeaders(servesTLS, mux)
+	// Outermost, and that is the whole placement: a guard that answers instead
+	// of forwarding — a Host the deployment never declared, a cross-origin POST,
+	// an unknown path — still gets a span, and a refusal is the traffic an
+	// operator of a published endpoint most needs to see. The health route is
+	// excluded by exact path: a balancer polls it forever, and a span per probe
+	// would bury every real request.
+	return mcpotel.ServerMiddleware(securityHeaders(servesTLS, mux), base+"/health")
 }
 
 // run serves the MCP server on the listener spec it is given.
