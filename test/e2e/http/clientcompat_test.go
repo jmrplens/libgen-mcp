@@ -3,6 +3,7 @@
 package httpe2e
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -72,6 +73,71 @@ func TestClient_ModernEraNeedsPerRequestMeta(t *testing.T) {
 	}})
 	if !strings.Contains(bare.body, "_meta") {
 		t.Errorf("a modern-era call without _meta was not refused for that reason: %s", truncate(bare.body))
+	}
+}
+
+// TestClient_ModernEraIsRefusedStructurallyWhenStateful pins what a client is
+// told when it asks for the modern revision from a --stateless=false listener,
+// which cannot serve it: the 2026-07-28 era carries its session state per
+// request, and a stateful server holds that state itself.
+//
+// The refusal is the SDK's, not this server's, and it is asserted here because
+// it is a promise a client reads. It is also what the go-sdk v1.8.0 bump
+// changed: v1.7.0 answered a bare `Bad Request: protocol version …` in
+// text/plain, which a JSON-RPC client can only report as a transport failure.
+// The structured form tells it exactly what to retry with — which versions this
+// server does take, and which one it asked for — and the go-sdk client acts on
+// that automatically.
+//
+// If this ever starts failing with no change of ours, the SDK moved: the plain
+// form is still one GODEBUG away (plaintextstatefulrejection=1), and that is the
+// first thing to check.
+func TestClient_ModernEraIsRefusedStructurallyWhenStateful(t *testing.T) {
+	s := startServer(t, nil, "--stateless=false")
+
+	reply := s.do(t, request{body: toolsListBody, headers: map[string]string{
+		"MCP-Protocol-Version": "2026-07-28",
+	}})
+	if reply.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", reply.status, http.StatusBadRequest, truncate(reply.body))
+	}
+
+	var envelope struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+			Data    *struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(reply.body), &envelope); err != nil {
+		t.Fatalf("the refusal is not JSON-RPC: %v\nbody: %s", err, truncate(reply.body))
+	}
+	if envelope.Error == nil {
+		t.Fatalf("no error object in the refusal: %s", truncate(reply.body))
+	}
+	// -32022 is CodeUnsupportedProtocolVersion. It is written out rather than
+	// imported so this asserts the number on the wire, which is what a client
+	// that is not the go-sdk matches on.
+	if envelope.Error.Code != -32022 {
+		t.Errorf("code = %d, want -32022 (unsupported protocol version)", envelope.Error.Code)
+	}
+	if envelope.Error.Data == nil {
+		t.Fatalf("no data payload, so a client is told what failed but not what to retry with: %s",
+			truncate(reply.body))
+	}
+	if envelope.Error.Data.Requested != "2026-07-28" {
+		t.Errorf("data.requested = %q, want the version that was asked for", envelope.Error.Data.Requested)
+	}
+	if len(envelope.Error.Data.Supported) == 0 {
+		t.Fatal("data.supported is empty, so the refusal names nothing to fall back to")
+	}
+	for _, v := range envelope.Error.Data.Supported {
+		if v >= "2026-07-28" {
+			t.Errorf("data.supported offers %q, which is the era being refused", v)
+		}
 	}
 }
 
