@@ -1108,6 +1108,36 @@ a `prompts/get` for a prompt that does not exist would otherwise record the inve
 dimension value, letting any client mint one time series per string it types — so a name whose
 call failed validation is recorded on the metric as `_OTHER` and kept exactly on the span.
 
+**The HTTP layer has a span of its own, outermost.** The MCP span starts inside the handler, so
+it never exists for a request one of the guards answered instead of forwarding — a `Host` the
+deployment never declared, a cross-origin POST, a body over the cap, an unknown path. That
+leaves an operator of a published endpoint unable to see the traffic they most need to watch, so
+this one covers host validation, CORS, the body cap and the handler, and a refusal is visible as
+a status code without ever reaching the MCP instrumentation.
+
+It records no route and no `url.path`: on a published endpoint the path is whatever a scanner
+sends, so `/wp-admin.php` and ten thousand friends would each mint a series. Method and status
+answer what an HTTP-level view is for; what was called is on the MCP span. The method itself is
+bounded, because `net/http` accepts any token as one — anything the convention does not name is
+recorded as `_OTHER`, with the original kept on the span alone and truncated, since this layer
+runs before every guard and the header budget is a megabyte.
+
+A `4xx` leaves the span status unset, which the convention makes a MUST for a server span: a
+refused `Host` is the server working correctly. A `5xx` takes the error status, with no
+description — any text there would come from a handler this layer cannot see.
+
+**`GET /health` is excluded**, by exact path under the configured mount. A balancer polls it at a
+fixed interval forever, so a span per probe would bury every real request, and the route answers
+a two-line handler that can only fail by the process being gone — which the probe itself already
+reports.
+
+**A caller cannot switch off the recording of its own refusal.** Every caller of a published
+endpoint is anonymous, and the default sampler is `ParentBased(AlwaysOn)`, so a `traceparent`
+with the sampled flag cleared would make this span non-recording — including the span for the
+refusal that caller is about to receive. The flag is ignored unless `OTEL_TRACES_SAMPLER` names a
+sampler, which is a decision the operator took deliberately and keeps. A blank value is not that
+decision: an orchestrator injects one for a setting nobody provided, and the SDK rejects it too.
+
 **Every outbound fetch is a child span**, recorded at the one chokepoint each source, probe,
 mirror lookup and redirect hop already inherits — `netguard`'s client — so a source added later
 is instrumented without anybody remembering to instrument it. It records the method, the host,
