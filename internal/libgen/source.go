@@ -12,19 +12,44 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
-// httpClientOr returns c, or http.DefaultClient when c is nil. Every source keeps
+// httpClientOr returns c, or a guarded fallback when c is nil. Every source keeps
 // its *http.Client optional so a zero-value source stays usable (tests construct
 // them directly), and this is the one place that decision is written down.
+//
+// The fallback used to be http.DefaultClient, which has none of netguard's
+// policy: no dialer refusing the loopback interface, the operator's LAN or a
+// cloud metadata endpoint, and no redirect check bounding the chain or stripping
+// credentials off-origin. Every source this server builds passes a client, so
+// nothing reached it — but "no caller today" is the state a seam is in right up
+// until it has one, and this one would have opened the whole SSRF class for
+// whichever source forgot.
+//
+// Guarded rather than a panic: the comment above is the contract, a zero-value
+// source is meant to stay usable, and a panic would trade a working default for
+// a crash in the one case the fallback exists for. What makes the choice safe is
+// that the client it returns is the same one a configured source gets.
 func httpClientOr(c *http.Client) *http.Client {
 	if c != nil {
 		return c
 	}
-	return http.DefaultClient
+	return fallbackClient()
 }
+
+// fallbackClient is the guarded client a source with no client of its own uses.
+//
+// It is built once: netguard.Client allocates a Transport per call, and a
+// fallback that allocated one per request would pool no connections at all.
+// Private destinations are refused, which is the safe default — a source that
+// legitimately needs them is one built from configuration, and that source has a
+// client of its own.
+var fallbackClient = sync.OnceValue(func() *http.Client {
+	return netguard.Client(0, false)
+})
 
 // pdfProbeSniff is how many leading bytes of a candidate URL are read to confirm
 // it serves a PDF when the response Content-Type is inconclusive. It must stay at

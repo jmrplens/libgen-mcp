@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // The sentinels below are the values the assertions hunt for. Each appears
@@ -165,4 +167,44 @@ func TestSourceAttemptLogDoesNotLeakTheKey(t *testing.T) {
 	assertNoSentinel(t, buf.String(), annasKeySentinel, "the source-attempt log record")
 	assertNames(t, buf.String(), "source failed, advancing", "the source-attempt log record")
 	assertNoSentinel(t, err.Error(), annasKeySentinel, "the joined download failure")
+}
+
+// TestZeroValueSourceDialsThroughTheGuard pins the fallback client, which is a
+// seam rather than a live path — and that is exactly why it is worth a test.
+//
+// Every source this server builds passes a client, so nothing reached the
+// fallback. It used to be http.DefaultClient, which carries none of netguard's
+// policy: no dialer refusing loopback, the operator's LAN or a cloud metadata
+// endpoint, and no redirect check. "No caller today" is the state a seam is in
+// right up until it has one, and this one would have opened the whole
+// server-side request forgery class for whichever source forgot its client.
+//
+// The assertion is a real dial. This package's TestMain lifts the private-address
+// tier for its loopback fixtures, so the address used here is a metadata
+// endpoint instead: that tier holds unconditionally, so a guarded client refuses
+// it and an unguarded one does not.
+func TestZeroValueSourceDialsThroughTheGuard(t *testing.T) {
+	client := httpClientOr(nil)
+	if client == http.DefaultClient {
+		t.Fatal("the fallback is http.DefaultClient, which has no address policy at all")
+	}
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok || transport.DialContext == nil {
+		t.Fatal("the fallback client has no dialer to check")
+	}
+	_, err := transport.DialContext(t.Context(), "tcp", "169.254.169.254:80")
+	if !errors.Is(err, netguard.ErrBlockedAddress) {
+		t.Errorf("dial error = %v, want netguard.ErrBlockedAddress; the fallback is not guarded", err)
+	}
+}
+
+// TestFallbackClientIsBuiltOnce pins the sync.OnceValue: netguard.Client
+// allocates a Transport per call, so a fallback built per request would pool no
+// connections at all.
+func TestFallbackClientIsBuiltOnce(t *testing.T) {
+	first, second := httpClientOr(nil), httpClientOr(nil)
+	if first != second {
+		t.Error("the fallback client is rebuilt on every call, so it pools nothing")
+	}
 }

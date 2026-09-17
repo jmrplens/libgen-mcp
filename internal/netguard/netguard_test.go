@@ -1,9 +1,11 @@
 package netguard
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -360,4 +362,87 @@ func get(t *testing.T, c *http.Client, rawURL string) (*http.Response, error) {
 		t.Fatalf("NewRequestWithContext(%q) error = %v", rawURL, err)
 	}
 	return c.Do(req)
+}
+
+// TestCheckRedirectStripsRefererOffOrigin covers the header net/http sets for
+// you, which is why it is the one on this list that is not a credential.
+//
+// Two of this server's outbound URLs put a secret in the query string — Anna's
+// Archive requires its member key there, and Unpaywall its contact address — and
+// a resolved file URL on the member path is a presigned URL, a working
+// credential in its own right. net/http attaches the previous request's full URL
+// as Referer on every redirect it follows, so without this the next host is
+// handed the previous one's query string.
+//
+// It cannot be fixed at the call site: by the time any of this server's code
+// sees the redirected request, net/http has already decided to send it.
+func TestCheckRedirectStripsRefererOffOrigin(t *testing.T) {
+	const secretURL = "https://annas.invalid/dyn/api/fast_download.json?md5=abc&key=s3cret"
+
+	tests := []struct {
+		name       string
+		from, to   string
+		wantHeader bool
+	}{
+		{"off-origin drops it", "https://annas.invalid/a", "https://cdn.elsewhere.invalid/f.pdf", false},
+		{"a subdomain is off-origin too", "https://annas.invalid/a", "https://dl.annas.invalid/f.pdf", false},
+		{"same origin keeps it", "https://annas.invalid/a", "https://annas.invalid/b", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &http.Request{URL: mustParse(t, tt.to), Header: http.Header{}}
+			req.Header.Set("Referer", secretURL)
+
+			if err := CheckRedirect(false)(req, []*http.Request{{URL: mustParse(t, tt.from)}}); err != nil {
+				t.Fatalf("CheckRedirect() error = %v", err)
+			}
+
+			got := req.Header.Get("Referer")
+			if tt.wantHeader && got != secretURL {
+				t.Errorf("Referer = %q, want it kept on a same-origin redirect", got)
+			}
+			if !tt.wantHeader && got != "" {
+				t.Errorf("Referer = %q, want it dropped; the member key would travel to the next host", got)
+			}
+		})
+	}
+}
+
+// TestCheckRedirectLogsWithoutTheURL pins what the drop is allowed to say.
+//
+// The whole point of stripping Referer is that the previous URL carries a
+// secret, so a log line naming that URL would undo the strip one line later —
+// and this server's log stream is read by an operator and, through other paths,
+// reaches a model's transcript. Scheme and host only.
+func TestCheckRedirectLogsWithoutTheURL(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	req := &http.Request{URL: mustParse(t, "https://cdn.elsewhere.invalid/f.pdf"), Header: http.Header{}}
+	req.Header.Set("Referer", "https://annas.invalid/dyn/api/fast_download.json?md5=abc&key=s3cret")
+	req.Header.Set("Authorization", "Bearer s3cret")
+
+	if err := CheckRedirect(false)(req, []*http.Request{
+		{URL: mustParse(t, "https://annas.invalid/dyn/api/fast_download.json?md5=abc&key=s3cret")},
+	}); err != nil {
+		t.Fatalf("CheckRedirect() error = %v", err)
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "dropped request headers") {
+		t.Fatalf("the drop was not logged at all: %s", logged)
+	}
+	if strings.Contains(logged, "s3cret") {
+		t.Errorf("the log line carries the secret it just stripped:\n%s", logged)
+	}
+	if strings.Contains(logged, "fast_download.json") {
+		t.Errorf("the log line names the path of the URL it stripped:\n%s", logged)
+	}
+	for _, want := range []string{"annas.invalid", "cdn.elsewhere.invalid", "Referer", "Authorization"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("the log line does not mention %q, so it says less than it usefully could:\n%s", want, logged)
+		}
+	}
 }
