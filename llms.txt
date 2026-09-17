@@ -84,6 +84,8 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_RATE_LIMIT_BURST: How many of those requests one charged address may make at once before the refill rate applies. (default: 40)
 - LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT: How many download or read calls one charged address may have in flight. (default: the configured LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS)
 - LIBGEN_MCP_DRAIN_DELAY: How long GET /health answers 503 draining before the listener is closed on shutdown. (default: 0)
+- LIBGEN_MCP_TELEMETRY: Export OpenTelemetry traces, metrics and logs to a collector. (default: false)
+- LIBGEN_MCP_TELEMETRY_SIGNALS: Which signals are exported. (default: empty (all three))
 
 Tools:
 

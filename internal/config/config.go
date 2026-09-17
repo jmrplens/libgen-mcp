@@ -188,6 +188,28 @@ type Config struct {
 	// whole class for every source at once, which is why it is off by default and
 	// says so in its name.
 	AllowPrivateAddresses bool
+	// Telemetry turns OpenTelemetry on. LIBGEN_MCP_TELEMETRY, a bool, default
+	// FALSE.
+	//
+	// Off unless an operator asks, for privacy rather than for cost:
+	// instrumenting a deployment is a decision about that deployment's own
+	// users, and a server that traced by default would be making it for them.
+	// Everything else about the exporters — endpoint, headers, timeouts,
+	// sampling, resource attributes — is read from the standard OTEL_* variables
+	// by the SDK itself, which is why this is the only name here.
+	//
+	// It is a variable and not a flag on purpose: flags on this server belong to
+	// the transport, and a second spelling would be a precedence to explain for
+	// no gain.
+	Telemetry bool
+	// TelemetrySignals selects which signals are exported, as a comma-separated
+	// subset of traces, metrics and logs. LIBGEN_MCP_TELEMETRY_SIGNALS, empty
+	// (all three) by default.
+	//
+	// Separable because their costs differ: traces are per call, metrics are
+	// aggregated, and logs duplicate a stream an operator shipping stderr to a
+	// pipeline is already collecting.
+	TelemetrySignals string
 	// AllowedReadDirs widens the directories the read tool's `path` argument may
 	// resolve into. LIBGEN_MCP_ALLOWED_READ_DIRS, an OS path list (colon-separated
 	// on Unix, semicolon-separated on Windows). Empty by default.
@@ -468,6 +490,9 @@ func loadStringVars(cfg *Config) {
 	if v := Getenv("ALLOWED_DOWNLOAD_DIRS"); v != "" {
 		cfg.AllowedDownloadDirs = filepath.SplitList(v)
 	}
+	if v := TrimmedGetenv("TELEMETRY_SIGNALS"); v != "" {
+		cfg.TelemetrySignals = v
+	}
 }
 
 // loadDownloadTuning fills the download-tuning fields (the per-source resolve
@@ -533,6 +558,7 @@ func loadBools(cfg *Config) error {
 		{"CONFIRM_DOWNLOADS", &cfg.ConfirmDownloads},
 		{"DOWNLOAD_RETRY_EVERY_SOURCE", &cfg.RetryEverySource},
 		{"ALLOW_PRIVATE_ADDRESSES", &cfg.AllowPrivateAddresses},
+		{"TELEMETRY", &cfg.Telemetry},
 	} {
 		if err := envBool(b.key, b.dst); err != nil {
 			return err

@@ -442,3 +442,76 @@ func freeLoopbackAddr(t *testing.T) string {
 	}
 	return addr
 }
+
+// TestStdout_SurvivesATelemetrySDKThatCannotReachItsCollector is the case the
+// OpenTelemetry dependency makes possible and only a real process can catch.
+//
+// The SDK reports its own troubles through two channels, and both default to
+// something this transport cannot afford. Its error handler ends in log.Print,
+// whose destination is the standard library's shared logger — a package-global
+// any dependency can retarget at stdout — and the rendered pkg.go.dev example
+// for otel.SetLogger builds its logger over os.Stdout outright. Either one puts
+// an export failure into the JSON-RPC stream, and an unreachable collector is
+// not an edge case: it is what every misconfigured deployment has.
+//
+// So the collector here is deliberately a port nothing listens on, the batches
+// are forced out on a short interval, and the session goes on speaking the
+// protocol while the exporter fails behind it. internal/telemetry installs both
+// sinks over this server's own handler for exactly this reason; the assertion
+// is that the failures land on stderr and the conversation is unaffected.
+func TestStdout_SurvivesATelemetrySDKThatCannotReachItsCollector(t *testing.T) {
+	// Worded as a fixture rather than as a plausible token: a string shaped like
+	// a real credential in a test file is what a secret scanner reports, and a
+	// repository whose scanner cries wolf over its own fixtures is one where the
+	// next real finding is dismissed.
+	const secret = "not-a-credential-only-a-test-fixture-9f3a"
+
+	env := baseEnv(t, startMirror(t))
+	env["LIBGEN_MCP_TELEMETRY"] = "1"
+	// The house grammar, not the specification's: "1" is how an operator writes
+	// true everywhere else on this surface, and a switch that silently ignored
+	// it would turn this whole case into a test of a disabled SDK.
+	env["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://127.0.0.1:1"
+	// A header with no "=" is what makes both SDK channels speak at startup,
+	// deterministically, rather than waiting for an export that at this point in
+	// the port has nothing to send. It is also the shape that leaks: the parser
+	// prints the raw pair, and the log exporter hands the error handler the
+	// entire variable.
+	env["OTEL_EXPORTER_OTLP_HEADERS"] = secret
+
+	s := startSession(t, env)
+
+	// The protocol first: readMessage fails on anything that is not JSON, so
+	// this is the assertion that the stream stayed clean while the exporter was
+	// failing beside it.
+	for _, tc := range []struct {
+		name    string
+		request string
+	}{
+		{name: "initialize", request: initializeRequest(1)},
+		{name: "tools/list", request: request(2, "tools/list", "")},
+		{name: "tools/call", request: request(3, "tools/call", searchCall)},
+	} {
+		got := s.call(t, tc.request)
+		if got["jsonrpc"] != "2.0" {
+			t.Errorf("%s was not answered with JSON-RPC 2.0 while telemetry was failing: %v", tc.name, got)
+		}
+	}
+
+	// And the SDK's own complaint reached stderr, which is what says telemetry
+	// was actually on rather than quietly off — a disabled SDK says nothing at
+	// all and would pass everything above without touching either sink.
+	logs := s.waitForStderr(t, "opentelemetry sdk error", 10*time.Second)
+	if !strings.Contains(logs, "telemetry enabled") {
+		t.Errorf("the startup announcement is missing, so nothing says where the batches were going:\n%s", logs)
+	}
+	// The variable is named and its value is not. An operator whose
+	// configuration is malformed needs to know which variable to fix; the
+	// credential beside the typo is not theirs to publish to a log pipeline.
+	if !strings.Contains(logs, "OTEL_EXPORTER_OTLP_HEADERS") {
+		t.Errorf("the failure does not name the variable to fix:\n%s", logs)
+	}
+	if strings.Contains(logs, secret) {
+		t.Errorf("the collector credential was written to the log; it must be redacted:\n%s", logs)
+	}
+}

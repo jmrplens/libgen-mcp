@@ -997,6 +997,20 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	logging.Setup(cfg.LogLevel)
 	decision.explain()
 
+	// Before anything is served, so a span can cover the startup it is measuring,
+	// and after the configured log level so the announcement is filtered the way
+	// the operator asked. A collector that cannot be reached is logged and
+	// swallowed: a server that can still reach the mirrors keeps doing so.
+	// The shutdown context deliberately outlives the signal that triggered it:
+	// Shutdown applies its own bound of a few seconds, and a flush canceled by
+	// the same SIGTERM that started it would drop the batch describing the
+	// shutdown.
+	stopTelemetry, err := startTelemetry(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer stopTelemetry(context.WithoutCancel(ctx))
+
 	// Before the catalog is registered and before either transport, so a profile
 	// of startup itself can be taken. Refused rather than warned about when the
 	// address is not loopback: a profile listener on a reachable interface hands
