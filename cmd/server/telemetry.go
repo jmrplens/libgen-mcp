@@ -6,12 +6,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -47,6 +50,16 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 		return identityChoice{}, nil, err
 	}
 
+	// Installed unconditionally, before any outbound client is built, and not
+	// behind provider.Enabled(): the OpenTelemetry API's no-ops cost a nil check
+	// with no SDK installed, and the observer is also what strips baggage and
+	// trace context from every outbound request — a rule that must hold whether
+	// or not anybody is collecting. Which hosts the metric may name is bounded
+	// here for the same reason, since a mirror list is discovered and an
+	// open-access index hands back a publisher's own URL.
+	mcpotel.SetMetricServerAddresses(outboundMetricHosts(cfg))
+	restoreObserver := netguard.SetOutboundObserver(mcpotel.NewTransport)
+
 	provider, startErr := telemetry.Start(ctx, telemetry.Config{
 		Enabled:        cfg.Telemetry,
 		ServiceVersion: buildversion.Current(),
@@ -72,7 +85,34 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 			slog.WarnContext(ctx, "telemetry did not shut down cleanly",
 				"component", "telemetry", "error", shutdownErr)
 		}
+		// After the provider, so a client built during shutdown is not still
+		// recording into a stopped exporter. The observer is process-global, so
+		// leaving it installed would outlive what it writes into — which in a
+		// test binary is one test's telemetry reaching every later test's
+		// clients.
+		restoreObserver()
 	}, nil
+}
+
+// outboundMetricHosts are the hosts the outbound duration metric may name.
+//
+// The closed set is what this deployment is configured to reach rather than
+// everything it might: a mirror the discovery rotates to, and a publisher URL an
+// open-access index hands back, are both hosts a third party chose. Anything
+// outside the set is recorded as one bucket, so a caller cannot mint a time
+// series by causing a fetch.
+//
+// The span still carries the real host either way. A trace has no series budget;
+// a metric does.
+func outboundMetricHosts(cfg *config.Config) []string {
+	hosts := make([]string, 0, len(cfg.ScihubHosts)+1)
+	hosts = append(hosts, cfg.ScihubHosts...)
+	if mirror := strings.TrimSpace(cfg.Mirror); mirror != "" {
+		if parsed, err := url.Parse(mirror); err == nil && parsed.Hostname() != "" {
+			hosts = append(hosts, parsed.Hostname())
+		}
+	}
+	return hosts
 }
 
 // announceTelemetry says where the batches are going, and warns when a

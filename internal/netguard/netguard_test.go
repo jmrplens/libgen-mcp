@@ -446,3 +446,82 @@ func TestCheckRedirectLogsWithoutTheURL(t *testing.T) {
 		}
 	}
 }
+
+// TestClientForKeepsTheGuardUnderAnObserver is the regression this seam is one
+// refactor away from.
+//
+// The observer wraps the guarded transport so an outbound request can be
+// instrumented. An implementation that *replaced* the transport instead — which
+// is the shorter thing to write and reads identically at the call site — would
+// drop the ControlContext hook that refuses a metadata address, and every test
+// asserting a span would still pass. That is CWE-918 with a green suite, so the
+// property is asserted rather than trusted: with an observer installed, the
+// metadata endpoint is still refused.
+func TestClientForKeepsTheGuardUnderAnObserver(t *testing.T) {
+	wrapped := false
+	restore := SetOutboundObserver(func(base http.RoundTripper) http.RoundTripper {
+		wrapped = true
+		return observingRoundTripper{base: base}
+	})
+	t.Cleanup(restore)
+
+	// The hatch is open, so the refusal that remains is the metadata tier and
+	// not the private-address one: this asserts the narrow guard survived, not
+	// the broad one.
+	client := ClientFor(2*time.Second, NewPolicy(nil, true))
+	if !wrapped {
+		t.Fatal("the observer was not applied, so this case asserts nothing")
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://169.254.169.254/latest/meta-data/", http.NoBody)
+	if err != nil {
+		t.Fatalf("building the request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("the cloud metadata endpoint was reached through an observed client")
+	}
+	if !strings.Contains(err.Error(), ErrBlockedAddress.Error()) {
+		t.Errorf("the refusal is not the address guard's: %v", err)
+	}
+}
+
+// TestSetOutboundObserverRestoresThePrevious keeps the seam usable from a test
+// without leaking into the next one.
+//
+// It is process-global state, so an observer installed and never removed outlives
+// what it writes into: in a test binary that is one test's telemetry reaching
+// every later test's clients.
+func TestSetOutboundObserverRestoresThePrevious(t *testing.T) {
+	restore := SetOutboundObserver(func(base http.RoundTripper) http.RoundTripper {
+		return observingRoundTripper{base: base}
+	})
+	if observe(http.DefaultTransport) == http.DefaultTransport {
+		t.Fatal("the observer was not applied")
+	}
+	restore()
+	if observe(http.DefaultTransport) != http.DefaultTransport {
+		t.Error("the observer survived its restore")
+	}
+
+	// A nil observer removes one rather than panicking, which is what a
+	// deployment with telemetry off installs.
+	restoreNil := SetOutboundObserver(nil)
+	t.Cleanup(restoreNil)
+	if observe(http.DefaultTransport) != http.DefaultTransport {
+		t.Error("a nil observer still wrapped the transport")
+	}
+}
+
+// observingRoundTripper is a wrapper that does nothing but delegate, which is
+// the shape the real observer has around its instrumentation.
+type observingRoundTripper struct {
+	base http.RoundTripper
+}
+
+// RoundTrip delegates to the transport it wraps, which is the whole point: the
+// guard underneath must still decide.
+func (o observingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return o.base.RoundTrip(req)
+}

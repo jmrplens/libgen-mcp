@@ -400,14 +400,62 @@ func ClientFor(timeout time.Duration, policy *Policy) *http.Client {
 	allow := policy.AllowsPrivate() || privateAllowedForTest.Load()
 	c := &http.Client{
 		// The stamping transport wraps the guarded one rather than replacing it,
-		// so the decision is attached immediately before the dial.
-		Transport:     &policyTransport{base: Transport(allow), policy: policy},
+		// so the decision is attached immediately before the dial. The
+		// observer, if one was installed, wraps that in turn — outermost, so it
+		// sees the request as it was asked for and the guard still decides
+		// whether it is dialed.
+		Transport:     observe(&policyTransport{base: Transport(allow), policy: policy}),
 		CheckRedirect: checkRedirectFor(allow, policy),
 	}
 	if timeout > 0 {
 		c.Timeout = timeout
 	}
 	return c
+}
+
+// outboundObserver wraps the transport of every client this package builds.
+//
+// # Why a seam rather than a call
+//
+// The instrumentation lives in internal/mcpotel, which reads this package's
+// redaction rule for a span status description — so this package importing it
+// back would be a cycle. A seam keeps the dependency pointing one way and keeps
+// this package unaware of telemetry, which is the right shape for a file whose
+// subject is server-side request forgery.
+//
+// # Why it wraps rather than replaces
+//
+// What it is given is the guarded transport, and what it returns is handed to
+// http.Client. An observer that replaced the transport instead of wrapping it
+// would drop the ControlContext hook that refuses a private or metadata address,
+// which is a CWE-918 regression with a green suite: every test that asserts a
+// span would pass, and the one thing this package exists for would be gone.
+// TestClientForKeepsTheGuardUnderAnObserver is what says so.
+var outboundObserver atomic.Pointer[func(http.RoundTripper) http.RoundTripper]
+
+// SetOutboundObserver installs the wrapper applied to every client built after
+// the call, and returns a function restoring the previous one.
+//
+// Called once at startup, before any client is built, from the layer that knows
+// both this package and the instrumentation. Nil removes it.
+func SetOutboundObserver(wrap func(http.RoundTripper) http.RoundTripper) func() {
+	previous := outboundObserver.Load()
+	if wrap == nil {
+		outboundObserver.Store(nil)
+	} else {
+		outboundObserver.Store(&wrap)
+	}
+	return func() { outboundObserver.Store(previous) }
+}
+
+// observe applies the installed wrapper, or returns the transport unchanged.
+func observe(base http.RoundTripper) http.RoundTripper {
+	if wrap := outboundObserver.Load(); wrap != nil {
+		if wrapped := (*wrap)(base); wrapped != nil {
+			return wrapped
+		}
+	}
+	return base
 }
 
 // privateAllowedForTest lifts the address policy for every client built
