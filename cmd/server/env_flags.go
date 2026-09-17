@@ -134,16 +134,14 @@ func setEnvFromFlag(flagName, envName string, value *string) {
 	_ = os.Setenv(envName, *value)
 }
 
-// isFlagPassed reports whether the operator typed the named flag, as opposed to
-// it holding its default. A flag whose value happens to equal the default is
-// still a choice, which is why this asks the flag set rather than comparing
-// values.
+// isFlagPassed reports whether the named flag of the process's own command line
+// holds a value somebody gave it, as opposed to its default.
+//
+// "Somebody" rather than "the operator typed": applyHTTPEnvOverlay sets a flag
+// from its variable through the same flag set, and that is deliberate — an
+// operator who exported LIBGEN_MCP_RATE_LIMIT_RPS chose it as explicitly as one
+// who typed --rate-limit-rps, and the refusals that turn on "was this asked for
+// explicitly" have to treat the two the same.
 func isFlagPassed(name string) bool {
-	passed := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			passed = true
-		}
-	})
-	return passed
+	return flagPassedIn(flag.CommandLine, name)
 }

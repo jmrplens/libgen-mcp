@@ -176,3 +176,52 @@ func TestHealthcheck_ADrainingInstanceIsNotHealthy(t *testing.T) {
 		t.Fatal("the server did not exit within 30s of SIGTERM")
 	}
 }
+
+// TestHealthcheck_FindsAnInstanceConfiguredThroughTheEnvironment closes the gap
+// --healthcheck shipped with.
+//
+// The probe reads the listener off the peer's own configuration, and until the
+// HTTP settings had variables that configuration was entirely on the command
+// line. A container that sets LIBGEN_MCP_HTTP_ADDR and passes no flag has an
+// empty one, so the probe derived the default address and reported a perfectly
+// healthy instance unhealthy — which an orchestrator answers by restarting a
+// container whose restart changes nothing.
+//
+// Both settings are in play, because reading the address without the path asks
+// the wrong URL of the right server and looks exactly the same from outside.
+func TestHealthcheck_FindsAnInstanceConfiguredThroughTheEnvironment(t *testing.T) {
+	requireProcEnviron(t)
+
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	launchServer(t, "http://"+addr, nil, map[string]string{
+		"LIBGEN_MCP_HTTP_ADDR": addr,
+		"LIBGEN_MCP_HTTP_PATH": "/libgen",
+	}, nil)
+
+	code, out := runHealthcheckBinary(t)
+	if code != 0 {
+		t.Errorf("exit = %d, want 0 for an instance configured by variables alone:\n%s", code, out)
+	}
+	if !strings.Contains(out, "/libgen/health") {
+		t.Errorf("the probe did not derive the mount from the environment:\n%s", out)
+	}
+	if !strings.Contains(out, addr) {
+		t.Errorf("the probe did not derive the address from the environment:\n%s", out)
+	}
+}
+
+// requireProcEnviron skips a case that depends on reading another process's
+// environment where the platform cannot.
+//
+// The probe is honest about it — it says the environment could not be read and
+// names the address it assumed — but "honest" is not "found the listener", and
+// asserting the first on Linux and the second everywhere else would be two
+// tests wearing one name. This one is the Linux half; the fallback is asserted
+// in cmd/server, where the reader is a parameter.
+func requireProcEnviron(t *testing.T) {
+	t.Helper()
+
+	if _, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", os.Getpid())); err != nil {
+		t.Skipf("this platform does not publish a process environment: %v", err)
+	}
+}

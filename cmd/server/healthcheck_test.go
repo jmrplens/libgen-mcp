@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // TestParseListenerFlagsReadsEverySpellingTheFlagPackageAccepts covers the
@@ -725,5 +728,200 @@ func TestStdinIsNullUnderReadsARealDescriptor(t *testing.T) {
 	}
 	if !isNull {
 		t.Errorf("a descriptor pointing at %s was not read as the null device", os.DevNull)
+	}
+}
+
+// TestEnvironUnderReadsOnlyTheListenerVariables covers the procfs read, and the
+// two rules it applies to what it finds.
+//
+// The file is the whole block the process was started with, secrets included, so
+// what comes back is filtered: a probe that carried LIBGEN_MCP_ANNAS_KEY around
+// would be one formatting mistake from a log line. And an entry with no "=" is
+// skipped rather than guessed at.
+func TestEnvironUnderReadsOnlyTheListenerVariables(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "77")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("making the fixture: %v", err)
+	}
+	block := strings.Join([]string{
+		config.EnvName("HTTP_ADDR") + "=127.0.0.1:9123",
+		config.EnvName("HTTP_PATH") + "=/libgen",
+		config.EnvName("TLS_CERT") + "=/etc/ssl/mcp.crt",
+		config.EnvName("TRANSPORT") + "=http",
+		config.EnvName("ANNAS_KEY") + "=a-secret-nobody-asked-for",
+		"PATH=/usr/bin",
+		"a-malformed-entry-with-no-equals",
+	}, "\x00") + "\x00"
+	if err := os.WriteFile(filepath.Join(dir, "environ"), []byte(block), 0o600); err != nil {
+		t.Fatalf("writing the fixture: %v", err)
+	}
+
+	got, err := environUnder(root, 77)
+	if err != nil {
+		t.Fatalf("environUnder() error = %v", err)
+	}
+
+	want := map[string]string{
+		config.EnvName("HTTP_ADDR"): "127.0.0.1:9123",
+		config.EnvName("HTTP_PATH"): "/libgen",
+		config.EnvName("TLS_CERT"):  "/etc/ssl/mcp.crt",
+		config.EnvName("TRANSPORT"): "http",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("environUnder() = %v, want %v", got, want)
+	}
+	// Spelled out separately, because this is the one entry whose presence would
+	// be a leak rather than a wrong answer.
+	if _, leaked := got[config.EnvName("ANNAS_KEY")]; leaked {
+		t.Error("environUnder returned a credential; it must keep only the listener variables")
+	}
+}
+
+// TestEnvironUnderReportsAProcessItCannotRead keeps "nothing was looked at"
+// distinguishable from "nothing was set", which is what the caveat rests on.
+func TestEnvironUnderReportsAProcessItCannotRead(t *testing.T) {
+	if got, err := environUnder(t.TempDir(), 77); err == nil {
+		t.Errorf("environUnder() = %v, nil for a pid with no procfs entry, want an error", got)
+	}
+}
+
+// TestOverlayListenerEnvKeepsTheCommandLineWinning is the probe's half of the
+// server's own precedence.
+//
+// A probe that let the environment win would read a different configuration than
+// the process it is probing whenever a deployment overrides one setting on the
+// command line — which is the shape of every base image with a `command:`
+// override.
+func TestOverlayListenerEnvKeepsTheCommandLineWinning(t *testing.T) {
+	env := map[string]string{
+		config.EnvName("HTTP_ADDR"): "127.0.0.1:9123",
+		config.EnvName("HTTP_PATH"): "/from-the-environment",
+		config.EnvName("TLS_CERT"):  "/etc/ssl/mcp.crt",
+		config.EnvName("TRANSPORT"): "http",
+	}
+
+	got := overlayListenerEnv(listenerFlags{addr: "127.0.0.1:7777"}, env)
+	if got.addr != "127.0.0.1:7777" {
+		t.Errorf("addr = %q, want the command line's", got.addr)
+	}
+	// The rest still comes from the environment, so the case above is precedence
+	// rather than the overlay being skipped altogether.
+	if got.basePath != "/from-the-environment" {
+		t.Errorf("basePath = %q, want the variable's value", got.basePath)
+	}
+	if got.tlsCert != "/etc/ssl/mcp.crt" {
+		t.Errorf("tlsCert = %q, want the variable's value", got.tlsCert)
+	}
+	if got.transport != "http" {
+		t.Errorf("transport = %q, want the variable's value", got.transport)
+	}
+}
+
+// TestRunHealthcheckFindsAnInstanceConfiguredThroughTheEnvironment is the gap
+// --healthcheck shipped with: parseListenerFlags reads a command line, and a
+// container configured entirely through `environment:` has nothing on one.
+//
+// Before the environment was read, this peer's address was derived as the
+// default and the probe reported a healthy instance unhealthy — which an
+// orchestrator answers by restarting a container whose restart changes nothing.
+func TestRunHealthcheckFindsAnInstanceConfiguredThroughTheEnvironment(t *testing.T) {
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/libgen/health" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ok.Close()
+	addr := strings.TrimPrefix(ok.URL, "http://")
+
+	var stderr bytes.Buffer
+	deps := healthcheckDeps{
+		// No flags at all: the argument list is the bare binary.
+		peers: func() ([]healthPeer, error) {
+			return []healthPeer{{pid: 42, args: []string{"libgen-mcp"}}}, nil
+		},
+		stdinIsNull: func(int32) (bool, error) { return false, errors.ErrUnsupported },
+		environ: func(int32) (map[string]string, error) {
+			return map[string]string{
+				config.EnvName("HTTP_ADDR"): addr,
+				config.EnvName("HTTP_PATH"): "/libgen",
+			}, nil
+		},
+		budget: 2 * time.Second,
+	}
+	if got := runHealthcheck(t.Context(), nil, "", deps, &stderr); got != healthcheckHealthy {
+		t.Errorf("exit = %d, want %d: the listener is named by variables, not by flags (%s)",
+			got, healthcheckHealthy, stderr.String())
+	}
+	// The mount under the prefix is part of it: a probe that read the address and
+	// not the path would ask / and get the 404 above.
+	if !strings.Contains(stderr.String(), "/libgen/health") {
+		t.Errorf("stderr = %q, want it to name the probed path", stderr.String())
+	}
+}
+
+// TestRunHealthcheckSaysWhenItCouldNotReadThePeerEnvironment is the honest
+// fallback the platform split needs.
+//
+// Where procfs is not there, a peer with no --http is a peer whose address is a
+// guess. Reporting the failure with the default address it assumed is what lets
+// an operator tell "the server is down" from "the probe was looking in the wrong
+// place", which are the same exit code and opposite actions.
+func TestRunHealthcheckSaysWhenItCouldNotReadThePeerEnvironment(t *testing.T) {
+	var stderr bytes.Buffer
+	deps := healthcheckDeps{
+		peers: func() ([]healthPeer, error) {
+			return []healthPeer{{pid: 42, args: []string{"libgen-mcp", "--transport", "http"}}}, nil
+		},
+		stdinIsNull: func(int32) (bool, error) { return false, errors.ErrUnsupported },
+		environ:     func(int32) (map[string]string, error) { return nil, errors.ErrUnsupported },
+		budget:      2 * time.Second,
+	}
+	if got := runHealthcheck(t.Context(), nil, "", deps, &stderr); got != healthcheckUnhealthy {
+		t.Fatalf("exit = %d, want %d", got, healthcheckUnhealthy)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "environment could not be read") {
+		t.Errorf("stderr = %q, want it to say the environment could not be read", out)
+	}
+	if !strings.Contains(out, defaultHTTPAddr) {
+		t.Errorf("stderr = %q, want it to name the address it assumed", out)
+	}
+}
+
+// TestRunHealthcheckDoesNotCaveatAnAddressItWasGiven keeps the note off every
+// failure on a platform without procfs.
+//
+// A peer whose --http is on the command line is fully known whether or not the
+// environment could be read, and a caveat printed there would attach to every
+// failure on Windows and macOS — which is how a caveat stops being read.
+func TestRunHealthcheckDoesNotCaveatAnAddressItWasGiven(t *testing.T) {
+	var stderr bytes.Buffer
+	deps := healthcheckDeps{
+		peers: func() ([]healthPeer, error) {
+			return []healthPeer{{pid: 42, args: []string{"libgen-mcp", "--http", "127.0.0.1:1"}}}, nil
+		},
+		stdinIsNull: func(int32) (bool, error) { return false, errors.ErrUnsupported },
+		environ:     func(int32) (map[string]string, error) { return nil, errors.ErrUnsupported },
+		budget:      2 * time.Second,
+	}
+	if got := runHealthcheck(t.Context(), nil, "", deps, &stderr); got != healthcheckUnhealthy {
+		t.Fatalf("exit = %d, want %d", got, healthcheckUnhealthy)
+	}
+	if strings.Contains(stderr.String(), "environment could not be read") {
+		t.Errorf("stderr = %q, want no caveat: the address was on the command line", stderr.String())
+	}
+}
+
+// TestReadEnvironWithoutAReaderIsAFailure pins the nil case, which is what every
+// caller that does not care about the environment produces.
+//
+// Returning an empty map would say the peer set no listener variables, which is
+// a claim nothing checked; the caveat that follows depends on the difference.
+func TestReadEnvironWithoutAReaderIsAFailure(t *testing.T) {
+	if got, err := (healthcheckDeps{}).readEnviron(42); err == nil {
+		t.Errorf("readEnviron() = %v, nil with no reader, want a failure", got)
 	}
 }

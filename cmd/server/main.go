@@ -235,19 +235,18 @@ func mainWithExit() int {
 	// that point would do nothing and say nothing.
 	applyEnvBackedFlags()
 
-	if *showVersion {
-		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
-		return 0
+	if code, handled := runUtility(utilityFlags{
+		version:     *showVersion,
+		healthcheck: *healthcheck,
+		shutdown:    *shutdown,
+		tlsCert:     *tlsCert,
+	}); handled {
+		return code
 	}
-	// Both before anything reads configuration or binds anything: they are
-	// diagnostics about a process that is already running, and neither has any
-	// use for this one's own settings.
-	if *healthcheck {
-		return runHealthcheck(context.Background(), flag.Args(), *tlsCert,
-			healthcheckDeps{peers: livePeers, stdinIsNull: peerStdinIsNull}, os.Stderr)
-	}
-	if *shutdown {
-		return runShutdown(os.Stderr)
+
+	if envErr := readTheEnvironmentUnderTheFlags(); envErr != nil {
+		log.Print(envErr)
+		return 1
 	}
 
 	// A negative cap disables the SDK limit outright, which must not be reachable
@@ -385,6 +384,69 @@ func mainWithExit() int {
 		return 1
 	}
 	return 0
+}
+
+// utilityFlags are the invocations that are not a server: they say something
+// about this build or about a process already running, and exit.
+type utilityFlags struct {
+	version     bool
+	healthcheck bool
+	shutdown    bool
+	// tlsCert is this invocation's own --tls-cert, which --healthcheck uses as
+	// the pin for an https target it was given outright.
+	tlsCert string
+}
+
+// runUtility answers one of those invocations, reporting whether it was one.
+//
+// They are answered before anything reads configuration or binds anything:
+// --version describes the binary, and the other two are diagnostics about a
+// process that is already running. Neither has any use for this process's own
+// settings, and --healthcheck in particular must not load a dotenv file to
+// decide whether somebody else's listener answers.
+func runUtility(f utilityFlags) (code int, handled bool) {
+	switch {
+	case f.version:
+		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
+		return 0, true
+	case f.healthcheck:
+		return runHealthcheck(context.Background(), flag.Args(), f.tlsCert,
+			healthcheckDeps{peers: livePeers, stdinIsNull: peerStdinIsNull, environ: peerEnviron}, os.Stderr), true
+	case f.shutdown:
+		return runShutdown(os.Stderr), true
+	}
+	return 0, false
+}
+
+// readTheEnvironmentUnderTheFlags loads the dotenv files and fills in every HTTP
+// flag the operator did not pass.
+//
+// It runs in mainWithExit rather than inside run, because every setting below it
+// is now backed by a variable and a home file has to be able to set them.
+// Reading the files later would give this server two precedences: one for the
+// settings config.Load reads, and another for the HTTP half.
+//
+// The JSON handler goes up first for the reason it does in run: loading
+// announces where configuration came from, and those records would otherwise go
+// through the standard library's text handler, putting plain lines onto a stream
+// that is otherwise JSON. The announcement happens once per process, so run's
+// own config.Load finds it already done.
+func readTheEnvironmentUnderTheFlags() error {
+	logging.Setup(slog.LevelInfo)
+	config.LoadEnvFiles()
+
+	overlaid, err := applyHTTPEnvOverlay()
+	if err != nil {
+		return err
+	}
+	if len(overlaid) > 0 {
+		// At the starting level rather than the configured one, for the reason
+		// the dotenv announcement is: this is the only local evidence that the
+		// listener was configured by something other than the command line, and
+		// the level is one of the settings such a source would like to set.
+		slog.Info("HTTP settings taken from the environment", "variables", describeOverlay(overlaid))
+	}
+	return nil
 }
 
 // resolveSocketMode parses --http-socket-mode for the address actually given.

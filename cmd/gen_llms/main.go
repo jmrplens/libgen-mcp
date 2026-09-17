@@ -575,6 +575,23 @@ func configEnvVars() []envVarDoc {
 		{"LIBGEN_MCP_ENRICH", "true", boolEnvRange, "Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. Default true only allows it — a call still has to pass enrich: true. Set false to forbid it entirely."},
 		{"LIBGEN_MCP_CONFIRM_DOWNLOADS", "true", boolEnvRange, "Ask the user to approve each file that download writes to disk. Only ever consulted when the client advertised elicitation — one that cannot be asked is never prompted. Set false to save without prompting: the deployment-wide form of download's skip_confirmation argument and of the prompt's own \"stop asking for this session\" checkbox."},
 		{"LIBGEN_MCP_EXTRA_SOURCES", "auto", "auto, always, never", "When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. auto: only when the Library Genesis catalog returns nothing or fails. always: on every search, alongside the catalog. never: catalog only, even on a miss."},
+		{"LIBGEN_MCP_TRANSPORT", "empty (--http decides)", "empty, stdio, http or auto", "Which transport to serve, the variable form of --transport. auto reads it off standard input: only /dev/null — a container started without -i — means HTTP. Every variable below is the same setting as the flag of the same name, and the flag wins when both are given."},
+		{"LIBGEN_MCP_HTTP_ADDR", "empty (stdio)", "host:port, or a unix socket path", "Where streamable HTTP listens, the variable form of --http. A value containing a path separator is a unix socket; a bare name is read as a host."},
+		{"LIBGEN_MCP_HTTP_PATH", "/", "URL path prefix", "Path prefix every HTTP route is mounted under — the MCP endpoint, /health and both server cards. For a reverse proxy that forwards its prefix instead of stripping it."},
+		{"LIBGEN_MCP_HTTP_SOCKET_MODE", "0660", "octal mode, with or without a leading 0", "Permission mode for a unix socket. Ignored for a TCP address, and refused on a platform without file modes."},
+		{"LIBGEN_MCP_PUBLIC_URL", "empty", "http/https URL with a host", "Origin clients reach this deployment at. Its host is one this server answers in the Host header, and it is what the SEP-2127 server card publishes as its remote."},
+		{"LIBGEN_MCP_TRUSTED_ORIGINS", "empty (browsers refused)", "comma-separated scheme://host[:port], or *", "Browser origins allowed to call this server cross-origin. Non-browser clients send no Origin and are unaffected."},
+		{"LIBGEN_MCP_TRUSTED_PROXIES", "empty", "comma-separated addresses and CIDR ranges, or the literal unix", "Proxies whose forwarded-address header is believed. Required together with LIBGEN_MCP_TRUSTED_PROXY_HEADER."},
+		{"LIBGEN_MCP_TRUSTED_PROXY_HEADER", "empty", "a header name, e.g. X-Real-IP", "Header a trusted proxy fills with the address it heard the request from. Read only from a peer in LIBGEN_MCP_TRUSTED_PROXIES."},
+		{"LIBGEN_MCP_TLS_CERT", "empty", "path to a PEM certificate", "Terminate TLS in this process. Requires LIBGEN_MCP_TLS_KEY; the pair is re-read when the files change, so a renewal is not a restart."},
+		{"LIBGEN_MCP_TLS_KEY", "empty", "path to a PEM private key", "Private key for LIBGEN_MCP_TLS_CERT. Both or neither."},
+		{"LIBGEN_MCP_STATELESS", "true", boolEnvRange, "Stateless streamable HTTP: no Mcp-Session-Id, each POST self-contained, GET/DELETE answering 405. Required by MCP protocol 2026-07-28; set false for legacy stateful sessions."},
+		{"LIBGEN_MCP_JSON_RESPONSE", "false", boolEnvRange, "Return application/json instead of text/event-stream."},
+		{"LIBGEN_MCP_MAX_REQUEST_BODY_BYTES", "0 (SDK default, 4 MiB)", "[0, 9223372036854775807]", "Largest streamable HTTP request body accepted. 0 keeps the SDK default."},
+		{"LIBGEN_MCP_RATE_LIMIT_RPS", "10", "a number; 0 or less turns the limit off", "Inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process."},
+		{"LIBGEN_MCP_RATE_LIMIT_BURST", "40", "an integer", "How many of those requests one charged address may make at once before the refill rate applies."},
+		{"LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT", "the configured LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS", "an integer; 0 or less turns the bound off", "How many download or read calls one charged address may have in flight. A separate ceiling of 64 bounds the process whatever this says."},
+		{"LIBGEN_MCP_DRAIN_DELAY", "0", "[0, 5m], Go duration", "How long GET /health answers 503 draining before the listener is closed on shutdown. Set it to at least one probe interval of whatever is in front."},
 	}
 }
 
