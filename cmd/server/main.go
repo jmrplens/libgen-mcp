@@ -785,6 +785,9 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
 	if vErr := cfg.Validate(); vErr != nil {
 		return vErr
 	}
+	if hatchErr := refusePrivateHatchOnOpenListener(spec, cfg); hatchErr != nil {
+		return hatchErr
+	}
 	// Install the global slog logger before serving so every log line goes to
 	// stderr (stdout is reserved for the stdio MCP transport).
 	logging.Setup(cfg.LogLevel)
@@ -799,6 +802,40 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
 	}
 	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
 	return server.Run(ctx, &mcp.StdioTransport{})
+}
+
+// refusePrivateHatchOnOpenListener rejects the private-address hatch on a
+// listener somebody other than this machine can open a connection to.
+//
+// The hatch lets this server dial loopback, the operator's LAN and
+// carrier-grade-NAT space. On a stdio server, and on one bound to loopback or a
+// unix socket, whoever can ask for that is somebody with an account on this
+// machine, which is what the hatch is for. On an open listener it is anyone who
+// can POST to the endpoint: a tool call naming a URL is enough to have the
+// server fetch an address the caller could not reach, and return it. That is a
+// request-forgery proxy into whatever network the server sits in, which is the
+// thing internal/netguard exists to prevent — turned on by configuration that
+// says nothing about who may reach the listener.
+//
+// It is a startup refusal rather than a warning, because a warning is read once
+// by whoever deployed it and never again, while the exposure lasts for the life
+// of the process.
+//
+// It reads spec.addr — the address the server is about to bind — and never a
+// flag value. **Any change that lets the listener be chosen somewhere else must
+// resolve it before this point**: a transport default that serves HTTP with no
+// --http given, or an address supplied through the environment, would otherwise
+// arrive here looking like stdio and leave the hatch open on a wildcard bind,
+// which is the exact case this refuses.
+func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error {
+	if !cfg.AllowPrivateAddresses || spec.addr == "" || listenerIsHostLocal(spec.addr) {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s is set and --http %s binds a listener other machines can reach, which would let any caller that can POST to this endpoint aim this server at addresses only this network can reach. "+
+			"Bind a loopback address (--http 127.0.0.1:PORT) or a unix socket, or unset the variable: a mirror named in LIBGEN_MIRROR or %s is already exempt from the address guard without it",
+		config.EnvName("ALLOW_PRIVATE_ADDRESSES"), spec.addr, config.EnvName("SCIHUB_HOSTS"),
+	)
 }
 
 // newRegisteredServer builds the MCP server for cfg with every tool and

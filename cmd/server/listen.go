@@ -18,6 +18,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -91,6 +92,55 @@ func parseSocketMode(value string) (os.FileMode, error) {
 	}
 	return os.FileMode(mode), nil
 }
+
+// listenerIsHostLocal reports whether an address binds a listener no other
+// machine can open a connection to.
+//
+// A loopback address is the plain case. A unix socket qualifies too, and for a
+// stronger reason than a port does: it resolves to a file rather than a name, so
+// no remote peer can reach it at all, and --http-socket-mode decides which local
+// principals may. A wildcard bind is the one that matters here, because it is
+// what every container recipe in the docs uses.
+//
+// A name is judged by what it resolves to and never by the name itself.
+// "localhost" is loopback by convention rather than by rule: a host whose
+// /etc/hosts maps it elsewhere binds elsewhere, and a check that trusted the
+// spelling would pass a listener open to the network. Resolving is what
+// net.Listen does with the same string a moment later, so this asks the question
+// the bind will answer. Every resolved address must be loopback, and a name that
+// resolves to none is not host-local: this decides whether to leave a
+// request-forgery hatch open, so not knowing is a no.
+//
+// It cannot see a port publication. A container binding 0.0.0.0 and published
+// with `-p 127.0.0.1:8811:8080` is host-local in fact and is judged otherwise,
+// because nothing inside the process distinguishes it from the same container
+// published on every interface.
+func listenerIsHostLocal(addr string) bool {
+	if isUnixSocketAddr(addr) {
+		return true
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" {
+		return false
+	}
+	if parsed, parseErr := netip.ParseAddr(host); parseErr == nil {
+		return parsed.IsLoopback()
+	}
+	resolved, lookupErr := lookupListenHost(host)
+	if lookupErr != nil || len(resolved) == 0 {
+		return false
+	}
+	for _, address := range resolved {
+		if !address.IsLoopback() {
+			return false
+		}
+	}
+	return true
+}
+
+// lookupListenHost is the resolver [listenerIsHostLocal] asks, as a variable so
+// a test can answer for a name without depending on the machine's /etc/hosts.
+var lookupListenHost = net.LookupIP //nolint:gochecknoglobals // test seam, mirroring loadTLSKeyPair above
 
 // validateTLSFiles checks the certificate pair before the server starts.
 //
