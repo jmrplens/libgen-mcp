@@ -72,6 +72,9 @@ type listenSpec struct {
 	// Its default is the configured download concurrency, which is not known
 	// until the configuration is read — after the flags are parsed.
 	inflight inflightFlag
+	// drainDelay is --drain-delay: how long /health answers 503 before the
+	// listener is closed.
+	drainDelay time.Duration
 }
 
 // inflightFlag is --max-inflight-per-client and whether the operator passed it,
@@ -79,6 +82,23 @@ type listenSpec struct {
 type inflightFlag struct {
 	value    int
 	explicit bool
+}
+
+// httpPolicy is what the serving path needs that the listener itself does not
+// decide: who a caller is, which hosts are answered, how this deployment is
+// fingerprinted, and how long it announces its own departure.
+//
+// It travels as one value because every field is settled at startup and read
+// once, and because the alternative is a parameter list that grows by one on
+// every step of this phase.
+type httpPolicy struct {
+	guard  hostGuard
+	charge chargePolicy
+	// digest fingerprints the settings that shape the served surface, for
+	// /health. Empty leaves the field out of the body.
+	digest string
+	// drainDelay is how long /health answers 503 before the listener closes.
+	drainDelay time.Duration
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

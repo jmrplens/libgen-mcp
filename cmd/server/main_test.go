@@ -95,7 +95,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub, nil, nil, "/", false)
+	handler := newHTTPHandler(stub, nil, nil, "/", false, testHealth())
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -203,7 +203,7 @@ func TestIsCleanShutdown(t *testing.T) {
 func TestServeHTTPGracefulShutdown(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(canceledContext(), newTestServer(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions())
+		err = serveHTTP(canceledContext(), newTestServer(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions(), httpPolicy{})
 	})
 	if err != nil {
 		t.Fatalf("serveHTTP() = %v, want nil on graceful shutdown", err)
@@ -215,7 +215,7 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 func TestServeHTTPListenError(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = serveHTTP(context.Background(), newTestServer(), listenSpec{addr: "127.0.0.1:99999"}, transport.DefaultOptions())
+		err = serveHTTP(context.Background(), newTestServer(), listenSpec{addr: "127.0.0.1:99999"}, transport.DefaultOptions(), httpPolicy{})
 	})
 	if err == nil {
 		t.Fatal("serveHTTP() = nil, want a listen error for an invalid port")
@@ -326,7 +326,8 @@ func TestServeHTTPServesRequests(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(), newHostGuard(addr, "", trustedProxies{}), chargePolicy{})
+		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(),
+			httpPolicy{guard: newHostGuard(addr, "", trustedProxies{})})
 	}()
 
 	base := "http://" + addr
@@ -377,14 +378,19 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 	}
 	addr := ln.Addr().String()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// A deadline of its own, and canceled before it fires. The graceful phase
+	// is then the smaller of the server's budget and what this deadline leaves,
+	// which is what shutdownBudget promises — so this case exercises the clamp
+	// and costs three seconds rather than the full budget.
+	const gracefulBudget = 3 * time.Second
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(gracefulBudget))
 	done := make(chan error, 1)
 	// Stateful mode is what exposes the long-lived GET stream; the stateless
 	// default answers GET with 405 and closes every POST stream on reply.
 	opts := transport.DefaultOptions()
 	opts.Stateless = false
 	go func() {
-		done <- serveHTTPOn(ctx, newTestServer(), ln, opts, newHostGuard(addr, "", trustedProxies{}), chargePolicy{})
+		done <- serveHTTPOn(ctx, newTestServer(), ln, opts, httpPolicy{guard: newHostGuard(addr, "", trustedProxies{})})
 	}()
 
 	base := "http://" + addr
@@ -401,8 +407,14 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 		if sErr != nil {
 			t.Fatalf("serveHTTP() = %v, want nil once the open stream is force-closed", sErr)
 		}
-		if elapsed := time.Since(start); elapsed < httpShutdownTimeout {
-			t.Errorf("returned after %v, want at least the %v graceful phase", elapsed, httpShutdownTimeout)
+		// Most of the budget, not all of it: what is being asserted is that the
+		// graceful phase was waited out rather than skipped, and the clamp
+		// reads the clock a hair after this test does.
+		if elapsed := time.Since(start); elapsed < gracefulBudget/2 {
+			t.Errorf("returned after %v, want the %v graceful phase to have been waited out", elapsed, gracefulBudget)
+		}
+		if elapsed := time.Since(start); elapsed > httpShutdownTimeout {
+			t.Errorf("returned after %v, want no more than the caller's own %v deadline allowed", elapsed, gracefulBudget)
 		}
 	case <-time.After(httpShutdownTimeout + 15*time.Second):
 		t.Fatal("serveHTTP did not return after cancel with a stream still open")
@@ -504,7 +516,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/", false))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/", false, testHealth()))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -731,7 +743,7 @@ func TestNewHealthResponseUptimeAndStartedAt(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := newHealthResponse(start, tc.now)
+			got := newHealthResponse(start, tc.now, "", false)
 			if got.UptimeSeconds != tc.wantUptime {
 				t.Errorf("uptime_seconds = %d, want %d", got.UptimeSeconds, tc.wantUptime)
 			}
@@ -749,7 +761,7 @@ func TestNewHealthResponseRendersStartedAtInUTC(t *testing.T) {
 	t.Parallel()
 	zone := time.FixedZone("UTC+5", 5*60*60)
 	start := time.Date(2026, 8, 23, 15, 30, 0, 0, zone)
-	got := newHealthResponse(start, start)
+	got := newHealthResponse(start, start, "", false)
 	if got.StartedAt != "2026-08-23T10:30:00Z" {
 		t.Errorf("started_at = %q, want the same instant normalized to UTC", got.StartedAt)
 	}
@@ -1175,6 +1187,10 @@ func TestCrossOriginProtectedRejectsAnUnvalidatedOrigin(t *testing.T) {
 // teapotHandler stands in for the MCP handler in the routing tests. It answers
 // a status nothing else in the mux produces, so "this request reached the MCP
 // endpoint" is unambiguous rather than inferred from a body.
+// testHealth is the /health handler for a test that is not about health: no
+// configuration digest, and a listener that never drains.
+func testHealth() http.Handler { return healthHandler("", nil) }
+
 func teapotHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
@@ -1253,7 +1269,7 @@ type securedRequest struct {
 // way out and lost every one of those responses.
 func TestSecurityHeadersAreSetOnEveryResponse(t *testing.T) {
 	const trusted = "https://claude.ai"
-	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/", false)
+	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/", false, testHealth())
 
 	cases := []securedRequest{
 		{
@@ -1588,7 +1604,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 	}
 	for _, base := range []string{"/", "/libgen"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), card, nil, base, false)
+			handler := newHTTPHandler(teapotHandler(), card, nil, base, false, testHealth())
 			for _, tc := range mountedRoutes(normalizeBasePath(base)) {
 				t.Run(tc.name, func(t *testing.T) {
 					assertRoute(t, handler, tc)
@@ -1605,7 +1621,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 func TestNewHTTPHandlerAcceptsEveryBasePathSpelling(t *testing.T) {
 	for _, base := range []string{"libgen", "/libgen", "/libgen/"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), nil, nil, base, false)
+			handler := newHTTPHandler(teapotHandler(), nil, nil, base, false, testHealth())
 			assertRoute(t, handler, routeCase{
 				method: http.MethodGet, path: "/libgen/health",
 				wantStatus: http.StatusOK, wantType: "application/json",

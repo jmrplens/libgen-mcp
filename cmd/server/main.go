@@ -19,6 +19,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -39,7 +40,20 @@ import (
 
 // httpShutdownTimeout bounds how long a graceful HTTP shutdown may take before
 // in-flight connections are forcibly closed.
-const httpShutdownTimeout = 5 * time.Second
+//
+// The value is bracketed from both sides and neither side is generous. Below it
+// sit the things a request may legitimately still be doing: a resolve inside
+// LIBGEN_MCP_RESOLVE_BUDGET, a transfer inside LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT,
+// a stream between two progress notifications. Above it sits the supervisor's
+// own grace — ten seconds for `docker stop`, thirty for a Kubernetes pod — after
+// which the process is killed and the budget is academic.
+//
+// Fifteen seconds outlasts the stall timeout and clears docker's grace only
+// because [drainAndShutdown] clamps it to whatever the caller's own deadline
+// leaves. Raising it without that clamp buys nothing: the supervisor is the real
+// limit, and a budget longer than the grace is a promise the process cannot
+// keep.
+const httpShutdownTimeout = 15 * time.Second
 
 // The listener's own timeouts. Both guard a peer that opens a connection and
 // then does nothing with it, which costs a file descriptor either way.
@@ -209,6 +223,7 @@ func mainWithExit() int {
 	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
 	rateLimitRPS := flag.Float64("rate-limit-rps", defaultRateLimitRPS, "inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. 0 or less turns the limit off. On a listener whose every peer is this machine — a loopback bind or a unix socket — it is off unless --trusted-proxies names the proxy in front, because otherwise every caller is charged to one address; passing it explicitly there is refused rather than downgraded")
 	rateLimitBurst := flag.Int("rate-limit-burst", defaultRateLimitBurst, "how many of those requests one charged address may make at once before the refill rate applies")
+	drainDelay := flag.Duration("drain-delay", 0, "how long GET /health answers 503 draining before the listener is closed on shutdown. 0 (default) closes at once. Set it to at least one probe interval of whatever is in front, or the balancer learns this instance is going by the connection failing — after it has already sent work to it. Capped at "+maxDrainDelay.String())
 	maxInflight := flag.Int("max-inflight-per-client", 0, "how many download or read calls one charged address may have in flight. Unset means the configured "+config.EnvName("MAX_CONCURRENT_DOWNLOADS")+", so the bound starts at the whole download semaphore; 0 or less turns the per-caller bound off. A ceiling is exactly as real as the identity underneath it, so behind a proxy it needs --trusted-proxy-header and --trusted-proxies too")
 	registerEnvBackedFlags()
 	flag.Parse()
@@ -299,6 +314,14 @@ func mainWithExit() int {
 	if decision.HTTP {
 		log.Printf("inbound rate limit: %s", limit.describe())
 	}
+	// Refused rather than clamped: past a few minutes a drain delay is not a
+	// handover, it is a shutdown that appears to hang — and every supervisor
+	// kills the process long before it elapses, so the operator would be waiting
+	// for something that never happens.
+	if *drainDelay < 0 || *drainDelay > maxDrainDelay {
+		log.Printf("--drain-delay %s must be between 0 and %s", *drainDelay, maxDrainDelay)
+		return 1
+	}
 
 	// Refused at startup rather than at the first request: a server mounted on a
 	// path it cannot match would answer 404 to everything, which looks like a
@@ -340,8 +363,9 @@ func mainWithExit() int {
 		charge: charge,
 		// Nil on stdio, which every layer that reads it treats as "no per-caller
 		// state at all" rather than as an empty table.
-		records:  newClientRecordsFor(decision.HTTP, limit, charge),
-		inflight: inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
+		records:    newClientRecordsFor(decision.HTTP, limit, charge),
+		inflight:   inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
+		drainDelay: *drainDelay,
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -479,70 +503,6 @@ const (
 	headerContentType = "Content-Type"
 	mediaTypeJSON     = "application/json"
 )
-
-// processStartTime marks when this process began serving.
-//
-// Package-level initialization runs before main, so this is the earliest
-// instant the program can observe about itself. Tests do not override it:
-// newHealthResponse takes both instants as parameters instead, so uptime is
-// deterministic without a mutable package-level clock.
-var processStartTime = time.Now()
-
-// healthResponse is the JSON body returned by the /health endpoint. The field
-// names match the sibling gitlab-mcp-server so one probe can read both servers.
-//
-// Liveness is reported two ways on purpose. StartedAt is the stable fact: it
-// does not change between probes, so a monitor can cache it, deduplicate it,
-// and detect a restart by noticing it moved — the same reason Prometheus
-// exposes process_start_time_seconds rather than an uptime counter.
-// UptimeSeconds is the derived convenience value, in the unit the IETF health
-// check draft uses for it ("observedUnit": "s").
-type healthResponse struct {
-	// Status is the liveness verdict; this endpoint only ever reports "ok",
-	// because a process that cannot answer at all is the failure signal.
-	Status string `json:"status"`
-	// Version is the release this build reports, stamped or compiled in.
-	Version string `json:"version"`
-	// Commit is the revision the release ldflags stamped, or "none".
-	Commit string `json:"commit"`
-	// StartedAt is the process start instant in RFC 3339, matching how this
-	// project renders timestamps everywhere else.
-	StartedAt string `json:"started_at"`
-	// UptimeSeconds is whole seconds since StartedAt. Sub-second precision
-	// would be noise on an endpoint polled at probe intervals.
-	UptimeSeconds int64 `json:"uptime_seconds"`
-}
-
-// newHealthResponse builds the /health body for a start instant observed at
-// now. Both instants are parameters so the uptime arithmetic can be tested
-// without mutating a package-level clock from concurrent tests.
-func newHealthResponse(startedAt, now time.Time) healthResponse {
-	// Truncating instead of rounding keeps uptime from reporting a second that
-	// has not fully elapsed. The clamp guards a caller that observes an instant
-	// before the start; time.Now within one process cannot, because its
-	// monotonic reading never goes backwards.
-	uptime := int64(now.Sub(startedAt).Seconds())
-	uptime = max(uptime, 0)
-	return healthResponse{
-		Status:        "ok",
-		Version:       buildversion.Current(),
-		Commit:        commit,
-		StartedAt:     startedAt.UTC().Format(time.RFC3339),
-		UptimeSeconds: uptime,
-	}
-}
-
-// healthHandler responds with HTTP 200 and a JSON body for container healthchecks
-// and load-balancer probes. It does not require authentication.
-//
-// Version comes from buildversion rather than the raw ldflags variable: that one
-// is empty unless a release stamped it, whereas buildversion falls back to the
-// number compiled in from VERSION, so a development build reports what it
-// actually is instead of a placeholder.
-func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set(headerContentType, mediaTypeJSON)
-	_ = json.NewEncoder(w).Encode(newHealthResponse(processStartTime, time.Now())) //nolint:errchkjson // healthcheck: client write errors are non-actionable
-}
 
 // The CORS response headers this server writes, named once because three
 // separate handlers set the origin header — the card's, its preflight, and the
@@ -877,10 +837,10 @@ func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
 // A nil card leaves the card routes unmounted, in which case those paths are
 // simply not served — unlike before, when an unmounted card fell through to the
 // MCP handler and answered 405.
-func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string, servesTLS bool) http.Handler {
+func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string, servesTLS bool, health http.Handler) http.Handler {
 	base := normalizeBasePath(basePath)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+base+"/health", healthHandler)
+	mux.Handle("GET "+base+"/health", health)
 	if cardJSON != nil {
 		for _, c := range []struct {
 			path      string
@@ -962,7 +922,15 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	}
 
 	if spec.addr != "" {
-		return serveHTTP(ctx, server, spec, opts)
+		// The digest is built here rather than at flag time because it
+		// fingerprints the configuration, and the configuration is not read
+		// until this point.
+		return serveHTTP(ctx, server, spec, opts, httpPolicy{
+			guard:      spec.guard,
+			charge:     spec.charge,
+			digest:     configDigest(cfg, opts.BasePath, opts.Stateless),
+			drainDelay: spec.drainDelay,
+		})
 	}
 	// Said before the first read, because after it the process looks idle and
 	// that is exactly what the message is about.
@@ -1092,13 +1060,13 @@ func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientR
 // ctx is canceled, tolerating the expected http.ErrServerClosed. Connections
 // still streaming after httpShutdownTimeout are closed outright rather than
 // waited on.
-func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts transport.Options) error {
+func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts transport.Options, policy httpPolicy) error {
 	ln, err := listenHTTP(ctx, spec)
 	if err != nil {
 		return err
 	}
 	opts.ServesTLS = spec.servesTLS()
-	return serveHTTPOn(ctx, server, ln, opts, spec.guard, spec.charge)
+	return serveHTTPOn(ctx, server, ln, opts, policy)
 }
 
 // serveHTTPOn serves the MCP endpoint on a listener the caller has already
@@ -1113,7 +1081,12 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 //
 // Production still calls serveHTTP, which binds and delegates here, so the
 // address a deployment configures is bound exactly as before.
-func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options, guard hostGuard, charge chargePolicy) error {
+func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options, policy httpPolicy) error {
+	guard, charge := policy.guard, policy.charge
+	// One flag per listener rather than per process: a server that has begun
+	// draining does not come back, but the next listener built in the same
+	// process — a test, or a restart — starts out serving.
+	var draining atomic.Bool
 	// The Host check wraps the MCP endpoint and nothing else: /health is what a
 	// balancer and a container runtime probe, and the server card is a public
 	// document, so both answer whatever Host the prober sends. It is applied
@@ -1145,7 +1118,8 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	}
 
 	srv := &http.Server{
-		Handler:           newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS),
+		Handler: newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS,
+			healthHandler(policy.digest, &draining)),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		// The slow-reader guard, and it is only safe because sseAware clears it
 		// on the MCP endpoint. Everything else this server answers — /health,
@@ -1166,24 +1140,60 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 		}
 		return err
 	case <-ctx.Done():
-		// ctx is already canceled here, so derive the shutdown deadline from a
-		// cancellation-stripped copy of ctx (preserving its values) rather than
-		// the dead parent, keeping graceful shutdown bounded by httpShutdownTimeout.
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpShutdownTimeout)
-		defer cancel()
-		err := srv.Shutdown(shutdownCtx)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		// Shutdown waits for every connection to go idle, and a streamable HTTP
-		// (SSE) stream never does on its own: a client attached when the signal
-		// arrives holds the graceful phase open until the deadline. That is an
-		// expected shutdown, not a failure — cut the remaining connections so the
-		// listener is released instead of leaking it and reporting an error.
-		log.Printf("graceful shutdown exceeded %s with streams still open; closing remaining connections", httpShutdownTimeout)
-		return srv.Close()
+		return drainAndShutdown(ctx, srv, &draining, policy.drainDelay)
 	}
+}
+
+// drainAndShutdown announces the drain, waits it out, and then ends the server
+// inside whatever budget is left.
+//
+// The announcement comes first and the close comes last, which is the whole
+// point of the delay: without it the close is what a balancer notices, one probe
+// later, and every request it sent in that window failed.
+func drainAndShutdown(ctx context.Context, srv *http.Server, draining *atomic.Bool, delay time.Duration) error {
+	announceDraining(ctx, draining, delay)
+
+	// ctx is already canceled here, so derive the shutdown deadline from a
+	// cancellation-stripped copy of it (preserving its values) rather than from
+	// the dead parent.
+	budget := shutdownBudget(ctx)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), budget)
+	defer cancel()
+
+	err := srv.Shutdown(shutdownCtx)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	// Shutdown waits for every connection to go idle, and a streamable HTTP
+	// (SSE) stream never does on its own: a client attached when the signal
+	// arrives holds the graceful phase open until the deadline. That is an
+	// expected shutdown, not a failure — cut the remaining connections so the
+	// listener is released instead of leaking it and reporting an error.
+	log.Printf("graceful shutdown exceeded %s with streams still open; closing remaining connections", budget)
+	return srv.Close()
+}
+
+// shutdownBudget is the smaller of this server's own budget and whatever the
+// caller's deadline leaves.
+//
+// A caller with a deadline of its own has already been told how long it has —
+// by a supervisor, or by a test — and spending longer than that on a graceful
+// phase means the process is killed mid-drain instead of closing its listener.
+// The clamp is what makes [httpShutdownTimeout] safe to raise: the budget is a
+// ceiling, never a floor.
+func shutdownBudget(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return httpShutdownTimeout
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		// The caller is already out of time. Something above zero, so Shutdown
+		// gets one pass at the idle connections rather than none.
+		return time.Millisecond
+	}
+	return min(remaining, httpShutdownTimeout)
 }
