@@ -242,7 +242,7 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil, "/", false)
+	handler := newHTTPHandler(stub, raw, nil, "/", false, testHealth())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil)
 	rec := httptest.NewRecorder()
@@ -276,7 +276,7 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil, "/", false)
+	handler := newHTTPHandler(stub, raw, nil, "/", false, testHealth())
 
 	getRec := httptest.NewRecorder()
 	handler.ServeHTTP(getRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil))
@@ -327,7 +327,7 @@ func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, nil, nil, "/", false)
+	handler := newHTTPHandler(stub, nil, nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
 		for _, method := range []string{http.MethodGet, http.MethodOptions} {
@@ -458,7 +458,7 @@ func TestServerCardOverridesCacheControl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
-	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false)
+	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
 		rec := httptest.NewRecorder()
@@ -492,7 +492,7 @@ func TestServerCardRoutesServeIdenticalBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
-	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false)
+	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false, testHealth())
 
 	bodies := make(map[string][]byte, 2)
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {

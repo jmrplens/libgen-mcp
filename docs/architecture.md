@@ -339,8 +339,8 @@ The server speaks MCP over one of two transports, selected at startup:
   /run/mcp-libgen.sock`) — the server instead serves the streamable HTTP transport,
   suitable for running centrally and connecting remote HTTP-capable clients. In this mode it
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
-  `status`, `version`, `commit`, `started_at` and `uptime_seconds` while the
-  server is serving — handy for container and load-balancer health checks. It
+  `status`, `version`, `commit`, `build`, `config_digest`, `started_at` and `uptime_seconds`
+  while the server is serving — handy for container and load-balancer health checks. It
   also publishes a server card at `GET /server-card` — and, for the scanners that
   already fetch it, at the legacy `GET /.well-known/mcp/server-card.json` — carrying
   `serverInfo`, the `capabilities` the handshake negotiates, an `authentication`
@@ -539,6 +539,7 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--tls-cert`                | _(empty)_   | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
 | `--tls-key`                 | _(empty)_   | PEM private key file for `--tls-cert`. Both or neither — a certificate without a key is a deployment that believes it is serving TLS and is not, so the half-pair fails startup.                                                                                                                                                                                                                                       |
 | `--max-inflight-per-client` | _(derived)_ | How many `download` or `read` calls one charged address may have in flight. Unset means the configured `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`, so the bound starts at the whole download semaphore; `0` or less turns the per-caller bound off. A separate ceiling of 64 bounds the process whatever this says, and is deliberately not configurable.                                                                   |
+| `--drain-delay`             | `0`         | How long `GET /health` answers `503 draining` before the listener is closed on shutdown. `0` closes at once. Set it to at least one probe interval of whatever is in front, or the balancer learns this instance is going by the connection failing — after it has already sent work to it. Capped at five minutes.                                                                                                    |
 
 **Routes, and a `404` for everything else.** The MCP endpoint is mounted on its own path
 rather than as a catch-all, alongside `GET /health` and the two server-card routes; every
@@ -681,6 +682,43 @@ leaving a constant that advertises a version nothing serves.
 
 Off the endpoint nothing changes. The `404` answers a scanner rather than a client and already
 names the endpoint, and the server card is a public document with no session behind it.
+
+**What `/health` answers, and what it deliberately does not.** The body carries `status`,
+`version`, `commit`, `build`, `config_digest`, `started_at` and `uptime_seconds`. `started_at`
+is the stable fact — byte-identical across probes, so a monitor can cache it and detect a restart
+by noticing it moved — and `uptime_seconds` is the derived convenience. `build` is the one string
+a display wants: the release this binary is closest to plus the short commit, so a tag build and a
+build from `main` read comparably where `version` alone gives one a plain number and the other a
+Go pseudo-version with a timestamp in it.
+
+`config_digest` is twelve hex characters fingerprinting the settings that decide the served
+surface and the answers it can give: the enabled sources, `extra_sources`, `server_fetch` (which
+decides whether `read` is registered at all), `remote_downloads`, `enrich`, `confirm_downloads`,
+the base path and statelessness. Replicas behind one balancer must agree on every one of them, or
+a client gets a different catalog depending on which node it reaches and nothing else notices. It
+is order-free wherever the setting is a set. **It is a fingerprint for comparison, not a secret**:
+the settings it covers are few and public, so whoever reads it can work out which combination
+produced it — nothing in it is a credential, and treating it as one is a mistake in the other
+direction. What is deliberately out: counters, the configuration values themselves, and anything
+needing an upstream round-trip. The endpoint needs no credential, and that is why.
+
+**Draining before the listener closes.** On shutdown, `/health` flips to `503` with
+`{"status":"draining"}` and `Cache-Control: no-store`, and `--drain-delay` holds the listener open
+that long before it is closed. Without the delay the close is what a balancer notices — one probe
+later, after every request it sent in that window has already failed. The default is `0`, because
+a delay is useless below one probe interval and there is no safe default for something only the
+deployment knows; set it to at least whatever is in front polls at. It is capped at five minutes:
+past that it is not a handover but a shutdown that appears to hang, and every supervisor kills the
+process long before it elapses.
+
+The graceful phase itself is bounded at **15 seconds**, and the bracket is tight from both sides.
+Below it sit the things a request may legitimately still be doing — a resolve inside
+`LIBGEN_MCP_RESOLVE_BUDGET`, a transfer inside `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`, a stream
+between two progress notifications. Above it sits the supervisor's own grace: ten seconds for
+`docker stop`, thirty for a Kubernetes pod, after which the process is killed and the budget is
+academic. What makes 15 safe is that it is a ceiling and never a floor — the effective budget is
+the smaller of it and whatever the caller's own deadline leaves, so a process told it has less
+closes its listener instead of being killed mid-drain.
 
 **What one caller may ask for.** `tools/call`, `prompts/get` and `subscriptions/listen` draw on a
 token bucket per charged address, and `tools/list` on a second bucket of its own. Without it the
