@@ -235,6 +235,21 @@ func TestUnix_StartupRefusals(t *testing.T) {
 			args: []string{"--http", missingDir},
 			want: "its directory is not usable",
 		},
+		{
+			name: "the unix trust literal on a TCP address",
+			args: []string{"--http", "127.0.0.1:0", "--trusted-proxy-header", "X-Real-IP", "--trusted-proxies", "unix"},
+			want: "is for a unix-socket listener",
+		},
+		{
+			name: "a trusted header nobody may set",
+			args: []string{"--http", socketPath(t), "--trusted-proxy-header", "X-Real-IP"},
+			want: "names a header nobody is trusted to set",
+		},
+		{
+			name: "trusted proxies whose header is never read",
+			args: []string{"--http", socketPath(t), "--trusted-proxies", "unix"},
+			want: "names proxies whose header is never read",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -246,6 +261,37 @@ func TestUnix_StartupRefusals(t *testing.T) {
 				t.Errorf("the refusal does not mention %q:\n%s", tc.want, out)
 			}
 		})
+	}
+}
+
+// TestUnix_TrustedProxyLiteralIsTheSocketsOwnSpelling covers the one
+// --trusted-proxies entry that is not an address, over the real binary.
+//
+// It is here rather than beside the TCP cases because it only means anything
+// here: a unix peer is a path, so no range can ever name it, and the literal is
+// how an operator says that the peers of a 0660 socket — its owner and the
+// group the proxy was put in — may speak for their callers. The refusal on a
+// TCP address is in the table above, so both directions are pinned.
+//
+// What the request half asserts is that the configuration is accepted and the
+// surface still serves under it. The charged address itself is not observable
+// on the wire yet: nothing reads it until a per-caller budget does, and the
+// assertion that it is the right address belongs with that.
+func TestUnix_TrustedProxyLiteralIsTheSocketsOwnSpelling(t *testing.T) {
+	path := socketPath(t)
+	s := startUnixServerAt(t, path, nil, "--trusted-proxy-header", "X-Real-IP", "--trusted-proxies", "unix")
+
+	reply := s.do(t, mcpPOST(map[string]string{"X-Real-IP": "203.0.113.7"}))
+	assertToolsListed(t, "over a socket whose peers are trusted proxies", reply)
+
+	// The rule is stated once at startup because that is the only place it can
+	// be seen. An operator who named the wrong hop has nothing else to look at:
+	// from outside, every caller simply shares the proxy's key.
+	logs := s.logs()
+	for _, want := range []string{"X-Real-IP", "unix"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("the startup log does not name %q, so the accepted rule is invisible:\n%s", want, logs)
+		}
 	}
 }
 

@@ -325,9 +325,18 @@ server {
         proxy_http_version 1.1;
         proxy_buffering    off;   # the POST response is a real SSE stream
         proxy_read_timeout 1h;    # downloads emit progress for minutes
+        proxy_set_header   X-Real-IP $remote_addr;
     }
 }
 ```
+
+That last header is only worth sending if the server is told to read it. A unix-socket peer is
+a path rather than an address, so the trust is stated with the literal `unix`:
+`--trusted-proxy-header X-Real-IP --trusted-proxies unix`. Both flags or neither — either one
+alone fails startup — and without them every caller is told apart by the socket, which is to
+say not at all. Over TCP, name the address the server accepts connections from instead of
+`unix`; behind a published container port that is the bridge gateway, not the `127.0.0.1` the
+upstream line uses.
 
 Under Docker the two containers share the socket's directory and publish nothing:
 
