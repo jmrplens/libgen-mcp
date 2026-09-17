@@ -54,6 +54,12 @@ type listenSpec struct {
 	// tlsCert and tlsKey are the PEM files this process terminates TLS with, or
 	// both empty for plain HTTP.
 	tlsCert, tlsKey string
+	// guard is the Host-header policy this listener answers under. It travels
+	// with the spec because it is mostly derived from addr — a bind that names
+	// a host declares it, a wildcard bind and a socket declare none — and
+	// because this struct is what already reaches the place the handler is
+	// built.
+	guard hostGuard
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

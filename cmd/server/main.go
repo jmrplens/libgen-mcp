@@ -191,6 +191,7 @@ func mainWithExit() int {
 	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	transportSelector := flag.String("transport", "", "which transport to serve: stdio, http, or auto. Empty (default) keeps the historical rule — a --http value means HTTP, no value means stdio. auto reads it off standard input: a pipe, terminal, file or socket means stdio, and only /dev/null (a container started without -i) means HTTP. --http still supplies the address HTTP binds, defaulting to "+defaultHTTPAddr)
+	publicURL := flag.String("public-url", "", "origin clients reach this deployment at, e.g. https://mcp.example.org/libgen. Its host is the one this server answers to in the Host header, which a reverse proxy forwards from the client; without it, or without --trusted-proxies naming the proxy, a proxied request carrying a public name is refused as a DNS-rebinding attempt")
 	trustedProxyHeader := flag.String("trusted-proxy-header", "", "header a trusted proxy fills with the address it heard the request from (e.g. X-Real-IP or X-Forwarded-For). Read only from a peer listed in --trusted-proxies, and required together with it; without both, every caller is told apart by the address the connection came from")
 	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
 	registerEnvBackedFlags()
@@ -251,6 +252,17 @@ func mainWithExit() int {
 		log.Print(proxyErr)
 		return 1
 	}
+	// Already validated above, so the error here is unreachable; parsing again
+	// rather than threading the value out of the check keeps the check callable
+	// on its own, which is what its own tests do.
+	proxies, _ := parseTrustedProxies(proxyEntries)
+	// A declaration nobody can act on is worse than none: the guard would keep
+	// refusing the very name the operator wrote, and the refusal would keep
+	// telling them to pass the flag they already passed.
+	if urlErr := validatePublicURL(*publicURL); urlErr != nil {
+		log.Print(urlErr)
+		return 1
+	}
 	if len(proxyEntries) > 0 {
 		// Said once at startup because it is the only place it can be seen: the
 		// rule decides which address every later per-caller budget is keyed on,
@@ -287,7 +299,17 @@ func mainWithExit() int {
 		TrustedOrigins:      trusted,
 		BasePath:            normalizeBasePath(*httpPath),
 	}
-	spec := listenSpec{addr: decision.Addr, socketMode: mode, tlsCert: *tlsCert, tlsKey: *tlsKey}
+	spec := listenSpec{
+		addr:       decision.Addr,
+		socketMode: mode,
+		tlsCert:    *tlsCert,
+		tlsKey:     *tlsKey,
+		// Built from the RESOLVED address, for the reason the private-address
+		// hatch reads it too: a `--transport http` deployment with no --http
+		// binds an address nobody typed, and a guard built from the flag would
+		// declare a host the listener never had.
+		guard: newHostGuard(decision.Addr, *publicURL, proxies),
+	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
 		return 1
@@ -692,6 +714,10 @@ func validateBasePath(p string) error {
 	return nil
 }
 
+// mcpAliasPath is the second spelling the MCP endpoint answers on, under
+// whatever --http-path mounts. It is an alias, not the canonical path.
+const mcpAliasPath = "/mcp"
+
 // endpointPatterns lists the ServeMux patterns the MCP endpoint answers on for a
 // normalized base path.
 //
@@ -703,11 +729,23 @@ func validateBasePath(p string) error {
 // Under a prefix both "/prefix" and "/prefix/" are accepted, since a client
 // given a base URL may or may not keep the trailing slash and neither spelling
 // is a different endpoint.
+//
+// "/mcp" is mounted beside them as an alias, because enough clients and enough
+// guides assume that path that a base URL pasted without it — or with it —
+// should reach the same endpoint rather than a 404 that reads as "this server
+// does not speak MCP". The canonical spelling stays the base path itself: every
+// snippet in this repository uses it, and the server card advertises it.
+//
+// Both the bare and the trailing-slash form are mounted explicitly. Left to
+// ServeMux, "/mcp/" would be a subtree pattern that swallows "/mcp/anything",
+// and a registered "/mcp/" also makes the mux answer "/mcp" with a 301 to it —
+// a redirect a POST does not follow with its body.
 func endpointPatterns(base string) []string {
+	patterns := []string{base + mcpAliasPath, base + mcpAliasPath + "/{$}"}
 	if base == "" {
-		return []string{"/{$}"}
+		return append(patterns, "/{$}")
 	}
-	return []string{base, base + "/{$}"}
+	return append(patterns, base, base+"/{$}")
 }
 
 // notFound answers a path this server does not serve, and names the one it does.
@@ -1009,7 +1047,7 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 		return err
 	}
 	opts.ServesTLS = spec.servesTLS()
-	return serveHTTPOn(ctx, server, ln, opts)
+	return serveHTTPOn(ctx, server, ln, opts, spec.guard)
 }
 
 // serveHTTPOn serves the MCP endpoint on a listener the caller has already
@@ -1024,8 +1062,14 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 //
 // Production still calls serveHTTP, which binds and delegates here, so the
 // address a deployment configures is bound exactly as before.
-func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options) error {
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))
+func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts transport.Options, guard hostGuard) error {
+	// The Host check wraps the MCP endpoint and nothing else: /health is what a
+	// balancer and a container runtime probe, and the server card is a public
+	// document, so both answer whatever Host the prober sends. It is applied
+	// here rather than inside newHTTPHandler because this is where the endpoint
+	// handler is built, and because the SDK's own copy of the check — which
+	// transport.StreamableHTTP turns off — sat in exactly this position.
+	mcpHandler := hostGuarded(guard, mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {

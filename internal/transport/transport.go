@@ -40,11 +40,22 @@ func DefaultOptions() Options { return Options{Stateless: true} }
 // StreamableHTTP maps the flags onto the SDK options. Cancellation propagation
 // is always on: client aborts cancel in-flight mirror fetches, and the SDK
 // restricts it to protocol-2026-07-28 requests so legacy clients are unaffected.
+//
+// DisableLocalhostProtection turns off the SDK's own DNS-rebinding check, which
+// this server answers itself in cmd/server's host guard. **The two halves belong
+// in one change**: the SDK's rule is that a connection accepted on a loopback
+// address may only carry a loopback Host, which refuses every reverse-proxy
+// recipe in the getting-started guide — nginx forwards the client's Host and
+// connects over loopback — and refuses it with plain text on a route a
+// Streamable HTTP client reads as JSON. Switching it off without the guard
+// removes the protection; adding the guard without switching it off leaves the
+// SDK refusing what the guard permits, one layer further in.
 func StreamableHTTP(opts Options) *mcp.StreamableHTTPOptions {
 	return &mcp.StreamableHTTPOptions{
 		Stateless:                    opts.Stateless,
 		JSONResponse:                 opts.JSONResponse,
 		MaxRequestBodyBytes:          opts.MaxRequestBodyBytes,
 		PropagateRequestCancellation: true,
+		DisableLocalhostProtection:   true,
 	}
 }

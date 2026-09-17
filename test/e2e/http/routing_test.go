@@ -94,8 +94,15 @@ func TestRouting_UnknownPathsAnswer404(t *testing.T) {
 		// does not serve: a prefix that matches a real route is exactly where
 		// an accidental catch-all would show up again.
 		"/.well-known/mcp",
-		// What a client given the wrong base URL asks for.
-		"/mcp",
+		// What a client given the wrong base URL asks for. "/mcp" used to be
+		// here and is not: it is now a mounted alias for the endpoint, so a GET
+		// on it is a wrong method rather than a wrong path. The neighboring
+		// spellings are the ones that still have to answer 404, and "/mcp/x" is
+		// the one that proves the alias is an exact match rather than a subtree
+		// that swallows everything below it.
+		"/mcp/x",
+		"/mcpx",
+		"/api/mcp",
 		"/nope",
 	}
 	for _, path := range paths {
