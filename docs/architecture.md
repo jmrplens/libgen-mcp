@@ -531,6 +531,8 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent.                                                                                                             |
 | `--http-path`              | `/`       | URL path prefix every route is mounted under: the MCP endpoint, `GET /health` and both server-card paths. `--http-path=/libgen` makes the endpoint `POST /libgen` and the probe `GET /libgen/health`; `libgen`, `/libgen` and `/libgen/` all mean the same mount. Set it when a reverse proxy forwards its prefix instead of stripping it. A query, a fragment, a traversal segment or a percent-escape fails startup. |
 | `--http-socket-mode`       | `0660`    | Permission mode for the unix socket `--http` names, as octal with or without a leading `0`. The default is owner+group read/write, so a same-host proxy reaches it by group membership and no other local account does. Refused at startup when `--http` is a TCP address, and on a platform with no file permission modes.                                                                                            |
+| `--trusted-proxy-header`   | _(empty)_ | Header a trusted proxy fills with the address it heard the request from — `X-Real-IP` on the hosted deployment. Read only from a peer `--trusted-proxies` names; from anybody else it is text the caller wrote. Required together with `--trusted-proxies`: either flag alone fails startup.                                                                                                                           |
+| `--trusted-proxies`        | _(empty)_ | Comma-separated addresses and CIDR ranges of the proxies whose `--trusted-proxy-header` is believed, e.g. `127.0.0.1/32`. The literal `unix` trusts every peer of a unix-socket listener instead, and is refused on a TCP address. An entry that is neither fails startup.                                                                                                                                             |
 | `--tls-cert`               | _(empty)_ | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
 | `--tls-key`                | _(empty)_ | PEM private key file for `--tls-cert`. Both or neither — a certificate without a key is a deployment that believes it is serving TLS and is not, so the half-pair fails startup.                                                                                                                                                                                                                                       |
 
@@ -618,6 +620,29 @@ for uncredentialed requests. `curl` reports `200` throughout and will not show y
 So a deployment that sets `--trusted-origins` must drop the CORS block from its proxy in
 the same change, and if the two cannot be coordinated, drop the proxy block first: that
 returns the endpoint to refusing browsers, which is at least consistent.
+
+**Which caller a request is charged to.** One process serves everybody: one mirror manager,
+one `libgen.Client`, one outbound rate limiter, one cache. Nothing is per-caller today, and
+what is added later has to key on something — so there is one answer to _who is this_ rather
+than one per feature, and it is the address the connection came from.
+
+Behind a reverse proxy every connection comes from the proxy, so `--trusted-proxy-header`
+names the header it fills with the address it heard the request from, and `--trusted-proxies`
+names the peers whose word is taken for it. The header is read **only** from a listed peer;
+from anybody else it is text the caller wrote, and a caller who can pick the address their
+traffic is charged to can pick somebody else's, or a fresh one per request. That is why the
+two flags are required together and either alone fails startup. A header carrying several
+hops is read from the **right**, stopping at the first hop that is not itself a trusted proxy,
+since each proxy appends the peer it heard from; a single-valued header such as `X-Real-IP` is
+simply that walk over one value.
+
+The address to trust is the one the server accepts connections from, which is not always the
+one the proxy's upstream line names — a published container port has a bridge gateway between
+them. Read it off the deployment rather than copying a value. On a unix socket the peer is a
+path, so `--trusted-proxies` takes the literal `unix` there — _every peer of this socket is a
+trusted proxy_, which `0660` already limits to its owner and group — and refuses it on a TCP
+address. The reasoning is recorded in
+[One server for every caller](decisions/2026-09-17-one-server-for-every-caller.md).
 
 **Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
 transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events

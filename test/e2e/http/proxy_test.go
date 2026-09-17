@@ -23,6 +23,14 @@ import (
 // The /proxied block is the deployment's, not an invention: mcp.jmrp.io answers
 // a POST to the MCP location with Access-Control-Allow-Origin "*" and an
 // Expose-Headers list, and answers OPTIONS itself with 204.
+//
+// Both locations forward X-Real-IP and X-Forwarded-For for the same reason: the
+// deployment's proxy does, so the address the server is given to charge a
+// caller comes from the fixture rather than from a header this suite wrote for
+// itself. What that address turns out to be is the fixture's own topology —
+// 127.0.0.1 here, because nothing stands between nginx and the server, whereas
+// the hosted endpoint sees its Docker bridge gateway. Neither belongs in the
+// code, which takes whatever the operator names.
 const proxyConfig = `events { worker_connections 64; }
 http {
   access_log off;
@@ -41,6 +49,8 @@ http {
       proxy_set_header Connection "";
       proxy_set_header Host $host;
       proxy_set_header Origin $http_origin;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       rewrite ^/proxied/?(.*)$ /$1 break;
       proxy_pass http://127.0.0.1:%d;
     }
@@ -49,6 +59,8 @@ http {
       proxy_set_header Connection "";
       proxy_set_header Host $host;
       proxy_set_header Origin $http_origin;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       rewrite ^/plain/?(.*)$ /$1 break;
       proxy_pass http://127.0.0.1:%d;
     }
@@ -263,5 +275,41 @@ func TestProxy_NoBufferingHeaderIsConsumedByTheProxy(t *testing.T) {
 	_, header := proxyDo(t, base, "/plain/", "")
 	if got := header.Get("X-Accel-Buffering"); got != "" {
 		t.Errorf("X-Accel-Buffering through nginx = %q, want it consumed and stripped", got)
+	}
+}
+
+// TestProxy_TrustedProxyFlagsServeTheDeployedShape drives the hosted
+// deployment's own proxy configuration through the real nginx.
+//
+// The shape is the one on the wire today: a proxy that forwards X-Real-IP, and
+// a server told to believe it from that proxy and from nobody else. The flag
+// names 127.0.0.1 because that is what this fixture's nginx connects from with
+// --network host; the hosted endpoint names its Docker bridge gateway instead,
+// which is a property of where it runs and not of the code.
+//
+// What is asserted is that the configuration is accepted end to end and the
+// surface still serves under it — the flags parse, the pair passes the startup
+// check, and nothing in the request path changes. The charged address is not
+// observable over the wire yet, because nothing reads it until a per-caller
+// budget does; the assertion that the walk returns the right address lives in
+// cmd/server's unit tests until then.
+func TestProxy_TrustedProxyFlagsServeTheDeployedShape(t *testing.T) {
+	port := freePort(t)
+	s := startServerOnPort(t, port, nil,
+		"--trusted-proxy-header", "X-Real-IP",
+		"--trusted-proxies", "127.0.0.1/32",
+	)
+	base := startProxy(t, port)
+
+	status, _ := proxyDo(t, base, "/plain/", "")
+	if status != http.StatusOK {
+		t.Fatalf("tools/list through the proxy = %d, want %d. Output:\n%s", status, http.StatusOK, s.logs())
+	}
+
+	logs := s.logs()
+	for _, want := range []string{"X-Real-IP", "127.0.0.1/32"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("the startup log does not name %q, so an operator cannot tell the rule was read:\n%s", want, logs)
+		}
 	}
 }

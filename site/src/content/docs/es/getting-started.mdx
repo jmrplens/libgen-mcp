@@ -391,9 +391,12 @@ server {
         proxy_http_version 1.1;
         proxy_buffering    off;   # la respuesta del POST es un flujo SSE real
         proxy_read_timeout 1h;    # las descargas emiten progreso durante minutos
+        proxy_set_header   X-Real-IP $remote_addr;
     }
 }
 ```
+
+Esa última cabecera solo merece la pena enviarla si al servidor se le dice que la lea. El par de un socket unix es una ruta y no una dirección, así que la confianza se declara con el literal `unix`: `--trusted-proxy-header X-Real-IP --trusted-proxies unix`. Los dos flags o ninguno — cualquiera por separado aborta el arranque — y sin ellos todos los llamantes se distinguen por el socket, es decir, no se distinguen. Sobre TCP, nombra la dirección desde la que el servidor acepta conexiones en lugar de `unix`; detrás de un puerto de contenedor publicado esa es la pasarela del bridge, no el `127.0.0.1` que usa la línea `upstream`.
 
 Con Docker, los dos contenedores comparten el directorio del socket y no publican nada:
 

@@ -191,6 +191,8 @@ func mainWithExit() int {
 	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
 	transportSelector := flag.String("transport", "", "which transport to serve: stdio, http, or auto. Empty (default) keeps the historical rule — a --http value means HTTP, no value means stdio. auto reads it off standard input: a pipe, terminal, file or socket means stdio, and only /dev/null (a container started without -i) means HTTP. --http still supplies the address HTTP binds, defaulting to "+defaultHTTPAddr)
+	trustedProxyHeader := flag.String("trusted-proxy-header", "", "header a trusted proxy fills with the address it heard the request from (e.g. X-Real-IP or X-Forwarded-For). Read only from a peer listed in --trusted-proxies, and required together with it; without both, every caller is told apart by the address the connection came from")
+	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
 	registerEnvBackedFlags()
 	flag.Parse()
 
@@ -238,6 +240,24 @@ func mainWithExit() int {
 	if modeErr != nil {
 		log.Print(modeErr)
 		return 1
+	}
+	// Refused before anything is served, and for the same reason the origin list
+	// and the socket mode are: an operator who believes a forwarded address is
+	// being read, and whose callers are all charged to the proxy anyway, has
+	// nothing to look at afterwards — and the opposite mistake hands every caller
+	// the key their own traffic is counted under.
+	proxyEntries := commaSeparated(*trustedProxies)
+	if proxyErr := validateTrustedProxyConfig(proxyEntries, *trustedProxyHeader, decision.Addr); proxyErr != nil {
+		log.Print(proxyErr)
+		return 1
+	}
+	if len(proxyEntries) > 0 {
+		// Said once at startup because it is the only place it can be seen: the
+		// rule decides which address every later per-caller budget is keyed on,
+		// and a list that names the wrong hop looks exactly like a correct one
+		// from outside — every caller simply shares the proxy's key.
+		log.Printf("--trusted-proxy-header %s is read from %s, and from no other peer; every other caller is told apart by the address it connects from",
+			strings.TrimSpace(*trustedProxyHeader), strings.Join(proxyEntries, ", "))
 	}
 
 	// Refused at startup rather than at the first request: a server mounted on a
