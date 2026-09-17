@@ -706,12 +706,38 @@ trusted proxy_, which `0660` already limits to its owner and group — and refus
 address. The reasoning is recorded in
 [One server for every caller](decisions/2026-09-17-one-server-for-every-caller.md).
 
-**Proxy buffering.** A response that negotiates SSE carries `X-Accel-Buffering: no`, which the
-transport spec asks servers to send: without it, an nginx-class reverse proxy accumulates events
-in a buffer instead of forwarding them. That matters here because the POST response stream is a
-real stream — `download` and `read` emit `notifications/progress` on it while a file is being
-fetched, and a buffering proxy would hold every one of those events until the transfer finished.
-The header is scoped to the MCP endpoint; `GET /health` and the server card do not carry it.
+**Proxy buffering, and the response is what decides.** A response that _is_ an SSE stream carries
+`X-Accel-Buffering: no`, which the transport spec asks servers to send: without it, an
+nginx-class reverse proxy accumulates events in a buffer instead of forwarding them. That matters
+here because the POST response stream is a real stream — `download` and `read` emit
+`notifications/progress` on it while a file is being fetched, and a buffering proxy would hold
+every one of those events until the transfer finished.
+
+The decision is taken from the committed `Content-Type`, not from the request's `Accept`. The SDK
+answers a stream to a bare `*/*` — curl's default and several HTTP libraries' — so a test on the
+literal `text/event-stream` in `Accept` missed exactly the clients most likely to be used to try
+the endpoint out: they got a real stream with no header at all. (It requires `Accept` to cover
+both `application/json` and `text/event-stream`, so a bare `text/*` is refused with `400` and
+never reaches the question.) The header is scoped to the MCP endpoint; `GET /health` and the
+server card do not carry it.
+
+**A silent stream is kept alive.** Every 25 seconds without a write, a stream receives the SSE
+comment `: keep-alive` — a line starting with `:` carries no field, so a conforming reader
+discards it without producing an event. Clearing this end's write deadline keeps the server from
+timing the stream out; it does nothing about the hops in between, and nginx closes an idle
+upstream response at `proxy_read_timeout`, 60 seconds by default. These streams are legitimately
+silent for that long: a resolve may spend `LIBGEN_MCP_RESOLVE_BUDGET` before the first
+notification, and a transfer may go `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` between them. The
+interval leaves room for two frames inside the tightest of those windows, and a stream that has
+written recently is skipped rather than padded.
+
+**The listener's write timeout, and where it does not apply.** `http.Server.WriteTimeout` is 60
+seconds, which guards a peer that opens a connection and then stops reading. It bounds the whole
+handler rather than the write, so on the MCP endpoint it would sever a tool call doing exactly
+what it was asked to do — a download under `--json-response` answers once, at the end, and the
+wall-clock cap on one call defaults to an hour. So the endpoint clears it, in both modes, and
+every other route keeps it: `/health`, both card paths and the `404` are small bodies with no
+business taking a minute to write.
 
 **Cache hints.** `tools/list`, `prompts/list` and `server/discover` carry a
 [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) hint of
