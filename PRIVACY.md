@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-08-06
+Last updated: 2026-09-17
 
 **libgen-mcp** is a Model Context Protocol (MCP) server you run yourself. In its
 normal use it runs entirely on your machine and acts as a bridge between your MCP
@@ -23,6 +23,47 @@ information, because nothing is ever sent anywhere that the maintainer controls.
 That last sentence is a statement about the software, and it holds wherever you
 run it. It is not a statement about the [hosted endpoint](#hosted-endpoint),
 where the same software runs on a machine the maintainer operates.
+
+### OpenTelemetry, if you turn it on
+
+The server can export traces, metrics and logs, and this section exists so the
+paragraph above stays exactly true rather than becoming a technicality.
+
+It is **off by default** (`LIBGEN_MCP_TELEMETRY`). When you enable it, the
+telemetry goes to a collector **you** configure and run. There is no path by
+which it could reach the maintainer: the only default the exporters have is
+`https://localhost:4318` — your own machine, where the export fails and says so in
+your own server log unless you are running a collector there. Nothing in any code
+path carries anyone else's address. Turning it on is a decision you make about
+your own deployment and the people using it.
+
+**What it records describes operations, never their contents:** the method
+called, the tool named, whether it succeeded, how long it took, which download
+source served a file and which mirror host it came from. **What somebody searched
+for is excluded by design and by no setting** — there is no value of any variable
+that puts a search query or a record title into an exported signal, because there
+is no operator for whom a collector holding "what this person looked for" is the
+right outcome. Tool arguments, tool results and any credential supplied for a
+single call are excluded on the same terms.
+
+The identifier of the item a call was about (an md5, a DOI, an ISBN) is exported
+as a keyed digest rather than literally, so that "this one book fails on every
+source" stays distinguishable from "every download is failing" without naming the
+book. The literal identifier is exported only under the full identity policy
+below.
+
+**Who made a call is recorded only if you ask**, through
+`LIBGEN_MCP_TELEMETRY_IDENTITY`. The default, `none`, records nothing about the
+caller. `pseudonymous` records a keyed digest of the address the request was
+charged to, which tells one caller's traffic from another's while naming nobody.
+`full` records that address and the client's own name and version, which is for
+an operator running this for a known group of people on their own collector — on
+a public endpoint an address is personal data, which is why it is neither the
+default nor a step anything takes for you.
+
+The full detail, including what each signal carries and the four traps in the
+standard `OTEL_*` variables, is in the
+[telemetry guide](https://jmrp.io/docs/libgen-mcp/telemetry/).
 
 ## Data flows
 
@@ -145,7 +186,10 @@ optional, and unset by default.
   (`LIBGEN_MCP_DOWNLOAD_DIR`, default `~/Downloads`, or the per-call `path`
   argument). Files stay on your machine; nothing is uploaded anywhere.
 - **Logs** go to standard error only (collected, if at all, by your MCP client).
-  The server creates no database and no telemetry file.
+  The server creates no database and no telemetry file. With
+  [OpenTelemetry](#opentelemetry-if-you-turn-it-on) enabled, records above an
+  INFO floor are also sent to the collector you configured — still nothing on
+  disk, and still nowhere the maintainer can reach.
 - **Mirror cache.** The lists of discovered Library Genesis and Anna's Archive
   mirrors are cached on disk for 24 hours, as `mirrors.json` and
   `annas-mirrors.json` under the OS cache directory
@@ -172,6 +216,15 @@ your own. The requests to Library Genesis and to the open-access sources are the
 made by that machine rather than by yours, so those third parties see its address
 instead of yours.
 
+That machine may also be running the server's own
+[OpenTelemetry export](#opentelemetry-if-you-turn-it-on) to a collector its
+operator controls, which is the one thing about it this policy can usefully say:
+the software's default is off, and whether a deployment you did not configure has
+turned it on, and under which identity policy, is a question for the person
+operating it. The instance's own card at `GET /.well-known/mcp/server-card.json`
+publishes the answer — whether telemetry is on, what each enabled signal records
+and what it records about callers — so it can be read rather than asked for.
+
 That instance is operated as part of [mcp.jmrp.io](https://mcp.jmrp.io/) and its
 handling of requests is governed there, not by this policy, which describes the
 software. This document can only tell you what the software does; it cannot make
@@ -190,7 +243,10 @@ evicted. None of them records a query or an identifier of yours except the names
 of the files you chose to fetch. It shares data with no third parties beyond the
 destinations listed under [Data flows](#data-flows) — the Library Genesis
 mirrors, the extra searchers a `search` may reach, and the article and book
-download sources you invoke.
+download sources you invoke. With
+[OpenTelemetry](#opentelemetry-if-you-turn-it-on) enabled, a fourth destination
+exists and it is one you named: the collector you configured, whose retention is
+yours to set.
 
 ## Responsible use
 
@@ -202,11 +258,17 @@ live. Use it only for content you are legally entitled to access.
 
 ### Does libgen-mcp collect any telemetry or analytics?
 
-No. The server has no telemetry, no analytics, no crash reporting and no backend
-of its own. It creates no database and no telemetry file, and logs only to
-standard error, where your MCP client collects them if it collects them at all.
-The maintainer never receives your queries, your downloads or any usage
-information.
+Not unless you turn it on, and never to the maintainer. There is no analytics, no
+crash reporting and no backend of its own; the server creates no database and no
+telemetry file, and logs to standard error, where your MCP client collects them if
+it collects them at all. The maintainer never receives your queries, your
+downloads or any usage information, whatever you configure.
+
+`LIBGEN_MCP_TELEMETRY` lets **you** export OpenTelemetry traces, metrics and logs
+to a collector **you** run; it is off by default, the exporters' only default
+destination is your own `localhost`, and what they carry describes operations
+rather than what was searched for. See
+[OpenTelemetry, if you turn it on](#opentelemetry-if-you-turn-it-on).
 
 ### What data leaves my machine, and who receives it?
 

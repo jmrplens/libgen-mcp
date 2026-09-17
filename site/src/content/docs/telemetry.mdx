@@ -1,0 +1,358 @@
+---
+title: Telemetry
+description: "OpenTelemetry in libgen-mcp: off by default, exported to a collector you run, and what each signal does and does not record."
+chips:
+  - text: "Off by default"
+  - text: "Your collector, never the maintainer's"
+  - text: "Privacy policy"
+    href: "/libgen-mcp/privacy/"
+datePublished: "2026-09-17"
+---
+
+`libgen-mcp` can export OpenTelemetry traces, metrics and logs to a collector you
+run. It is **off by default**, and off means nothing is created, nothing is
+started and nothing is sent: the switch is the only thing standing between the
+two states.
+
+This page is the detail behind the paragraph in [Privacy](/libgen-mcp/privacy/#opentelemetry-if-you-turn-it-on).
+
+## Turning it on
+
+```bash
+LIBGEN_MCP_TELEMETRY=1
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Everything about _how_ the export happens — the endpoint, the protocol, headers,
+timeouts, sampling, batch sizes, resource attributes, the service name — comes
+from the standard `OTEL_*` variables, which the SDK reads itself. Two names are
+this server's own beyond the switch:
+
+| Variable                                 | Default       | What it does                                                                                              |
+| ---------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_TELEMETRY`                   | `false`       | The switch. `1`/`0`, `true`/`false`; a value that is neither fails startup.                               |
+| `LIBGEN_MCP_TELEMETRY_SIGNALS`           | all three     | A comma-separated subset of `traces`, `metrics`, `logs`.                                                  |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY`          | `none`        | What a signal may say about who made a call. See [Recording who made a call](#recording-who-made-a-call). |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY`      | _(generated)_ | The secret the pseudonyms are computed under. **It is a credential.**                                     |
+| `LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION` | `0`           | How long a _generated_ key lives. Ignored when the key is configured.                                     |
+
+The signals are separable because their costs differ: traces are per call,
+metrics are aggregated, and logs duplicate a stream you are already collecting if
+you ship stderr to a pipeline.
+
+`OTEL_SDK_DISABLED=true` vetoes the switch from outside, and is the one variable
+on this surface parsed under the specification's grammar (the case-insensitive
+word `true`, and nothing else) rather than this server's looser one.
+
+### The four traps in the standard variables
+
+These catch people, they are not this server's doing, and each one fails quietly.
+
+**`http://` is not the default.** The Go exporters default to
+`https://localhost:4318`, not `http`. Turning telemetry on with no endpoint set
+attempts TLS against a plaintext local collector and every batch fails, for all
+three signals. Write the scheme:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+Writing a bare `localhost:4318` also yields https.
+
+**Durations are integer milliseconds, never Go durations.** The specification is
+explicit: "Any value that represents a timeout MUST be an integer representing a
+number of milliseconds." So `OTEL_EXPORTER_OTLP_TIMEOUT=30s` does not mean thirty
+seconds. It parses as nothing, and the 10s default stands.
+
+```bash
+OTEL_EXPORTER_OTLP_TIMEOUT=30000   # thirty seconds
+OTEL_EXPORTER_OTLP_TIMEOUT=30s     # nothing; the default is kept
+```
+
+Every `OTEL_BSP_*`, `OTEL_BLRP_*`, `OTEL_METRIC_EXPORT_INTERVAL` and
+`OTEL_METRIC_EXPORT_TIMEOUT` behaves the same way. Note that every variable _this_
+server defines takes a Go duration, which makes the inconsistency worse rather
+than better. It is worth reading twice.
+
+**`http/json` is refused, and the reason is narrower than it looks.** Since
+v1.46.0 the Go trace exporter implements it; the metric and log exporters do not.
+Honoring it would give one deployment two encodings at once — JSON spans beside
+protobuf metrics — from a single setting that reads as though it selects one
+thing. So it fails at startup, by name, rather than silently downgrading or
+silently splitting.
+
+**`OTEL_EXPORTER_OTLP_INSECURE=true` overrides an `https` endpoint, for traces and
+metrics.** The specification says the variable "only applies to OTLP/gRPC when an
+endpoint is provided without the http or https scheme". The Go trace and metric
+exporters do not read it that way: their environment configuration applies the
+scheme first and the `INSECURE` options after, so the later one wins and an
+`https` endpoint is downgraded to plaintext, taking whatever credential you set
+with it. The newer log exporters resolve the scheme first and are correct, which
+is why one deployment can end up exporting two signals in the clear and the third
+over TLS.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
+OTEL_EXPORTER_OTLP_INSECURE=true   # traces and metrics go out in plaintext anyway
+```
+
+The precedence runs the other way too: an `INSECURE=false` beside an `http`
+endpoint upgrades traces and metrics to TLS. This server emulates the deviation
+per signal rather than reading the scheme off the URL, so the plaintext warning
+below names the signals that are actually affected. It does not refuse the
+configuration: the endpoint is yours to choose.
+
+## Authenticating to your collector
+
+A collector that wants a credential reads it from the standard headers variable:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
+OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer%20abc123
+```
+
+The value is URL-encoded per the specification, which is why the space is `%20`.
+
+When a credential is configured against a **plaintext endpoint on another host**,
+the server warns once at startup and names the signals affected:
+
+```text
+a collector credential is configured against a plaintext endpoint on another host;
+it crosses the network in the clear on every export
+```
+
+It is a warning and never a refusal: a collector on a trusted private network
+reached over plaintext is a legitimate deployment, and both the endpoint and the
+headers are your configuration. A loopback collector is exempt — a credential that
+never leaves the machine cannot be observed on a network.
+
+## What is recorded
+
+### Spans
+
+One span per MCP request, named for the method, with the tool or prompt it
+carried:
+
+| Attribute                    | Example           | Notes                                                              |
+| ---------------------------- | ----------------- | ------------------------------------------------------------------ |
+| `mcp.method.name`            | `tools/call`      | The protocol method.                                               |
+| `gen_ai.tool.name`           | `download`        | Only for a tool this server registers; an unknown name is dropped. |
+| `gen_ai.prompt.name`         | `acquire_book`    | The same rule for prompts.                                         |
+| `mcp.protocol.version`       | `2026-07-28`      | Only a revision this server admits.                                |
+| `mcp.session.id`             | _(stateful only)_ | Absent under the stateless default, where there is no session.     |
+| `network.transport`          | `pipe` / `tcp`    | stdio is `pipe`; an HTTP listener, unix socket included, is `tcp`. |
+| `error.type`                 | `unavailable`     | A classification, never a message.                                 |
+| `rpc.response.status_code`   | `-32602`          | The JSON-RPC code, when there is one.                              |
+| `libgen_mcp.source`          | `unpaywall`       | Which download source served the item.                             |
+| `libgen_mcp.source_attempts` | `3`               | How many were tried before it.                                     |
+| `libgen_mcp.mirror_host`     | `libgen.li`       | The host the bytes came from.                                      |
+| `libgen_mcp.refusal_reason`  | `rate_limited`    | Why a request was refused before it reached a handler.             |
+
+An HTTP deployment adds a span in front of all of them, covering the guards that
+can refuse a request before the MCP layer exists: the Host check, the
+cross-origin protection, the body cap, the rate limit. Without it the traffic a
+published endpoint refuses is invisible, which is the traffic an operator most
+wants to see.
+
+Each outbound fetch this server makes is a child span carrying the method, the
+host and the status — and **never `url.full`**, because most of the URLs this
+server fetches were chosen by a third party and several carry a credential in
+their query string.
+
+**Nothing this server sends outward carries trace context.** A caller's
+`traceparent` and `baggage` are read on the way in and dropped on the way out, so
+a Sci-Hub mirror or a publisher never receives a correlation handle for your
+deployment. See [Architecture](/libgen-mcp/architecture/) for why that differs from the
+usual advice.
+
+### Metrics
+
+| Instrument                                 | Kind      | Dimensions                                                   |
+| ------------------------------------------ | --------- | ------------------------------------------------------------ |
+| `mcp.server.operation.duration`            | histogram | method, tool or prompt, outcome, protocol version, transport |
+| `mcp.server.session.duration`              | histogram | transport                                                    |
+| `mcp.client.operation.duration`            | histogram | the calls this server makes back to a client                 |
+| `http.server.request.duration`             | histogram | method, status, scheme                                       |
+| `http.client.request.duration`             | histogram | method, status, and the host — bounded, see below            |
+| `libgen_mcp.read_cache.bytes`              | gauge     | how full the `read` cache is, beside `.capacity`             |
+| `libgen_mcp.read_cache.evictions`          | counter   | `reason`: `ttl` or `size_pressure`                           |
+| `libgen_mcp.downloads.inflight`            | gauge     | concurrent downloads, beside `.capacity`                     |
+| `libgen_mcp.source_cooldown.entries`       | gauge     | sources being passed over, beside `.capacity` (the chain)    |
+| `libgen_mcp.source_cooldown.bypassed`      | counter   | every capable source in cooldown and tried anyway, by `kind` |
+| `libgen_mcp.client_records.entries`        | gauge     | the per-caller table, beside `.capacity`                     |
+| `libgen_mcp.client_records.evictions`      | counter   | `reason`: `lapsed` or `size_pressure`                        |
+| `libgen_mcp.client_records.busy_evictions` | counter   | an eviction taken with nothing idle to drop                  |
+
+**A metric dimension is never a value a caller chooses.** A tool name that is not
+one this server registers, a protocol version it does not admit, an HTTP method
+it does not know and a host it was not configured to reach are all folded into a
+single bucket rather than minting a time series each. The span keeps the real
+value: a trace has no series budget and a metric does.
+
+`libgen_mcp.mirror_host` is deliberately **not** a metric dimension. Which mirror
+a discovery rotated to is a third party's choice, and a discovered host list is
+not a bounded label space.
+
+### Logs
+
+Every log record goes to stderr first, unchanged, and — above an INFO floor that
+is **separate from `LIBGEN_MCP_LOG_LEVEL`** — to the collector as well. Debugging
+on your own terminal therefore does not start shipping a record per mirror
+request; running at `warn` still exports what an incident is made of.
+
+The exported copy is the stderr record minus three things:
+
+- **the fields on the strip list**: a search query, a record title, a per-call
+  credential, the address a request was charged to, and a recovered panic and its
+  stack;
+- **every error's text**, replaced by its type. The bridge would otherwise promote
+  an error into `exception.message` equal to `err.Error()`, which on this server
+  is net/http's `GET scheme://host/path: reason` — a mirror, and a path that for a
+  download is the item identifier;
+- **anything past one attribute's budget**, truncated with a marker and repaired
+  to valid UTF-8, since one partial rune fails the upload for a whole batch.
+
+### What is never recorded
+
+Under any policy, with any variable set to any value:
+
+- **the search query.** There is no setting that exports it, because there is no
+  operator for whom a collector holding "what this person looked for" is the right
+  outcome;
+- **the title of a record** that was returned, which is the same disclosure
+  arriving by the other direction;
+- **tool arguments and tool results**, whole;
+- **a credential supplied for a single call** — an Anna's Archive key or an
+  Unpaywall contact address — which is used once and never stored, let alone
+  exported;
+- **the contents of anything downloaded or read.**
+
+**The item identifier is not exported at all today.** An md5, a DOI or an ISBN
+names a specific book or paper, which is the same disclosure as the query by
+another route, so no span, metric or log record carries one. The machinery for
+exporting it as a keyed digest (`libgen_mcp.item.ref`, and the literal
+`libgen_mcp.item.id` only under `full`) exists in the code and nothing calls it:
+the digest would keep "this one book fails on every source" distinguishable from
+"every download is failing", which are two conditions with opposite responses.
+When it is turned on, this page and the server card will say so — and a digest is
+still reversible by anyone holding your identity key and a list of candidate
+identifiers, which is inherent to pseudonymity and why the key is a credential.
+
+## Recording who made a call
+
+`LIBGEN_MCP_TELEMETRY_IDENTITY` has three values.
+
+| Value          | What is exported                                                                      |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `none`         | Nothing about the caller. The default.                                                |
+| `pseudonymous` | `user.hash`, a keyed digest of the charged client address.                            |
+| `full`         | `client.address`, plus `mcp.client.name` and `mcp.client.version` from the handshake. |
+
+**There is no user here.** This server authenticates nobody, so a caller is an
+address — and on a public endpoint that is a stranger's address, which is personal
+data under the GDPR wherever the operator can have it attributed. That is why
+`none` is the default and `full` is a decision with a legal shape, rather than a
+verbosity setting.
+
+`user.hash` is an HMAC under a 32-byte key, not a plain digest: without the key
+there is nothing to enumerate against, which is what makes it usable on a public
+endpoint at all.
+
+### The key decides whether replicas agree
+
+Leave `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY` unset and a key is generated at startup
+and written nowhere: the pseudonym dies with the process, and two replicas report
+one caller as two. Set it and every replica derives the same digest for one
+caller, across restarts — which is what a multi-replica deployment wants, and why
+the key never rotates when you supplied it (`LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION`
+is ignored, with a warning, in that case).
+
+### A constant `user.hash` is a configuration symptom
+
+The digest is computed over the address the request was **charged** to, which is
+the same address every per-caller budget is keyed on. Three deployment shapes,
+three outcomes:
+
+1. **A listener other machines reach directly.** The peer is the caller, and the
+   pseudonym is a real per-caller pseudonym.
+2. **A TCP listener on loopback behind a proxy on the same host** — which is what
+   a published endpoint usually is. Without `--trusted-proxies` and
+   `--trusted-proxy-header`, the peer is the proxy for every caller alive, so
+   **one digest covers the whole deployment**.
+3. **A unix socket.** The peer is not an address at all, so without
+   `--trusted-proxies unix` the same thing happens by a different route.
+
+So a `user.hash` that never changes is not the policy working unusually well: it
+means the proxy flags are missing. Set the two flags to the address the proxy
+connects from and the header it sets, and check again.
+
+## Turning it off
+
+Unset `LIBGEN_MCP_TELEMETRY`, or set `OTEL_SDK_DISABLED=true` to veto it from
+outside without touching the deployment's own configuration. Either way nothing
+is created and nothing is started; the instrumentation calls in the code cost a
+nil check against the API's no-ops.
+
+## Seeing whether it is on
+
+Two places, and they answer different people.
+
+**The startup log**, at WARN, because it is the only local evidence that anything
+about this deployment leaves the machine and `LIBGEN_MCP_LOG_LEVEL` is free to
+suppress everything below it:
+
+```json
+{"level":"WARN","msg":"telemetry enabled","protocol":"http/protobuf","endpoint":"http://localhost:4318","signals":["traces","metrics","logs"]}
+{"level":"WARN","msg":"telemetry identity policy","policy":"pseudonymous","exports":"a keyed digest of the caller's address, with no readable identity","key":"configured (LIBGEN_MCP_TELEMETRY_IDENTITY_KEY), shared across replicas and never rotated here"}
+```
+
+**The server card**, at `GET /.well-known/mcp/server-card.json`, which is how
+somebody _calling_ a deployment can see that their calls are instrumented without
+having to ask its operator:
+
+```json
+{
+	"observability": {
+		"enabled": true,
+		"signals": ["traces", "metrics", "logs"],
+		"protocol": "http/protobuf",
+		"conventions": "OpenTelemetry, following the MCP semantic conventions",
+		"identity": "none",
+		"discloses": "nothing about who made a call",
+		"recorded": { "traces": "…", "metrics": "…", "logs": "…" },
+		"not_recorded": "search queries, record titles, tool arguments, tool results, and any credential supplied for a single call"
+	}
+}
+```
+
+The block is absent when telemetry is off, so nothing has to be parsed as a
+negation — and it deliberately does **not** carry the collector's address, which
+names the operator's own infrastructure.
+
+## When it goes wrong
+
+A collector that cannot be reached is logged and swallowed: a server that can
+still reach the mirrors keeps doing so. What is _not_ swallowed is a value of one
+of this server's own variables that cannot be parsed — an unknown signal name, an
+identity policy nobody defined, a rotation out of range — because a deployment
+that does not match its own configuration must not reach production looking
+healthy.
+
+The SDK's own failures reach your log stream rather than the stderr of whatever
+happened to be the process's default writer: the error handler and the internal
+logger are installed over this server's handler at startup. On stdio that is not
+a nicety — a library writing to stdout corrupts the JSON-RPC stream.
+
+### On stdio, never use a console exporter
+
+`OTEL_TRACES_EXPORTER=console` writes spans to stdout, which on a stdio server is
+the protocol. Use `otlp` and a local collector, or leave telemetry off.
+
+## Standards this follows
+
+The [MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/)
+for the protocol layer, the HTTP conventions for the two HTTP spans, and the
+registry's own keys where the value really is what the registry says it is
+(`error.type`, `server.address`, `user.hash`). Everything this project invented is
+under `libgen_mcp.*`, which is the namespace rule in both directions: a name in
+somebody else's namespace is a claim a backend reads structurally.

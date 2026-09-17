@@ -1,11 +1,11 @@
 ---
 title: Política de privacidad
-description: "Qué maneja libgen-mcp y a dónde va: sin telemetría, sin analítica, y cada destino de red listado herramienta por herramienta."
-datePublished: "2026-08-06"
+description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y va a tu colector, y cada destino de red está listado herramienta por herramienta."
+datePublished: "2026-09-17"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "322a695e7ccf5eda"
+privacySource: "3cc22c8c82267d84"
 head:
   - tag: script
     attrs:
@@ -78,6 +78,45 @@ controle.
 Esa última frase habla del software y se cumple lo ejecutes donde lo ejecutes. No
 habla del [endpoint hospedado](#endpoint-hospedado), donde ese mismo software corre
 en una máquina que opera el mantenedor.
+
+### OpenTelemetry, si lo activas
+
+El servidor puede exportar trazas, métricas y registros, y esta sección existe
+para que el párrafo de arriba siga siendo exactamente cierto en lugar de
+convertirse en un tecnicismo.
+
+Está **apagado por defecto** (`LIBGEN_MCP_TELEMETRY`). Cuando lo activas, la
+telemetría va a un colector que **tú** configuras y ejecutas. No hay ningún camino
+por el que pueda llegar al mantenedor: el único valor por defecto que tienen los
+exportadores es `https://localhost:4318` — tu propia máquina, donde la exportación
+falla y lo dice en tu propio registro del servidor salvo que tengas un colector
+ahí. Nada en ninguna ruta de código lleva la dirección de otra persona. Activarlo
+es una decisión que tomas sobre tu propio despliegue y sobre quienes lo usan.
+
+**Lo que registra describe operaciones, nunca su contenido:** el método invocado,
+la herramienta nombrada, si tuvo éxito, cuánto tardó, qué fuente de descarga sirvió
+el fichero y de qué mirror vino. **Lo que alguien buscó queda excluido por diseño y
+por ningún ajuste**: no hay valor de ninguna variable que meta una consulta de
+búsqueda o el título de un registro en una señal exportada, porque no hay ningún
+operador para quien un colector con «lo que esta persona buscó» sea el resultado
+correcto. Los argumentos de las herramientas, sus resultados y cualquier credencial
+suministrada para una sola llamada quedan excluidos en los mismos términos.
+
+El identificador del ítem al que se refiere una llamada (un md5, un DOI, un ISBN)
+tampoco se exporta hoy: nombra un libro o un artículo concreto, que es la misma
+revelación por otra vía.
+
+**Quién hizo una llamada solo se registra si lo pides**, con
+`LIBGEN_MCP_TELEMETRY_IDENTITY`. El valor por defecto, `none`, no registra nada de
+quien llama. `pseudonymous` registra un digest con clave de la dirección a la que
+se cargó la petición, que distingue el tráfico de un llamante del de otro sin
+nombrar a nadie. `full` registra esa dirección y el nombre y la versión del propio
+cliente, y es para quien opera esto para un grupo conocido de personas en su propio
+colector — en un endpoint público una dirección es dato personal, y por eso no es
+ni el valor por defecto ni algo que nada active por ti.
+
+El detalle completo, incluido lo que lleva cada señal y las cuatro trampas de las
+variables `OTEL_*` estándar, está en la [guía de telemetría](/libgen-mcp/es/telemetry/).
 
 ## Flujos de datos
 
@@ -213,7 +252,10 @@ es igualmente opcional y está sin definir por defecto.
   sitio.
 - Los **logs** van solo a la salida de error estándar (recogidos, si acaso, por
   tu cliente MCP). El servidor no crea ninguna base de datos ni fichero de
-  telemetría.
+  telemetría. Con [OpenTelemetry](#opentelemetry-si-lo-activas) activado, los
+  registros por encima de un umbral INFO se envían además al colector que hayas
+  configurado — sigue sin haber nada en disco, y sigue sin haber ningún sitio al
+  que el mantenedor pueda llegar.
 - **Caché de mirrors.** Las listas de mirrors descubiertos de Library Genesis y
   Anna's Archive se cachean en disco durante 24 horas, como `mirrors.json` y
   `annas-mirrors.json` bajo el directorio de caché del sistema
@@ -242,6 +284,16 @@ en la tuya. Las peticiones a Library Genesis y a las fuentes de acceso abierto l
 hace entonces esa máquina y no la tuya, así que esos terceros ven su dirección en
 lugar de la tuya.
 
+Esa máquina puede además estar ejecutando la
+[exportación de OpenTelemetry](#opentelemetry-si-lo-activas) del propio servidor
+hacia un colector que controla quien la opera, que es lo único útil que esta
+política puede decir al respecto: el valor por defecto del software es apagado, y
+si un despliegue que no configuraste tú lo ha encendido, y con qué política de
+identidad, es una pregunta para quien lo opera. La propia card de la instancia en
+`GET /.well-known/mcp/server-card.json` publica la respuesta —si la telemetría está
+encendida, qué registra cada señal activada y qué registra sobre quien llama—, así
+que puede leerse en vez de preguntarse.
+
 Esa instancia se opera como parte de [mcp.jmrp.io](https://mcp.jmrp.io/) y su
 tratamiento de las peticiones se rige allí, no por esta política, que describe el
 software. Este documento solo puede contarte qué hace el software; no puede prometer
@@ -261,7 +313,10 @@ identificador tuyo, más allá de los nombres de los ficheros que elegiste obten
 No comparte datos con terceros más allá de los destinos listados en [Flujos de
 datos](#flujos-de-datos) — los mirrors de Library Genesis, los buscadores
 adicionales a los que puede llegar un `search`, y las fuentes de descarga de
-artículos y libros que invocas.
+artículos y libros que invocas. Con
+[OpenTelemetry](#opentelemetry-si-lo-activas) activado existe un cuarto destino, y
+es uno que nombraste tú: el colector que configuraste, cuya retención te toca fijar
+a ti.
 
 ## Uso responsable
 
@@ -274,11 +329,17 @@ derecho legal de acceder.
 
 ### ¿Recoge libgen-mcp telemetría o analíticas?
 
-No. El servidor no tiene telemetría, ni analíticas, ni informes de fallos, ni
-backend propio. No crea ninguna base de datos ni ningún fichero de telemetría, y
-registra únicamente en la salida de error estándar, donde tu cliente MCP los
-recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus
-descargas ni ninguna información de uso.
+No, salvo que lo actives tú, y nunca al mantenedor. No hay analíticas, ni informes
+de fallos, ni backend propio; el servidor no crea ninguna base de datos ni ningún
+fichero de telemetría, y registra en la salida de error estándar, donde tu cliente
+MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus
+descargas ni ninguna información de uso, configures lo que configures.
+
+`LIBGEN_MCP_TELEMETRY` te permite a **ti** exportar trazas, métricas y registros
+de OpenTelemetry a un colector que **tú** ejecutas; está apagado por defecto, el
+único destino por defecto de los exportadores es tu propio `localhost`, y lo que
+llevan describe operaciones y no lo que se buscó. Consulta
+[OpenTelemetry, si lo activas](#opentelemetry-si-lo-activas).
 
 ### ¿Qué datos salen de mi máquina, y quién los recibe?
 
