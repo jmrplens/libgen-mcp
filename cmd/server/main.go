@@ -190,6 +190,7 @@ func mainWithExit() int {
 	tlsKey := flag.String("tls-key", "", "PEM private key file for --tls-cert")
 	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
 	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
+	transportSelector := flag.String("transport", "", "which transport to serve: stdio, http, or auto. Empty (default) keeps the historical rule — a --http value means HTTP, no value means stdio. auto reads it off standard input: a pipe, terminal, file or socket means stdio, and only /dev/null (a container started without -i) means HTTP. --http still supplies the address HTTP binds, defaulting to "+defaultHTTPAddr)
 	flag.Parse()
 
 	if *showVersion {
@@ -216,7 +217,18 @@ func mainWithExit() int {
 		log.Print(tlsErr)
 		return 1
 	}
-	mode, modeErr := resolveSocketMode(*httpAddr, *socketMode)
+	// Resolved before anything reads the listener, because after --transport
+	// exists the flag is no longer the answer: `--transport http` with no --http
+	// binds an address nobody typed, and `--transport stdio` with one binds
+	// nothing at all. Everything downstream — the socket mode, the listen
+	// specification, the remote-download mode, the private-address hatch — takes
+	// decision.Addr rather than the flag.
+	decision, transportErr := resolveTransport(*transportSelector, *httpAddr)
+	if transportErr != nil {
+		log.Print(transportErr)
+		return 1
+	}
+	mode, modeErr := resolveSocketMode(decision.Addr, *socketMode)
 	if modeErr != nil {
 		log.Print(modeErr)
 		return 1
@@ -249,8 +261,8 @@ func mainWithExit() int {
 		TrustedOrigins:      trusted,
 		BasePath:            normalizeBasePath(*httpPath),
 	}
-	spec := listenSpec{addr: *httpAddr, socketMode: mode, tlsCert: *tlsCert, tlsKey: *tlsKey}
-	if err := run(ctx, spec, opts); err != nil && !isCleanShutdown(err) {
+	spec := listenSpec{addr: decision.Addr, socketMode: mode, tlsCert: *tlsCert, tlsKey: *tlsKey}
+	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
 		return 1
 	}
@@ -783,8 +795,14 @@ func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, 
 	return securityHeaders(servesTLS, mux)
 }
 
-func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
-	httpAddr := spec.addr
+// run serves the MCP server on the listener spec it is given.
+//
+// decision carries only how that spec was arrived at — the warning, the
+// inference, and whether a person is at the other end of stdin. Which transport
+// to serve is read from spec.addr and nowhere else, so there is one source of
+// truth for it rather than two that can drift: mainWithExit resolves the
+// transport first and builds the spec from the answer.
+func run(ctx context.Context, spec listenSpec, opts transport.Options, decision transportDecision) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -796,16 +814,24 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options) error {
 		return hatchErr
 	}
 	// Install the global slog logger before serving so every log line goes to
-	// stderr (stdout is reserved for the stdio MCP transport).
+	// stderr (stdout is reserved for the stdio MCP transport). The transport
+	// decision is explained here rather than where it was taken, so it arrives
+	// as a JSON record on a stream of JSON records.
 	logging.Setup(cfg.LogLevel)
+	decision.explain()
 
-	server, err := newRegisteredServer(cfg, httpAddr)
+	server, err := newRegisteredServer(cfg, spec.addr)
 	if err != nil {
 		return err
 	}
 
-	if httpAddr != "" {
+	if spec.addr != "" {
 		return serveHTTP(ctx, server, spec, opts)
+	}
+	// Said before the first read, because after it the process looks idle and
+	// that is exactly what the message is about.
+	if decision.Interactive {
+		writeTerminalGuidance(os.Stderr, buildversion.Current())
 	}
 	return serveStdio(ctx, server, cfg)
 }
@@ -876,14 +902,20 @@ func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
-func newRegisteredServer(cfg *config.Config, httpAddr string) (*mcp.Server, error) {
+func newRegisteredServer(cfg *config.Config, listenAddr string) (*mcp.Server, error) {
 	// A deployment is remote when its disk is not the caller's: an HTTP listener
 	// (a TCP address or a unix socket) or a hosted stdio process that says so with
 	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
 	// not, whether the server may pull a file's body over its own connection —
 	// resolved here, before the client is built, because this is the only place
 	// that knows the transport.
-	remote := httpAddr != "" || cfg.RemoteDownloads
+	//
+	// listenAddr is the RESOLVED address, not the --http flag. The difference is
+	// silent and it matters: a `--transport http` deployment with no --http would
+	// otherwise read as local and start pulling file bodies over an egress IP
+	// shared by everyone it serves, which is the thing the file-body decision
+	// record exists to prevent.
+	remote := listenAddr != "" || cfg.RemoteDownloads
 	serverFetch := cfg.ResolveServerFetch(remote)
 
 	mgr, err := mirrors.NewManager(cfg)

@@ -8,6 +8,7 @@ package stdioe2e
 
 import (
 	"encoding/json"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -322,4 +323,122 @@ func TestMalformedInput_IsAnsweredAndTheSessionSurvives(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTransportAuto_WithAPipeOnStdin_SpeaksStdio pins the half of the transport
+// inference every MCP client depends on, against a real process.
+//
+// The shape under test is the shape that ships: an MCP client connects a pipe to
+// file descriptor 0, which is exactly what exec.Cmd's StdinPipe gives this
+// session, and `--transport auto` has to read that as "somebody is speaking to
+// me". Getting it wrong is not a visible failure — it is an HTTP listener nobody
+// asked for and a client that waits at initialize forever with no output at all.
+//
+// Both halves are asserted, because either alone would pass while the feature
+// was broken: the log line says what was inferred, and the JSON-RPC answers
+// coming back down stdout say the server went on to serve it. An HTTP listener
+// answers nothing here whatever it logged.
+func TestTransportAuto_WithAPipeOnStdin_SpeaksStdio(t *testing.T) {
+	s := startSessionWithArgs(t, baseEnv(t, startMirror(t)), "--transport", "auto")
+
+	for _, tc := range []struct {
+		name    string
+		request string
+	}{
+		{name: "initialize", request: initializeRequest(1)},
+		{name: "tools/list", request: request(2, "tools/list", "")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := s.call(t, tc.request)
+			if got["error"] != nil {
+				t.Fatalf("%s failed: %v", tc.name, got["error"])
+			}
+			if got["jsonrpc"] != "2.0" {
+				t.Errorf("%s was not answered with JSON-RPC 2.0: %v", tc.name, got)
+			}
+		})
+	}
+
+	logs := s.waitForStderr(t, "transport inferred from stdin", 10*time.Second)
+	for _, want := range []string{`"transport":"stdio"`, "stdin is a pipe"} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("the inference was not logged as %s:\n%s", want, logs)
+		}
+	}
+}
+
+// TestTerminalGuidance_IsNotPrintedToAClient is the other side of the message
+// this step adds.
+//
+// A word of explanation for somebody who started the server from a shell is
+// worth having; the same words arriving in a client's log on every session, or
+// worse on its stdout, are not. A client connects a pipe, so it must see
+// neither.
+func TestTerminalGuidance_IsNotPrintedToAClient(t *testing.T) {
+	s := startSession(t, baseEnv(t, startMirror(t)))
+	if got := s.call(t, initializeRequest(1)); got["error"] != nil {
+		t.Fatalf("initialize failed: %v", got["error"])
+	}
+
+	// Anchored on a line the server always writes, so this is an absence in what
+	// was logged rather than in what the harness had copied so far.
+	logs := s.waitForStderr(t, startupLine, 10*time.Second)
+	if strings.Contains(logs, "Model Context Protocol server, not an interactive program") {
+		t.Errorf("the terminal guidance was printed to a client with a pipe on stdin:\n%s", logs)
+	}
+}
+
+// TestTransportStdio_WithAnAddressServesStdioAndListensNowhere is the other
+// direction of the resolution --transport introduces.
+//
+// The selector decides the transport and --http supplies an address, so the two
+// together can ask for something contradictory. What must not happen is the
+// half-and-half: a stdio session served AND a port quietly opened, which would
+// be a listener nobody knows is there on a deployment that believes it is
+// speaking over pipes.
+//
+// The listener is checked by dialing rather than by reading a log line: a server
+// that logged "serving stdio" and bound the port anyway would satisfy any
+// message assertion, and the socket is the thing that matters.
+func TestTransportStdio_WithAnAddressServesStdioAndListensNowhere(t *testing.T) {
+	addr := freeLoopbackAddr(t)
+	s := startSessionWithArgs(t, baseEnv(t, startMirror(t)), "--transport", "stdio", "--http", addr)
+
+	if got := s.call(t, initializeRequest(1)); got["error"] != nil {
+		t.Fatalf("the stdio session was not served: %v", got["error"])
+	}
+
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := dialer.DialContext(t.Context(), "tcp", addr)
+	if err == nil {
+		_ = conn.Close()
+		t.Errorf("%s accepted a connection, so --transport stdio still opened a listener", addr)
+	}
+
+	// And the operator is told, because an address that does nothing is the
+	// hardest kind of thing to notice is missing.
+	logs := s.waitForStderr(t, "was given but this process is serving stdio", 10*time.Second)
+	if !strings.Contains(logs, addr) {
+		t.Errorf("the warning does not name the address that was dropped:\n%s", logs)
+	}
+}
+
+// freeLoopbackAddr returns a loopback address nothing is listening on.
+//
+// The port is taken and released, which leaves a window in which something else
+// could claim it. That is acceptable here and nowhere else in this module: the
+// assertion is that the SERVER did not bind it, and a foreign listener would
+// make the case fail rather than pass — the direction a flake has to fall.
+func freeLoopbackAddr(t *testing.T) string {
+	t.Helper()
+	var lc net.ListenConfig
+	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserving a port: %v", err)
+	}
+	addr := l.Addr().String()
+	if closeErr := l.Close(); closeErr != nil {
+		t.Fatalf("releasing the reserved port: %v", closeErr)
+	}
+	return addr
 }

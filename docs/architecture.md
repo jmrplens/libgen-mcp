@@ -330,7 +330,10 @@ The server speaks MCP over one of two transports, selected at startup:
 - **stdio (default).** With no `--http` flag the server runs over stdio, reading requests on
   stdin and writing responses on stdout (logs go to stderr). This is the mode MCP clients
   such as Claude Code, Claude Desktop, Cursor, and VS Code use: the client launches the
-  binary as a child process and speaks to it locally, one client per process.
+  binary as a child process and speaks to it locally, one client per process. Started from a
+  terminal it prints a few lines to stderr saying so and then serves anyway — a terminal on
+  stdin is a legitimate way to hand-drive the protocol, and the message exists because the
+  alternative is a process that appears to do nothing.
 - **streamable HTTP (opt-in).** Started with `--http` — either a TCP address (for example
   `libgen-mcp --http :8080`) or the path of a unix socket (`libgen-mcp --http
   /run/mcp-libgen.sock`) — the server instead serves the streamable HTTP transport,
@@ -365,6 +368,34 @@ and moving them client-side would leave the server with nothing to do. An operat
 with `LIBGEN_MCP_SERVER_FETCH=1`. See
 [Configuration](configuration.md#libgen_mcp_server_fetch) and
 [Tools](tools.md#read-is-not-on-every-deployment).
+
+### Which transport, and who decides
+
+The rule above — no `--http` means stdio — is still true and still the default, but it is no
+longer the whole rule. `--transport` states the choice outright, and takes `stdio`, `http` or
+`auto`:
+
+- `--transport stdio` serves stdio whatever else was given. A `--http` value alongside it is
+  warned about rather than ignored, because an address that quietly does nothing is the
+  hardest kind of misconfiguration to notice.
+- `--transport http` serves HTTP. `--http` supplies the address; without one it binds
+  `:8080`, which is a listener anything on the network can reach — so
+  `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` is refused there, exactly as it is for `--http :8080`
+  typed out.
+- `--transport auto` **reads the answer off standard input**, which is what lets one container
+  image serve a published port and still work with `docker run -i`.
+
+The inference asks "did anybody hand this process a stdin at all", not "is this a terminal" —
+a terminal and `/dev/null` are both character devices, so the second question cannot separate
+a person from a container started without `-i`. Only `/dev/null` means HTTP; a pipe (an MCP
+client), a terminal (a person), a regular file (a replayed session) and a socket (a
+supervisor) all mean stdio. An unrecognized shape means stdio too, because that error is
+visible in seconds while the other one is a client hanging with no output at all. Whatever it
+decides, it logs the observation it decided on.
+
+Everything downstream reads the **resolved** answer rather than the flag: the socket mode, the
+listener, whether `download` returns links instead of files, whether the server may fetch file
+bodies at all, and the private-address refusal.
 
 ### Where the server listens
 
