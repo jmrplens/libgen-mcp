@@ -595,9 +595,32 @@ layer that knows its own certificate lifetime, so it sends its own. No `preload`
 either way: preloading is a decision about a whole domain, which one server behind it has no
 standing to make on the operator's behalf.
 
-**Request cancellation.** A client that disconnects mid-call cancels the handler's context,
-so an abandoned mirror fetch stops instead of running to completion. The SDK applies this
-only to protocol-`2026-07-28` requests, so older clients are unaffected.
+**Request cancellation, for every client and not only the newest.** A client that disconnects
+mid-call cancels the handler's context, so an abandoned mirror fetch stops instead of running to
+completion. The SDK's own propagation covers protocol-`2026-07-28` requests, where cancellation
+arrives as a `notifications/cancelled` an older client cannot send — so for everyone else an
+abandoned `tools/call` was not a signal this server dropped: nothing was signaled at all, and
+the handler kept working. Here that handler is usually a download, holding one of
+`LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` slots and a temp-cache slot and spending the shared
+outbound bucket, for megabytes nobody will read — while the callers still waiting queue behind
+it.
+
+So each POST is stamped with a process-internal token naming its own request context, and each
+call it carries runs under a context that ends when the POST does. Binding to the POST is exact
+rather than a guess: this server configures no `EventStore`, so a response can only be written
+to the stream that carried its request — there is nothing to replay from, and in stateless mode
+no second request to replay onto. When the POST ends, the answer has nowhere left to go.
+
+Notifications are exempt, because no POST waits for one and their handlers may legitimately
+outlive it. A request carrying no token is left alone, which is stdio — where a client that goes
+away closes the pipe and the transport read failure cancels everything in flight — and the
+in-memory transport the server card is built over. The token is stamped by the server, never
+read from the caller: any inbound value under that name is overwritten on a POST and deleted on
+every other method, so a client cannot name somebody else's request.
+
+This and the wall-clock cap (`LIBGEN_MCP_ACTION_TIMEOUT`) cover different halves of the same
+resource: one ends a call whose client went away, the other a call whose client is still
+waiting.
 
 **Origin validation.** A state-changing POST that a browser sends from another origin is
 refused with `403`, which the transport spec requires of every streamable HTTP server to
