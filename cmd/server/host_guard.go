@@ -220,9 +220,16 @@ func hostGuarded(guard hostGuard, next http.Handler) http.Handler {
 		}
 		slog.WarnContext(r.Context(), "request refused: the Host header names a host this deployment does not serve",
 			"host", loggedHostPrefix(r.Host), "host_len", len(r.Host))
-		http.Error(w, "Forbidden: the Host header names a host this deployment does not serve. "+
-			"Behind a reverse proxy, pass --public-url with the origin clients use, or --trusted-proxies with the proxy's address.",
-			http.StatusForbidden)
+		// JSON-RPC rather than http.Error's plain text, for the reason
+		// refusal.go states: an unreadable 4xx on this route reads to a
+		// Streamable HTTP client as a pre-negotiation server, and it downgrades
+		// its transport instead of reporting the misconfiguration.
+		refusal{
+			status: http.StatusForbidden,
+			code:   codeForbidden,
+			message: "the Host header names a host this deployment does not serve. " +
+				"Behind a reverse proxy, pass --public-url with the origin clients use, or --trusted-proxies with the proxy's address.",
+		}.write(w, r)
 	})
 }
 

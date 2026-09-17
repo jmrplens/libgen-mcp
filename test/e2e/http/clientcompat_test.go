@@ -141,6 +141,64 @@ func TestClient_ModernEraIsRefusedStructurallyWhenStateful(t *testing.T) {
 	}
 }
 
+// TestClient_UnrecognizedLegacyVersionIsRefusedAsJSONRPC is the branch the SDK
+// still answers in plain text, and the one where an opaque body is worst.
+//
+// The specification's own backward-compatibility rule tells a client that a 400
+// whose body is not a recognizable JSON-RPC error means an initialization-era
+// server. It then downgrades to the withdrawn HTTP+SSE transport and issues a
+// GET, which this stateless deployment answers 405 — so a typo in one header
+// costs the client its transport instead of one retry.
+//
+// Asserted on the wire because that is the only place it is visible: the SDK
+// produces the JSON-RPC form natively for revisions at or above 2026-07-28, so
+// a test written against the modern era would pass without this guard existing.
+func TestClient_UnrecognizedLegacyVersionIsRefusedAsJSONRPC(t *testing.T) {
+	s := startServer(t, nil)
+
+	reply := s.do(t, request{body: toolsListBody, headers: map[string]string{
+		"MCP-Protocol-Version": "2024-01-01",
+	}})
+	if reply.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", reply.status, http.StatusBadRequest, truncate(reply.body))
+	}
+	if ct := reply.header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json: a body a client cannot recognize is the whole failure", ct)
+	}
+
+	var envelope struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Error   *struct {
+			Code int `json:"code"`
+			Data *struct {
+				Supported []string `json:"supported"`
+				Requested string   `json:"requested"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(reply.body), &envelope); err != nil {
+		t.Fatalf("the refusal is not JSON-RPC: %v\nbody: %s", err, truncate(reply.body))
+	}
+	if envelope.JSONRPC != "2.0" {
+		t.Errorf("jsonrpc = %q, want 2.0", envelope.JSONRPC)
+	}
+	// toolsListBody carries id 1. Echoing it is what lets a client that routes
+	// on id deliver the refusal to the call that caused it.
+	if string(envelope.ID) != "1" {
+		t.Errorf("id = %q, want the request's own id", envelope.ID)
+	}
+	if envelope.Error == nil || envelope.Error.Code != -32022 {
+		t.Fatalf("error = %+v, want code -32022 (unsupported protocol version): %s", envelope.Error, truncate(reply.body))
+	}
+	if envelope.Error.Data == nil || len(envelope.Error.Data.Supported) == 0 {
+		t.Fatalf("no supported list, so the client is told what failed but not what to retry with: %s", truncate(reply.body))
+	}
+	if envelope.Error.Data.Requested != "2024-01-01" {
+		t.Errorf("data.requested = %q, want the version that was asked for", envelope.Error.Data.Requested)
+	}
+}
+
 // TestClient_AcceptVariants covers the header clients get wrong most often.
 func TestClient_AcceptVariants(t *testing.T) {
 	s := startServer(t, nil)
