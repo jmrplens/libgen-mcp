@@ -339,6 +339,85 @@ func proxyDoWithHost(t *testing.T, base, path, host string) (int, http.Header) {
 	return resp.StatusCode, resp.Header
 }
 
+// TestProxy_TwoClientsBehindTheProxyGetABucketEach is the rate limit's central
+// claim, driven through a real proxy because this is the only place in the suite
+// where the peer address is genuinely the proxy's rather than the test's own
+// choice.
+//
+// nginx sets X-Forwarded-For to $proxy_add_x_forwarded_for, appending the peer
+// it heard from — so what arrives is "<the client's value>, 127.0.0.1" and the
+// rightmost-hop walk has real work to do: skip the hop the flag vouches for,
+// stop at the one it does not. Two clients that differ in nothing else then have
+// to be told apart, and without the flags they must not be.
+//
+// The server is on a wildcard bind, which is the hosted deployment's shape and
+// the one no startup rule can decide.
+func TestProxy_TwoClientsBehindTheProxyGetABucketEach(t *testing.T) {
+	const (
+		clientA = "203.0.113.7"
+		clientB = "198.51.100.23"
+	)
+	limit := []string{"--rate-limit-rps", "0.001", "--rate-limit-burst", "1"}
+
+	t.Run("told apart when the proxy is named", func(t *testing.T) {
+		base := proxiedWildcardServer(t, append([]string{
+			"--trusted-proxy-header", "X-Forwarded-For",
+			"--trusted-proxies", "127.0.0.1/32",
+		}, limit...)...)
+
+		assertProxiedRPCCode(t, base, clientA, 0, "the first caller's first request")
+		assertProxiedRPCCode(t, base, clientA, rateLimitedCode, "the first caller's second request")
+		assertProxiedRPCCode(t, base, clientB, 0, "the second caller's first request")
+	})
+
+	t.Run("one budget for everybody when it is not", func(t *testing.T) {
+		base := proxiedWildcardServer(t, limit...)
+
+		assertProxiedRPCCode(t, base, clientA, 0, "the first request")
+		assertProxiedRPCCode(t, base, clientB, rateLimitedCode, "a different forwarded address")
+	})
+}
+
+// proxiedWildcardServer starts the binary on a wildcard bind with nginx in front
+// and returns the proxy's base URL.
+func proxiedWildcardServer(t *testing.T, flags ...string) string {
+	t.Helper()
+
+	port := freePort(t)
+	launchServer(t, fmt.Sprintf("http://127.0.0.1:%d", port), nil, nil,
+		append([]string{"--http", fmt.Sprintf(":%d", port)}, flags...))
+	return startProxy(t, port)
+}
+
+// assertProxiedRPCCode sends one tools/list through the proxy announcing a
+// client address, and checks the JSON-RPC code that comes back. 0 means the
+// request was served.
+func assertProxiedRPCCode(t *testing.T, base, client string, want int, what string) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/plain/", strings.NewReader(toolsListBody))
+	if err != nil {
+		t.Fatalf("%s: building the request: %v", what, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", acceptHeader)
+	req.Header.Set("MCP-Protocol-Version", protocolVersion)
+	// The value nginx will append its own peer to.
+	req.Header.Set("X-Forwarded-For", client)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s: %v", what, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	reply := response{status: resp.StatusCode, header: resp.Header, body: string(body)}
+	if got := rpcErrorCode(t, what, reply); got != want {
+		t.Errorf("%s: JSON-RPC code = %d, want %d", what, got, want)
+	}
+}
+
 // TestProxy_TrustedProxyFlagsServeTheDeployedShape drives the hosted
 // deployment's own proxy configuration through the real nginx.
 //

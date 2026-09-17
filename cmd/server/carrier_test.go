@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,7 +32,7 @@ func stampedToken(t *testing.T, c *requestCarriers) (token string, endPOST func(
 
 	ctx, cancel := context.WithCancel(t.Context())
 	var minted string
-	handler := c.middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	handler := c.middleware(chargePolicy{}, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		minted = r.Header.Get(carrierHeader)
 	}))
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader("{}"))
@@ -180,42 +181,60 @@ func TestCarrierLeavesAnUncarriedRequestAlone(t *testing.T) {
 // TestCarrierRefusesASmuggledToken is the reason the header is stamped rather
 // than merely read.
 //
-// A client that could set this header would be naming somebody else's POST: bind
-// would attach their call to a context that is not theirs, and ending that POST
-// would cancel it. Every inbound value is overwritten on a POST and deleted on
-// anything else, so a token that reaches bind was minted here.
+// A client that could set the carrier header would be naming somebody else's
+// POST: bind would attach their call to a context that is not theirs, and ending
+// that POST would cancel it. One who could set the client-address header would
+// be choosing whose budget their traffic counts against. Both are
+// server-controlled, so both are overwritten on a POST and deleted on anything
+// else.
 func TestCarrierRefusesASmuggledToken(t *testing.T) {
 	var c requestCarriers
+	// A policy that vouches for nobody, so the address charged is the peer's —
+	// which is what the test asserts arrives, rather than the caller's value.
+	charge := chargePolicy{}
 
-	t.Run("a POST gets its value overwritten", func(t *testing.T) {
-		var reached string
-		handler := c.middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			reached = r.Header.Get(carrierHeader)
+	reachedWith := func(t *testing.T, method string) (token, address string) {
+		t.Helper()
+		handler := c.middleware(charge, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			token = r.Header.Get(carrierHeader)
+			address = r.Header.Get(clientAddressHeader)
 		}))
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", strings.NewReader("{}"))
+		var body io.Reader
+		if method == http.MethodPost {
+			body = strings.NewReader("{}")
+		}
+		req := httptest.NewRequestWithContext(t.Context(), method, "/", body)
+		req.RemoteAddr = "198.51.100.23:41100"
 		req.Header.Set(carrierHeader, "smuggled")
+		req.Header.Set(clientAddressHeader, "203.0.113.7")
 		handler.ServeHTTP(httptest.NewRecorder(), req)
+		return token, address
+	}
 
-		if reached == "smuggled" {
+	t.Run("a POST gets both values overwritten", func(t *testing.T) {
+		token, address := reachedWith(t, http.MethodPost)
+		if token == "smuggled" {
 			t.Error("the caller's own carrier token reached the SDK")
 		}
-		if reached == "" {
+		if token == "" {
 			t.Error("no token was minted for the POST")
+		}
+		if address == "203.0.113.7" {
+			t.Error("the caller chose the address their traffic is charged to")
+		}
+		if address != "198.51.100.23" {
+			t.Errorf("charged address = %q, want the peer this policy vouches for nobody else than", address)
 		}
 	})
 
 	for _, method := range []string{http.MethodGet, http.MethodDelete, http.MethodOptions} {
-		t.Run("a "+method+" gets it deleted", func(t *testing.T) {
-			var reached string
-			handler := c.middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				reached = r.Header.Get(carrierHeader)
-			}))
-			req := httptest.NewRequestWithContext(t.Context(), method, "/", nil)
-			req.Header.Set(carrierHeader, "smuggled")
-			handler.ServeHTTP(httptest.NewRecorder(), req)
-
-			if reached != "" {
-				t.Errorf("a %s carried the token %q through; this method mints none, so none may pass", method, reached)
+		t.Run("a "+method+" gets both deleted", func(t *testing.T) {
+			token, address := reachedWith(t, method)
+			if token != "" {
+				t.Errorf("a %s carried the token %q through; this method mints none, so none may pass", method, token)
+			}
+			if address != "" {
+				t.Errorf("a %s carried the charged address %q through; this method stamps none", method, address)
 			}
 		})
 	}

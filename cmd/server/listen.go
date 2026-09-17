@@ -60,6 +60,14 @@ type listenSpec struct {
 	// because this struct is what already reaches the place the handler is
 	// built.
 	guard hostGuard
+	// charge is how a request's caller is named: the flags that decide whether a
+	// forwarded address is believed, and from whom.
+	charge chargePolicy
+	// records is the per-caller state this deployment keeps, or nil when it
+	// keeps none. Its contents depend on the listener too — a listener whose
+	// every peer is this machine cannot tell two callers apart, so there is
+	// nothing worth keeping per caller there.
+	records *clientRecords
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

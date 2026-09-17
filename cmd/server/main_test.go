@@ -326,7 +326,7 @@ func TestServeHTTPServesRequests(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(), newHostGuard(addr, "", trustedProxies{}))
+		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(), newHostGuard(addr, "", trustedProxies{}), chargePolicy{})
 	}()
 
 	base := "http://" + addr
@@ -383,7 +383,9 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 	// default answers GET with 405 and closes every POST stream on reply.
 	opts := transport.DefaultOptions()
 	opts.Stateless = false
-	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, opts, newHostGuard(addr, "", trustedProxies{})) }()
+	go func() {
+		done <- serveHTTPOn(ctx, newTestServer(), ln, opts, newHostGuard(addr, "", trustedProxies{}), chargePolicy{})
+	}()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -486,7 +488,7 @@ func healthOK(base string) bool {
 func newSearchToolServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newMCPServer(serverInstructions(true, false))
+	srv := newMCPServer(serverInstructions(true, false), nil)
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil
@@ -817,7 +819,7 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "")
+	server, err := newRegisteredServer(cfg, "", nil)
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -872,7 +874,7 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "")
+	server, err := newRegisteredServer(cfg, "", nil)
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -939,7 +941,7 @@ func TestAdvertisedCapabilitiesAreWhatThisServerServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "")
+	server, err := newRegisteredServer(cfg, "", nil)
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}

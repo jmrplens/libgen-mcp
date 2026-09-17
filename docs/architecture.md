@@ -534,6 +534,8 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--public-url`             | _(empty)_ | Origin clients reach this deployment at, e.g. `https://mcp.example.org/libgen`. Its host is the one this server answers to in the `Host` header a proxy forwards; without it, or without `--trusted-proxies` naming the proxy, a proxied request carrying a public name is refused as a DNS-rebinding attempt. A value that is not an `http`/`https` URL with a host fails startup.                                    |
 | `--trusted-proxy-header`   | _(empty)_ | Header a trusted proxy fills with the address it heard the request from — `X-Real-IP` on the hosted deployment. Read only from a peer `--trusted-proxies` names; from anybody else it is text the caller wrote. Required together with `--trusted-proxies`: either flag alone fails startup.                                                                                                                           |
 | `--trusted-proxies`        | _(empty)_ | Comma-separated addresses and CIDR ranges of the proxies whose `--trusted-proxy-header` is believed, e.g. `127.0.0.1/32`. The literal `unix` trusts every peer of a unix-socket listener instead, and is refused on a TCP address. An entry that is neither fails startup.                                                                                                                                             |
+| `--rate-limit-rps`         | `10`      | Inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. `0` or less turns it off. On a listener whose every peer is this machine it is off unless `--trusted-proxies` names the proxy in front; passing it explicitly there fails startup rather than being downgraded.                                                                               |
+| `--rate-limit-burst`       | `40`      | How many of those requests one charged address may make at once before the refill rate applies.                                                                                                                                                                                                                                                                                                                        |
 | `--tls-cert`               | _(empty)_ | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
 | `--tls-key`                | _(empty)_ | PEM private key file for `--tls-cert`. Both or neither — a certificate without a key is a deployment that believes it is serving TLS and is not, so the half-pair fails startup.                                                                                                                                                                                                                                       |
 
@@ -678,6 +680,53 @@ leaving a constant that advertises a version nothing serves.
 
 Off the endpoint nothing changes. The `404` answers a scanner rather than a client and already
 names the endpoint, and the server card is a public document with no session behind it.
+
+**What one caller may ask for.** `tools/call`, `prompts/get` and `subscriptions/listen` draw on a
+token bucket per charged address, and `tools/list` on a second bucket of its own. Without it the
+noisiest caller spends the outbound bucket, the download slots, the temp cache and the processor
+for everybody, since all of those are one set shared by one process.
+
+The two buckets are separate so that **draining the call bucket never costs a caller their
+discovery**: a refused listing is worse than a refused call, because no model is in the loop to
+read the message and back off. Listing is still metered — a client listing in a loop spends the
+processor its co-tenants are waiting for — just not out of the same budget. The methods that
+reach nothing are not metered at all: `initialize`, `prompts/list`, the notifications, and the
+resource methods and `completion/complete`, which already answer `-32601`.
+
+A refused `tools/call` comes back as a **successful** JSON-RPC result flagged `isError`, so the
+model gets a structured diagnostic and the agent loop can back off; the other three have no error
+flag of their own, so their refusal is a JSON-RPC error with code `-42900`, mirroring HTTP 429 the
+way the transport gates' codes mirror their statuses. Refusals are reported at most once per ten
+seconds, with a count of everything the line stands for — their rate is the arrival rate minus the
+limit, so one line each would be a flood.
+
+**The limit is only a limit where the charged address tells two callers apart**, which is why it
+is not simply on everywhere:
+
+- On a listener whose every peer is this machine — a loopback bind, or a unix socket — it is
+  **off** unless `--trusted-proxies` names the proxy in front (`unix` for a socket). Without that
+  every caller in the world arrives as one address and the "per-caller" bucket is one budget for
+  the whole deployment, which is worse than no limit: legitimate users refuse each other, and no
+  limit is at least honest about what it does. Passing `--rate-limit-rps` explicitly there is a
+  startup refusal naming both proxy flags, because an operator who asked for a bound deserves to
+  be told it cannot do what they think.
+- On a **wildcard bind** it stays on, and no startup rule decides it: that listener may serve real
+  remote peers and a same-host proxy at once, and this process cannot see a port publication — a
+  container binding `0.0.0.0` published with `-p 127.0.0.1:8080:8080` is host-local in fact and
+  reads as public here. Instead, the first request charged to an address no public client could
+  have (loopback, RFC 1918, CGNAT, link-local, unique-local — the same set the outbound guard
+  refuses to dial) logs **one** warning naming both flags. That address is often not loopback: a
+  container published on the host's loopback sees its bridge gateway, which is RFC 1918.
+
+The per-address table is bounded and evicts rather than refusing. Refusing at the cap would lock
+out every new legitimate client once a few thousand addresses had been seen — trivial over IPv6 —
+and refusing to _track_ at the cap would make the next address unlimited, which is the bypass.
+Eviction costs at most one full burst, prefers a record with no request in flight, and sweeps
+lapsed records first so the cap bounds live callers rather than everything ever seen.
+
+The figures are the sibling project's HTTP defaults. What they should be against _this_ server's
+outbound budget is a measurement nobody has taken yet; a deployment's own numbers are whatever its
+flags say.
 
 **Which `Host` this server answers.** Every MCP server is asked to refuse a `Host` it does not
 serve, against DNS rebinding: an attacker resolves a name they control to the address a server

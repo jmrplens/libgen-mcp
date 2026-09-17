@@ -95,8 +95,8 @@ var mcpCarriers requestCarriers
 // the Host guard, the cross-origin protection, the version check — end the
 // request without ever dispatching an MCP call, and a token minted for one of
 // those would name a context nothing looks up.
-func carriedMCPHandler(next http.Handler) http.Handler {
-	return mcpCarriers.middleware(next)
+func carriedMCPHandler(charge chargePolicy, next http.Handler) http.Handler {
+	return mcpCarriers.middleware(charge, next)
 }
 
 // middleware stamps every POST to the MCP endpoint with a fresh carrier token
@@ -108,15 +108,22 @@ func carriedMCPHandler(next http.Handler) http.Handler {
 // context is what makes "the token is not in the map" mean exactly "the POST
 // carrying it is over", which is the invariant [requestCarriers.bind] reads.
 //
+// It stamps the charged address in the same place and for the same reasons: it
+// is the other per-POST value the SDK's middlewares cannot see for themselves,
+// and it is decided from the connection and the operator's flags rather than
+// from anything a caller wrote. Both headers are server-controlled, so both are
+// overwritten here and deleted everywhere else.
+//
 // Non-POST methods carry no MCP requests: a stateless GET or DELETE is answered
 // 405, and a stateful GET opens the standalone SSE stream, which delivers
-// server-initiated messages and receives none. They get the header deleted and
-// nothing else, so a client cannot smuggle a token in on a method this never
-// mints one for.
-func (c *requestCarriers) middleware(next http.Handler) http.Handler {
+// server-initiated messages and receives none. They get the headers deleted and
+// nothing else, so a client cannot smuggle either value in on a method this
+// never mints one for.
+func (c *requestCarriers) middleware(charge chargePolicy, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			r.Header.Del(carrierHeader)
+			r.Header.Del(clientAddressHeader)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -125,6 +132,7 @@ func (c *requestCarriers) middleware(next http.Handler) http.Handler {
 		c.contexts.Store(token, ctx)
 		context.AfterFunc(ctx, func() { c.contexts.Delete(token) })
 		r.Header.Set(carrierHeader, token)
+		r.Header.Set(clientAddressHeader, charge.charge(r))
 		next.ServeHTTP(w, r)
 	})
 }
