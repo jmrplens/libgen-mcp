@@ -683,6 +683,37 @@ leaving a constant that advertises a version nothing serves.
 Off the endpoint nothing changes. The `404` answers a scanner rather than a client and already
 names the endpoint, and the server card is a public document with no session behind it.
 
+**The binary probes itself.** `libgen-mcp --healthcheck` finds the running instance on this
+machine, reads `--http`, `--http-path`, `--tls-cert` and `--transport` off its command line,
+derives where `/health` is served and asks — exiting `0` when it answers, `1` when it does not,
+`2` for a target that does not parse. The image's `HEALTHCHECK` runs exactly that.
+
+A `curl` or `wget` line in the image would have to restate the flags, and gets four of the five
+listener shapes wrong: another port, a unix socket, TLS this process terminates, and a mount under
+`--http-path` all serve perfectly while such a probe reports unhealthy — and an orchestrator then
+restarts a container whose restart changes nothing. An instance serving stdio has no listener to
+probe and is reported healthy while it runs. The one listener it cannot discover is one bound to
+port `0`, whose real port is known only to the kernel and to the server's own log; pass the target
+outright there (`--healthcheck http://127.0.0.1:PORT/health`, `unix:/run/mcp.sock`, `host:port`),
+which is also what a probe run from outside the container does.
+
+An `https` listener is verified against the certificate `--tls-cert` names, as the only trusted
+root, asking for a name that certificate carries — so a self-signed certificate on a loopback
+address verifies the standard way, with no chain it never had and no host name it was never issued
+for. One attempt is bounded at three seconds and the whole run at four, inside the image's
+five-second timeout, so the check answers rather than being killed without a verdict.
+
+This is **not** `cmd/probe`, which is a maintainer's live diagnostic against the real mirrors.
+
+`libgen-mcp --shutdown` is its neighbor rather than its opposite: it asks every other instance of
+this binary on the machine to exit and kills what is left after five seconds. It exists for the
+upgrade — swapping the binary under an npm launcher, a `.mcpb` bundle or a plain `cp` leaves the
+old process holding a download slot, a temp-cache entry and the listener the new one wants. It
+shares its process lookup with `--healthcheck`, which is why they arrived together: the dependency
+on a process list is the cost, and one consumer would not have justified it. Binary names are
+compared with the platform suffix stripped, so `libgen-mcp-linux-amd64` matches `libgen-mcp` and
+neither matches somebody else's process on a shared host.
+
 **What `/health` answers, and what it deliberately does not.** The body carries `status`,
 `version`, `commit`, `build`, `config_digest`, `started_at` and `uptime_seconds`. `started_at`
 is the stable fact — byte-identical across probes, so a monitor can cache it and detect a restart

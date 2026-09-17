@@ -511,6 +511,16 @@ as much as our regressions, and triaging that daily costs more than it returns.
 `cmd/probe` is the quicker check that every route still works against the real
 mirrors; a genuine breakage otherwise surfaces from use.
 
+**`cmd/probe` and `libgen-mcp --healthcheck` are different things, and the names
+are chosen so they cannot be confused.** `cmd/probe` is a live diagnostic: it
+asks the real mirrors whether the download routes still work, and it is a
+maintainer's tool. `--healthcheck` is the container's health check: it finds the
+running server on this machine, reads the listener off its command line, and asks
+its `/health`. It reaches no mirror and needs no network beyond loopback. The
+server's flag is deliberately **not** `--probe`, even though the sibling project
+spells it that way, because `dist/probe` already exists here — one name meaning
+two things in one repository is worth a rename to avoid.
+
 The suite loads the repo-root `.env` itself, so either invocation above — and an
 IDE running a single test — picks up `LIBGEN_MCP_UNPAYWALL_EMAIL`,
 `LIBGEN_MCP_CORE_KEY` and `LIBGEN_MCP_ANNAS_KEY`. Anything already exported wins

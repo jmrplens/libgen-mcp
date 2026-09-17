@@ -209,6 +209,8 @@ func main() {
 func mainWithExit() int {
 	httpAddr := flag.String("http", "", "serve streamable HTTP here instead of stdio: an address (e.g. :8080) or a unix socket path (e.g. /run/mcp.sock, recognized by the path separator; a bare name like mcp.sock is read as a host)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	healthcheck := flag.Bool("healthcheck", false, "probe the running instance's /health and exit 0 when it answers, 1 when it does not. The listener is read off that instance's own command line — its --http, --http-path, --tls-cert and --transport — so a socket, a moved port, a mount under a prefix and TLS this process terminates are all probed correctly. A target may be given instead: an http(s) URL, unix:<path>, or host:port. This is not cmd/probe, which checks the live mirrors")
+	shutdown := flag.Bool("shutdown", false, "ask every other instance of this binary on this machine to exit, then kill what is left after "+shutdownGracePeriod.String()+". For an upgrade that swaps the binary while the old process still holds a download slot and a listener")
 	stateless := flag.Bool("stateless", true, "stateless streamable HTTP (default; required for MCP protocol 2026-07-28): no Mcp-Session-Id, each POST self-contained, GET/DELETE return 405; use -stateless=false for legacy stateful sessions")
 	jsonResponse := flag.Bool("json-response", false, "return application/json responses instead of text/event-stream (SSE)")
 	maxBody := flag.Int64("max-request-body-bytes", 0, "maximum streamable HTTP request body size in bytes; 0 uses the SDK default (4 MiB)")
@@ -236,6 +238,16 @@ func mainWithExit() int {
 	if *showVersion {
 		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
 		return 0
+	}
+	// Both before anything reads configuration or binds anything: they are
+	// diagnostics about a process that is already running, and neither has any
+	// use for this one's own settings.
+	if *healthcheck {
+		return runHealthcheck(context.Background(), flag.Args(), *tlsCert,
+			healthcheckDeps{peers: livePeers, stdinIsNull: peerStdinIsNull}, os.Stderr)
+	}
+	if *shutdown {
+		return runShutdown(os.Stderr)
 	}
 
 	// A negative cap disables the SDK limit outright, which must not be reachable
