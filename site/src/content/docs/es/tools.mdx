@@ -350,7 +350,10 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 	</Fragment>
 	<Fragment slot="path">
 		Directorio de destino. Por defecto `LIBGEN_MCP_DOWNLOAD_DIR` (o
-		`~/Downloads`). Se ignora cuando `resolve_only` es true.
+		`~/Downloads`). Se ignora cuando `resolve_only` es true. Un directorio
+		nombrado aquí queda confinado al directorio de trabajo, al temporal del
+		sistema, a `LIBGEN_MCP_DOWNLOAD_DIR` y a lo que figure en
+		`LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS`.
 	</Fragment>
 	<Fragment slot="filename">
 		Nombre de archivo de destino, usado tal cual una vez saneado a un único
@@ -579,7 +582,10 @@ Qué hacer en su lugar en un despliegue así: llama a `download`, que devuelve u
 	<Fragment slot="doi">DOI de un resultado de búsqueda de artículo.</Fragment>
 	<Fragment slot="path">
 		Lee un archivo ya descargado por su ruta absoluta. Solo servidor local — se
-		rechaza en un servidor remoto.
+		rechaza en un servidor remoto. Está confinada al directorio de trabajo, al
+		directorio temporal del sistema, a `LIBGEN_MCP_DOWNLOAD_DIR` y a lo que
+		figure en `LIBGEN_MCP_ALLOWED_READ_DIRS`; los enlaces simbólicos se
+		resuelven antes de la comprobación.
 	</Fragment>
 	<Fragment slot="source">
 		Restringe la obtención a una fuente (`libgen`/`randombook`/`annas` para

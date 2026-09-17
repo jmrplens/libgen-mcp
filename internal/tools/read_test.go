@@ -19,6 +19,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/extract"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 )
 
 // failingReadClient returns a libgen client whose only mirror is unroutable, so
@@ -33,7 +34,7 @@ func failingReadClient(t *testing.T) *libgen.Client {
 // TestValidateReadInput_BadMD5 covers the md5-syntax arm of validateReadInput: a
 // set but non-32-hex md5 is rejected before any fetch is attempted.
 func TestValidateReadInput_BadMD5(t *testing.T) {
-	if err := validateReadInput(ReadInput{MD5: "not-hex"}, false); err == nil {
+	if err := validateReadInput(ReadInput{MD5: "not-hex"}); err == nil {
 		t.Error("a malformed md5 should be rejected by validateReadInput")
 	}
 }
@@ -73,7 +74,7 @@ func TestReadReq_InvalidCursor(t *testing.T) {
 // before any file is resolved, so a nil client is safe.
 func TestReadBranches_InvalidCursor(t *testing.T) {
 	ctx := context.Background()
-	if _, err := readFind(ctx, nil, nil, ReadInput{Find: "x", Cursor: "!!!"}); err == nil {
+	if _, err := readFind(ctx, nil, nil, readTestCfg(), ReadInput{Find: "x", Cursor: "!!!"}); err == nil {
 		t.Error("readFind with an invalid cursor should error")
 	}
 	if _, err := readSequential(ctx, nil, nil, readTestCfg(), ReadInput{Path: "x", Cursor: "!!!"}); err == nil {
@@ -88,10 +89,10 @@ func TestReadBranches_ResolveError(t *testing.T) {
 	ctx := context.Background()
 	c := failingReadClient(t)
 	const md5 = "0123456789abcdef0123456789abcdef"
-	if _, err := readFind(ctx, nil, c, ReadInput{MD5: md5, Find: "x"}); err == nil {
+	if _, err := readFind(ctx, nil, c, readTestCfg(), ReadInput{MD5: md5, Find: "x"}); err == nil {
 		t.Error("readFind should propagate a fetch failure")
 	}
-	if _, err := readOutline(ctx, nil, c, ReadInput{MD5: md5}); err == nil {
+	if _, err := readOutline(ctx, nil, c, readTestCfg(), ReadInput{MD5: md5}); err == nil {
 		t.Error("readOutline should propagate a fetch failure")
 	}
 	if _, err := readSequential(ctx, nil, c, readTestCfg(), ReadInput{MD5: md5}); err == nil {
@@ -107,10 +108,10 @@ func TestReadBranches_ExtractError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	const p = "../extract/testdata/sample.pdf"
-	if _, err := readFind(ctx, nil, nil, ReadInput{Path: p, Find: "x"}); err == nil {
+	if _, err := readFind(ctx, nil, nil, readTestCfg(), ReadInput{Path: p, Find: "x"}); err == nil {
 		t.Error("readFind should surface a canceled-context extractor error")
 	}
-	if _, err := readOutline(ctx, nil, nil, ReadInput{Path: p}); err == nil {
+	if _, err := readOutline(ctx, nil, nil, readTestCfg(), ReadInput{Path: p}); err == nil {
 		t.Error("readOutline should surface a canceled-context extractor error")
 	}
 	if _, err := readSequential(ctx, nil, nil, readTestCfg(), ReadInput{Path: p}); err == nil {
@@ -122,7 +123,7 @@ func TestReadBranches_ExtractError(t *testing.T) {
 // selected branch errors (here an invalid cursor into the sequential branch), the
 // handler returns that error as a tool error rather than a result.
 func TestReadHandler_PropagatesBranchError(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, _, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: "x", Cursor: "!!!"})
 	if err == nil && (res == nil || !res.IsError) {
 		t.Fatal("readHandler should surface a branch error as a tool error")
@@ -147,7 +148,16 @@ func samplePDFBytesAndMD5(t *testing.T) ([]byte, string) {
 // so a directly constructed readHandler in these tests behaves like a handler
 // built through Register.
 func readTestCfg() *config.Config {
-	return &config.Config{ReadMaxChars: 6000, ReadDefaultPages: 5}
+	return &config.Config{
+		ReadMaxChars:     6000,
+		ReadDefaultPages: 5,
+		// The extract fixtures are a sibling of this package, so they are outside
+		// the working directory a test binary runs in and the containment refuses
+		// them by default — correctly. Naming the directory is what an operator
+		// would do to read files from somewhere this server does not own, and it
+		// keeps these tests exercising the guard rather than bypassing it.
+		AllowedReadDirs: []string{"../extract/testdata"},
+	}
 }
 
 // decodeReadOutput unmarshals a read tool result's structured content into a
@@ -411,7 +421,7 @@ func TestReadTool_FindEmptyStillReadsSequential(t *testing.T) {
 // local file (djvu) is a normal not-extractable result — Extractable false with a
 // reason — rather than a tool error, mirroring the sequential unsupported path.
 func TestReadTool_FindUnsupportedFormat(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path: "../extract/testdata/unsupported.djvu",
 		Find: "anything",
@@ -434,7 +444,7 @@ func TestReadTool_FindUnsupportedFormat(t *testing.T) {
 // file (djvu) in local mode is NOT a tool error: it returns a normal result with
 // Extractable false and an explanatory reason.
 func TestReadTool_LocalPathUnsupported(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path: "../extract/testdata/unsupported.djvu",
 	})
@@ -455,7 +465,15 @@ func TestReadTool_LocalPathUnsupported(t *testing.T) {
 // TestReadTool_RemoteRejectsPath verifies that, on a remote server, a read by
 // local path is rejected: the client cannot expose its filesystem to the host.
 func TestReadTool_RemoteRejectsPath(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), true)
+	// The transport decision now reaches the handler through pathguard rather than
+	// as a parameter, so the remote deployment is set up the way Register sets it
+	// up. TestMain turns it on for the package; this test is the one case that
+	// needs it off.
+	previous := pathguard.LocalAccessAllowed()
+	pathguard.SetLocalAccess(false)
+	t.Cleanup(func() { pathguard.SetLocalAccess(previous) })
+
+	h := readHandler(nil, readTestCfg())
 	res, _, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: "x"})
 	if err == nil && (res == nil || !res.IsError) {
 		t.Fatal("remote mode should reject a read by path")
@@ -488,7 +506,7 @@ func TestReadNextSteps_ReasonWithNewlineIsSanitized(t *testing.T) {
 // with the chapter titles, and still leads next_steps with the UNTRUSTED warning
 // (catalog/document titles are untrusted data).
 func TestReadTool_OutlinePDF(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path:    "../extract/testdata/bookmarked.pdf",
 		Outline: true,
@@ -532,7 +550,7 @@ func TestReadTool_DamagedTextLayerIsFlagged(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Repeat("qwrtp lkjhg zxcvbnm ffgghh mnbvcxz ", 20)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: path})
 	if err != nil {
 		t.Fatalf("readHandler returned an error: %v", err)
@@ -608,7 +626,7 @@ func TestLimitOutlineDepth(t *testing.T) {
 // to find a chapter.
 func TestReadTool_OutlineMaxDepth(t *testing.T) {
 	path := writeNestedEPUB(t)
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path: path, Outline: true, MaxDepth: 1,
 	})
@@ -707,7 +725,7 @@ func writeNestedEPUB(t *testing.T) string {
 // the sample PDF (no bookmarks) reports extractable with zero entries, and the
 // Markdown states plainly that no table of contents was found.
 func TestReadTool_OutlineNoToc(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path:    "../extract/testdata/sample.pdf",
 		Outline: true,
@@ -738,7 +756,7 @@ func TestReadTool_OutlineNoToc(t *testing.T) {
 // same reason the text path gives, and guidance that names retrying as pointless
 // rather than leaving it as the obvious next move.
 func TestReadTool_OutlineOfAScannedPDF(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path:    "../extract/testdata/scanned.pdf",
 		Outline: true,
@@ -773,7 +791,7 @@ func TestReadTool_OutlineOfAScannedPDF(t *testing.T) {
 // read (no outline, no find) still returns sequential text with no outline
 // entries, and a find over the same file still returns matches.
 func TestReadTool_OutlineDoesNotBreakFindOrSequential(t *testing.T) {
-	h := readHandler(nil, readTestCfg(), false)
+	h := readHandler(nil, readTestCfg())
 
 	seqRes, seq, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
 		Path: "../extract/testdata/sample.txt",

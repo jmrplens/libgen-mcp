@@ -551,12 +551,29 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (content []
 	if sawTransient {
 		// At least one transient failure: genuine connectivity trouble.
 		slog.Error("all mirror attempts exhausted", "path", path, "attempts", attempts)
-		return nil, "", fmt.Errorf("%w: %w", ErrAllMirrorsFailed, joined)
+		return nil, "", chainMirrorErrors(ErrAllMirrorsFailed, joined)
 	}
 	// Every candidate error was permanent (e.g. 404/403): a normal rejection, not
 	// a connectivity problem. Surface it as such and log at a lower severity.
 	slog.Warn("all mirrors rejected the request", "path", path, "attempts", attempts)
-	return nil, "", fmt.Errorf("%w: %w", ErrRequestRejected, joined)
+	return nil, "", chainMirrorErrors(ErrRequestRejected, joined)
+}
+
+// chainMirrorErrors wraps sentinel with the per-mirror failures, or explains
+// their absence when there are none.
+//
+// errors.Join returns nil for an empty slice, and fmt.Errorf renders a %w verb
+// with a nil operand as the literal "%!w(<nil>)" — a message that reports the
+// formatting broke rather than what happened, and which reaches both the
+// operator's log and the model's transcript. There are no per-mirror errors only
+// when no mirror was tried, which means the lister returned an empty list; a
+// Manager never does, so this is a custom lister, but saying so is better than
+// printing a format-verb diagnostic.
+func chainMirrorErrors(sentinel, joined error) error {
+	if joined == nil {
+		return fmt.Errorf("%w: no mirror was tried, because the mirror list was empty", sentinel)
+	}
+	return fmt.Errorf("%w: %w", sentinel, joined)
 }
 
 // sweep makes one pass over the candidate mirrors, failing over to the next on

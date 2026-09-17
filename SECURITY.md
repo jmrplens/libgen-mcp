@@ -66,6 +66,18 @@ wanted:
   directory and derives filenames from remote metadata. A remote-controlled name
   that escapes the destination directory, overwrites something it should not, or
   survives `sanitizeFilename` is a vulnerability.
+- **Reading or writing a local path the caller chose.** `read` takes a `path` and
+  `download` takes a destination directory, and both arrive from whatever is
+  driving the model rather than from configuration — which is the distinction that
+  matters, because the text `read` returns is untrusted third-party content and a
+  model acting on an instruction embedded in one document can ask for another.
+  Both are confined to the working directory, the OS temp directory, the
+  download directory and whatever `LIBGEN_MCP_ALLOWED_READ_DIRS` or
+  `LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS` name; the home directory is not an implicit
+  root even when the server was started there. Paths are resolved through
+  symlinks before the check and the leaf is opened without following one, so a
+  link inside an allowed directory pointing outside it, or swapped in after the
+  check, is in scope.
 - **Server-side request forgery.** Mirror discovery, the download source chain
   and `read` all fetch URLs influenced by remote responses. A path that can be
   steered to an internal address or a non-HTTP scheme is in scope, and matters

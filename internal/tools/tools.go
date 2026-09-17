@@ -24,6 +24,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
@@ -176,7 +177,7 @@ type DownloadInput struct {
 	MD5         string `json:"md5,omitempty" jsonschema:"file md5 from a book search result; provide md5, isbn or doi"`
 	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; provide md5, isbn or doi"`
 	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book, 10 or 13 characters, hyphens optional; fetches an openly licensed copy. Provide md5, isbn or doi"`
-	Path        string `json:"path,omitempty" jsonschema:"destination directory (default LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads); ignored when resolve_only is true"`
+	Path        string `json:"path,omitempty" jsonschema:"destination directory (default LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads); ignored when resolve_only is true. Confined to the working directory, the OS temp directory, the download directory, and anything in LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS"`
 	Filename    string `json:"filename,omitempty" jsonschema:"destination filename, sanitized to one path component. Unset: an md5 download is named 'Author - Title (Year).ext' from the record; doi/isbn keeps the announced name, else the identifier"`
 	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all; the enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
 	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"Anna's Archive member (fast) downloads; needs a paid membership. With no server key the client is asked for one, used once, never stored. False: keyless IPFS"`
@@ -271,6 +272,11 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	// before the first provider is constructed. Without this call they would keep
 	// their safe default and an operator's opt-out would silently not reach them.
 	discovery.SetAllowPrivateAddresses(cfg.AllowPrivateAddresses)
+	// Same shape, one layer down: whether this deployment may act on a
+	// caller-supplied local path at all is a transport decision, and it is applied
+	// to the package once here so every path argument inherits it instead of each
+	// carrying its own copy of the rule.
+	pathguard.SetLocalAccess(!o.remoteDownloads)
 	// One lister for both tools, so a single discovery and a single cache serve
 	// the search escalation and the get_details fallback instead of each building
 	// its own manager.
@@ -330,7 +336,11 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		InputSchema: readInputSchema(orderedEnabledSources(book, article), o.remoteDownloads),
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
 		Icons:       toolutil.IconRead,
-	}, withRecovery("read", readHandler(client, cfg, o.remoteDownloads)))
+		// The transport decision reaches the handler through pathguard's package
+		// state, set above, rather than as a parameter: it is the same decision for
+		// every path argument, and one of them having its own copy is how the two
+		// come to disagree.
+	}, withRecovery("read", readHandler(client, cfg)))
 }
 
 // readSchemaFor is a seam for tests to exercise the defensive nil-schema path,
@@ -1852,18 +1862,33 @@ func (d *downloadCall) prepare(ctx context.Context, req *mcp.CallToolRequest, li
 	// call (ask, then act) and the second one would only throw the message away.
 	d.confirm = wantConfirmation(linkOnly, d.cfg, d.consent, req, d.in)
 	if d.confirm && d.round.willAsk() {
-		askDownloadConfirm(d.round, d.item, downloadDir(d.cfg, d.in), d.in, d.size)
+		// A destination the guard refuses is reported when the download runs, not
+		// here: this is the prompt, and naming the path the caller asked for is what
+		// makes the question answerable. The refusal still happens before anything
+		// is written.
+		dir, dirErr := downloadDir(d.cfg, d.in)
+		if dirErr != nil {
+			dir = d.in.Path
+		}
+		askDownloadConfirm(d.round, d.item, dir, d.in, d.size)
 	}
 	return d.round.needsInput()
 }
 
 // downloadDir returns the directory a download writes to: the per-call path when
 // given, else the server's configured one.
-func downloadDir(cfg *config.Config, in DownloadInput) string {
-	if in.Path != "" {
-		return in.Path
+//
+// A per-call path is a caller-supplied write destination, so it is confined here
+// — the one place the argument becomes a directory this server will create files
+// in. The configured directory is not put through the guard: an operator naming
+// their own download directory is the configuration, not a request, and running
+// it through a containment whose roots include it would only be able to refuse
+// the deployment's own setting.
+func downloadDir(cfg *config.Config, in DownloadInput) (string, error) {
+	if in.Path == "" {
+		return cfg.DownloadDir, nil
 	}
-	return cfg.DownloadDir
+	return pathguard.CanonicalOutputPath(in.Path, downloadRoots(cfg))
 }
 
 // localDownload runs the disk-writing download path: it resolves the destination
@@ -1873,7 +1898,10 @@ func downloadDir(cfg *config.Config, in DownloadInput) string {
 // AND no size probe — so the default/headless path is byte-identical to today. A
 // decline returns a non-error result carrying the resolved link, and writes nothing.
 func localDownload(ctx context.Context, req *mcp.CallToolRequest, d *downloadCall) (*mcp.CallToolResult, DownloadOutput, error) {
-	dir := downloadDir(d.cfg, d.in)
+	dir, err := downloadDir(d.cfg, d.in)
+	if err != nil {
+		return nil, DownloadOutput{}, err
+	}
 	if d.confirm {
 		proceed, declinedRes, declinedOut := readDownloadConfirm(ctx, req, d)
 		if !proceed {

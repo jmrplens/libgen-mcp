@@ -169,6 +169,27 @@ type Config struct {
 	// whole class for every source at once, which is why it is off by default and
 	// says so in its name.
 	AllowPrivateAddresses bool
+	// AllowedReadDirs widens the directories the read tool's `path` argument may
+	// resolve into. LIBGEN_MCP_ALLOWED_READ_DIRS, an OS path list (colon-separated
+	// on Unix, semicolon-separated on Windows). Empty by default.
+	//
+	// Without it, a caller-supplied path must resolve under the working directory,
+	// the OS temp directory or LIBGEN_MCP_DOWNLOAD_DIR. That is deliberately narrow:
+	// the text read returns is labeled UNTRUSTED, so a model acting on an
+	// instruction embedded in one document can ask for another, and without a
+	// containment ~/.ssh/id_rsa is a file like any other.
+	//
+	// It is a widening rather than a switch because a containment nobody can widen
+	// on purpose gets switched off by whoever hits it.
+	AllowedReadDirs []string
+	// AllowedDownloadDirs is the same for the download tool's `path` argument, which
+	// is a destination this server writes to rather than a file it reads.
+	// LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS, an OS path list. Empty by default.
+	//
+	// Separate from AllowedReadDirs on purpose: what a deployment is willing to
+	// have read and what it is willing to have written are different decisions, and
+	// an operator who widened one has not widened the other.
+	AllowedDownloadDirs []string
 }
 
 // ExtraSourcesMode selects when the extra searchers (Anna's Archive plus the
@@ -363,6 +384,15 @@ func loadStringVars(cfg *Config) {
 	}
 	if v := Getenv("SOURCES"); v != "" {
 		cfg.Sources = splitHosts(v)
+	}
+	// filepath.SplitList rather than a comma split: these are paths, and a path
+	// list is spelled the way the platform spells one — colons on Unix,
+	// semicolons on Windows — because a Windows path contains a colon of its own.
+	if v := Getenv("ALLOWED_READ_DIRS"); v != "" {
+		cfg.AllowedReadDirs = filepath.SplitList(v)
+	}
+	if v := Getenv("ALLOWED_DOWNLOAD_DIRS"); v != "" {
+		cfg.AllowedDownloadDirs = filepath.SplitList(v)
 	}
 }
 
