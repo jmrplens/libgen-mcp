@@ -75,6 +75,10 @@ type listenSpec struct {
 	// drainDelay is --drain-delay: how long /health answers 503 before the
 	// listener is closed.
 	drainDelay time.Duration
+	// publicURL is --public-url, carried from flag parsing to the serving path
+	// for the server card. The Host guard reads it too, but through the value it
+	// was built from rather than through this field.
+	publicURL string
 }
 
 // inflightFlag is --max-inflight-per-client and whether the operator passed it,
@@ -99,6 +103,12 @@ type httpPolicy struct {
 	digest string
 	// drainDelay is how long /health answers 503 before the listener closes.
 	drainDelay time.Duration
+	// publicURL is --public-url, the only address this process knows to be
+	// reachable from outside. The SEP-2127 card publishes it and omits its
+	// connection block entirely without one, which is true rather than
+	// misleading — a listen address is frequently loopback or a socket behind a
+	// proxy.
+	publicURL string
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

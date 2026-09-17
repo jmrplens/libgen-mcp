@@ -9,10 +9,10 @@ import (
 	"testing"
 )
 
-// The two locations the server card answers on. Both are served and both return
-// the same bytes: the current one is where the ext-server-card extension moved
-// the document, and the legacy one is kept because the scanners that already
-// fetch it would otherwise start getting a 404.
+// The two locations a server card answers on. Each serves its own document —
+// the current path the discovery card SEP-2127 describes, the legacy one the
+// enumerating card the scanners already fetching it expect — and which bytes go
+// where is pinned in servercard_test.go.
 const (
 	serverCardCurrentPath = "/server-card"
 	serverCardLegacyPath  = "/.well-known/mcp/server-card.json"
@@ -137,54 +137,6 @@ func TestRouting_NotFoundIsReadableByABrowser(t *testing.T) {
 	}
 	if got := reply.header.Get("Access-Control-Allow-Origin"); got != trustedOrigin {
 		t.Errorf("Allow-Origin = %q, want the origin echoed: without it the page sees a CORS error instead of the 404", got)
-	}
-}
-
-// TestRouting_BothCardRoutesServeTheSameBytes pins the pair a scanner may read
-// either of.
-//
-// Two locations for one document is a promise that they agree. They are served
-// from the same slice in the handler, so the only way they could differ is a
-// change that gave one of them its own copy — which is precisely the change
-// this case is here to catch, since nothing else compares them.
-func TestRouting_BothCardRoutesServeTheSameBytes(t *testing.T) {
-	s := startServer(t, nil)
-
-	current := s.do(t, request{method: http.MethodGet, path: serverCardCurrentPath})
-	if current.status != http.StatusOK {
-		t.Fatalf("GET %s = %d, want %d", serverCardCurrentPath, current.status, http.StatusOK)
-	}
-	// The extension gives the document its own media type; a client comparing
-	// the header literally is the reason it is not simply application/json.
-	if got := current.header.Get("Content-Type"); got != "application/mcp-server-card+json" {
-		t.Errorf("GET %s: Content-Type = %q, want %q", serverCardCurrentPath, got, "application/mcp-server-card+json")
-	}
-
-	legacy := s.do(t, request{method: http.MethodGet, path: serverCardLegacyPath})
-	if legacy.status != http.StatusOK {
-		t.Fatalf("GET %s = %d, want %d", serverCardLegacyPath, legacy.status, http.StatusOK)
-	}
-	// The legacy route keeps application/json: that is what the scanners
-	// already fetching it expect, and changing it would be a silent break for
-	// the audience the route exists to serve.
-	if ct := legacy.header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
-		t.Errorf("GET %s: Content-Type = %q, want application/json", serverCardLegacyPath, ct)
-	}
-
-	if current.body != legacy.body {
-		t.Errorf("the two card routes returned different documents:\n%s = %s\n%s = %s",
-			serverCardCurrentPath, truncate(current.body), serverCardLegacyPath, truncate(legacy.body))
-	}
-	// A pair of empty bodies would be identical too, so the comparison needs
-	// something to stand on. What the document actually contains is pinned by
-	// TestClient_ServerCardIsReadableWithoutASession; this only needs to know
-	// that a card was served at all.
-	var card map[string]any
-	if err := json.Unmarshal([]byte(current.body), &card); err != nil {
-		t.Fatalf("the card is not JSON: %v (%s)", err, truncate(current.body))
-	}
-	if _, ok := card["serverInfo"]; !ok {
-		t.Errorf("the card carries no serverInfo: %s", truncate(current.body))
 	}
 }
 

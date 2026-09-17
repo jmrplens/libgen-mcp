@@ -378,6 +378,7 @@ func mainWithExit() int {
 		records:    newClientRecordsFor(decision.HTTP, limit, charge),
 		inflight:   inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
 		drainDelay: *drainDelay,
+		publicURL:  strings.TrimSpace(*publicURL),
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -824,10 +825,17 @@ func serverCardPreflight(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// serverCardGET serves the card bytes under the given media type. Both routes
-// close over the same slice, so the two locations cannot answer differently.
+// serverCardGET serves one card document under its own media type.
+//
+// The two routes no longer close over the same bytes: /server-card answers the
+// SEP-2127 card, which carries identity and how to connect, and the .well-known
+// path answers the enumerating SEP-1649 document. They were the same document
+// with two content types, which put the older shape at the location SEP-2127
+// reserves; see discovery_card.go for why enriching the new one would be a
+// contradiction rather than a kindness to a scanner.
 func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	etag := entityTagFor(cardJSON)
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(headerContentType, mediaType)
 		w.Header().Set(headerAllowOrigin, "*")
 		// The card is fetched by scanners that may hand the bytes to a browser;
@@ -837,9 +845,10 @@ func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		// The card only changes with a release, so a scanner may hold it. This
 		// deliberately overrides the no-store securityHeaders sets for the rest
-		// of the surface.
+		// of the surface, and the validator is what makes the revalidation after
+		// that hour cost a 304 rather than the whole document again.
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		_, _ = w.Write(cardJSON)
+		serveCachedDocument(w, r, etag, cardJSON)
 	}
 }
 
@@ -849,21 +858,29 @@ func serverCardGET(cardJSON []byte, mediaType string) http.HandlerFunc {
 // A nil card leaves the card routes unmounted, in which case those paths are
 // simply not served — unlike before, when an unmounted card fell through to the
 // MCP handler and answered 405.
-func newHTTPHandler(mcpHandler http.Handler, cardJSON []byte, trusted []string, basePath string, servesTLS bool, health http.Handler) http.Handler {
+func newHTTPHandler(mcpHandler http.Handler, cards serverCards, trusted []string, basePath string, servesTLS bool, health http.Handler) http.Handler {
 	base := normalizeBasePath(basePath)
 	mux := http.NewServeMux()
 	mux.Handle("GET "+base+"/health", health)
-	if cardJSON != nil {
-		for _, c := range []struct {
-			path      string
-			mediaType string
-		}{
-			{serverCardPath, mediaTypeJSON},
-			{serverCardCurrentPath, serverCardMediaType},
-		} {
-			mux.HandleFunc("OPTIONS "+base+c.path, serverCardPreflight)
-			mux.HandleFunc("GET "+base+c.path, serverCardGET(cardJSON, c.mediaType))
+	for _, c := range []struct {
+		path      string
+		mediaType string
+		body      []byte
+	}{
+		{serverCardPath, mediaTypeJSON, cards.enumerating},
+		{serverCardCurrentPath, serverCardMediaType, cards.discovery},
+	} {
+		// Each route is mounted only when its own document exists. The
+		// enumerating one is built by listing the live server and can fail; the
+		// discovery one is built from constants and flags and cannot. A path
+		// left unmounted falls through to the 404, which is the honest answer —
+		// unlike before, when it fell through to the MCP handler and answered
+		// 405.
+		if c.body == nil {
+			continue
 		}
+		mux.HandleFunc("OPTIONS "+base+c.path, serverCardPreflight)
+		mux.HandleFunc("GET "+base+c.path, serverCardGET(c.body, c.mediaType))
 	}
 	// CORS outermost so a preflight is answered before the protection sees it,
 	// and the protection still guards the POST that follows. The card routes are
@@ -942,6 +959,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 			charge:     spec.charge,
 			digest:     configDigest(cfg, opts.BasePath, opts.Stateless),
 			drainDelay: spec.drainDelay,
+			publicURL:  spec.publicURL,
 		})
 	}
 	// Said before the first read, because after it the process looks idle and
@@ -1124,13 +1142,24 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// A failure is not fatal — the endpoint simply stays unmounted, because a
 	// server that serves its tools is more useful than one that refuses to start
 	// over a discovery document.
-	cardJSON, cardErr := buildServerCard(ctx, server)
+	var cards serverCards
+	enumerating, cardErr := buildServerCard(ctx, server)
 	if cardErr != nil {
 		slog.Warn("server card unavailable; "+serverCardPath+" will not be served", "error", cardErr)
 	}
+	cards.enumerating = enumerating
+	// The SEP-2127 card is built from constants and flags, so unlike the
+	// enumerating one it cannot fail for a reason worth serving without — and a
+	// failure here would mean a bug in this package rather than a catalog that
+	// would not list.
+	discovery, discoveryErr := buildDiscoveryCard(policy.publicURL, opts.Stateless)
+	if discoveryErr != nil {
+		slog.Warn("discovery card unavailable; "+serverCardCurrentPath+" will not be served", "error", discoveryErr)
+	}
+	cards.discovery = discovery
 
 	srv := &http.Server{
-		Handler: newHTTPHandler(mcpHandler, cardJSON, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS,
+		Handler: newHTTPHandler(mcpHandler, cards, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS,
 			healthHandler(policy.digest, &draining)),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		// The slow-reader guard, and it is only safe because sseAware clears it

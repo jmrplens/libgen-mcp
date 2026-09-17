@@ -118,7 +118,7 @@ func TestPprofListenerServesTheHandlers(t *testing.T) {
 // answers 404. That is the claim worth pinning, because it is the one a later
 // change could break by handing http.DefaultServeMux to a server.
 func TestTheMCPListenerDoesNotServeProfiles(t *testing.T) {
-	handler := newHTTPHandler(http.NotFoundHandler(), nil, nil, "/", false, testHealth())
+	handler := newHTTPHandler(http.NotFoundHandler(), serverCards{}, nil, "/", false, testHealth())
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
