@@ -68,10 +68,13 @@ func TestFetchToTempRefusesWhenFetchDisabled(t *testing.T) {
 	defer srv.Close()
 	c := noFetchClient(staticMirrors{srv.URL})
 
-	// FetchToTemp creates its per-fetch directory under TMPDIR, so pointing that
-	// at the test's own directory makes "created no temp dir" observable.
+	// FetchToTemp creates its per-fetch directory under the process temp
+	// directory, so pointing that at the test's own makes "created no temp dir"
+	// observable. isolateTempDir rather than a bare TMPDIR: on Windows that
+	// variable is not the one os.TempDir reads, and the assertion below would
+	// then be inspecting a directory this test does not control.
 	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
+	isolateTempDir(t, tmp)
 
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: md5Hex(payload)})
 	if !errors.Is(err, ErrServerFetchDisabled) {

@@ -350,6 +350,39 @@ a blank line so it is not treated as a second package doc.
 `go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings` (also
 `make godoc-check`) enforces this, including test files.
 
+## CI shape
+
+**One required check, `CI verdict`.** It `needs` every other job and runs
+`.github/scripts/needs-verdict.sh`, which fails unless each one reported
+`success`. Adding a job to the pipeline means adding it to that `needs` list —
+one edit, in the file the job was added to — rather than editing the repository's
+ruleset, which is a step nobody remembers and which quietly leaves every new job
+ungated.
+
+The script refuses `skipped` as well as `failure`: a job that did not run is not
+a job that passed, and a skipped one otherwise reports a green tick. The one
+legitimate skip is paired with the event it is legitimate on
+(`docker:push` — the image build is pull-request-only), so a job meant to skip on
+a push is still required on a pull request.
+
+**The unit suite runs on all three platforms on every pull request**, not only on
+`main` and at release. That is the more expensive shape and it is chosen
+deliberately: a platform failure found after merge is a red `main` nobody asked
+for, and the person who can fix it fastest is the one still holding the change.
+Linux is in the matrix as the control — without it, a macOS-only failure cannot
+be told apart from a command that would have failed anywhere. A cheap
+cross-compile job type-checks `windows/amd64`, `darwin/arm64` and `linux/arm64`
+beside it, so narrowing the real matrix later can never silently take the compile
+of `cmd/server/listen_other.go` with it.
+
+**The race detector is its own workflow** (`race.yml`), called by the release
+workflow and run weekly on `main`, never on a pull request: the suite is slow
+enough under the detector that every pull request would pay for a class of defect
+most changes cannot introduce. It is `workflow_call`-reusable rather than copied,
+so the release gate runs exactly what a maintainer runs from the dispatch menu,
+and it passes an explicit `-timeout` because `go test` defaults to ten minutes
+and a package that is merely slow under the detector reaches it.
+
 ## Verification Checklist
 
 All of these must exit 0 before a change is done. Run the Go gates on the

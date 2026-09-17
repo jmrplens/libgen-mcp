@@ -131,6 +131,22 @@ func guardedRead[T any](ctx context.Context, fn func(context.Context) (T, error)
 		done <- out
 	}()
 
+	// The budget is checked before the select rather than only inside it, because
+	// a select whose cases are both ready picks one at random — and both are ready
+	// whenever the work lands at about the moment the budget runs out. That made
+	// the guard's answer a coin flip: the same call on the same file could report
+	// a result or a timeout depending on scheduling, and the stuck-read gauge
+	// moved on one outcome and not the other, so the backstop's own count depended
+	// on the flip too.
+	//
+	// An expired budget wins the tie. The promise to the caller is an answer
+	// within it, so once it has run out that is what happened, and saying so is
+	// what tells an operator the budget is too tight for their documents.
+	if inner.Err() != nil && ctx.Err() == nil {
+		w.abandon()
+		return zero, unresponsiveReadReason, nil
+	}
+
 	select {
 	case out := <-done:
 		if out.panicked {

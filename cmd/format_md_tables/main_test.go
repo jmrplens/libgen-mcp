@@ -467,7 +467,20 @@ func (w *countingErrWriter) Write(p []byte) (int, error) {
 // TestResolveInputPath_RelError verifies that filepath.Rel failures (a relative
 // root against an absolute item) are wrapped and reported.
 func TestResolveInputPath_RelError(t *testing.T) {
-	_, err := resolveInputPath("relative-root", string(filepath.Separator)+"absolute-item")
+	// filepath.Rel fails when one path is absolute and the other is not, so the
+	// target has to be absolute on the platform running the test. A leading
+	// separator is not enough: on Windows "\item" is drive-relative and
+	// filepath.IsAbs reports false for it, so this case used to assert nothing
+	// there. filepath.Abs produces the rooted form each platform actually means.
+	absolute, err := filepath.Abs("absolute-item")
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
+	if !filepath.IsAbs(absolute) {
+		t.Fatalf("%q is not absolute on this platform, so the fixture proves nothing", absolute)
+	}
+
+	_, err = resolveInputPath("relative-root", absolute)
 	if err == nil {
 		t.Fatal("resolveInputPath() error = nil, want filepath.Rel failure")
 	}

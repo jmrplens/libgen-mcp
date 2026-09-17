@@ -291,7 +291,14 @@ func TestGuardedRead_CancelsTheWorkItAbandons(t *testing.T) {
 // sample document loses the race — which is the point: the guarantee under test
 // is that a read always comes back, whatever the file turns out to be.
 func TestReadModes_ReturnWithinTheBudget(t *testing.T) {
-	shrinkReadBudget(t, time.Nanosecond)
+	// A budget already in the past rather than one nanosecond, for the reason
+	// TestGuardedRead_AnExpiredBudgetWinsTheTie sets out at length: on Windows the
+	// monotonic clock is coarse enough that time.Until on a deadline one
+	// nanosecond away can still be positive, so context.WithTimeout does not
+	// cancel synchronously and the read finishes first. This test passed on the
+	// first Windows run and failed on the second, which is what a race looks like
+	// when only one platform is close enough to the edge to lose it.
+	shrinkReadBudget(t, -time.Second)
 	awaitNoStuckReads(t)
 
 	chunk, err := Extract(context.Background(), "testdata/sample.pdf", Req{})
@@ -332,6 +339,58 @@ func TestFormatHint(t *testing.T) {
 	for path, want := range cases {
 		if got := formatHint(path); got != want {
 			t.Errorf("formatHint(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+// TestGuardedRead_AnExpiredBudgetWinsTheTie pins the tie-break, which is the
+// half a race cannot be trusted to demonstrate.
+//
+// When the work lands at about the moment the budget runs out, both of the
+// select's cases are ready and Go picks between them at random. The answer was
+// therefore a coin flip: the same call on the same file could report a result or
+// a timeout depending on scheduling, and the stuck-read gauge moved on one
+// outcome and not the other. The budget had already expired here, so the answer
+// is the same every time.
+//
+// Read this before trusting a green run of it: on Linux it passes against the
+// old behavior too, because the parent goroutine reaches the select before the
+// child is scheduled and the tie never occurs here — two hundred iterations do
+// not produce one. The tie is real on Windows, where CI caught
+// TestReadModes_ReturnWithinTheBudget reporting a successful read against a
+// budget of one nanosecond.
+//
+// So this is a regression test on the platform that exhibits the race and a
+// statement of the rule everywhere else. That is worth having, and it is worth
+// saying rather than leaving a loop that looks like proof.
+func TestGuardedRead_AnExpiredBudgetWinsTheTie(t *testing.T) {
+	// A budget already in the past, not one nanosecond.
+	//
+	// context.WithTimeout cancels synchronously only when time.Until(deadline) is
+	// already <= 0, and on Windows the monotonic clock is coarse enough that
+	// time.Until on a deadline one nanosecond away still returns a positive value
+	// — the clock has not ticked. The context then cancels on a timer roughly
+	// fifteen milliseconds later, long after the check this test is about, and it
+	// failed on the Windows leg of the matrix for exactly that reason. A negative
+	// budget is unambiguous on every platform.
+	shrinkReadBudget(t, -time.Second)
+
+	for i := range 200 {
+		awaitNoStuckReads(t)
+		// Work that returns at once, so done is ready as soon as the goroutine is
+		// scheduled — which is exactly the tie.
+		value, reason, err := guardedRead(context.Background(), func(context.Context) (int, error) {
+			return 42, nil
+		})
+		if err != nil {
+			t.Fatalf("iteration %d: an expired budget is a soft failure, got error %v", i, err)
+		}
+		if reason != unresponsiveReadReason {
+			t.Fatalf("iteration %d: reason = %q, want %q; the tie went to the finished work",
+				i, reason, unresponsiveReadReason)
+		}
+		if value != 0 {
+			t.Fatalf("iteration %d: value = %d, want none from a read the caller gave up on", i, value)
 		}
 	}
 }
