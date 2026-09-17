@@ -86,6 +86,9 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_DRAIN_DELAY: How long GET /health answers 503 draining before the listener is closed on shutdown. (default: 0)
 - LIBGEN_MCP_TELEMETRY: Export OpenTelemetry traces, metrics and logs to a collector. (default: false)
 - LIBGEN_MCP_TELEMETRY_SIGNALS: Which signals are exported. (default: empty (all three))
+- LIBGEN_MCP_TELEMETRY_IDENTITY: What an exported signal may say about who made a call. (default: none)
+- LIBGEN_MCP_TELEMETRY_IDENTITY_KEY: The secret the pseudonyms are computed under. (default: empty (generated per process))
+- LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION: How long a generated identity key lives. (default: 0 (the life of the process))
 
 Tools:
 
