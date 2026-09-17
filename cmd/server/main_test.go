@@ -23,6 +23,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -500,7 +501,7 @@ func healthOK(base string) bool {
 func newSearchToolServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
+	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{}, mcpotel.Options{})
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil
@@ -831,7 +832,7 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -886,7 +887,7 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
@@ -953,7 +954,7 @@ func TestAdvertisedCapabilitiesAreWhatThisServerServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}

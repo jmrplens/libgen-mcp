@@ -91,7 +91,7 @@ func messages(records []slog.Record) string {
 func TestStartTelemetryOffIsSilentAndStillStoppable(t *testing.T) {
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{})
+	_, stop, err := startTelemetry(t.Context(), &config.Config{})
 	if err != nil {
 		t.Fatalf("startTelemetry() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestStartTelemetryOffIsSilentAndStillStoppable(t *testing.T) {
 // server defines and cannot read is a deployment that does not match its own
 // configuration — which must not reach production looking healthy.
 func TestStartTelemetryRefusesASignalListThatDoesNotParse(t *testing.T) {
-	stop, err := startTelemetry(t.Context(), &config.Config{
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
 		Telemetry:        true,
 		TelemetrySignals: "traces,metric",
 	})
@@ -143,7 +143,7 @@ func TestStartTelemetryAnnouncesWhereTheBatchesGo(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
+	_, stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
 	if err != nil {
 		t.Fatalf("startTelemetry() error = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestStartTelemetryWarnsAboutAPlaintextCredential(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "x-fixture-header="+collectorCredentialFixture)
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
+	_, stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
 	if err != nil {
 		t.Fatalf("startTelemetry() error = %v", err)
 	}
@@ -208,7 +208,7 @@ func TestStartTelemetrySaysNothingAboutALoopbackCredential(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "x-fixture-header="+collectorCredentialFixture)
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
+	_, stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
 	if err != nil {
 		t.Fatalf("startTelemetry() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestStartTelemetryHonorsTheSpecificationKillSwitch(t *testing.T) {
 	t.Setenv("OTEL_SDK_DISABLED", "true")
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
+	_, stop, err := startTelemetry(t.Context(), &config.Config{Telemetry: true})
 	if err != nil {
 		t.Fatalf("startTelemetry() error = %v", err)
 	}
@@ -246,7 +246,7 @@ func TestStartTelemetrySelectsTheSignalsItWasGiven(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
 		Telemetry:        true,
 		TelemetrySignals: "traces",
 	})
@@ -416,7 +416,7 @@ func TestStartTelemetryAnnouncesTheIdentityPolicy(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318")
 	logged := captureTelemetryLog(t)
 
-	stop, err := startTelemetry(t.Context(), &config.Config{
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
 		Telemetry:         true,
 		TelemetryIdentity: "pseudonymous",
 	})

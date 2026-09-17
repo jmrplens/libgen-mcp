@@ -436,6 +436,34 @@ Los fallbacks no son gratis, y donde más se nota es en la marca: medida como JS
 
 **Sin enrutado por cabecera de parámetro.** Los argumentos de las herramientas viajan solo en el cuerpo JSON-RPC: nada de esta superficie lleva una anotación `x-mcp-header` de [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243). Anotar `md5` es el candidato evidente y se ha descartado a propósito — la anotación obliga al cliente a reflejar el valor en una cabecera `Mcp-Param-Md5` y al servidor a rechazar la llamada si falta, algo que los clientes de navegador no pueden cumplir por construcción, porque las cabeceras de nombre dinámico no se pueden incluir en la lista blanca de CORS con credenciales. Delante de este servidor no hay nada que fuera a enrutar con eso, así que el intercambio es todo coste.
 
+### Telemetría
+
+Apagada salvo que `LIBGEN_MCP_TELEMETRY` diga lo contrario, y apagada por defecto por privacidad y no por coste: instrumentar un despliegue es una decisión sobre los usuarios de ese despliegue. Todo lo relativo a los exportadores — endpoint, cabeceras, protocolo, tiempos límite, muestreo, atributos de recurso — sale de las variables `OTEL_*` estándar que lee el propio SDK. [Configuración](/libgen-mcp/es/configuration/#listener-http) lista las variables; esto es lo que dicen las señales.
+
+**Un span y una duración por petición MCP**, que registra una middleware situada por debajo del guardián de pánicos, de modo que el rechazo de recursos, las pistas de caché, el trío por llamante y el handler quedan todos dentro de una misma petición medida. El span es de tipo `SERVER` y cuelga del contexto de traza que viene en `params._meta`, no del transporte, que es la instrucción de la propia convención: una petición MCP puede servirse en varias peticiones HTTP si el cliente reintenta, y una petición HTTP en streaming puede llevar más de una petición MCP, así que colgarla del transporte ataría la operación al viaje de ida y vuelta que le tocara llevarla. El span HTTP ambiente se adjunta como **enlace**, para que «qué petición llevó esto» siga teniendo respuesta.
+
+**La cadena de fuentes es la razón por la que aquí merece la pena.** Una descarga servida por la primera fuente y otra servida por la cuarta son el mismo resultado para quien llama y algo completamente distinto para quien tiene que decidir si un mirror se está muriendo — y la cadena es la única capa que lo sabe. Se registra cada intento, así que `libgen_mcp.source` nombra la que sirvió y `libgen_mcp.source_attempts` dice cuánta cadena costó. `libgen_mcp.mirror_host` nombra el mirror del catálogo, como host pelado y nunca como URL: una URL de fichero resuelta en la ruta de miembro es ella misma una credencial que funciona.
+
+**Un rechazo se registra allí donde se decide**, porque un rechazo viaja como una respuesta JSON-RPC correcta que lleva dentro un fallo destinado al modelo — desde fuera del handler es indistinguible de una llamada que se ejecutó y salió bien, que es exactamente lo que parecería en la métrica. Las razones son un conjunto cerrado, porque el valor acaba en una dimensión de métrica y una dimensión no se puede retirar sin romper todos los cuadros de mando construidos sobre ella:
+
+| Razón                 | Qué la decidió                                                       |
+| --------------------- | -------------------------------------------------------------------- |
+| `consent_declined`    | La persona dijo que no en el aviso de descarga.                      |
+| `source_not_in_chain` | Quien llamó nombró una fuente que este despliegue no tiene activada. |
+| `download_too_large`  | El límite de tamaño rechazó una transferencia.                       |
+| `download_stalled`    | No llegaron bytes durante la ventana de atasco.                      |
+| `blocked_address`     | El guardián de destinos salientes rechazó un host.                   |
+| `invalid_params`      | Se rechazó un argumento antes de hacer nada.                         |
+| `rate_limited`        | El límite de tasa entrante por llamante rechazó un método.           |
+| `inflight_ceiling`    | El techo por llamante o por proceso de llamadas pesadas rechazó una. |
+| `action_timeout`      | El tope de reloj de pared sobre una llamada la terminó.              |
+
+Una fuente saltada por enfriamiento **no** está en esa lista, y es a propósito. Aquí el enfriamiento es encaminamiento y no rechazo: la cadena o pasa de largo de una fuente enfriada y sigue, o — cuando todas las que podrían servir están enfriadas — se salta el enfriamiento y lo intenta igual. Ninguna de las dos declina una llamada, así que una razón registrada ahí marcaría como rechazadas llamadas que salieron bien.
+
+**Nada sobre quien llama llega jamás a una métrica.** Cada combinación distinta de etiquetas es una serie temporal que alguien almacena y paga, y una dimensión por llamante no está acotada por construcción: en un endpoint público crece con internet. El span lleva lo que permita la política de identidad, porque un span no tiene presupuesto de series. El mismo razonamiento acota un nombre que eligió quien llama: un `prompts/get` de un prompt que no existe registraría si no el nombre inventado como valor de dimensión, permitiendo a cualquier cliente acuñar una serie temporal por cada cadena que se le ocurra escribir — así que un nombre cuya llamada no pasó la validación se registra en la métrica como `_OTHER` y se conserva exacto en el span.
+
+**Una sesión solo se mide donde una sesión es un lapso de tiempo real**: stdio, donde es la vida del proceso, y `--stateless=false`, donde es lo que nombra un `Mcp-Session-Id`. Con el modo sin estado por defecto cada POST es su propia sesión, así que una duración de sesión sería un histograma de duraciones de petición con otro nombre. Hay un tercer salto, y no es evidente: un transporte con estado crea además una sesión de usar y tirar para el sondeo `server/discover` que manda un cliente actual antes de hacer el handshake, lo que metería una muestra casi nula por cada cliente que conecta. Una sesión solo se observa cuando ya ha llevado un `initialize`, que es el discriminador del propio SDK — solo persiste `InitializeParams` cuando el transporte puede servir el protocolo.
+
 ### Superficie propia
 
 Todo lo que este servidor pone en el cable y que el esquema de MCP no define, y el hueco que ocupa:

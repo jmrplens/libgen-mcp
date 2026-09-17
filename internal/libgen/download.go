@@ -24,6 +24,7 @@ import (
 	xhtml "golang.org/x/net/html"
 
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 )
@@ -446,6 +447,11 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	// otherwise try the whole configured chain in order.
 	sources, selErr := c.selectSources(item.Source)
 	if selErr != nil {
+		// A caller naming a source this deployment does not have enabled is a
+		// refusal rather than a failure: nothing was tried and nothing went
+		// wrong. Recorded here rather than inside selectSources, which has no
+		// context and is called from the metadata path too.
+		mcpotel.RecordRefusal(ctx, mcpotel.ReasonSourceNotInChain)
 		return nil, selErr
 	}
 	sources = c.withPerCallUnpaywall(item, sources)
@@ -466,6 +472,13 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		started := time.Now()
 		res, err := c.downloadFrom(ctx, src, req, lastResort)
 		logging.SourceAttempt(src.Name(), servingMirror(res), started, err)
+		// The same fact on the span, on every attempt rather than on the one
+		// that worked: from outside this loop a download served by the first
+		// source and one served by the fourth are the same result, and the
+		// difference is the whole of what an operator needs to know about the
+		// health of the chain. The last one recorded is the winner, because the
+		// loop returns as soon as one serves.
+		mcpotel.RecordSource(ctx, src.Name(), servingMirror(res))
 		if err == nil {
 			c.clearSourceCooldown(src.Name())
 			c.sweepPartials(req.partials)
@@ -484,7 +497,33 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 		}
 		return nil, fmt.Errorf("no download source supports md5=%q doi=%q", item.MD5, item.DOI)
 	}
-	return nil, errors.Join(errs...)
+	joined := errors.Join(errs...)
+	// Classified once, at the end, from what actually ended the call. Recording
+	// a refusal per failed attempt would put one on every call that recovered
+	// through a later source, which is the opposite of what the attribute
+	// means: a chain that failed over is a chain doing its job.
+	mcpotel.RecordRefusal(ctx, refusalFor(joined))
+	return nil, joined
+}
+
+// refusalFor names the refusal behind a failed download, or "" when the chain
+// simply ran out of sources.
+//
+// Only the failures this server decided on. A mirror returning 500, a
+// certificate that does not verify, a body that is an HTML page — those are
+// things that happened to the call, and calling them refusals would put this
+// server's name on somebody else's outage.
+func refusalFor(err error) mcpotel.RefusalReason {
+	switch {
+	case errors.Is(err, errDownloadTooLarge):
+		return mcpotel.ReasonDownloadTooLarge
+	case errors.Is(err, errStalled):
+		return mcpotel.ReasonDownloadStalled
+	case errors.Is(err, netguard.ErrBlockedAddress):
+		return mcpotel.ReasonBlockedAddress
+	default:
+		return ""
+	}
 }
 
 // servingMirror returns the mirror a finished download was served from, or "" when

@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 )
 
 // panicSecret is the sort of thing a panic message carries and a caller must
@@ -163,7 +164,7 @@ func TestAPanickingPromptDoesNotEndTheSession(t *testing.T) {
 func connectToServerWithPanickingPrompt(t *testing.T) *mcp.ClientSession {
 	t.Helper()
 
-	server := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
+	server := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{}, mcpotel.Options{})
 	// One tool, so tools/list below has something to answer with and the
 	// survival check is about the session rather than an empty catalog.
 	mcp.AddTool(server, &mcp.Tool{Name: "ping", Description: "returns nothing in particular"},
@@ -204,7 +205,7 @@ func TestAPanickingToolKeepsWithRecoverysResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load(): %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{})
+	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer(): %v", err)
 	}

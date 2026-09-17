@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
@@ -89,6 +90,11 @@ func (c *clientRecords) limitHeavyCalls(ceiling heavyCeiling) mcp.Middleware {
 			}
 			leave, refusal := c.enterHeavy(rec, ceiling)
 			if refusal != "" {
+				// The span sits outside this layer, so the refusal reaches it
+				// through the context the middleware put the holder in. Without
+				// this the metric would show a fast successful tools/call, which
+				// is what a refusal looks like from the outside.
+				mcpotel.RecordRefusal(ctx, mcpotel.ReasonInflightCeiling)
 				return toolutil.RefusalResult(refusal), nil
 			}
 			defer leave()

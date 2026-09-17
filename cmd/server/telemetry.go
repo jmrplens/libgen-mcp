@@ -7,7 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -33,14 +37,14 @@ import (
 // failed start, and after a successful one — so the caller defers it
 // unconditionally rather than carrying a nil check into the exit path, which is
 // the worst place to put one because it runs after the work succeeded.
-func startTelemetry(ctx context.Context, cfg *config.Config) (stop func(context.Context), err error) {
+func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityChoice, stop func(context.Context), err error) {
 	signals, err := telemetry.ParseSignals(cfg.TelemetrySignals)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_SIGNALS"), err)
+		return identityChoice{}, nil, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_SIGNALS"), err)
 	}
-	identity, err := resolveIdentity(cfg)
+	identity, err = resolveIdentity(cfg)
 	if err != nil {
-		return nil, err
+		return identityChoice{}, nil, err
 	}
 
 	provider, startErr := telemetry.Start(ctx, telemetry.Config{
@@ -51,16 +55,19 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (stop func(context.
 	if startErr != nil {
 		slog.ErrorContext(ctx, "telemetry disabled: it could not be started",
 			"component", "telemetry", "error", startErr)
-		return func(context.Context) {
+		return identity, func(context.Context) {
 			// Nothing to shut down: the provider never started, and the caller
-			// still defers this unconditionally.
+			// still defers this unconditionally. The identity choice is returned
+			// anyway: the span middleware is installed whether or not an
+			// exporter is, because the OpenTelemetry API's no-ops cost nothing,
+			// and it must redact the same way either way.
 		}, nil
 	}
 
 	if provider.Enabled() {
 		announceTelemetry(ctx, provider, identity)
 	}
-	return func(shutdownCtx context.Context) {
+	return identity, func(shutdownCtx context.Context) {
 		if shutdownErr := provider.Shutdown(shutdownCtx); shutdownErr != nil {
 			slog.WarnContext(ctx, "telemetry did not shut down cleanly",
 				"component", "telemetry", "error", shutdownErr)
@@ -186,4 +193,55 @@ func resolveIdentity(cfg *config.Config) (identityChoice, error) {
 		caller: telemetry.NewRedactor(policy, keys),
 		item:   telemetry.NewItemRedactor(policy, keys),
 	}, nil
+}
+
+// spanOptions builds what the MCP span middleware needs from this deployment.
+//
+// It is here rather than in newMCPServer because every input is a telemetry
+// decision: which transport the convention's vocabulary calls this, which
+// protocol revisions may reach a metric dimension, and how much a span may say
+// about who called.
+func spanOptions(listenAddr string, identity identityChoice) mcpotel.Options {
+	transport := mcpotel.TransportPipe
+	if listenAddr != "" {
+		transport = mcpotel.TransportTCP
+	}
+	return mcpotel.Options{
+		Callers: callerAttributer(identity),
+		// The convention's own vocabulary, not names of our choosing: "pipe"
+		// for stdio and "tcp" for streamable HTTP, a unix socket included —
+		// the attribute describes the shape of the transport, and a socket is
+		// a network transport that happens not to cross a wire.
+		Transport: transport,
+		// Only a revision this server admits is ever recorded. The value
+		// arrives from the caller and lands on a metric dimension, so an
+		// unbounded one would let a client mint time series by typing.
+		ProtocolVersions: mcp.SupportedProtocolVersions(),
+	}
+}
+
+// callerAttributer turns the charged client address into the attributes the
+// identity policy allows on a span.
+//
+// The address is the one every per-caller budget is already keyed on, read back
+// from the header the HTTP layer stamped, so a pseudonym on a span and a bucket
+// in the rate limiter name the same caller. On stdio there is no header and no
+// address, and every policy yields nothing — which is right: one process, one
+// person, nothing to tell apart.
+//
+// The client's own name and version come from the session's initialize
+// parameters, which exist on both transports, and are recorded only under the
+// full policy: they name software rather than a person.
+func callerAttributer(identity identityChoice) mcpotel.CallerAttributer {
+	return mcpotel.CallerAttributerFunc(func(_ context.Context, req mcp.Request) []attribute.KeyValue {
+		caller := telemetry.Caller{Address: chargedAddressOf(req)}
+		if session, ok := req.GetSession().(*mcp.ServerSession); ok && session != nil {
+			caller.Session = session.ID()
+			if params := session.InitializeParams(); params != nil && params.ClientInfo != nil {
+				caller.ClientName = params.ClientInfo.Name
+				caller.ClientVersion = params.ClientInfo.Version
+			}
+		}
+		return identity.caller.Attributes(caller)
+	})
 }
