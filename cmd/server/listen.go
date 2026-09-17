@@ -221,20 +221,26 @@ func validateTLSFiles(certFile, keyFile string) error {
 
 // tlsConfigFor builds the server TLS configuration for a validated pair.
 //
+// The pair rides behind [certReloader.GetCertificate] rather than in
+// Certificates, so a renewal written to the same paths is picked up on the next
+// handshake instead of at the next restart. The first load still happens here
+// and still fails loudly: a rotation must not stop a running server, but a
+// server that cannot start with the certificate it was given must say so.
+//
 // NextProtos is not decoration. http.Server negotiates HTTP/2 for a TLS listener
 // only when the config advertises h2 — ServeTLS adds it for you, and
 // tls.NewListener does not — so omitting it would silently drop every client to
 // HTTP/1.1. MinVersion is stated rather than inherited so the floor is visible
 // at the place it is decided.
 func tlsConfigFor(certFile, keyFile string) (*tls.Config, error) {
-	cert, err := loadTLSKeyPair(certFile, keyFile)
+	reloader, err := newCertReloader(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("loading the TLS certificate and key: %w", err)
+		return nil, err
 	}
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-		NextProtos:   []string{"h2", "http/1.1"},
+		GetCertificate: reloader.GetCertificate,
+		MinVersion:     tls.VersionTLS12,
+		NextProtos:     []string{"h2", "http/1.1"},
 	}, nil
 }
 

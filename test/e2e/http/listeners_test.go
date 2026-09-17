@@ -101,16 +101,31 @@ type tlsPair struct {
 	certFile string
 	keyFile  string
 	pool     *x509.CertPool
+	// leaf is the certificate that was written, so a test can tell one
+	// generation of a rotation from the next by its serial number.
+	leaf *x509.Certificate
 }
 
 // generateTLSPair writes a self-signed certificate and key for 127.0.0.1 into
 // the test's temporary directory.
+func generateTLSPair(t *testing.T) tlsPair {
+	t.Helper()
+	return generateTLSPairAt(t, t.TempDir())
+}
+
+// generateTLSPairAt writes the pair into a directory the caller chose, under
+// the same two names.
+//
+// The directory is a parameter so a rotation test can write a second generation
+// over the first: replacing the contents behind the paths the server was started
+// with is what certbot, Vault's agent and a Kubernetes secret projection all do,
+// and a reloader that only noticed a new path would notice none of them.
 //
 // In process rather than shelling out to openssl: this suite is a release gate
 // that runs on every PR, so it must depend on nothing that is not in the Go
 // standard library. The certificate is its own issuer, which is why the same
 // DER goes into the client's root pool — there is no CA to keep.
-func generateTLSPair(t *testing.T) tlsPair {
+func generateTLSPairAt(t *testing.T, dir string) tlsPair {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -148,7 +163,6 @@ func generateTLSPair(t *testing.T) tlsPair {
 		t.Fatalf("marshaling the key: %v", err)
 	}
 
-	dir := t.TempDir()
 	pair := tlsPair{
 		certFile: filepath.Join(dir, "cert.pem"),
 		keyFile:  filepath.Join(dir, "key.pem"),
@@ -162,6 +176,7 @@ func generateTLSPair(t *testing.T) tlsPair {
 		t.Fatalf("parsing the certificate back: %v", err)
 	}
 	pair.pool.AddCert(cert)
+	pair.leaf = cert
 	return pair
 }
 

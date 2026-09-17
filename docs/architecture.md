@@ -444,6 +444,25 @@ which time nobody is watching the log. The listener pins TLS 1.2 as the floor an
 has to be stated explicitly: `tls.NewListener` does not add it the way `http.Server.ServeTLS`
 does, and without it every client silently drops to HTTP/1.1.
 
+**A renewal is two file writes, not a restart.** The pair rides behind
+`tls.Config.GetCertificate`, and each handshake first stats both files: unchanged, the
+certificate already in memory is presented and nothing is read; changed, the pair is re-read
+and the new certificate is served from that handshake on, while the connections already open
+keep the old one until they are replaced. A restart would do the same thing at a much higher
+price here — every download in flight is cut, and the temp cache that would have served the
+retry goes with the process — so certbot, Vault's agent and a remounted Kubernetes secret all
+become writes this server picks up on its own.
+
+The check is a stat rather than a timer or a signal: a timer needs an interval to explain and
+leaves a window, and a signal needs somewhere to send it, which a container whose renewal is an
+updated mounted secret does not have. A reload that fails — the certificate written before its
+key, a mount briefly absent — **keeps the previous certificate and logs one warning per distinct
+broken state**, because refusing the handshake would turn a routine renewal into an outage
+lasting as long as one file write, and the certificate already loaded is valid until it
+expires. The stamp of a failed load is deliberately not recorded, so the next handshake tries
+again rather than waiting for a third write. The first load is the exception and stays strict:
+startup is the one moment there is nothing to fall back to and someone is watching.
+
 A certificate from a private CA needs the proxy in front to be told to trust it. In nginx that
 is `proxy_ssl_verify on` **plus** `proxy_ssl_trusted_certificate` naming the CA file:
 verification is off by default there, and turning it on without a CA file fails every
@@ -535,7 +554,7 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--trusted-proxies`         | _(empty)_   | Comma-separated addresses and CIDR ranges of the proxies whose `--trusted-proxy-header` is believed, e.g. `127.0.0.1/32`. The literal `unix` trusts every peer of a unix-socket listener instead, and is refused on a TCP address. An entry that is neither fails startup.                                                                                                                                             |
 | `--rate-limit-rps`          | `10`        | Inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. `0` or less turns it off. On a listener whose every peer is this machine it is off unless `--trusted-proxies` names the proxy in front; passing it explicitly there fails startup rather than being downgraded.                                                                               |
 | `--rate-limit-burst`        | `40`        | How many of those requests one charged address may make at once before the refill rate applies.                                                                                                                                                                                                                                                                                                                        |
-| `--tls-cert`                | _(empty)_   | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
+| `--tls-cert`                | _(empty)_   | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake, and re-read when the files change, so a renewal written to the same paths needs no restart.                |
 | `--tls-key`                 | _(empty)_   | PEM private key file for `--tls-cert`. Both or neither — a certificate without a key is a deployment that believes it is serving TLS and is not, so the half-pair fails startup.                                                                                                                                                                                                                                       |
 | `--max-inflight-per-client` | _(derived)_ | How many `download` or `read` calls one charged address may have in flight. Unset means the configured `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`, so the bound starts at the whole download semaphore; `0` or less turns the per-caller bound off. A separate ceiling of 64 bounds the process whatever this says, and is deliberately not configurable.                                                                   |
 | `--drain-delay`             | `0`         | How long `GET /health` answers `503 draining` before the listener is closed on shutdown. `0` closes at once. Set it to at least one probe interval of whatever is in front, or the balancer learns this instance is going by the connection failing — after it has already sent work to it. Capped at five minutes.                                                                                                    |
