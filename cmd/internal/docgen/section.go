@@ -21,7 +21,10 @@ func ReplaceSection(path, startMark, endMark, content string) error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Clean(path), []byte(result), 0o644) //#nosec G306,G703 -- managed doc path is a compile-time constant, not user input
+	// GeneratedFileMode rather than 0o644: a managed section is a generated
+	// artifact like any other here, and the tighter mode is what gosec's G306
+	// accepts without a suppression.
+	return os.WriteFile(filepath.Clean(path), []byte(result), GeneratedFileMode) //#nosec G703 -- managed doc path is a compile-time constant, not user input
 }
 
 // ComputeReplacedSection returns text with the content between startMark and

@@ -31,6 +31,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 )
 
@@ -114,16 +115,13 @@ func run(checkOnly bool) error {
 		return err
 	}
 
+	if writeErr := docgen.WriteOrCheck(path, generated, checkOnly,
+		"`make gen-lhm-manifest` and commit the result"); writeErr != nil {
+		return writeErr
+	}
 	if checkOnly {
-		if !bytes.Equal(current, generated) {
-			return fmt.Errorf("%s is stale: run `make gen-lhm-manifest` and commit the result", manifestFileName)
-		}
 		fmt.Printf("%s is current (%d tools, %d prompts)\n", manifestFileName, toolCount, promptCount)
 		return nil
-	}
-
-	if writeErr := os.WriteFile(path, generated, 0o600); writeErr != nil {
-		return fmt.Errorf("write %s: %w", manifestFileName, writeErr)
 	}
 	fmt.Printf("Generated %s (%d tools, %d prompts)\n", manifestFileName, toolCount, promptCount)
 	return nil

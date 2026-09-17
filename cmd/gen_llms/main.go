@@ -16,6 +16,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 )
@@ -970,27 +972,7 @@ func writeGeneratedFile(name, content string, checkOnly bool) error {
 	if err != nil {
 		return err
 	}
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = root.Close() }()
-
-	if checkOnly {
-		existing, readErr := root.ReadFile(name)
-		if readErr != nil {
-			return readErr
-		}
-		if normalizeLineEndings(string(existing)) != normalizeLineEndings(content) {
-			return fmt.Errorf("%s is out of date; run go run ./cmd/gen_llms/", name)
-		}
-		return nil
-	}
-	return root.WriteFile(name, []byte(content), 0o644)
-}
-
-func normalizeLineEndings(s string) string {
-	return strings.ReplaceAll(s, "\r\n", "\n")
+	return docgen.WriteOrCheck(filepath.Join(dir, name), []byte(content), checkOnly, "`go run ./cmd/gen_llms/`")
 }
 
 func isGeneratedLLMSFile(name string) bool {

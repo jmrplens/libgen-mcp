@@ -38,6 +38,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
 const (
@@ -168,7 +170,11 @@ func generateAll(dir string, icons []iconSource, raster rasterizer) (int, error)
 	}
 	written := 0
 	for _, p := range rendered {
-		if writeErr := os.WriteFile(p.path, p.data, 0o644); writeErr != nil { //nolint:gosec // generated asset, not sensitive
+		// The raw path rather than docgen.WriteOrCheck, and deliberately: that
+		// helper appends a trailing newline, which would corrupt a WebP. What is
+		// shared is the mode, so this names the same decision instead of carrying
+		// a 0o644 and the gosec suppression it costs.
+		if writeErr := os.WriteFile(p.path, p.data, docgen.GeneratedFileMode); writeErr != nil {
 			return written, writeErr
 		}
 		written++

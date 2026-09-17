@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
 // scenario outcome statuses.
@@ -110,7 +112,11 @@ func writeResultsDocAt(path string, outcomes []outcome, model string, now time.T
 	for _, r := range rows {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", r.ID, r.Mode, r.Status, r.Measured, r.Detail)
 	}
-	if werr := os.WriteFile(path, []byte(b.String()), 0o600); werr != nil {
+	// A results doc is what this run measured, not an artifact compared against
+	// the tree, so it goes through WriteReport rather than WriteOrCheck. The path
+	// is always a real file here — the run has somewhere to put its results — so
+	// the stdout sentinel never fires.
+	if werr := docgen.WriteReport(os.Stdout, path, []byte(b.String())); werr != nil {
 		return fmt.Errorf("write results doc: %w", werr)
 	}
 	return nil
