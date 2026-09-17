@@ -302,3 +302,33 @@ func TestPrivateHatchAcceptedOnAHostLocalListener(t *testing.T) {
 		}
 	})
 }
+
+// TestPrivateHatchRefusedWhenTransportHTTPSuppliesTheAddress is the case the
+// hatch precondition would silently stop covering.
+//
+// Before --transport existed, "is this listener reachable by anyone" could be
+// answered from --http: no flag meant stdio, so there was nothing to judge. With
+// `--transport http` there is a listener and no flag, and a check still reading
+// the flag would see "" , conclude stdio, and leave the hatch open on the
+// wildcard address the transport defaults to — which is precisely the deployment
+// the refusal was written for.
+//
+// No port is bound: the refusal happens before the listener does, which is also
+// why this can use the real default address without colliding with anything.
+func TestPrivateHatchRefusedWhenTransportHTTPSuppliesTheAddress(t *testing.T) {
+	out, err := runServerWithEnvExpectingExit(t, privateHatch, "--transport", "http")
+	if err == nil {
+		t.Fatalf("the server started with the hatch set and --transport http. Output:\n%s", out)
+	}
+	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":8080"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+		}
+	}
+}
+
+// The other direction of the same resolution — `--transport stdio` with a
+// --http value must leave nothing listening — lives in test/e2e/stdio, where the
+// harness gives the process a pipe on stdin. It has to: the claim is that a
+// stdio session was served, and a module whose every server is expected to
+// answer on a socket cannot make it.

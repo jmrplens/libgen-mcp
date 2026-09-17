@@ -157,7 +157,7 @@ func TestRunValidatesConfig(t *testing.T) {
 	// be rejected by cfg.Validate, so run returns before attempting to serve.
 	t.Setenv("LIBGEN_MCP_RATE_RPS", "999")
 
-	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
 	if err == nil {
 		t.Fatal("run() = nil, want validation error")
 	}
@@ -231,7 +231,7 @@ func TestServeHTTPListenError(t *testing.T) {
 func TestRunHTTP(t *testing.T) {
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{addr: "127.0.0.1:0"}, transport.DefaultOptions(), transportDecision{HTTP: true, Addr: "127.0.0.1:0"})
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(http) = %v, want a clean shutdown", err)
@@ -244,7 +244,7 @@ func TestRunStdio(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio) = %v, want a clean shutdown", err)
@@ -259,7 +259,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 	stubStdinEOF(t)
 	var err error
 	awaitReturn(t, func() {
-		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions())
+		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
 	})
 	if !isCleanShutdown(err) {
 		t.Fatalf("run(stdio, remote downloads) = %v, want a clean shutdown", err)
@@ -270,7 +270,7 @@ func TestRunStdioRemoteDownloads(t *testing.T) {
 // unparseable duration makes Load itself (not Validate) return an error.
 func TestRunConfigLoadError(t *testing.T) {
 	t.Setenv("LIBGEN_MCP_TIMEOUT", "not-a-duration")
-	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
 	if err == nil {
 		t.Fatal("run() = nil, want a config-load error")
 	}
@@ -299,7 +299,7 @@ func TestRunManagerError(t *testing.T) {
 	if _, err := os.UserCacheDir(); err == nil {
 		t.Skip("os.UserCacheDir still resolves a cache directory on this platform")
 	}
-	err := run(context.Background(), listenSpec{}, transport.DefaultOptions())
+	err := run(context.Background(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
 	if err == nil {
 		t.Fatal("run() = nil, want a mirror-manager error")
 	}
