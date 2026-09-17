@@ -70,7 +70,7 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...Progres
 	// Resolve against the cache under a single lock: if a concurrent fetch filled
 	// the same key while we downloaded, discard our copy and use theirs; otherwise
 	// store ours. Either way the caller gets one reference and one release.
-	stored, isNew := c.tempCache.getOrPut(key, res.Path, res.SizeBytes)
+	stored, isNew := c.tempCache.getOrPut(ctx, key, res.Path, res.SizeBytes)
 	if !isNew {
 		_ = os.RemoveAll(tempDir)
 	}

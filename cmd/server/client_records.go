@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
@@ -197,14 +198,14 @@ func newClientRecordsFor(serving bool, limit rateLimitDecision, charge chargePol
 //
 // The pair is what keeps inFlight honest: every caller defers the second half,
 // so a record is busy for exactly as long as the request it belongs to.
-func (c *clientRecords) begin(address string) (rec *clientRecord, end func()) {
+func (c *clientRecords) begin(ctx context.Context, address string) (rec *clientRecord, end func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	now := c.now()
 	rec = c.byAddress[address]
 	if rec == nil {
-		c.makeRoomLocked(now)
+		c.makeRoomLocked(ctx, now)
 		rec = &clientRecord{limiter: c.mint()}
 		c.byAddress[address] = rec
 	}
@@ -233,15 +234,15 @@ func (c *clientRecords) mint() *toolutil.RateLimiter {
 // It sweeps first, so the cap bounds live keys rather than everything ever seen,
 // and only evicts when the sweep left the table still full. The sweep is rate
 // limited for the reason [sweepInterval] gives.
-func (c *clientRecords) makeRoomLocked(now time.Time) {
+func (c *clientRecords) makeRoomLocked(ctx context.Context, now time.Time) {
 	if len(c.byAddress) < c.maxRecords {
 		return
 	}
 	if now.Sub(c.lastSweep) >= c.sweepEvery {
-		c.sweepLocked(now)
+		c.sweepLocked(ctx, now)
 	}
 	for len(c.byAddress) >= c.maxRecords {
-		if !c.evictLocked() {
+		if !c.evictLocked(ctx) {
 			return
 		}
 	}
@@ -250,11 +251,12 @@ func (c *clientRecords) makeRoomLocked(now time.Time) {
 // sweepLocked removes every record whose last request is older than the TTL,
 // busy ones excepted: a record with work in flight is live whatever its clock
 // says.
-func (c *clientRecords) sweepLocked(now time.Time) {
+func (c *clientRecords) sweepLocked(ctx context.Context, now time.Time) {
 	c.lastSweep = now
 	for address, rec := range c.byAddress {
 		if !rec.busy() && now.Sub(rec.lastSeen) > c.ttl {
 			delete(c.byAddress, address)
+			mcpotel.RecordClientRecordEviction(ctx, mcpotel.ReasonLapsed)
 		}
 	}
 }
@@ -265,7 +267,7 @@ func (c *clientRecords) sweepLocked(now time.Time) {
 // evicts the least recently used of those instead, because the alternative is
 // growing past the cap, and a bound that yields under pressure is not a bound. A
 // record is therefore only ever skipped in favor of another record.
-func (c *clientRecords) evictLocked() bool {
+func (c *clientRecords) evictLocked(ctx context.Context) bool {
 	var (
 		idleKey   string
 		idleSeen  time.Time
@@ -288,12 +290,36 @@ func (c *clientRecords) evictLocked() bool {
 	switch {
 	case foundIdle:
 		delete(c.byAddress, idleKey)
+		mcpotel.RecordClientRecordEviction(ctx, mcpotel.ReasonSizePressure)
 	case foundBusy:
 		delete(c.byAddress, busyKey)
+		mcpotel.RecordClientRecordEviction(ctx, mcpotel.ReasonSizePressure)
+		// Its own instrument rather than a third reason, because it is the only
+		// one that says something is wrong rather than something is working:
+		// the table was full of callers with work in flight, so the LRU had
+		// nothing idle to drop and took a busy record anyway. Without it, a
+		// table thrashing under a flood of spoofed addresses looks exactly like
+		// a quiet one.
+		mcpotel.RecordClientRecordBusyEviction(ctx)
 	default:
 		return false
 	}
 	return true
+}
+
+// observe publishes how full the table is and what bounds it.
+//
+// The callback takes the table's own lock, which is what makes it safe on the
+// SDK's collection goroutine. A nil table publishes nothing: on stdio there is
+// one caller and no table to describe.
+func (c *clientRecords) observe() {
+	if c == nil {
+		return
+	}
+	mcpotel.ObserveBounded(mcpotel.InstrumentClientRecordsEntries, mcpotel.InstrumentClientRecordsCapacity, mcpotel.Gauges{
+		Current:  func() int64 { return int64(c.len()) },
+		Capacity: func() int64 { return int64(c.maxRecords) },
+	})
 }
 
 // len reports how many records the table holds.
@@ -328,7 +354,7 @@ func (c *clientRecords) meter(next mcp.MethodHandler) mcp.MethodHandler {
 		// wildcard bind nothing before the first request can tell a same-host
 		// proxy from a real remote peer.
 		unidentifiableCallers.warn(address, c.charge)
-		rec, done := c.begin(address)
+		rec, done := c.begin(ctx, address)
 		defer done()
 		return next(context.WithValue(ctx, recordKey{}, rec), method, req)
 	}

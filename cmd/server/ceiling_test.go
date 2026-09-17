@@ -36,7 +36,7 @@ func startCall(t *testing.T, records *clientRecords, ceiling heavyCeiling, addre
 		return &mcp.CallToolResult{}, nil
 	})
 
-	rec, end := records.begin(address)
+	rec, end := records.begin(t.Context(), address)
 	ctx := context.WithValue(t.Context(), recordKey{}, rec)
 	go func() {
 		defer end()
@@ -200,7 +200,7 @@ func TestTheCountReturnsToZeroWhenACallEndsBadly(t *testing.T) {
 		{name: "the handler failed", err: errors.New("every source is exhausted")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rec, end := records.begin("203.0.113.7")
+			rec, end := records.begin(t.Context(), "203.0.113.7")
 			ctx := context.WithValue(t.Context(), recordKey{}, rec)
 			handler := records.limitHeavyCalls(ceiling)(func(context.Context, string, mcp.Request) (mcp.Result, error) {
 				return nil, tc.err
@@ -232,7 +232,7 @@ func TestTheCountIsTakenWithNoCeilingConfigured(t *testing.T) {
 	records, _ := testRecords(t, 8)
 	off := heavyCeiling{perClient: 0, perProcess: maxHeavyPerProcess}
 
-	rec, end := records.begin("203.0.113.7")
+	rec, end := records.begin(t.Context(), "203.0.113.7")
 	defer end()
 	ctx := context.WithValue(t.Context(), recordKey{}, rec)
 

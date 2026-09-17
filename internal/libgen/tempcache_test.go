@@ -37,7 +37,7 @@ func TestTempCache_GetMissThenPutHit(t *testing.T) {
 	if _, ok := tc.get("md5-a"); ok {
 		t.Fatal("get before put should miss")
 	}
-	tc.put("md5-a", path, size)
+	tc.put(t.Context(), "md5-a", path, size)
 	got, ok := tc.get("md5-a")
 	if !ok {
 		t.Fatal("get after put should hit")
@@ -50,7 +50,7 @@ func TestTempCache_GetMissThenPutHit(t *testing.T) {
 	}
 	// A second, distinct key stores independently and hits on its own path.
 	path2, size2 := writeTempFile(t, "second entry")
-	tc.put("md5-b", path2, size2)
+	tc.put(t.Context(), "md5-b", path2, size2)
 	if gotB, okB := tc.get("md5-b"); !okB || gotB != path2 {
 		t.Errorf("get(md5-b) = %q, %v; want %q, true", gotB, okB, path2)
 	}
@@ -63,7 +63,7 @@ func TestTempCache_ReleaseAllowsEviction(t *testing.T) {
 	tc := newTempCache(1<<30, 0) // ttl=0: any past atime is expired
 	path, size := writeTempFile(t, "evict me please")
 
-	tc.put("md5-a", path, size) // refs=1 (the putting caller holds one ref)
+	tc.put(t.Context(), "md5-a", path, size) // refs=1 (the putting caller holds one ref)
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Fatalf("file should exist after put: %v", statErr)
 	}
@@ -73,7 +73,7 @@ func TestTempCache_ReleaseAllowsEviction(t *testing.T) {
 	tc.release("md5-a") // refs=1
 	tc.release("md5-a") // refs=0
 
-	tc.evict()
+	tc.evict(t.Context())
 
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Errorf("file should be removed after eviction, stat err = %v", statErr)
@@ -90,10 +90,10 @@ func TestTempCache_ReleaseAllowsSizeEviction(t *testing.T) {
 	path, size := writeTempFile(t, "some bytes over the cap")
 	tc := newTempCache(size-1, time.Hour) // maxBytes below the entry size
 
-	tc.put("md5-a", path, size) // refs=1
-	tc.release("md5-a")         // refs=0
+	tc.put(t.Context(), "md5-a", path, size) // refs=1
+	tc.release("md5-a")                      // refs=0
 
-	tc.evict()
+	tc.evict(t.Context())
 
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Errorf("oversized released entry should be evicted, stat err = %v", statErr)
@@ -129,7 +129,7 @@ func TestTempCache_SizeEvictionDropsTheLeastRecentlyUsed(t *testing.T) {
 	tc.entries["mid"] = &tempEntry{path: midPath, size: midSize, refs: 0, atime: time.Now().Add(-2 * time.Minute)}
 	tc.entries["new"] = &tempEntry{path: newPath, size: newSize, refs: 0, atime: time.Now().Add(-1 * time.Minute)}
 
-	tc.evict()
+	tc.evict(t.Context())
 
 	if _, ok := tc.entries["old"]; ok {
 		t.Error("the least-recently-used entry survived eviction")
@@ -159,7 +159,7 @@ func TestTempCache_EvictionSkipsReferencedEntriesEvenWhenOldest(t *testing.T) {
 	tc.entries["held"] = &tempEntry{path: heldPath, size: heldSize, refs: 1, atime: time.Now().Add(-3 * time.Minute)}
 	tc.entries["free"] = &tempEntry{path: freePath, size: freeSize, refs: 0, atime: time.Now().Add(-1 * time.Minute)}
 
-	tc.evict()
+	tc.evict(t.Context())
 
 	if _, ok := tc.entries["held"]; !ok {
 		t.Error("an entry with a live reference was evicted; a read in progress lost its file")
@@ -180,16 +180,16 @@ func TestTempCache_ReleaseDoesNotUnderflow(t *testing.T) {
 	path, size := writeTempFile(t, "double released")
 	tc := newTempCache(1<<30, time.Hour)
 
-	tc.put("k", path, size) // refs=1
-	tc.release("k")         // refs=0
-	tc.release("k")         // one release too many
+	tc.put(t.Context(), "k", path, size) // refs=1
+	tc.release("k")                      // refs=0
+	tc.release("k")                      // one release too many
 
 	if got := tc.entries["k"].refs; got != 0 {
 		t.Fatalf("refs after an extra release = %d, want 0", got)
 	}
 	// The entry must still be evictable, which is what the floor exists to protect.
 	tc.maxBytes = 0
-	tc.evict()
+	tc.evict(t.Context())
 	if _, ok := tc.entries["k"]; ok {
 		t.Error("an over-released entry was not evictable")
 	}
@@ -203,9 +203,9 @@ func TestTempCache_PutOverwritesUnreferencedFile(t *testing.T) {
 	path1, size1 := writeTempFile(t, "first backing file")
 	path2, size2 := writeTempFile(t, "second backing file")
 
-	tc.put("k", path1, size1) // refs=1
-	tc.release("k")           // refs=0, now overwritable
-	tc.put("k", path2, size2) // prev unreferenced with a different path → path1 removed
+	tc.put(t.Context(), "k", path1, size1) // refs=1
+	tc.release("k")                        // refs=0, now overwritable
+	tc.put(t.Context(), "k", path2, size2) // prev unreferenced with a different path → path1 removed
 
 	if _, statErr := os.Stat(path1); !os.IsNotExist(statErr) {
 		t.Errorf("stale backing file should be removed, stat err = %v", statErr)
@@ -223,10 +223,10 @@ func TestTempCache_GetOrPutHitReturnsExisting(t *testing.T) {
 	path1, size1 := writeTempFile(t, "the winner")
 	path2, size2 := writeTempFile(t, "the loser")
 
-	if stored, isNew := tc.getOrPut("k", path1, size1); !isNew || stored != path1 {
+	if stored, isNew := tc.getOrPut(t.Context(), "k", path1, size1); !isNew || stored != path1 {
 		t.Fatalf("first getOrPut = (%q, %v), want (%q, true)", stored, isNew, path1)
 	}
-	stored, isNew := tc.getOrPut("k", path2, size2)
+	stored, isNew := tc.getOrPut(t.Context(), "k", path2, size2)
 	if isNew {
 		t.Error("second getOrPut isNew = true, want false (key already present)")
 	}
@@ -255,9 +255,9 @@ func TestTempCache_RefcountBlocksEviction(t *testing.T) {
 	path, size := writeTempFile(t, "held open while read is in progress")
 	tc := newTempCache(size-1, 0) // both ttl (0) and size cap would evict a refs==0 entry
 
-	tc.put("md5-a", path, size) // refs=1, held
+	tc.put(t.Context(), "md5-a", path, size) // refs=1, held
 
-	tc.evict()
+	tc.evict(t.Context())
 
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Errorf("held file (refs>0) must not be removed: %v", statErr)

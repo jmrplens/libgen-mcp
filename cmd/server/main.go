@@ -1035,6 +1035,11 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	}
 	defer profiler.stop()
 
+	// After the telemetry wiring and before anything is served, so the table is
+	// described from its first request. A nil table publishes nothing, which is
+	// the honest answer on stdio: one caller, no table.
+	spec.records.observe()
+
 	server, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight, identity)
 	if err != nil {
 		return err
