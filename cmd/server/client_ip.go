@@ -23,6 +23,8 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 // unixPeerEntry is the one --trusted-proxies spelling that is not an address.
@@ -59,7 +61,11 @@ func parseTrustedProxies(entries []string) (trustedProxies, error) {
 			continue
 		}
 		if prefix, err := netip.ParsePrefix(entry); err == nil {
-			t.prefixes = append(t.prefixes, prefix.Masked())
+			normalized, ok := unmapPrefix(prefix)
+			if !ok {
+				return trustedProxies{}, fmt.Errorf("%q is an IPv4-mapped range shorter than /96, which names addresses outside the IPv4 space it appears to describe", entry)
+			}
+			t.prefixes = append(t.prefixes, normalized)
 			continue
 		}
 		addr, err := netip.ParseAddr(entry)
@@ -70,6 +76,29 @@ func parseTrustedProxies(entries []string) (trustedProxies, error) {
 		t.prefixes = append(t.prefixes, netip.PrefixFrom(addr, addr.BitLen()))
 	}
 	return t, nil
+}
+
+// unmapPrefix reduces an IPv4-mapped range to the IPv4 range it describes.
+//
+// `::ffff:192.0.2.0/120` is a legal way to write `192.0.2.0/24` and
+// netip.ParsePrefix accepts it, but Masked keeps it as a 128-bit mapped prefix —
+// and every peer this server compares against has been through Unmap by then, so
+// the range matches nothing and the forwarded header is silently ignored. The
+// deployment looks configured and charges every caller to the proxy.
+//
+// A mapped prefix shorter than /96 is refused rather than normalized: it covers
+// addresses outside the mapped block, so there is no IPv4 range it means, and
+// guessing one would trust more than the operator wrote.
+func unmapPrefix(prefix netip.Prefix) (netip.Prefix, bool) {
+	addr := prefix.Addr()
+	if !addr.Is4In6() {
+		return prefix.Masked(), true
+	}
+	const mappedPrefixBits = 96
+	if prefix.Bits() < mappedPrefixBits {
+		return netip.Prefix{}, false
+	}
+	return netip.PrefixFrom(addr.Unmap(), prefix.Bits()-mappedPrefixBits).Masked(), true
 }
 
 // chargePolicy is the pair of flags that decide which address a request is
@@ -231,6 +260,13 @@ func validateTrustedProxyConfig(entries []string, header, listenAddr string) err
 	}
 	if header == "" && len(entries) > 0 {
 		return fmt.Errorf("--trusted-proxies %q names proxies whose header is never read: pass --trusted-proxy-header with the header they set, or drop the list", strings.Join(entries, ","))
+	}
+	// A name Go's server cannot put in a request's header map is a rule that
+	// reads nothing: r.Header.Get returns the empty string for it whatever the
+	// proxy sent, so the forwarded address is ignored and every caller is
+	// charged to the proxy — a deployment that looks configured and is not.
+	if header != "" && !httpguts.ValidHeaderFieldName(header) {
+		return fmt.Errorf("--trusted-proxy-header %q is not a valid HTTP header name, so no request can ever carry it", header)
 	}
 	proxies, err := parseTrustedProxies(entries)
 	if err != nil {

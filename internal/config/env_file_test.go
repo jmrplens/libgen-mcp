@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,12 +22,27 @@ import (
 // the thing under test, and TestANamedFileCannotBeNominatedByALoadedOne would
 // keep passing after the once-ness was taken out of production. Measured — it
 // did.
-func resetEnvFileState(t *testing.T) {
+func resetEnvFileState(t *testing.T) (home string) {
 	t.Helper()
 	previousOnce, previousExplicit := envFileAnnounceOnce, explicitEnvFile
 	t.Cleanup(func() { envFileAnnounceOnce, explicitEnvFile = previousOnce, previousExplicit })
 	envFileAnnounceOnce = newAnnounceOnce()
 	explicitEnvFile = newExplicitEnvFileMemo()
+
+	// A home directory of the test's own, because the real one is a source of
+	// configuration these cases are about. A developer with an actual
+	// ~/.libgen-mcp.env would otherwise have LoadEnvFiles read it here — and a
+	// LIBGEN_MIRROR in it makes the working-directory case fail after that case
+	// unsets the process value, on their machine and on nobody else's. Both
+	// variables, since os.UserHomeDir reads HOME on unix and USERPROFILE on
+	// Windows.
+	//
+	// Returned as well as set, so a case that writes into it has the path in
+	// hand rather than reading back the variable it just wrote.
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
 }
 
 // inDir runs the rest of the test with dir as the working directory, which is
@@ -380,4 +397,93 @@ func TestALongKeyIsTruncatedAndMarked(t *testing.T) {
 	if !strings.HasSuffix(got[0], "...") {
 		t.Errorf("a truncated key is not marked as one, so it reads as the real name: %q", got[0])
 	}
+}
+
+// TestTheHomeFileIsAnnouncedWhenItDecidesSomething keeps the one source of
+// configuration nobody passed this server from being silent.
+//
+// The home file is read because somebody deliberately put it where the server
+// looks — and on this server it can decide which tools exist, since
+// LIBGEN_MCP_SERVER_FETCH lives there like everything else. A deployment whose
+// surface came from a file the client never named has to be able to see that
+// from its own log.
+func TestTheHomeFileIsAnnouncedWhenItDecidesSomething(t *testing.T) {
+	home := resetEnvFileState(t)
+	inDir(t, t.TempDir())
+	unsetEnv(t, "LIBGEN_MIRROR")
+
+	writeEnvFile(t, filepath.Join(home, EnvFileName), "LIBGEN_MIRROR=https://home.example")
+
+	logged := captureConfigLog(t)
+	report := LoadEnvFiles()
+
+	if report.HomePath == "" {
+		t.Fatal("the report does not name the home file it loaded")
+	}
+	if report.HomeErr != nil {
+		t.Fatalf("HomeErr = %v, want the file to have loaded", report.HomeErr)
+	}
+	if got := os.Getenv("LIBGEN_MIRROR"); got != "https://home.example" {
+		t.Errorf("LIBGEN_MIRROR = %q, want the value from the home file", got)
+	}
+	if out := logged(); !strings.Contains(out, "home directory") {
+		t.Errorf("the load was not announced, so a setting nobody passed decided something silently:\n%s", out)
+	}
+}
+
+// TestAnUnreadableHomeFileIsReportedRatherThanDropped is the failure that was
+// silent.
+//
+// godotenv's error for a file that exists and cannot be parsed or read was
+// discarded, so the operator's settings were simply absent and the server ran on
+// defaults that contradict them — with nothing in the log to look at. A missing
+// file stays silent, because that is every ordinary deployment.
+func TestAnUnreadableHomeFileIsReportedRatherThanDropped(t *testing.T) {
+	home := resetEnvFileState(t)
+	inDir(t, t.TempDir())
+
+	// A directory where the file should be: readable as an entry, impossible as
+	// a dotenv file, and portable in a way a permission bit is not.
+	if err := os.Mkdir(filepath.Join(home, EnvFileName), 0o700); err != nil {
+		t.Fatalf("creating the unreadable home entry: %v", err)
+	}
+
+	logged := captureConfigLog(t)
+	report := LoadEnvFiles()
+
+	if report.HomeErr == nil {
+		t.Fatal("a home file that could not be read was reported as absent")
+	}
+	if out := logged(); !strings.Contains(out, "could not be read") {
+		t.Errorf("the failure was not announced:\n%s", out)
+	}
+}
+
+// TestAnAbsentHomeFileSaysNothing keeps the announcement worth reading: it is
+// the normal case, and a line for it would be on every start of every ordinary
+// deployment.
+func TestAnAbsentHomeFileSaysNothing(t *testing.T) {
+	resetEnvFileState(t)
+	inDir(t, t.TempDir())
+
+	logged := captureConfigLog(t)
+	report := LoadEnvFiles()
+
+	if report.HomePath != "" || report.HomeErr != nil {
+		t.Errorf("an absent home file was reported: path=%q err=%v", report.HomePath, report.HomeErr)
+	}
+	if out := logged(); strings.Contains(out, "home directory") {
+		t.Errorf("a deployment with no home file was told about one:\n%s", out)
+	}
+}
+
+// captureConfigLog collects what this package logs while a test runs.
+func captureConfigLog(t *testing.T) func() string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	return buf.String
 }

@@ -202,3 +202,61 @@ func probeHealthAt(t *testing.T, url string) (int, healthBody) {
 	}
 	return resp.StatusCode, body
 }
+
+// TestDrain_ASecondSignalDoesNotWaitOutTheDelay is the escape hatch an operator
+// needs and the code promises.
+//
+// signal.NotifyContext keeps intercepting after the first signal until its stop
+// function is called, so with that call deferred to the end of main a second
+// SIGTERM during the drain is swallowed exactly like the first — and the drain
+// can be minutes. Somebody who has decided not to wait then has nothing short of
+// SIGKILL, which is the outcome a graceful shutdown exists to avoid.
+//
+// Driven over the real binary, because what is being asserted is the process's
+// signal disposition rather than a function's.
+func TestDrain_ASecondSignalDoesNotWaitOutTheDelay(t *testing.T) {
+	port := freePort(t)
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	// Long enough that waiting it out is unmistakable, and short enough that a
+	// regression fails this test rather than hanging it.
+	//nolint:gosec // the binary this package built, on a port it reserved
+	cmd := exec.CommandContext(context.Background(), serverBinary(t),
+		"--http", fmt.Sprintf("127.0.0.1:%d", port), "--drain-delay", "60s")
+	cmd.Env = append(os.Environ(), "LIBGEN_MCP_LOG_LEVEL=info", "LIBGEN_MCP_DOWNLOAD_DIR="+t.TempDir())
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("starting the server: %v", err)
+	}
+	stopped := make(chan error, 1)
+	go func() { stopped <- cmd.Wait() }()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+
+	waitHealthy(t, &server{baseURL: base, logs: func() string { return "" }})
+
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signaling: %v", err)
+	}
+	// The drain has begun: the listener is up and answering 503. Waiting for it
+	// is what makes the second signal land during the sleep rather than before
+	// the first one was handled.
+	if status, _ := waitDraining(t, base, 10*time.Second); status != http.StatusServiceUnavailable {
+		t.Fatalf("GET /health during the drain = %d, want %d", status, http.StatusServiceUnavailable)
+	}
+
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signaling a second time: %v", err)
+	}
+
+	select {
+	case <-stopped:
+		// The exit status is deliberately not asserted: the second signal is
+		// the default disposition, which terminates the process rather than
+		// letting it return zero, and that is the point.
+	case <-time.After(20 * time.Second):
+		t.Fatal("the second signal was swallowed: the process sat out its drain delay with nobody able to stop it")
+	}
+	if elapsed := time.Since(start); elapsed > 20*time.Second {
+		t.Errorf("the second signal took %v to end the process", elapsed)
+	}
+}

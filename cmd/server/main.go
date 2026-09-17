@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -49,12 +50,19 @@ import (
 // own grace — ten seconds for `docker stop`, thirty for a Kubernetes pod — after
 // which the process is killed and the budget is academic.
 //
-// Fifteen seconds outlasts the stall timeout and clears docker's grace only
-// because [drainAndShutdown] clamps it to whatever the caller's own deadline
-// leaves. Raising it without that clamp buys nothing: the supervisor is the real
-// limit, and a budget longer than the grace is a promise the process cannot
-// keep.
-const httpShutdownTimeout = 15 * time.Second
+// It sits **below** docker's default grace rather than above it, and that is
+// the correction this value needed: the production context comes from
+// signal.NotifyContext and carries no deadline, so [drainAndShutdown]'s clamp
+// has nothing to clamp against and the full budget applies. An SSE stream keeps
+// srv.Shutdown waiting until it expires, and srv.Close runs only afterwards — so
+// a budget of fifteen seconds meant docker killing the process at ten, with the
+// remaining connections never closed and the listener never released.
+//
+// Eight seconds leaves room for the close and the exit inside that grace. A
+// deployment that raises `--drain-delay` is adding to the same budget and has to
+// raise its supervisor's grace with it: the drain sleeps first and the shutdown
+// begins after.
+const httpShutdownTimeout = 8 * time.Second
 
 // The listener's own timeouts. Both guard a peer that opens a connection and
 // then does nothing with it, which costs a file descriptor either way.
@@ -261,6 +269,16 @@ func mainWithExit() int {
 	// shut down gracefully; a second signal restores the default behavior.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Restored at the first signal rather than at the end of this function,
+	// which is what makes the sentence above true. NotifyContext keeps
+	// intercepting until stop is called, so with the deferred call alone a
+	// second SIGTERM during a drain — up to --drain-delay, which may be minutes
+	// — would be swallowed exactly like the first, and an operator who has
+	// decided not to wait has no way to say so short of SIGKILL.
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
 
 	// Both refused before anything is served, for the same reason the origin list
 	// is: a deployment that believes it is serving TLS, or that its socket is
@@ -1055,12 +1073,13 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 		// fingerprints the configuration, and the configuration is not read
 		// until this point.
 		return serveHTTP(ctx, server, spec, opts, httpPolicy{
-			guard:      spec.guard,
-			charge:     spec.charge,
-			digest:     configDigest(cfg, opts.BasePath, opts.Stateless),
-			drainDelay: spec.drainDelay,
-			publicURL:  spec.publicURL,
-			identity:   identity.policy,
+			guard:        spec.guard,
+			charge:       spec.charge,
+			digest:       configDigest(cfg, opts.BasePath, opts.Stateless),
+			drainDelay:   spec.drainDelay,
+			publicURL:    spec.publicURL,
+			identity:     identity.policy,
+			allowPrivate: cfg.AllowPrivateAddresses,
 		})
 	}
 	// Said before the first read, because after it the process looks idle and
@@ -1133,6 +1152,38 @@ func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error
 	)
 }
 
+// refusePrivateHatchOnBoundListener is the startup refusal above, asked again of
+// the listener that exists.
+//
+// The two are not redundant. The first reads a configured address and has to
+// resolve a name to judge it; this one reads what the kernel bound, which is the
+// only answer that cannot be a different one by the time it matters. Between
+// them sits a resolver a deployment does not control — a second lookup of the
+// same name can return a different address, and the hatch would then be open on
+// a listener other machines can reach, which is the one arrangement this setting
+// must never be combined with.
+//
+// A unix socket is host-local by construction: it has no address for another
+// machine to reach.
+func refusePrivateHatchOnBoundListener(ln net.Listener, allowPrivate bool) error {
+	if !allowPrivate || ln == nil {
+		return nil
+	}
+	addr, isTCP := ln.Addr().(*net.TCPAddr)
+	if !isTCP {
+		return nil
+	}
+	bound, ok := netip.AddrFromSlice(addr.IP)
+	if ok && bound.Unmap().IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s is set and the listener bound %s, which other machines can reach: the address resolved to something other than loopback between the startup check and the bind. "+
+			"Bind a loopback address (--http 127.0.0.1:PORT) or a unix socket, or unset the variable",
+		config.EnvName("ALLOW_PRIVATE_ADDRESSES"), ln.Addr(),
+	)
+}
+
 // newRegisteredServer builds the MCP server for cfg with every tool and
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
@@ -1196,6 +1247,16 @@ func serveHTTP(ctx context.Context, server *mcp.Server, spec listenSpec, opts tr
 	ln, err := listenHTTP(ctx, spec)
 	if err != nil {
 		return err
+	}
+	// Checked against the address that was actually bound, not the one that was
+	// asked for. The startup refusal resolves the host to decide whether the
+	// listener is host-local, and the bind resolves it again — so a name whose
+	// answer changed between the two passes validation as loopback and then
+	// binds an address other machines can reach, with the private-address hatch
+	// open behind it. The kernel's answer is the one that cannot have changed.
+	if boundErr := refusePrivateHatchOnBoundListener(ln, policy.allowPrivate); boundErr != nil {
+		_ = ln.Close()
+		return boundErr
 	}
 	opts.ServesTLS = spec.servesTLS()
 	return serveHTTPOn(ctx, server, ln, opts, policy)
