@@ -30,6 +30,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/prompts"
 	"github.com/jmrplens/libgen-mcp/internal/tools"
@@ -493,7 +494,7 @@ func isCleanShutdown(err error) bool {
 // none — stdio, and any listener where an address cannot tell two callers apart.
 // Nil leaves the metering middlewares out entirely rather than installing ones
 // that would allow everything.
-func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeiling) *mcp.Server {
+func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeiling, spans mcpotel.Options) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:        "libgen-mcp",
 		Title:       implementationTitle,
@@ -561,10 +562,17 @@ func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeil
 	// up regardless must not answer as though something did (see
 	// internal/capguard).
 	server.AddReceivingMiddleware(capguard.NoResources())
+	// The span goes on beneath the panic guard, so everything below it — the
+	// resource refusal, the cache hints, the per-caller trio and the handler —
+	// runs inside one measured request. Above it there is only recoverPanics,
+	// which means a panicking call ends its span while unwinding and records no
+	// duration: the measurement is of requests that finished, and a panic is
+	// reported as the IsError result recoverPanics turns it into.
+	server.AddReceivingMiddleware(mcpotel.Middleware(spans))
 	// Last, and that is what puts it OUTERMOST — which is not obvious and is the
 	// whole of why the order matters here. Each call wraps the handler built so
-	// far, so the three nest recoverPanics(capguard(cachehints(handler))) and a
-	// panic in either of the other two is caught as well as one in a handler.
+	// far, so the four nest recoverPanics(mcpotel(capguard(cachehints(handler))))
+	// and a panic in any of the others is caught as well as one in a handler.
 	// Moving this line up would quietly demote it to covering less.
 	server.AddReceivingMiddleware(recoverPanics)
 	return server
@@ -1005,7 +1013,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	// Shutdown applies its own bound of a few seconds, and a flush canceled by
 	// the same SIGTERM that started it would drop the batch describing the
 	// shutdown.
-	stopTelemetry, err := startTelemetry(ctx, cfg)
+	identity, stopTelemetry, err := startTelemetry(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -1021,7 +1029,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	}
 	defer profiler.stop()
 
-	server, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight)
+	server, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight, identity)
 	if err != nil {
 		return err
 	}
@@ -1112,7 +1120,7 @@ func refusePrivateHatchOnOpenListener(spec listenSpec, cfg *config.Config) error
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
-func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords, inflight inflightFlag) (*mcp.Server, error) {
+func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords, inflight inflightFlag, identity identityChoice) (*mcp.Server, error) {
 	// A deployment is remote when its disk is not the caller's: an HTTP listener
 	// (a TCP address or a unix socket) or a hosted stdio process that says so with
 	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
@@ -1143,7 +1151,8 @@ func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientR
 	if records != nil {
 		slog.Info("in-flight ceiling on download and read", "ceiling", ceiling.describe())
 	}
-	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch), records, ceiling)
+	server := newMCPServer(serverInstructions(serverFetch, remote || !serverFetch), records, ceiling,
+		spanOptions(listenAddr, identity))
 	// When the server can't write to the client's disk, the download tool returns a
 	// link to fetch instead of saving a file. That's the case in HTTP mode, and also
 	// for a hosted stdio deployment (e.g. behind mcp-proxy) that opts in via

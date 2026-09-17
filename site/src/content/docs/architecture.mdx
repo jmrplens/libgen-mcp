@@ -432,6 +432,34 @@ The fallbacks are not free, and the brand mark is where it shows: measured as se
 
 **No param-header routing.** Tool arguments are passed in the JSON-RPC body only: nothing on this surface carries an [SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243) `x-mcp-header` annotation. Annotating `md5` is the obvious candidate and is deliberately not done — the annotation obliges the client to mirror the value into an `Mcp-Param-Md5` header and the server to reject the call without it, which browser-based clients structurally cannot satisfy, since dynamically named headers cannot be allow-listed for credentialed CORS. Nothing fronts this server that would route on it, so the trade is all cost.
 
+### Telemetry
+
+Off unless `LIBGEN_MCP_TELEMETRY` says otherwise, and off is the default for privacy rather than for cost: instrumenting a deployment is a decision about that deployment's own users. Everything about the exporters — endpoint, headers, protocol, timeouts, sampling, resource attributes — comes from the standard `OTEL_*` variables the SDK reads itself. [Configuration](/libgen-mcp/configuration/#http-listener) lists the variables; this is what the signals say.
+
+**One span and one duration per MCP request**, recorded by a middleware sitting beneath the panic guard, so the resource refusal, the cache hints, the per-caller trio and the handler are all inside one measured request. The span is `SERVER` kind and is parented from the trace context in `params._meta` rather than from the transport, which is the convention's own instruction: one MCP request can be served by several HTTP requests when a client retries, and one streamable HTTP request can carry more than one MCP request, so parenting to the transport attaches an operation to whichever round trip happened to carry it. The ambient HTTP span is attached as a **link** instead, so "which request carried this" stays answerable.
+
+**The source chain is the reason it is worth its cost here.** A download that succeeded through the first source and one that succeeded through the fourth are the same result to a caller and completely different to whoever has to decide whether a mirror is dying — and the chain is the only layer that knows. Every attempt is recorded, so `libgen_mcp.source` names the one that served and `libgen_mcp.source_attempts` says how much of the chain it cost. `libgen_mcp.mirror_host` names the catalog mirror, as a bare host and never a URL: a resolved file URL on the member path is itself a working credential.
+
+**A refusal is recorded from where it is decided**, because a refusal travels as a successful JSON-RPC response carrying a failure meant for the model — from outside the handler it is indistinguishable from a call that ran and succeeded, which is exactly what it would look like on the metric. The reasons are a closed set, because the value lands on a metric dimension and a dimension cannot be withdrawn without breaking every dashboard built on it:
+
+| Reason                | What decided it                                                   |
+| --------------------- | ----------------------------------------------------------------- |
+| `consent_declined`    | The user answered no to a download prompt.                        |
+| `source_not_in_chain` | The caller named a source this deployment does not have enabled.  |
+| `download_too_large`  | The size cap refused a transfer.                                  |
+| `download_stalled`    | No bytes arrived for the stall window.                            |
+| `blocked_address`     | The outbound destination guard refused a host.                    |
+| `invalid_params`      | An argument was rejected before any work was done.                |
+| `rate_limited`        | The per-caller inbound rate limit refused a method.               |
+| `inflight_ceiling`    | The per-caller or per-process ceiling on heavy calls refused one. |
+| `action_timeout`      | The wall-clock cap on one tool call ended it.                     |
+
+A source skipped for cooldown is deliberately **not** on that list. Cooldown here is routing rather than refusal: the chain either passes over a cooled source and continues, or — when every supporting source is cooled — bypasses the cooldown and tries anyway. Neither declines a call, so a reason recorded there would mark calls that succeeded as refused.
+
+**Nothing about a caller ever reaches a metric.** Every distinct label combination is a time series somebody stores and pays for, and a per-caller dimension is unbounded by construction: on a public endpoint it grows with the internet. The span carries what the identity policy allows, because a span has no series budget. The same reasoning bounds a name the caller chose: a `prompts/get` for a prompt that does not exist would otherwise record the invented name as a dimension value, letting any client mint one time series per string it types — so a name whose call failed validation is recorded on the metric as `_OTHER` and kept exactly on the span.
+
+**A session is measured only where a session is a real span of time**: stdio, where it is the process lifetime, and `--stateless=false`, where it is what an `Mcp-Session-Id` names. Under the stateless default each POST is its own session, so a session duration would be a histogram of request durations under a second name. There is a third skip, and it is not obvious: a stateful transport also creates a throwaway session for the `server/discover` probe a current client sends before it handshakes, which would put a near-zero sample in for every client that connects. A session is observed only once it has carried an `initialize`, which is the SDK's own discriminator — it persists `InitializeParams` only when the transport can serve the protocol.
+
 ### Vendor surface
 
 Everything this server puts on the wire that the MCP schema does not define, and the slot it occupies:

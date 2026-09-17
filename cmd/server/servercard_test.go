@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -21,7 +22,7 @@ import (
 func newCardTestServer() *mcp.Server {
 	type stubIn struct{}
 	type stubOut struct{}
-	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
+	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{}, mcpotel.Options{})
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Title: "Search", Description: "stub tool"},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil
@@ -392,7 +393,7 @@ func TestServerCardCarriesIcons(t *testing.T) {
 	toolIcon := mcp.Icon{Source: "https://example.invalid/tool.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}}
 	promptIcon := mcp.Icon{Source: "https://example.invalid/prompt.png", MIMEType: "image/png"}
 
-	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{})
+	srv := newMCPServer(serverInstructions(true, false), nil, heavyCeiling{}, mcpotel.Options{})
 	mcp.AddTool(srv, &mcp.Tool{Name: "search", Description: "stub", Icons: []mcp.Icon{toolIcon}},
 		func(context.Context, *mcp.CallToolRequest, stubIn) (*mcp.CallToolResult, stubOut, error) {
 			return nil, stubOut{}, nil

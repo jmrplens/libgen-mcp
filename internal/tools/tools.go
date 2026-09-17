@@ -24,6 +24,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
@@ -1138,9 +1139,32 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 				return
 			}
 			logging.ToolCall(name, start, err)
+			// The deadline this wrapper derived is the deployment's own, so a
+			// call it ended is a refusal rather than a failure that happened to
+			// the call. Distinguished from a caller who gave up: only the
+			// derived context expiring counts, and a caller's cancellation
+			// leaves the parent done first.
+			if endedByActionDeadline(ctx) {
+				mcpotel.RecordRefusal(ctx, mcpotel.ReasonActionTimeout)
+			}
 		}()
 		return h(ctx, req, in)
 	}
+}
+
+// endedByActionDeadline reports whether the wall-clock cap this server applies
+// is what ended a call, as opposed to the caller giving up.
+//
+// The two are the same error value — context.DeadlineExceeded reaches the
+// handler either way — so the discriminator is the deadline itself: the derived
+// context carries one only when the cap is configured, and a caller who
+// disconnected cancels rather than expires.
+func endedByActionDeadline(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return false
+	}
+	_, hasDeadline := ctx.Deadline()
+	return hasDeadline
 }
 
 func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
@@ -1998,6 +2022,10 @@ func readDownloadConfirm(ctx context.Context, req *mcp.CallToolRequest, d *downl
 	decision, remember := d.round.askConfirmRemember(downloadConfirmID, "", "confirm",
 		"Confirm downloading and saving this file to the server", "dont_ask_again")
 	if decision == confirmDeclined {
+		// Recorded on the span because the result is a successful JSON-RPC
+		// response carrying a refusal meant for the model, which from outside
+		// this handler is indistinguishable from a handler that ran and failed.
+		mcpotel.RecordRefusal(ctx, mcpotel.ReasonConsentDeclined)
 		res, out := declinedDownload(ctx, d.client, d.item, d.in.Filename)
 		return false, res, out
 	}

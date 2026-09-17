@@ -13,6 +13,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/time/rate"
+
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 )
 
 // RateLimitedErrorCode is the JSON-RPC code a refused request carries.
@@ -248,6 +250,7 @@ func refuse(ctx context.Context, limiter *RateLimiter, method string, req mcp.Re
 	}
 	name := ToolNameOf(req)
 	limiter.reportRefusal(ctx, name)
+	mcpotel.RecordRefusal(ctx, mcpotel.ReasonRateLimited)
 	what := name
 	if what == "" {
 		what = methodToolsCall
@@ -278,6 +281,7 @@ func refuseWithError(ctx context.Context, limiter *RateLimiter, method string) e
 			return nil
 		}
 		limiter.reportRefusal(ctx, method)
+		mcpotel.RecordRefusal(ctx, mcpotel.ReasonRateLimited)
 	case methodToolsList:
 		catalog := limiter.forCatalog()
 		if catalog.allow() {
