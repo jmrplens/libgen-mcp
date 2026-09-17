@@ -364,6 +364,12 @@ func newMCPServer(instructions string) *mcp.Server {
 	// up regardless must not answer as though something did (see
 	// internal/capguard).
 	server.AddReceivingMiddleware(capguard.NoResources())
+	// Last, and that is what puts it OUTERMOST — which is not obvious and is the
+	// whole of why the order matters here. Each call wraps the handler built so
+	// far, so the three nest recoverPanics(capguard(cachehints(handler))) and a
+	// panic in either of the other two is caught as well as one in a handler.
+	// Moving this line up would quietly demote it to covering less.
+	server.AddReceivingMiddleware(recoverPanics)
 	return server
 }
 
