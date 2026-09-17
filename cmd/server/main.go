@@ -536,6 +536,11 @@ func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeil
 			Tools:   &mcp.ToolCapabilities{ListChanged: false},
 			Prompts: &mcp.PromptCapabilities{ListChanged: false},
 		},
+		// Supplied, because the SDK discards its own records otherwise and the
+		// protocol layer is then silent when a session misbehaves — and supplied
+		// wrapped, because the raw stream is not usable as it arrives on a
+		// stateless deployment. See sdk_log.go for both halves.
+		Logger: sdkLogger(),
 	})
 	// The per-caller trio goes on first, which makes it INNERMOST, and the order
 	// within it is not interchangeable. Each layer reads the caller's record off
