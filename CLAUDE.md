@@ -390,11 +390,13 @@ packages you touched, then the doc/surface gates:
 
 ```bash
 golangci-lint fmt --diff                                   # formatting (no diff)
-golangci-lint run --build-tags e2e,eval ./...              # lint, ALL build tags
+golangci-lint run --build-tags e2e,eval,httpe2e,stdioe2e ./...  # lint, ALL build tags
 go vet ./... && go vet -tags e2e ./... && go vet -tags eval ./...
+go vet -tags httpe2e ./... && go vet -tags stdioe2e ./...
 go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
 go test ./...                                              # unit tests
 go test -race ./...                                        # race detector
+make test-e2e-http && make test-e2e-stdio                  # the two transport modules (CI runs both)
 make cover-check                                           # internal/ >= 85%
 make check-md-tables                                       # Markdown tables normalized
 make check-llms                                            # llms.txt fresh + valid
@@ -460,7 +462,8 @@ imports anything else from it.
 
 A plain `golangci-lint run` skips every tagged file, which is how the whole
 `cmd/eval` harness went unanalyzed until 2026-07-30. `make lint` passes
-`GO_ANALYSIS_TAGS` (`e2e,eval`) for this reason — add any new build tag there.
+`GO_ANALYSIS_TAGS` (`e2e,eval,httpe2e,stdioe2e`) for this reason — add any new
+build tag there.
 
 Complexity budgets are enforced by golangci-lint: `gocyclo` min-complexity 20,
 `gocognit` 25, `nestif` 5. Keep functions under these; factor helpers out rather
@@ -532,8 +535,8 @@ dependent by nature: the same request must be refused with one flag and accepted
 with another.
 
 Unlike the live suite above, **this one runs in CI on every PR**, because it
-depends on nothing external. It is also the release gate: `release.yml`'s
-`http-e2e` job is a `needs:` of both GoReleaser and Docker, so a transport
+depends on nothing external. It is also half the release gate: `release.yml`'s
+`transport-e2e` job is a `needs:` of both GoReleaser and Docker, so a transport
 regression stops everything the tag would have produced. It cannot stop the tag
 itself — `release.yml` triggers on the tag push, so by the time the gate runs the
 tag exists — but nothing is built, pushed or published behind a failing gate. That
@@ -553,6 +556,41 @@ Two things about it are easy to get wrong:
   the misbehaving-mirror suite, which is this repository's own addition: every
   tool call reaches an upstream, so a mirror that is slow, broken or hostile is
   a live input rather than a hypothetical.
+
+**stdio end-to-end** (`test/e2e/stdio/`) is the same idea for the other
+transport, and for the primary one, behind the `stdioe2e` build tag:
+
+```bash
+make test-e2e-stdio
+```
+
+It builds the binary and drives it over two pipes the way a client does. What
+only exists once there is a process is what it covers: **stdout carries nothing
+but JSON-RPC** (one stray `Println` breaks every client, and the npm launcher's
+`validate-npm.mjs` was checking this after the code was already tagged), logs go
+to stderr with their severities intact, the handshake is answered before a
+client would give up and retry it, the catalog comes back whole when it is asked
+for during startup, an idle session is not closed by the server, and both
+shutdowns the binding prescribes exit 0.
+
+It runs **on every PR and on all three platforms**, and it is the other half of
+the `transport-e2e` release gate. Three things about it are easy to undo:
+
+- **It reaches nothing it did not start itself, and that is arranged rather than
+  assumed.** The mirror cache is seeded in each session's `HOME` so discovery
+  never fetches the live catalog page, the search calls pass
+  `extra_sources: "never"` so an empty fixture does not escalate to the real
+  open-access providers, and every session runs behind a dead `HTTP_PROXY` that
+  exempts loopback. The first version of the module took six seconds per tool
+  call because it was federating to arXiv and Crossref for real.
+- **The environment is replaced, not extended.** A developer's exported
+  `LIBGEN_MIRROR` would otherwise decide what the tests measure, and the failure
+  would be invisible on their machine and on nobody else's.
+- **An stderr assertion must anchor on a line written *after* what it is about.**
+  The harness copies stderr on a goroutine with no ordering against the stdout
+  reply, so waiting for the startup banner — which the server writes before it
+  serves anything — returns a buffer the records under test have not reached.
+  That mistake passes silently, which is how it got written the first time.
 
 **Eval** is a live, LLM-driven harness under `cmd/eval`, gated behind the `eval`
 build tag plus `LIBGEN_EVAL=1` and `ANTHROPIC_API_KEY` (real API, mirrors, and

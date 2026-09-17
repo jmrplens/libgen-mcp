@@ -169,6 +169,11 @@ jobs:
       # above it is compiled *and* run.
       - name: HTTP transport end-to-end
         run: go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
+      # The other transport, and the primary one. It builds the binary and
+      # drives it over pipes, reaching nothing but the fixtures it starts
+      # itself, so it runs here for the same reason the module above does.
+      - name: stdio transport end-to-end
+        run: go test -tags stdioe2e -count=1 -timeout 900s ./test/e2e/stdio/
       - name: Check Markdown tables are formatted
         if: env.FRESHNESS == 'checked'
         run: go run ./cmd/format_md_tables/ --check
@@ -401,6 +406,13 @@ jobs:
       # committed artifacts, and a path they only spell correctly on Linux
       # produces a diff nobody can reproduce.
       - run: go test ./... -count=1
+      # The stdio module belongs on all three platforms rather than on Linux
+      # alone: what it drives is a process, two pipes and a termination signal,
+      # and each of those is spelled differently on Windows — the home directory
+      # the server resolves its cache through, the console event that stands in
+      # for SIGTERM, the executable extension. None of that is exercised by the
+      # unit suite above.
+      - run: go test -tags stdioe2e -count=1 -timeout 900s ./test/e2e/stdio/
 
   # A cheap type-check of the same targets on a Linux runner, one job per
   # platform, beside the real matrix rather than instead of it.

@@ -33,8 +33,8 @@ jobs:
   # It deliberately declares no permissions beyond the default read and takes no
   # secrets: a gate that fails must not be able to leak anything, and it needs
   # none of what the jobs behind it hold.
-  http-e2e:
-    name: HTTP transport end-to-end
+  transport-e2e:
+    name: Transport end-to-end
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,14 +43,18 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+      # Both transports, in one job rather than two: they gate the same thing
+      # and share a checkout and a toolchain, and a release that stops for one
+      # stops for the other anyway.
       - run: go test -tags httpe2e -count=1 -timeout 900s ./test/e2e/http/
+      - run: go test -tags stdioe2e -count=1 -timeout 900s ./test/e2e/stdio/
 
   # The race detector, in parallel with the transport gate above rather than
   # behind it: the two are independent, and a tag should not wait for one to
   # learn about the other. Called rather than copied, so this runs exactly what
   # a maintainer runs from the Race workflow's dispatch menu.
   #
-  # Like http-e2e it declares contents: read and takes no secrets. A gate that
+  # Like transport-e2e it declares contents: read and takes no secrets. A gate that
   # fails must not be able to leak what the jobs behind it hold.
   race:
     name: Race detector
@@ -60,7 +64,7 @@ jobs:
 
   release:
     name: GoReleaser
-    needs: [http-e2e, race]
+    needs: [transport-e2e, race]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -239,7 +243,7 @@ jobs:
 
   docker:
     name: Docker
-    needs: [http-e2e, race]
+    needs: [transport-e2e, race]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
