@@ -233,7 +233,6 @@ mano:
 | Registro MCP            | Ficha                                                                                                                       |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Registro oficial de MCP | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
-| Smithery                | [smithery.ai/servers/@jmrp/libgen-mcp](https://smithery.ai/servers/@jmrp/libgen-mcp)                                        |
 | mcp.so                  | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
 | LobeHub                 | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
 
@@ -317,7 +316,7 @@ Hay una instancia pública en **`https://mcp.jmrp.io/libgen`**. No necesita cuen
 }
 ```
 
-Es la forma más rápida de probar el servidor. Ejecutarlo **en local** — con Docker o con un binario, más arriba — o a través de [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) sigue siendo la mejor forma de usarlo a diario, por dos razones concretas y no como advertencia de rigor:
+Es la forma más rápida de probar el servidor. Ejecutarlo **en local** — con Docker o con un binario, más arriba — sigue siendo la mejor forma de usarlo a diario, por dos razones concretas y no como advertencia de rigor:
 
 - **Tus consultas pasan por la máquina de otra persona.** En local, lo que buscas no sale de tu ordenador. La instancia hospedada no guarda nada, pero "no guarda nada" es una promesa; "no se envió nunca" es un hecho.
 - **`download` no puede escribir en tu disco desde un servidor remoto**, así que devuelve un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un fichero. Eso es inherente al MCP remoto, no una limitación de este endpoint — ver [Dónde acaba el fichero](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).

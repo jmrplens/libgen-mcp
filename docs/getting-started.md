@@ -197,8 +197,8 @@ no local process — point any HTTP-capable MCP client at it:
 ```
 
 It is the fastest way to try the server. Running it **locally** — Docker or a binary, above —
-or through [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) remains the better way to
-keep using it, for two concrete reasons rather than as a disclaimer:
+remains the better way to keep using it, for two concrete reasons rather than as a
+disclaimer:
 
 - **Your queries travel through someone else's machine.** Locally, what you search for never
   leaves your computer. The hosted instance stores nothing, but "stores nothing" is a promise;

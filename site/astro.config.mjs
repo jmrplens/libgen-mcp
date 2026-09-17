@@ -314,15 +314,11 @@ const jsonLd = JSON.stringify({
 			creator: { "@id": authorId },
 			maintainer: { "@id": authorId },
 			// Every listing that carries this server, so an engine resolving the
-			// name lands on the same entity wherever it finds it. Note the
-			// Smithery namespace is `jmrp`, not `jmrplens`.
+			// name lands on the same entity wherever it finds it.
 			sameAs: [
 				`${fullUrl}/`,
 				repositoryUrl,
 				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
-				// /server/ 308-redirects to /servers/; sameAs should name the
-				// destination, not a hop.
-				"https://smithery.ai/servers/@jmrp/libgen-mcp",
 				"https://mcp.so/servers/libgen-mcp-d62341",
 				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
 				"https://pkg.go.dev/github.com/jmrplens/libgen-mcp",

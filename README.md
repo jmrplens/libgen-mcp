@@ -74,7 +74,7 @@ A public instance is hosted at **`https://mcp.jmrp.io/libgen`** — no account, 
 }
 ```
 
-It is the fastest way to try the server, and the right way to keep using it is still **locally** (Docker or a binary, above) or through [Smithery](https://smithery.ai/servers/@jmrp/libgen-mcp) — for two concrete reasons, not as a disclaimer:
+It is the fastest way to try the server, and the right way to keep using it is still **locally** (Docker or a binary, above) — for two concrete reasons, not as a disclaimer:
 
 - **Your queries go through someone else's machine.** Running it locally means what you search for never leaves your computer.
 - **`download` cannot write to your disk from a remote server**, so it returns a link instead of a file. That is inherent to remote MCP, not a limitation of this endpoint — see [Where the file goes](docs/tools.md#where-the-file-goes-local-vs-remote).
