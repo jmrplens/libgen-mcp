@@ -384,8 +384,11 @@ func TestTLSConfigFor(t *testing.T) {
 		if !slices.Contains(cfg.NextProtos, "http/1.1") {
 			t.Errorf("NextProtos = %q, want http/1.1 kept as the fallback", cfg.NextProtos)
 		}
-		if len(cfg.Certificates) != 1 {
-			t.Errorf("Certificates = %d, want the loaded pair", len(cfg.Certificates))
+		// The pair rides behind GetCertificate rather than in Certificates, so
+		// a renewal written to the same paths is picked up on the next
+		// handshake; what it serves is pinned in tls_reload_test.go.
+		if cfg.GetCertificate == nil {
+			t.Error("GetCertificate is nil: the certificate would be frozen at startup")
 		}
 	})
 

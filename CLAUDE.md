@@ -231,6 +231,15 @@ whole decision. Four things there are easy to undo by accident:
   the protocol list the way `http.Server.ServeTLS` does, so dropping it drops every client to
   HTTP/1.1 with no error anywhere. The pair is loaded eagerly through the `loadTLSKeyPair`
   variable seam so a bad file is a named startup error.
+- **The pair rides behind `GetCertificate`, never in `Certificates`.** `certReloader`
+  (`tls_reload.go`) stats both files on the handshake path and re-reads them when the size or
+  mtime of either has moved, so a renewal written to the same paths needs no restart. Two rules
+  hold it together: the **first** load stays strict and stops startup, while **every later**
+  failure keeps the previous certificate and warns — refusing the handshake would turn the
+  window between a rotation's two writes into an outage. And the stamp of a failed load is
+  deliberately not recorded, so the next handshake retries instead of waiting for a third
+  write; recording it there is the one-line change that makes a half-written rotation
+  permanent.
 
 `Strict-Transport-Security` is emitted **only** when this process terminates TLS
 (`transport.Options.ServesTLS` → `securityHeaders`). It is the one conditional header on the

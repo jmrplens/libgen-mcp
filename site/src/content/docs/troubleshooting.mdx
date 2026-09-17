@@ -346,6 +346,24 @@ These are the server's own diagnostic logs, written straight to stderr. They are
 
 </Facts>
 
+## A renewed certificate is not being served
+
+<Facts>
+	<Fact kind="symptom">
+		Certbot or a secret projection has written a new certificate, the files on disk are current, and clients are still presented the old one — or the log carries `the TLS certificate on disk could not be loaded; serving the previous one`.
+	</Fact>
+	<Fact kind="meaning">
+		The pair is re-read when the files change, and "changed" means the size or the modification time of either file moved. Two situations produce this symptom, and the log tells them apart.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- A **silently old** certificate with nothing in the log means the files never looked changed. A renewal that writes through a symlink the server was not started on, or a copy made with `cp -p` that preserves the original timestamps, both leave the paths the server is watching exactly as they were. Point `--tls-cert`/`--tls-key` at the paths the renewal actually rewrites — for certbot that is `live/<name>/fullchain.pem` and `privkey.pem` — or drop the timestamp-preserving flag.
+    	- A **warning** means the pair on disk was read and refused. Mid-rotation that is expected and self-correcting: the certificate lands before its key, the pair does not match for as long as the second write takes, and the previous certificate is served meanwhile. One warning is logged per distinct state of the files, so a line that keeps repeating with a new timestamp is a rotation that keeps failing rather than a busy server. If it persists, the two files do not belong together — check that the key matches the certificate with `openssl pkey -in key.pem -pubout` against `openssl x509 -in cert.pem -pubkey -noout`.
+    	- Connections **already open keep the certificate they handshook with**, which is by design. A client holding a keep-alive connection sees the new certificate when it reconnects, not before; a proxy in front with a long-lived upstream pool is the usual reason a rotation looks half-applied from outside.
+    </Fact>
+
+</Facts>
+
 ## Disk space
 
 <Facts>

@@ -3,10 +3,16 @@
 package httpe2e
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"math/big"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // wantHSTS is what a process terminating TLS states about itself: one year, and
@@ -71,6 +77,115 @@ func TestTLS_ServesHTTPSAndNegotiatesHTTP2(t *testing.T) {
 	// otherwise be logged as a plain address.
 	if logs := s.logs(); !strings.Contains(logs, "listening on https://") {
 		t.Errorf("the startup log does not name the endpoint as https:\n%s", logs)
+	}
+}
+
+// TestTLS_ARenewalIsServedWithoutARestart is the whole of what the reloader
+// buys, against the real binary.
+//
+// A certificate expires, and with the pair frozen into the config at startup the
+// replacement is a restart — which here cuts every download in flight and takes
+// the temp cache that would have served the retry with it. The rotation is two
+// file writes, and the process that was already serving presents the new
+// certificate on the next handshake.
+//
+// The assertion is the certificate the listener actually presents, not a status
+// code: a server that never reloaded would keep answering 200 to a client that
+// still trusts the old certificate, which is exactly the state this is here to
+// tell apart.
+func TestTLS_ARenewalIsServedWithoutARestart(t *testing.T) {
+	dir := t.TempDir()
+	first := generateTLSPairAt(t, dir)
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	s := launchServer(t, "https://"+addr, tlsClient(t, first), nil,
+		[]string{"--http", addr, "--tls-cert", first.certFile, "--tls-key", first.keyFile})
+
+	if got := presentedSerial(t, addr, first.pool); got.Cmp(first.leaf.SerialNumber) != 0 {
+		t.Fatalf("the listener presented serial %s, want the configured %s", got, first.leaf.SerialNumber)
+	}
+
+	// The second generation lands on the same two paths. The timestamps are
+	// moved explicitly: two certificates of this shape can have the same byte
+	// count, and a filesystem with coarse timestamps could stamp two writes
+	// milliseconds apart identically — which would make the case depend on where
+	// it runs rather than on the code.
+	second := generateTLSPairAt(t, dir)
+	stampForward(t, second.certFile, second.keyFile)
+
+	got := presentedSerial(t, addr, second.pool)
+	if got.Cmp(second.leaf.SerialNumber) != 0 {
+		t.Fatalf("after the rotation the listener presented serial %s, want the renewed %s. Output:\n%s",
+			got, second.leaf.SerialNumber, s.logs())
+	}
+
+	// A client that trusts only the old certificate is now refused, which is the
+	// other half of the statement: the listener moved rather than presenting
+	// both.
+	if _, err := dialTLS(t, addr, first.pool); err == nil {
+		t.Error("the old certificate still verifies after the rotation; the listener is serving both")
+	}
+
+	// And the config the rotation is served through is still the config the
+	// listener needs. Dropping NextProtos while moving the pair behind a
+	// callback would put every client back on HTTP/1.1, with nothing failing to
+	// say so.
+	renewed := &server{baseURL: "https://" + addr, client: tlsClient(t, second)}
+	health := renewed.do(t, request{method: http.MethodGet, path: "/health"})
+	if health.status != http.StatusOK {
+		t.Errorf("GET /health after the rotation = %d, want %d", health.status, http.StatusOK)
+	}
+	if health.proto != "HTTP/2.0" {
+		t.Errorf("GET /health after the rotation came back on %s, want HTTP/2.0", health.proto)
+	}
+	if logs := s.logs(); !strings.Contains(logs, "reloaded the TLS certificate") {
+		t.Errorf("the reload is not in the log, so an operator has no record of it:\n%s", logs)
+	}
+}
+
+// presentedSerial completes a handshake against addr and returns the serial
+// number of the leaf the listener presented, failing the test if it cannot.
+func presentedSerial(t *testing.T, addr string, pool *x509.CertPool) *big.Int {
+	t.Helper()
+
+	state, err := dialTLS(t, addr, pool)
+	if err != nil {
+		t.Fatalf("handshake with %s: %v", addr, err)
+	}
+	if len(state.PeerCertificates) == 0 {
+		t.Fatalf("the handshake with %s produced no peer certificate", addr)
+	}
+	return state.PeerCertificates[0].SerialNumber
+}
+
+// dialTLS completes a handshake against addr verifying the certificate against
+// pool, and returns the connection state or the reason it failed.
+//
+// The verification is the point: a handshake that accepted anything would say
+// only that something answered, where this says which certificate it presented
+// and that a real client would have accepted it.
+func dialTLS(t *testing.T, addr string, pool *x509.CertPool) (tls.ConnectionState, error) {
+	t.Helper()
+
+	dialer := &tls.Dialer{Config: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}
+	conn, err := dialer.DialContext(t.Context(), "tcp", addr)
+	if err != nil {
+		return tls.ConnectionState{}, err
+	}
+	defer conn.Close()
+	return conn.(*tls.Conn).ConnectionState(), nil //nolint:forcetypeassert // tls.Dialer always returns a *tls.Conn
+}
+
+// stampForward moves each file's modification time a second into the future, so
+// a rotation is visible to a stat whatever the filesystem's timestamp
+// resolution is.
+func stampForward(t *testing.T, paths ...string) {
+	t.Helper()
+
+	when := time.Now().Add(time.Second)
+	for _, path := range paths {
+		if err := os.Chtimes(path, when, when); err != nil {
+			t.Fatalf("stamping %s: %v", path, err)
+		}
 	}
 }
 

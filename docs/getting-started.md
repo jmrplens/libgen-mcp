@@ -405,8 +405,11 @@ libgen-mcp --http 0.0.0.0:8443 --tls-cert /etc/ssl/mcp.crt --tls-key /etc/ssl/mc
 
 Both flags or neither — a certificate without a key fails startup, as does a file that cannot
 be read or a key that does not match its certificate, because the pair is loaded at startup
-rather than at the first handshake. The listener requires TLS 1.2 or better and negotiates
-HTTP/2 with clients that offer it. Every response then carries
+rather than at the first handshake. **A renewal written to the same two paths needs no
+restart**: each handshake checks whether the files have moved and re-reads them when they have,
+so certbot, Vault's agent or a remounted Kubernetes secret is picked up on the next connection,
+and a half-written pair keeps the previous certificate rather than failing the handshake. The
+listener requires TLS 1.2 or better and negotiates HTTP/2 with clients that offer it. Every response then carries
 `Strict-Transport-Security: max-age=31536000; includeSubDomains`, which only the endpoint that
 actually terminated the connection is in a position to claim.
 

@@ -346,6 +346,24 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 </Facts>
 
+## Un certificado renovado no se está sirviendo
+
+<Facts>
+	<Fact kind="symptom">
+		Certbot o una proyección de secretos ha escrito un certificado nuevo, los ficheros en disco están al día, y a los clientes se les sigue presentando el antiguo — o el log lleva `the TLS certificate on disk could not be loaded; serving the previous one`.
+	</Fact>
+	<Fact kind="meaning">
+		La pareja se relee cuando los ficheros cambian, y «cambiar» significa que se movió el tamaño o la fecha de modificación de alguno de los dos. Hay dos situaciones que producen este síntoma, y el log las distingue.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- Un certificado **viejo en silencio**, sin nada en el log, significa que los ficheros nunca parecieron cambiar. Una renovación que escribe a través de un enlace simbólico con el que no se arrancó el servidor, o una copia hecha con `cp -p` que preserva las fechas originales, dejan las rutas que el servidor vigila exactamente como estaban. Apunta `--tls-cert`/`--tls-key` a las rutas que la renovación reescribe de verdad — en certbot son `live/<nombre>/fullchain.pem` y `privkey.pem` — o quita el flag que preserva las fechas.
+    	- Un **aviso** significa que la pareja en disco se leyó y se rechazó. A mitad de una rotación eso es esperable y se corrige solo: el certificado llega antes que su clave, la pareja no casa durante lo que tarde la segunda escritura, y mientras tanto se sirve el certificado anterior. Se escribe un aviso por cada estado distinto de los ficheros, así que una línea que se repite con fecha nueva es una rotación que sigue fallando y no un servidor con mucho tráfico. Si persiste, los dos ficheros no van juntos — comprueba que la clave case con el certificado con `openssl pkey -in key.pem -pubout` frente a `openssl x509 -in cert.pem -pubkey -noout`.
+    	- Las conexiones **ya abiertas conservan el certificado con el que hicieron el handshake**, y es a propósito. Un cliente que mantiene una conexión keep-alive ve el certificado nuevo cuando reconecta, no antes; un proxy delante con un pool de conexiones de larga vida es el motivo habitual de que una rotación parezca aplicada a medias desde fuera.
+    </Fact>
+
+</Facts>
+
 ## Espacio en disco
 
 <Facts>
