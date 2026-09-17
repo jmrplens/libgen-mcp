@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -1044,4 +1045,35 @@ func TestResolveServerFetch(t *testing.T) {
 			t.Error("ServerFetchAllowed() = false on an unresolved Config, want true")
 		}
 	})
+}
+
+// TestOperatorHostsReportsOnlyWhatWasConfigured pins the input the destination
+// guard reads, and the boundary that makes it worth reading.
+//
+// Only configuration belongs here. A URL a third party deposited in an
+// open-access index is the class the guard exists to constrain, so it must never
+// arrive through this door — and neither may a default, which would make every
+// deployment claim to have named a host it never wrote down.
+func TestOperatorHostsReportsOnlyWhatWasConfigured(t *testing.T) {
+	cfg := &Config{
+		Mirror:      "https://mirror.example.test",
+		ScihubHosts: []string{"sci-hub.ee", "sci-hub.se"},
+	}
+	want := []string{"https://mirror.example.test", "sci-hub.ee", "sci-hub.se"}
+	if got := cfg.OperatorHosts(); !reflect.DeepEqual(got, want) {
+		t.Errorf("OperatorHosts() = %v, want %v", got, want)
+	}
+
+	// An unset mirror is not a host, and a whitespace-only one is the same thing
+	// spelled differently.
+	for _, mirror := range []string{"", "   "} {
+		got := (&Config{Mirror: mirror, ScihubHosts: []string{"sci-hub.ee"}}).OperatorHosts()
+		if !reflect.DeepEqual(got, []string{"sci-hub.ee"}) {
+			t.Errorf("OperatorHosts() with Mirror=%q = %v, want only the Sci-Hub host", mirror, got)
+		}
+	}
+
+	if got := (&Config{}).OperatorHosts(); len(got) != 0 {
+		t.Errorf("OperatorHosts() = %v, want nothing for a configuration that named nothing", got)
+	}
 }

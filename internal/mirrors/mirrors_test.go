@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // errReader is an io.Reader that always fails, used to exercise the html.Parse
@@ -454,4 +456,88 @@ func TestAnnasFallbackUsedWithoutNetworkOrCache(t *testing.T) {
 			t.Errorf("Mirrors() returned the libgen mirror %q for an Anna's manager", u)
 		}
 	}
+}
+
+// TestOperatorHostsCoversConfigurationAndTheFamilyConstants pins what the
+// destination guard is told this deployment chose for itself.
+//
+// The two halves are there for different reasons. LIBGEN_MIRROR and the Sci-Hub
+// hosts are what an operator wrote down; the family constants are what this
+// server picked on their behalf, which is the same kind of decision. A mirror
+// hostname the catalog page lists is neither, and must not be here: the page is
+// a third party, and one that started answering with 127.0.0.1 would otherwise
+// be reading this server's own loopback back to it.
+func TestOperatorHostsCoversConfigurationAndTheFamilyConstants(t *testing.T) {
+	cfg := &config.Config{Mirror: "https://mirror.example.test", ScihubHosts: []string{"sci-hub.ee"}}
+	got := OperatorHosts(cfg)
+
+	for _, want := range []string{
+		"https://mirror.example.test", "sci-hub.ee",
+		DefaultSourceURL, DefaultPreferred, AnnasFamily.SourceURL, AnnasFamily.Preferred,
+	} {
+		if !slices.Contains(got, want) {
+			t.Errorf("OperatorHosts() = %v, missing %q", got, want)
+		}
+	}
+	for _, f := range KnownFamilies {
+		for _, want := range f.Fallback {
+			if !slices.Contains(got, want) {
+				t.Errorf("OperatorHosts() = %v, missing the %s fallback %q", got, f.Name, want)
+			}
+		}
+	}
+	if slices.Contains(got, "https://libgen.example-scraped.test") {
+		t.Error("OperatorHosts() carries a host nobody configured")
+	}
+	if len(OperatorHosts(nil)) == 0 {
+		t.Error("OperatorHosts(nil) is empty; the family constants do not depend on a configuration")
+	}
+}
+
+// TestManagerReachesTheMirrorTheOperatorConfigured is the wiring, asserted the
+// way a deployment experiences it.
+//
+// A mirror on the operator's own network is an ordinary setup, and until the
+// destination policy carried the operator-named set the only way to reach one
+// was LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES — which opens every third-party URL in
+// the same breath. The negative below is the half that has to keep working: the
+// same private address, from a deployment that named nothing, stays refused.
+func TestManagerReachesTheMirrorTheOperatorConfigured(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	named, err := NewManagerFor(LibgenFamily, &config.Config{Mirror: srv.URL, Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("NewManagerFor() error = %v", err)
+	}
+	resp, err := getThrough(t, named.HTTP, srv.URL)
+	if err != nil {
+		t.Fatalf("fetching the configured mirror failed: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	anonymous, err := NewManagerFor(LibgenFamily, &config.Config{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("NewManagerFor() error = %v", err)
+	}
+	resp, err = getThrough(t, anonymous.HTTP, srv.URL)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("a private address nobody configured was reached")
+	}
+	if !errors.Is(err, netguard.ErrBlockedAddress) {
+		t.Errorf("err = %v, want netguard.ErrBlockedAddress", err)
+	}
+}
+
+// getThrough issues a context-carrying GET on the given client.
+func getThrough(t *testing.T, c *http.Client, rawURL string) (*http.Response, error) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, rawURL, http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(%q) error = %v", rawURL, err)
+	}
+	return c.Do(req)
 }

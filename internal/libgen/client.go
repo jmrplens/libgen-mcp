@@ -304,14 +304,22 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	if strings.TrimSpace(cfg.UnpaywallEmail) != "" {
 		olRPS = openLibraryEnrichRPS
 	}
+	// One policy for both clients, so the two never disagree and the lookup it
+	// may make on a refusal is answered once for the pair.
+	destinations := netguard.NewPolicy(mirrors.OperatorHosts(cfg), cfg.AllowPrivateAddresses)
 	c := &Client{
 		mirrors: m,
 		// Both clients screen their destinations (internal/netguard): every source in
 		// the chain fetches a URL some third party supplied, so the address a URL
 		// resolves to is not this server's to trust. dl carries no timeout — a
 		// streaming download's lifetime is its context's.
-		http:             netguard.Client(cfg.Timeout, cfg.AllowPrivateAddresses),
-		dl:               netguard.Client(0, cfg.AllowPrivateAddresses),
+		//
+		// They carry the operator-named set rather than a bare flag because one
+		// client serves both kinds of destination: the same c.dl fetches the
+		// mirror the operator configured and the resolved URL a third party
+		// deposited, so the policy cannot be per client and travels per request.
+		http:             netguard.ClientFor(cfg.Timeout, destinations),
+		dl:               netguard.ClientFor(0, destinations),
 		limiter:          rate.NewLimiter(rate.Limit(cfg.RateRPS), cfg.RateBurst),
 		enrichLimiter:    rate.NewLimiter(5, 5),
 		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), olRPS),

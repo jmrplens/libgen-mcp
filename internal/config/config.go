@@ -835,6 +835,28 @@ func (c *Config) SourceEnabled(name string) bool {
 	return false
 }
 
+// OperatorHosts returns the destinations this deployment's operator named in
+// its own configuration, as written: the forced mirror (LIBGEN_MIRROR) and the
+// Sci-Hub hosts (LIBGEN_MCP_SCIHUB_HOSTS).
+//
+// internal/netguard is the consumer, and the distinction it draws is the reason
+// this exists: a host the operator wrote down is theirs to choose, while a URL
+// some third party deposited in an open-access index is not. Only configuration
+// belongs here — a mirror hostname scraped from the shadowlibraries catalog, a
+// provider's result and a resolved download URL are all third-party, however
+// ordinary they look.
+//
+// The values are returned as configured, scheme and port included; normalizing
+// them to bare hostnames is netguard's job, so the two cannot disagree about
+// what a host is.
+func (c *Config) OperatorHosts() []string {
+	hosts := make([]string, 0, 1+len(c.ScihubHosts))
+	if strings.TrimSpace(c.Mirror) != "" {
+		hosts = append(hosts, c.Mirror)
+	}
+	return append(hosts, c.ScihubHosts...)
+}
+
 // validateMirror checks that a non-empty mirror is an http/https URL with a host.
 func validateMirror(mirror string) error {
 	if mirror == "" {

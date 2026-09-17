@@ -101,8 +101,14 @@ type Provider interface {
 // newDiscoveryClient builds the shared *http.Client used by discovery providers,
 // with a sane overall timeout so a stalled connection can never outlive the
 // per-provider context budget.
+//
+// It names no operator-chosen destination, and that is the whole configuration
+// rather than an omission: every provider here is a baked-in public API, and
+// nothing in this package reads a base URL from the environment. So a provider
+// gets netguard's strict tier on every address it reaches, which is right — a
+// result deposited in an open-access index is the archetypal third-party URL.
 func newDiscoveryClient() *http.Client {
-	return netguard.Client(discoveryTimeout+time.Second, allowPrivateAddresses.Load())
+	return netguard.ClientFor(discoveryTimeout+time.Second, netguard.NewPolicy(nil, allowPrivateAddresses.Load()))
 }
 
 // allowPrivateAddresses mirrors the deployment's LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES
