@@ -531,6 +531,7 @@ number of replicas can sit behind a plain round-robin load balancer with no stic
 | `--trusted-origins`        | _(empty)_ | Comma-separated browser origins allowed to call this server cross-origin, as `scheme://host[:port]`. Empty refuses every cross-origin browser request; `*` accepts any, with a startup warning. A malformed entry fails startup rather than being dropped. Flag only — there is no environment equivalent.                                                                                                             |
 | `--http-path`              | `/`       | URL path prefix every route is mounted under: the MCP endpoint, `GET /health` and both server-card paths. `--http-path=/libgen` makes the endpoint `POST /libgen` and the probe `GET /libgen/health`; `libgen`, `/libgen` and `/libgen/` all mean the same mount. Set it when a reverse proxy forwards its prefix instead of stripping it. A query, a fragment, a traversal segment or a percent-escape fails startup. |
 | `--http-socket-mode`       | `0660`    | Permission mode for the unix socket `--http` names, as octal with or without a leading `0`. The default is owner+group read/write, so a same-host proxy reaches it by group membership and no other local account does. Refused at startup when `--http` is a TCP address, and on a platform with no file permission modes.                                                                                            |
+| `--public-url`             | _(empty)_ | Origin clients reach this deployment at, e.g. `https://mcp.example.org/libgen`. Its host is the one this server answers to in the `Host` header a proxy forwards; without it, or without `--trusted-proxies` naming the proxy, a proxied request carrying a public name is refused as a DNS-rebinding attempt. A value that is not an `http`/`https` URL with a host fails startup.                                    |
 | `--trusted-proxy-header`   | _(empty)_ | Header a trusted proxy fills with the address it heard the request from — `X-Real-IP` on the hosted deployment. Read only from a peer `--trusted-proxies` names; from anybody else it is text the caller wrote. Required together with `--trusted-proxies`: either flag alone fails startup.                                                                                                                           |
 | `--trusted-proxies`        | _(empty)_ | Comma-separated addresses and CIDR ranges of the proxies whose `--trusted-proxy-header` is believed, e.g. `127.0.0.1/32`. The literal `unix` trusts every peer of a unix-socket listener instead, and is refused on a TCP address. An entry that is neither fails startup.                                                                                                                                             |
 | `--tls-cert`               | _(empty)_ | PEM certificate file. Setting it makes this process terminate TLS itself instead of leaving that to a proxy in front, which also turns on `Strict-Transport-Security`. Requires `--tls-key`; the pair is loaded at startup, so a missing or mismatched file fails there rather than at the first handshake.                                                                                                            |
@@ -547,6 +548,14 @@ route exists, and that another method would work. The `405` is still exactly rig
 endpoint itself, where a `GET` or a `DELETE` is a real method error. The `404` carries the same
 CORS answer as the endpoint, because a browser shown a bare cross-origin `404` reports a CORS
 failure instead of the status, hiding the mistyped path the `404` exists to name.
+
+**`/mcp` is an alias for the endpoint.** Enough clients and enough guides assume that path that
+a base URL pasted with or without it should reach the same place rather than a `404` that reads
+as "this server does not speak MCP". It travels with `--http-path`, so under `--http-path=/libgen`
+it is `POST /libgen/mcp`. Both `/mcp` and `/mcp/` are mounted as exact matches: a bare `/mcp/`
+would be a `ServeMux` subtree pattern that swallows every path beneath it, and would also make
+the mux answer `/mcp` with a `301` that a POST does not follow with its body. The canonical
+spelling stays the mount itself — every snippet here uses it, and the card advertises it.
 
 **Mounting under a prefix.** `--http-path` moves the whole route set — the endpoint, `/health`
 and both card paths — under a prefix, for a reverse proxy that forwards its prefix verbatim
@@ -620,6 +629,33 @@ for uncredentialed requests. `curl` reports `200` throughout and will not show y
 So a deployment that sets `--trusted-origins` must drop the CORS block from its proxy in
 the same change, and if the two cannot be coordinated, drop the proxy block first: that
 returns the endpoint to refusing browsers, which is at least consistent.
+
+**Which `Host` this server answers.** Every MCP server is asked to refuse a `Host` it does not
+serve, against DNS rebinding: an attacker resolves a name they control to the address a server
+listens on, and a browser they have already loaded then reaches it under that name. The rule
+the SDK applies is that a connection **accepted on** a loopback address may only carry a
+loopback `Host` — and the address it looks at is the connection's, not the bind, so a wildcard
+bind reached over `127.0.0.1` is caught by it exactly as a loopback bind is. That is every
+reverse-proxy recipe on this page: the proxy forwards the client's `Host` and connects over
+loopback.
+
+So this server answers the question itself, with the deployment's own flags in hand, and the
+SDK's copy is switched off in `internal/transport` — **in the same change, because either half
+alone is wrong**. It answers to the loopback names, the host `--http` binds when it names one,
+the host `--public-url` advertises, and anything a peer in `--trusted-proxies` forwards. A
+request carrying no `Host` at all is served: no browser omits it, and what does is a health
+check — HAProxy's `option httpchk` sends none unless one is configured, and refusing it marks
+a working instance down. A unix socket declares no host and answers any, since no name
+resolves to a file on disk.
+
+A bind that names a host is the strict case rather than the lenient one: the operator named an
+interface, so an undeclared `Host` is refused whatever address the request arrived on. A
+wildcard bind names none and falls back to the SDK's rule, which is why a proxied wildcard
+bind still needs one of the two flags. The refusal names both.
+
+The check is mounted on the MCP endpoint alone. `/health` is what a balancer and a container
+runtime probe, the server card is a public document, and neither executes anything a rebinding
+attack could want.
 
 **Which caller a request is charged to.** One process serves everybody: one mirror manager,
 one `libgen.Client`, one outbound rate limiter, one cache. Nothing is per-caller today, and

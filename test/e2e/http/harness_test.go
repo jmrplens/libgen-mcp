@@ -321,6 +321,11 @@ type request struct {
 	path    string
 	body    string
 	headers map[string]string
+	// host overrides the Host header, which is what a reverse proxy forwarding
+	// its client's Host produces. It is its own field because net/http reads
+	// Request.Host and ignores a "Host" entry in the header map, so a case
+	// written the obvious way would send the URL's host and assert nothing.
+	host string
 }
 
 // response is what a test asserts against.
@@ -367,6 +372,9 @@ func (s *server) do(t *testing.T, r request) response {
 	}
 	for k, v := range r.headers {
 		req.Header.Set(k, v)
+	}
+	if r.host != "" {
+		req.Host = r.host
 	}
 
 	resp, err := s.httpClient().Do(req)

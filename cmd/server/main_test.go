@@ -325,7 +325,9 @@ func TestServeHTTPServesRequests(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions()) }()
+	go func() {
+		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(), newHostGuard(addr, "", trustedProxies{}))
+	}()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -381,7 +383,7 @@ func TestServeHTTPClosesStreamsThatOutlastShutdown(t *testing.T) {
 	// default answers GET with 405 and closes every POST stream on reply.
 	opts := transport.DefaultOptions()
 	opts.Stateless = false
-	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, opts) }()
+	go func() { done <- serveHTTPOn(ctx, newTestServer(), ln, opts, newHostGuard(addr, "", trustedProxies{})) }()
 
 	base := "http://" + addr
 	waitForHealth(t, base)
@@ -1429,18 +1431,24 @@ func TestValidateBasePath(t *testing.T) {
 }
 
 // TestEndpointPatterns pins the patterns the MCP endpoint is mounted on. At the
-// root it is the exact-match wildcard and nothing else — mounting on a bare "/"
-// is what made the handler a catch-all that answered every path — and under a
-// prefix both spellings are accepted, since a client handed a base URL may or
-// may not keep the trailing slash.
+// root it is the exact-match wildcard — mounting on a bare "/" is what made the
+// handler a catch-all that answered every path — and under a prefix both
+// spellings are accepted, since a client handed a base URL may or may not keep
+// the trailing slash.
+//
+// The "/mcp" alias travels with the base path rather than living at the root,
+// and both of its spellings are exact-match too: a plain "/prefix/mcp/" would be
+// a ServeMux subtree pattern that swallows every path beneath it, and would also
+// make the mux answer "/prefix/mcp" with a 301 that a POST does not follow with
+// its body.
 func TestEndpointPatterns(t *testing.T) {
 	cases := []struct {
 		name string
 		base string
 		want []string
 	}{
-		{"root", "", []string{"/{$}"}},
-		{"prefix", "/libgen", []string{"/libgen", "/libgen/{$}"}},
+		{"root", "", []string{"/mcp", "/mcp/{$}", "/{$}"}},
+		{"prefix", "/libgen", []string{"/libgen/mcp", "/libgen/mcp/{$}", "/libgen", "/libgen/{$}"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1520,6 +1528,13 @@ func mountedRoutes(prefix string) []routeCase {
 		{name: "legacy card path", method: http.MethodGet, path: prefix + serverCardPath, wantStatus: http.StatusOK, wantType: "application/json", wantCache: "public, max-age=3600"},
 		{name: "current card path", method: http.MethodGet, path: prefix + serverCardCurrentPath, wantStatus: http.StatusOK, wantType: serverCardMediaType, wantCache: "public, max-age=3600"},
 		{name: "mcp endpoint with a trailing slash", method: http.MethodPost, path: prefix + "/", wantStatus: http.StatusTeapot},
+		// The alias, in both spellings, and the path beneath it that must NOT
+		// reach the endpoint: mounted as a bare "/mcp/" subtree, ServeMux would
+		// hand it everything below and answer "/mcp" with a 301 a POST does not
+		// follow with its body.
+		{name: "mcp alias", method: http.MethodPost, path: prefix + mcpAliasPath, wantStatus: http.StatusTeapot},
+		{name: "mcp alias with a trailing slash", method: http.MethodPost, path: prefix + mcpAliasPath + "/", wantStatus: http.StatusTeapot},
+		{name: "a path under the mcp alias", method: http.MethodGet, path: prefix + mcpAliasPath + "/x", wantStatus: http.StatusNotFound, wantType: "application/json"},
 		{name: "unknown path under the mount", method: http.MethodGet, path: prefix + "/nope", wantStatus: http.StatusNotFound, wantType: "application/json"},
 		// The probe that started this: a scanner asking for OAuth discovery got
 		// 405 from the catch-all, which told it the endpoint exists.

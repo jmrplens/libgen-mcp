@@ -278,6 +278,67 @@ func TestProxy_NoBufferingHeaderIsConsumedByTheProxy(t *testing.T) {
 	}
 }
 
+// TestProxy_AForwardedPublicHostNeedsTheServerToDeclareIt drives the live Host
+// defect through the real nginx, which is where it was found.
+//
+// Everything about the shape is the deployment's: nginx forwards the client's
+// Host with `proxy_set_header Host $host`, connects to the server over loopback,
+// and the server therefore sees a public name on a connection accepted on a
+// loopback address — the one combination the SDK's own check refuses. Nothing is
+// modeled: the header arrives because a real proxy put it there.
+//
+// Both halves are asserted in one test because the second is what makes the
+// first a defect rather than a policy: the same request, same proxy, same
+// binary, served once the operator declares the name.
+func TestProxy_AForwardedPublicHostNeedsTheServerToDeclareIt(t *testing.T) {
+	const forwarded = "mcp.example.org"
+
+	t.Run("undeclared", func(t *testing.T) {
+		port := freePort(t)
+		startServerOnPort(t, port, nil)
+		base := startProxy(t, port)
+
+		if status, _ := proxyDoWithHost(t, base, "/plain/", forwarded); status != http.StatusForbidden {
+			t.Fatalf("tools/list through the proxy = %d, want %d: the forwarded Host names nothing this server declared", status, http.StatusForbidden)
+		}
+	})
+
+	t.Run("declared with --public-url", func(t *testing.T) {
+		port := freePort(t)
+		startServerOnPort(t, port, nil, "--public-url", "https://"+forwarded+"/libgen")
+		base := startProxy(t, port)
+
+		if status, _ := proxyDoWithHost(t, base, "/plain/", forwarded); status != http.StatusOK {
+			t.Fatalf("tools/list through the proxy = %d, want %d", status, http.StatusOK)
+		}
+	})
+}
+
+// proxyDoWithHost is proxyDo addressed to the proxy under a name the proxy then
+// forwards. The name is never resolved: the request goes to the proxy's own
+// address and only carries the name in the Host header, which is how a client
+// reaching a virtual host behaves.
+func proxyDoWithHost(t *testing.T, base, path, host string) (int, http.Header) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(toolsListBody))
+	if err != nil {
+		t.Fatalf("building the request: %v", err)
+	}
+	req.Host = host
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", acceptHeader)
+	req.Header.Set("MCP-Protocol-Version", protocolVersion)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode, resp.Header
+}
+
 // TestProxy_TrustedProxyFlagsServeTheDeployedShape drives the hosted
 // deployment's own proxy configuration through the real nginx.
 //

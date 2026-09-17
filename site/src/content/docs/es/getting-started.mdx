@@ -333,7 +333,15 @@ Para ejecutar el servidor de forma centralizada y conectarte por HTTP en lugar d
 libgen-mcp --http :8080
 ```
 
-En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga.
+El endpoint es el propio montaje — aquí `POST /` — y `POST /mcp` es un alias suyo, porque hay suficientes clientes y guías que dan por hecho esa ruta como para que una URL base pegada con ella o sin ella llegue al mismo sitio. Con `--http-path` el alias se mueve con el montaje (`/libgen/mcp`).
+
+**Detrás de un proxy inverso, declara el nombre que usan los clientes.** Un proxy reenvía el `Host` del cliente y conecta por loopback, y un servidor que nunca oyó ese nombre rechaza la petición con `403` — la comprobación de DNS rebinding que se le pide a todo servidor MCP. Dile el nombre con `--public-url`, o avala al proxy con `--trusted-proxies`; con cualquiera de los dos basta, y ninguno es opcional en un bind comodín, que no declara nombre propio:
+
+```bash
+libgen-mcp --http :8080 --public-url https://mcp.example.org
+```
+
+En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga. Responde al `Host` que envíe quien sondea, incluso a ninguno — el `option httpchk` de HAProxy no envía `Host` salvo que se configure, y una sonda rechazada marca como caída una instancia que funciona.
 
 En modo HTTP el servidor publica además una **server card** en `GET /server-card` — la ubicación a la que la movió la extensión `ext-server-card`, servida como `application/mcp-server-card+json` — y, con los mismos bytes, en la ruta heredada `GET /.well-known/mcp/server-card.json`, que se mantiene porque los escáneres ya la piden ahí. Lleva `serverInfo`, las `capabilities` que negocia el handshake, un bloque `authentication` (este servidor no pide ninguna) y los listados completos de `tools` y `prompts`, de modo que un directorio o un escáner puede leer toda la superficie — los cuatro prompts incluidos — sin abrir una sesión MCP. Se sirve sin autenticación, responde al preflight CORS y lleva `Access-Control-Allow-Origin: *` para que también pueda leerla un directorio que corra en el navegador, y no le afecta el `405` que el modo sin estado devuelve en el endpoint MCP.
 

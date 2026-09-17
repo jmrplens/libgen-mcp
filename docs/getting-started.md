@@ -227,8 +227,24 @@ address and point HTTP-capable clients at it:
 libgen-mcp --http :8080
 ```
 
+The endpoint is the mount itself — `POST /` here — and `POST /mcp` is an alias for it, because
+enough clients and guides assume that path that a base URL pasted with or without it should
+reach the same place. Under `--http-path` the alias moves with the mount (`/libgen/mcp`).
+
+**Behind a reverse proxy, declare the name clients use.** A proxy forwards the client's `Host`
+and connects over loopback, and a server that never heard that name refuses the request with
+`403` — the DNS-rebinding check every MCP server is asked to make. Tell it the name with
+`--public-url`, or vouch for the proxy with `--trusted-proxies`; either is enough, and neither
+is optional on a wildcard bind, which declares no name of its own:
+
+```bash
+libgen-mcp --http :8080 --public-url https://mcp.example.org
+```
+
 In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200`
-while serving, handy for container and load-balancer health checks.
+while serving, handy for container and load-balancer health checks. It answers whatever `Host`
+a prober sends, including none at all — HAProxy's `option httpchk` sends no `Host` unless one
+is configured, and a refused probe marks a working instance down.
 
 In HTTP mode the server also publishes a **server card** at `GET /server-card` — the location
 the `ext-server-card` extension moved to, served as `application/mcp-server-card+json` — and,
