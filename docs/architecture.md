@@ -341,12 +341,11 @@ The server speaks MCP over one of two transports, selected at startup:
   also mounts a `GET /health` readiness endpoint that returns `200` and a JSON body carrying
   `status`, `version`, `commit`, `build`, `config_digest`, `started_at` and `uptime_seconds`
   while the server is serving — handy for container and load-balancer health checks. It
-  also publishes a server card at `GET /server-card` — and, for the scanners that
-  already fetch it, at the legacy `GET /.well-known/mcp/server-card.json` — carrying
-  `serverInfo`, the `capabilities` the handshake negotiates, an `authentication`
-  block, and the full `tools` and `prompts` listings, served with
+  also publishes two server cards — the SEP-2127 discovery card at `GET /server-card`
+  and, for the scanners that already fetch it, the enumerating one at the legacy
+  `GET /.well-known/mcp/server-card.json` — both served with
   `Access-Control-Allow-Origin: *` so a directory or scanner — a browser-based
-  one included — can read the surface without opening an MCP session. Those routes
+  one included — can read them without opening an MCP session. Those routes
   and the MCP endpoint are the whole HTTP surface: every other path answers `404`.
 
 Both transports share the same download pipeline and HTTP client; the surface they present
@@ -570,6 +569,47 @@ probe is `GET /libgen/health`, and `/health` at the root is a `404` like anythin
 fragment, a traversal segment or a percent-escape is refused at startup rather than at the
 first request — a server mounted on a path it can never match answers `404` to everything,
 which reads as a proxy fault and is the hardest kind of misconfiguration to find.
+
+**Two cards, because two specifications describe two documents.** Both card paths answered the
+same bytes under two media types until the split, which put the older enumerating shape at the
+location the newer specification reserves — a deployment that wanted to be conformant had to
+shadow the route with a static file in its proxy. Each path now serves the document its own
+specification describes:
+
+| Route                               | Media type                         | Document                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/server-card`                      | `application/mcp-server-card+json` | The **discovery card** of SEP-2127: the registry name `io.github.jmrplens/libgen-mcp`, the running version, title, description, website and repository — and, when `--public-url` names one, a single `remotes` entry giving that URL, `"type": "streamable-http"` and the protocol versions this deployment negotiates. No primitives, no capability block, no credential header. |
+| `/.well-known/mcp/server-card.json` | `application/json`                 | The **enumerating card** of the closed SEP-1649 draft: `serverInfo`, the `capabilities` the handshake negotiates, an `authentication` block and the full `tools` and `prompts` listings. Kept because the scanners that already fetch it there would otherwise start getting a `404`.                                                                                              |
+
+The discovery card lists no tools on purpose: what a server exposes can vary by session and
+configuration — `read` is not registered when `LIBGEN_MCP_SERVER_FETCH` is off — so a card that
+enumerated the surface would be answering a question only a live `tools/list` can answer. The
+enumerating document is where a directory gets that, and the standard pre-connection channel is
+`server/discover`, which this server also answers.
+
+`remotes` is absent unless `--public-url` is given, and that absence is deliberate: a listen
+address is not an answer, since it is frequently loopback or a unix socket behind a proxy, and
+publishing it would send a client somewhere it cannot go. The protocol versions the entry
+declares come from the same list the version guard refuses with, so a stateful deployment never
+advertises `2026-07-28` — the one version it answers `400` to. The extension asks in writing
+that a card not contradict what a client observes once connected.
+
+**A validator on both.** Each card carries a strong `ETag`, so a scanner revalidating after the
+hour its `Cache-Control` allows pays for a `304` rather than for the whole document again. The
+tag is the first 128 bits of a SHA-256 over the document's own bytes and over nothing else,
+which is what makes it worth having behind a balancer: two replicas that rendered the same
+document publish the same tag, so a client revalidating against whichever replica the balancer
+picked is answered `304`. A tag minted per process — a start instant, a random string, even the
+build digest — would miss on every request that changed replica, and the miss would be
+invisible, because the response is still correct. The conditional handling is
+[`http.ServeContent`](https://pkg.go.dev/net/http#ServeContent)'s rather than a comparison
+written here: `If-None-Match` is a list, `*` is a value of its own, a `GET` uses the weak
+comparison, and a proxy that compresses the response rewrites the tag it forwards as `W/"…"` —
+four ways to be wrong, each of which fails silently by serving a correct `200` nobody needed.
+No `Last-Modified` accompanies it: these documents are rendered at startup out of
+configuration, and sending the process start instant would invite a client to compare two
+replicas by it and conclude the document had changed when only the process had. `/health` gets
+no validator at all — its body carries `uptime_seconds`, so it differs on every probe.
 
 **Security headers.** Every response carries the same five headers — tool results, the health
 probe, the card, the `403`, the preflight `204`, the `405` and the `404` alike — set by the
@@ -982,13 +1022,13 @@ satisfy. See
 Everything this server puts on the wire that the MCP schema does not define, and the slot it
 occupies:
 
-| What                                                       | Where it rides                                                             | Slot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The server card document                                   | `GET /server-card`, and the legacy `GET /.well-known/mcp/server-card.json` | A vendor document, never a JSON-RPC message. Not a specification: [SEP-1649](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1649), the draft it descends from, is closed, and its successor SEP-2127 relocates the card and rejects `.well-known/mcp` paths — which is why `/server-card`, served as `application/mcp-server-card+json`, is the current location and the `.well-known` one is kept only because scanners already fetch it. Both answer the same bytes. The standard pre-connection channel is `server/discover`, which this server also answers. |
-| `next_steps`, and the "💡 Next steps" block that mirrors it | tool result                                                                | Result content — a field of the tool's own `outputSchema`, not a protocol extension.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Markdown where the serialized JSON would go                | tool result `content`                                                      | A deliberate deviation from a SHOULD: the tools spec asks a tool returning structured content to also return the serialized JSON in a text block. This one returns Markdown instead — that channel is for the person reading the transcript, and repeating the JSON would double every payload for a reader that already has it in `structuredContent`.                                                                                                                                                                                                                             |
-| `GET /health` and its JSON body                            | its own HTTP path                                                          | Outside MCP entirely: the transport spec governs the MCP endpoint, not the rest of the origin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| The icon entry order                                       | icon arrays                                                                | See [Icons](#icons); the fields themselves are standard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| What                                                       | Where it rides                                                             | Slot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The server card documents                                  | `GET /server-card`, and the legacy `GET /.well-known/mcp/server-card.json` | Vendor documents, never JSON-RPC messages, and two different ones. `/server-card` carries the identity-only discovery card of SEP-2127, served as `application/mcp-server-card+json`; the `.well-known` path carries the enumerating card of [SEP-1649](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1649), the closed draft it descends from, and is kept only because scanners already fetch it there. Neither is a specification this server can claim conformance to. The standard pre-connection channel is `server/discover`, which this server also answers. |
+| `next_steps`, and the "💡 Next steps" block that mirrors it | tool result                                                                | Result content — a field of the tool's own `outputSchema`, not a protocol extension.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Markdown where the serialized JSON would go                | tool result `content`                                                      | A deliberate deviation from a SHOULD: the tools spec asks a tool returning structured content to also return the serialized JSON in a text block. This one returns Markdown instead — that channel is for the person reading the transcript, and repeating the JSON would double every payload for a reader that already has it in `structuredContent`.                                                                                                                                                                                                                                  |
+| `GET /health` and its JSON body                            | its own HTTP path                                                          | Outside MCP entirely: the transport spec governs the MCP endpoint, not the rest of the origin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| The icon entry order                                       | icon arrays                                                                | See [Icons](#icons); the fields themselves are standard.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 Nothing else is ours, and the gaps are the point. There is not one vendor `_meta` key on the
 wire — the only `_meta` is the SDK's own `io.modelcontextprotocol/serverInfo` (SEP-2575). The

@@ -95,7 +95,7 @@ func TestHealthEndpoint(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "mcp")
 	})
-	handler := newHTTPHandler(stub, nil, nil, "/", false, testHealth())
+	handler := newHTTPHandler(stub, serverCards{}, nil, "/", false, testHealth())
 
 	// The three fields and the content type are a contract shared with the sibling
 	// gitlab-mcp-server, so one external probe can read both servers and confirm
@@ -516,7 +516,7 @@ func newTransportTestServer(t *testing.T, opts transport.Options) *httptest.Serv
 	mcpHandler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv }, transport.StreamableHTTP(opts),
 	)
-	ts := httptest.NewServer(newHTTPHandler(mcpHandler, nil, opts.TrustedOrigins, "/", false, testHealth()))
+	ts := httptest.NewServer(newHTTPHandler(mcpHandler, serverCards{}, opts.TrustedOrigins, "/", false, testHealth()))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -1269,7 +1269,7 @@ type securedRequest struct {
 // way out and lost every one of those responses.
 func TestSecurityHeadersAreSetOnEveryResponse(t *testing.T) {
 	const trusted = "https://claude.ai"
-	handler := newHTTPHandler(teapotHandler(), nil, []string{trusted}, "/", false, testHealth())
+	handler := newHTTPHandler(teapotHandler(), serverCards{}, []string{trusted}, "/", false, testHealth())
 
 	cases := []securedRequest{
 		{
@@ -1604,7 +1604,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 	}
 	for _, base := range []string{"/", "/libgen"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), card, nil, base, false, testHealth())
+			handler := newHTTPHandler(teapotHandler(), testCards(t, card), nil, base, false, testHealth())
 			for _, tc := range mountedRoutes(normalizeBasePath(base)) {
 				t.Run(tc.name, func(t *testing.T) {
 					assertRoute(t, handler, tc)
@@ -1621,7 +1621,7 @@ func TestNewHTTPHandlerRoutes(t *testing.T) {
 func TestNewHTTPHandlerAcceptsEveryBasePathSpelling(t *testing.T) {
 	for _, base := range []string{"libgen", "/libgen", "/libgen/"} {
 		t.Run(base, func(t *testing.T) {
-			handler := newHTTPHandler(teapotHandler(), nil, nil, base, false, testHealth())
+			handler := newHTTPHandler(teapotHandler(), serverCards{}, nil, base, false, testHealth())
 			assertRoute(t, handler, routeCase{
 				method: http.MethodGet, path: "/libgen/health",
 				wantStatus: http.StatusOK, wantType: "application/json",

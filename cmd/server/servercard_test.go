@@ -242,7 +242,7 @@ func TestServerCardRouteServesTheDocument(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil, "/", false, testHealth())
+	handler := newHTTPHandler(stub, testCards(t, raw), nil, "/", false, testHealth())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil)
 	rec := httptest.NewRecorder()
@@ -276,7 +276,7 @@ func TestServerCardRouteAllowsCrossOriginReads(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, raw, nil, "/", false, testHealth())
+	handler := newHTTPHandler(stub, testCards(t, raw), nil, "/", false, testHealth())
 
 	getRec := httptest.NewRecorder()
 	handler.ServeHTTP(getRec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, serverCardPath, nil))
@@ -327,7 +327,7 @@ func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	stub := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := newHTTPHandler(stub, nil, nil, "/", false, testHealth())
+	handler := newHTTPHandler(stub, serverCards{}, nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
 		for _, method := range []string{http.MethodGet, http.MethodOptions} {
@@ -458,7 +458,7 @@ func TestServerCardOverridesCacheControl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
-	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false, testHealth())
+	handler := newHTTPHandler(teapotHandler(), testCards(t, raw), nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
 		rec := httptest.NewRecorder()
@@ -480,19 +480,25 @@ func TestServerCardOverridesCacheControl(t *testing.T) {
 	}
 }
 
-// TestServerCardRoutesServeIdenticalBytes pins the promise the two locations
-// make together. /server-card is where the ext-server-card extension moved the
-// document on 2026-06-08, and /.well-known/mcp/server-card.json is kept only
-// because scanners already fetch it — so a reader following either one must get
-// the same card. They close over one slice precisely so the older path cannot
-// become a quietly stale copy; this is what would fail if that stopped being
-// true.
-func TestServerCardRoutesServeIdenticalBytes(t *testing.T) {
-	raw, err := buildServerCard(t.Context(), newCardTestServer())
+// TestServerCardRoutesServeTheirOwnDocument pins what the two locations promise.
+// /server-card is where the ext-server-card extension moved the document on
+// 2026-06-08, and /.well-known/mcp/server-card.json is kept only because
+// scanners already fetch it.
+//
+// **This assertion inverted.** The two routes used to close over one slice and
+// answer the same bytes under two content types, which put the older
+// enumerating shape at the location SEP-2127 reserves. Each path now answers the
+// document its own specification describes, and what has to hold is that they
+// are different documents and that each is the bytes it was handed, not a
+// re-serialization — the cards are built once per process, so neither can drift
+// between reads.
+func TestServerCardRoutesServeTheirOwnDocument(t *testing.T) {
+	enumerating, err := buildServerCard(t.Context(), newCardTestServer())
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}
-	handler := newHTTPHandler(teapotHandler(), raw, nil, "/", false, testHealth())
+	cards := testCards(t, enumerating)
+	handler := newHTTPHandler(teapotHandler(), cards, nil, "/", false, testHealth())
 
 	bodies := make(map[string][]byte, 2)
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
@@ -504,13 +510,28 @@ func TestServerCardRoutesServeIdenticalBytes(t *testing.T) {
 		bodies[path] = rec.Body.Bytes()
 	}
 
-	if !bytes.Equal(bodies[serverCardPath], bodies[serverCardCurrentPath]) {
-		t.Errorf("the two card routes differ:\n%s = %s\n%s = %s",
-			serverCardPath, bodies[serverCardPath], serverCardCurrentPath, bodies[serverCardCurrentPath])
+	if bytes.Equal(bodies[serverCardPath], bodies[serverCardCurrentPath]) {
+		t.Error("both routes answered the same bytes; the SEP-2127 location is serving the enumerating document again")
 	}
-	// And both are the bytes handed to the handler, not a re-serialization: the
-	// card is built once per process so the document cannot drift between reads.
-	if !bytes.Equal(bodies[serverCardCurrentPath], raw) {
-		t.Errorf("served card = %s, want the bytes buildServerCard produced", bodies[serverCardCurrentPath])
+	if !bytes.Equal(bodies[serverCardPath], cards.enumerating) {
+		t.Errorf("%s served %s, want the bytes buildServerCard produced", serverCardPath, bodies[serverCardPath])
 	}
+	if !bytes.Equal(bodies[serverCardCurrentPath], cards.discovery) {
+		t.Errorf("%s served %s, want the bytes buildDiscoveryCard produced", serverCardCurrentPath, bodies[serverCardCurrentPath])
+	}
+}
+
+// testCards is the pair of documents a routing test mounts: the enumerating one
+// it was given, and a real SEP-2127 card beside it.
+//
+// A real one rather than a stub, because several of these cases assert the two
+// routes differ and a stub would make that pass for a reason the deployment does
+// not have.
+func testCards(t *testing.T, enumerating []byte) serverCards {
+	t.Helper()
+	discovery, err := buildDiscoveryCard("https://mcp.example.org/libgen", true)
+	if err != nil {
+		t.Fatalf("buildDiscoveryCard() error = %v", err)
+	}
+	return serverCards{enumerating: enumerating, discovery: discovery}
 }

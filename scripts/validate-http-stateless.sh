@@ -6,9 +6,11 @@
 # can only approximate, because they depend on the process actually listening:
 #
 #   1. GET /health           → 200 JSON status/version/commit/started_at/uptime_seconds
-#      GET server-card.json  → 200 JSON serverInfo/tools/prompts (discovery is unaffected)
-#      GET /server-card      → 200 application/mcp-server-card+json, byte-identical
-#                              (the current location; the .well-known one is legacy)
+#      GET server-card.json  → 200 JSON serverInfo/tools/prompts (the enumerating
+#                              SEP-1649 document, kept where scanners fetch it)
+#      GET /server-card      → 200 application/mcp-server-card+json, the SEP-2127
+#                              card: identity and how to connect, no primitives.
+#                              A DIFFERENT document, and both carry an ETag.
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
 #                               no session handshake)
@@ -195,16 +197,43 @@ else
   fail "the card does not state capabilities"
 fi
 
-# The card moved to /server-card on 2026-06-08 (ext-server-card); the .well-known
-# path above is kept because scanners already fetch it. Both are served, and a
-# client that follows either must get the same surface — so compare the bytes, not
-# just the status.
+# The two locations serve two DIFFERENT documents, and this assertion inverted
+# when that became true. /server-card is where SEP-2127 puts the card, and a
+# SEP-2127 card carries identity and how to connect and deliberately no
+# primitives; the .well-known path keeps the enumerating document because
+# scanners already fetch it. Serving the enumerating one at both was putting the
+# older shape at the location the newer specification reserves.
 CARD_CURRENT=$(curl -fsS "${BASE}/server-card" 2>/dev/null || true)
-if [ -n "$CARD_CURRENT" ] && [ "$CARD_CURRENT" = "$CARD" ]; then
-  pass "GET /server-card serves the same document as the legacy path"
+if [ -z "$CARD_CURRENT" ]; then
+  fail "GET /server-card served nothing"
+elif [ "$CARD_CURRENT" = "$CARD" ]; then
+  fail "GET /server-card served the enumerating document, which belongs at the legacy path"
 else
-  fail "GET /server-card did not serve the legacy path's bytes"
+  pass "GET /server-card serves its own document, not the legacy path's"
 fi
+
+# And it is the document SEP-2127 describes: an identity with no tool list.
+if printf '%s' "$CARD_CURRENT" | grep -q '"name"' && ! printf '%s' "$CARD_CURRENT" | grep -q '"tools"'; then
+  pass "GET /server-card carries identity and no primitives"
+else
+  fail "GET /server-card is not a SEP-2127 card"
+fi
+
+# Both documents carry a validator, so the revalidation after their one-hour
+# lifetime costs a 304 rather than the whole thing again.
+for CARD_PATH in "/.well-known/mcp/server-card.json" "/server-card"; do
+  CARD_ETAG=$(curl -fsSI "${BASE}${CARD_PATH}" 2>/dev/null | tr -d '\r' | awk -F': ' 'tolower($1)=="etag" {print $2}')
+  if [ -z "$CARD_ETAG" ]; then
+    fail "GET ${CARD_PATH} carries no ETag"
+    continue
+  fi
+  CARD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -H "If-None-Match: ${CARD_ETAG}" "${BASE}${CARD_PATH}")
+  if [ "$CARD_STATUS" = "304" ]; then
+    pass "GET ${CARD_PATH} answers 304 to its own validator"
+  else
+    fail "GET ${CARD_PATH} answered ${CARD_STATUS} to its own ETag, want 304"
+  fi
+done
 
 # The media type differs by location on purpose: the extension gives the document
 # its own type, while the legacy path keeps the application/json its existing
