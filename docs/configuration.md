@@ -462,3 +462,34 @@ md5-keyed hits merge into `results` (labeled by `origin`); the rest appear in th
 `open_access` array, where only an entry with `open_access: true` is known to be free to read —
 dblp and PubMed are bibliographic indexes, and ERIC hosts only part of what it indexes. See [Tools](tools.md#open-access-discovery)
 for the output shape.
+
+### `LIBGEN_MCP_TELEMETRY` and the `OTEL_*` variables
+
+`LIBGEN_MCP_TELEMETRY` is the only switch this server owns. Everything about *how* the export
+happens — the collector endpoint, the protocol, headers, timeouts, sampling, batch sizes,
+resource attributes, the service name — comes from the standard `OTEL_*` variables, which the
+OpenTelemetry SDK reads for itself.
+
+**Those names are never prefixed, and that is not an inconsistency.** Every variable this server
+defines carries `LIBGEN_MCP_`, because a stdio server runs in whatever shell its client was
+started from, beside every other tool that person uses, and a bare `TIMEOUT` may already belong
+to one of them. An `OTEL_*` name is not ours to choose: the SDK reads the spelling the
+specification gives it, so `LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` would be a variable nothing
+reads. The same applies to `LIBGEN_MIRROR`, which follows the mirror family's own convention.
+
+Two consequences worth knowing before you set them:
+
+- **They are shared with every other OpenTelemetry process in the same environment.** One
+  `OTEL_EXPORTER_OTLP_ENDPOINT` in a compose file configures this server and the sidecar next to
+  it, which is usually what you want and occasionally a surprise. The per-signal forms
+  (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and its siblings) are the way to differ.
+- **`OTEL_SDK_DISABLED` vetoes the switch**, and is parsed under the specification's grammar —
+  the case-insensitive word `true`, and nothing else — rather than this server's looser one.
+  It cannot be the *on* switch, because its specified default means "the SDK is enabled" while
+  telemetry here is off until asked for; so the two compose, with ours turning the export on and
+  the specification's able to turn it off from outside.
+
+What is exported, and what is deliberately not, is in
+[Privacy](../PRIVACY.md) and in the identity rows above. When telemetry is on, the deployment
+also says so in its own server card, so a caller of a public endpoint can see that their calls
+are instrumented without having to ask.

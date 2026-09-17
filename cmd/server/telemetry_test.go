@@ -1,15 +1,23 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/logging"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/internal/transport"
 )
 
 // collectorCredentialFixture stands in for the collector credential the
@@ -21,65 +29,70 @@ import (
 // next real finding is dismissed.
 const collectorCredentialFixture = "not-a-credential-only-a-test-fixture-9f3a"
 
-// captureTelemetryLog collects the records this wiring writes while a test runs.
-func captureTelemetryLog(t *testing.T) func() []slog.Record {
+// captureTelemetryLog redirects the server's own log stream to a buffer and
+// returns what has been written to it.
+//
+// The stream rather than the default logger, and that is forced rather than
+// preferred: installing the telemetry bridge rebuilds the stderr handler, so a
+// substituted slog.Default() is replaced at the exact moment the wiring under
+// test does its job. A test built that way would assert on a logger the server
+// had stopped using, and would keep passing while the bridge sent everything
+// somewhere else.
+func captureTelemetryLog(t *testing.T) func() string {
 	t.Helper()
 
-	sink := &recordSink{}
+	stream := &syncBuffer{}
+	t.Cleanup(logging.SetDestination(stream))
 	previous := slog.Default()
-	slog.SetDefault(slog.New(sink))
+	// Debug, so a case about a level is decided by the assertion rather than by
+	// the capture.
+	logging.Setup(slog.LevelDebug)
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	return sink.records
+	return stream.String
 }
 
-// recordSink is a [slog.Handler] that keeps every record.
-type recordSink struct {
-	mu   sync.Mutex
-	kept []slog.Record
+// syncBuffer is a buffer safe to write from the goroutines a shutdown flush
+// runs on.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
 }
 
-// Enabled reports that every level is handled, so a case about a WARN is not
-// filtered before it is seen.
-func (s *recordSink) Enabled(context.Context, slog.Level) bool { return true }
-
-// Handle keeps the record.
-func (s *recordSink) Handle(_ context.Context, record slog.Record) error {
+// Write appends to the buffer.
+func (s *syncBuffer) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.kept = append(s.kept, record.Clone())
-	return nil
+	return s.b.Write(p)
 }
 
-// WithAttrs returns the sink unchanged; it keeps no attributes of its own.
-func (s *recordSink) WithAttrs([]slog.Attr) slog.Handler { return s }
-
-// WithGroup returns the sink unchanged; it keeps no groups.
-func (s *recordSink) WithGroup(string) slog.Handler { return s }
-
-// records returns what has been kept so far.
-func (s *recordSink) records() []slog.Record {
+// String returns everything written so far.
+func (s *syncBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]slog.Record(nil), s.kept...)
+	return s.b.String()
 }
 
-// messages renders the kept records as one string, for a contains assertion.
-func messages(records []slog.Record) string {
-	var b strings.Builder
-	for _, record := range records {
-		b.WriteString(record.Level.String())
-		b.WriteString(" ")
-		b.WriteString(record.Message)
-		record.Attrs(func(attr slog.Attr) bool {
-			b.WriteString(" ")
-			b.WriteString(attr.Key)
-			b.WriteString("=")
-			b.WriteString(attr.Value.String())
-			return true
-		})
-		b.WriteString("\n")
+// findLogRecord returns the first JSON record in the stream with this message.
+//
+// Parsed rather than matched as a substring, because two of the assertions here
+// are about a record's severity and its fields rather than about the words in
+// it, and "WARN" appears in a line that merely mentions one.
+func findLogRecord(t *testing.T, stream, message string) (map[string]any, bool) {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(stream), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("the log stream is not JSON, which every client depends on: %q: %v", line, err)
+		}
+		if record["msg"] == message {
+			return record, true
+		}
 	}
-	return b.String()
+	return nil, false
 }
 
 // TestStartTelemetryOffIsSilentAndStillStoppable is the ordinary deployment,
@@ -100,7 +113,7 @@ func TestStartTelemetryOffIsSilentAndStillStoppable(t *testing.T) {
 	}
 	stop(t.Context())
 
-	if got := messages(logged()); strings.Contains(got, "telemetry") {
+	if got := logged(); strings.Contains(got, "telemetry") {
 		t.Errorf("a deployment that asked for nothing was told about telemetry:\n%s", got)
 	}
 }
@@ -149,21 +162,15 @@ func TestStartTelemetryAnnouncesWhereTheBatchesGo(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	var announcement *slog.Record
-	for _, record := range logged() {
-		if record.Message == "telemetry enabled" {
-			announcement = &record
-			break
-		}
+	announcement, found := findLogRecord(t, logged(), "telemetry enabled")
+	if !found {
+		t.Fatalf("nothing announced that telemetry was on:\n%s", logged())
 	}
-	if announcement == nil {
-		t.Fatalf("nothing announced that telemetry was on:\n%s", messages(logged()))
+	if announcement["level"] != "WARN" {
+		t.Errorf("the announcement is at %v, want WARN: a deployment running at warn would export with nothing on its own stderr naming the collector", announcement["level"])
 	}
-	if announcement.Level != slog.LevelWarn {
-		t.Errorf("the announcement is at %s, want WARN: a deployment running at warn would export with nothing on its own stderr naming the collector", announcement.Level)
-	}
-	if got := messages([]slog.Record{*announcement}); !strings.Contains(got, "127.0.0.1:4318") {
-		t.Errorf("the announcement does not name the endpoint: %s", got)
+	if endpoint, _ := announcement["endpoint"].(string); endpoint != "http://127.0.0.1:4318" {
+		t.Errorf("the announcement does not name the endpoint: %v", announcement)
 	}
 }
 
@@ -185,7 +192,7 @@ func TestStartTelemetryWarnsAboutAPlaintextCredential(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	got := messages(logged())
+	got := logged()
 	if !strings.Contains(got, "crosses the network in the clear") {
 		t.Errorf("no warning about the plaintext credential:\n%s", got)
 	}
@@ -214,7 +221,7 @@ func TestStartTelemetrySaysNothingAboutALoopbackCredential(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	if got := messages(logged()); strings.Contains(got, "crosses the network in the clear") {
+	if got := logged(); strings.Contains(got, "crosses the network in the clear") {
 		t.Errorf("a loopback collector was warned about:\n%s", got)
 	}
 }
@@ -235,7 +242,7 @@ func TestStartTelemetryHonorsTheSpecificationKillSwitch(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	if got := messages(logged()); strings.Contains(got, "telemetry enabled") {
+	if got := logged(); strings.Contains(got, "telemetry enabled") {
 		t.Errorf("telemetry started although OTEL_SDK_DISABLED is set:\n%s", got)
 	}
 }
@@ -255,7 +262,7 @@ func TestStartTelemetrySelectsTheSignalsItWasGiven(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	got := messages(logged())
+	got := logged()
 	if !strings.Contains(got, "traces") {
 		t.Errorf("the announcement does not name the selected signal:\n%s", got)
 	}
@@ -362,7 +369,7 @@ func TestResolveIdentityWarnsWhenBothTheKeyAndTheRotationAreSet(t *testing.T) {
 		t.Errorf("Rotation() = %s, want zero: a configured key does not rotate here", got.keys.Rotation())
 	}
 
-	out := messages(logged())
+	out := logged()
 	if !strings.Contains(out, "rotation interval is ignored") {
 		t.Errorf("nothing said that the rotation does nothing:\n%s", out)
 	}
@@ -425,12 +432,176 @@ func TestStartTelemetryAnnouncesTheIdentityPolicy(t *testing.T) {
 	}
 	t.Cleanup(func() { stop(context.WithoutCancel(t.Context())) })
 
-	out := messages(logged())
+	out := logged()
 	if !strings.Contains(out, "pseudonymous") {
 		t.Errorf("the startup log does not name the identity policy:\n%s", out)
 	}
 	// In words, not only as a mode name.
 	if !strings.Contains(out, telemetry.PolicyDescription(telemetry.IdentityPseudonymous)) {
 		t.Errorf("the startup log does not say what the policy exports:\n%s", out)
+	}
+}
+
+// recordingCollector is an OTLP/HTTP endpoint that keeps every payload byte for
+// byte.
+//
+// It decodes nothing. The question these tests ask is whether a given string
+// left the process at all, and a decoder that understood the payload could only
+// answer it for the fields it knew about — which is the wrong shape for a check
+// about what must never be there.
+func recordingCollector(t *testing.T) (url string, payloads func() string) {
+	t.Helper()
+
+	var received syncBuffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reader io.Reader = r.Body
+		if r.Header.Get("Content-Encoding") == "gzip" {
+			unzipped, err := gzip.NewReader(r.Body)
+			if err != nil {
+				t.Errorf("the collector could not read a gzipped payload: %v", err)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			defer func() { _ = unzipped.Close() }()
+			reader = unzipped
+		}
+		body, err := io.ReadAll(reader)
+		if err != nil {
+			t.Errorf("reading the payload: %v", err)
+		}
+		_, _ = received.Write(body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, received.String
+}
+
+// TestALogRecordReachesTheCollectorOnlyAfterTheBridgeIsInstalled is the wire
+// order, driven rather than read.
+//
+// Two things about this wiring are invisible from inside the process, and both
+// are the kind that survive review. The first is that the logs signal is only
+// real once something writes into it: the provider can be installed, "logs" can
+// be announced at startup and published on the server card, and no record ever
+// exported. The second is that the startup announcement — the one line saying
+// what this deployment exports about its callers — is written before the bridge
+// unless somebody put it after, in which case it reaches stderr alone, which is
+// the one place an operator running several replicas is not looking.
+//
+// So the assertions are a real OTLP endpoint and three strings: a record from
+// before, a record from after, and the announcement itself.
+func TestALogRecordReachesTheCollectorOnlyAfterTheBridgeIsInstalled(t *testing.T) {
+	endpoint, payloads := recordingCollector(t)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	captureTelemetryLog(t)
+
+	slog.Warn("a-record-from-before-the-bridge")
+
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
+		Telemetry:        true,
+		TelemetrySignals: "logs",
+	})
+	if err != nil {
+		t.Fatalf("startTelemetry() error = %v", err)
+	}
+	slog.Warn("a-record-from-after-the-bridge")
+
+	// The flush: the batch processor exports on shutdown, so this is what puts
+	// the records on the wire.
+	stop(context.WithoutCancel(t.Context()))
+
+	exported := payloads()
+	if !strings.Contains(exported, "a-record-from-after-the-bridge") {
+		t.Errorf("no record reached the collector, so the logs signal exports nothing:\n%s", exported)
+	}
+	if strings.Contains(exported, "a-record-from-before-the-bridge") {
+		t.Error("a record written before the bridge was exported, which cannot happen and means this test proves nothing about order")
+	}
+	if !strings.Contains(exported, "telemetry enabled") {
+		t.Error("the startup announcement did not reach the collector, so it was written before the bridge")
+	}
+}
+
+// TestTheBridgeIsNotInstalledForASignalNobodyAskedFor keeps the wrapper off the
+// log path of a deployment that exports traces alone.
+//
+// With the logs signal off, the global logger provider is still the no-op one,
+// so bridging would cost every record in the process a trip through a handler
+// that discards it — on the hot path of a server whose logs are its only local
+// evidence.
+func TestTheBridgeIsNotInstalledForASignalNobodyAskedFor(t *testing.T) {
+	endpoint, payloads := recordingCollector(t)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	captureTelemetryLog(t)
+
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
+		Telemetry:        true,
+		TelemetrySignals: "traces",
+	})
+	if err != nil {
+		t.Fatalf("startTelemetry() error = %v", err)
+	}
+	slog.Warn("a-record-under-traces-only")
+	stop(context.WithoutCancel(t.Context()))
+
+	if strings.Contains(payloads(), "a-record-under-traces-only") {
+		t.Error("a log record was exported although the logs signal was not selected")
+	}
+}
+
+// TestStoppingTelemetryTakesTheBridgeBackOut is what keeps a stopped exporter
+// from outliving the provider it belongs to.
+//
+// The default logger is a process global. Leaving the bridge installed after
+// shutdown routes every later record at a logger provider that has been shut
+// down — in a test binary, one test's collector receiving the rest of the suite.
+func TestStoppingTelemetryTakesTheBridgeBackOut(t *testing.T) {
+	endpoint, _ := recordingCollector(t)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint)
+	captureTelemetryLog(t)
+
+	before := slog.Default()
+	_, stop, err := startTelemetry(t.Context(), &config.Config{
+		Telemetry:        true,
+		TelemetrySignals: "logs",
+	})
+	if err != nil {
+		t.Fatalf("startTelemetry() error = %v", err)
+	}
+	if slog.Default() == before {
+		t.Fatal("the default logger was not replaced, so nothing bridges the log records")
+	}
+	stop(context.WithoutCancel(t.Context()))
+
+	if slog.Default() != before {
+		t.Error("the bridge outlived the provider it writes into")
+	}
+}
+
+// TestAnUnusableIdentityPolicyStopsStartup is the rule this surface applies to
+// every variable it defines, reaching the one place it can be observed.
+//
+// A value that is set and cannot be parsed is an error rather than a warning,
+// because falling back to the default in silence is how a deployment that does
+// not match its own configuration survives to production — and the identity
+// policy is the setting where that is worst: the operator believes they turned
+// caller identity off.
+//
+// It refuses whether or not telemetry is on. The variable was set by somebody
+// who meant something by it.
+func TestAnUnusableIdentityPolicyStopsStartup(t *testing.T) {
+	t.Setenv(config.EnvName("TELEMETRY_IDENTITY"), "anonymous")
+	stubStdinEOF(t)
+
+	var err error
+	awaitReturn(t, func() {
+		err = run(canceledContext(), listenSpec{}, transport.DefaultOptions(), transportDecision{})
+	})
+
+	if err == nil {
+		t.Fatal("run() served a deployment whose identity policy nobody could parse")
+	}
+	if !strings.Contains(err.Error(), config.EnvName("TELEMETRY_IDENTITY")) {
+		t.Errorf("the refusal does not name the variable an operator would fix: %v", err)
 	}
 }

@@ -15,6 +15,8 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 )
 
 // serverCardPath is the legacy card location, kept because scanners and
@@ -101,6 +103,80 @@ type serverCard struct {
 	Prompts           []serverCardPrompt `json:"prompts"`
 	Resources         []any              `json:"resources"`
 	ResourceTemplates []any              `json:"resourceTemplates"`
+	// Observability says what this deployment records about the calls it
+	// serves, and is absent when it records nothing.
+	Observability *serverCardObservability `json:"observability,omitempty"`
+}
+
+// serverCardObservability is what a caller may know about being instrumented.
+//
+// # Why it is published at all
+//
+// Telemetry is off by default here for privacy rather than cost, and a privacy
+// default nobody can observe is worth less than one they can. This matters more
+// on this server than on the sibling it is modeled after: that one is deployed by
+// an organization for its own people, who have somebody to ask. A stranger
+// reaching a public MCP endpoint has no relationship with the operator through
+// which to ask whether their searches are traced.
+//
+// # Absent rather than "enabled": false
+//
+// A consumer should not have to parse a negation to learn that nothing is
+// recorded, and a block that is always present invites one written by hand that
+// says the wrong thing.
+//
+// # What it deliberately does not carry
+//
+// The collector's address. It names the operator's own infrastructure, and the
+// card is fetched by every client that asks. What a caller needs is whether their
+// calls are recorded and in what form; where the records land is not theirs to
+// know. The startup log has it, for the operator who is looking at their own
+// deployment.
+type serverCardObservability struct {
+	Enabled bool `json:"enabled"`
+	// Signals and Protocol come from the live snapshot. Protocol is empty when
+	// the enabled signals do not agree on one, which is an honest absence
+	// rather than one signal's answer published as the process's.
+	Signals  []string `json:"signals,omitempty"`
+	Protocol string   `json:"protocol,omitempty"`
+	// Conventions names the vocabulary, so a reader knows the records follow a
+	// published schema rather than one invented here.
+	Conventions string `json:"conventions"`
+	// Identity is the policy's name, and Discloses is the same thing in words.
+	// The name alone means nothing to somebody who did not read the
+	// documentation, which is most of the people this block is for.
+	Identity  string `json:"identity"`
+	Discloses string `json:"discloses"`
+	// Recorded and NotRecorded are the two halves a caller actually wants, and
+	// the second is the one worth writing down: it is a commitment, and a
+	// commitment in a machine-readable document is one somebody can check.
+	Recorded    string `json:"recorded"`
+	NotRecorded string `json:"not_recorded"`
+}
+
+// cardObservability describes this deployment's instrumentation, or nothing when
+// it has none.
+func cardObservability(identity telemetry.IdentityPolicy) *serverCardObservability {
+	snapshot := telemetry.CurrentSnapshot()
+	if !snapshot.Enabled {
+		return nil
+	}
+	policy := identity
+	if policy == "" {
+		policy = telemetry.DefaultIdentityPolicy
+	}
+	return &serverCardObservability{
+		Enabled:     true,
+		Signals:     snapshot.Signals,
+		Protocol:    snapshot.Protocol,
+		Conventions: "OpenTelemetry, following the MCP semantic conventions",
+		Identity:    string(policy),
+		Discloses:   telemetry.PolicyDescription(policy),
+		Recorded: "the method called, the tool named, the outcome and the duration, " +
+			"which download source served a file, and the mirror host it came from",
+		NotRecorded: "search queries, record titles, tool arguments, tool results, " +
+			"and any credential supplied for a single call",
+	}
 }
 
 // buildServerCard serializes the card once, by listing the live server's own
@@ -114,7 +190,7 @@ type serverCard struct {
 // Resources and resource templates are always empty: this server registers
 // none. The keys are still emitted, because the card's shape is the contract a
 // scanner reads and an absent key is a different statement from an empty list.
-func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
+func buildServerCard(ctx context.Context, server *mcp.Server, identity telemetry.IdentityPolicy) ([]byte, error) {
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, st, nil)
 	if err != nil {
@@ -179,6 +255,7 @@ func buildServerCard(ctx context.Context, server *mcp.Server) ([]byte, error) {
 	}
 	card.Resources = []any{}
 	card.ResourceTemplates = []any{}
+	card.Observability = cardObservability(identity)
 
 	return json.Marshal(card)
 }

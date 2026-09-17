@@ -24,6 +24,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/cachehints"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 	"github.com/jmrplens/libgen-mcp/internal/transport"
 	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
 )
@@ -1599,7 +1600,7 @@ func assertRoute(t *testing.T, handler http.Handler, tc routeCase) {
 // inside the mount or outside it — is a 404 naming the endpoint rather than a
 // 405 claiming the path exists.
 func TestNewHTTPHandlerRoutes(t *testing.T) {
-	card, err := buildServerCard(t.Context(), newCardTestServer())
+	card, err := buildServerCard(t.Context(), newCardTestServer(), telemetry.IdentityNone)
 	if err != nil {
 		t.Fatalf("buildServerCard() error = %v", err)
 	}

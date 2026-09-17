@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/logging"
 	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/telemetry"
@@ -77,7 +78,30 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 		}, nil
 	}
 
+	restoreLogger := func() {
+		// Replaced below when the bridge is installed. Until then it is what the
+		// stop function calls, so the "no bridge" case needs a body rather than
+		// a nil check in the exit path.
+	}
 	if provider.Enabled() {
+		// The logs signal is only real once something writes into it, and this
+		// is that something: `telemetry.Start` installs the global logger
+		// provider and nothing in this server had ever logged through it. Until
+		// this line existed, "logs" was announced at startup and published on
+		// the server card while no record was ever exported.
+		//
+		// It is gated on the signal as well as on the provider: with
+		// LIBGEN_MCP_TELEMETRY_SIGNALS=traces the global logger provider is
+		// still the no-op one, so bridging would cost every record a trip
+		// through a handler that discards it.
+		if provider.Signals().Logs {
+			restoreLogger = installSlogBridge(cfg.LogLevel)
+		}
+
+		// After the bridge, so the announcement itself reaches the collector.
+		// Before it, these lines went to stderr alone — which is the one place
+		// an operator running several replicas is not looking, and they are the
+		// lines that say what this deployment exports about its callers.
 		announceTelemetry(ctx, provider, identity)
 	}
 	return identity, func(shutdownCtx context.Context) {
@@ -85,6 +109,11 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 			slog.WarnContext(ctx, "telemetry did not shut down cleanly",
 				"component", "telemetry", "error", shutdownErr)
 		}
+		// After the provider, so a record written during shutdown still reaches
+		// a collector that is listening, and so the bridge's lifetime matches
+		// the provider's: the default logger is a process global, and leaving it
+		// installed routes every later record at an exporter that has stopped.
+		restoreLogger()
 		// After the provider, so a client built during shutdown is not still
 		// recording into a stopped exporter. The observer is process-global, so
 		// leaving it installed would outlive what it writes into — which in a
@@ -92,6 +121,19 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (identity identityC
 		// clients.
 		restoreObserver()
 	}, nil
+}
+
+// installSlogBridge sends every log record to the collector as well as to
+// stderr, and returns the function that takes it back out.
+//
+// The stderr handler is rebuilt here rather than read back from slog.Default():
+// the bridge must wrap a handler whose behavior is known, and the default is
+// whatever the last caller installed. Reading it would work every time it was
+// tried and fail the once it mattered.
+func installSlogBridge(level slog.Level) func() {
+	return logging.SetupWrapped(level, func(base slog.Handler) slog.Handler {
+		return telemetry.NewSlogHandler(base, telemetry.DefaultLogSeverity)
+	})
 }
 
 // outboundMetricHosts are the hosts the outbound duration metric may name.

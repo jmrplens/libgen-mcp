@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/telemetry"
 )
 
 // defaultSocketMode is the permission mode a unix socket is created with when
@@ -109,6 +111,13 @@ type httpPolicy struct {
 	// misleading — a listen address is frequently loopback or a socket behind a
 	// proxy.
 	publicURL string
+	// identity is the telemetry identity policy this deployment resolved, for
+	// the block the enumerating card publishes about what it records.
+	//
+	// The policy rather than the redactor: the card answers what is recorded
+	// about a caller, which is the one question a caller of a public endpoint
+	// cannot otherwise ask — there is nobody to ask.
+	identity telemetry.IdentityPolicy
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

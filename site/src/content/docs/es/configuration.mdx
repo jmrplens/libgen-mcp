@@ -307,6 +307,19 @@ Controla si el argumento opt-in `enrich: true` de `get_details` se respeta en ab
 
 Controla cuándo se consultan los buscadores extra (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC). El valor por defecto `auto` los consulta solo cuando el catálogo de Library Genesis no devuelve nada o falla; `always` los consulta en cada búsqueda, a la vez que el catálogo; `never` restringe cada búsqueda al catálogo, incluso si no hay resultados. Un argumento `extra_sources` por llamada prevalece sobre este valor por defecto en cualquier dirección, con una excepción: un despliegue fijado a `never` es un **cierre**, no un valor por defecto — ninguna llamada puede reactivar las fuentes adicionales, porque una política que quien llama puede anular a título individual no es una política. Los ocho proveedores son sin clave (sin cuenta ni API key) y best-effort, cada uno acotado por su propio presupuesto corto por petición, así que un proveedor lento o que falla nunca retrasa ni hace fallar la búsqueda principal de Library Genesis. Los resultados de Anna's, identificados por md5, se fusionan en `results` (etiquetados por `origin`); el resto aparece en el array separado `open_access`, donde solo se sabe que es de lectura libre una entrada con `open_access: true` — dblp y PubMed son índices bibliográficos, y ERIC solo aloja una parte de lo que indexa. Consulta [Herramientas](/libgen-mcp/es/tools/#descubrimiento-de-acceso-abierto) para ver la forma de salida.
 
+### `LIBGEN_MCP_TELEMETRY` y las variables `OTEL_*`
+
+`LIBGEN_MCP_TELEMETRY` es el único interruptor que este servidor posee. Todo lo relativo a _cómo_ se exporta —el endpoint del colector, el protocolo, las cabeceras, los tiempos de espera, el muestreo, el tamaño de los lotes, los atributos de recurso, el nombre del servicio— procede de las variables estándar `OTEL_*`, que el SDK de OpenTelemetry lee por su cuenta.
+
+**Esos nombres nunca llevan prefijo, y no es una incoherencia.** Toda variable que define este servidor lleva `LIBGEN_MCP_`, porque un servidor stdio se ejecuta en el intérprete de órdenes desde el que se lanzó su cliente, junto a cualquier otra herramienta que esa persona use, y un `TIMEOUT` a secas puede pertenecer ya a alguna de ellas. Un nombre `OTEL_*` no es nuestro para elegirlo: el SDK lee la grafía que le da la especificación, así que `LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` sería una variable que nadie lee. Lo mismo vale para `LIBGEN_MIRROR`, que sigue la convención de la propia familia de mirrors.
+
+Dos consecuencias que conviene conocer antes de fijarlas:
+
+- **Se comparten con cualquier otro proceso OpenTelemetry del mismo entorno.** Un solo `OTEL_EXPORTER_OTLP_ENDPOINT` en un fichero de compose configura este servidor y el sidecar de al lado, que suele ser lo que se quiere y de vez en cuando es una sorpresa. Las formas por señal (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` y sus hermanas) son la manera de diferenciarlos.
+- **`OTEL_SDK_DISABLED` veta el interruptor**, y se interpreta con la gramática de la especificación —la palabra `true` sin distinguir mayúsculas, y nada más— en lugar de con la más laxa de este servidor. No puede ser el interruptor de _encendido_, porque su valor por defecto especificado significa «el SDK está habilitado» mientras que aquí la telemetría está apagada hasta que se pide; así que ambos se componen: el nuestro enciende la exportación y el de la especificación puede apagarla desde fuera.
+
+Qué se exporta, y qué deliberadamente no, está en [Privacidad](/libgen-mcp/es/privacy/) y en las filas de identidad de arriba. Con la telemetría encendida, el despliegue también lo declara en su propia tarjeta de servidor, de modo que quien llama a un endpoint público puede ver que sus llamadas están instrumentadas sin tener que preguntar.
+
 ## Preguntas frecuentes
 
 ### ¿Cuál es la configuración mínima de libgen-mcp?
