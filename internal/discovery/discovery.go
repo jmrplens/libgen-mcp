@@ -135,15 +135,21 @@ func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status
 // higher rate to a request carrying a contact email in its agent string — override
 // the default discovery agent. Its context and body-bounding semantics are
 // identical to boundedGet.
+//
+// Both failures are redacted. Crossref's query string carries the operator's
+// contact address (the "mailto" politeness parameter), and a *url.Error prints
+// the whole URL. Nothing renders these errors today — Federate drops a provider
+// failure on the floor — so this is the leak being closed before it opens, on
+// the day something starts recording a provider refusal.
 func boundedGetUA(ctx context.Context, client *http.Client, rawURL, userAgent string) (status int, body []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, netguard.RedactTransportError(err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, netguard.RedactTransportError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err = io.ReadAll(io.LimitReader(resp.Body, discoveryMaxBody))

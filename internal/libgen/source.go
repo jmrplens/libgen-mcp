@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/jmrplens/libgen-mcp/internal/netguard"
 )
 
 // httpClientOr returns c, or http.DefaultClient when c is nil. Every source keeps
@@ -102,10 +104,13 @@ type jsonFetch struct {
 // with the taxonomy in sourceerr.go: a transport error or a transient status is the
 // source being unavailable, while a decode failure stays untagged so a body we could
 // not read never reads as a verdict on the item.
+//
+// Both failures are redacted: this helper is shared by every JSON-fetching source,
+// so a source added later inherits the rule instead of having to remember it.
 func (f jsonFetch) get(ctx context.Context, endpoint string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("%s: building request for %q: %w", f.source, f.subject, err)
+		return fmt.Errorf("%s: building request for %q: %w", f.source, f.subject, netguard.RedactTransportError(err))
 	}
 	req.Header.Set("User-Agent", userAgent())
 	// Go sends no Accept header of its own, and a content-negotiating REST host can
@@ -115,7 +120,7 @@ func (f jsonFetch) get(ctx context.Context, endpoint string, out any) error {
 
 	resp, err := httpClientOr(f.client).Do(req)
 	if err != nil {
-		return unavailable(fmt.Errorf("%s: requesting %q: %w", f.source, f.subject, err))
+		return unavailable(fmt.Errorf("%s: requesting %q: %w", f.source, f.subject, netguard.RedactTransportError(err)))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {

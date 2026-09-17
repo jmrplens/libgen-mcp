@@ -255,6 +255,28 @@ When rendering them into Markdown, always pass them through `mdCell` (table
 cells) or `fencedBlock` (code blocks) from `internal/tools/markdown.go`. Never
 interpolate external strings into Markdown directly.
 
+### Secrets in an outbound URL
+
+A key rides in the `Authorization` header, never in the URL — the rule
+`internal/libgen/source_core.go` states beside the code and CORE follows.
+
+Where a service accepts the secret only in the query string (Anna's member
+endpoint, Unpaywall's contact address, Crossref's `mailto`), the request is
+built that way and **the failure is redacted before anything wraps it**:
+`net/http` reports a transport-level failure as a `*url.Error` whose `Error()`
+prints the whole request URL, query string included, and this server writes such
+an error to two sinks at once — the operator's log stream through
+`logging.SourceAttempt`, and the model's transcript through `downloadFailure`.
+Route the error from every `(*http.Client).Do` and every
+`http.NewRequestWithContext` through `netguard.RedactTransportError`, and name a
+URL in a message with `netguard.RedactURLString`. Those two are the single
+implementation of the rule (userinfo, query and fragment dropped, scheme, host
+and path kept); do not write a second one beside them.
+
+The same applies to a resolved file URL, which on Anna's member path is itself a
+working credential: a presigned URL published in an error is usable by whoever
+reads the log.
+
 ### Doc comments
 
 Every exported (and, per the audit config, every) declaration needs a godoc

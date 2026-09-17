@@ -102,6 +102,12 @@ wanted:
   [privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/).
 - No credentials are required for any core capability. The two optional keys are
   opt-in, and a key supplied per call is used for that request and never stored.
+- A secret rides in a request header wherever the service accepts one, and where
+  it has to ride in the query string the outbound failure is redacted before it
+  is reported. `net/http` returns a transport failure as an error whose message
+  is the whole request URL, so a diagnostic that named the endpoint would
+  otherwise publish the credential it was signed with to the log stream and to
+  the calling model at once.
 - Externally sourced text is escaped through dedicated helpers and marked
   untrusted before it reaches a client.
 - Every handler is panic-safe: an unexpected failure becomes a tool error rather
