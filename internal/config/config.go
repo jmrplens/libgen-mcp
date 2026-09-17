@@ -210,6 +210,33 @@ type Config struct {
 	// aggregated, and logs duplicate a stream an operator shipping stderr to a
 	// pipeline is already collecting.
 	TelemetrySignals string
+	// TelemetryIdentity selects what an exported signal may say about who made a
+	// call: none, pseudonymous or full. LIBGEN_MCP_TELEMETRY_IDENTITY, default
+	// none.
+	//
+	// It is kept as the operator's string rather than a parsed value because
+	// this package must not depend on internal/telemetry: the validation lives
+	// where the policy does, and an unknown value fails startup there.
+	TelemetryIdentity string
+	// TelemetryIdentityKey is the operator's pseudonymisation secret.
+	// LIBGEN_MCP_TELEMETRY_IDENTITY_KEY, empty by default.
+	//
+	// Supplied, it gives every replica the same digest for one caller, and it
+	// never rotates: a key the operator provided is theirs to rotate, on their
+	// schedule, from outside. Empty, a key is generated at startup and written
+	// nowhere, so the pseudonym dies with the process.
+	//
+	// It is a credential and has no flag, for the reason the other three do not:
+	// a secret on a command line is visible to every user on the machine through
+	// ps and lands in shell history.
+	TelemetryIdentityKey string
+	// TelemetryIdentityRotation is how long a *generated* identity key lives.
+	// LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION, zero (the life of the process) by
+	// default, capped at thirty days.
+	//
+	// Ignored when a key is configured, with a warning: rotating a key somebody
+	// else supplied would destroy the correlation they configured it for.
+	TelemetryIdentityRotation time.Duration
 	// AllowedReadDirs widens the directories the read tool's `path` argument may
 	// resolve into. LIBGEN_MCP_ALLOWED_READ_DIRS, an OS path list (colon-separated
 	// on Unix, semicolon-separated on Windows). Empty by default.
@@ -493,6 +520,15 @@ func loadStringVars(cfg *Config) {
 	if v := TrimmedGetenv("TELEMETRY_SIGNALS"); v != "" {
 		cfg.TelemetrySignals = v
 	}
+	if v := TrimmedGetenv("TELEMETRY_IDENTITY"); v != "" {
+		cfg.TelemetryIdentity = v
+	}
+	// Not trimmed: a secret is whatever the operator set, and silently altering
+	// one would give two deployments that believe they share a key two different
+	// digests.
+	if v := Getenv("TELEMETRY_IDENTITY_KEY"); v != "" {
+		cfg.TelemetryIdentityKey = v
+	}
 }
 
 // loadDownloadTuning fills the download-tuning fields (the per-source resolve
@@ -615,6 +651,9 @@ func loadNumeric(cfg *Config) error {
 		return err
 	}
 	if err := envDuration("READ_CACHE_TTL", &cfg.ReadCacheTTL); err != nil {
+		return err
+	}
+	if err := envDuration("TELEMETRY_IDENTITY_ROTATION", &cfg.TelemetryIdentityRotation); err != nil {
 		return err
 	}
 	return nil

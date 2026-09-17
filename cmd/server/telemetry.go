@@ -38,6 +38,10 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (stop func(context.
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_SIGNALS"), err)
 	}
+	identity, err := resolveIdentity(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	provider, startErr := telemetry.Start(ctx, telemetry.Config{
 		Enabled:        cfg.Telemetry,
@@ -54,7 +58,7 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (stop func(context.
 	}
 
 	if provider.Enabled() {
-		announceTelemetry(ctx, provider)
+		announceTelemetry(ctx, provider, identity)
 	}
 	return func(shutdownCtx context.Context) {
 		if shutdownErr := provider.Shutdown(shutdownCtx); shutdownErr != nil {
@@ -72,7 +76,18 @@ func startTelemetry(ctx context.Context, cfg *config.Config) (stop func(context.
 // suppress everything below it — so a deployment running at warn would export
 // every call with nothing on its own stderr naming the collector, and the
 // exported copy is no help to somebody looking for the destination.
-func announceTelemetry(ctx context.Context, provider *telemetry.Provider) {
+func announceTelemetry(ctx context.Context, provider *telemetry.Provider, identity identityChoice) {
+	// The policy in the same breath as the destination, in words rather than as
+	// a mode name: "pseudonymous" means nothing on its own, and an operator who
+	// misconfigured this deserves to notice at startup rather than from a
+	// backend three weeks later.
+	slog.WarnContext(ctx, "telemetry identity policy",
+		"component", "telemetry",
+		"policy", string(identity.policy),
+		"exports", telemetry.PolicyDescription(identity.policy),
+		"key", identity.keySource(),
+		"rotation", identity.rotationDescription())
+
 	// Said once, at the moment it applies. The documentation carries the same
 	// warning in prose, which reaches an operator who read that section; this
 	// reaches the one who did not.
@@ -94,4 +109,81 @@ func announceTelemetry(ctx context.Context, provider *telemetry.Provider) {
 		"protocols", snapshot.SignalProtocols,
 		"endpoints", snapshot.SignalEndpoints,
 		"signals", snapshot.Signals)
+}
+
+// identityChoice is the identity half of the telemetry configuration, resolved
+// once so the startup line and the redactors agree about it.
+type identityChoice struct {
+	policy telemetry.IdentityPolicy
+	keys   *telemetry.Keyring
+	// caller redacts who made a call; item redacts what the call was about. Both
+	// are built over the one keyring, so an operator's secret governs both and
+	// neither can outlive the other.
+	caller *telemetry.Redactor
+	item   *telemetry.ItemRedactor
+}
+
+// keySource says where the pseudonymisation secret came from, for the startup
+// line.
+//
+// Whether the key is configured is the single most consequential thing about a
+// multi-replica deployment's telemetry — it decides whether one caller has one
+// digest across the fleet or one per replica — and it is invisible from the
+// outside, since both produce digests that look identical.
+func (c identityChoice) keySource() string {
+	switch {
+	case c.keys == nil:
+		return "none (no pseudonym is emitted)"
+	case c.keys.Configured():
+		return "configured (" + config.EnvName("TELEMETRY_IDENTITY_KEY") + "), shared across replicas and never rotated here"
+	default:
+		return "generated at startup, written nowhere, not shared across replicas"
+	}
+}
+
+// rotationDescription renders the lifetime of a generated key.
+func (c identityChoice) rotationDescription() string {
+	if c.keys == nil || c.keys.Configured() || c.keys.Rotation() <= 0 {
+		return "none (the key lives as long as the process)"
+	}
+	return c.keys.Rotation().String()
+}
+
+// resolveIdentity parses the identity policy and builds the keyring the
+// pseudonyms are computed under.
+//
+// The keyring is built even under `none`, and deliberately: the item redactor
+// digests an identifier under every policy, so a deployment that records nothing
+// about its callers still tells one failing book from a failing mirror.
+//
+// Both refusals are startup errors rather than warnings, because both are this
+// server's own variables: a policy nobody can parse and a rotation interval out
+// of range are deployments that do not match their own configuration.
+func resolveIdentity(cfg *config.Config) (identityChoice, error) {
+	policy, err := telemetry.ParseIdentityPolicy(cfg.TelemetryIdentity)
+	if err != nil {
+		return identityChoice{}, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_IDENTITY"), err)
+	}
+
+	keys, err := telemetry.NewKeyring(cfg.TelemetryIdentityKey, cfg.TelemetryIdentityRotation)
+	if err != nil {
+		return identityChoice{}, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_IDENTITY_ROTATION"), err)
+	}
+	if keys.Configured() && cfg.TelemetryIdentityRotation > 0 {
+		// Said rather than silently obeyed or silently ignored. An operator who
+		// set both has a mental model where one of them does nothing, and which
+		// one is not guessable from the outside.
+		slog.Warn("the identity key is configured, so the rotation interval is ignored",
+			"component", "telemetry",
+			"key", config.EnvName("TELEMETRY_IDENTITY_KEY"),
+			"rotation", config.EnvName("TELEMETRY_IDENTITY_ROTATION"),
+			"reason", "rotating a key the operator supplied would destroy the correlation they configured it for")
+	}
+
+	return identityChoice{
+		policy: policy,
+		keys:   keys,
+		caller: telemetry.NewRedactor(policy, keys),
+		item:   telemetry.NewItemRedactor(policy, keys),
+	}, nil
 }
