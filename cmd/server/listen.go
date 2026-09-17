@@ -65,9 +65,20 @@ type listenSpec struct {
 	charge chargePolicy
 	// records is the per-caller state this deployment keeps, or nil when it
 	// keeps none. Its contents depend on the listener too — a listener whose
-	// every peer is this machine cannot tell two callers apart, so there is
-	// nothing worth keeping per caller there.
+	// every peer is this machine cannot tell two callers apart, so the buckets
+	// in it are nil there.
 	records *clientRecords
+	// inflight is --max-inflight-per-client as it arrived, not as it resolves.
+	// Its default is the configured download concurrency, which is not known
+	// until the configuration is read — after the flags are parsed.
+	inflight inflightFlag
+}
+
+// inflightFlag is --max-inflight-per-client and whether the operator passed it,
+// which is what separates "use the default" from "turn the bound off".
+type inflightFlag struct {
+	value    int
+	explicit bool
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

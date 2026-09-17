@@ -26,11 +26,11 @@ var oneAtATime = []string{"--rate-limit-rps", "0.001", "--rate-limit-burst", "1"
 // off on a listener whose every peer is this machine unless a proxy is named,
 // and startServer binds 127.0.0.1. A case about the limit being ON with no proxy
 // flags has to be on the listener where that is allowed.
-func startWildcardServer(t *testing.T, flags ...string) *server {
+func startWildcardServer(t *testing.T, env map[string]string, flags ...string) *server {
 	t.Helper()
 
 	port := freePort(t)
-	return launchServer(t, fmt.Sprintf("http://127.0.0.1:%d", port), nil, nil,
+	return launchServer(t, fmt.Sprintf("http://127.0.0.1:%d", port), nil, env,
 		append([]string{"--http", fmt.Sprintf(":%d", port)}, flags...))
 }
 
@@ -72,7 +72,7 @@ func rpcErrorCode(t *testing.T, what string, reply response) int {
 // they share a bucket it is because the server cannot tell them apart — which is
 // exactly the failure the flags are there to prevent.
 func TestRateLimit_TwoForwardedAddressesGetABucketEach(t *testing.T) {
-	s := startWildcardServer(t, append([]string{
+	s := startWildcardServer(t, nil, append([]string{
 		"--trusted-proxy-header", "X-Real-IP",
 		"--trusted-proxies", "127.0.0.1/32",
 	}, oneAtATime...)...)
@@ -103,7 +103,7 @@ func TestRateLimit_TwoForwardedAddressesGetABucketEach(t *testing.T) {
 // makes the test above mean something: without it, a build that ignored the
 // header entirely would pass by refusing nobody.
 func TestRateLimit_WithoutTheProxyFlagsEveryCallerSharesOneBucket(t *testing.T) {
-	s := startWildcardServer(t, oneAtATime...)
+	s := startWildcardServer(t, nil, oneAtATime...)
 
 	if code := rpcErrorCode(t, "the first request", s.do(t, forwardedFrom("X-Real-IP", "203.0.113.7"))); code != 0 {
 		t.Fatalf("the very first request was refused with code %d", code)
@@ -122,7 +122,7 @@ func TestRateLimit_WithoutTheProxyFlagsEveryCallerSharesOneBucket(t *testing.T) 
 // serves, so anything per-request would be a flood — and a flood is how a
 // warning stops being read.
 func TestRateLimit_TheWarningNamesTheFlagsThatFixIt(t *testing.T) {
-	s := startWildcardServer(t, oneAtATime...)
+	s := startWildcardServer(t, nil, oneAtATime...)
 
 	// Two requests, so a per-request line would show up as two.
 	for range 2 {

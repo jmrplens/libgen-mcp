@@ -217,19 +217,37 @@ func TestTheSweepIsRateLimited(t *testing.T) {
 	}
 }
 
-// TestNoRecordsWhenTheLimitIsOff keeps a table from existing when nothing is
-// metered: it would grow an entry per address and remember nothing anybody reads.
-func TestNoRecordsWhenTheLimitIsOff(t *testing.T) {
-	if got := newClientRecordsFor(rateLimitDecision{off: true, reason: "test"}, chargePolicy{}); got != nil {
-		t.Error("a table was built although the limit is off")
+// TestTheTableExistsForEveryHTTPDeployment pins what it is for.
+//
+// It outlives the rate limit being off, because the in-flight ceiling is keyed
+// on the same record: a deployment whose limiter is off still bounds how many
+// files one caller is moving. With the limit off the records simply carry no
+// bucket, which the limiter reads as disabled. stdio gets no table at all —
+// there is one caller, nobody to be fair to, and the download semaphore is
+// already theirs alone.
+func TestTheTableExistsForEveryHTTPDeployment(t *testing.T) {
+	if got := newClientRecordsFor(false, rateLimitDecision{rps: 10, burst: 40}, chargePolicy{}); got != nil {
+		t.Error("a table was built for a deployment that serves no HTTP")
 	}
-	records := newClientRecordsFor(rateLimitDecision{rps: 10, burst: 40}, chargePolicy{})
-	if records == nil {
-		t.Fatal("no table was built although the limit is on")
-	}
-	rec, end := records.begin("203.0.113.7")
-	defer end()
-	if rec.limiter == nil {
-		t.Error("the record carries no bucket, so the limit is on and meters nothing")
-	}
+
+	t.Run("with the limit on", func(t *testing.T) {
+		records := newClientRecordsFor(true, rateLimitDecision{rps: 10, burst: 40}, chargePolicy{})
+		rec, end := records.begin("203.0.113.7")
+		defer end()
+		if rec.limiter == nil {
+			t.Error("the record carries no bucket, so the limit is on and meters nothing")
+		}
+	})
+
+	t.Run("with the limit off", func(t *testing.T) {
+		records := newClientRecordsFor(true, rateLimitDecision{off: true, reason: "test"}, chargePolicy{})
+		if records == nil {
+			t.Fatal("no table at all, so the in-flight ceiling has nothing to count on")
+		}
+		rec, end := records.begin("203.0.113.7")
+		defer end()
+		if rec.limiter != nil {
+			t.Error("the record carries a bucket although the limit is off")
+		}
+	})
 }

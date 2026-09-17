@@ -22,9 +22,14 @@ import (
 // budget their traffic counts against.
 const clientAddressHeader = "X-Libgen-Mcp-Client"
 
-// limiterKey carries the bucket a request draws on, from the middleware that
-// resolves it to the one that spends it.
-type limiterKey struct{}
+// recordKey carries the caller's record, from the middleware that resolves it to
+// the ones that read it.
+//
+// The record rather than the bucket alone: two layers inside it ask different
+// questions of the same caller — may they spend a token, and are they already
+// moving as many files as this deployment allows — and resolving the address
+// twice is how the two come to disagree about who is calling.
+type recordKey struct{}
 
 // chargedAddressOf reads the address an MCP request is charged to, or "" when it
 // arrived on a transport that stamps none — stdio, and the in-memory session the
@@ -40,11 +45,21 @@ func chargedAddressOf(req mcp.Request) string {
 	return extra.Header.Get(clientAddressHeader)
 }
 
+// recordFrom returns the caller's record, or nil on a transport that names no
+// caller.
+func recordFrom(ctx context.Context) *clientRecord {
+	rec, _ := ctx.Value(recordKey{}).(*clientRecord)
+	return rec
+}
+
 // limiterFrom returns the bucket [clientRecords.meter] resolved for this
 // request, or nil when there is none — which the limiter treats as disabled.
 func limiterFrom(ctx context.Context) *toolutil.RateLimiter {
-	limiter, _ := ctx.Value(limiterKey{}).(*toolutil.RateLimiter)
-	return limiter
+	rec := recordFrom(ctx)
+	if rec == nil {
+		return nil
+	}
+	return rec.limiter
 }
 
 // The table's bounds.
@@ -73,7 +88,24 @@ type clientRecord struct {
 	// A record with work in flight is skipped by the eviction, so a caller
 	// mid-call does not lose the bucket that is bounding them.
 	inFlight int
+	// heavy counts the calls that move bytes — download and read — this address
+	// has running right now. It is what [clientRecords.enterHeavy] bounds.
+	//
+	// It is counted whether or not a ceiling is configured. Counting and capping
+	// are two jobs, and skipping the increment when no cap is set switches both
+	// off at once: the count is also what tells the eviction that this caller is
+	// busy, so a deployment that removed the ceiling would quietly make every
+	// downloading record look idle.
+	heavy int
 }
+
+// busy reports whether this caller has anything running.
+//
+// Both counters, because they answer the same question for different work and
+// the eviction has to respect either: losing a record mid-request loses the
+// bucket that was bounding that caller and the count that was holding their
+// ceiling, and they start again from zero.
+func (r *clientRecord) busy() bool { return r.inFlight > 0 || r.heavy > 0 }
 
 // clientRecords is a bounded table of per-address state.
 //
@@ -107,6 +139,10 @@ type clientRecords struct {
 	byAddress map[string]*clientRecord
 	// lastSweep is when lapsed records were last removed.
 	lastSweep time.Time
+	// heavyTotal is how many byte-moving calls every caller has in flight
+	// together. The per-client ceiling multiplies by however many callers there
+	// are, so this is the only one that bounds the process.
+	heavyTotal int
 	// newLimiter mints a bucket for a new address. It is a field so a test can
 	// build a table whose buckets it controls.
 	newLimiter func() *toolutil.RateLimiter
@@ -138,14 +174,19 @@ func newClientRecords(newLimiter func() *toolutil.RateLimiter, charge chargePoli
 	}
 }
 
-// newClientRecordsFor builds the table a decision calls for, or nil when it
-// calls for none.
+// newClientRecordsFor builds the table an HTTP deployment keeps, or nil for one
+// that keeps nothing about its callers.
 //
-// Nil rather than an empty table with nil buckets: there is nothing to remember
-// about a caller when nothing is being metered, and a table that exists would
-// grow one entry per address for no reason at all.
-func newClientRecordsFor(limit rateLimitDecision, charge chargePolicy) *clientRecords {
-	if limit.off {
+// The table outlives the rate limit being off: the in-flight ceiling is keyed on
+// the same record, and a deployment whose limiter is off — a loopback bind with
+// no proxy named — still bounds how many files one caller is moving. With the
+// limit off the records simply carry no bucket, which the limiter reads as
+// disabled.
+//
+// Nil is for stdio, where there is one caller, nobody to be fair to, and the
+// download semaphore is already theirs alone.
+func newClientRecordsFor(serving bool, limit rateLimitDecision, charge chargePolicy) *clientRecords {
+	if !serving {
 		return nil
 	}
 	return newClientRecords(limit.newLimiter, charge)
@@ -212,7 +253,7 @@ func (c *clientRecords) makeRoomLocked(now time.Time) {
 func (c *clientRecords) sweepLocked(now time.Time) {
 	c.lastSweep = now
 	for address, rec := range c.byAddress {
-		if rec.inFlight == 0 && now.Sub(rec.lastSeen) > c.ttl {
+		if !rec.busy() && now.Sub(rec.lastSeen) > c.ttl {
 			delete(c.byAddress, address)
 		}
 	}
@@ -234,7 +275,7 @@ func (c *clientRecords) evictLocked() bool {
 		foundBusy bool
 	)
 	for address, rec := range c.byAddress {
-		if rec.inFlight == 0 {
+		if !rec.busy() {
 			if !foundIdle || rec.lastSeen.Before(idleSeen) {
 				idleKey, idleSeen, foundIdle = address, rec.lastSeen, true
 			}
@@ -289,6 +330,6 @@ func (c *clientRecords) meter(next mcp.MethodHandler) mcp.MethodHandler {
 		unidentifiableCallers.warn(address, c.charge)
 		rec, done := c.begin(address)
 		defer done()
-		return next(context.WithValue(ctx, limiterKey{}, rec.limiter), method, req)
+		return next(context.WithValue(ctx, recordKey{}, rec), method, req)
 	}
 }
