@@ -371,7 +371,7 @@ Every other setting — download location, mirror pinning, source allow-list, ra
 
 **Where settings come from.** The process environment (what your client passed) wins, then the file `LIBGEN_MCP_ENV_FILE` names, then `~/.libgen-mcp.env`. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
 
-A few settings also have flags, written into their variables only when you type them: `--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses`, `--env-file`. The three credential-shaped ones above deliberately have none — a secret on a command line is visible through `ps` and lands in your shell history.
+A few settings also have flags, written into their variables only when you type them: `--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses`, `--pprof-addr`, `--env-file`. The three credential-shaped ones above deliberately have none — a secret on a command line is visible through `ps` and lands in your shell history.
 
 ## How it works
 

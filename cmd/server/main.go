@@ -838,6 +838,16 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	logging.Setup(cfg.LogLevel)
 	decision.explain()
 
+	// Before the catalog is registered and before either transport, so a profile
+	// of startup itself can be taken. Refused rather than warned about when the
+	// address is not loopback: a profile listener on a reachable interface hands
+	// out copies of this process's memory.
+	profiler, err := startPprofListener(ctx, pprofListenAddr())
+	if err != nil {
+		return err
+	}
+	defer profiler.stop()
+
 	server, err := newRegisteredServer(cfg, spec.addr)
 	if err != nil {
 		return err
