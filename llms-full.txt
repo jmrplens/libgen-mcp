@@ -281,6 +281,8 @@ All configuration is via environment variables. Every variable is optional and n
 | `LIBGEN_MCP_RATE_LIMIT_BURST` | 40 | an integer | How many of those requests one charged address may make at once before the refill rate applies. |
 | `LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT` | the configured LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS | an integer; 0 or less turns the bound off | How many download or read calls one charged address may have in flight. A separate ceiling of 64 bounds the process whatever this says. |
 | `LIBGEN_MCP_DRAIN_DELAY` | 0 | [0, 5m], Go duration | How long GET /health answers 503 draining before the listener is closed on shutdown. Set it to at least one probe interval of whatever is in front. |
+| `LIBGEN_MCP_TELEMETRY` | false | 1/true/0/false | Export OpenTelemetry traces, metrics and logs to a collector. Off unless an operator asks, for privacy rather than cost: instrumenting a deployment is a decision about that deployment's own users. Everything else about the exporters — endpoint, headers, timeouts, sampling, resource attributes — comes from the standard OTEL_* variables the SDK reads itself, which is why this is the only name here. OTEL_SDK_DISABLED vetoes it, under the specification's own grammar (the case-insensitive word true and nothing else). |
+| `LIBGEN_MCP_TELEMETRY_SIGNALS` | empty (all three) | comma-separated subset of: traces, metrics, logs | Which signals are exported. Separable because their costs differ: traces are per call, metrics are aggregated, and logs duplicate a stream an operator shipping stderr to a pipeline already collects. An unrecognized name fails startup rather than being dropped, since a signal misspelled and a signal left out are indistinguishable from the outside. |
 
 ## Download sources
 

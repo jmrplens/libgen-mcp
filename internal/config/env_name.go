@@ -82,6 +82,8 @@ var knownNames = []string{
 	"SCIHUB_HOSTS",
 	"SERVER_FETCH",
 	"SOURCES",
+	"TELEMETRY",
+	"TELEMETRY_SIGNALS",
 	"TIMEOUT",
 	"UNPAYWALL_EMAIL",
 }
