@@ -167,6 +167,33 @@ func (m *Manager) resolveFamily() Family {
 	return m.family
 }
 
+// KnownFamilies lists the mirror families this server ships with. It is the set
+// [OperatorHosts] reads, so a family added later is covered by adding it here
+// rather than by remembering a second list.
+var KnownFamilies = []Family{LibgenFamily, AnnasFamily}
+
+// OperatorHosts returns every destination this deployment chose for itself: the
+// hosts named in the configuration (see [config.Config.OperatorHosts]) plus the
+// catalog, preferred mirror and fallback list each known family ships with.
+//
+// The family constants belong here because they are this server's own choice of
+// where to look, the same kind of decision LIBGEN_MIRROR makes explicitly. What
+// is deliberately NOT here is the mirror list those constants produce: a
+// hostname scraped from the shadowlibraries catalog is a third party's, and a
+// catalog page that started answering with 127.0.0.1 would otherwise be reading
+// this server's own loopback back to it.
+func OperatorHosts(cfg *config.Config) []string {
+	var hosts []string
+	if cfg != nil {
+		hosts = cfg.OperatorHosts()
+	}
+	for _, f := range KnownFamilies {
+		hosts = append(hosts, f.SourceURL, f.Preferred)
+		hosts = append(hosts, f.Fallback...)
+	}
+	return hosts
+}
+
 // NewManager builds a Manager for the libgen family from the configuration,
 // using the configured mirror as preferred (or DefaultPreferred when unset) and
 // the OS cache dir for the cache.
@@ -191,8 +218,11 @@ func NewManagerFor(f Family, cfg *config.Config) (*Manager, error) {
 		SourceURL: f.SourceURL,
 		CachePath: filepath.Join(cacheDir, "libgen-mcp", f.CacheFile),
 		Preferred: preferred,
-		HTTP:      netguard.Client(cfg.Timeout, cfg.AllowPrivateAddresses),
-		family:    f,
+		// Discovery fetches the catalog page and probes the mirrors it lists. The
+		// page is an operator-named destination; what it lists is not, which is
+		// the distinction the policy carries.
+		HTTP:   netguard.ClientFor(cfg.Timeout, netguard.NewPolicy(OperatorHosts(cfg), cfg.AllowPrivateAddresses)),
+		family: f,
 	}, nil
 }
 

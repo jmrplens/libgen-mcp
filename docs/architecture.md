@@ -23,9 +23,9 @@ instance-metadata endpoint — and if it did, the server would be acting as a pr
 network the depositor could never reach directly. That is server-side request forgery, and
 `internal/netguard` is where it is refused.
 
-The check lives in the dialer's `Control` hook rather than on the URL, because only the dialer
-sees what the name actually resolved to. A URL-level check is defeated by a public hostname
-with a private `A` record and by DNS rebinding; the `Control` hook is handed the concrete IP
+The check lives in the dialer's `ControlContext` hook rather than on the URL, because only the
+dialer sees what the name actually resolved to. A URL-level check is defeated by a public
+hostname with a private `A` record and by DNS rebinding; the hook is handed the concrete IP
 microseconds before `connect`. Blocked: loopback, `0.0.0.0/8`, the IPv4 broadcast address,
 link-local unicast and multicast (`169.254.0.0/16`, which contains `169.254.169.254`, and
 `fe80::/10`), every multicast scope, RFC 1918 and RFC 4193 private space, and RFC 6598
@@ -34,13 +34,24 @@ carrier-grade NAT — each also in its IPv4-mapped IPv6 disguise.
 Because the policy is installed on the shared `Transport`, every download source, every
 liveness probe, every discovery provider and every mirror lookup inherits it at once, rather
 than each having to remember. A complementary redirect policy bounds the chain at five hops
-and strips `Authorization` and `Cookie` whenever a redirect changes host — which is the one
-protection the dialer cannot give, since `net/http` keeps those headers for any _subdomain_ of
-the original.
+and strips `Authorization`, `Cookie` and `Referer` whenever a redirect changes scheme, host or
+port — which is the one protection the dialer cannot give, since `net/http` keeps those
+headers for any _subdomain_ of the original.
 
-`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES=true` lifts it, for the one legitimate case: an operator
-running their own mirror on their own network. It is off by default and applies to every
-source at once, in both directions.
+**A host the operator named is exempt from the private-address tier, whatever it resolves
+to.** The hosts of `LIBGEN_MIRROR` and `LIBGEN_MCP_SCIHUB_HOSTS`, plus each mirror family's
+own catalog, preferred mirror and fallback list, are the destinations this deployment chose
+for itself; everything else — a resolved download URL, a provider's result, a mirror hostname
+scraped from the catalog page, a redirect hop that leaves a named host — is somebody else's
+and gets the strict tier. The distinction cannot be a property of the client, because the same
+client fetches both, so it is stamped per request and read in the dialer. See
+[the operator-named-host ADR](decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md)
+for the reasoning and the costs.
+
+`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES=true` lifts the tier for every destination at once, in
+both directions. It is off by default, and since the exemption above covers the case it
+existed for — an operator running their own mirror on their own network — a deployment that
+set it only for that can now drop it.
 
 It does **not** lift everything. Four addresses are refused whatever the flag says — the cloud
 instance metadata endpoints (`169.254.169.254`, `169.254.170.2`, `fd00:ec2::254` and

@@ -246,23 +246,23 @@ func TestControlIsInstalledWhateverTheAllowanceSays(t *testing.T) {
 	}
 	// Under the allowance a private destination is the point of the flag and must
 	// still be dialed.
-	if err := control(true)("tcp", "10.0.0.1:80", nil); err != nil {
+	if err := control(true)(t.Context(), "tcp", "10.0.0.1:80", nil); err != nil {
 		t.Errorf("control(true) refused a private address (%v); that is what the flag exists to permit", err)
 	}
-	if err := control(false)("tcp", "10.0.0.1:80", nil); !errors.Is(err, ErrBlockedAddress) {
+	if err := control(false)(t.Context(), "tcp", "10.0.0.1:80", nil); !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("control error %v is not ErrBlockedAddress", err)
 	}
-	if err := control(false)("tcp", "not-an-address", nil); !errors.Is(err, ErrBlockedAddress) {
+	if err := control(false)(t.Context(), "tcp", "not-an-address", nil); !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("a destination with no port must be refused, got %v", err)
 	}
 	// A destination that splits cleanly but is not an IP literal reaches the other
 	// refusal branch. Control is only ever handed resolved addresses, so this should
 	// be unreachable in practice — which is exactly why it must be pinned rather
 	// than assumed.
-	if err := control(false)("tcp", "example.org:443", nil); !errors.Is(err, ErrBlockedAddress) {
+	if err := control(false)(t.Context(), "tcp", "example.org:443", nil); !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("a non-literal destination must be refused, got %v", err)
 	}
-	if err := control(false)("tcp", "104.18.32.7:443", nil); err != nil {
+	if err := control(false)(t.Context(), "tcp", "104.18.32.7:443", nil); err != nil {
 		t.Errorf("control error = %v, want a public address permitted", err)
 	}
 }

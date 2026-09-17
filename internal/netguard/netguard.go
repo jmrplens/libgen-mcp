@@ -21,6 +21,7 @@
 package netguard
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -172,14 +173,17 @@ func metadataEndpoint(addr netip.Addr) (string, bool) {
 // is always handed a resolved IP literal, so that path is defensive rather than
 // reachable, and refusing is what the rest of this package already does with an
 // address it cannot judge.
-func control(allowPrivate bool) func(network, address string, c syscall.RawConn) error {
-	return func(_, address string, _ syscall.RawConn) error {
+func control(allowPrivate bool) func(ctx context.Context, network, address string, c syscall.RawConn) error {
+	return func(ctx context.Context, _, address string, _ syscall.RawConn) error {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
 			return fmt.Errorf("%w: unparseable destination %q", ErrBlockedAddress, address)
 		}
 		// Control is always handed a resolved IP literal, never a name, which is
-		// exactly why the check belongs here.
+		// exactly why the check belongs here: a public hostname with a private A
+		// record and a DNS rebinding both arrive here as what they resolved to,
+		// and there is no window between this check and the connection because
+		// this IS the connection.
 		addr, err := netip.ParseAddr(host)
 		if err != nil {
 			return fmt.Errorf("%w: unparseable destination %q", ErrBlockedAddress, host)
@@ -187,14 +191,35 @@ func control(allowPrivate bool) func(network, address string, c syscall.RawConn)
 		if what, ok := metadataEndpoint(addr); ok {
 			return fmt.Errorf("%w: %s is %s", ErrBlockedAddress, addr, what)
 		}
-		if allowPrivate {
+		if !Blocked(addr) {
 			return nil
 		}
-		if Blocked(addr) {
-			return fmt.Errorf("%w: %s", ErrBlockedAddress, addr)
-		}
+		return tierB(ctx, addr, allowPrivate)
+	}
+}
+
+// tierB decides a private destination, which is the tier the operator's own
+// configuration can answer for.
+//
+// A host the operator named is exempt whatever it resolves to. Refusing one
+// would mean telling everyone running a mirror on their own network that it is
+// now a risk to their own server, and the flag that undid it would be passed by
+// all of them — a guard that protects nobody and annoys everybody. The exemption
+// is what lets this tier be strict about every destination a third party
+// supplied, which is the class the guard exists for.
+//
+// A request that carries no decision at all is governed by the client's own
+// setting alone, which is what this package did before the distinction existed.
+// Nothing in this server dials unstamped; a caller borrowing the bare Transport
+// chose its own destination and is not what this guard is about.
+func tierB(ctx context.Context, addr netip.Addr, allowPrivate bool) error {
+	if allowPrivate {
 		return nil
 	}
+	if decision, stamped := dialDecisionFrom(ctx); stamped && decision.permitsPrivate(ctx) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", ErrBlockedAddress, addr)
 }
 
 // Transport builds an http.Transport whose connections are screened by the
@@ -210,7 +235,10 @@ func Transport(allowPrivate bool) *http.Transport {
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		Control:   control(allowPrivate),
+		// ControlContext rather than Control: the per-request decision about
+		// whether the operator named this destination travels on the request's
+		// context, and Control cannot see it.
+		ControlContext: control(allowPrivate),
 	}
 	t.DialContext = dialer.DialContext
 	return t
@@ -234,11 +262,19 @@ func Transport(allowPrivate bool) *http.Transport {
 // every redirect that mirror issues rejected. The hop cap and the credential
 // strip are not address policy and apply either way.
 func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Request) error {
+	return checkRedirectFor(allowPrivate, nil)
+}
+
+// checkRedirectFor is [CheckRedirect] with the operator-named set in hand, so
+// the literal-address shortcut below does not refuse a hop the dialer would
+// have allowed. The dialer is still the authority — this only produces a better
+// message, and earlier, than an opaque dial failure would.
+func checkRedirectFor(allowPrivate bool, policy *Policy) func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) >= maxRedirects {
 			return fmt.Errorf("%w: stopped after %d", ErrTooManyRedirects, len(via))
 		}
-		if err := redirectAddressAllowed(req, allowPrivate); err != nil {
+		if err := redirectAddressAllowed(req, allowPrivate, policy); err != nil {
 			return err
 		}
 		if len(via) > 0 && !sameOrigin(via[len(via)-1].URL, req.URL) {
@@ -254,11 +290,12 @@ func CheckRedirect(allowPrivate bool) func(req *http.Request, via []*http.Reques
 // to.
 //
 // The tiers are the dialer's, deliberately: a metadata endpoint is refused
-// whatever the flag says, and everything else is refused only when private
-// destinations are not permitted. A redirect is the cheaper half of the attack,
-// since a URL deposited in an index need only bounce once, so the two halves of
-// one client must not disagree about what is reachable.
-func redirectAddressAllowed(req *http.Request, allowPrivate bool) error {
+// whatever the configuration says, and a private address is refused unless the
+// operator's own configuration answers for it — the flag, the host being one
+// they named, or a named host that is itself private. A redirect is the cheaper
+// half of the attack, since a URL deposited in an index need only bounce once,
+// so the two halves of one client must not disagree about what is reachable.
+func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy) error {
 	addr, spelledAsAddress := addressLiteral(req.URL.Hostname())
 	if !spelledAsAddress {
 		return nil
@@ -266,10 +303,14 @@ func redirectAddressAllowed(req *http.Request, allowPrivate bool) error {
 	if what, ok := metadataEndpoint(addr); ok {
 		return fmt.Errorf("%w: redirect to %s, %s", ErrBlockedAddress, addr, what)
 	}
-	if !allowPrivate && Blocked(addr) {
-		return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
+	if allowPrivate || !Blocked(addr) {
+		return nil
 	}
-	return nil
+	decision := dialDecision{policy: policy, operatorNamed: policy.Names(req.URL.Hostname())}
+	if decision.permitsPrivate(req.Context()) {
+		return nil
+	}
+	return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
 }
 
 // stripSensitiveHeaders removes the headers that must not follow a redirect off
@@ -343,12 +384,25 @@ func effectivePort(u *url.URL) string {
 // and nothing in that intent covers handing out the credentials of the machine
 // it is running on.
 func Client(timeout time.Duration, allowPrivate bool) *http.Client {
+	return ClientFor(timeout, NewPolicy(nil, allowPrivate))
+}
+
+// ClientFor is [Client] for a caller that knows which hosts the operator named.
+//
+// Those hosts are exempt from the private-address tier whatever they resolve to,
+// which is what lets the guard be strict about everything else. A caller with no
+// such list gets a client that treats every destination as third-party, which is
+// the behavior this package had before the distinction existed and is the safe
+// direction to default to.
+func ClientFor(timeout time.Duration, policy *Policy) *http.Client {
 	// One decision, applied to both halves of the policy: the dialer and the
 	// redirect check must never disagree about what this client may reach.
-	allow := allowPrivate || privateAllowedForTest.Load()
+	allow := policy.AllowsPrivate() || privateAllowedForTest.Load()
 	c := &http.Client{
-		Transport:     Transport(allow),
-		CheckRedirect: CheckRedirect(allow),
+		// The stamping transport wraps the guarded one rather than replacing it,
+		// so the decision is attached immediately before the dial.
+		Transport:     &policyTransport{base: Transport(allow), policy: policy},
+		CheckRedirect: checkRedirectFor(allow, policy),
 	}
 	if timeout > 0 {
 		c.Timeout = timeout

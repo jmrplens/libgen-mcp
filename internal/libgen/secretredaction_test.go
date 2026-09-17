@@ -189,13 +189,17 @@ func TestZeroValueSourceDialsThroughTheGuard(t *testing.T) {
 		t.Fatal("the fallback is http.DefaultClient, which has no address policy at all")
 	}
 
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok || transport.DialContext == nil {
-		t.Fatal("the fallback client has no dialer to check")
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://169.254.169.254/latest/meta-data/", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, err := transport.DialContext(t.Context(), "tcp", "169.254.169.254:80")
+	resp, err := client.Transport.RoundTrip(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("the fallback client reached a cloud metadata endpoint")
+	}
 	if !errors.Is(err, netguard.ErrBlockedAddress) {
-		t.Errorf("dial error = %v, want netguard.ErrBlockedAddress; the fallback is not guarded", err)
+		t.Errorf("round-trip error = %v, want netguard.ErrBlockedAddress; the fallback is not guarded", err)
 	}
 }
 

@@ -50,7 +50,7 @@ func TestMetadataAddressesAreRefusedUnderTheAllowance(t *testing.T) {
 
 	for _, tc := range metadataCases {
 		t.Run(tc.addr, func(t *testing.T) {
-			err := hook("tcp", hostPort(tc.addr), nil)
+			err := hook(t.Context(), "tcp", hostPort(tc.addr), nil)
 			if err == nil {
 				t.Fatalf("dialing %s was permitted under the private-address allowance", tc.addr)
 			}
@@ -73,7 +73,7 @@ func TestMetadataAddressesAreRefusedWhenMappedIntoIPv6(t *testing.T) {
 		t.Fatal("the fixture is not a v4-mapped address, so this test checks nothing")
 	}
 
-	err := control(true)("tcp", "["+mapped.String()+"]:80", nil)
+	err := control(true)(t.Context(), "tcp", "["+mapped.String()+"]:80", nil)
 	if !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("err = %v, want the mapped form refused as the address it is", err)
 	}
@@ -125,18 +125,21 @@ func TestSetAllowPrivateForTestDoesNotLiftTheMetadataTier(t *testing.T) {
 	t.Cleanup(restore)
 
 	client := Client(0, false)
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok {
-		t.Fatal("the client's transport is not an *http.Transport")
-	}
-	if transport.DialContext == nil {
-		t.Fatal("the client has no dialer to check")
-	}
 
-	// The dial is attempted for real. Nothing answers on a metadata address from
-	// a test runner, so the assertion is on which error comes back: the guard's,
-	// not the network's.
-	_, err := transport.DialContext(t.Context(), "tcp", "169.254.169.254:80")
+	// The round trip is attempted for real, through the whole transport the
+	// client ships with rather than the dialer alone, so the per-request stamp is
+	// on the path too. Nothing answers on a metadata address from a test runner,
+	// so the assertion is on which error comes back: the guard's, not the
+	// network's.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://169.254.169.254/latest/meta-data/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Transport.RoundTrip(req)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("the metadata address was reached under the test seam")
+	}
 	if !errors.Is(err, ErrBlockedAddress) {
 		t.Errorf("err = %v, want ErrBlockedAddress; the test seam lifted the metadata tier", err)
 	}
