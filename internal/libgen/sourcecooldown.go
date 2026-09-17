@@ -2,9 +2,11 @@ package libgen
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 )
 
 // sourceCooldownDuration is how long a download source is set aside after a failure
@@ -89,7 +91,7 @@ type cooledSource struct {
 // because the chain grants its LAST source the full start-retry schedule
 // (downloadFrom): pushing a dead source to the tail would hand it the most patience
 // of all, which is the opposite of the intent.
-func (c *Client) eligibleSources(supporting []DownloadSource) []DownloadSource {
+func (c *Client) eligibleSources(ctx context.Context, item Item, supporting []DownloadSource) []DownloadSource {
 	now := time.Now()
 	avail := make([]DownloadSource, 0, len(supporting))
 	var cooled []cooledSource
@@ -114,6 +116,12 @@ func (c *Client) eligibleSources(supporting []DownloadSource) []DownloadSource {
 	}
 	if len(avail) == 0 {
 		logging.SourceCooldownBypassed(cooledNames(cooled))
+		// Counted once per chain run rather than once per cooled source: the
+		// question is how often a deployment is in this state, and counting per
+		// source would make a long chain look worse than a short one for the
+		// same outage. It is the one cooldown value worth alerting on — one
+		// source down is routing, all of them down is an outage.
+		mcpotel.RecordSourceCooldownBypassed(ctx, kindOf(item))
 		return supporting
 	}
 	for _, s := range cooled {
@@ -130,6 +138,19 @@ func cooledNames(cooled []cooledSource) []string {
 		names = append(names, s.name)
 	}
 	return names
+}
+
+// kindOf tells a book from an article, which is the only dimension the cooldown
+// bypass carries.
+//
+// A DOI is the article chain and anything else is the book chain, and the two
+// have different sources and different causes — so "every source is down" means
+// two different outages depending on which it was.
+func kindOf(item Item) mcpotel.ItemKind {
+	if strings.TrimSpace(item.DOI) != "" {
+		return mcpotel.KindArticle
+	}
+	return mcpotel.KindBook
 }
 
 // supportingSources returns the sources from chain that can serve item, in chain

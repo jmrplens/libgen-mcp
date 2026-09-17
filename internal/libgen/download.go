@@ -397,7 +397,7 @@ func (c *Client) ResolveLink(ctx context.Context, item Item) (ResolvedDownload, 
 	sources = c.withPerCallUnpaywall(item, sources)
 	sources = c.withPerCallAnnas(item, sources)
 	var errs []error
-	for _, src := range c.eligibleSources(supportingSources(sources, item)) {
+	for _, src := range c.eligibleSources(ctx, item, supportingSources(sources, item)) {
 		resolved, rerr := c.resolveWithin(ctx, src, item)
 		if rerr != nil {
 			c.noteSourceFailure(ctx, src.Name(), rerr)
@@ -464,7 +464,7 @@ func (c *Client) DownloadItem(ctx context.Context, item Item, dir, filename stri
 	// Only the sources that can serve this item matter, and the last of them is the
 	// one worth waiting on: see downloadFrom. Sources a recent failure proved
 	// unavailable are passed over unless they are all that is left (eligibleSources).
-	supporting := c.eligibleSources(supportingSources(sources, item))
+	supporting := c.eligibleSources(ctx, item, supportingSources(sources, item))
 
 	var errs []error
 	for i, src := range supporting {

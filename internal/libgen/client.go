@@ -19,6 +19,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/internal/netguard"
 	"github.com/jmrplens/libgen-mcp/internal/version"
@@ -345,7 +346,40 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
+	c.observeResources()
 	return c
+}
+
+// observeResources publishes how full this client's three bounded resources are.
+//
+// Registered after the options, so a test that replaced the chain or the cache
+// gets its own object read rather than the one it replaced. Registering the same
+// instrument again replaces the previous callback, which is what keeps a test
+// binary building a hundred clients from reporting a hundred caches.
+//
+// Every callback takes the resource's own lock, which is what makes them safe on
+// the SDK's collection goroutine. The semaphore needs none: len and cap on a
+// channel are atomic reads, and the value is a snapshot either way.
+func (c *Client) observeResources() {
+	c.tempCache.observe()
+
+	mcpotel.ObserveBounded(mcpotel.InstrumentDownloadsInflight, mcpotel.InstrumentDownloadsCapacity, mcpotel.Gauges{
+		Current:  func() int64 { return int64(len(c.dlSem)) },
+		Capacity: func() int64 { return int64(cap(c.dlSem)) },
+	})
+
+	// The cooldown table has no capacity of its own: it is bounded by the number
+	// of sources in the chain, which is the honest denominator — "three of
+	// seventeen sources are being passed over" is the sentence an operator
+	// wants, and a made-up cap would not produce it.
+	mcpotel.ObserveBounded(mcpotel.InstrumentSourceCooldownEntries, mcpotel.InstrumentSourceCooldownCapacity, mcpotel.Gauges{
+		Current: func() int64 {
+			c.sourceMu.Lock()
+			defer c.sourceMu.Unlock()
+			return int64(len(c.sourceCooldown))
+		},
+		Capacity: func() int64 { return int64(len(c.sources)) },
+	})
 }
 
 // fixedMirrors is a MirrorLister over a hardcoded list, used as the offline

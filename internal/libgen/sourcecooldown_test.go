@@ -83,12 +83,12 @@ func TestSourceCooldownExpires(t *testing.T) {
 	}
 
 	c.markSourceCooldown("fatcat")
-	if got := srcNames(c.eligibleSources(chain)); len(got) != 1 || got[0] != "scidb" {
+	if got := srcNames(c.eligibleSources(t.Context(), Item{}, chain)); len(got) != 1 || got[0] != "scidb" {
 		t.Fatalf("eligible sources = %v, want [scidb] while fatcat is in cooldown", got)
 	}
 
 	time.Sleep(50 * time.Millisecond)
-	if got := srcNames(c.eligibleSources(chain)); len(got) != 2 {
+	if got := srcNames(c.eligibleSources(t.Context(), Item{}, chain)); len(got) != 2 {
 		t.Errorf("eligible sources = %v, want both once the cooldown expired", got)
 	}
 }
@@ -207,7 +207,7 @@ func TestSourceCooldownIsLiftedOnSuccess(t *testing.T) {
 	}
 
 	// "other" stays in cooldown, so there is no bypass to mask the result.
-	if got := srcNames(c.eligibleSources([]DownloadSource{good, other})); len(got) != 1 || got[0] != "good" {
+	if got := srcNames(c.eligibleSources(t.Context(), Item{}, []DownloadSource{good, other})); len(got) != 1 || got[0] != "good" {
 		t.Errorf("eligible sources = %v, want [good]: a source that just served must not stay in cooldown", got)
 	}
 }
@@ -227,7 +227,7 @@ func TestSourceCooldownIsRaceFree(t *testing.T) {
 			defer wg.Done()
 			for range 50 {
 				c.noteSourceFailure(context.Background(), chain[i%2].Name(), unavailable(errors.New("dial tcp")))
-				_ = c.eligibleSources(chain)
+				_ = c.eligibleSources(t.Context(), Item{}, chain)
 			}
 		}(i)
 	}

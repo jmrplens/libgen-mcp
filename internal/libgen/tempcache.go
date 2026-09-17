@@ -1,10 +1,13 @@
 package libgen
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
 )
 
 // tempEntry is one cached temp download: the file path, its size in bytes, the
@@ -59,14 +62,14 @@ func (tc *tempCache) get(key string) (string, bool) {
 // one reference) and then runs an eviction pass to stay within the size cap and
 // TTL. If key already holds an entry it is overwritten (the caller's fresh copy
 // wins); the previous backing file is removed if it differs and is unreferenced.
-func (tc *tempCache) put(key, path string, size int64) {
+func (tc *tempCache) put(ctx context.Context, key, path string, size int64) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if prev, ok := tc.entries[key]; ok && prev.refs == 0 && prev.path != path {
 		removeTempFile(prev.path)
 	}
 	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: time.Now()}
-	tc.evictLocked()
+	tc.evictLocked(ctx)
 }
 
 // getOrPut atomically resolves a just-downloaded file against the cache: on a hit
@@ -75,7 +78,7 @@ func (tc *tempCache) put(key, path string, size int64) {
 // stores the file with refs=1, runs an eviction pass, and returns it with
 // isNew=true. Doing both under one lock closes the window where two concurrent
 // fetches of the same key would each insert and leak one copy.
-func (tc *tempCache) getOrPut(key, path string, size int64) (stored string, isNew bool) {
+func (tc *tempCache) getOrPut(ctx context.Context, key, path string, size int64) (stored string, isNew bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if e, ok := tc.entries[key]; ok {
@@ -84,7 +87,7 @@ func (tc *tempCache) getOrPut(key, path string, size int64) (stored string, isNe
 		return e.path, false
 	}
 	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: time.Now()}
-	tc.evictLocked()
+	tc.evictLocked(ctx)
 	return path, true
 }
 
@@ -108,22 +111,27 @@ func (tc *tempCache) release(key string) {
 // still exceeds maxBytes, the least-recently-used entry — but only entries with
 // refs==0. Each removed entry's backing file (and its per-fetch temp dir) is
 // deleted from disk.
-func (tc *tempCache) evict() {
+func (tc *tempCache) evict(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	tc.evictLocked()
+	tc.evictLocked(ctx)
 }
 
 // evictLocked is evict's body; the caller must hold tc.mu. It first drops every
 // TTL-expired unreferenced entry, then, while the total size is over the cap,
 // drops the least-recently-used unreferenced entry until it is within the cap or
 // no evictable entry remains.
-func (tc *tempCache) evictLocked() {
+func (tc *tempCache) evictLocked(ctx context.Context) {
 	now := time.Now()
 	for key, e := range tc.entries {
 		if e.refs == 0 && tc.ttl >= 0 && now.Sub(e.atime) >= tc.ttl {
 			removeTempFile(e.path)
 			delete(tc.entries, key)
+			// Counted by reason rather than in total, which is the whole value
+			// of the instrument: a cache that is full because nothing expires
+			// is a different deployment from one that is full because it is
+			// busy, and the two want opposite changes to the configuration.
+			mcpotel.RecordReadCacheEviction(ctx, mcpotel.ReasonTTL)
 		}
 	}
 	for tc.totalSizeLocked() > tc.maxBytes {
@@ -133,7 +141,24 @@ func (tc *tempCache) evictLocked() {
 		}
 		removeTempFile(tc.entries[key].path)
 		delete(tc.entries, key)
+		mcpotel.RecordReadCacheEviction(ctx, mcpotel.ReasonSizePressure)
 	}
+}
+
+// observe publishes how full this cache is and what it is bounded by.
+//
+// The callbacks take the cache's own lock, which is what makes them safe to run
+// on the SDK's collection goroutine, and they read rather than compute: the
+// total is a sum over entries, which is the same walk eviction already does.
+func (tc *tempCache) observe() {
+	mcpotel.ObserveBounded(mcpotel.InstrumentReadCacheBytes, mcpotel.InstrumentReadCacheCapacity, mcpotel.Gauges{
+		Current: func() int64 {
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			return tc.totalSizeLocked()
+		},
+		Capacity: func() int64 { return tc.maxBytes },
+	})
 }
 
 // totalSizeLocked returns the sum of all cached entry sizes; the caller must
