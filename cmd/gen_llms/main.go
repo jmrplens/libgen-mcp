@@ -447,8 +447,8 @@ func docPages(toolNameList string) []docPage {
 			"Uso responsable", "Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor",
 		},
 		{
-			"privacy/", "Privacy policy", "No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes",
-			"Política de privacidad", "Sin telemetría; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada",
+			"privacy/", "Privacy policy", "Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own",
+			"Política de privacidad", "Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector",
 		},
 	}
 }

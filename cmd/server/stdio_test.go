@@ -86,6 +86,15 @@ func TestFilterAnswersUnreadableLines(t *testing.T) {
 	}{
 		{name: "not JSON at all", line: `hello`, wantCode: codeParseError},
 		{name: "truncated JSON", line: `{"jsonrpc":"2.0",`, wantCode: codeParseError},
+		// A batch, refused here rather than passed to the SDK. Measured: on a
+		// session that negotiated a protocol newer than 2025-06-18 — which is
+		// every ordinary client — the SDK treats a top-level array as a protocol
+		// violation, ends the session and the process exits non-zero, which is
+		// the failure this filter exists to prevent. The filter sits under the
+		// SDK and cannot know the negotiated version, so it gives one answer for
+		// both: an Invalid Request an old client can read beats a dead server
+		// for everyone else.
+		{name: "a JSON array", line: `[1,2,3]`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON number", line: `42`, wantCode: codeInvalidRequest},
 		{name: "a bare JSON string", line: `"hello"`, wantCode: codeInvalidRequest},
 		{name: "an object without jsonrpc", line: `{"id":7,"method":"x"}`, wantCode: codeInvalidRequest, wantID: "7"},
@@ -335,25 +344,4 @@ func decodeRefusal(t *testing.T, answered string) (code float64, id string) {
 		t.Errorf("the refusal carries no message, so the client is told a number and nothing else: %q", answered)
 	}
 	return decoded.Error.Code, string(decoded.ID)
-}
-
-// TestFilterPassesABatchToTheSDK keeps a client this server still supports from
-// being refused by the filter in front of it.
-//
-// A top-level array is a JSON-RPC batch, and whether one is allowed depends on
-// the negotiated protocol version: the SDK accepts batches for every version
-// before 2025-06-18. Refusing them here takes that decision away from the one
-// place that knows the version, and turns a legacy client's valid request into
-// an Invalid Request it cannot act on.
-func TestFilterPassesABatchToTheSDK(t *testing.T) {
-	const batch = `[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`
-
-	passed, answered := drive(t, batch+"\n", 1<<20)
-
-	if passed != batch+"\n" {
-		t.Errorf("the batch did not reach the SDK: passed %q", passed)
-	}
-	if answered != "" {
-		t.Errorf("the filter answered a batch itself: %s", answered)
-	}
 }

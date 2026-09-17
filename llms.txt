@@ -115,7 +115,7 @@ Prompts (guided workflows a client can offer by name):
 - [LLM eval results](https://jmrp.io/docs/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
 - [Troubleshooting](https://jmrp.io/docs/libgen-mcp/troubleshooting/): Common setup and runtime issues
 - [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/): Why the open-access providers are tried first, and what the server refuses to serve
-- [Privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/): No telemetry; requests go only to the Library Genesis mirrors and the search and download sources a call invokes
+- [Privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/): Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own
 - [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
@@ -130,7 +130,7 @@ Prompts (guided workflows a client can offer by name):
 - [Resultados de la evaluación con LLM](https://jmrp.io/docs/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
 - [Solución de problemas](https://jmrp.io/docs/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
 - [Uso responsable](https://jmrp.io/docs/libgen-mcp/es/responsible-use/): Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor
-- [Política de privacidad](https://jmrp.io/docs/libgen-mcp/es/privacy/): Sin telemetría; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada
+- [Política de privacidad](https://jmrp.io/docs/libgen-mcp/es/privacy/): Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector
 
 ## Optional
 
