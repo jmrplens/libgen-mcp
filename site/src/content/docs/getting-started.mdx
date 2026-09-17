@@ -436,6 +436,28 @@ The proxy's worker processes have to run in the socket's group (GID `10001` here
 	and it is not.
 </Aside>
 
+#### Configuring the listener without a command line
+
+Every HTTP flag also has a variable, so the same deployment can be written with no `command:` at all — which is what a Kubernetes ConfigMap, a systemd unit's `Environment=` or an image somebody else's platform runs for you has to work with:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:latest
+    environment:
+      LIBGEN_MCP_HTTP_ADDR: "/run/mcp/libgen.sock"
+      LIBGEN_MCP_TRUSTED_PROXY_HEADER: "X-Real-IP"
+      LIBGEN_MCP_TRUSTED_PROXIES: "unix"
+      LIBGEN_MCP_DRAIN_DELAY: "10s"
+    user: "10001:10001"
+    volumes:
+      - ./run:/run/mcp
+```
+
+The name is the flag in upper case with dashes as underscores, under `LIBGEN_MCP_`. The one exception is `--http` itself, whose variable is `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_MCP_HTTP` would read as a switch rather than as an address. The full list is in [Configuration → HTTP listener](/libgen-mcp/configuration/#http-listener).
+
+**A flag you type still wins**, so a base image that sets its defaults in `environment:` and a `command:` that overrides one of them behaves the way it looks. Typing a flag counts even when you type its default value: `--stateless=true` beats `LIBGEN_MCP_STATELESS=0`, because the question is whether you asked, not whether the answer differs. A variable that does not parse fails startup naming both the variable and the flag, rather than silently leaving the default in place — and the startup log names the variables that configured the listener, which is the quickest answer to "why is it on that port".
+
 #### Terminating TLS in this process
 
 When the proxy is on **another** host, there is a network segment that has to exist, and this server can terminate TLS itself:

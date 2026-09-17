@@ -31,6 +31,10 @@ actually type them — so an exported value survives a flag you did not pass:
 `LIBGEN_MCP_UNPAYWALL_EMAIL`) deliberately have none: a secret on a command line is visible
 to every user on the machine through `ps` and lands in your shell history.
 
+The **HTTP listener settings** go the other way — the flag is the primary spelling and the
+variable fills it in — but the precedence is the same one: a flag you typed wins, then the
+environment, then the default. They are listed under [HTTP listener](#http-listener) below.
+
 ## Reference
 
 | Variable                                 | Default                                                  | Range / allowed values                                                                                                                                                                                                                       | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -68,6 +72,56 @@ to every user on the machine through `ps` and lands in your shell history.
 | `LIBGEN_MCP_ENRICH`                      | `true`                                                   | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)                                                                                                                                                                                    | Deployment kill-switch for `get_details`' opt-in `enrich` metadata (Crossref/OpenLibrary). Default `true` means enrichment is *allowed*; set `false` to *forbid* it entirely, regardless of the per-call `enrich` flag. A non-boolean value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `LIBGEN_MCP_CONFIRM_DOWNLOADS`           | `true`                                                   | `strconv.ParseBool` values (`1`/`true`/`0`/`false`, etc.)                                                                                                                                                                                    | Ask the user to approve each file that `download` writes to disk. Only consulted when the client advertised elicitation. Set `false` to save without prompting — the deployment-wide counterpart of the prompt's "stop asking for this session" checkbox, not a persisted form of it. A non-boolean value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `LIBGEN_MCP_EXTRA_SOURCES`               | `auto`                                                   | `auto`, `always`, `never`                                                                                                                                                                                                                    | When the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. `auto`: only when the Library Genesis catalog returns nothing or fails. `always`: on every search, alongside the catalog. `never`: catalog only, even on a miss. A per-call `extra_sources` argument overrides this default in either direction — except `never`, which is a lock no call can lift; an unrecognized value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+### HTTP listener
+
+These configure the HTTP transport, and every one of them is the flag of the same name with a
+variable underneath it. The naming rule is mechanical — `LIBGEN_MCP_` plus the flag in upper
+case with dashes as underscores — with one exception: `--http` is `LIBGEN_MCP_HTTP_ADDR`,
+because `LIBGEN_MCP_HTTP` would read as a switch rather than as an address.
+
+They exist for the deployment that has no command line to write on: a compose file's
+`environment:`, a systemd unit's `Environment=`, a Kubernetes ConfigMap. What each setting
+*does* is documented once, with the flags, in
+[Architecture → Stateless mode](architecture.md#stateless-mode) and
+[Where the server listens](architecture.md#where-the-server-listens).
+
+| Variable                             | Flag                        | Default                               |
+| ------------------------------------ | --------------------------- | ------------------------------------- |
+| `LIBGEN_MCP_TRANSPORT`               | `--transport`               | *(empty: `--http` decides)*           |
+| `LIBGEN_MCP_HTTP_ADDR`               | `--http`                    | *(empty: stdio)*                      |
+| `LIBGEN_MCP_HTTP_PATH`               | `--http-path`               | `/`                                   |
+| `LIBGEN_MCP_HTTP_SOCKET_MODE`        | `--http-socket-mode`        | `0660`                                |
+| `LIBGEN_MCP_PUBLIC_URL`              | `--public-url`              | *(empty)*                             |
+| `LIBGEN_MCP_TRUSTED_ORIGINS`         | `--trusted-origins`         | *(empty: browsers refused)*           |
+| `LIBGEN_MCP_TRUSTED_PROXIES`         | `--trusted-proxies`         | *(empty)*                             |
+| `LIBGEN_MCP_TRUSTED_PROXY_HEADER`    | `--trusted-proxy-header`    | *(empty)*                             |
+| `LIBGEN_MCP_TLS_CERT`                | `--tls-cert`                | *(empty)*                             |
+| `LIBGEN_MCP_TLS_KEY`                 | `--tls-key`                 | *(empty)*                             |
+| `LIBGEN_MCP_STATELESS`               | `--stateless`               | `true`                                |
+| `LIBGEN_MCP_JSON_RESPONSE`           | `--json-response`           | `false`                               |
+| `LIBGEN_MCP_MAX_REQUEST_BODY_BYTES`  | `--max-request-body-bytes`  | `0` (the SDK's 4 MiB)                 |
+| `LIBGEN_MCP_RATE_LIMIT_RPS`          | `--rate-limit-rps`          | `10`                                  |
+| `LIBGEN_MCP_RATE_LIMIT_BURST`        | `--rate-limit-burst`        | `40`                                  |
+| `LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT` | `--max-inflight-per-client` | `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` |
+| `LIBGEN_MCP_DRAIN_DELAY`             | `--drain-delay`             | `0`                                   |
+
+Three details are worth knowing before you rely on them.
+
+**"Explicitly passed" means typed, not different from the default.** A deployment that spells
+its configuration out in full — `--stateless=true` on an image whose environment sets
+`LIBGEN_MCP_STATELESS=0` — gets the flag, because the question is whether you asked for it and
+not whether the answer happens to match. It goes the other way too: exporting
+`LIBGEN_MCP_RATE_LIMIT_RPS` counts as asking for that limit, so a listener that cannot tell two
+callers apart refuses to start rather than quietly ignoring it, exactly as it does for the flag.
+
+**A value that does not parse fails startup**, naming the variable and the flag it fills.
+Falling back to the default in silence is how a deployment that does not match its own
+configuration reaches production looking healthy.
+
+**A variable that is set but blank counts as unset**, which is what `${FOO}` expands to in a
+compose file when the shell has no `FOO`. Surrounding whitespace is trimmed, so a value copied
+with a trailing space is not a path that does not exist.
 
 ## Notes on specific variables
 

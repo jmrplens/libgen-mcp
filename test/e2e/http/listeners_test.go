@@ -367,3 +367,114 @@ func TestPrivateHatchRefusedWhenTheFlagSetsIt(t *testing.T) {
 		}
 	}
 }
+
+// TestPrivateHatchRefusedWhenTheEnvironmentSuppliesTheAddress is the fourth way
+// the hatch precondition can be silently defeated, and the one this step opens.
+//
+// The refusal is keyed on the resolved listen address, and that address now has
+// a variable of its own. A deployment that sets LIBGEN_MCP_HTTP_ADDR and passes
+// no flag at all has a wildcard listener the check must still see — so the
+// overlay has to run before the check, not beside it. Run the other way around
+// and this is a wide-open request-forgery proxy whose startup line says nothing.
+func TestPrivateHatchRefusedWhenTheEnvironmentSuppliesTheAddress(t *testing.T) {
+	env := map[string]string{
+		"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES": "true",
+		"LIBGEN_MCP_HTTP_ADDR":               ":0",
+	}
+	out, err := runServerWithEnvExpectingExit(t, env)
+	if err == nil {
+		t.Fatalf("the server started with the hatch set and its listener named by the environment. Output:\n%s", out)
+	}
+	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":0"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+		}
+	}
+}
+
+// TestEnvOverlay_ConfiguresAListenerWithNoFlagsAtAll is the whole step against
+// the real binary: a deployment whose command line is the bare binary and whose
+// configuration is its `environment:` block.
+//
+// Every assertion here is a setting that had no variable before, and each is
+// read back from the wire rather than from the log — the mount from the path
+// that answers, the card's remote from --public-url, the session policy from the
+// absence of a session header.
+func TestEnvOverlay_ConfiguresAListenerWithNoFlagsAtAll(t *testing.T) {
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	env := map[string]string{
+		"LIBGEN_MCP_HTTP_ADDR":  addr,
+		"LIBGEN_MCP_HTTP_PATH":  "/libgen",
+		"LIBGEN_MCP_PUBLIC_URL": "https://mcp.example.org/libgen",
+	}
+	// No flags: launchServer is given the binary and nothing else, which is what
+	// an image with no `command:` override runs.
+	s := launchServer(t, "http://"+addr, nil, env, nil)
+
+	reply := s.do(t, mcpPOSTAt("/libgen"))
+	assertToolsListed(t, "on a listener configured by the environment", reply)
+
+	// The mount moved, so the root is a 404 rather than the endpoint — which is
+	// what says LIBGEN_MCP_HTTP_PATH was read rather than ignored.
+	assertNotFound(t, s, request{method: http.MethodGet, path: "/"}, "/libgen")
+
+	card := s.do(t, request{method: http.MethodGet, path: "/libgen" + serverCardCurrentPath})
+	if card.status != http.StatusOK {
+		t.Fatalf("GET the card = %d, want %d", card.status, http.StatusOK)
+	}
+	if !strings.Contains(card.body, "https://mcp.example.org/libgen") {
+		t.Errorf("the card does not carry the public URL from the environment: %s", truncate(card.body))
+	}
+	// And the log says where the configuration came from, which is the only
+	// local evidence an operator has that their variables were read.
+	if logs := s.logs(); !strings.Contains(logs, "LIBGEN_MCP_HTTP_ADDR") {
+		t.Errorf("the startup log does not name the variables that configured the listener:\n%s", logs)
+	}
+}
+
+// TestEnvOverlay_AFlagBeatsItsVariable is the precedence, against the binary.
+//
+// It is the pairing every container hits: an image whose `environment:` block
+// sets the defaults, and a `command:` that overrides one of them for this one
+// deployment. The wrong precedence here is not a subtle bug — the override is
+// simply ignored, and the operator's evidence is that the server is on the
+// wrong port.
+func TestEnvOverlay_AFlagBeatsItsVariable(t *testing.T) {
+	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	env := map[string]string{
+		"LIBGEN_MCP_HTTP_ADDR": "127.0.0.1:1",
+		"LIBGEN_MCP_HTTP_PATH": "/from-the-environment",
+	}
+	s := launchServer(t, "http://"+addr, nil, env, []string{"--http", addr})
+
+	// The flag decided the address — the server answered at all, and the
+	// variable named a port nothing can bind.
+	if !s.healthy(t) {
+		t.Errorf("the server is not answering on the address the flag named. Output:\n%s", s.logs())
+	}
+	// And the setting nobody passed still came from the environment, so this is
+	// precedence rather than the overlay being off.
+	assertToolsListed(t, "on the mount the environment named", s.do(t, mcpPOSTAt("/from-the-environment")))
+}
+
+// TestEnvOverlay_AnUnparseableVariableFailsStartup keeps a bad value from
+// reaching production as a default.
+//
+// A container whose variable does not parse must not come up looking configured:
+// the probe would answer, the orchestrator would be satisfied, and the setting
+// the operator wrote would simply not be in effect.
+func TestEnvOverlay_AnUnparseableVariableFailsStartup(t *testing.T) {
+	env := map[string]string{
+		"LIBGEN_MCP_HTTP_ADDR":   "127.0.0.1:0",
+		"LIBGEN_MCP_DRAIN_DELAY": "soon",
+	}
+	out, err := runServerWithEnvExpectingExit(t, env)
+	if err == nil {
+		t.Fatalf("the server started with an unparseable variable. Output:\n%s", out)
+	}
+	for _, want := range []string{"LIBGEN_MCP_DRAIN_DELAY", "--drain-delay"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the refusal does not name %q. Output:\n%s", want, out)
+		}
+	}
+}

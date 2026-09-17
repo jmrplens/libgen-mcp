@@ -205,7 +205,7 @@ func launchServer(t *testing.T, baseURL string, client *http.Client, env map[str
 		// args carries the --http value ahead of the caller's flags, and
 		// neither "--http" nor an address matches the name being looked for, so
 		// scanning the whole list finds the same mount the caller asked for.
-		base:   basePathFromFlags(args),
+		base:   mountPoint(args, env),
 		client: client,
 		logs: func() string {
 			mu.Lock()
@@ -221,6 +221,21 @@ func launchServer(t *testing.T, baseURL string, client *http.Client, env map[str
 
 	waitHealthy(t, srv)
 	return srv
+}
+
+// mountPoint reports where the routes are, applying the server's own
+// precedence: the flag if one was passed, then the variable.
+//
+// The variable half is not optional. A case that configures the mount through
+// LIBGEN_MCP_HTTP_PATH and is polled at / times out against a server that
+// started perfectly and simply mounted /health somewhere else — which reads as
+// "the server never came up", the one failure this harness must never report
+// falsely.
+func mountPoint(flags []string, env map[string]string) string {
+	if base := basePathFromFlags(flags); base != "" {
+		return base
+	}
+	return normalizeBase(env["LIBGEN_MCP_HTTP_PATH"])
 }
 
 // basePathFromFlags reports the mount point a caller asked for with

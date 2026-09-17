@@ -6,12 +6,22 @@
 // --http-path all serve perfectly while the probe reports unhealthy — and an
 // orchestrator then restarts a container whose restart changes nothing.
 //
-// --healthcheck reads the listener off the running server's own command line
+// --healthcheck reads the listener off the running server's own configuration
 // instead. It finds the other instances of this binary, takes --http,
 // --http-path, --tls-cert and --transport from their arguments, derives where
 // /health is served, and asks. A target may also be given outright, for a probe
 // run from outside the container or for a deployment whose process list cannot
 // be read.
+//
+// Those four settings also have variables, and a container configured entirely
+// through `environment:` puts none of them on a command line — so the peer's
+// environment is read too, from /proc/<pid>/environ, under the same precedence
+// the server itself applies: a flag it was given wins, and the variable fills in
+// what the flag did not say. Where that cannot be read — every platform without
+// procfs, and a peer belonging to another user — the probe says so in the reason
+// it prints rather than quietly assuming the default address, because assuming
+// it is how a healthy instance on a moved port gets reported unhealthy and
+// restarted.
 //
 // The name is --healthcheck rather than --probe because cmd/probe is already
 // something else in this repository: a live mirror diagnostic. `libgen-mcp
@@ -42,6 +52,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jmrplens/libgen-mcp/internal/config"
 )
 
 // healthcheckTimeout bounds one attempt. The image's HEALTHCHECK allows five
@@ -369,9 +381,27 @@ type healthcheckDeps struct {
 	peers func() ([]healthPeer, error)
 	// stdinIsNull reports whether a peer's file descriptor 0 is the null device.
 	stdinIsNull func(pid int32) (bool, error)
+	// environ reads a peer's listener variables. A failure is not fatal: the
+	// command line is still read, and the probe says what it could not see.
+	environ func(pid int32) (map[string]string, error)
 	// budget bounds the whole run. Zero, which is what the binary passes, means
 	// healthcheckBudget.
 	budget time.Duration
+}
+
+// readEnviron reads a peer's listener variables, treating an absent reader the
+// way a platform without procfs is treated: as a failure that is reported rather
+// than as an empty environment.
+//
+// The distinction is the whole of what the caveat rests on. An empty map says
+// the peer set no listener variables, which is a fact; a nil reader says nothing
+// was looked at, and a probe that reported the second as the first would assume
+// the default address and call a healthy instance unhealthy without a word.
+func (d healthcheckDeps) readEnviron(pid int32) (map[string]string, error) {
+	if d.environ == nil {
+		return nil, errors.ErrUnsupported
+	}
+	return d.environ(pid)
 }
 
 // runHealthcheck implements --healthcheck and returns the process exit code: 0
@@ -435,6 +465,13 @@ func checkDiscoveredPeers(ctx context.Context, deps healthcheckDeps, stderr io.W
 			continue
 		}
 		servers++
+		// The command line first, then what it did not say. The utility check
+		// stays on the flags alone: --healthcheck and --shutdown have no
+		// variables, and a peer that is one of those is not a server whatever
+		// its environment holds.
+		env, envErr := deps.readEnviron(peer.pid)
+		flags = overlayListenerEnv(flags, env)
+		caveat := environCaveat(flags, envErr)
 		serves, addr, why := peerServesHTTP(flags, func() (bool, error) { return deps.stdinIsNull(peer.pid) })
 		if !serves {
 			fmt.Fprintf(stderr, "healthcheck: pid %d serves stdio (%s) and is running\n", peer.pid, why)
@@ -442,7 +479,7 @@ func checkDiscoveredPeers(ctx context.Context, deps healthcheckDeps, stderr io.W
 		}
 		target := healthTargetFor(addr, flags.basePath, flags.tlsCert)
 		if probeErr := askHealth(ctx, target); probeErr != nil {
-			failures = append(failures, fmt.Sprintf("pid %d at %s: %v", peer.pid, target, probeErr))
+			failures = append(failures, fmt.Sprintf("pid %d at %s: %v%s", peer.pid, target, probeErr, caveat))
 			continue
 		}
 		fmt.Fprintf(stderr, "healthcheck: pid %d at %s answered\n", peer.pid, target)
@@ -484,4 +521,87 @@ func stdinIsNullUnder(procRoot string, pid int32) (bool, error) {
 		return false, err
 	}
 	return link == os.DevNull, nil
+}
+
+// environUnder reads a process's environment as published under procRoot,
+// returning only the variables this probe has a use for.
+//
+// The file is NUL-separated, and an entry with no "=" is skipped rather than
+// guessed at: /proc/<pid>/environ is the block the process was started with, and
+// a malformed entry there is not something a probe should interpret.
+//
+// It is filtered rather than returned whole because the rest of that block is
+// the deployment's secrets — LIBGEN_MCP_ANNAS_KEY and LIBGEN_MCP_CORE_KEY among
+// them — and a probe that carried them around would put them one formatting
+// mistake away from a log line.
+func environUnder(procRoot string, pid int32) (map[string]string, error) {
+	//#nosec G304 -- a fixed path under procRoot for a pid this process just listed.
+	raw, err := os.ReadFile(filepath.Join(procRoot, strconv.Itoa(int(pid)), "environ"))
+	if err != nil {
+		return nil, err
+	}
+	wanted := listenerEnvNames()
+	found := make(map[string]string, len(wanted))
+	for entry := range strings.SplitSeq(string(raw), "\x00") {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || !wanted[name] {
+			continue
+		}
+		found[name] = strings.TrimSpace(value)
+	}
+	return found, nil
+}
+
+// environCaveat says, in a failure message, that the address being probed was
+// assumed rather than read.
+//
+// It is empty unless both halves are true: the peer's environment could not be
+// read, and its command line named no address — which is the one combination in
+// which the probe is guessing. A peer whose --http is on the command line is
+// fully known whether or not procfs answered, and saying so anyway would put a
+// caveat on every failure of every platform without procfs, which is how a
+// caveat stops being read.
+func environCaveat(f listenerFlags, err error) string {
+	if err == nil || f.addr != "" {
+		return ""
+	}
+	return fmt.Sprintf(" (its environment could not be read: %v, so %s was assumed; pass the target to --healthcheck)",
+		err, defaultHTTPAddr)
+}
+
+// listenerEnvNames is the set environUnder keeps: the variables that decide
+// where, and whether, HTTP is served.
+func listenerEnvNames() map[string]bool {
+	return map[string]bool{
+		config.EnvName("HTTP_ADDR"): true,
+		config.EnvName("HTTP_PATH"): true,
+		config.EnvName("TLS_CERT"):  true,
+		config.EnvName("TRANSPORT"): true,
+	}
+}
+
+// overlayListenerEnv fills in the listener settings a peer's command line did
+// not carry, from the environment it was started with.
+//
+// The precedence is the server's own, and it has to be: a flag the peer was
+// given wins, and the variable fills in what the flag did not say. A probe that
+// let the environment win would be reading a different configuration than the
+// process it is probing whenever a deployment overrides one setting on the
+// command line — which is the shape every base image plus `command:` override
+// has.
+func overlayListenerEnv(f listenerFlags, env map[string]string) listenerFlags {
+	for _, field := range []struct {
+		target *string
+		name   string
+	}{
+		{target: &f.addr, name: config.EnvName("HTTP_ADDR")},
+		{target: &f.basePath, name: config.EnvName("HTTP_PATH")},
+		{target: &f.tlsCert, name: config.EnvName("TLS_CERT")},
+		{target: &f.transport, name: config.EnvName("TRANSPORT")},
+	} {
+		if *field.target == "" {
+			*field.target = env[field.name]
+		}
+	}
+	return f
 }

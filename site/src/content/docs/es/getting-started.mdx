@@ -439,6 +439,28 @@ Los procesos worker del proxy tienen que correr en el grupo del socket (aquí el
 	se lee como "local" y no lo es.
 </Aside>
 
+#### Configurar el listener sin línea de órdenes
+
+Cada opción HTTP tiene además su variable, así que el mismo despliegue se puede escribir sin ningún `command:` — que es con lo que tiene que apañarse un ConfigMap de Kubernetes, el `Environment=` de una unidad de systemd o una imagen que ejecuta por ti la plataforma de otra persona:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:latest
+    environment:
+      LIBGEN_MCP_HTTP_ADDR: "/run/mcp/libgen.sock"
+      LIBGEN_MCP_TRUSTED_PROXY_HEADER: "X-Real-IP"
+      LIBGEN_MCP_TRUSTED_PROXIES: "unix"
+      LIBGEN_MCP_DRAIN_DELAY: "10s"
+    user: "10001:10001"
+    volumes:
+      - ./run:/run/mcp
+```
+
+El nombre es el de la opción en mayúsculas y con los guiones como guiones bajos, bajo `LIBGEN_MCP_`. La única excepción es `--http`, cuya variable es `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_MCP_HTTP` se leería como un interruptor y no como una dirección. La lista completa está en [Configuración → Listener HTTP](/libgen-mcp/es/configuration/#listener-http).
+
+**Una opción que teclees sigue ganando**, así que una imagen base que fija sus valores por defecto en `environment:` y un `command:` que sobrescribe uno de ellos se comportan como parece. Teclear una opción cuenta incluso si tecleas su valor por defecto: `--stateless=true` gana a `LIBGEN_MCP_STATELESS=0`, porque la pregunta es si lo pediste, no si la respuesta cambia. Una variable que no se puede interpretar aborta el arranque nombrando la variable y la opción, en lugar de dejar el valor por defecto en silencio — y el log de arranque nombra las variables que configuraron el listener, que es la respuesta más rápida a «¿por qué está en ese puerto?».
+
 #### Terminar TLS en este proceso
 
 Cuando el proxy está en **otro** host sí hay un segmento de red que tiene que existir, y este servidor puede terminar TLS él mismo:
