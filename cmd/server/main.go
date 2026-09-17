@@ -621,6 +621,19 @@ func crossOriginProtected(trusted []string, next http.Handler) http.Handler {
 		return next
 	}
 	protection := http.NewCrossOriginProtection()
+	// The standard library refuses with plain text, which on this route is the
+	// body a Streamable HTTP client reads as a pre-negotiation server before
+	// downgrading its transport. Every gate in front of the endpoint answers in
+	// one shape; see refusal.go. The card routes are mounted outside this
+	// wrapper and keep the library's own answer, since nothing there is a
+	// JSON-RPC request to correlate with.
+	protection.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refusal{
+			status:  http.StatusForbidden,
+			code:    codeForbidden,
+			message: "cross-origin request refused: this deployment vouches for no browser origin, or not for this one. Name it with --trusted-origins.",
+		}.write(w, r)
+	}))
 	for _, origin := range trusted {
 		// The value was validated at startup, so an error here is unreachable;
 		// ignoring it silently would still be the wrong shape, because a
@@ -1069,7 +1082,12 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// here rather than inside newHTTPHandler because this is where the endpoint
 	// handler is built, and because the SDK's own copy of the check — which
 	// transport.StreamableHTTP turns off — sat in exactly this position.
-	mcpHandler := hostGuarded(guard, mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)))
+	// The Host guard is outermost of the two: a request naming a host this
+	// deployment does not serve is refused before anything else is done with
+	// it, the body read for a JSON-RPC id included. The version guard sits
+	// directly in front of the SDK because that is the answer it replaces.
+	mcpHandler := hostGuarded(guard, protocolVersionGuarded(opts.Stateless,
+		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts))))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {

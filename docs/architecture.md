@@ -630,6 +630,32 @@ So a deployment that sets `--trusted-origins` must drop the CORS block from its 
 the same change, and if the two cannot be coordinated, drop the proxy block first: that
 returns the endpoint to refusing browsers, which is at least consistent.
 
+**A refusal on the endpoint is shaped like a JSON-RPC error.** Every gate in front of the MCP
+endpoint — the `Host` check, the cross-origin protection, the protocol-version check — answers
+`application/json` with a `jsonrpc`/`error` body carrying the id of the call it refuses, rather
+than the plain text `http.Error` writes. The reason is not tidiness: a client handed a `4xx`
+whose body is not a recognizable JSON-RPC error is told by the transport specification to
+conclude it is talking to an initialization-era server, so it downgrades to the withdrawn
+HTTP+SSE transport and issues a `GET` — which a stateless deployment answers `405`. It ends
+with no transport at all instead of the one retry a readable error would have given it. An
+opaque refusal therefore turns a configuration mistake into a false protocol diagnosis.
+
+The id is echoed exactly as it arrived, and the member is **omitted** rather than sent as
+`null` when there is none: under `2026-07-28` a `RequestId` is a string or an integer, so
+`null` fails schema validation — and the failure it produces is the very downgrade above. The
+codes mirror their HTTP status times `-100` (`-40300` for `403`), which lands outside the range
+JSON-RPC and MCP reserve; the one exception is `-32022`, which the MCP specification itself
+defines for an unsupported protocol version and which carries
+`data.supported` — what this deployment negotiates — and `data.requested`.
+
+That list is the SDK's own, narrowed the way the SDK narrows it: every revision at or above
+`2026-07-28` needs a stateless transport, so a `--stateless=false` deployment does not offer
+one. It is read from the SDK rather than copied, so a toolchain bump moves it instead of
+leaving a constant that advertises a version nothing serves.
+
+Off the endpoint nothing changes. The `404` answers a scanner rather than a client and already
+names the endpoint, and the server card is a public document with no session behind it.
+
 **Which `Host` this server answers.** Every MCP server is asked to refuse a `Host` it does not
 serve, against DNS rebinding: an attacker resolves a name they control to the address a server
 listens on, and a browser they have already loaded then reaches it under that name. The rule
