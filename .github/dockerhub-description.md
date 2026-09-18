@@ -8,7 +8,7 @@ You talk to your AI assistant; it does the searching and fetching. No mirrors, M
 
 ## Run with Docker
 
-The image runs on **stdio by default** — the correct mode for MCP clients. Stdio transport, for desktop clients such as Claude Desktop, Cursor or VS Code:
+The image **decides its transport from what standard input is**: `docker run -i` connects a pipe and gets stdio — the correct mode for MCP clients — while a run without `-i` serves streamable HTTP on port 8080. Stdio transport, for desktop clients such as Claude Desktop, Cursor or VS Code:
 
 ```json
 {
@@ -36,8 +36,8 @@ docker run -i --rm -e LIBGEN_MCP_EXTRA_SOURCES=always jmrplens/libgen-mcp:latest
 # Save downloads to a host folder
 docker run -i --rm -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads -v "$HOME/Downloads:/downloads" jmrplens/libgen-mcp:latest
 
-# Serve streamable HTTP instead of stdio
-docker run --rm -p 8080:8080 jmrplens/libgen-mcp:latest --http :8080
+# Serve streamable HTTP instead of stdio (no -i, so no flag needed either)
+docker run --rm -p 8080:8080 jmrplens/libgen-mcp:latest
 ```
 
 Images are multi-arch (`linux/amd64`, `linux/arm64`), published for every release with provenance and SBOM attestations, and signed with Cosign. The same image is also available as `ghcr.io/jmrplens/libgen-mcp`.

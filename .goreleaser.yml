@@ -13,9 +13,22 @@ builds:
     binary: libgen-mcp
     env:
       - CGO_ENABLED=0
+    # CGO_ENABLED=0 and no -buildmode=pie: the release binaries are the thing
+    # every install path hands somebody raw, so "standalone" is the property that
+    # matters most about them. PIE makes a Go binary dynamically linked and gives
+    # it a PT_INTERP naming the build host's loader — the published v1.7.2
+    # linux/amd64 asset asks for /lib64/ld-linux-x86-64.so.2 — so it cannot exec
+    # on musl at all, and the docs' "single fully static executable" was not true
+    # of it.
+    #
+    # Nothing is lost on the other four targets. Measured with Go 1.27: a
+    # windows/amd64 build has DllCharacteristics 00008160 with the flag and
+    # without it, and a darwin build is `flags:<DYLDLINK|PIE>` either way. Only
+    # linux changes, and there the trade is the executable's own address
+    # randomization against running everywhere, on a binary with no cgo and no
+    # FFI surface.
     flags:
       - -trimpath
-      - -buildmode=pie
     goos:
       - linux
       - darwin

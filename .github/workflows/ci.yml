@@ -299,10 +299,26 @@ jobs:
           failure-threshold: warning
           ignore: DL3008,DL3018
 
+  # Both published platforms are built here and, more to the point, started:
+  # an image nothing has ever executed on the platform it advertises is not a
+  # tested artefact. This job used to build the runner's native platform alone
+  # and never run it, which is a shape that cannot see the class of defect the
+  # smoke script's header describes — a cross-compiled binary asking for a
+  # loader the runtime image does not ship execs fine on amd64 and not at all
+  # on arm64.
+  #
+  # The matrix leg is cheap despite the emulation: Go cross-compiles from the
+  # build platform, so only the runtime stage's `apk add` and the `--version`
+  # run below go through QEMU. `needs: docker` in the verdict below waits on
+  # the whole matrix and reads one result for it, so this stays a single gate.
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -310,22 +326,35 @@ jobs:
       - name: Check for Docker changes
         id: filter
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore)
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore scripts/smoke-test-image.sh)
           if [ -n "$CHANGED" ]; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
             echo "No Docker-related files changed — skipping build"
           fi
+      # QEMU so the non-native variant can be executed here, not only built.
+      - name: Set up QEMU
+        if: steps.filter.outputs.docker == 'true'
+        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.docker == 'true'
+        uses: docker/setup-buildx-action@v4
       - name: Build Docker image
         if: steps.filter.outputs.docker == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
           push: false
+          load: true
+          platforms: ${{ matrix.platform }}
+          tags: libgen-mcp:ci
           build-args: |
             VERSION=ci
             COMMIT=${{ github.sha }}
+      - name: Smoke test the image
+        if: steps.filter.outputs.docker == 'true'
+        run: bash scripts/smoke-test-image.sh ci "libgen-mcp:ci=${{ matrix.platform }}"
 
   docs-site:
     name: Docs Site

@@ -65,9 +65,13 @@ endif
 all: build ## Build the server binary (default)
 
 # ─── Build ──────────────────────────────────────────────────────────────────
+# No -buildmode=pie here either, so a local build is the same shape as a released
+# one: on linux the flag is what gives a CGO-free Go binary a PT_INTERP, and a
+# binary that names a loader is not the standalone artifact every install path in
+# this project hands people. See the comment in .goreleaser.yml.
 build: ## Build the server binary into dist/
 	$(call MKDIR_P,dist)
-	go build -trimpath -buildmode=pie -ldflags="$(LDFLAGS)" -o dist/$(BINARY_NAME)$(BINARY_EXT) $(CMD_PATH)
+	go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY_NAME)$(BINARY_EXT) $(CMD_PATH)
 
 build-probe: ## Build the probe diagnostic CLI into dist/
 	$(call MKDIR_P,dist)

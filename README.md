@@ -213,7 +213,7 @@ To use a native binary instead, set `"command"` to the binary path and drop the 
 
 ## Run with Docker
 
-Run the container directly (for a shell, a hosted deployment, or to try flags). The image runs on **stdio by default** — the correct mode for MCP clients — and the `-e` flags combine freely (full list in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)).
+Run the container directly (for a shell, a hosted deployment, or to try flags). The image **decides its transport from what standard input is**: `docker run -i` connects a pipe and gets stdio — the correct mode for MCP clients — while a run without `-i` serves streamable HTTP on port 8080. The `-e` flags combine freely (full list in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)).
 
 ```bash
 # Plain (stdio, zero config)
@@ -228,8 +228,8 @@ docker run -i --rm -e LIBGEN_MCP_EXTRA_SOURCES=always ghcr.io/jmrplens/libgen-mc
 # Save downloads to a host folder (mount a volume, point the download dir at it)
 docker run -i --rm -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads -v "$HOME/Downloads:/downloads" ghcr.io/jmrplens/libgen-mcp:latest
 
-# Serve streamable HTTP instead of stdio
-docker run --rm -p 8080:8080 ghcr.io/jmrplens/libgen-mcp:latest --http :8080
+# Serve streamable HTTP instead of stdio (no -i, so no flag needed either)
+docker run --rm -p 8080:8080 ghcr.io/jmrplens/libgen-mcp:latest
 ```
 
 ## Install a native binary
