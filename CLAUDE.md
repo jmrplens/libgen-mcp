@@ -759,6 +759,15 @@ skill is a rule an agent has to invoke something to see:
   the wrong bytes. `scripts/update-server-json-sha.sh` refuses that run, and
   `make check-stamper` (CI's `server.json` job) drives the refusal on a fixture.
 
+**There are two plugin manifests, and they are different schemas for different
+directories rather than a copy.** `.plugin/plugin.json` is the Open Plugins
+location, validating against a `plugin.schema.json` beside it and carrying a
+`logo` and an `mcpServers` pointer; `plugin.json` at the repository root is the
+Agent Plugins one, which names its schema remotely so a validator can fetch it
+and sets `additionalProperties: false` — it accepts neither of those two fields.
+Both are in `VERSION_MANIFESTS` and both are stamped on release; neither is
+generated from the other.
+
 ### The npm channel
 
 `npm/libgen-mcp/` is the **committed** launcher package (`@jmrp.io/libgen-mcp`):
