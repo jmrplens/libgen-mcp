@@ -64,7 +64,12 @@ jobs:
 
   release:
     name: GoReleaser
-    needs: [transport-e2e, race]
+    # `docker` is a dependency and not a sibling: server.json declares the two
+    # images by digest, and a digest only exists once the index has been pushed.
+    # Stamping before that would pin the previous release's image under the new
+    # tag — which is the one failure a reader of the manifest cannot see, since
+    # the tag in the identifier would look right.
+    needs: [transport-e2e, race, docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -130,10 +135,13 @@ jobs:
           bash scripts/publish-npm.sh dist "${GITHUB_REF#refs/tags/v}"
 
       - name: Pin server.json version and SHA256 hashes
+        env:
+          OCI_DIGEST: ${{ needs.docker.outputs.digest }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF#refs/tags/v}"
-          bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
+          bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
+            dist/libgen-mcp.mcpb "${OCI_DIGEST}"
           # Prove the pin landed before anything is published. mcp-publisher reads
           # server.json, so a pin that silently no-opped would publish the previous
           # version — and the duplicate-version guard below would then report that
@@ -204,6 +212,7 @@ jobs:
         if: ${{ github.event.repository.private == false }}
         env:
           RELEASE_DEPLOY_KEY_B64: ${{ secrets.RELEASE_DEPLOY_KEY_B64 }}
+          OCI_DIGEST: ${{ needs.docker.outputs.digest }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF#refs/tags/v}"
@@ -227,7 +236,10 @@ jobs:
 
           git fetch origin main
           git checkout main
-          bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}"
+          # dist/ is untracked, so the bundle the stamp above hashed survives
+          # the checkout and the two runs agree on every field.
+          bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
+            dist/libgen-mcp.mcpb "${OCI_DIGEST}"
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.
@@ -245,6 +257,12 @@ jobs:
     name: Docker
     needs: [transport-e2e, race]
     runs-on: ubuntu-latest
+    # The digest of the pushed index, which the release job stamps into
+    # server.json's two OCI identifiers. One value for both registries: the
+    # multi-platform build is pushed once and ghcr.io and Docker Hub hold the
+    # identical index.
+    outputs:
+      digest: ${{ steps.docker-push.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
       - name: Extract version

@@ -9,8 +9,9 @@ The version lives in `VERSION` and is mirrored into five manifests. To cut a
 release:
 
 1. Bump `VERSION`.
-2. Update the version in `server.json` (both `.version` and the six release-asset
-   URLs), `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`, and
+2. Update the version in `server.json` (`.version`, the bundle's release-asset
+   URL, the tag in each image reference and the npm entry's `version`),
+   `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`, and
    run `make sync-npm-version` for `npm/libgen-mcp/package.json` (it moves the
    version and all six dependency pins together — never hand-edit it).
 3. Run `make check-manifests`. It gates all five against `VERSION`, and CI runs
@@ -25,12 +26,38 @@ release:
 
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
-per-package versions, its six asset identifiers and their `fileSha256` digests,
+per-package versions, its identifiers and their `fileSha256` digests,
 then stamps the version into the other four manifests (`lhm.plugin.json`,
 `mcpb/manifest.json`, `.plugin/plugin.json`, `npm/libgen-mcp/package.json`) — the
 same set `check-manifests` gates — and commits the result back to main. The manual
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.
+
+**What `server.json` declares is four real packages**, and each one's shape is
+load-bearing:
+
+- **`registryType: "mcpb"` means the bundle, not a binary.** It names
+  `libgen-mcp.mcpb`, whose `fileSha256` cannot come from `checksums.txt` — the
+  bundle is built after GoReleaser runs, and appending it to that file would
+  invalidate the signature over it. The stamper hashes the path passed as its
+  **third** argument instead, and refuses a run in which nothing got a hash.
+- **The two `oci` entries carry their digest**, which only exists once the image
+  index has been pushed. So the `docker` job publishes the digest as an output,
+  the `release` job `needs:` it, and the stamper takes it as its **fourth**
+  argument and refuses to stamp a digest-pinned identifier without one — that
+  refusal is what stops a new tag from being pinned beside the previous release's
+  image. Both registries hold the identical index, so one digest serves both;
+  the rewrite still happens per entry, or one registry's reference lands under
+  the other's.
+- **An OCI entry carries no `packageArguments`**, because the image's `CMD`
+  already is the argument list and any argument replaces it wholesale.
+- **The `npm` entry is validated against the *published* package.** The registry
+  reads `mcpName` from the `package.json` on npmjs.com, so that field has to be
+  in a version that is already published. The release job publishes npm before it
+  runs `mcp-publisher`, in that order, which is what makes the two agree.
+
+`make check-stamper` drives all of this against a fixture, in CI's `server.json`
+job; it needs no network and no release.
 
 **A `remotes` URL must be globally unique across the whole registry, and the
 comparison is on the literal string.** The registry refuses a publish whose remote

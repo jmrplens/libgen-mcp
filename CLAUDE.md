@@ -739,6 +739,26 @@ things and a registry rule that has already broken one publish. It lives in the
 `release` skill (`.claude/skills/release/SKILL.md`) — invoke it when bumping the
 version, tagging, or publishing to the MCP registry, npm or LobeHub.
 
+Three rules from it are repeated here, because each one has already cost a
+publish or shipped a manifest nobody could use, and a rule that lives only in a
+skill is a rule an agent has to invoke something to see:
+
+- **A `remotes` URL must be globally unique across the whole registry, and the
+  comparison is on the literal string** — templates included. v1.5.2 failed to
+  publish because `server.json` declared `https://{host}:{port}/`, copied from
+  the sibling project, which had claimed that exact template first. Checking that
+  nothing claims your *hostname* is not the check.
+- **`registryType: "mcpb"` means the bundle, not a binary.** Six entries pointed
+  at raw ELF and PE files through twenty tags, which no schema can see: the type
+  says how a client installs the thing, and a client that unpacks an ELF as a zip
+  gets nothing.
+- **A digest is stamped from the push that produced it, per entry.** The `docker`
+  job emits the image index's digest as an output and `release` `needs:` it,
+  because stamping the tag alone leaves the previous release's image pinned under
+  the new version — a manifest whose identifier reads correctly and resolves to
+  the wrong bytes. `scripts/update-server-json-sha.sh` refuses that run, and
+  `make check-stamper` (CI's `server.json` job) drives the refusal on a fixture.
+
 ### The npm channel
 
 `npm/libgen-mcp/` is the **committed** launcher package (`@jmrp.io/libgen-mcp`):

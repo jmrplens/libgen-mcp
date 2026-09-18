@@ -19,9 +19,9 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-linux-amd64",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp.mcpb",
       "version": "1.7.2",
-      "fileSha256": "afb48b73671b977b95a6c33aff20d5e7fadc118ffe6e8dd55b48b825d38261e2",
+      "fileSha256": "9d8c27231e591b5c2ecddebcb951561a3544b75da9dfc6d9cad29a1f4bfeea6b",
       "transport": {
         "type": "stdio"
       },
@@ -47,10 +47,8 @@
       ]
     },
     {
-      "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-linux-arm64",
-      "version": "1.7.2",
-      "fileSha256": "e37cd587518fb83c9d52abdfd7004caa8a6d0b248dda899e7f59d17bf34a2e88",
+      "registryType": "oci",
+      "identifier": "ghcr.io/jmrplens/libgen-mcp:1.7.2@sha256:fd41aaa926f3ce996e0e65042d2b55a8843b41f99898b96157d3e9ad88815426",
       "transport": {
         "type": "stdio"
       },
@@ -76,10 +74,8 @@
       ]
     },
     {
-      "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-darwin-amd64",
-      "version": "1.7.2",
-      "fileSha256": "550f23014042fdbaa53e646b38b94b703bf0579d4eeaa53a130e9b2fe807320f",
+      "registryType": "oci",
+      "identifier": "docker.io/jmrplens/libgen-mcp:1.7.2@sha256:fd41aaa926f3ce996e0e65042d2b55a8843b41f99898b96157d3e9ad88815426",
       "transport": {
         "type": "stdio"
       },
@@ -105,68 +101,10 @@
       ]
     },
     {
-      "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-darwin-arm64",
+      "registryType": "npm",
+      "identifier": "@jmrp.io/libgen-mcp",
       "version": "1.7.2",
-      "fileSha256": "ff3a2c8b8881ec79f9e82707b77e25b4a5c0e94cc879786680d1138729f2bd57",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
-          "isRequired": false,
-          "placeholder": "https://libgen.li"
-        },
-        {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
-          "description": "Directory where the download tool saves files (default: ~/Downloads)",
-          "isRequired": false,
-          "placeholder": "~/Downloads"
-        },
-        {
-          "name": "LIBGEN_MCP_TIMEOUT",
-          "description": "Per-request HTTP timeout (default: 10s)",
-          "isRequired": false,
-          "default": "10s"
-        }
-      ]
-    },
-    {
-      "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-windows-amd64.exe",
-      "version": "1.7.2",
-      "fileSha256": "82c673d3fa892f62eea441bfc40bc71023e4c71e8e29f104633d3ebcd2710032",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
-          "isRequired": false,
-          "placeholder": "https://libgen.li"
-        },
-        {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
-          "description": "Directory where the download tool saves files (default: ~/Downloads)",
-          "isRequired": false,
-          "placeholder": "~/Downloads"
-        },
-        {
-          "name": "LIBGEN_MCP_TIMEOUT",
-          "description": "Per-request HTTP timeout (default: 10s)",
-          "isRequired": false,
-          "default": "10s"
-        }
-      ]
-    },
-    {
-      "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.2/libgen-mcp-windows-arm64.exe",
-      "version": "1.7.2",
-      "fileSha256": "24f952ed0f2ec5f7f6df83baea0dd00c4ff4e646eef617f4494f296e325ef2cc",
+      "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
       },
