@@ -132,7 +132,9 @@ jobs:
           # altered packages. 11.5.1 is the floor npm trusted publishing
           # requires; bump it deliberately.
           npm install -g npm@11.5.1
-          bash scripts/publish-npm.sh dist "${GITHUB_REF#refs/tags/v}"
+          # --no-assemble: publish the tree the step above validated, rather
+          # than rebuilding it and shipping bytes nothing looked at.
+          bash scripts/publish-npm.sh dist "${GITHUB_REF#refs/tags/v}" --no-assemble
 
       - name: Pin server.json version and SHA256 hashes
         env:

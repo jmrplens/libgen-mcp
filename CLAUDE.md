@@ -790,6 +790,25 @@ Three things about it are easy to get wrong:
   the child's exit code and terminating signal. `scripts/validate-npm.mjs` drives
   a real `initialize` handshake and asserts every stdout line parses as JSON-RPC
   2.0, so a regression fails `make validate-npm` rather than a user's client.
+- **The bytes that ship are the bytes that were verified.** `build-npm.mjs`
+  checks every binary against the release's own cosign-signed `checksums.txt`
+  before packing it and records the digests in `npm/packages/verified-binaries.json`;
+  `validate-npm.mjs` re-hashes each *packed* binary against that record, because
+  its other checks — a size floor, four magic bytes, a file list — all pass for a
+  wrong-but-plausible file, and an npm version can never be replaced. The release
+  then publishes with `--no-assemble`, so the directory the validator examined is
+  the one that goes out rather than an equally-configured rebuild of it;
+  `assert_assembled` refuses a tree that is missing or built for another version,
+  which is what keeps the flag from turning a skipped build into a stale publish.
+  `--allow-unverified` exists for a directory with genuinely no manifest and is
+  never for CI: the validator fails on a tree packed with it.
+- **No package declares a `libc`, and that is asserted rather than left out.**
+  The release binaries carry no ELF interpreter (see *The binaries are
+  standalone* below), so they run on glibc and musl alike, and npm's `libc` field
+  would make Alpine skip a package that works. `validate-npm.mjs` checks both
+  halves — the field is absent, and the *packed* linux bytes match no
+  `ld-linux`/`ld-musl` string — so re-adding `-buildmode=pie` fails the release
+  rather than shipping packages that die on the first run.
 - **The version is stamped, not hand-edited.** `build-npm.mjs --sync-only`
   rewrites the version and all six `optionalDependencies` pins together, which is
   why `scripts/update-server-json-sha.sh` calls it rather than editing the JSON:
@@ -802,6 +821,35 @@ The scope is the npm **organization** `jmrp.io`, so packages are
 profile) and `npm org ls jmrp.io` lists `jmrpio` as the owner **member** — neither
 is the scope, and reading either as one publishes to the wrong place. A granular
 token cannot unpublish, so a mis-scoped publish cannot be undone.
+
+### The binaries are standalone, and `-buildmode=pie` is what takes that away
+
+Every build in this repository — `.goreleaser.yml`, the `Makefile`'s `build`
+target, the `Dockerfile` — is `CGO_ENABLED=0` **without** `-buildmode=pie`, so
+the binary names no ELF interpreter and runs on glibc, on musl, in a distroless
+image and on `scratch`.
+
+The flag is not a free hardening win, and it cost this project a release channel.
+PIE makes a Go binary dynamically linked, and the linker picks its `PT_INTERP` by
+stat-ing the **build** host (`cmd/link/internal/ld/elf.go`). The image builds on
+`$BUILDPLATFORM`, so the cross-compiled `linux/arm64` binary asked for
+`/lib/ld-linux-aarch64.so.1` into an Alpine runtime that ships only musl's, and
+**the published arm64 image could not exec at all**. The release binaries have
+the same shape: v1.7.2's `linux/amd64` asset asks for
+`/lib64/ld-linux-x86-64.so.2`.
+
+It buys nothing on the other targets. Measured with Go 1.27: a `windows/amd64`
+build has `DllCharacteristics 00008160` with the flag and without it, and a
+`darwin` build is `flags:<DYLDLINK|PIE>` either way — Go already emits
+ASLR-capable binaries there. Only linux changes, and there the trade is the
+executable's own address randomization against running everywhere, on a binary
+with no cgo and no FFI surface.
+
+Two guards hold it, both on the artifact rather than on the flag, because an
+interpreter path is a literal string in the ELF: the `Dockerfile` greps the
+binary it just built and fails the build, and `validate-npm.mjs` greps the
+*packed* linux bytes and fails the release. Adding the flag back therefore breaks
+loudly at build time instead of quietly on somebody's Alpine host.
 
 ## Commit & PR Conventions
 

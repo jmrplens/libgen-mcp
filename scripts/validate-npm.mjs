@@ -7,7 +7,15 @@
 //   1. Structural, for all seven packages. What actually ships in each tarball:
 //      the exact file set, the executable bit on the binary, the binary's magic
 //      number for the platform it claims, a size floor, and the package.json
-//      os/cpu/name/version. This runs anywhere; it does not execute anything.
+//      os/cpu/name/version, and — for the linux packages, which declare no
+//      `libc` — that the packed binary names no ELF interpreter, which is the
+//      claim that field's absence makes. This runs anywhere; it does not
+//      execute anything.
+//   1b. Provenance: every packed binary is compared against the digest
+//      build-npm.mjs recorded after checking it against the release's signed
+//      checksums.txt. The structural checks above are a size floor, four magic
+//      bytes and a file list — a wrong-but-plausible binary passes all three,
+//      and one that reaches an npm version can never be replaced.
 //   2. Runtime, for the one platform the validating host can run (linux-x64
 //      inside the node:22 container `make validate-npm` uses). It installs the
 //      launcher plus that platform package from their tarballs into a throwaway
@@ -18,7 +26,8 @@
 // Usage: node scripts/validate-npm.mjs --packages <dir> --main <dir> --version <x.y.z>
 
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +43,14 @@ const MAGIC = {
   win32: [[0x4d, 0x5a]], // MZ
 };
 const MIN_BINARY_BYTES = 5_000_000;
+
+// An ELF interpreter path, as a literal string in the binary. A Go build with
+// -buildmode=pie carries one and cannot exec where that loader is missing; a
+// build without it carries none and runs on glibc and musl alike. The linux
+// packages declare no `libc`, which is a claim that they run anywhere — so the
+// claim is checked against the bytes rather than against the flag that produced
+// them.
+const ELF_INTERPRETER = /ld-linux|ld-musl/;
 
 const PLATFORMS = [
   { key: "linux-x64", os: "linux", cpu: "x64", exe: false },
@@ -85,12 +102,20 @@ function packAndList(dir, destDir) {
   return { tgz, entries };
 }
 
-function firstBytes(tgz, entryName, n) {
-  const buf = execFileSync("tar", ["-xzOf", tgz, entryName], { maxBuffer: 1 << 30 });
-  return Array.from(buf.subarray(0, n));
+function entryBytes(tgz, entryName) {
+  return execFileSync("tar", ["-xzOf", tgz, entryName], { maxBuffer: 1 << 30 });
 }
 
-function validatePlatform(plat, packagesDir, version, workDir) {
+// readVerifiedBinaries loads the digests build-npm.mjs recorded after checking
+// each binary against the release's signed checksums.txt. Absent means the
+// packages were assembled by something that skipped that check.
+function readVerifiedBinaries(packagesDir) {
+  const path = join(packagesDir, "verified-binaries.json");
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function validatePlatform(plat, packagesDir, version, workDir, verified) {
   const label = `@jmrp.io/libgen-mcp-${plat.key}`;
   const dir = join(packagesDir, plat.key);
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
@@ -99,6 +124,10 @@ function validatePlatform(plat, packagesDir, version, workDir) {
   check(pkg.version === version, `${plat.key}: version ${pkg.version}, want ${version}`);
   check(JSON.stringify(pkg.os) === JSON.stringify([plat.os]), `${plat.key}: os ${JSON.stringify(pkg.os)}, want [${plat.os}]`);
   check(JSON.stringify(pkg.cpu) === JSON.stringify([plat.cpu]), `${plat.key}: cpu ${JSON.stringify(pkg.cpu)}, want [${plat.cpu}]`);
+  check(
+    pkg.libc === undefined,
+    `${plat.key}: declares libc ${JSON.stringify(pkg.libc)}; the binaries name no interpreter and run on any C library, so a libc here would make npm skip a package that works`,
+  );
 
   const binaryName = plat.exe ? "libgen-mcp.exe" : "libgen-mcp";
   const { tgz, entries } = packAndList(dir, workDir);
@@ -113,9 +142,27 @@ function validatePlatform(plat, packagesDir, version, workDir) {
   if (check(binEntry, `${plat.key}: binary ${binaryName} not in tarball`)) {
     check(binEntry.mode.includes("x"), `${plat.key}: binary is not executable in the tarball (mode ${binEntry.mode})`);
     check(binEntry.size >= MIN_BINARY_BYTES, `${plat.key}: binary is ${binEntry.size} bytes, below the ${MIN_BINARY_BYTES} floor`);
-    const magic = firstBytes(tgz, `package/${binaryName}`, 4);
+    const bytes = entryBytes(tgz, `package/${binaryName}`);
+    const magic = Array.from(bytes.subarray(0, 4));
     const ok = MAGIC[plat.os].some((sig) => sig.every((b, i) => magic[i] === b));
     check(ok, `${plat.key}: binary magic ${magic.map((b) => b.toString(16)).join(" ")} is not ${plat.os}`);
+
+    if (plat.os === "linux") {
+      const interp = bytes.toString("latin1").match(ELF_INTERPRETER);
+      check(
+        interp === null,
+        `${plat.key}: the packed binary names an ELF interpreter (${interp?.[0]}), so it is not standalone — it cannot exec where that loader is missing, and this package claims to run on any C library`,
+      );
+    }
+
+    if (verified) {
+      const want = verified.binaries?.[plat.key];
+      const got = createHash("sha256").update(bytes).digest("hex");
+      check(
+        want === got,
+        `${plat.key}: the packed binary is sha256 ${got}, but the release's signed checksums.txt named ${want}`,
+      );
+    }
   }
 }
 
@@ -213,10 +260,26 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const workDir = mkdtempSync(join(tmpdir(), "validate-npm-"));
   process.stdout.write(`Validating npm distribution v${args.version}\n`);
+  const verified = readVerifiedBinaries(args.packages);
+  check(
+    verified !== null,
+    "packages were assembled without verified-binaries.json — build-npm.mjs did not check them against the release's checksums.txt",
+  );
+  check(
+    verified === null || verified.verified === true,
+    "verified-binaries.json says the binaries were packaged with --allow-unverified",
+  );
+  check(
+    verified === null || verified.version === args.version,
+    `verified-binaries.json records version ${verified?.version}, but this is v${args.version}`,
+  );
+
   try {
-    for (const plat of PLATFORMS) validatePlatform(plat, args.packages, args.version, workDir);
+    for (const plat of PLATFORMS) validatePlatform(plat, args.packages, args.version, workDir, verified);
     validateMain(args.main, args.version, workDir);
-    process.stdout.write(`  structural: 7 packages checked (files, exec bit, magic, os/cpu, pins)${failures.length ? "" : " ✓"}\n`);
+    process.stdout.write(
+      `  structural: 7 packages checked (files, exec bit, magic, no ELF interpreter, sha256 vs checksums.txt, os/cpu, pins)${failures.length ? "" : " ✓"}\n`,
+    );
     await runtimeCheck(args.packages, args.main, args.version, workDir);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
