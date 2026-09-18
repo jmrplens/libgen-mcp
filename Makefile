@@ -15,7 +15,9 @@
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
-        publish-npm-dry publish-npm publish-lobehub sonar clean help \
+        publish-npm-dry publish-npm \
+        gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi \
+        publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
 
@@ -384,6 +386,49 @@ publish-npm-dry: ## Assemble and pack the npm publish set without publishing (NP
 publish-npm: ## Publish the npm distribution: platform packages first, then the launcher
 	@test -n "$(NPM_BINARIES)" || { echo "ERROR: set NPM_BINARIES=<dir of release binaries>"; exit 1; }
 	scripts/publish-npm.sh "$(NPM_BINARIES)" "$(VERSION)"
+
+# ─── PyPI distribution ──────────────────────────────────────────────────────
+# Six platform wheels, each carrying one release binary in .data/scripts — the
+# uv/ruff model, where the installer puts the binary on the scripts path and it
+# IS the command. Nothing runs at install time and nothing is compiled.
+#
+# The two linux wheels carry musllinux tags beside the manylinux ones, which the
+# validator checks against the archived bytes rather than trusting: the binaries
+# are static, so one file serves Debian and Alpine alike.
+PYPI_BINARIES ?=
+
+gen-pypi: ## Assemble the PyPI wheelhouse from release binaries (PYPI_BINARIES=<dir>)
+	@command -v python3 >/dev/null || { echo "ERROR: Python 3 is required"; exit 1; }
+	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
+	python3 scripts/build_pypi.py --binaries "$(PYPI_BINARIES)" --version "$(VERSION)"
+
+validate-pypi: ## Build and validate the wheels in a clean python:3.14-slim container (PYPI_BINARIES=<dir>)
+	@command -v docker >/dev/null || { echo "ERROR: Docker is required for isolated validation (or use validate-pypi-local)"; exit 1; }
+	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
+	@# --user with a writable HOME, as validate-npm does: the container writes
+	@# pypi/dist through the bind mount, so running as root would leave it
+	@# root-owned on the host.
+	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp \
+		-v "$(CURDIR):/work" -v "$(abspath $(PYPI_BINARIES)):/binaries:ro" \
+		-w /work python:3.14-slim sh -euc ' \
+			python3 scripts/build_pypi.py --binaries /binaries --version $(VERSION) && \
+			python3 scripts/validate_pypi.py --wheels pypi/dist --version $(VERSION)'
+
+validate-pypi-local: ## Same validation without Docker, for CI (PYPI_BINARIES=<dir>)
+	@command -v python3 >/dev/null || { echo "ERROR: Python 3 is required"; exit 1; }
+	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
+	python3 scripts/build_pypi.py --binaries "$(PYPI_BINARIES)" --version "$(VERSION)"
+	python3 scripts/validate_pypi.py --wheels pypi/dist --version "$(VERSION)"
+
+publish-pypi-dry: ## Assemble and validate the wheelhouse without uploading (PYPI_BINARIES=<dir>)
+	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-pypi.sh "$(PYPI_BINARIES)" "$(VERSION)" --dry-run
+
+# Auth via PYPI_TOKEN. The release workflow publishes through the OIDC trusted
+# publisher instead; this target is the bootstrap and the manual fallback.
+publish-pypi: ## Assemble, validate and publish the PyPI wheels out of band (PYPI_BINARIES=<dir>)
+	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-pypi.sh "$(PYPI_BINARIES)" "$(VERSION)"
 
 ## publish-lobehub: publish the current version to the LobeHub Marketplace.
 ## Reads lhm.plugin.json (version kept in sync by scripts/update-server-json-sha.sh
