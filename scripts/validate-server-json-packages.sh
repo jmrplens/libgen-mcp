@@ -415,8 +415,12 @@ while IFS=$'\t' read -r identifier version; do
     continue
   fi
 
-  if ! meta=$(curl "${CURL_META[@]}" -fsSL "https://pypi.org/pypi/${identifier}/${version}/json"); then
-    fail "version $version not found on pypi.org"
+  # A version PyPI does not serve yet is a note rather than a failure, the same
+  # transition the npm and nuget branches allow: this gate runs on main, where
+  # a declared version exists only from the release that publishes it. What is
+  # never excused is a published version whose README lost the token.
+  if ! meta=$(curl "${CURL_META[@]}" -fsSL "https://pypi.org/pypi/${identifier}/${version}/json" 2>/dev/null); then
+    echo "  NOTE: pypi.org does not serve $identifier $version yet; the registry accepts this entry starting with the release that publishes it"
     continue
   fi
   published_desc=$(echo "$meta" | jq -r '.info.description // ""')

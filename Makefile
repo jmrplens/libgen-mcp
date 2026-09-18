@@ -430,6 +430,50 @@ publish-pypi: ## Assemble, validate and publish the PyPI wheels out of band (PYP
 	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
 	scripts/publish-pypi.sh "$(PYPI_BINARIES)" "$(VERSION)"
 
+# ─── NuGet distribution ─────────────────────────────────────────────────────
+# A .NET tool whose entry point is the native binary: one pointer package that
+# names a package per runtime identifier, and six runtime packages that each
+# carry one binary. Nothing in them is .NET code, and a .nupkg is a zip with an
+# OPC skeleton, so packing needs Python and no SDK — only the validator's
+# install-and-run step needs one.
+NUGET_BINARIES ?=
+
+# Pinned by digest because dnx's behaviour is an SDK property, not a package
+# property: bump it deliberately, and re-run the validator when you do.
+NUGET_SDK_IMAGE = mcr.microsoft.com/dotnet/sdk:10.0@sha256:e1ffd2a92ae84c1291bc1b6887501f8af98e6331e7af6d4c8d37168c5e87a64c
+
+gen-nuget: ## Assemble the NuGet packages from release binaries (NUGET_BINARIES=<dir>)
+	@command -v python3 >/dev/null || { echo "ERROR: Python 3 is required"; exit 1; }
+	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
+	python3 scripts/build_nuget.py --binaries "$(NUGET_BINARIES)" --version "$(VERSION)"
+
+validate-nuget: ## Build and validate the packages in a pinned .NET SDK container (NUGET_BINARIES=<dir>)
+	@command -v docker >/dev/null || { echo "ERROR: Docker is required for isolated validation (or use validate-nuget-local)"; exit 1; }
+	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
+	docker run --rm \
+		-v "$(CURDIR):/work" -v "$(abspath $(NUGET_BINARIES)):/binaries:ro" \
+		-e DOTNET_NOLOGO=1 -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+		-w /work $(NUGET_SDK_IMAGE) sh -euc ' \
+			apt-get -qq update && apt-get -qq install -y --no-install-recommends python3 >/dev/null && \
+			python3 scripts/build_nuget.py --binaries /binaries --version $(VERSION) && \
+			python3 scripts/validate_nuget.py --packages nuget/dist --version $(VERSION)'
+
+validate-nuget-local: ## Same validation without Docker, for CI (needs the .NET 10 SDK on PATH)
+	@command -v python3 >/dev/null || { echo "ERROR: Python 3 is required"; exit 1; }
+	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
+	python3 scripts/build_nuget.py --binaries "$(NUGET_BINARIES)" --version "$(VERSION)"
+	python3 scripts/validate_nuget.py --packages nuget/dist --version "$(VERSION)"
+
+publish-nuget-dry: ## Assemble and validate the NuGet packages without pushing (NUGET_BINARIES=<dir>)
+	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-nuget.sh "$(NUGET_BINARIES)" "$(VERSION)" --dry-run
+
+# Auth via NUGET_API_KEY. The release workflow pushes under NuGet's trusted
+# publishing instead; this target is the bootstrap and the manual fallback.
+publish-nuget: ## Assemble, validate and push the NuGet packages out of band (NUGET_BINARIES=<dir>)
+	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
+	scripts/publish-nuget.sh "$(NUGET_BINARIES)" "$(VERSION)"
+
 ## publish-lobehub: publish the current version to the LobeHub Marketplace.
 ## Reads lhm.plugin.json (version kept in sync by scripts/update-server-json-sha.sh
 ## on each release) and posts it via the @lobehub/market-cli. Requires a one-time

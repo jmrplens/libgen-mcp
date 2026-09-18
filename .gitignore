@@ -26,6 +26,12 @@
 # description every wheel embeds, and it carries the MCP Registry's ownership
 # token — and the wheels are not.
 /pypi/dist/
+
+# NuGet packages: seven .nupkg files built from the release binaries at publish
+# time. The README under /nuget/ IS committed — it is the long description the
+# pointer package ships and the file the MCP Registry reads ownership from.
+/nuget/dist/
+
 __pycache__/
 
 coverage.out

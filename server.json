@@ -128,6 +128,66 @@
           "default": "10s"
         }
       ]
+    },
+    {
+      "registryType": "pypi",
+      "identifier": "libgen-mcp",
+      "version": "1.7.2",
+      "runtimeHint": "uvx",
+      "registryBaseUrl": "https://pypi.org",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 10s)",
+          "isRequired": false,
+          "default": "10s"
+        }
+      ]
+    },
+    {
+      "registryType": "nuget",
+      "identifier": "libgen-mcp",
+      "version": "1.7.2",
+      "runtimeHint": "dnx",
+      "registryBaseUrl": "https://api.nuget.org/v3/index.json",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 10s)",
+          "isRequired": false,
+          "default": "10s"
+        }
+      ]
     }
   ]
 }

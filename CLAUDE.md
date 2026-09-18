@@ -868,6 +868,37 @@ command, because the name was free. That is not a cosmetic detail:
   on either. Measured end to end: the wheel installs under `python:3.13-alpine`
   and the command runs.
 
+### The NuGet channel
+
+`nuget/README.md` is **committed** and is the long description the pointer
+package ships; NuGet is the one registry whose MCP ownership check reads the
+*published README*, so it carries the `mcp-name:` token and `build_nuget.py`
+refuses to build without it. The seven packages are **generated** into
+`nuget/dist/`, which is gitignored.
+
+It is a .NET tool whose entry point is a native executable, so nothing in the
+packages is .NET code. Five things about that layout are load-bearing:
+
+- **Seven packages, pushed runtime-first.** One pointer, `libgen-mcp`, naming a
+  package per runtime identifier, and six `libgen-mcp.<rid>` packages carrying
+  one binary each. `dotnet tool install` resolves the pointer and then the host's
+  package, so a pointer visible before its runtime packages installs nothing —
+  the same ordering rule as npm's launcher.
+- **The tool manifest must be `DotNetCliTool Version="2"`.** Version 1 has no
+  runtime-identifier layout at all.
+- **`<licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>` beside the MIT
+  expression.** nuget.org rejects an expression-licensed package without it with
+  a 400 naming `aka.ms/invalidNuGetLicenseUrl`, which nothing local reports.
+- **`.mcp/server.json` ships inside the pointer** and carries *this* version, not
+  the repository's: the manifest is stamped only after the packages are
+  published, so the copy inside has to stand alone.
+- **Arguments for the server go after `--`.** Everything before it belongs to
+  `dnx`.
+
+`make validate-nuget` drives all of it in a digest-pinned .NET SDK container,
+ending in a real `dotnet tool install` **and** a `dnx` run that must each answer
+an MCP `initialize` over stdio.
+
 ### The binaries are standalone, and `-buildmode=pie` is what takes that away
 
 Every build in this repository — `.goreleaser.yml`, the `Makefile`'s `build`
