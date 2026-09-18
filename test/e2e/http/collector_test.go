@@ -121,6 +121,35 @@ func (c *collector) awaitPayloadContaining(t *testing.T, want string, within tim
 	return ""
 }
 
+// awaitCallsExported blocks until the collector holds at least want spans for
+// tool calls, and returns everything received by then.
+//
+// It is what a negative assertion has to wait for. The first batch a server
+// exports is its own startup — the card builder opens an in-memory session and
+// emits server/discover, tools/list and prompts/list — so "wait for an export,
+// then check the planted value is absent" is satisfied by a batch that never
+// carried the operation under test. Every case here would pass against a server
+// that exported the secret, as long as it was slow about it.
+//
+// The marker is the method name, which is in every MCP span and is neither
+// sensitive nor planted: a case must never synchronize on the value it is
+// asserting the absence of, since that assertion would then be waiting for its
+// own failure.
+func (c *collector) awaitCallsExported(t *testing.T, want int, within time.Duration) string {
+	t.Helper()
+
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if all := c.payloads(); strings.Count(all, "tools/call") >= want {
+			return all
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("fewer than %d tools/call spans reached the collector within %s; the assertions below would have been made against the startup batch",
+		want, within)
+	return ""
+}
+
 // received returns what has arrived so far.
 func (c *collector) received() []export {
 	c.mu.Lock()

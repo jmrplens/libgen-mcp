@@ -91,9 +91,10 @@ func TestCollector_ACredentialNeverLeavesOnTheFailurePath(t *testing.T) {
 		results = append(results, got.body)
 	}
 
-	// The export has to have happened, or the collector assertion is a
-	// statement about an empty slice.
-	c.awaitExport(t, 20*time.Second)
+	// Both calls have to have been exported, not merely some batch: the startup
+	// one carries no tools/call at all, so waiting for it would make every
+	// assertion below a statement about telemetry that predates the calls.
+	c.awaitCallsExported(t, 2, 30*time.Second)
 
 	for _, secret := range plantedForms(plantedAnnasKey, plantedEmail) {
 		// 1. The collector.
@@ -158,7 +159,7 @@ func TestCollector_TheSearchQueryNeverLeaves(t *testing.T) {
 		t.Fatalf("search answered %d, so nothing was driven: %s", got.status, got.body)
 	}
 
-	c.awaitExport(t, 20*time.Second)
+	c.awaitCallsExported(t, 1, 30*time.Second)
 	c.assertNoPayloadContains(t, plantedQuery)
 }
 
@@ -189,7 +190,7 @@ func TestCollector_TheItemIdentifierNeverLeaves(t *testing.T) {
 		s.do(t, request{body: body})
 	}
 
-	c.awaitExport(t, 20*time.Second)
+	c.awaitCallsExported(t, 2, 30*time.Second)
 	c.assertNoPayloadContains(t, plantedMD5, plantedDOI)
 }
 
@@ -219,7 +220,7 @@ func TestCollector_EveryIdentityPolicyKeepsThePlantedValuesIn(t *testing.T) {
 				`"arguments":{"query":"` + plantedQuery + `"}}}`
 			s.do(t, request{body: body})
 
-			c.awaitExport(t, 20*time.Second)
+			c.awaitCallsExported(t, 1, 30*time.Second)
 			c.assertNoPayloadContains(t, plantedQuery, plantedAnnasKey)
 		})
 	}

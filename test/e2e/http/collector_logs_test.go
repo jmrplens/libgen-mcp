@@ -79,15 +79,19 @@ func TestCollector_AStrippedFieldIsAbsentFromTheExportedRecord(t *testing.T) {
 
 	s.do(t, request{body: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"anything"}}}`})
 
-	c.awaitExport(t, 20*time.Second)
-
 	// The record is on the operator's terminal, whole.
 	logs := s.logs()
 	if !strings.Contains(logs, "charged_address") {
 		t.Skipf("the wildcard-bind warning did not fire on this runner, so there is no record to assert about:\n%s", tail(logs))
 	}
-	// And the field name is nowhere in what left the process.
-	if payloads := c.payloads(); strings.Contains(payloads, "charged_address") {
+
+	// Waited for by its own message rather than by "an export": the assertion
+	// below is that a field of *this* record is absent, so it has to be made
+	// against a batch that carried the record. The message is the safe half of
+	// it — the address is what must not travel, and synchronizing on that would
+	// mean waiting for the failure this is looking for.
+	payloads := c.awaitPayloadContaining(t, "callers cannot be told apart", 30*time.Second)
+	if strings.Contains(payloads, "charged_address") {
 		t.Error("charged_address reached the collector; the strip list is applied on the wrong leg or not at all")
 	}
 }

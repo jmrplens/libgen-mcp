@@ -5,6 +5,7 @@ package httpe2e
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,17 +52,33 @@ func TestTelemetry_TheCardTellsACallerWhatIsRecorded(t *testing.T) {
 	if !card.Observability.Enabled {
 		t.Error("the block says telemetry is off on a deployment that is exporting")
 	}
-	if card.Observability.Identity != "pseudonymous" || card.Observability.Discloses == "" {
-		t.Errorf("the block does not say what is recorded about a caller: %+v", card.Observability)
+
+	// Every field is compared rather than merely found non-empty. These are
+	// caller-facing commitments: "some text is here" is satisfied by text that
+	// says the wrong thing, which on this block is worse than saying nothing.
+	if got, want := card.Observability.Signals, []string{"traces", "metrics"}; !slices.Equal(got, want) {
+		t.Errorf("signals = %v, want exactly the two configured %v", got, want)
 	}
-	// Only the two signals this deployment exports, and the claim for each.
+	if card.Observability.Identity != "pseudonymous" {
+		t.Errorf("identity = %q, want the resolved policy", card.Observability.Identity)
+	}
+	if want := "a keyed digest of the caller's address, with no readable identity"; card.Observability.Discloses != want {
+		t.Errorf("discloses = %q, want %q", card.Observability.Discloses, want)
+	}
+	if want := "search queries, record titles, tool arguments, tool results, " +
+		"and any credential supplied for a single call"; card.Observability.NotRecorded != want {
+		t.Errorf("not_recorded = %q, want %q", card.Observability.NotRecorded, want)
+	}
+	// The per-signal claims: the two exported ones carry the sentence that
+	// belongs to them, and the one that is off carries nothing at all.
 	if _, present := card.Observability.Recorded["logs"]; present {
 		t.Errorf("the card claims a signal it does not export: %+v", card.Observability.Recorded)
 	}
-	for _, signal := range []string{"traces", "metrics"} {
-		if card.Observability.Recorded[signal] == "" {
-			t.Errorf("the card says nothing about %s, which this deployment does export", signal)
-		}
+	if traces := card.Observability.Recorded["traces"]; !strings.Contains(traces, "mirror host it came from") {
+		t.Errorf("the traces claim does not describe what a trace carries: %q", traces)
+	}
+	if metrics := card.Observability.Recorded["metrics"]; !strings.Contains(metrics, "never the mirror host") {
+		t.Errorf("the metrics claim does not say what metrics deliberately omit: %q", metrics)
 	}
 	// The collector's address is the operator's infrastructure, and this
 	// document is fetched by whoever asks.

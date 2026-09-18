@@ -83,10 +83,12 @@ func TestCollector_TheHealthProbeIsNotTraced(t *testing.T) {
 	payloads := c.awaitPayloadContaining(t, "http.response.status_code", 20*time.Second)
 
 	// The span carries no url.path, so a traced probe cannot be recognized by
-	// its route: what gives it away is the count. Five probes and one call must
-	// produce one HTTP span, not six.
-	if got := strings.Count(payloads, "http.response.status_code"); got > 2 {
-		t.Errorf("the collector holds %d HTTP status attributes after five probes and one call; the probe is being traced", got)
+	// its route: what gives it away is the count. Exactly one, not "no more than
+	// two" — the startup card is built over in-memory transports and produces no
+	// HTTP span at all, so the single call above is the only one there should
+	// ever be, and a looser bound would hide one traced probe.
+	if got := strings.Count(payloads, "http.response.status_code"); got != 1 {
+		t.Errorf("the collector holds %d HTTP status attributes after five probes and one call, want exactly 1; the probe is being traced", got)
 	}
 }
 
