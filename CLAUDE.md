@@ -460,6 +460,8 @@ make audit-surface-quality                                 # tool surface conven
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
+make check-manifests && make check-stamper                 # only if you touched a version-bearing manifest
+make check-server-json-packages                            # only if you touched server.json (needs network; CI runs it on push)
 ```
 
 **`make` does not cover everything CI runs.** Three gates have no `make` target

@@ -152,6 +152,21 @@ jobs:
             inst=json.load(open('server.json')); \
             jsonschema.validate(inst, schema); \
             print('server.json: VALID')"
+      # What the schema above cannot see: that a package declared as "mcpb"
+      # points at a raw ELF binary, that an image tag was never pushed or has
+      # moved off its digest, or that an npm version is missing the mcpName the
+      # registry reads ownership from. Six entries sat in the first of those for
+      # twenty tags here, every one of them schema-valid.
+      #
+      # On pushes only: it downloads tens of MB and talks to three registries,
+      # which is worth doing once per merge rather than on every push to every
+      # pull request. The job it lives in is already a gate, so a failure here
+      # fails the same check.
+      - name: Every declared package is published and is what it claims
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make check-server-json-packages
 
   build:
     name: Build

@@ -13,6 +13,7 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
+        check-server-json-packages \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
@@ -324,6 +325,9 @@ check-manifests: ## Verify every version-bearing manifest parses and matches the
 
 check-stamper: ## Exercise the release stamper (server.json) against a fixture manifest
 	bash scripts/update-server-json-sha_test.sh
+
+check-server-json-packages: ## Download every package server.json declares and check it is what it claims (needs network)
+	bash scripts/validate-server-json-packages.sh
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)

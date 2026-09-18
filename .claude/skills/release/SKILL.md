@@ -67,7 +67,15 @@ load-bearing:
   runs `mcp-publisher`, in that order, which is what makes the two agree.
 
 `make check-stamper` drives all of this against a fixture, in CI's `server.json`
-job; it needs no network and no release.
+job; it needs no network and no release. `make check-server-json-packages` is the
+other half and does need both: it downloads every declared artifact and checks it
+is what it claims — the bundle really is a zip with a `manifest.json`, the image
+tag still resolves to the pinned digest, both platform manifests carry the
+ownership label, and the published npm version carries `mcpName`. It runs in the
+same CI job **on pushes only**, because it moves tens of megabytes. A published
+image that predates a label or a `CMD` this repository has since added is
+reported as a note rather than a failure, and only while the `Dockerfile` in the
+tree declares the thing that is missing.
 
 **A `remotes` URL must be globally unique across the whole registry, and the
 comparison is on the literal string.** The registry refuses a publish whose remote
