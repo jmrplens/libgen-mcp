@@ -10,6 +10,17 @@ on:
   push:
     tags:
       - "v*"
+  # A dispatch is always a rehearsal; there is no input that makes it publish.
+  # The version rehearsed is the one the dispatched tree carries in VERSION; the
+  # input exists to state it explicitly, and preflight holds the two to each
+  # other the way it holds a pushed tag. The tag does not have to exist.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to rehearse as, e.g. v1.7.3. Empty reads it from VERSION on the dispatched ref; a value must match it. Nothing is published."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -18,11 +29,59 @@ permissions:
 
 env:
   GO_VERSION: "1.27.0"
+  # The switch every step reads. Its companion, RELEASE_TAG, is the version
+  # whichever way the run started, so a step stamps, tags or compares against
+  # one name; that one is a job-level variable fed from preflight's output
+  # rather than a workflow-level one, because on a dispatch it comes from the
+  # VERSION file, which no expression up here can read.
+  REHEARSAL: ${{ github.event_name == 'workflow_dispatch' }}
   REGISTRY: ghcr.io
   IMAGE_NAME: jmrplens/libgen-mcp
   DOCKERHUB_IMAGE: jmrplens/libgen-mcp
 
 jobs:
+  # The one check that runs before anything else spends a runner, and the answer
+  # every later job releases — or rehearses — as.
+  #
+  # The docker job tagged ghcr.io from the VERSION file while everything else
+  # used the git tag, and nothing compared them: a tag pushed without the bump
+  # would have published an image at one version and a server.json pinning
+  # another, each internally consistent. Five minutes here settles it before the
+  # transport gate boots.
+  #
+  # It declares contents: read and takes no secrets, like the two gates below.
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve the release tag and hold it to VERSION
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          FILE_V="$(tr -d '[:space:]' < VERSION)"
+          if [ "$REHEARSAL" = "true" ]; then
+            TAG="${INPUT_TAG:-v${FILE_V}}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          TAG_V="${TAG#v}"
+          if [ "${FILE_V}" != "${TAG_V}" ]; then
+            echo "::error::VERSION file says ${FILE_V} but the tag is v${TAG_V} — the docker job would tag ghcr.io:${FILE_V} while server.json pins ghcr.io/jmrplens/libgen-mcp:${TAG_V}"
+            if [ "$REHEARSAL" = "true" ]; then
+              echo "::error::a rehearsal is of the version this tree carries: leave the tag input empty, or set it to v${FILE_V}"
+            fi
+            exit 1
+          fi
+          echo "release_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "release tag ${TAG}, VERSION ${FILE_V}, rehearsal=${REHEARSAL}"
   # The gate in front of everything a tag sets in motion.
   #
   # Nothing used to stand between a tag push and published binaries, a pushed
@@ -35,6 +94,7 @@ jobs:
   # none of what the jobs behind it hold.
   transport-e2e:
     name: Transport end-to-end
+    needs: [preflight]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,6 +118,7 @@ jobs:
   # fails must not be able to leak what the jobs behind it hold.
   race:
     name: Race detector
+    needs: [preflight]
     uses: ./.github/workflows/race.yml
     permissions:
       contents: read
@@ -69,8 +130,10 @@ jobs:
     # Stamping before that would pin the previous release's image under the new
     # tag — which is the one failure a reader of the manifest cannot see, since
     # the tag in the identifier would look right.
-    needs: [transport-e2e, race, docker]
+    needs: [preflight, transport-e2e, race, docker]
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -83,18 +146,43 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
-          args: release --clean
+          # A rehearsal builds everything and publishes nothing: --snapshot skips
+          # the tag validation and the GitHub release (the binaries still carry
+          # the rehearsed version, through snapshot.version_template in
+          # .goreleaser.yml, so the npm validator downstream accepts them),
+          # --skip=publish keeps every artifact local, and --skip=sign leaves the
+          # signing identity unused on artifacts nobody will ship. The SBOMs are
+          # still generated, so syft's scan is exercised.
+          args: ${{ env.REHEARSAL == 'true' && 'release --clean --snapshot --skip=publish,sign,announce' || 'release --clean' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
 
-      - name: Build and upload the .mcpb Claude Desktop bundle
+      # Built in a rehearsal too — packing the bundle is the part that can
+      # break, and it is the file server.json's hash is taken from — and
+      # uploaded only when there is a release to attach it to.
+      - name: Build the .mcpb Claude Desktop bundle
+        run: bash scripts/build-mcpb.sh "${RELEASE_TAG#v}"
+
+      - name: Upload the .mcpb bundle to the release
+        if: env.REHEARSAL != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          bash scripts/build-mcpb.sh "${VERSION}"
-          gh release upload "v${VERSION}" dist/libgen-mcp.mcpb --clobber
+        run: gh release upload "v${RELEASE_TAG#v}" dist/libgen-mcp.mcpb --clobber
+
+      # Every asset — binaries, checksums.txt and its signature, the SBOMs and
+      # the .mcpb above — is attached before the release becomes visible, so no
+      # installer or updater ever observes a partial one. GoReleaser creates it
+      # as a draft (.goreleaser.yml: draft: true) and this is the flip.
+      #
+      # It is also why this step comes before the registry publish rather than
+      # at the end: a draft release's assets are not publicly downloadable, and
+      # the registry fetches the bundle server.json declares.
+      - name: Publish the release
+        if: env.REHEARSAL != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "v${RELEASE_TAG#v}" --draft=false
 
       # npm publish via OIDC trusted publisher — no stored token. dist/ already
       # holds the release binaries under their published names here, the same
@@ -122,9 +210,10 @@ jobs:
       # runs on the ephemeral runner, which is already disposable; the same
       # check runs in Docker via `make validate-npm` on a developer's machine.
       - name: Validate npm packages
-        run: make validate-npm-local NPM_BINARIES=dist VERSION="${GITHUB_REF#refs/tags/v}"
+        run: make validate-npm-local NPM_BINARIES=dist VERSION="${RELEASE_TAG#v}"
 
       - name: Publish to npm
+        if: env.REHEARSAL != 'true'
         run: |
           set -euo pipefail
           # Pinned, not @latest: this CLI runs `npm publish` under the job's
@@ -134,14 +223,17 @@ jobs:
           npm install -g npm@11.5.1
           # --no-assemble: publish the tree the step above validated, rather
           # than rebuilding it and shipping bytes nothing looked at.
-          bash scripts/publish-npm.sh dist "${GITHUB_REF#refs/tags/v}" --no-assemble
+          bash scripts/publish-npm.sh dist "${RELEASE_TAG#v}" --no-assemble
 
+      # Runs in a rehearsal too, and that is the point: this is where the
+      # stamper meets a real digest and a real bundle, and a rehearsal that
+      # skipped it could not catch the one thing S39's refusals exist for.
       - name: Pin server.json version and SHA256 hashes
         env:
           OCI_DIGEST: ${{ needs.docker.outputs.digest }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          VERSION="${RELEASE_TAG#v}"
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
             dist/libgen-mcp.mcpb "${OCI_DIGEST}"
           # Prove the pin landed before anything is published. mcp-publisher reads
@@ -166,7 +258,7 @@ jobs:
       # its release assets are public. This step auto-skips while the repo is
       # private and activates automatically when it is made public.
       - name: Publish to MCP Registry
-        if: ${{ github.event.repository.private == false }}
+        if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
         env:
           MCP_PUBLISHER_VERSION: "v1.7.8"
           MCP_PUBLISHER_SHA256: "48230dbec85bd88a0d42977ef533cddda23235f0db4331b9263ce53b432cb75c"
@@ -185,7 +277,7 @@ jobs:
             "${TARBALL}"
           tar xzf "${TARBALL}" mcp-publisher
           ./mcp-publisher login github-oidc
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          VERSION="${RELEASE_TAG#v}"
           set +e
           ./mcp-publisher publish 2>&1 | tee mcp-publisher-publish.log
           STATUS=${PIPESTATUS[0]}
@@ -211,13 +303,13 @@ jobs:
           echo "::notice::MCP Registry now serves ${VERSION} as the latest version"
 
       - name: Commit pinned server.json back to main
-        if: ${{ github.event.repository.private == false }}
+        if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
         env:
           RELEASE_DEPLOY_KEY_B64: ${{ secrets.RELEASE_DEPLOY_KEY_B64 }}
           OCI_DIGEST: ${{ needs.docker.outputs.digest }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          VERSION="${RELEASE_TAG#v}"
 
           # main is protected by a ruleset. Push over SSH with a write-enabled
           # deploy key, which the ruleset's DeployKey bypass allows.
@@ -257,20 +349,30 @@ jobs:
 
   docker:
     name: Docker
-    needs: [transport-e2e, race]
+    needs: [preflight, transport-e2e, race]
     runs-on: ubuntu-latest
-    # The digest of the pushed index, which the release job stamps into
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    # The digest of the image index, which the release job stamps into
     # server.json's two OCI identifiers. One value for both registries: the
     # multi-platform build is pushed once and ghcr.io and Docker Hub hold the
     # identical index.
+    #
+    # In a rehearsal it is the digest of the index exported to a tarball, read
+    # back by the step below, so the stamping step downstream runs on a real
+    # value rather than being skipped — which is the only way a rehearsal can
+    # exercise the refusals that exist for exactly this field.
     outputs:
-      digest: ${{ steps.docker-push.outputs.digest }}
+      digest: ${{ steps.rehearsal-digest.outputs.digest || steps.docker-push.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
       - name: Extract version
         id: version
-        run: echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+        run: echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
       - uses: sigstore/cosign-installer@v4.1.2
+      # The registry logins run in a rehearsal too. They mint a credential and
+      # spend nothing, and a policy that has drifted is exactly the kind of
+      # failure a rehearsal is for; only the push below is skipped.
       - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -339,11 +441,17 @@ jobs:
           bash scripts/smoke-test-image.sh "${EXPECTED_VERSION}" \
             libgen-mcp:smoke-amd64=linux/amd64 \
             libgen-mcp:smoke-arm64=linux/arm64
+      # In a rehearsal the same multi-platform build, with the same provenance
+      # and SBOM, is exported to an OCI layout on the runner instead of pushed:
+      # the image index that would have gone to the registry exists, so its
+      # digest is real and the stamping step pins it, and nothing has left the
+      # machine.
       - uses: docker/build-push-action@v7
         id: docker-push
         with:
           context: .
-          push: true
+          push: ${{ env.REHEARSAL != 'true' }}
+          outputs: ${{ env.REHEARSAL == 'true' && format('type=oci,dest={0}/rehearsal-image.tar', runner.temp) || '' }}
           platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
@@ -357,12 +465,33 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ steps.dockerhub-login.outputs.skip == 'false' && format('docker.io/{0}:{1}', env.DOCKERHUB_IMAGE, steps.version.outputs.version) || '' }}
             ${{ steps.dockerhub-login.outputs.skip == 'false' && format('docker.io/{0}:latest', env.DOCKERHUB_IMAGE) || '' }}
+      # Rehearsal only: the action reports the exported index's digest the same
+      # way it reports a pushed one, and the OCI layout's own index.json is read
+      # if it does not, so the stamping step never runs on an empty value.
+      - name: Read the rehearsed image's digest
+        id: rehearsal-digest
+        if: env.REHEARSAL == 'true'
+        env:
+          BUILT_DIGEST: ${{ steps.docker-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          digest="${BUILT_DIGEST}"
+          if [ -z "$digest" ]; then
+            digest=$(tar -xOf "${RUNNER_TEMP}/rehearsal-image.tar" index.json | jq -r '.manifests[0].digest')
+          fi
+          if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::the OCI export reported no digest (got '${digest}')"
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "rehearsed image index ${digest}, exported to a tarball and pushed nowhere"
       - name: Sign Docker image (ghcr.io)
+        if: env.REHEARSAL != 'true'
         run: |
           cosign sign --yes \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.docker-push.outputs.digest }}
       - name: Sign Docker image (docker.io)
-        if: steps.dockerhub-login.outputs.skip == 'false'
+        if: env.REHEARSAL != 'true' && steps.dockerhub-login.outputs.skip == 'false'
         run: |
           cosign sign --yes \
             docker.io/${{ env.DOCKERHUB_IMAGE }}@${{ steps.docker-push.outputs.digest }}
@@ -376,7 +505,7 @@ jobs:
       # with read/write/delete scope — the descriptions API rejects narrower
       # ones.
       - name: Update Docker Hub description
-        if: steps.dockerhub-login.outputs.skip == 'false'
+        if: env.REHEARSAL != 'true' && steps.dockerhub-login.outputs.skip == 'false'
         # Pinned to a commit SHA (unlike the org-owned actions above) because
         # this is an individually-maintained action that receives
         # DOCKERHUB_TOKEN — a mutable tag would let a compromised release

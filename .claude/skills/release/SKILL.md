@@ -23,7 +23,43 @@ release:
    opening line, so a bump leaves them stale. They are **not** covered by
    `check-manifests` — `make check-llms` is the gate that catches it, in a
    different CI job.
-5. Open a PR; once merged, tag `vX.Y.Z` on main to trigger the release.
+5. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
+   trigger the release.
+
+## Rehearsing a release
+
+```sh
+gh workflow run release.yml --ref main            # rehearses the VERSION file's version
+gh workflow run release.yml --ref main -f tag=v1.7.3
+```
+
+A dispatch **is** a rehearsal. There is no input that makes it publish:
+`REHEARSAL` is derived from `github.event_name` alone, and every step that
+cannot be undone — the npm publish, the registry publish, the image push and its
+signatures, the `.mcpb` upload, the release un-draft, the commit back to `main` —
+carries `if: env.REHEARSAL != 'true'`. The `tag` input only states which version
+is being rehearsed; preflight refuses it if it disagrees with `VERSION`, exactly
+as it refuses a pushed tag that does.
+
+Everything else runs, and that is the point:
+
+- **GoReleaser builds the real matrix** under `--snapshot --skip=publish,sign,announce`,
+  and the binaries carry the rehearsed version rather than a `-SNAPSHOT-` suffix
+  (`snapshot.version_template` in `.goreleaser.yml`), so the npm validator
+  downstream accepts them.
+- **The image is built for both platforms, smoke-tested, and exported to an OCI
+  layout** instead of pushed. Its digest is real, so the `server.json` stamp runs
+  on a real value — without that, a rehearsal could not exercise the one thing
+  the stamper's refusals exist for.
+- **The registry logins run**, because they mint a credential and spend nothing,
+  and a trusted-publishing policy that has drifted is exactly what a rehearsal
+  should catch. The rule generalises: a credential exchange that *mints* runs in
+  a rehearsal; only the upload that spends it is skipped.
+- **The `.mcpb` is packed and `server.json` is stamped**, locally, and nothing is
+  uploaded.
+
+Read the log for four things: the tag preflight resolved, a `sha256:` digest read
+back from the OCI export, `npm distribution valid`, and `server.json pinned to …`.
 
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its

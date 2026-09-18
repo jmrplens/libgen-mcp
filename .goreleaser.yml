@@ -60,6 +60,14 @@ archives:
 checksum:
   name_template: checksums.txt
 
+snapshot:
+  # A release rehearsal (release.yml on workflow_dispatch) builds the dispatched
+  # tree under the version its tag input names, and the npm validator downstream
+  # compares the binary's own version with the one the packages carry — so a
+  # snapshot there has to answer with that version and nothing appended.
+  # Anywhere else a snapshot keeps GoReleaser's naming.
+  version_template: '{{ if index .Env "RELEASE_TAG" }}{{ trimprefix .Env.RELEASE_TAG "v" }}{{ else }}{{ .Version }}-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
+
 changelog:
   use: github
   sort: asc
@@ -115,7 +123,14 @@ release:
   github:
     owner: jmrplens
     name: libgen-mcp
-  draft: false
+  # Draft, and it stays a draft until the workflow's "Publish release" step
+  # flips it — after the .mcpb is attached. With `draft: false` GoReleaser
+  # un-drafted the release the moment its own uploads finished, which made the
+  # release public for the minutes it took to build and attach the bundle: a
+  # window in which server.json's declared package did not exist, and in which
+  # an installer or an updater sees a partial release. It is also the shape
+  # GitHub's immutable releases require.
+  draft: true
   prerelease: auto
   name_template: "v{{.Version}}"
   # Make a re-run recover on its own. GoReleaser publishes into a draft and
