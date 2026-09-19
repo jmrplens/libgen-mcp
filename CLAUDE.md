@@ -493,6 +493,7 @@ make check-llms                                            # llms.txt fresh + va
 make check-lhm-manifest                                    # lhm.plugin.json matches the surface
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
+make check-install-buttons                                 # the one-click buttons agree
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)

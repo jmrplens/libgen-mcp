@@ -11,6 +11,7 @@
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
+        check-install-buttons \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published \
@@ -290,6 +291,9 @@ audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool de
 
 audit-surface-quality: ## Fail if the MCP tool surface violates a quality convention (CI gate)
 	go run ./cmd/audit_surface_quality/
+
+check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
+	go run ./cmd/audit_install_buttons/
 
 validate-http-stateless: ## Smoke-validate the stateless streamable HTTP transport against a real server (MODE=binary|docker, PORT=18080)
 	./scripts/validate-http-stateless.sh $(MODE) $(PORT)

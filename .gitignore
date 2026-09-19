@@ -11,6 +11,8 @@
 /format_md_tables
 /gen_eval_pages
 /audit_surface_quality
+/audit_supply_chain
+/audit_install_buttons
 /gen_icon_webp
 /dist/
 
