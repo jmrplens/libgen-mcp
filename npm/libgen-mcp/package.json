@@ -1,6 +1,6 @@
 {
   "name": "@jmrp.io/libgen-mcp",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "mcpName": "io.github.jmrplens/libgen-mcp",
   "description": "Model Context Protocol (MCP) server for federated search, citation and reading of books and papers across Library Genesis and open-access sources. Runs as a local binary over stdio or HTTP.",
   "keywords": [
@@ -36,12 +36,12 @@
     "README.md"
   ],
   "optionalDependencies": {
-    "@jmrp.io/libgen-mcp-linux-x64": "1.7.2",
-    "@jmrp.io/libgen-mcp-linux-arm64": "1.7.2",
-    "@jmrp.io/libgen-mcp-darwin-x64": "1.7.2",
-    "@jmrp.io/libgen-mcp-darwin-arm64": "1.7.2",
-    "@jmrp.io/libgen-mcp-win32-x64": "1.7.2",
-    "@jmrp.io/libgen-mcp-win32-arm64": "1.7.2"
+    "@jmrp.io/libgen-mcp-linux-x64": "1.7.3",
+    "@jmrp.io/libgen-mcp-linux-arm64": "1.7.3",
+    "@jmrp.io/libgen-mcp-darwin-x64": "1.7.3",
+    "@jmrp.io/libgen-mcp-darwin-arm64": "1.7.3",
+    "@jmrp.io/libgen-mcp-win32-x64": "1.7.3",
+    "@jmrp.io/libgen-mcp-win32-arm64": "1.7.3"
   },
   "engines": {
     "node": ">=18"

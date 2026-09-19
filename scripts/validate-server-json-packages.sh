@@ -377,9 +377,15 @@ while IFS=$'\t' read -r identifier version; do
     continue
   fi
 
+  # A version npm does not serve yet is a note rather than a failure, as it is
+  # for pypi and nuget: this gate runs on main, where the version-bearing
+  # manifests are bumped in the commit *before* the tag that publishes them, so
+  # between those two points every declared version is one that does not exist.
+  # The lockstep checks above stay hard failures — they compare this repository
+  # against itself and are knowable at any moment.
   encoded=${identifier//\//%2F}
-  if ! meta=$(curl "${CURL_META[@]}" -fsSL "https://registry.npmjs.org/${encoded}/${version}"); then
-    fail "version $version not found on registry.npmjs.org"
+  if ! meta=$(curl "${CURL_META[@]}" -fsSL "https://registry.npmjs.org/${encoded}/${version}" 2>/dev/null); then
+    echo "  NOTE: registry.npmjs.org does not serve $identifier $version yet; the registry accepts this entry starting with the release that publishes it"
     continue
   fi
   published_mcp=$(echo "$meta" | jq -r '.mcpName // ""')
