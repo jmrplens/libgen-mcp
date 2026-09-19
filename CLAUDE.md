@@ -318,6 +318,32 @@ through `envBool`.
 to the default in silence is how a deployment that does not match its
 configuration survives to production.
 
+### Served text is ASCII, and carries no semicolon
+
+Every string a client receives from `tools/list` or `prompts/list` — a tool
+description, a title, every `jsonschema:"…"` tag that becomes a schema
+description, a prompt's description and its arguments' — is **pure ASCII prose
+with no semicolon**. `make check-gateway-chars` reads a real round-trip and
+gates it.
+
+The reason is a door this server has to get through. An MCP gateway refused a
+sibling project's onboarding with `Description contains unsafe characters:
+';'`, over semicolons that were ordinary English punctuation. A validator that
+says "unsafe characters" is matching a character *class*, so holding the surface
+to a class — ASCII, minus a short list — is the only version of clean the next
+gateway cannot surprise.
+
+Two things follow. **Rewrite, do not substitute**: an em dash replaced by a
+hyphen reads as a range, and these descriptions are load-bearing prose a model
+acts on — split the sentence instead. And the rule is about *served* text, not
+payload: `internal/tools/citations.go` truncates a citation with U+2026 into
+result **content**, which is data the caller asked for and stays outside the
+policy.
+
+The sweep changes the served surface, so a change here means regenerating
+`llms.txt`, `lhm.plugin.json` and `site/src/data/tool-schema.json` in the same
+commit.
+
 ### Escaping untrusted content
 
 Record titles, authors, and any other externally-sourced text are **untrusted**.
@@ -494,6 +520,7 @@ make check-lhm-manifest                                    # lhm.plugin.json mat
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
 make check-install-buttons                                 # the one-click buttons agree
+make check-gateway-chars                                   # served text stays gateway-safe
 make check-test-goroutines                                 # no testing.T abort off the test goroutine
 make check-test-file-names                                 # test files named after their module
 cd site && pnpm run lint                                   # the docs site, if you touched it

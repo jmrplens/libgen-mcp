@@ -176,12 +176,12 @@ type DownloadResult struct {
 	// Verified reports whether the downloaded file's MD5 digest matched the
 	// requested md5 (integrity confirmed end to end). It is false when the serving
 	// source did not request MD5 verification.
-	Verified bool `json:"verified" jsonschema:"bytes matched the requested md5; false for doi/isbn (none to check)"`
+	Verified bool `json:"verified" jsonschema:"bytes matched the requested md5, false for doi/isbn because there is none to check"`
 	// NameOrigin reports where the saved file's name came from. It matters most on
 	// an unverified download: a "metadata" or "identifier" name was constructed
 	// here, not announced by the source, so it says what was ASKED FOR and is no
 	// evidence of what was delivered. See chooseFileName.
-	NameOrigin NameOrigin `json:"name_origin,omitempty" jsonschema:"caller, announced (source-sent), metadata or identifier; the last two say what was asked for, not what arrived"`
+	NameOrigin NameOrigin `json:"name_origin,omitempty" jsonschema:"caller, announced (source-sent), metadata or identifier. The last two say what was asked for, not what arrived"`
 	// Resumed reports whether the download continued from a pre-existing partial
 	// (the CDN honored a Range request) rather than starting from zero.
 	Resumed bool `json:"resumed" jsonschema:"resumed from an existing partial"`
@@ -191,7 +191,7 @@ type DownloadResult struct {
 	// and cleared by the tool layer (redactUnaskedAccount) for a call that never
 	// asked for the member tier, since an allowance the caller did not enquire
 	// about discloses the operator's paid membership rather than answering it.
-	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining allowance; only when annas_member was set"`
+	Account *AccountInfo `json:"account,omitempty" jsonschema:"remaining allowance, only when annas_member was set"`
 }
 
 // errIntegrityCheckFailed is returned when the downloaded content's MD5 digest

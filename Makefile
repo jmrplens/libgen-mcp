@@ -11,7 +11,7 @@
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
-        check-install-buttons \
+        check-install-buttons audit-gateway-chars check-gateway-chars \
         audit-test-goroutines check-test-goroutines check-test-file-names \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
@@ -292,6 +292,12 @@ audit-tokens: ## Report the LLM context-window footprint (tokens) of the tool de
 
 audit-surface-quality: ## Fail if the MCP tool surface violates a quality convention (CI gate)
 	go run ./cmd/audit_surface_quality/
+
+audit-gateway-chars: ## Report served strings carrying characters an MCP gateway may reject
+	go run ./cmd/audit_gateway_chars/
+
+check-gateway-chars: ## Fail when the served surface carries a character an MCP gateway may reject (CI gate)
+	go run ./cmd/audit_gateway_chars/ -check
 
 check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
 	go run ./cmd/audit_install_buttons/

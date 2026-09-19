@@ -49,7 +49,7 @@ type DiscoveryResult struct {
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
-	DOI     string `json:"doi,omitempty" jsonschema:"DOI; pass to read/download"`
+	DOI     string `json:"doi,omitempty" jsonschema:"DOI, to pass to read or download"`
 	ISBN    string `json:"isbn,omitempty" jsonschema:"book ISBN"`
 	// Venue is the publication venue when the source states one: arXiv's journal_ref
 	// (e.g. "Phys. Rev. Lett. 100, 012345 (2021)"), the conference or journal dblp
@@ -58,7 +58,7 @@ type DiscoveryResult struct {
 	Venue string `json:"venue,omitempty" jsonschema:"publication venue"`
 	// MD5 is the file digest when the provider is md5-keyed (Anna's Archive).
 	// Empty for the DOI-keyed open-access providers.
-	MD5 string `json:"md5,omitempty" jsonschema:"file md5; pass to get_details/download"`
+	MD5 string `json:"md5,omitempty" jsonschema:"file md5, to pass to get_details or download"`
 	// Extension and Size describe the file behind an md5-keyed result, so it can be
 	// compared with a catalog result on the two attributes people sort by. Both are
 	// as the provider states them — the size is a human string like "12.0MB", not a
@@ -70,7 +70,7 @@ type DiscoveryResult struct {
 	// link the PUBLISHER advertises, which is unverified — many publishers 403
 	// anonymous clients — so nothing may present it as proof the work is readable.
 	// A Gutenberg ebook is not an article PDF and rides FullTextURL instead.
-	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF: a real file for arxiv/eric (eric's only route, no doi); for crossref an UNVERIFIED publisher link, not proof it is readable"`
+	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF: a real file for arxiv/eric (eric's only route, no doi). For crossref it is an UNVERIFIED publisher link, not proof it is readable"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"
@@ -81,12 +81,12 @@ type DiscoveryResult struct {
 	// accepts — Project Gutenberg, whose ebooks have no DOI, ISBN or md5. It is the
 	// whole value of such a hit: without it the record could only be described, not
 	// obtained. Distinct from PDFURL, which is specifically an article PDF.
-	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"book file (epub/txt/pdf); fetch it directly"`
+	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"book file (epub/txt/pdf), to fetch directly"`
 	// OpenAccess states the record's LICENSING status as the provider reports it (a
 	// Creative Commons license for crossref, a hosted free copy for the rest). It is
 	// not a claim that the file can be fetched right now: an openly licensed article
 	// can still sit behind a publisher that refuses automated clients.
-	OpenAccess bool `json:"open_access" jsonschema:"openly licensed; not proof it can be fetched"`
+	OpenAccess bool `json:"open_access" jsonschema:"openly licensed, which is not proof it can be fetched"`
 }
 
 // Provider is a keyless open-access discovery source.

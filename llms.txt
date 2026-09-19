@@ -93,7 +93,7 @@ Configuration (environment variables, all optional):
 Tools:
 
 - search: Federated search for books, papers, comics, magazines and standards, returning per-result metadata, md5 and download links.
-- get_details: Full metadata for one bibliographic record — identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its citations field.
+- get_details: Full metadata for one bibliographic record: identifiers, DOI, cover and related edition, plus ready-to-paste BibTeX and RIS exports in its citations field.
 - download: Download a file to a local directory.
 - read: Read a book or paper's text in chunks without downloading the whole file.
 
