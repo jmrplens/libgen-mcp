@@ -338,6 +338,13 @@ jobs:
       - name: Markdown tables are normalized
         if: env.FRESHNESS == 'checked'
         run: make check-md-tables
+      # The README's counts are read from the source — the registered tools and
+      # prompts, config.KnownSources, config.KnownEnvNames, and a walk of the
+      # tree — so a sentence that says four when the server registers five is a
+      # failure rather than a stale line nobody notices.
+      - name: The README's counts match the source
+        if: env.FRESHNESS == 'checked'
+        run: make check-stats
       # Not FRESHNESS-gated, unlike everything above it: those check that a
       # generated file was regenerated, which is the top layer of a stack's job.
       # This checks what a button actually registers, and a button can be edited
