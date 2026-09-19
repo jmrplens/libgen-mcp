@@ -11,6 +11,15 @@
 //   node scripts/build-npm.mjs --binaries <dir> --version <x.y.z> [--out <dir>]
 //   node scripts/build-npm.mjs --sync-only --version <x.y.z>
 //
+// Every binary is checked against <dir>/checksums.txt — the release's own
+// manifest, cosign-signed at build time — before it is copied into a package.
+// The packages were assembled from an unverified copy of the build directory,
+// so a stale or swapped binary would reach an immutable registry with nothing
+// looking at it: the validator checks a size floor, a magic number and one
+// handshake on the host platform, all of which a wrong-but-plausible file
+// passes. Pass --allow-unverified only when there is genuinely no manifest
+// (never in CI).
+//
 // <dir> holds the release assets under their published names
 // (libgen-mcp-linux-amd64, …). Output is one directory per package under
 // <out> (default npm/packages), plus the main package's version and dependency
@@ -21,7 +30,8 @@
 // release version-stamp step can keep the checked-in file honest between
 // releases without staging a whole distribution.
 
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +42,13 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 // the release filename the binary is copied from. Keep this in lockstep with
 // the launcher's supported set and the main package's optionalDependencies.
 const PLATFORMS = [
+  // No `libc` on the linux packages, and that is a claim rather than an
+  // omission: the release binaries are built without -buildmode=pie, so they
+  // name no ELF interpreter and run on glibc and musl alike. npm's `libc` field
+  // exists to make a package skip on the wrong C library, and declaring one
+  // here would make Alpine skip a package that works. validate-npm.mjs asserts
+  // both halves — no `libc` field, and no interpreter in the packed bytes —
+  // because the day someone re-adds the flag, the right answer changes.
   { key: "linux-x64", os: "linux", cpu: "x64", asset: "libgen-mcp-linux-amd64", exe: false },
   { key: "linux-arm64", os: "linux", cpu: "arm64", asset: "libgen-mcp-linux-arm64", exe: false },
   { key: "darwin-x64", os: "darwin", cpu: "x64", asset: "libgen-mcp-darwin-amd64", exe: false },
@@ -41,13 +58,20 @@ const PLATFORMS = [
 ];
 
 function parseArgs(argv) {
-  const out = { binaries: null, version: null, out: join(repoRoot, "npm", "packages"), syncOnly: false };
+  const out = {
+    binaries: null,
+    version: null,
+    out: join(repoRoot, "npm", "packages"),
+    syncOnly: false,
+    allowUnverified: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--binaries") out.binaries = argv[++i];
     else if (arg === "--version") out.version = argv[++i];
     else if (arg === "--out") out.out = argv[++i];
     else if (arg === "--sync-only") out.syncOnly = true;
+    else if (arg === "--allow-unverified") out.allowUnverified = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!out.version) throw new Error("--version <x.y.z> is required");
@@ -56,6 +80,25 @@ function parseArgs(argv) {
   if (!/^\d+\.\d+\.\d+$/.test(out.version)) throw new Error(`--version must be semver, got ${out.version}`);
   if (!out.syncOnly && !out.binaries) throw new Error("--binaries <dir> is required (or pass --sync-only)");
   return out;
+}
+
+// sha256 of a file, hex, the same form checksums.txt uses.
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+// readChecksums parses GoReleaser's checksums.txt ("<hex>  <name>" lines).
+// Returns null when the file is absent so the caller can decide whether that is
+// acceptable.
+function readChecksums(binariesDir) {
+  const path = join(binariesDir, "checksums.txt");
+  if (!existsSync(path)) return null;
+  const entries = new Map();
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const m = line.trim().match(/^([0-9a-f]{64})\s+\*?(.+)$/);
+    if (m) entries.set(m[2], m[1]);
+  }
+  return entries;
 }
 
 const mainRepository = {
@@ -67,13 +110,23 @@ const mainRepository = {
 // stable name the launcher resolves, made executable so the bit survives into
 // the tarball, and a package.json whose os/cpu confine the install to the
 // platform it serves.
-function writePlatformPackage(plat, version, binariesDir, outDir) {
+function writePlatformPackage(plat, version, binariesDir, outDir, checksums) {
   const dir = join(outDir, plat.key);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
 
   const binaryName = plat.exe ? "libgen-mcp.exe" : "libgen-mcp";
   const src = join(binariesDir, plat.asset);
+  const digest = sha256(src);
+  if (checksums) {
+    const want = checksums.get(plat.asset);
+    if (!want) {
+      throw new Error(`${plat.asset} is not listed in ${join(binariesDir, "checksums.txt")}`);
+    }
+    if (want !== digest) {
+      throw new Error(`${plat.asset} is sha256 ${digest}, but checksums.txt says ${want}`);
+    }
+  }
   const dst = join(dir, binaryName);
   copyFileSync(src, dst);
   // Explicit 0o755 after the copy: npm records the file mode in the tarball, so
@@ -103,7 +156,7 @@ function writePlatformPackage(plat, version, binariesDir, outDir) {
       `[@jmrp.io/libgen-mcp](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). ` +
       "You do not install this directly; it comes in as an optional dependency of the main package.\n",
   );
-  return { name: pkg.name, dir };
+  return { name: pkg.name, dir, binaryName, digest };
 }
 
 // syncMainPackage rewrites the launcher package's own version and pins every
@@ -132,10 +185,37 @@ function main() {
 
   mkdirSync(args.out, { recursive: true });
 
+  const checksums = readChecksums(args.binaries);
+  if (!checksums && !args.allowUnverified) {
+    throw new Error(
+      `${join(args.binaries, "checksums.txt")} not found — refusing to package unverified binaries ` +
+        "(pass --allow-unverified to override)",
+    );
+  }
+  if (!checksums) {
+    process.stderr.write("WARNING: --allow-unverified — binaries are being packaged without a checksum manifest\n");
+  }
+
   const platformPackages = PLATFORMS.map((p) =>
-    writePlatformPackage(p, args.version, args.binaries, args.out),
+    writePlatformPackage(p, args.version, args.binaries, args.out, checksums),
   );
   const mainPackage = syncMainPackage(args.version);
+
+  // Record what was verified so validate-npm.mjs can confirm the packed
+  // tarballs still carry those exact bytes. Written beside the package
+  // directories, never inside one, so it cannot be published.
+  writeFileSync(
+    join(args.out, "verified-binaries.json"),
+    JSON.stringify(
+      {
+        version: args.version,
+        verified: Boolean(checksums),
+        binaries: Object.fromEntries(platformPackages.map((p, i) => [PLATFORMS[i].key, p.digest])),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
 
   // Publish order matters: the platform packages must exist on the registry
   // before the launcher that lists them, or an install racing the publish
