@@ -575,6 +575,61 @@ jobs:
             bash scripts/publish-nuget.sh dist "${RELEASE_TAG#v}" --no-assemble
           fi
 
+  # Read the three registries back and compare what they serve with the
+  # release's own signed checksums.
+  #
+  # It exists because the publishers **re-assemble** their packages after
+  # validating them, so the bytes that were validated are not necessarily the
+  # bytes that went out — and of the six per-platform binaries, only the
+  # runner's own is ever executed by any check. A stale or swapped binary for
+  # the other five reaches three registries that cannot be corrected, with
+  # nothing in the pipeline looking at it again.
+  #
+  # This is the only step that inspects the bytes a user installs, and it runs
+  # in a job holding no publishing credential of any kind. The retry budget is
+  # the same allowance the registry publish gives itself and for the same
+  # reason — this runs minutes after the uploads, and a registry CDN that has
+  # not caught up answers 404 — and it is spent only on downloads: a digest
+  # that does not match fails on sight, with no second attempt.
+  verify-published:
+    name: Verify published packages
+    needs: [preflight, npm, pypi, nuget]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      - name: Fetch and verify the signed checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh --checksums-only "${RELEASE_TAG#v}" dist
+
+      - name: Compare registry packages with the signed checksums
+        if: env.REHEARSAL != 'true'
+        run: |
+          python3 scripts/verify_published_packages.py \
+            --retry-budget 480 --retry-delay 30 \
+            "${RELEASE_TAG#v}" dist/checksums.txt
+
+      - name: Nothing to verify in a rehearsal
+        if: env.REHEARSAL == 'true'
+        run: |
+          echo "::notice::rehearsal: nothing was published, so there is nothing on npm, PyPI or NuGet to compare with the checksums; the comparison runs on the next real release"
+
   # The MCP Registry publish, last of the publishers and behind every one of
   # them as an explicit `needs:` edge. The registry validates the npm entry by
   # reading mcpName off the published package, the PyPI one by GETting
@@ -585,7 +640,7 @@ jobs:
   # installers at the image, and it must not advertise an index nobody signed.
   mcp-registry:
     name: Publish to the MCP Registry
-    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget]
+    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget, verify-published]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
@@ -731,7 +786,7 @@ jobs:
   # rather than the tail of one that does.
   commit-manifests:
     name: Commit manifests to main
-    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget, homebrew, mcp-registry]
+    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget, homebrew, mcp-registry, verify-published]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}

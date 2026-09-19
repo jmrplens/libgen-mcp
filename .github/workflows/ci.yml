@@ -129,6 +129,13 @@ jobs:
       # fixture, rather than discovered on a tag.
       - name: The release stamper does what server.json's entries need
         run: make check-stamper
+      # The published-package verifier gates the two jobs that advertise a
+      # release, so it has to tell propagation lag from wrong bytes: the first
+      # is waited out, the second is reported on sight. Both directions are
+      # pinned offline here, because on a tag the wrong answer is unrecoverable
+      # in one direction and invisible in the other.
+      - name: The published-package verifier waits out lag and never a mismatch
+        run: make check-verify-published
       - name: Validate server.json against the MCP Registry schema
         run: |
           set -euo pipefail

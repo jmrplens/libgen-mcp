@@ -69,9 +69,54 @@ Everything else runs, and that is the point:
   skipped.
 - **The `.mcpb` is packed and `server.json` is stamped**, locally, and nothing is
   uploaded.
+- **syft and oras are installed and the image SBOMs are generated**, from the two
+  smoke images the docker job's daemon holds, with the package-count guard. The
+  installs and the scan are the part of that feature that can rot, so they are
+  not behind the rehearsal switch; only the attestations and the `oras attach`
+  are, because a rehearsal pushes no index to attach them to.
+- **Every publisher job runs**, fetching the rehearsal's own build through
+  `scripts/fetch-release-assets.sh` instead of downloading a release, so the
+  whole graph — not just the build — is exercised.
 
-Read the log for four things: the tag preflight resolved, a `sha256:` digest read
-back from the OCI export, `npm distribution valid`, and `server.json pinned to …`.
+Read the log for five things: the tag preflight resolved, a `sha256:` digest read
+back from the OCI export, `N packages from docker:libgen-mcp:smoke-…`,
+`npm distribution valid`, and `server.json pinned to …`.
+
+**What a rehearsal cannot prove, and why.** Everything irreversible is skipped,
+so the skipped steps are exactly the unexercised ones: the twelve image
+attestations and the bare SPDX referrers (there is no pushed index to attach
+them to), the four publishes, `mcp-publisher`, the release un-draft and the
+commit to `main`. Two job permissions ride along with them — `contents: write`
+and `attestations: write` on the GoReleaser job — because every step that needs
+either is skipped. `id-token: write` *is* proven, by the two mint-only exchanges.
+
+## The shape of the release
+
+Thirteen jobs, and the edges are the point rather than the count:
+
+```text
+preflight ─┬─ transport-e2e ─┐
+           ├─ race ──────────┼─ docker ── sign-attest ── release ─┬─ npm ──┐
+           └─────────────────┘                                    ├─ pypi ─┼─ verify-published ─┬─ mcp-registry ─┐
+                                                                  ├─ nuget ┘                    │                ├─ commit-manifests
+                                                                  ├─ homebrew ───────────────────────────────────┘
+                                                                  └─ winget
+```
+
+Three rules hold it together, each one a failure that happened:
+
+- **The signing identity is never live while third-party build code runs.**
+  `docker` keeps `packages: write` and no `id-token`; `sign-attest` runs no build
+  action at all. It is also what stops a re-run from rebuilding: the image build
+  is not byte-reproducible, so a retried signature used to push a new index under
+  the same tags and orphan the one already signed.
+- **Nothing packages a build directory.** Each publisher fetches the release and
+  checks it against the cosign-signed `checksums.txt`, so what ships is what was
+  published.
+- **Nothing advertises what nobody checked.** `mcp-registry` and
+  `commit-manifests` wait on `verify-published`, which compares what the three
+  registries actually serve with that same signed manifest, from a job holding no
+  publishing credential.
 
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
