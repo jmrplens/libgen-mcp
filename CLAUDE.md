@@ -494,6 +494,7 @@ make check-lhm-manifest                                    # lhm.plugin.json mat
 make check-doc-links                                       # local doc links resolve
 make audit-surface-quality                                 # tool surface conventions
 make check-install-buttons                                 # the one-click buttons agree
+make check-test-goroutines                                 # no testing.T abort off the test goroutine
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
@@ -590,6 +591,48 @@ Docs are **bilingual and kept in parity**:
 
 **Unit tests** run offline with `go test ./...`. HTML fixtures live in each
 package's `testdata/`.
+
+### Assertions off the test goroutine
+
+`testing.T.FailNow` — and therefore `t.Fatal` and `t.Fatalf` — must be called
+from the goroutine running the test. Anywhere else it terminates only *that*
+goroutine: inside an `http.HandlerFunc` literal the response is truncated or
+never written, the client observes a transport error, and the test carries on
+against the wreckage, failing somewhere that has nothing to do with the
+assertion. **Almost every test here stands up an `httptest` server** for a
+mirror or a provider, so the handler literal is both the most common place an
+assertion gets written and the one place the abort does not work.
+
+`go vet`'s `testinggoroutine` analyzer flags a bare `go func() { t.Fatal() }()`
+and cannot see that a literal passed to `http.HandlerFunc` crosses the same
+boundary. `make check-test-goroutines` can, and gates it.
+
+Every assertion inside a literal that crosses a goroutine boundary follows all
+six of these:
+
+1. **Never `t.Fatal`/`t.Fatalf`/`t.FailNow` inside the literal.** Use `t.Errorf`,
+   or record and assert later (rule 5).
+2. **`return` immediately after the `t.Errorf`, even as the last statement.**
+   `t.Fatal` gave that exit for free; a later edit appending code below a bare
+   `t.Errorf` reintroduces the bug silently.
+3. **Write a deterministic response before returning** — `http.Error(w, "<what
+   failed>", http.StatusInternalServerError)`. Without it the client receives a
+   `200` with an empty body, which is a worse signal than the EOF it replaces.
+4. **Nothing the failed check would have validated may be used afterwards.** If
+   the check guarded a nil, the `return` comes before any use of it.
+5. **Prefer recording over asserting.** Keep observed values in locals inside
+   the handler and assert on the test goroutine after the client call returns.
+   That removes the problem rather than mitigating it.
+6. **A "must not be called" guard becomes a recorded flag** — `var called
+   atomic.Bool`, written in the handler, asserted afterwards. The `atomic` is
+   not optional: an unsynchronised variable written from the handler goroutine
+   is a data race.
+
+The gate fails **only** on rule 1. `t.Errorf`-without-return is reported as an
+advisory list and not gated, because most such sites are the legitimate
+assert-then-respond shape where the handler goes on to write its canned
+response; rule 2 binds when the `t.Errorf` replaced an abort that guarded later
+statements.
 
 **End-to-end** tests hit the real site and are double-gated: they need the `e2e`
 build tag **and** `LIBGEN_E2E=1`:

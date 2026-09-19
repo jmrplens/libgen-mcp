@@ -13,6 +13,7 @@
 /audit_surface_quality
 /audit_supply_chain
 /audit_install_buttons
+/audit_test_goroutines
 /gen_icon_webp
 /dist/
 

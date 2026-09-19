@@ -12,6 +12,7 @@
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons \
+        audit-test-goroutines check-test-goroutines \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published \
@@ -294,6 +295,12 @@ audit-surface-quality: ## Fail if the MCP tool surface violates a quality conven
 
 check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
 	go run ./cmd/audit_install_buttons/
+
+audit-test-goroutines: ## Report every testing.T abort made off the test goroutine, plus the advisory Errorf sites
+	go run ./cmd/audit_test_goroutines/
+
+check-test-goroutines: ## Fail when a testing.T abort is made off the test goroutine (CI gate)
+	go run ./cmd/audit_test_goroutines/ -check
 
 validate-http-stateless: ## Smoke-validate the stateless streamable HTTP transport against a real server (MODE=binary|docker, PORT=18080)
 	./scripts/validate-http-stateless.sh $(MODE) $(PORT)

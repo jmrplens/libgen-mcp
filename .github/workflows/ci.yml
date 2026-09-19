@@ -54,6 +54,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: go mod download
+      # Before the suite rather than after it, because this is the failure mode
+      # that makes a suite report the wrong thing: an abort called from an
+      # httptest handler kills that goroutine alone, the client sees a transport
+      # error, and the test fails somewhere else entirely.
+      - name: No testing.T abort is made off the test goroutine
+        run: make check-test-goroutines
       - name: Run tests with coverage
         run: |
           go test -count=1 -coverpkg=./internal/...,./cmd/server/...,./cmd/internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
