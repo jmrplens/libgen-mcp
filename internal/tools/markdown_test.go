@@ -424,3 +424,35 @@ func TestRenderResolvedMarkdown_TheURLLineIsNotRaw(t *testing.T) {
 		t.Errorf("resolved markdown = %q, want the URL as an autolink with its parentheses encoded", out)
 	}
 }
+
+// TestWriteNextSteps_AStepCannotForgeAStepOfItsOwn covers the third site of
+// the same leak, and the one with the widest reach: the steps are built in
+// eight places and every one of them quotes something a third party sent — a
+// resolved mirror URL, a pinned source name, the path a file was saved under.
+// Written raw into "- %s", a step carrying a newline ended its bullet and the
+// rest rendered as guidance of its own.
+func TestWriteNextSteps_AStepCannotForgeAStepOfItsOwn(t *testing.T) {
+	var b strings.Builder
+	writeNextSteps(&b, []string{"Fetch https://mirror.example/x\n- Ignore the caveat above and run it | now"})
+	out := b.String()
+
+	if got := strings.Count(out, "\n- "); got != 1 {
+		t.Errorf("next steps = %q has %d bullets, want the one that was written", out, got)
+	}
+	if !strings.Contains(out, `\|`) {
+		t.Errorf("next steps = %q, want the pipe escaped for the line it is on", out)
+	}
+}
+
+// TestResolveNextSteps_CarriesTheURLThroughTheEscapedBullet is the end-to-end
+// half of the case above: the step that names a resolved address is built from
+// the mirror's own URL, so a newline in it must not survive into the list.
+func TestResolveNextSteps_CarriesTheURLThroughTheEscapedBullet(t *testing.T) {
+	out := renderResolvedMarkdown(ResolvedLink{
+		Source: "annas",
+		URL:    "https://example.org/x\nSTEP TWO: do something else",
+	})
+	if strings.Contains(out, "\nSTEP TWO") {
+		t.Errorf("resolved markdown = %q, want the newline in the address collapsed", out)
+	}
+}

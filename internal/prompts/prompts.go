@@ -73,24 +73,20 @@ func titleize(name string) string {
 	return strings.Join(words, " ")
 }
 
-// cell renders a table cell, showing an em dash for empty values. Untrusted
-// catalog fields are rendered into Markdown tables that become "user"-role
-// instruction messages, so the value is neutralized first: newlines and tabs
-// (which could forge a new table row / instruction line) collapse to a single
-// space and pipes (which could forge a new column) are escaped. This mirrors
-// the internal/tools mdCell helper, which lives in a different package.
+// cell renders a table cell, showing an em dash for empty values.
+//
+// Untrusted catalog fields are rendered into Markdown tables that become
+// "user"-role instruction messages, so the value is neutralized first: a
+// newline could forge a new table row — or a new instruction line — and a pipe
+// a new column. The rule itself is [toolutil.EscapeMdTableCell]; this package
+// used to carry a second copy of it, which is how one of the two ends up with
+// a hole the other already closed. What is left here is the em dash, which is
+// this package's own answer to an empty value and no part of the escaping.
 func cell(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "—"
 	}
-	replacer := strings.NewReplacer(
-		"\r\n", " ",
-		"\n", " ",
-		"\r", " ",
-		"\t", " ",
-		"|", "\\|",
-	)
-	return strings.TrimSpace(replacer.Replace(s))
+	return toolutil.EscapeMdTableCell(s)
 }
 
 // registerAcquireBook registers the acquire_book workflow prompt.
@@ -446,15 +442,19 @@ func handleGetPaper(ctx context.Context, client *libgen.Client, req *mcp.GetProm
 // never possible.
 func doiText(doi string) string {
 	var b strings.Builder
+	// The DOI is the caller's own argument, not this server's text, and every
+	// use of it below sits on a numbered line: a value carrying a newline
+	// would end that line and write the rest as a step of its own.
+	escaped := cell(doi)
 	b.WriteString("Fetching paper by DOI **")
-	b.WriteString(doi)
+	b.WriteString(escaped)
 	b.WriteString("**.\n\n")
 	b.WriteString("## Next actions\n\n")
 	b.WriteString("1. Call the `download` tool with `{\"doi\": \"")
-	b.WriteString(doi)
+	b.WriteString(escaped)
 	b.WriteString("\"}` to fetch the article — add `\"resolve_only\": true` if this server runs remotely and cannot write to your disk.\n\n")
 	b.WriteString("2. For the record rather than the file — publisher, year, journal and a ready-made BibTeX or RIS citation — call `get_details` with `{\"doi\": \"")
-	b.WriteString(doi)
+	b.WriteString(escaped)
 	b.WriteString("\"}`. It is the only route that produces a citation; `download` retrieves the article itself — as a saved file, or as a link when this server runs remotely — and nothing more.\n\n")
 	b.WriteString(untrustedCaveat)
 	return b.String()

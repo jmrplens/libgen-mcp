@@ -12,6 +12,7 @@
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons audit-gateway-chars check-gateway-chars \
+        audit-md-escaping check-md-escaping \
         audit-test-goroutines check-test-goroutines check-test-file-names \
         audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
@@ -299,6 +300,12 @@ audit-gateway-chars: ## Report served strings carrying characters an MCP gateway
 
 check-gateway-chars: ## Fail when the served surface carries a character an MCP gateway may reject (CI gate)
 	go run ./cmd/audit_gateway_chars/ -check
+
+audit-md-escaping: ## Report catalog text reaching a Markdown construct with no escaper between it and the page
+	go run ./cmd/audit_md_escaping/ -v
+
+check-md-escaping: ## Fail when a value reaches a Markdown construct unescaped (CI gate)
+	go run ./cmd/audit_md_escaping/ -check -fail-unresolved-in internal/toolutil
 
 check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
 	go run ./cmd/audit_install_buttons/
