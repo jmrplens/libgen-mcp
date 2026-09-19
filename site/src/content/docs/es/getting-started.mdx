@@ -176,7 +176,7 @@ Si ya tienes Node 18 o posterior, **npm** es el camino más corto — un solo co
     	docker pull ghcr.io/jmrplens/libgen-mcp:latest
     	```
 
-    	La imagen se ejecuta en **stdio por defecto** — el modo correcto para clientes MCP, así que `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (como lo usan los botones de un clic y `claude mcp add`) funciona sin configuración. Monta un volumen con permisos de escritura para las descargas y apunta `LIBGEN_MCP_DOWNLOAD_DIR` a él; el contenedor se ejecuta como usuario sin privilegios, por lo que el directorio del host debe ser escribible por el UID `10001`:
+    	La imagen **decide su transporte a partir de lo que sea la entrada estándar**, así que `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (como lo usan los botones de un clic y `claude mcp add`) conecta una tubería y obtiene el servidor stdio, que es el modo correcto para un cliente MCP, y funciona sin configuración. Una ejecución sin `-i` — un servicio de Compose sin `stdin_open`, un pod de Kubernetes, cualquier cosa que arranque un orquestador — conecta `/dev/null` y obtiene en su lugar el listener HTTP en streaming en el puerto 8080. Monta un volumen con permisos de escritura para las descargas y apunta `LIBGEN_MCP_DOWNLOAD_DIR` a él; el contenedor se ejecuta como usuario sin privilegios, por lo que el directorio del host debe ser escribible por el UID `10001`:
 
     	```bash
     	docker run -i --rm \
@@ -194,14 +194,21 @@ Si ya tienes Node 18 o posterior, **npm** es el camino más corto — un solo co
     	  ghcr.io/jmrplens/libgen-mcp:latest
     	```
 
-    	Para el transporte HTTP en streaming pasa `--http 0.0.0.0:8080` y publica el puerto; en modo HTTP se expone además un endpoint `GET /health`:
+    	Para el transporte HTTP en streaming quita el `-i` y publica el puerto — la orden por defecto de la imagen es `--transport auto --http 0.0.0.0:8080`, así que no hay nada que pasar. En modo HTTP se expone además un endpoint `GET /health`:
 
     	```bash
     	docker run --rm -p 8080:8080 \
     	  -v "$HOME/Downloads:/downloads" \
     	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
-    	  ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
+    	  ghcr.io/jmrplens/libgen-mcp:latest
     	```
+
+    	Nombrar tú el listener sigue funcionando — `docker run --rm -p 9000:9000 ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:9000` — con una cosa que conviene saber: **cualquier argumento sustituye la orden por defecto entera**, `--transport auto` incluido. Aquí es inofensivo, porque nombrar un listener es decidir el transporte, pero significa que el flag que añades es la línea de órdenes _completa_ y no un añadido a ella.
+
+    	Dos ajustes que se encuentran en un contenedor y que por separado sorprenden:
+
+    	- Un contenedor que se ata a `0.0.0.0` **con `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` puesto se rechaza al arrancar**, y la orden por defecto de arriba es exactamente ese listener. El rechazo es deliberado — esa variable permite a quien llama dirigir el servidor a direcciones que solo este host alcanza, que no es un poder para entregárselo a quien encuentre el puerto publicado — así que pasa `--http 127.0.0.1:8080` y pon un proxy delante, o deja la variable sin poner.
+    	- Un contenedor en el espacio de red **del host** (`--network host`) detrás de un proxy en esa misma máquina se alcanza por loopback, así que al servidor le parece un cliente local. En una red bridge — la de por defecto — no lo es, y lo que llega es la dirección del proxy. Consulta [Remoto (HTTP en streaming)](#remoto-http-en-streaming) para saber qué flags necesita cada forma.
     </TabItem>
     <TabItem label="go install">
     	Si ya tienes Go 1.27 o posterior y prefieres compilar desde el código fuente:

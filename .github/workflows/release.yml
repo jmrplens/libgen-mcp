@@ -281,6 +281,44 @@ jobs:
         uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+      # Nothing is published until both images have been started. `load: true`
+      # takes one platform per build, which is why this is two steps rather
+      # than the multi-platform build below; the push reuses their layers from
+      # the gha cache, so the second build of each is a cache hit rather than a
+      # second compile.
+      - name: Build linux/amd64 for the smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: libgen-mcp:smoke-amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.build-date.outputs.date }}
+      - name: Build linux/arm64 for the smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          platforms: linux/arm64
+          tags: libgen-mcp:smoke-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.build-date.outputs.date }}
+      - name: Smoke test both architectures
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bash scripts/smoke-test-image.sh "${EXPECTED_VERSION}" \
+            libgen-mcp:smoke-amd64=linux/amd64 \
+            libgen-mcp:smoke-arm64=linux/arm64
       - uses: docker/build-push-action@v7
         id: docker-push
         with:
@@ -289,6 +327,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
+          cache-from: type=gha
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ github.sha }}

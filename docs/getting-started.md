@@ -79,11 +79,14 @@ multi-arch image is published to the GitHub Container Registry:
 docker pull ghcr.io/jmrplens/libgen-mcp:latest
 ```
 
-The image runs the server on **stdio by default** — the correct mode for MCP clients, so
+The image **decides its transport from what standard input is**, so
 `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (as the one-click buttons and
-`claude mcp add` use it) works out of the box. Mount a writable volume for downloads and
-point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a non-root user, so the host
-directory must be writable by UID `10001`:
+`claude mcp add` use it) connects a pipe and gets the stdio server, which is the correct
+mode for an MCP client, and works out of the box. A run without `-i` — a Compose service
+with no `stdin_open`, a Kubernetes pod, anything an orchestrator starts — connects
+`/dev/null` and gets the streamable HTTP listener on port 8080 instead. Mount a writable
+volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a
+non-root user, so the host directory must be writable by UID `10001`:
 
 ```bash
 docker run -i --rm \
@@ -92,15 +95,34 @@ docker run -i --rm \
   ghcr.io/jmrplens/libgen-mcp:latest
 ```
 
-For the streamable HTTP transport instead, pass `--http 0.0.0.0:8080` and publish the port;
+For the streamable HTTP transport instead, drop the `-i` and publish the port — the image's
+default command is `--transport auto --http 0.0.0.0:8080`, so there is nothing to pass.
 HTTP mode also exposes a `GET /health` readiness endpoint:
 
 ```bash
 docker run --rm -p 8080:8080 \
   -v "$HOME/Downloads:/downloads" \
   -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
-  ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:8080
+  ghcr.io/jmrplens/libgen-mcp:latest
 ```
+
+Naming a listener yourself still works — `docker run --rm -p 9000:9000
+ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:9000` — with one thing to know: **an
+argument replaces the default command wholesale**, `--transport auto` included. That is
+harmless here, because naming a listener is deciding the transport, but it means a flag you
+add is the *whole* command line rather than an addition to it.
+
+Two settings that meet in a container and surprise people apart:
+
+- A container binding `0.0.0.0` **with `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` set is refused
+  at startup**, and the default command above is exactly that listener. The refusal is
+  deliberate — that variable lets a caller steer the server at addresses only this host can
+  reach, which is not a power to hand to whoever finds the published port — so pass
+  `--http 127.0.0.1:8080` and put a proxy in front, or leave the variable unset.
+- A container on the **host's** network namespace (`--network host`) behind a proxy on that
+  same host is reached over loopback, so it looks to the server like a local client. On a
+  bridge network — the default — it is not, and the proxy's address is what arrives. See
+  [Remote (streamable HTTP)](#remote-streamable-http) for which flags each shape needs.
 
 ### 4. `go install` (from source)
 
