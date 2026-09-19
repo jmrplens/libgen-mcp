@@ -15,15 +15,24 @@ func objectSchema(props map[string]any) map[string]any {
 	return map[string]any{"type": "object", "properties": props}
 }
 
+// describedOutputSchema is the output schema a well-formed tool carries: an
+// object whose root says what the tool returns.
+func describedOutputSchema() map[string]any {
+	schema := objectSchema(nil)
+	schema["description"] = "What the tool returns, in a sentence long enough to be useful."
+	return schema
+}
+
 // TestAuditMetadata_Clean verifies a well-formed tool produces no metadata
 // violations.
 func TestAuditMetadata_Clean(t *testing.T) {
 	tool := &mcp.Tool{
-		Name:        "search",
-		Title:       "Search",
-		Description: "A sufficiently long description for the tool.",
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(bool)},
-		InputSchema: objectSchema(nil),
+		Name:         "search",
+		Title:        "Search",
+		Description:  "A sufficiently long description for the tool.",
+		Annotations:  &mcp.ToolAnnotations{DestructiveHint: new(bool)},
+		InputSchema:  objectSchema(nil),
+		OutputSchema: describedOutputSchema(),
 	}
 	if vs := auditMetadata(tool); len(vs) != 0 {
 		t.Fatalf("auditMetadata() = %+v, want none", vs)
@@ -36,10 +45,11 @@ func TestAuditMetadata_Clean(t *testing.T) {
 func TestAuditMetadata_UndeclaredDestructiveHint(t *testing.T) {
 	base := func() *mcp.Tool {
 		return &mcp.Tool{
-			Name:        "search",
-			Title:       "Search",
-			Description: "A sufficiently long description for the tool.",
-			InputSchema: objectSchema(nil),
+			Name:         "search",
+			Title:        "Search",
+			Description:  "A sufficiently long description for the tool.",
+			InputSchema:  objectSchema(nil),
+			OutputSchema: describedOutputSchema(),
 		}
 	}
 
@@ -425,5 +435,45 @@ func TestAuditSchema_ConstraintStubsInGroupBranches(t *testing.T) {
 	got := categorySet(auditSchema("download", "input", schema))
 	if !got["field-description"] {
 		t.Error("a typed, undescribed property inside a branch must still be reported")
+	}
+}
+
+// TestAuditOutputRoot_ChecksWhatACallerIsToldTheyGetBack pins the rule the
+// whole surface failed until it existed: a schema inferred from a Go struct
+// describes every field and says nothing about the whole, so a client had a
+// list of properties and no sentence to put above it.
+func TestAuditOutputRoot_ChecksWhatACallerIsToldTheyGetBack(t *testing.T) {
+	described := "What the tool returns, in a sentence long enough to be useful."
+	testCases := []struct {
+		name   string
+		schema any
+		want   []string
+	}{
+		{name: "an object with a root description", schema: describedOutputSchema(), want: nil},
+		{name: "no schema at all", schema: nil, want: []string{"output-schema"}},
+		{name: "not an object value", schema: "a string", want: []string{"output-schema"}},
+		{name: "an object with no root description", schema: objectSchema(nil), want: []string{"output-description"}},
+		{
+			name:   "an object with a root description too short to say anything",
+			schema: map[string]any{"type": "object", "description": "stuff"},
+			want:   []string{"output-description"},
+		},
+		{
+			name:   "a described schema of the wrong type",
+			schema: map[string]any{"type": "array", "description": described},
+			want:   []string{"output-schema"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var categories []string
+			for _, v := range auditOutputRoot(&mcp.Tool{Name: "search", OutputSchema: tc.schema}) {
+				categories = append(categories, v.Category)
+			}
+			if strings.Join(categories, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("auditOutputRoot() reported %v, want %v", categories, tc.want)
+			}
+		})
 	}
 }

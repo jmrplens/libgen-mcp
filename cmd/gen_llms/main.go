@@ -820,6 +820,13 @@ func writeSchemaSection(b *strings.Builder, heading string, schema any) {
 	required := schemaRequiredSet(schemaMap)
 
 	b.WriteString(heading + "\n\n")
+	// The root description, when the schema carries one, before the property
+	// list. A list of fields says what comes back and never says what it is
+	// for, and a reader deciding whether to call the tool needs the sentence
+	// more than the fields.
+	if root, hasRoot := schemaMap["description"].(string); hasRoot && strings.TrimSpace(root) != "" {
+		b.WriteString(root + "\n\n")
+	}
 	names := make([]string, 0, len(props))
 	for name := range props {
 		names = append(names, name)

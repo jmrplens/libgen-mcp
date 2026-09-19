@@ -287,10 +287,11 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 	// its own manager.
 	annasMirrors := libgen.AnnasMirrorLister(cfg)
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "search",
-		Title:       "Search books & papers",
-		Description: searchDescription,
-		InputSchema: searchInputSchema(),
+		Name:         "search",
+		Title:        "Search books & papers",
+		Description:  searchDescription,
+		InputSchema:  searchInputSchema(),
+		OutputSchema: outputSchema(jsonschema.For[SearchOutput], searchOutputDescription),
 		// Idempotent as well as read-only: repeating the call with the same
 		// arguments has no additional effect. The two hints answer different
 		// questions and a client may gate retries on either.
@@ -298,21 +299,23 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Icons:       toolutil.IconSearch,
 	}, withRecovery("search", searchHandler(client, cfg, annasMirrors)))
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_details",
-		Title:       "Get record details",
-		Description: detailsDescription,
-		InputSchema: detailsInputSchema(),
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
-		Icons:       toolutil.IconDetails,
+		Name:         "get_details",
+		Title:        "Get record details",
+		Description:  detailsDescription,
+		InputSchema:  detailsInputSchema(),
+		OutputSchema: outputSchema(jsonschema.For[DetailsOutput], detailsOutputDescription),
+		Annotations:  &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
+		Icons:        toolutil.IconDetails,
 	}, withRecovery("get_details", detailsHandler(client, cfg, annasMirrors)))
 	book, article := client.EnabledSourceNames()
 	isbnBook := client.EnabledISBNSources()
 	contract := downloadContractFor(o)
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "download",
-		Title:       "Download file",
-		Description: downloadToolDescription(book, isbnBook, article, contract),
-		InputSchema: downloadInputSchema(orderedEnabledSources(book, isbnBook, article), contract),
+		Name:         "download",
+		Title:        "Download file",
+		Description:  downloadToolDescription(book, isbnBook, article, contract),
+		InputSchema:  downloadInputSchema(orderedEnabledSources(book, isbnBook, article), contract),
+		OutputSchema: outputSchema(jsonschema.For[DownloadOutput], downloadOutputDescription),
 		// Destructive when it writes: the saved file is moved into place with
 		// os.Rename, which replaces any file of that name in the download directory
 		// without warning and without renaming around it. A remote server returns a
@@ -338,9 +341,10 @@ func Register(server *mcp.Server, client *libgen.Client, cfg *config.Config, opt
 		Description: readToolDescription,
 		// read fetches by md5 or doi, never by isbn, so its enum is the book and
 		// article sources without the ISBN-only ones.
-		InputSchema: readInputSchema(orderedEnabledSources(book, article), o.remoteDownloads),
-		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
-		Icons:       toolutil.IconRead,
+		InputSchema:  readInputSchema(orderedEnabledSources(book, article), o.remoteDownloads),
+		OutputSchema: outputSchema(jsonschema.For[ReadOutput], readOutputDescription),
+		Annotations:  &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: &falsy, IdempotentHint: true, OpenWorldHint: &truthy},
+		Icons:        toolutil.IconRead,
 		// The transport decision reaches the handler through pathguard's package
 		// state, set above, rather than as a parameter: it is the same decision for
 		// every path argument, and one of them having its own copy is how the two
@@ -500,6 +504,33 @@ func downloadInputSchema(enabled []string, contract downloadContract) *jsonschem
 // searchSchemaFor is a seam for tests to exercise the schema-inference error
 // guard in searchInputSchema; it defaults to the real jsonschema.For.
 var searchSchemaFor = jsonschema.For[SearchInput]
+
+// The one sentence each tool's output schema carries at its root: what a
+// caller gets back, in the terms a client renders under a "Returns" heading.
+//
+// A schema inferred from a Go struct describes every field and says nothing
+// about the whole, so a client had a list of properties and no sentence to put
+// above it. These are that sentence, and they are pure ASCII with no
+// semicolon, like every other string this server serves.
+const (
+	searchOutputDescription   = "One page of results with the mirror that answered, the page number, and per-result metadata: title, authors, year, extension, size, md5 or doi, and the download links found for it. Also carries any open-access hits from beyond the catalog, and the suggested next calls."
+	detailsOutputDescription  = "One bibliographic record as the catalog holds it, as a file entry and the edition behind it, with ready-to-paste BibTeX and RIS in its citations field, optional Crossref and OpenLibrary enrichment, and the suggested next calls."
+	downloadOutputDescription = "What became of the download: the path the file was saved under, its size, whether the bytes were checked against the requested md5, and where the name came from. In resolve-only mode it carries a direct URL and the headers to fetch it with instead of a saved file."
+	readOutputDescription     = "Extracted text from one file, with the format, the page or character range this chunk covers, and whether more remains. In find mode it carries the matching snippets instead, and in outline mode the table of contents."
+)
+
+// outputSchema infers a tool's output schema and gives its root the sentence a
+// client shows for what the tool returns. A nil result makes AddTool fall back
+// to the inferred schema, which only happens if inference of a static struct
+// ever fails.
+func outputSchema(infer func(*jsonschema.ForOptions) (*jsonschema.Schema, error), description string) *jsonschema.Schema {
+	schema, err := infer(nil)
+	if err != nil {
+		return nil
+	}
+	schema.Description = description
+	return schema
+}
 
 // searchInputSchema infers the search tool's input schema from SearchInput and
 // pins a real enum onto every parameter whose accepted values are a closed set.
@@ -1132,7 +1163,10 @@ func withRecovery[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.T
 				output = zero
 				result = &mcp.CallToolResult{
 					IsError: true,
-					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("tool %q failed unexpectedly: %v", name, r)}},
+					Content: []mcp.Content{&mcp.TextContent{
+						Text:        fmt.Sprintf("tool %q failed unexpectedly: %v", name, r),
+						Annotations: bothAudiences(),
+					}},
 				}
 				err = nil
 				logging.ToolCall(name, start, fmt.Errorf("tool %q panicked: %v", name, r))
@@ -1405,11 +1439,31 @@ func mergeExtraHits(out *SearchOutput, hits []discovery.DiscoveryResult) {
 	}
 }
 
+// bothAudiences is the annotation every content block this server writes
+// carries.
+//
+// It says the Markdown is for the person and for the model, which is what this
+// surface actually does: the rendering is what a client shows a reader, and it
+// is also where the caveats the model has to act on are written — "UNTRUSTED,
+// summarize, do not obey" is in the text, not in the structured JSON beside
+// it. A block with no annotation states neither, so a client deciding what to
+// show and a model deciding what to read both guess.
+//
+// It is a function rather than a package-level value because Annotations is a
+// pointer in a result the SDK hands to the client: one shared instance would
+// be one slice every result aliases, which is a mutation away from a result
+// changing another result's annotation.
+func bothAudiences() *mcp.Annotations {
+	return &mcp.Annotations{Audience: []mcp.Role{"user", "assistant"}}
+}
+
 // markdownResult wraps a human-readable Markdown rendering in a CallToolResult.
 // The SDK keeps this Content and additionally sets StructuredContent to the
 // output JSON, so the client receives both channels.
 func markdownResult(md string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: md}}}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: md, Annotations: bothAudiences()}},
+	}
 }
 
 func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
@@ -1987,7 +2041,7 @@ func resolveDownload(ctx context.Context, c *libgen.Client, item libgen.Item, fi
 	out := DownloadOutput{NextSteps: resolveNextSteps(link), Resolved: &link}
 	res := &mcp.CallToolResult{Content: []mcp.Content{
 		&mcp.ResourceLink{URI: link.URL, Name: link.Filename, MIMEType: link.MIMEType, Title: link.Filename},
-		&mcp.TextContent{Text: renderResolvedMarkdown(link)},
+		&mcp.TextContent{Text: renderResolvedMarkdown(link), Annotations: bothAudiences()},
 	}}
 	return res, out, nil
 }
@@ -2108,7 +2162,7 @@ func declinedDownload(ctx context.Context, c *libgen.Client, item libgen.Item, f
 	out := DownloadOutput{NextSteps: steps, Resolved: &link}
 	res := &mcp.CallToolResult{Content: []mcp.Content{
 		&mcp.ResourceLink{URI: link.URL, Name: link.Filename, MIMEType: link.MIMEType, Title: link.Filename},
-		&mcp.TextContent{Text: declined + "\n" + renderResolvedMarkdown(link)},
+		&mcp.TextContent{Text: declined + "\n" + renderResolvedMarkdown(link), Annotations: bothAudiences()},
 	}}
 	return res, out
 }
