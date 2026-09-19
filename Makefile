@@ -13,7 +13,7 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
-        check-server-json-packages \
+        check-server-json-packages check-supply-chain \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
         gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi \
@@ -330,6 +330,9 @@ check-stamper: ## Exercise the release stamper (server.json) against a fixture m
 
 check-server-json-packages: ## Download every package server.json declares and check it is what it claims (needs network)
 	bash scripts/validate-server-json-packages.sh
+
+check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
+	go run ./cmd/audit_supply_chain/
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
