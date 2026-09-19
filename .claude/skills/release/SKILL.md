@@ -125,6 +125,33 @@ yours already publishes the same template.
 The `server.json` CI job is named for a required status check in the branch
 ruleset, not for its scope — do not rename it without updating the ruleset too.
 
+## The channels, and what each one's first publish needed
+
+A tag publishes to seven places. Six are automatic; LobeHub is not.
+
+| Channel | Auth | One-time setup |
+| --- | --- | --- |
+| GitHub release | `GITHUB_TOKEN` | — |
+| ghcr.io + Docker Hub | `GITHUB_TOKEN`, `DOCKERHUB_*` | — |
+| npm | OIDC trusted publisher | done (bootstrap publish, then the publisher) |
+| PyPI | OIDC trusted publisher | **1.7.2 uploaded by hand**; publisher to be added |
+| NuGet | `NuGet/login` OIDC → 1-hour key | **1.7.2 pushed by hand**; policy to be added |
+| Homebrew tap | `TAP_DEPLOY_KEY_B64` | the `jmrplens/homebrew-tap` repository and its deploy key |
+| winget | `WINGET_TOKEN` | the `jmrplens/winget-pkgs` fork, and one manual manifest submission accepted upstream |
+| LobeHub | interactive `lhm login` | `make publish-lobehub`, by hand after the tag |
+
+**Every trusted publisher on this repository names a blank environment**, and no
+publishing job declares `environment:`. npm matches on repository, workflow file
+**and** environment; PyPI and NuGet match the same way. One job with an
+environment and the others without is a failure that only appears during a real
+release, on the one path that never runs before a tag.
+
+**Homebrew and winget degrade rather than block.** Each checks for its secret and
+warns out when it is missing, because a release must not be held up by a channel
+whose external half does not exist yet. The winget job is skipped whole on a
+dispatch — it opens a pull request against `microsoft/winget-pkgs`, and there is
+no dry form of that.
+
 ## Publishing to npm
 
 npm is part of the tagged release and needs no manual step. After GoReleaser

@@ -82,6 +82,7 @@ jobs:
           fi
           echo "release_tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "release tag ${TAG}, VERSION ${FILE_V}, rehearsal=${REHEARSAL}"
+
   # The gate in front of everything a tag sets in motion.
   #
   # Nothing used to stand between a tag push and published binaries, a pushed
@@ -184,6 +185,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "v${RELEASE_TAG#v}" --draft=false
 
+      # A rehearsal has no release for the Homebrew job to read checksums from,
+      # and the formula's hashes are the part of it that can be wrong. Handing
+      # that job this file is what lets the rendering run for real on a
+      # dispatch; on a tag it downloads the published one and verifies its
+      # signature instead.
+      - name: Keep the rehearsal's checksums for the tap job
+        if: env.REHEARSAL == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: rehearsal-checksums
+          path: dist/checksums.txt
+          retention-days: 1
+
       # npm publish via OIDC trusted publisher — no stored token. dist/ already
       # holds the release binaries under their published names here, the same
       # spot the .mcpb step above reads from. The workflow's id-token: write
@@ -224,6 +238,74 @@ jobs:
           # --no-assemble: publish the tree the step above validated, rather
           # than rebuilding it and shipping bytes nothing looked at.
           bash scripts/publish-npm.sh dist "${RELEASE_TAG#v}" --no-assemble
+
+      # PyPI and NuGet follow npm here, and all three come before the registry
+      # publish below: mcp-publisher validates ownership by fetching each
+      # package server.json declares, so a package declared and not yet
+      # published fails the whole release at that step.
+      #
+      # Both build from the same dist/ the npm step used, and both validate
+      # before uploading, because a PyPI file name is burned forever even if
+      # the release is deleted and a NuGet version can be unlisted but never
+      # replaced.
+
+      - name: Build and validate the PyPI wheels
+        run: make validate-pypi-local PYPI_BINARIES=dist VERSION="${RELEASE_TAG#v}"
+
+      # OIDC trusted publisher: no stored token, PEP 740 attestations attached
+      # automatically, and skip-existing lets a re-run land on files already
+      # uploaded without failing. The publisher on pypi.org names this
+      # repository, this workflow file and a **blank** environment — this job
+      # declares no `environment:`, exactly as the npm publisher requires, and
+      # adding one would break both at once.
+      - name: Publish to PyPI
+        if: env.REHEARSAL != 'true'
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          packages-dir: pypi/dist
+          skip-existing: true
+
+      # An exact SDK version rather than 10.0.x: dnx's behaviour is an SDK
+      # property, and this is the same line the container `make validate-nuget`
+      # pins by digest. Bump the two together.
+      - uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: "10.0.400"
+
+      - name: Build and validate the NuGet packages
+        env:
+          DOTNET_NOLOGO: "1"
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+        run: make validate-nuget-local NUGET_BINARIES=dist VERSION="${RELEASE_TAG#v}"
+
+      # nuget.org trusted publishing: the job's OIDC token is exchanged for an
+      # API key that lives one hour. **This runs in a rehearsal too** — it mints
+      # a credential and spends nothing, and a policy that has drifted is
+      # exactly what a rehearsal should catch. The input is the nuget.org
+      # profile name, which is public, so it is a literal rather than a secret.
+      - name: NuGet login (OIDC to a temporary API key)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: jmrplens
+
+      # --no-assemble pushes the tree the validation step opened, and the script
+      # pushes the runtime packages before the pointer, so an install racing the
+      # publish never resolves a pointer whose packages are not there yet.
+      - name: Publish to NuGet
+        env:
+          DOTNET_NOLOGO: "1"
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+          # Withheld from a rehearsal, not merely unused by it: the dry run
+          # never reads the key, so the step has no reason to hold it.
+          NUGET_API_KEY: ${{ env.REHEARSAL != 'true' && steps.nuget-login.outputs.NUGET_API_KEY || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$REHEARSAL" = "true" ]; then
+            bash scripts/publish-nuget.sh dist "${RELEASE_TAG#v}" --no-assemble --dry-run
+          else
+            bash scripts/publish-nuget.sh dist "${RELEASE_TAG#v}" --no-assemble
+          fi
 
       # Runs in a rehearsal too, and that is the point: this is where the
       # stamper meets a real digest and a real bundle, and a rehearsal that
@@ -517,3 +599,126 @@ jobs:
           repository: ${{ env.DOCKERHUB_IMAGE }}
           short-description: "MCP server to search and read Library Genesis and open-access sources. By jmrp.io"
           readme-filepath: ./.github/dockerhub-description.md
+
+  # Homebrew is the fastest path from a tag to a running binary on somebody's
+  # machine, so it waits for the release job: a tap that advertises a version
+  # whose packages failed to publish is worse than a tap one release behind.
+  #
+  # It holds the tap's deploy key and runs no third-party code, which is why it
+  # is a job of its own rather than a step beside the publishes.
+  homebrew:
+    name: Homebrew tap
+    needs: [preflight, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Take the rehearsal's own checksums
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: rehearsal-checksums
+          path: dist
+
+      # The formula's sha256 lines are only as trustworthy as where they came
+      # from, so on a real release the manifest is downloaded with its sigstore
+      # bundle and verified before a single hash is read out of it.
+      - name: Fetch and verify the release checksums
+        if: env.REHEARSAL != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "v${RELEASE_TAG#v}" --dir dist \
+            --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' --clobber
+          cosign verify-blob \
+            --bundle dist/checksums.txt.sigstore.json \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            dist/checksums.txt
+
+      - name: Update the tap formula
+        env:
+          # Withheld from a rehearsal, not merely unused by it: the tap is
+          # cloned read-only over https and the commit is shown rather than
+          # pushed, so the step has no reason to hold the key.
+          TAP_DEPLOY_KEY_B64: ${{ env.REHEARSAL != 'true' && secrets.TAP_DEPLOY_KEY_B64 || '' }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          if [ "$REHEARSAL" = "true" ]; then
+            TAP_REPO=https://github.com/jmrplens/homebrew-tap.git \
+              bash scripts/update-homebrew-tap.sh dist/checksums.txt "${VERSION}" \
+                "${RUNNER_TEMP}/homebrew-tap" --dry-run
+            exit 0
+          fi
+          # The tap repository and its deploy key are set up once, by hand. Until
+          # then a release is not held up by a channel that does not exist yet.
+          if [ -z "${TAP_DEPLOY_KEY_B64}" ]; then
+            echo "::warning::TAP_DEPLOY_KEY_B64 is not configured — skipping the Homebrew tap update"
+            exit 0
+          fi
+          KEY_FILE="${RUNNER_TEMP}/tap_deploy_key"
+          KNOWN_HOSTS_FILE="${RUNNER_TEMP}/tap_known_hosts"
+          echo "${TAP_DEPLOY_KEY_B64}" | base64 --decode > "${KEY_FILE}"
+          chmod 600 "${KEY_FILE}"
+          ssh-keyscan -H github.com > "${KNOWN_HOSTS_FILE}" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ${KEY_FILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${KNOWN_HOSTS_FILE}"
+          bash scripts/update-homebrew-tap.sh dist/checksums.txt "${VERSION}" "${RUNNER_TEMP}/homebrew-tap"
+
+  # winget opens a pull request against microsoft/winget-pkgs, so nothing here
+  # can run dry and a rehearsal skips the job whole. `env` is not readable in a
+  # job-level `if`, hence the event test.
+  winget:
+    name: Winget
+    needs: [release]
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions: {} # both steps authenticate with WINGET_TOKEN, not GITHUB_TOKEN
+    steps:
+      - name: Check the winget credentials
+        id: winget-token
+        shell: bash
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -z "${WINGET_TOKEN}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::WINGET_TOKEN is not configured — skipping the winget submission."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The fork MUST be synced before the releaser runs: komac creates its
+      # branch on the fork, and a stale fork fails with "Ref cannot be created",
+      # which the releaser's continue-on-error would then hide. This step is
+      # deliberately blocking — nothing downstream depends on this job, so a red
+      # winget job is the visibility a silently skipped submission lacks.
+      - name: Sync the winget-pkgs fork with upstream
+        if: steps.winget-token.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: gh api -X POST repos/jmrplens/winget-pkgs/merge-upstream -f branch=master
+
+      # Only works once the initial manifest for jmrplens.libgen-mcp has been
+      # accepted upstream, which is a one-time manual submission;
+      # continue-on-error keeps releases green until then, and when Microsoft's
+      # validation service hiccups.
+      #
+      # Pinned to a commit SHA because this is an individually-maintained action
+      # that receives WINGET_TOKEN — a mutable tag would let a compromised
+      # release exfiltrate it.
+      - uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+        if: steps.winget-token.outputs.skip == 'false'
+        continue-on-error: true
+        with:
+          identifier: jmrplens.libgen-mcp
+          installers-regex: '-windows-(amd64|arm64)\.exe$'
+          release-tag: ${{ github.ref_name }}
+          token: ${{ secrets.WINGET_TOKEN }}

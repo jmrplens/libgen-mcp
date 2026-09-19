@@ -787,6 +787,15 @@ and sets `additionalProperties: false` — it accepts neither of those two field
 Both are in `VERSION_MANIFESTS` and both are stamped on release; neither is
 generated from the other.
 
+**Every trusted publisher names a blank environment, and no publishing step
+declares one.** npm matches a publisher on the repository, the workflow file
+**and** the environment; PyPI and NuGet match the same way. The publishes live in
+the `release` job, which declares no `environment:`, and adding one there would
+break all three at once — during a real release, on the one path that never runs
+before a tag. Ordering matters for the same reason: npm, PyPI and NuGet all
+publish **before** `mcp-publisher`, which validates ownership by fetching each
+package `server.json` declares.
+
 ### The npm channel
 
 `npm/libgen-mcp/` is the **committed** launcher package (`@jmrp.io/libgen-mcp`):
