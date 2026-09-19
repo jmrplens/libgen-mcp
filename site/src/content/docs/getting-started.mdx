@@ -508,6 +508,8 @@ services:
 
 The name is the flag in upper case with dashes as underscores, under `LIBGEN_MCP_`. The one exception is `--http` itself, whose variable is `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_MCP_HTTP` would read as a switch rather than as an address. The full list is in [Configuration → HTTP listener](/libgen-mcp/configuration/#http-listener).
 
+{/* libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use */}
+
 **A flag you type still wins**, so a base image that sets its defaults in `environment:` and a `command:` that overrides one of them behaves the way it looks. Typing a flag counts even when you type its default value: `--stateless=true` beats `LIBGEN_MCP_STATELESS=0`, because the question is whether you asked, not whether the answer differs. A variable that does not parse fails startup naming both the variable and the flag, rather than silently leaving the default in place — and the startup log names the variables that configured the listener, which is the quickest answer to "why is it on that port".
 
 #### Terminating TLS in this process

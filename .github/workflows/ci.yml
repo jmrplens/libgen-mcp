@@ -345,6 +345,13 @@ jobs:
       - name: The README's counts match the source
         if: env.FRESHNESS == 'checked'
         run: make check-stats
+      # A page that names a variable nobody reads, a source nobody can select
+      # or a tool nobody registered is worse than a page that says nothing: the
+      # reader who sets it gets silence, and the silence looks like their own
+      # mistake. Not FRESHNESS-gated, like the buttons below it: a page can be
+      # edited in any layer of a stack.
+      - name: The documentation names nothing the server does not have
+        run: make check-doc-names
       # Not FRESHNESS-gated, unlike everything above it: those check that a
       # generated file was regenerated, which is the top layer of a stack's job.
       # This checks what a button actually registers, and a button can be edited

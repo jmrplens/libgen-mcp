@@ -550,6 +550,8 @@ the environment, then the default** — so a compose file's `environment:` block
 deployment whose image sets no `command:`, and a single `command:` override still wins for the
 one setting it names.
 
+<!-- libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use -->
+
 "Explicitly passed" means typed, not different from the default: `--stateless=true` beats
 `LIBGEN_MCP_STATELESS=0`. A value that does not parse fails startup naming the variable and the
 flag it fills, rather than falling back to the default in silence — a deployment that does not

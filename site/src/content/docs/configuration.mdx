@@ -151,6 +151,8 @@ The **HTTP listener settings** go the other way — the flag is the primary spel
 
 These configure the HTTP transport, and every one of them is the flag of the same name with a variable underneath it. The naming rule is mechanical — `LIBGEN_MCP_` plus the flag in upper case with dashes as underscores — with one exception: `--http` is `LIBGEN_MCP_HTTP_ADDR`, because `LIBGEN_MCP_HTTP` would read as a switch rather than as an address.
 
+{/* libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use */}
+
 They exist for the deployment that has no command line to write on: a compose file's `environment:`, a systemd unit's `Environment=`, a Kubernetes ConfigMap. What each setting _does_ is documented once, with the flags, in [Architecture → Stateless mode](/libgen-mcp/architecture/#stateless-mode) and [Where the server listens](/libgen-mcp/architecture/#where-the-server-listens).
 
 | Variable                             | Flag                        | Default                               |
@@ -322,6 +324,8 @@ Controls when the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary,
 `LIBGEN_MCP_TELEMETRY` is the only switch this server owns. Everything about _how_ the export happens — the collector endpoint, the protocol, headers, timeouts, sampling, batch sizes, resource attributes, the service name — comes from the standard `OTEL_*` variables, which the OpenTelemetry SDK reads for itself.
 
 **Those names are never prefixed, and that is not an inconsistency.** Every variable this server defines carries `LIBGEN_MCP_`, because a stdio server runs in whatever shell its client was started from, beside every other tool that person uses, and a bare `TIMEOUT` may already belong to one of them. An `OTEL_*` name is not ours to choose: the SDK reads the spelling the specification gives it, so `LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` would be a variable nothing reads. The same applies to `LIBGEN_MIRROR`, which follows the mirror family's own convention.
+
+{/* libgen:allow-name LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT: named above as the prefixed spelling nothing reads */}
 
 Two consequences worth knowing before you set them:
 

@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/internal/freshness"
 )
 
 // TestTruncateRunes_RespectsRuneBoundaries verifies truncation counts runes (not
@@ -967,5 +968,71 @@ func TestLLMSFullDocumentsBothSchemas(t *testing.T) {
 	}
 	if !strings.Contains(out, "**Returns:**") {
 		t.Fatal("output schemas are not documented")
+	}
+}
+
+// TestInstallChannelsReachTheGeneratedFiles verifies both committed files name
+// every channel the release publishes.
+//
+// It is what the defect that prompted the list looked like: llms.txt and
+// llms-full.txt named the binary and Docker and nothing else, while the npm
+// launcher had shipped since "#127" and PyPI and NuGet since v1.7.3 — so a
+// model reading the repository's own machine-readable summary would tell a
+// user to download a release asset when one npx line would have done.
+//
+// What it can catch is a row added to installChannels that the generator does
+// not write, and a committed file that stopped carrying one. What it cannot
+// catch is a channel the release publishes and nobody added, which is why
+// installChannels carries the rule in prose beside it.
+func TestInstallChannelsReachTheGeneratedFiles(t *testing.T) {
+	freshness.SkipIfDeferred(t)
+
+	for _, name := range []string{"llms.txt", "llms-full.txt"} {
+		content, err := os.ReadFile(filepath.Join("..", "..", name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		for _, channel := range installChannels {
+			t.Run(name+" names "+channel.name, func(t *testing.T) {
+				if !strings.Contains(string(content), channel.command) {
+					t.Errorf("%s does not carry %q, the command for %s", name, channel.command, channel.name)
+				}
+			})
+		}
+	}
+}
+
+// TestWriteInstallChannels_WritesEveryRow drives the writer itself, so a row
+// the generated files happen to mention for another reason cannot stand in for
+// one this list is responsible for.
+func TestWriteInstallChannels_WritesEveryRow(t *testing.T) {
+	var b strings.Builder
+	writeInstallChannels(&b)
+	written := b.String()
+
+	for _, channel := range installChannels {
+		t.Run(channel.name, func(t *testing.T) {
+			if !strings.Contains(written, "- "+channel.name+": `"+channel.command+"`") {
+				t.Errorf("writeInstallChannels() = %q, want a row for %s", written, channel.name)
+			}
+		})
+	}
+}
+
+// TestInstallChannelsAreNamedOnce verifies the list has no duplicate channel,
+// which would print the same line twice to a reader deciding between them, and
+// no row with nothing to run.
+func TestInstallChannelsAreNamedOnce(t *testing.T) {
+	seen := map[string]bool{}
+	for _, channel := range installChannels {
+		t.Run(channel.name, func(t *testing.T) {
+			if seen[channel.name] {
+				t.Errorf("%q is listed twice", channel.name)
+			}
+			seen[channel.name] = true
+			if strings.TrimSpace(channel.command) == "" {
+				t.Errorf("%q has no command, so the row tells a reader nothing", channel.name)
+			}
+		})
 	}
 }

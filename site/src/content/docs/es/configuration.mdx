@@ -151,6 +151,8 @@ Los **ajustes del listener HTTP** van al revés — la opción es la grafía pri
 
 Estas configuran el transporte HTTP, y cada una es la opción del mismo nombre con una variable por debajo. La regla de nombrado es mecánica — `LIBGEN_MCP_` más el nombre de la opción en mayúsculas y con los guiones como guiones bajos — con una excepción: `--http` es `LIBGEN_MCP_HTTP_ADDR`, porque `LIBGEN_MCP_HTTP` se leería como un interruptor y no como una dirección.
 
+{/* libgen:allow-name LIBGEN_MCP_HTTP: se nombra arriba como la grafia que este servidor deliberadamente no usa */}
+
 Existen para el despliegue que no tiene una línea de órdenes donde escribir: el `environment:` de un compose, el `Environment=` de una unidad de systemd, un ConfigMap de Kubernetes. Lo que _hace_ cada ajuste está documentado una sola vez, junto a las opciones, en [Arquitectura → Modo sin estado](/libgen-mcp/es/architecture/#modo-sin-estado) y [Dónde escucha el servidor](/libgen-mcp/es/architecture/#dónde-escucha-el-servidor).
 
 | Variable                             | Opción                      | Por defecto                           |
@@ -324,6 +326,8 @@ Controla cuándo se consultan los buscadores extra (Anna's Archive, arXiv, Cross
 `LIBGEN_MCP_TELEMETRY` es el único interruptor que este servidor posee. Todo lo relativo a _cómo_ se exporta —el endpoint del colector, el protocolo, las cabeceras, los tiempos de espera, el muestreo, el tamaño de los lotes, los atributos de recurso, el nombre del servicio— procede de las variables estándar `OTEL_*`, que el SDK de OpenTelemetry lee por su cuenta.
 
 **Esos nombres nunca llevan prefijo, y no es una incoherencia.** Toda variable que define este servidor lleva `LIBGEN_MCP_`, porque un servidor stdio se ejecuta en el intérprete de órdenes desde el que se lanzó su cliente, junto a cualquier otra herramienta que esa persona use, y un `TIMEOUT` a secas puede pertenecer ya a alguna de ellas. Un nombre `OTEL_*` no es nuestro para elegirlo: el SDK lee la grafía que le da la especificación, así que `LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` sería una variable que nadie lee. Lo mismo vale para `LIBGEN_MIRROR`, que sigue la convención de la propia familia de mirrors.
+
+{/* libgen:allow-name LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT: se nombra arriba como la grafia con prefijo que nada lee */}
 
 Dos consecuencias que conviene conocer antes de fijarlas:
 

@@ -31,6 +31,16 @@ Docker alternative (no download; pulls the image on first run and runs over stdi
 
 Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).
 
+Every channel this server publishes to, and the one line that runs it:
+
+- Docker: `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest`
+- npm (Node 18+): `npx -y @jmrp.io/libgen-mcp`
+- prebuilt binary: `download the release asset for the OS and architecture, then run it`
+- PyPI: `uvx --from libgen-mcp libgen-mcp`
+- NuGet (.NET 10+): `dnx libgen-mcp -- --help`
+- Homebrew: `brew install jmrplens/tap/libgen-mcp`
+- Claude Desktop bundle: `install the .mcpb asset from the release`
+
 Configuration (environment variables, all optional):
 
 - LIBGEN_MIRROR: Force a specific mirror base URL, e.g. https://libgen.li. (default: auto-discovered)
