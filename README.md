@@ -243,7 +243,19 @@ curl -L -o libgen-mcp \
 chmod +x libgen-mcp && sudo mv libgen-mcp /usr/local/bin/
 ```
 
-The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/arch with nothing else installed. Each release ships a `checksums.txt` to verify the download. Then register `libgen-mcp` with your client using the binary variant of any snippet [above](#add-to-your-mcp-client), or see the [getting-started guide](docs/getting-started.md). **No token or account is required** — Library Genesis needs no credentials.
+The binary is fully static (`CGO_ENABLED=0`, no `-buildmode=pie`), so it names no dynamic loader and runs anywhere for that OS/arch with nothing else installed — glibc, musl, or a `scratch` container. Then register `libgen-mcp` with your client using the binary variant of any snippet [above](#add-to-your-mcp-client), or see the [getting-started guide](docs/getting-started.md). **No token or account is required** — Library Genesis needs no credentials.
+
+Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them:
+
+```bash
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+sha256sum --ignore-missing -c checksums.txt
+```
+
+The first command is the one usually skipped and the one that matters: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. Full recipe in the [getting-started guide](docs/getting-started.md#verifying-what-you-downloaded).
 
 ## Other install channels
 
