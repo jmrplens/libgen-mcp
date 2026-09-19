@@ -417,6 +417,21 @@ the SHA stands for, and without it an action is pinned **and** frozen. To bump
 one by hand, resolve the tag first — `gh api repos/<owner>/<repo>/commits/<tag>
 -q .sha` — and move the comment with it.
 
+`make check-supply-chain` (`cmd/audit_supply_chain`, CI's `Supply chain` job) is
+what keeps all of this true. It reads the raw workflow text for the pins — a
+`uses:` inside a commented-out block still counts — and the parsed document for
+everything structural, and it refuses a workflow with a duplicated mapping key
+rather than auditing whichever value the parser happened to keep. Its own job
+declares `contents: read` and takes no secrets, because it audits the jobs that
+*do*.
+
+**Pinning the action is not pinning the tool.** `goreleaser-action` and
+`cosign-installer` download a binary at run time, so each is given an exact
+version through a top-level `env` entry (`GORELEASER_VERSION`,
+`COSIGN_VERSION`) — the one indirection the audit allows. The cosign major is
+load-bearing beyond the pin: it decides how a signature is attached, and a 2.x
+client reports "no signatures found" on an image a 3.x client verifies.
+
 `cooldown: {default-days: 3}` on every Dependabot ecosystem holds a release for
 three days before a pull request proposes it, which is the window a compromised
 or withdrawn publish is usually caught in. It does not delay a security fix that
