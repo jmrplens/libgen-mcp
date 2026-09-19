@@ -114,6 +114,18 @@ load-bearing:
   in a version that is already published. The release job publishes npm before it
   runs `mcp-publisher`, in that order, which is what makes the two agree.
 
+**The registry re-fetches all four entries at publish time, and that race is
+retried rather than failed.** `mcp-publisher publish` validates the npm entry by
+reading `mcpName` off the published package, the PyPI one by GETting pypi.org's
+JSON for the version, the NuGet one by reading that version's README off the v3
+feed, and the OCI one by resolving the tag — all minutes after the steps above
+uploaded them. nuget.org runs a validation pass of its own before a pushed
+version becomes visible, which takes minutes, so its "wait for validation to
+complete" is lag by construction. The step therefore retries **only** the
+wordings the registry labels transient, eight times at a minute apart; a plain
+404 is deliberately not among them, so a package that genuinely failed to
+publish fails on the first attempt rather than eight minutes later.
+
 `make check-stamper` drives all of this against a fixture, in CI's `server.json`
 job; it needs no network and no release. `make check-server-json-packages` is the
 other half and does need both: it downloads every declared artifact and checks it

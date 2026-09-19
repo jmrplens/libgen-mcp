@@ -412,8 +412,8 @@ jobs:
       - name: Publish to MCP Registry
         if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
         env:
-          MCP_PUBLISHER_VERSION: "v1.7.8"
-          MCP_PUBLISHER_SHA256: "48230dbec85bd88a0d42977ef533cddda23235f0db4331b9263ce53b432cb75c"
+          MCP_PUBLISHER_VERSION: "v1.8.1"
+          MCP_PUBLISHER_SHA256: "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc"
         run: |
           set -euo pipefail
           TARBALL="mcp-publisher_linux_amd64.tar.gz"
@@ -431,8 +431,34 @@ jobs:
           ./mcp-publisher login github-oidc
           VERSION="${RELEASE_TAG#v}"
           set +e
-          ./mcp-publisher publish 2>&1 | tee mcp-publisher-publish.log
-          STATUS=${PIPESTATUS[0]}
+          STATUS=1
+          for attempt in 1 2 3 4 5 6 7 8; do
+            ./mcp-publisher publish 2>&1 | tee mcp-publisher-publish.log
+            STATUS=${PIPESTATUS[0]}
+            [ "${STATUS}" -eq 0 ] && break
+            if grep -q "invalid version: cannot publish duplicate version" mcp-publisher-publish.log; then
+              break
+            fi
+            # The registry validates every package entry by fetching what the
+            # steps above published minutes ago: the npm entry by reading
+            # `mcpName` off the published package, the PyPI one by GETting
+            # pypi.org's JSON for this version, the NuGet one by reading that
+            # version's README off the v3 feed. nuget.org runs a validation
+            # pass of its own on every push before the version becomes
+            # visible, so "wait for validation to complete" is propagation lag
+            # by construction rather than a broken release. Retry only the
+            # wordings the registry itself labels transient; a plain 404 is
+            # deliberately absent, so a package that genuinely was not
+            # published fails on the first attempt instead of eight minutes
+            # later. The OCI entry's own 404 is absent for the same reason —
+            # the image was pushed by the job this one needs.
+            if grep -qE "take a moment to appear|retry later|retry shortly|validation timed out|wait for validation to complete" mcp-publisher-publish.log; then
+              echo "::notice::the registry has not caught up with this release yet (attempt ${attempt}); retrying in 60s"
+              sleep 60
+              continue
+            fi
+            break
+          done
           set -e
           if [ "${STATUS}" -ne 0 ]; then
             # A duplicate here can only be a duplicate of this tag: the pin step
