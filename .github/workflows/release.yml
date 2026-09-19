@@ -176,6 +176,27 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
 
+      # GoReleaser leaves every binary in a per-target subdirectory — the first
+      # rehearsal proved it: dist/artifacts.json names
+      # `libgen-mcp-linux-amd64` with a path of
+      # `dist/libgen-mcp_linux_amd64_v1/libgen-mcp`. The release-asset name
+      # exists only in that manifest, so `dist/` has no file under it and every
+      # step below that takes a directory of assets — the npm, PyPI and NuGet
+      # builders, and their validators — finds nothing.
+      #
+      # It went unnoticed because each of those channels landed after the last
+      # tag, so none of them had ever run. `build-mcpb.sh` is the exception and
+      # the reason the gap stayed hidden: it looks its two binaries up with
+      # `find` on the target path rather than by asset name.
+      - name: Stage release-named binaries at the dist root
+        run: |
+          set -euo pipefail
+          jq -r '.[] | select(.type == "Binary" and (.name | startswith("libgen-mcp-"))) | [.name, .path] | @tsv' dist/artifacts.json \
+            | while IFS=$'\t' read -r name path; do
+                cp "$path" "dist/$name"
+              done
+          ls -1 dist/
+
       # Built in a rehearsal too — packing the bundle is the part that can
       # break, and it is the file server.json's hash is taken from — and
       # uploaded only when there is a release to attach it to.
