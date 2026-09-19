@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jmrplens/libgen-mcp/cmd/internal/gate"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 	"github.com/jmrplens/libgen-mcp/internal/config"
 )
@@ -44,17 +44,16 @@ func main() {
 }
 
 // run parses the command line and performs the sweep.
+//
+// It returns 0 when every name resolves, 1 when -check found one that does
+// not, and 2 when the audit could not do its job: a gate that cannot run must
+// not read as a gate that passed.
 func run(args []string, out, errOut io.Writer) int {
-	flags := flag.NewFlagSet(toolName, flag.ContinueOnError)
-	flags.SetOutput(errOut)
-	var (
-		dir   = flags.String("dir", ".", "repository root")
-		check = flags.Bool("check", false, "exit non-zero when a name does not resolve")
-	)
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
+	cfg, err := gate.Parse(toolName, args, errOut, "exit non-zero when a name does not resolve", nil)
+	switch {
+	case gate.Helped(err):
+		return 0
+	case err != nil:
 		return 2
 	}
 
@@ -63,7 +62,7 @@ func run(args []string, out, errOut io.Writer) int {
 		fmt.Fprintf(errOut, "%s: %v\n", toolName, err)
 		return 2
 	}
-	pages, err := readPages(*dir)
+	pages, err := readPages(cfg.Dir)
 	if err != nil {
 		fmt.Fprintf(errOut, "%s: %v\n", toolName, err)
 		return 2
@@ -71,7 +70,7 @@ func run(args []string, out, errOut io.Writer) int {
 
 	report := audit(pages, surface)
 	writeReport(out, report)
-	if *check && len(report.Findings) > 0 {
+	if cfg.Check && len(report.Findings) > 0 {
 		fmt.Fprintf(errOut, "%s: %d name(s) in the documentation do not resolve\n", toolName, len(report.Findings))
 		return 1
 	}

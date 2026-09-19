@@ -470,13 +470,13 @@ by registering the tools and prompts for real and walking the tree, and
 | Download sources         |    21 |
 | Discovery providers      |     8 |
 | `LIBGEN_MCP_*` variables |    55 |
-| Go packages              |    47 |
-| Test files               |   218 |
+| Go packages              |    48 |
+| Test files               |   219 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
 | unit (internal)      |   101 |
-| unit (cmd)           |    65 |
+| unit (cmd)           |    66 |
 | HTTP end-to-end      |    29 |
 | stdio end-to-end     |    10 |
 | collector acceptance |     7 |

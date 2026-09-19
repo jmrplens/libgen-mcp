@@ -1,8 +1,6 @@
 package main
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/cmd/internal/gate"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
 	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
 	"github.com/jmrplens/libgen-mcp/internal/config"
@@ -45,25 +44,20 @@ func main() {
 // and 2 when the command could not do its job: a gate that cannot run must not
 // read as a gate that passed.
 func run(args []string, out, errOut io.Writer) int {
-	flags := flag.NewFlagSet(toolName, flag.ContinueOnError)
-	flags.SetOutput(errOut)
-	var (
-		dir   = flags.String("dir", ".", "repository root")
-		check = flags.Bool("check", false, "exit non-zero when the committed region is stale")
-	)
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
+	cfg, err := gate.Parse(toolName, args, errOut, "exit non-zero when the committed region is stale", nil)
+	switch {
+	case gate.Helped(err):
+		return 0
+	case err != nil:
 		return 2
 	}
 
-	stats, err := collect(*dir)
+	stats, err := collect(cfg.Dir)
 	if err != nil {
 		fmt.Fprintf(errOut, "%s: %v\n", toolName, err)
 		return 2
 	}
-	return apply(*dir, stats, *check, out, errOut)
+	return apply(cfg.Dir, stats, cfg.Check, out, errOut)
 }
 
 // apply writes the rendered region, or compares it and says which it was.
