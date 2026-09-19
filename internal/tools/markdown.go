@@ -8,6 +8,7 @@ import (
 
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
 // This file renders each tool's structured output as a human-readable Markdown
@@ -28,39 +29,19 @@ func writeNextSteps(b *strings.Builder, steps []string) {
 	}
 }
 
-// mdCell sanitizes a value for a Markdown table cell: it collapses newlines and
-// escapes pipes so the value cannot break the table layout.
-func mdCell(s string) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "|", "\\|")
-	return strings.TrimSpace(s)
-}
+// mdCell sanitizes a value for a Markdown table cell.
+//
+// It is the package-local spelling of [toolutil.EscapeMdTableCell], kept
+// because thirty-odd call sites read better with the short name. The rule it
+// applies lives in internal/toolutil so internal/prompts applies the same one.
+func mdCell(s string) string { return toolutil.EscapeMdTableCell(s) }
 
-// fencedBlock wraps content in a Markdown fenced code block whose fence is long
-// enough that the content can never close it early. Per the CommonMark rule, a
-// closing fence must be at least as long as the opening one, so we open with
-// max(3, longestBacktickRun(content)+1) backticks. This keeps untrusted-derived
-// content (e.g. a BibTeX entry built from catalog metadata) from breaking out of
-// the fence and being rendered as Markdown/instructions. lang is the info string.
-func fencedBlock(lang, content string) string {
-	fence := strings.Repeat("`", max(3, longestBacktickRun(content)+1))
-	return fence + lang + "\n" + content + "\n" + fence
-}
-
-// longestBacktickRun returns the length of the longest run of consecutive
-// backticks in s, or 0 when s contains none.
-func longestBacktickRun(s string) int {
-	longest, run := 0, 0
-	for _, r := range s {
-		if r == '`' {
-			run++
-			longest = max(longest, run)
-			continue
-		}
-		run = 0
-	}
-	return longest
-}
+// fencedBlock wraps content in a Markdown fenced code block content cannot
+// close early.
+//
+// The package-local spelling of [toolutil.MarkdownFencedBlock], for the reason
+// mdCell gives.
+func fencedBlock(lang, content string) string { return toolutil.MarkdownFencedBlock(lang, content) }
 
 // resultTitle returns the title to show for a result, with its volume/issue
 // designator and edition marker appended when it has them. Both are parsed out
@@ -117,7 +98,7 @@ func resultLinks(r libgen.Result) string {
 		if label == "" {
 			label = "download"
 		}
-		parts = append(parts, fmt.Sprintf("[%s](%s)", mdCell(label), d.URL))
+		parts = append(parts, toolutil.MdTitleLink(label, d.URL))
 	}
 	return strings.Join(parts, " ")
 }

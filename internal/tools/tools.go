@@ -2210,7 +2210,12 @@ func resolveNextSteps(link ResolvedLink) []string {
 func renderResolvedMarkdown(link ResolvedLink) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Resolved a download link via **%s** (not downloaded — fetch it yourself):\n", mdCell(link.Source))
-	fmt.Fprintf(&b, "- URL: %s\n", link.URL)
+	// The resolved URL is third-party text and is the one value here a reader
+	// is meant to act on, so it is written as a link when it is one and in a
+	// code span when it is not. Written raw, a URL carrying a close
+	// parenthesis or a newline ended the line it was on and the rest rendered
+	// as prose.
+	fmt.Fprintf(&b, "- URL: %s\n", toolutil.MdAutolink(link.URL))
 	if link.Filename != "" {
 		fmt.Fprintf(&b, "- Suggested filename: %s\n", mdCell(link.Filename))
 	}

@@ -171,9 +171,11 @@ func TestReport_OrdersBySurfaceThenLocation(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	want := []string{"prompt a", "prompt b", "tool a", "tool z"}
 	for i, fragment := range want {
-		if !strings.Contains(lines[i], fragment) {
-			t.Errorf("line %d = %q, want it to name %q", i, lines[i], fragment)
-		}
+		t.Run(fragment, func(t *testing.T) {
+			if !strings.Contains(lines[i], fragment) {
+				t.Errorf("line %d = %q, want it to name %q", i, lines[i], fragment)
+			}
+		})
 	}
 }
 
