@@ -21,6 +21,13 @@
 /npm/**/node_modules/
 /npm/**/*.tgz
 
+# PyPI wheelhouse: six platform wheels built from the release binaries at
+# publish time. The README under /pypi/ IS committed — it is the long
+# description every wheel embeds, and it carries the MCP Registry's ownership
+# token — and the wheels are not.
+/pypi/dist/
+__pycache__/
+
 coverage.out
 coverage.internal.out
 coverage.html

@@ -839,6 +839,35 @@ profile) and `npm org ls jmrp.io` lists `jmrpio` as the owner **member** — nei
 is the scope, and reading either as one publishes to the wrong place. A granular
 token cannot unpublish, so a mis-scoped publish cannot be undone.
 
+### The PyPI channel
+
+`pypi/README.md` is **committed** and is the long description every wheel
+embeds; it carries the `mcp-name: io.github.jmrplens/libgen-mcp` token the MCP
+Registry reads ownership from, and `build_pypi.py` refuses to build without it.
+The six platform wheels are **generated** from the release assets into
+`pypi/dist/`, which is gitignored.
+
+The distribution is `libgen-mcp` — the same name as the import package and the
+command, because the name was free. That is not a cosmetic detail:
+
+- **No wheel declares a console script.** A `console_scripts` entry would be
+  named after the distribution, which here is also the name of the binary the
+  `.data/scripts` entry installs into `bin/` — two files, one path, and
+  whichever the installer writes last wins. A project shipping under an
+  author-prefixed name needs that wrapper so `uvx <dist-name>` resolves;
+  this one does not. `validate_pypi.py` fails a wheel that grows one.
+- **The binary rides in `.data/scripts`, not in the package directory.** The
+  wheel spec obliges the installer to put it on the scripts path with the
+  executable bit; a binary inside the package gets no such guarantee. The zip
+  entry needs `S_IFREG` in `external_attr` as well as the `0o111` bits, because
+  pip's `zip_item_is_executable` checks the file type first — permission bits
+  alone install it without `+x`.
+- **The linux wheels carry `musllinux` tags beside the `manylinux` ones.** That
+  is only honest for a binary that needs no C library, so the validator checks
+  the archived bytes for an ELF interpreter and for `GLIBC_` symbols and fails
+  on either. Measured end to end: the wheel installs under `python:3.13-alpine`
+  and the command runs.
+
 ### The binaries are standalone, and `-buildmode=pie` is what takes that away
 
 Every build in this repository — `.goreleaser.yml`, the `Makefile`'s `build`
