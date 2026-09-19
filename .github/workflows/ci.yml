@@ -321,6 +321,13 @@ jobs:
       - name: Markdown tables are normalized
         if: env.FRESHNESS == 'checked'
         run: make check-md-tables
+      # Not FRESHNESS-gated, unlike everything above it: those check that a
+      # generated file was regenerated, which is the top layer of a stack's job.
+      # This checks what a button actually registers, and a button can be edited
+      # in any layer — deferring it would let the layer that changes one be the
+      # only layer that does not look at it.
+      - name: The install buttons agree within each command
+        run: make check-install-buttons
 
   analyze-md:
     name: Analyze Markdown
