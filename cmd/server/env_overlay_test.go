@@ -110,17 +110,21 @@ func TestOverlayFillsAFlagNobodyPassed(t *testing.T) {
 		{flagName: "stateless", want: "false"},
 		{flagName: "rate-limit-rps", want: "2.5"},
 	} {
-		if got := overlayValue(t, fs, tc.flagName); got != tc.want {
-			t.Errorf("--%s = %q, want %q from its variable", tc.flagName, got, tc.want)
-		}
+		t.Run(tc.flagName, func(t *testing.T) {
+			if got := overlayValue(t, fs, tc.flagName); got != tc.want {
+				t.Errorf("--%s = %q, want %q from its variable", tc.flagName, got, tc.want)
+			}
+		})
 	}
 
 	// The names come back so the startup log can say where the listener came
 	// from, which is the only local evidence an operator has.
 	for _, want := range []string{"HTTP_ADDR", "DRAIN_DELAY", "STATELESS", "RATE_LIMIT_RPS"} {
-		if !slices.Contains(used, config.EnvName(want)) {
-			t.Errorf("%s configured a flag but is missing from the reported list %q", config.EnvName(want), used)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(used, config.EnvName(want)) {
+				t.Errorf("%s configured a flag but is missing from the reported list %q", config.EnvName(want), used)
+			}
+		})
 	}
 	if got := describeOverlay(used); !strings.Contains(got, config.EnvName("HTTP_ADDR")) {
 		t.Errorf("describeOverlay() = %q, want it to name the variables that were used", got)

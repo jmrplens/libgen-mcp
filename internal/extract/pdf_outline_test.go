@@ -62,10 +62,12 @@ func TestOutline_PDFBookmarks(t *testing.T) {
 		{Title: "Chapter 3: Results", Level: 0, Page: 2},
 	}
 	for i, w := range want {
-		got := res.Entries[i]
-		if got.Title != w.Title || got.Level != w.Level || got.Page != w.Page {
-			t.Errorf("entry %d: want %+v, got %+v", i, w, got)
-		}
+		t.Run(w.Title, func(t *testing.T) {
+			got := res.Entries[i]
+			if got.Title != w.Title || got.Level != w.Level || got.Page != w.Page {
+				t.Errorf("entry %d: want %+v, got %+v", i, w, got)
+			}
+		})
 	}
 }
 
@@ -221,17 +223,19 @@ func TestProbePageNumbers(t *testing.T) {
 		"no budget":           {total: 10, budget: 0, want: nil},
 	}
 	for name, tc := range cases {
-		got := probePageNumbers(tc.total, tc.budget)
-		if len(got) != len(tc.want) {
-			t.Errorf("%s: probePageNumbers(%d, %d) = %v, want %v", name, tc.total, tc.budget, got, tc.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tc.want[i] {
+		t.Run(name, func(t *testing.T) {
+			got := probePageNumbers(tc.total, tc.budget)
+			if len(got) != len(tc.want) {
 				t.Errorf("%s: probePageNumbers(%d, %d) = %v, want %v", name, tc.total, tc.budget, got, tc.want)
-				break
+				return
 			}
-		}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("%s: probePageNumbers(%d, %d) = %v, want %v", name, tc.total, tc.budget, got, tc.want)
+					break
+				}
+			}
+		})
 	}
 }
 

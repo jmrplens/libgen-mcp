@@ -202,22 +202,26 @@ func TestParseHealthTargetReadsWhatACallerWouldType(t *testing.T) {
 			{in: "127.0.0.1:8080", want: "http://127.0.0.1:8080/health"},
 			{in: ":8080", want: "http://127.0.0.1:8080/health"},
 		} {
-			got, err := parseHealthTarget(tc.in)
-			if err != nil {
-				t.Errorf("parseHealthTarget(%q) = %v", tc.in, err)
-				continue
-			}
-			if got.String() != tc.want {
-				t.Errorf("parseHealthTarget(%q) = %q, want %q", tc.in, got, tc.want)
-			}
+			t.Run(tc.in, func(t *testing.T) {
+				got, err := parseHealthTarget(tc.in)
+				if err != nil {
+					t.Errorf("parseHealthTarget(%q) = %v", tc.in, err)
+					return
+				}
+				if got.String() != tc.want {
+					t.Errorf("parseHealthTarget(%q) = %q, want %q", tc.in, got, tc.want)
+				}
+			})
 		}
 	})
 
 	t.Run("refused", func(t *testing.T) {
 		for _, in := range []string{"", "   ", "not a target", "http://", "ftp://example.org"} {
-			if _, err := parseHealthTarget(in); err == nil {
-				t.Errorf("parseHealthTarget(%q) was accepted", in)
-			}
+			t.Run(in, func(t *testing.T) {
+				if _, err := parseHealthTarget(in); err == nil {
+					t.Errorf("parseHealthTarget(%q) was accepted", in)
+				}
+			})
 		}
 	})
 }
@@ -453,15 +457,19 @@ func TestCanonicalBinaryNameMatchesEveryPlatformVariant(t *testing.T) {
 		"libgen-mcp-darwin-amd64", "libgen-mcp-darwin-arm64",
 		"libgen-mcp-windows-amd64.exe",
 	} {
-		if got := canonicalBinaryName(name); got != "libgen-mcp" {
-			t.Errorf("canonicalBinaryName(%q) = %q, want libgen-mcp", name, got)
-		}
+		t.Run(name, func(t *testing.T) {
+			if got := canonicalBinaryName(name); got != "libgen-mcp" {
+				t.Errorf("canonicalBinaryName(%q) = %q, want libgen-mcp", name, got)
+			}
+		})
 	}
 	// And not so eager that it matches something else entirely.
 	for _, name := range []string{"libgen-mcp-proxy", "probe", "other-mcp"} {
-		if canonicalBinaryName(name) == "libgen-mcp" {
-			t.Errorf("canonicalBinaryName(%q) matched this binary", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if canonicalBinaryName(name) == "libgen-mcp" {
+				t.Errorf("canonicalBinaryName(%q) matched this binary", name)
+			}
+		})
 	}
 }
 

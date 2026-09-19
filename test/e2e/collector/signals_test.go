@@ -134,8 +134,10 @@ func TestSignals_ASelectedSubsetIsTheWholeExport(t *testing.T) {
 	// The other two pipelines wrote nothing. Read after the traces arrived, so
 	// this is not merely early.
 	for _, file := range []string{metricsFile, logsFile} {
-		if docs := documents[map[string]any](t, filepath.Join(c.outDir, file)); len(docs) > 0 {
-			t.Errorf("%s holds %d document(s) although only traces were selected", file, len(docs))
-		}
+		t.Run(file, func(t *testing.T) {
+			if docs := documents[map[string]any](t, filepath.Join(c.outDir, file)); len(docs) > 0 {
+				t.Errorf("%s holds %d document(s) although only traces were selected", file, len(docs))
+			}
+		})
 	}
 }

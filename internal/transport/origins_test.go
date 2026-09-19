@@ -86,8 +86,10 @@ func TestTrusts(t *testing.T) {
 		{[]string{AnyOrigin}, "", false},
 	}
 	for _, tc := range cases {
-		if got := Trusts(tc.origins, tc.origin); got != tc.want {
-			t.Errorf("Trusts(%v, %q) = %v, want %v", tc.origins, tc.origin, got, tc.want)
-		}
+		t.Run(tc.origin, func(t *testing.T) {
+			if got := Trusts(tc.origins, tc.origin); got != tc.want {
+				t.Errorf("Trusts(%v, %q) = %v, want %v", tc.origins, tc.origin, got, tc.want)
+			}
+		})
 	}
 }

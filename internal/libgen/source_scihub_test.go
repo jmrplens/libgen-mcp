@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -260,11 +261,13 @@ func TestScihubErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			host := scihubStatusHost(t, status)
-			s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				host := scihubStatusHost(t, status)
+				s := scihubSource{hosts: []string{host}, http: http.DefaultClient, scheme: "http"}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+			})
 		}
 	})
 

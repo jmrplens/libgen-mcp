@@ -87,8 +87,10 @@ func TestCollector_ACredentialNeverLeavesOnTheFailurePath(t *testing.T) {
 
 	results := make([]string, 0, 2)
 	for _, body := range []string{byMD5, byDOI} {
-		got := s.do(t, request{body: body})
-		results = append(results, got.body)
+		t.Run(body, func(t *testing.T) {
+			got := s.do(t, request{body: body})
+			results = append(results, got.body)
+		})
 	}
 
 	// Both calls have to have been exported, not merely some batch: the startup
@@ -187,7 +189,9 @@ func TestCollector_TheItemIdentifierNeverLeaves(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_details","arguments":{"md5":"` + plantedMD5 + `"}}}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"download","arguments":{"doi":"` + plantedDOI + `"}}}`,
 	} {
-		s.do(t, request{body: body})
+		t.Run(body, func(t *testing.T) {
+			s.do(t, request{body: body})
+		})
 	}
 
 	c.awaitCallsExported(t, 2, 30*time.Second)

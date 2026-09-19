@@ -218,9 +218,11 @@ func TestFieldsOfReportsAMismatch(t *testing.T) {
 // and the failure would be a silently alphabetised table rather than an error.
 func TestDeclaredOrderCoversTheSurface(t *testing.T) {
 	for _, name := range []string{"search", "get_details", "download", "read"} {
-		if _, ok := declaredOrder[name]; !ok {
-			t.Errorf("declaredOrder has no entry for %q", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, ok := declaredOrder[name]; !ok {
+				t.Errorf("declaredOrder has no entry for %q", name)
+			}
+		})
 	}
 	if len(declaredOrder) != 4 {
 		t.Errorf("declaredOrder has %d entries, want 4: a new tool needs one, and a removed tool should lose it", len(declaredOrder))

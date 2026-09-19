@@ -134,8 +134,10 @@ func TestExtract_ReportsADamagedTextLayer(t *testing.T) {
 // otherwise trip every threshold.
 func TestQualityNote_ShortSampleIsNotJudged(t *testing.T) {
 	for _, text := range []string{"", "  \n\t ", "Fig. 3.1", "���", "qwrtp lkjhg"} {
-		if note := qualityNote(text); note != "" {
-			t.Errorf("qualityNote(%q) = %q, want no note for a sample this short", text, note)
-		}
+		t.Run(text, func(t *testing.T) {
+			if note := qualityNote(text); note != "" {
+				t.Errorf("qualityNote(%q) = %q, want no note for a sample this short", text, note)
+			}
+		})
 	}
 }

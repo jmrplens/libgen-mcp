@@ -5,6 +5,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -318,9 +319,11 @@ func TestListTools_ReturnsOrderedRealTools(t *testing.T) {
 	}
 	want := []string{"search", "get_details", "download", "read"}
 	for i, name := range want {
-		if toolList[i].Name != name {
-			t.Fatalf("tool[%d] = %q, want %q", i, toolList[i].Name, name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if toolList[i].Name != name {
+				t.Fatalf("tool[%d] = %q, want %q", i, toolList[i].Name, name)
+			}
+		})
 	}
 }
 
@@ -333,9 +336,11 @@ func TestToolOrder_Ordinals(t *testing.T) {
 		"anything":    3,
 	}
 	for name, want := range cases {
-		if got := toolOrder(name); got != want {
-			t.Fatalf("toolOrder(%q) = %d, want %d", name, got, want)
-		}
+		t.Run(name, func(t *testing.T) {
+			if got := toolOrder(name); got != want {
+				t.Fatalf("toolOrder(%q) = %d, want %d", name, got, want)
+			}
+		})
 	}
 }
 
@@ -362,9 +367,11 @@ func TestRun_GeneratesAndValidates(t *testing.T) {
 		t.Fatalf("read llms-full.txt: %v", err)
 	}
 	for _, want := range []string{"## Tools", "### search", "### get_details", "### download", "### read", "## Configuration"} {
-		if !strings.Contains(string(full), want) {
-			t.Fatalf("llms-full.txt missing %q", want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(string(full), want) {
+				t.Fatalf("llms-full.txt missing %q", want)
+			}
+		})
 	}
 
 	// The freshly generated files must pass check-only validation.
@@ -437,9 +444,11 @@ func TestWriteLLMSTxt_And_Full(t *testing.T) {
 		t.Fatalf("writeLLMSFullTxt error: %v", writeErr)
 	}
 	for _, name := range []string{llmsFileName, llmsFullFileName} {
-		if _, statErr := os.Stat(filepath.Join(dir, name)); statErr != nil {
-			t.Fatalf("expected %s written: %v", name, statErr)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, statErr := os.Stat(filepath.Join(dir, name)); statErr != nil {
+				t.Fatalf("expected %s written: %v", name, statErr)
+			}
+		})
 	}
 }
 
@@ -456,9 +465,11 @@ func TestWriteLLMSFullTool_RendersSections(t *testing.T) {
 	}
 	out := b.String()
 	for _, want := range []string{"### search", "**Parameters:**", "Annotations:"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("writeLLMSFullTool output missing %q:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Fatalf("writeLLMSFullTool output missing %q:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -690,9 +701,11 @@ func TestPluralSchemaType(t *testing.T) {
 		"widget":            "widgets",
 	}
 	for in, want := range cases {
-		if got := pluralSchemaType(in); got != want {
-			t.Fatalf("pluralSchemaType(%q) = %q, want %q", in, got, want)
-		}
+		t.Run(in, func(t *testing.T) {
+			if got := pluralSchemaType(in); got != want {
+				t.Fatalf("pluralSchemaType(%q) = %q, want %q", in, got, want)
+			}
+		})
 	}
 }
 
@@ -918,17 +931,21 @@ func TestWriteOutputSchema(t *testing.T) {
 	})
 	got := populated.String()
 	for _, want := range []string{"**Returns:**", "`path`", "absolute path of the saved file", "`verified`", "(required)"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Returns block missing %q:\n%s", want, got)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(got, want) {
+				t.Fatalf("Returns block missing %q:\n%s", want, got)
+			}
+		})
 	}
 
 	for _, empty := range []any{nil, "not a schema", map[string]any{"type": "object"}} {
-		var b strings.Builder
-		writeOutputSchema(&b, empty)
-		if b.String() != "" {
-			t.Fatalf("a tool without output properties must write nothing, got %q", b.String())
-		}
+		t.Run(fmt.Sprintf("%v", empty), func(t *testing.T) {
+			var b strings.Builder
+			writeOutputSchema(&b, empty)
+			if b.String() != "" {
+				t.Fatalf("a tool without output properties must write nothing, got %q", b.String())
+			}
+		})
 	}
 }
 

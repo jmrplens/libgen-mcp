@@ -43,9 +43,11 @@ func TestParseAnnasRecordZlib(t *testing.T) {
 		{"ISBN13", rec.ISBN13, "978-602-282-497-8"},
 		{"IPFSCID", rec.IPFSCID, "QmQg2L4vJwKFPiaDpdSY5d42EZ4XFkg8Dzpcuwxk23noyF"},
 	} {
-		if tc.got != tc.want {
-			t.Errorf("%s = %q, want %q", tc.field, tc.got, tc.want)
-		}
+		t.Run(tc.field, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Errorf("%s = %q, want %q", tc.field, tc.got, tc.want)
+			}
+		})
 	}
 }
 

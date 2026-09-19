@@ -178,8 +178,11 @@ func TestIsNotification(t *testing.T) {
 		"elicitation/create":                false,
 		"":                                  false,
 	} {
-		if got := IsNotification(method); got != want {
-			t.Errorf("IsNotification(%q) = %v, want %v", method, got, want)
-		}
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			if got := IsNotification(method); got != want {
+				t.Errorf("IsNotification(%q) = %v, want %v", method, got, want)
+			}
+		})
 	}
 }

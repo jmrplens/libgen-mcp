@@ -113,9 +113,11 @@ func TestResultsSummaryFlagsUnmeasuredScenarios(t *testing.T) {
 		t.Errorf("an unmeasured scenario must stop the every-scenario claim; got %q", partial)
 	}
 	for _, want := range []string{"3 measured so far", "2 scenarios", "no row here yet"} {
-		if !strings.Contains(partial, want) {
-			t.Errorf("summary missing %q; got %q", want, partial)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(partial, want) {
+				t.Errorf("summary missing %q; got %q", want, partial)
+			}
+		})
 	}
 	if one := renderResultsSummaryEN(sum, 4); !strings.Contains(one, "One scenario") {
 		t.Errorf("a single unmeasured scenario needs the singular; got %q", one)

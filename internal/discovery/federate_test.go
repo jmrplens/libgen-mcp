@@ -74,18 +74,20 @@ func TestFederateForwardsTheQueryAndLimitToEveryProvider(t *testing.T) {
 	Federate(context.Background(), "quantum error correction", 7, a, b)
 
 	for _, p := range []*stubProvider{a, b} {
-		if p.searched() != 1 {
-			t.Errorf("provider %q searched %d times, want 1", p.name, p.searched())
-		}
-		if p.gotQuery != "quantum error correction" {
-			t.Errorf("provider %q got query %q, want the caller's query", p.name, p.gotQuery)
-		}
-		if p.gotLimit != 7 {
-			t.Errorf("provider %q got limit %d, want 7", p.name, p.gotLimit)
-		}
-		if p.gotCtxErr != nil {
-			t.Errorf("provider %q got an already-failed context: %v", p.name, p.gotCtxErr)
-		}
+		t.Run(p.name, func(t *testing.T) {
+			if p.searched() != 1 {
+				t.Errorf("provider %q searched %d times, want 1", p.name, p.searched())
+			}
+			if p.gotQuery != "quantum error correction" {
+				t.Errorf("provider %q got query %q, want the caller's query", p.name, p.gotQuery)
+			}
+			if p.gotLimit != 7 {
+				t.Errorf("provider %q got limit %d, want 7", p.name, p.gotLimit)
+			}
+			if p.gotCtxErr != nil {
+				t.Errorf("provider %q got an already-failed context: %v", p.name, p.gotCtxErr)
+			}
+		})
 	}
 }
 
@@ -500,9 +502,11 @@ func TestDefaultProviders(t *testing.T) {
 	}
 	want := []string{"arxiv", "crossref", "openlibrary", "gutenberg"}
 	for i, name := range want {
-		if got := providers[i].Name(); got != name {
-			t.Errorf("provider[%d].Name() = %q, want %q", i, got, name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if got := providers[i].Name(); got != name {
+				t.Errorf("provider[%d].Name() = %q, want %q", i, got, name)
+			}
+		})
 	}
 }
 
@@ -540,8 +544,10 @@ func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
 		t.Fatalf("ExtraProviders() returned %d providers, want %d", len(got), len(want))
 	}
 	for i, name := range want {
-		if gotName := got[i].Name(); gotName != name {
-			t.Errorf("provider[%d].Name() = %q, want %q", i, gotName, name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if gotName := got[i].Name(); gotName != name {
+				t.Errorf("provider[%d].Name() = %q, want %q", i, gotName, name)
+			}
+		})
 	}
 }

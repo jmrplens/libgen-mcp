@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,9 +43,11 @@ func TestAPinIsTheSHAAndTheCommentTogether(t *testing.T) {
 		t.Errorf("a SHA with no version comment was accepted: %v", findings)
 	}
 	for _, unwanted := range []string{"actions/cache", "race.yml"} {
-		if contains(findings, unwanted) {
-			t.Errorf("%s should pass: %v", unwanted, findings)
-		}
+		t.Run(unwanted, func(t *testing.T) {
+			if contains(findings, unwanted) {
+				t.Errorf("%s should pass: %v", unwanted, findings)
+			}
+		})
 	}
 	if len(findings) != 2 {
 		t.Errorf("want exactly 2 findings, got %d: %v", len(findings), findings)
@@ -86,9 +89,11 @@ pip install --require-hashes -r requirements.txt
 `
 	findings := runtimeResolvedCode("s", script)
 	for _, want := range []string{"npx resolves", "@latest is whatever", "piped into a shell", "without --require-hashes"} {
-		if !contains(findings, want) {
-			t.Errorf("missed %q: %v", want, findings)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !contains(findings, want) {
+				t.Errorf("missed %q: %v", want, findings)
+			}
+		})
 	}
 	if len(findings) != 4 {
 		t.Errorf("want exactly 4 findings — the comment and the hashed install must pass — got %d: %v",
@@ -124,9 +129,11 @@ func TestPinningTheActionDoesNotPinWhatItDownloads(t *testing.T) {
 		{"version": "v2.18.2"},
 		{"version": "${{ env.GORELEASER_VERSION }}"},
 	} {
-		if got := checkStepAction("w", "goreleaser/goreleaser-action@x", ok, doc); len(got) != 0 {
-			t.Errorf("%v should pass: %v", ok, got)
-		}
+		t.Run(fmt.Sprint(ok["version"]), func(t *testing.T) {
+			if got := checkStepAction("w", "goreleaser/goreleaser-action@x", ok, doc); len(got) != 0 {
+				t.Errorf("%v should pass: %v", ok, got)
+			}
+		})
 	}
 
 	// An action that downloads nothing is not this rule's business.
@@ -163,9 +170,11 @@ updates:
 	}
 	findings := checkDependabot(doc)
 	for _, want := range []string{"gomod (/) states no cooldown", "below the 3", "carries semver-major-days"} {
-		if !contains(findings, want) {
-			t.Errorf("missed %q: %v", want, findings)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !contains(findings, want) {
+				t.Errorf("missed %q: %v", want, findings)
+			}
+		})
 	}
 	if contains(findings, "github-actions") {
 		t.Errorf("a stated cooldown at the floor should pass: %v", findings)

@@ -102,9 +102,11 @@ func TestFetchToTempRefusesWhenFetchDisabled(t *testing.T) {
 func TestErrServerFetchDisabledNamesTheWayOut(t *testing.T) {
 	msg := ErrServerFetchDisabled.Error()
 	for _, want := range []string{"LIBGEN_MCP_SERVER_FETCH", "download"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("ErrServerFetchDisabled = %q, want it to name %q", msg, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(msg, want) {
+				t.Errorf("ErrServerFetchDisabled = %q, want it to name %q", msg, want)
+			}
+		})
 	}
 }
 

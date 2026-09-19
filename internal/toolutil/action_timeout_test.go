@@ -41,17 +41,19 @@ func TestWithActionDeadlineBoundsACall(t *testing.T) {
 // where it refuses zero for every other bound.
 func TestZeroDisablesTheCap(t *testing.T) {
 	for _, d := range []time.Duration{0, -time.Second} {
-		withActionTimeout(t, d)
+		t.Run(d.String(), func(t *testing.T) {
+			withActionTimeout(t, d)
 
-		ctx, cancel := WithActionDeadline(t.Context())
-		defer cancel()
+			ctx, cancel := WithActionDeadline(t.Context())
+			defer cancel()
 
-		if _, ok := ctx.Deadline(); ok {
-			t.Errorf("SetActionTimeout(%v) still bounded the call", d)
-		}
-		if ActionTimeout() != 0 {
-			t.Errorf("ActionTimeout() = %v after SetActionTimeout(%v), want 0", ActionTimeout(), d)
-		}
+			if _, ok := ctx.Deadline(); ok {
+				t.Errorf("SetActionTimeout(%v) still bounded the call", d)
+			}
+			if ActionTimeout() != 0 {
+				t.Errorf("ActionTimeout() = %v after SetActionTimeout(%v), want 0", ActionTimeout(), d)
+			}
+		})
 	}
 }
 

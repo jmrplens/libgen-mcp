@@ -96,9 +96,11 @@ func TestHostGuard_TheRefusalSaysWhichFlagToPass(t *testing.T) {
 		t.Fatalf("status = %d, want %d", reply.status, http.StatusForbidden)
 	}
 	for _, want := range []string{"--public-url", "--trusted-proxies"} {
-		if !strings.Contains(reply.body, want) {
-			t.Errorf("the refusal does not name %s: %q", want, truncate(reply.body))
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(reply.body, want) {
+				t.Errorf("the refusal does not name %s: %q", want, truncate(reply.body))
+			}
+		})
 	}
 }
 
@@ -140,7 +142,9 @@ func TestHostGuard_ASocketServesAnyHost(t *testing.T) {
 	s := startUnixServer(t, nil)
 
 	for _, host := range []string{publicHost, "anything.example", "unix"} {
-		assertToolsListed(t, "over a unix socket with Host "+host, s.do(t, hostPOST(host)))
+		t.Run(host, func(t *testing.T) {
+			assertToolsListed(t, "over a unix socket with Host "+host, s.do(t, hostPOST(host)))
+		})
 	}
 }
 
@@ -154,9 +158,11 @@ func TestHostGuard_TheMCPAliasAnswersTheEndpoint(t *testing.T) {
 	s := startServer(t, nil)
 
 	for _, path := range []string{"/mcp", "/mcp/"} {
-		r := mcpPOST(nil)
-		r.path = path
-		assertToolsListed(t, "POST "+path, s.do(t, r))
+		t.Run(path, func(t *testing.T) {
+			r := mcpPOST(nil)
+			r.path = path
+			assertToolsListed(t, "POST "+path, s.do(t, r))
+		})
 	}
 
 	assertNotFound(t, s, request{method: http.MethodGet, path: "/mcp/x"}, "/")

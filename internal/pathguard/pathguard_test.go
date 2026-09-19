@@ -382,9 +382,11 @@ func TestOpenNoFollowRefusesASwappedLeaf(t *testing.T) {
 func TestCanonicalFileRequiresAPath(t *testing.T) {
 	allowLocal(t)
 	for _, in := range []string{"", "   "} {
-		if _, err := CanonicalFile(in, rootsFor(t.TempDir())); err == nil {
-			t.Errorf("CanonicalFile(%q) = nil, want an error", in)
-		}
+		t.Run(in, func(t *testing.T) {
+			if _, err := CanonicalFile(in, rootsFor(t.TempDir())); err == nil {
+				t.Errorf("CanonicalFile(%q) = nil, want an error", in)
+			}
+		})
 	}
 }
 

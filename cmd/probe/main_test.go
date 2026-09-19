@@ -213,9 +213,11 @@ func TestProbeHappyPath(t *testing.T) {
 	}
 	out := buf.String()
 	for _, want := range []string{"mirrors", "json.php details", "ads.php key", "CDN download"} {
-		if !strings.Contains(out, "[OK]   "+want) {
-			t.Errorf("missing OK line for %q; output:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, "[OK]   "+want) {
+				t.Errorf("missing OK line for %q; output:\n%s", want, out)
+			}
+		})
 	}
 }
 

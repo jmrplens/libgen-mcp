@@ -70,9 +70,11 @@ func TestCrossOrigin_AllowlistedOriginIsAnsweredAndAdmitted(t *testing.T) {
 	// The answer is derived from both request headers it echoes, so a shared
 	// cache must key on both.
 	for _, want := range []string{"Origin", "Access-Control-Request-Headers"} {
-		if !strings.Contains(pre.header.Get("Vary"), want) {
-			t.Errorf("preflight Vary = %q, want it to name %s", pre.header.Get("Vary"), want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(pre.header.Get("Vary"), want) {
+				t.Errorf("preflight Vary = %q, want it to name %s", pre.header.Get("Vary"), want)
+			}
+		})
 	}
 
 	post := s.do(t, browserPOST(trustedOrigin))
@@ -99,25 +101,27 @@ func TestCrossOrigin_WildcardAcceptsAnyOriginAndStillEchoes(t *testing.T) {
 	s := startServer(t, nil, "--trusted-origins=*")
 
 	for _, origin := range []string{trustedOrigin, untrustedOrigin} {
-		// The preflight first, in the order a browser does it. http.Client
-		// sends the POST straight out, so a wildcard that admitted requests
-		// while refusing the OPTIONS that precedes them would pass a
-		// POST-only test and fail every actual browser.
-		pre := s.do(t, preflightFor(origin))
-		if pre.status != http.StatusNoContent {
-			t.Errorf("%s preflight = %d, want %d under the wildcard", origin, pre.status, http.StatusNoContent)
-		}
-		if got := pre.header.Get("Access-Control-Allow-Origin"); got != origin {
-			t.Errorf("preflight Allow-Origin = %q, want %q echoed", got, origin)
-		}
+		t.Run(origin, func(t *testing.T) {
+			// The preflight first, in the order a browser does it. http.Client
+			// sends the POST straight out, so a wildcard that admitted requests
+			// while refusing the OPTIONS that precedes them would pass a
+			// POST-only test and fail every actual browser.
+			pre := s.do(t, preflightFor(origin))
+			if pre.status != http.StatusNoContent {
+				t.Errorf("%s preflight = %d, want %d under the wildcard", origin, pre.status, http.StatusNoContent)
+			}
+			if got := pre.header.Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("preflight Allow-Origin = %q, want %q echoed", got, origin)
+			}
 
-		reply := s.do(t, browserPOST(origin))
-		if reply.status != http.StatusOK {
-			t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)
-		}
-		if got := reply.header.Get("Access-Control-Allow-Origin"); got != origin {
-			t.Errorf("Allow-Origin = %q, want %q echoed even under the wildcard", got, origin)
-		}
+			reply := s.do(t, browserPOST(origin))
+			if reply.status != http.StatusOK {
+				t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)
+			}
+			if got := reply.header.Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("Allow-Origin = %q, want %q echoed even under the wildcard", got, origin)
+			}
+		})
 	}
 	if got := s.do(t, mcpPOST(nil)).status; got != http.StatusOK {
 		t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
@@ -131,12 +135,14 @@ func TestCrossOrigin_SafeMethodsStayReachable(t *testing.T) {
 	s := startServer(t, nil)
 
 	for _, path := range []string{"/health", "/.well-known/mcp/server-card.json"} {
-		reply := s.do(t, request{method: http.MethodGet, path: path, headers: map[string]string{
-			"Origin": untrustedOrigin, "Sec-Fetch-Site": "cross-site",
-		}})
-		if reply.status != http.StatusOK {
-			t.Errorf("GET %s from an untrusted origin = %d, want %d", path, reply.status, http.StatusOK)
-		}
+		t.Run(path, func(t *testing.T) {
+			reply := s.do(t, request{method: http.MethodGet, path: path, headers: map[string]string{
+				"Origin": untrustedOrigin, "Sec-Fetch-Site": "cross-site",
+			}})
+			if reply.status != http.StatusOK {
+				t.Errorf("GET %s from an untrusted origin = %d, want %d", path, reply.status, http.StatusOK)
+			}
+		})
 	}
 
 	// The card carries its own permissive CORS, deliberately unlike the MCP

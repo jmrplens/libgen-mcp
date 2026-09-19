@@ -361,9 +361,11 @@ func TestTransportAuto_WithAPipeOnStdin_SpeaksStdio(t *testing.T) {
 
 	logs := s.waitForStderr(t, "transport inferred from stdin", 10*time.Second)
 	for _, want := range []string{`"transport":"stdio"`, "stdin is a pipe"} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("the inference was not logged as %s:\n%s", want, logs)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logs, want) {
+				t.Errorf("the inference was not logged as %s:\n%s", want, logs)
+			}
+		})
 	}
 }
 
@@ -492,10 +494,12 @@ func TestStdout_SurvivesATelemetrySDKThatCannotReachItsCollector(t *testing.T) {
 		{name: "tools/list", request: request(2, "tools/list", "")},
 		{name: "tools/call", request: request(3, "tools/call", searchCall)},
 	} {
-		got := s.call(t, tc.request)
-		if got["jsonrpc"] != "2.0" {
-			t.Errorf("%s was not answered with JSON-RPC 2.0 while telemetry was failing: %v", tc.name, got)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got := s.call(t, tc.request)
+			if got["jsonrpc"] != "2.0" {
+				t.Errorf("%s was not answered with JSON-RPC 2.0 while telemetry was failing: %v", tc.name, got)
+			}
+		})
 	}
 
 	// And the SDK's own complaint reached stderr, which is what says telemetry

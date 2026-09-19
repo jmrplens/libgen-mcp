@@ -1120,14 +1120,7 @@ func TestServeHTTPTrustedOrigins(t *testing.T) {
 		if got := pre.header.Get("Access-Control-Allow-Headers"); got != "content-type" {
 			t.Errorf("preflight Allow-Headers = %q, want the requested header echoed", got)
 		}
-		// Both request headers the answer is derived from: the origin it echoes
-		// and the header list it echoes. A cache that missed either could
-		// replay one caller's preflight for another.
-		for _, want := range []string{"Origin", headerRequestHeader} {
-			if !strings.Contains(pre.header.Get("Vary"), want) {
-				t.Errorf("preflight Vary = %q, want it to name %s", pre.header.Get("Vary"), want)
-			}
-		}
+		assertVaryNamesBothRequestHeaders(t, pre.header.Get("Vary"))
 
 		post := browserPOST(t, ts.URL, trusted)
 		if post.status != http.StatusOK {
@@ -1146,6 +1139,21 @@ func TestServeHTTPTrustedOrigins(t *testing.T) {
 	})
 }
 
+// assertVaryNamesBothRequestHeaders checks the preflight's Vary against both
+// request headers its answer is derived from: the origin it echoes and the
+// header list it echoes. A cache that missed either could replay one caller's
+// preflight for another.
+func assertVaryNamesBothRequestHeaders(t *testing.T, vary string) {
+	t.Helper()
+	for _, want := range []string{"Origin", headerRequestHeader} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(vary, want) {
+				t.Errorf("preflight Vary = %q, want it to name %s", vary, want)
+			}
+		})
+	}
+}
+
 // TestServeHTTPTrustedOriginsWildcard covers --trusted-origins=*, which turns
 // the protection off for browsers entirely. It is a function of its own rather
 // than a third subtest because the three together exceed the cognitive
@@ -1157,13 +1165,15 @@ func TestServeHTTPTrustedOriginsWildcard(t *testing.T) {
 	ts := newTransportTestServer(t, opts)
 
 	for _, origin := range []string{trusted, untrusted} {
-		reply := browserPOST(t, ts.URL, origin)
-		if reply.status != http.StatusOK {
-			t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)
-		}
-		if got := reply.header.Get("Access-Control-Allow-Origin"); got != origin {
-			t.Errorf("Allow-Origin = %q, want %q echoed even under the wildcard", got, origin)
-		}
+		t.Run(origin, func(t *testing.T) {
+			reply := browserPOST(t, ts.URL, origin)
+			if reply.status != http.StatusOK {
+				t.Errorf("%s = %d, want %d under the wildcard", origin, reply.status, http.StatusOK)
+			}
+			if got := reply.header.Get("Access-Control-Allow-Origin"); got != origin {
+				t.Errorf("Allow-Origin = %q, want %q echoed even under the wildcard", got, origin)
+			}
+		})
 	}
 	if got := postMCP(t, ts.URL, listToolsRequest).status; got != http.StatusOK {
 		t.Errorf("no-Origin client = %d, want %d", got, http.StatusOK)
@@ -1723,9 +1733,11 @@ func TestRemoteDeploymentHidesRead(t *testing.T) {
 		t.Errorf("a remote server advertises read by default; tools = %v", names)
 	}
 	for _, want := range []string{"search", "get_details", "download"} {
-		if !hasTool(names, want) {
-			t.Errorf("%s is missing from a remote surface; tools = %v", want, names)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !hasTool(names, want) {
+				t.Errorf("%s is missing from a remote surface; tools = %v", want, names)
+			}
+		})
 	}
 	assertInstructionsMatchSurface(t, names, instructions)
 }

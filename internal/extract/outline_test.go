@@ -74,9 +74,11 @@ func TestOutline_EPUB3Nav(t *testing.T) {
 		{Title: "Chapter Two", Level: 0},
 	}
 	for i, w := range want {
-		if res.Entries[i].Title != w.Title || res.Entries[i].Level != w.Level {
-			t.Errorf("entry %d: want %+v, got %+v", i, w, res.Entries[i])
-		}
+		t.Run(w.Title, func(t *testing.T) {
+			if res.Entries[i].Title != w.Title || res.Entries[i].Level != w.Level {
+				t.Errorf("entry %d: want %+v, got %+v", i, w, res.Entries[i])
+			}
+		})
 	}
 }
 
@@ -520,23 +522,25 @@ func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
 		"cyclic page tree": writeBytes(t, dir, "cycle.pdf", cyclicPageTreePDF()),
 	}
 	for name, p := range paths {
-		outline, err := Outline(context.Background(), p)
-		if err != nil {
-			t.Fatalf("%s: Outline: %v", name, err)
-		}
-		chunk, err := Extract(context.Background(), p, Req{})
-		if err != nil {
-			t.Fatalf("%s: Extract: %v", name, err)
-		}
-		if outline.Extractable != chunk.Extractable {
-			t.Errorf("%s: Extractable disagrees: outline=%t text=%t (outline %q / text %q)",
-				name, outline.Extractable, chunk.Extractable, outline.Reason, chunk.Reason)
-			continue
-		}
-		if !outline.Extractable && outline.Reason != chunk.Reason {
-			t.Errorf("%s: same cause, different words:\n outline: %q\n text:    %q",
-				name, outline.Reason, chunk.Reason)
-		}
+		t.Run(name, func(t *testing.T) {
+			outline, err := Outline(context.Background(), p)
+			if err != nil {
+				t.Fatalf("%s: Outline: %v", name, err)
+			}
+			chunk, err := Extract(context.Background(), p, Req{})
+			if err != nil {
+				t.Fatalf("%s: Extract: %v", name, err)
+			}
+			if outline.Extractable != chunk.Extractable {
+				t.Errorf("%s: Extractable disagrees: outline=%t text=%t (outline %q / text %q)",
+					name, outline.Extractable, chunk.Extractable, outline.Reason, chunk.Reason)
+				return
+			}
+			if !outline.Extractable && outline.Reason != chunk.Reason {
+				t.Errorf("%s: same cause, different words:\n outline: %q\n text:    %q",
+					name, outline.Reason, chunk.Reason)
+			}
+		})
 	}
 }
 

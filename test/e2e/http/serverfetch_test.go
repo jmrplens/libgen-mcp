@@ -51,9 +51,11 @@ func TestHTTPHidesReadByDefault(t *testing.T) {
 		t.Errorf("an --http server advertises read by default; tools = %v", names)
 	}
 	for _, want := range []string{"search", "get_details", "download"} {
-		if !slices.Contains(names, want) {
-			t.Errorf("%s is missing; tools = %v", want, names)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(names, want) {
+				t.Errorf("%s is missing; tools = %v", want, names)
+			}
+		})
 	}
 }
 

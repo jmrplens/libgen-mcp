@@ -448,8 +448,10 @@ func TestProxy_TrustedProxyFlagsServeTheDeployedShape(t *testing.T) {
 
 	logs := s.logs()
 	for _, want := range []string{"X-Real-IP", "127.0.0.1/32"} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("the startup log does not name %q, so an operator cannot tell the rule was read:\n%s", want, logs)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logs, want) {
+				t.Errorf("the startup log does not name %q, so an operator cannot tell the rule was read:\n%s", want, logs)
+			}
+		})
 	}
 }

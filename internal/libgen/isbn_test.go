@@ -25,9 +25,11 @@ func TestNormalizeISBN(t *testing.T) {
 		{"87a4ebdaf21fa6cc70009a3d", ""}, // nor an md5 fragment
 	}
 	for _, c := range cases {
-		if got := NormalizeISBN(c.in); got != c.want {
-			t.Errorf("NormalizeISBN(%q) = %q, want %q", c.in, got, c.want)
-		}
+		t.Run(c.in, func(t *testing.T) {
+			if got := NormalizeISBN(c.in); got != c.want {
+				t.Errorf("NormalizeISBN(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 

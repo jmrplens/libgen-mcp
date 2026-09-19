@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -128,26 +129,30 @@ func TestCoreErrorClassification(t *testing.T) {
 
 	t.Run("a rejected key is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
-			api := coreAPIServer(t, `{"message":"invalid token"}`, status, nil, nil)
-			s := coreSource{http: api.Client(), key: "bad", apiBase: api.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				api := coreAPIServer(t, `{"message":"invalid token"}`, status, nil, nil)
+				s := coreSource{http: api.Client(), key: "bad", apiBase: api.URL}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
-			if errors.Is(err, ErrNotIndexed) {
-				t.Errorf("HTTP %d (rejected key) read as the DOI being unheld", status)
-			}
-			api.Close()
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+				if errors.Is(err, ErrNotIndexed) {
+					t.Errorf("HTTP %d (rejected key) read as the DOI being unheld", status)
+				}
+				api.Close()
+			})
 		}
 	})
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			api := coreAPIServer(t, "", status, nil, nil)
-			s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				api := coreAPIServer(t, "", status, nil, nil)
+				s := coreSource{http: api.Client(), key: "k", apiBase: api.URL}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
-			api.Close()
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+				api.Close()
+			})
 		}
 	})
 

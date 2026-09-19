@@ -119,9 +119,11 @@ func TestExtractIcons_FindsSVGConstantsInDeclarationOrder(t *testing.T) {
 		t.Fatalf("extractIcons() names = %v, want %v", names, want)
 	}
 	for i := range want {
-		if names[i] != want[i] {
-			t.Fatalf("extractIcons() names = %v, want %v", names, want)
-		}
+		t.Run(want[i], func(t *testing.T) {
+			if names[i] != want[i] {
+				t.Fatalf("extractIcons() names = %v, want %v", names, want)
+			}
+		})
 	}
 	if icons[0].svg != "<svg>branch</svg>" {
 		t.Errorf("icons[0].svg = %q, want %q", icons[0].svg, "<svg>branch</svg>")
@@ -237,13 +239,15 @@ func TestGenerateAll_WritesEveryVariant(t *testing.T) {
 	}
 
 	for _, name := range []string{"branch-light.webp", "branch-dark.webp", "mr-light.webp", "mr-dark.webp"} {
-		data, readErr := os.ReadFile(filepath.Join(dir, name))
-		if readErr != nil {
-			t.Fatalf("expected %s to exist: %v", name, readErr)
-		}
-		if len(data) == 0 {
-			t.Errorf("%s is empty", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			data, readErr := os.ReadFile(filepath.Join(dir, name))
+			if readErr != nil {
+				t.Fatalf("expected %s to exist: %v", name, readErr)
+			}
+			if len(data) == 0 {
+				t.Errorf("%s is empty", name)
+			}
+		})
 	}
 	branchLight, _ := os.ReadFile(filepath.Join(dir, "branch-light.webp"))
 	if string(branchLight) != "<svg>branch</svg>|"+colorLight {
@@ -285,9 +289,11 @@ func TestGenerateAll_LeavesAssetsUntouchedWhenALaterIconFails(t *testing.T) {
 	const sentinel = "PREVIOUS-ASSET"
 	seeded := []string{"good-light.webp", "good-dark.webp", "bad-light.webp", "bad-dark.webp"}
 	for _, name := range seeded {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(sentinel), 0o600); err != nil {
-			t.Fatalf("seed %s: %v", name, err)
-		}
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(sentinel), 0o600); err != nil {
+				t.Fatalf("seed %s: %v", name, err)
+			}
+		})
 	}
 
 	// "good" rasterizes; "bad" — declared after it — does not.
@@ -307,14 +313,16 @@ func TestGenerateAll_LeavesAssetsUntouchedWhenALaterIconFails(t *testing.T) {
 		t.Errorf("generateAll() wrote %d files before failing, want 0", written)
 	}
 	for _, name := range seeded {
-		got, readErr := os.ReadFile(filepath.Join(dir, name))
-		if readErr != nil {
-			t.Errorf("%s: %v", name, readErr)
-			continue
-		}
-		if string(got) != sentinel {
-			t.Errorf("%s was replaced despite the run failing; got %q", name, got)
-		}
+		t.Run(name, func(t *testing.T) {
+			got, readErr := os.ReadFile(filepath.Join(dir, name))
+			if readErr != nil {
+				t.Errorf("%s: %v", name, readErr)
+				return
+			}
+			if string(got) != sentinel {
+				t.Errorf("%s was replaced despite the run failing; got %q", name, got)
+			}
+		})
 	}
 }
 

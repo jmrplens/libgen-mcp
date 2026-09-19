@@ -143,9 +143,11 @@ func TestPrecedenceIsProcessThenNamedThenHome(t *testing.T) {
 		{name: "LIBGEN_MCP_LOG_LEVEL", want: "warn", from: "the named file"},
 		{name: "LIBGEN_MCP_SOURCES", want: "libgen", from: "the home file"},
 	} {
-		if got := os.Getenv(tc.name); got != tc.want {
-			t.Errorf("%s = %q, want %q from %s", tc.name, got, tc.want, tc.from)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := os.Getenv(tc.name); got != tc.want {
+				t.Errorf("%s = %q, want %q from %s", tc.name, got, tc.want, tc.from)
+			}
+		})
 	}
 	if report.ExplicitPath != named {
 		t.Errorf("ExplicitPath = %q, want %q", report.ExplicitPath, named)

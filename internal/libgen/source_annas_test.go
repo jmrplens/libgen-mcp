@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -55,10 +56,12 @@ func TestAnnasErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable} {
-			s := annasSource{mirrors: staticMirrors{annasStatusMirror(t, status)}, http: http.DefaultClient}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				s := annasSource{mirrors: staticMirrors{annasStatusMirror(t, status)}, http: http.DefaultClient}
 
-			_, err := s.Resolve(context.Background(), Item{MD5: md5})
-			assertUnavailable(t, err)
+				_, err := s.Resolve(context.Background(), Item{MD5: md5})
+				assertUnavailable(t, err)
+			})
 		}
 	})
 
@@ -447,9 +450,11 @@ func TestPerCallAnnasKeyIgnoredWhenNotApplicable(t *testing.T) {
 		"explicit source": {MD5: "abc", AnnasKey: "k", Source: "libgen"},
 	}
 	for name, it := range cases {
-		if got := c.withPerCallAnnas(it, base); len(got) != len(base) {
-			t.Errorf("%s: chain grew to %d, want unchanged", name, len(got))
-		}
+		t.Run(name, func(t *testing.T) {
+			if got := c.withPerCallAnnas(it, base); len(got) != len(base) {
+				t.Errorf("%s: chain grew to %d, want unchanged", name, len(got))
+			}
+		})
 	}
 
 	withAnnas := []DownloadSource{libgenSource{c: c}, annasSource{key: "configured"}}

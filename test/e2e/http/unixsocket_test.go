@@ -289,9 +289,11 @@ func TestUnix_TrustedProxyLiteralIsTheSocketsOwnSpelling(t *testing.T) {
 	// from outside, every caller simply shares the proxy's key.
 	logs := s.logs()
 	for _, want := range []string{"X-Real-IP", "unix"} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("the startup log does not name %q, so the accepted rule is invisible:\n%s", want, logs)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logs, want) {
+				t.Errorf("the startup log does not name %q, so the accepted rule is invisible:\n%s", want, logs)
+			}
+		})
 	}
 }
 

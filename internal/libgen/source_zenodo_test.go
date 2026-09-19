@@ -485,8 +485,10 @@ func TestZenodoIsDigits(t *testing.T) {
 		" 1":    false,
 	}
 	for in, want := range cases {
-		if got := isDigits(in); got != want {
-			t.Errorf("isDigits(%q) = %v, want %v", in, got, want)
-		}
+		t.Run(in, func(t *testing.T) {
+			if got := isDigits(in); got != want {
+				t.Errorf("isDigits(%q) = %v, want %v", in, got, want)
+			}
+		})
 	}
 }

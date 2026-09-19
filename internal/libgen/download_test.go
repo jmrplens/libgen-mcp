@@ -1310,10 +1310,12 @@ func TestDownloadKeepsPartialsWhenEveryLegFails(t *testing.T) {
 	// Each source owns its own partial, and both must survive: either one can be
 	// the offset a later call resumes from.
 	for _, name := range []string{"srca", "srcb"} {
-		part := filepath.Join(dir, ".libgen-mcp-"+name+"-"+partialKey(item, Resolved{})+".part")
-		if _, statErr := os.Stat(part); statErr != nil {
-			t.Errorf("%s's partial missing at %s: %v (an unresolved item must stay resumable)", name, part, statErr)
-		}
+		t.Run(name, func(t *testing.T) {
+			part := filepath.Join(dir, ".libgen-mcp-"+name+"-"+partialKey(item, Resolved{})+".part")
+			if _, statErr := os.Stat(part); statErr != nil {
+				t.Errorf("%s's partial missing at %s: %v (an unresolved item must stay resumable)", name, part, statErr)
+			}
+		})
 	}
 }
 
@@ -1400,10 +1402,12 @@ func TestParseContentRangeStart(t *testing.T) {
 		{"", 0, false},
 	}
 	for _, tc := range cases {
-		got, ok := parseContentRangeStart(tc.in)
-		if got != tc.want || ok != tc.ok {
-			t.Errorf("parseContentRangeStart(%q) = (%d, %v), want (%d, %v)", tc.in, got, ok, tc.want, tc.ok)
-		}
+		t.Run(tc.in, func(t *testing.T) {
+			got, ok := parseContentRangeStart(tc.in)
+			if got != tc.want || ok != tc.ok {
+				t.Errorf("parseContentRangeStart(%q) = (%d, %v), want (%d, %v)", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
 	}
 }
 
@@ -1421,9 +1425,11 @@ func TestFilenameFromDisposition(t *testing.T) {
 		{"attachment", ""},           // no filename parameter
 	}
 	for _, tc := range cases {
-		if got := filenameFromDisposition(tc.in); got != tc.want {
-			t.Errorf("filenameFromDisposition(%q) = %q, want %q", tc.in, got, tc.want)
-		}
+		t.Run(tc.in, func(t *testing.T) {
+			if got := filenameFromDisposition(tc.in); got != tc.want {
+				t.Errorf("filenameFromDisposition(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -2075,9 +2081,11 @@ func TestWithPerCallUnpaywall(t *testing.T) {
 		{DOI: "10.1/x", Email: "caller@example.com", Source: "libgen"}, // named source
 	}
 	for _, it := range unchanged {
-		if got := c.withPerCallUnpaywall(it, plain); len(got) != 1 || got[0].Name() != "libgen" {
-			t.Errorf("withPerCallUnpaywall(%+v) altered the chain: %v", it, srcNames(got))
-		}
+		t.Run(fmt.Sprintf("%+v", it), func(t *testing.T) {
+			if got := c.withPerCallUnpaywall(it, plain); len(got) != 1 || got[0].Name() != "libgen" {
+				t.Errorf("withPerCallUnpaywall(%+v) altered the chain: %v", it, srcNames(got))
+			}
+		})
 	}
 
 	// Positive case: email + DOI + no named source + no unpaywall present → prepend.
@@ -2245,9 +2253,11 @@ func TestDownloadLogsEachSourceAttempt(t *testing.T) {
 
 	log := buf.String()
 	for _, want := range []string{`"source":"first"`, `"source":"second"`} {
-		if !strings.Contains(log, want) {
-			t.Errorf("the chain never logged an attempt for %s; log=%s", want, log)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(log, want) {
+				t.Errorf("the chain never logged an attempt for %s; log=%s", want, log)
+			}
+		})
 	}
 	if !strings.Contains(log, "source failed, advancing") {
 		t.Errorf("the chain never logged why it moved on; log=%s", log)
@@ -2439,13 +2449,15 @@ func TestUnavailableSourceStillGetsTheRetrySchedule(t *testing.T) {
 // source's file or errors out, and the flag could report nothing but true.
 func TestDownloadResultKeepsProvenanceOffTheWire(t *testing.T) {
 	for _, name := range []string{"Source", "Mirror"} {
-		field, ok := reflect.TypeFor[DownloadResult]().FieldByName(name)
-		if !ok {
-			t.Fatalf("DownloadResult has no %s field; the chain and the log still need it", name)
-		}
-		if got := field.Tag.Get("json"); got != "-" {
-			t.Errorf(`DownloadResult.%s json tag = %q, want "-": provenance must not be serialized to the caller`, name, got)
-		}
+		t.Run(name, func(t *testing.T) {
+			field, ok := reflect.TypeFor[DownloadResult]().FieldByName(name)
+			if !ok {
+				t.Fatalf("DownloadResult has no %s field; the chain and the log still need it", name)
+			}
+			if got := field.Tag.Get("json"); got != "-" {
+				t.Errorf(`DownloadResult.%s json tag = %q, want "-": provenance must not be serialized to the caller`, name, got)
+			}
+		})
 	}
 	if _, present := reflect.TypeFor[DownloadResult]().FieldByName("ServedByRequestedSource"); present {
 		t.Error("DownloadResult carries ServedByRequestedSource again: selectSources narrows a pinned " +
@@ -2506,10 +2518,12 @@ func TestHostRefusal(t *testing.T) {
 		{http.StatusInternalServerError, false},
 	}
 	for _, tt := range tests {
-		got := hostRefusal(tt.status, "https://pubs.example.org/a.pdf")
-		if (got != nil) != tt.refusal {
-			t.Errorf("hostRefusal(%d) = %v, want refusal = %v", tt.status, got, tt.refusal)
-		}
+		t.Run(strconv.Itoa(tt.status), func(t *testing.T) {
+			got := hostRefusal(tt.status, "https://pubs.example.org/a.pdf")
+			if (got != nil) != tt.refusal {
+				t.Errorf("hostRefusal(%d) = %v, want refusal = %v", tt.status, got, tt.refusal)
+			}
+		})
 	}
 }
 

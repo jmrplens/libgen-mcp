@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -139,11 +140,13 @@ func TestOpenAlexErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			srv := openalexBodyServer(t, status, "")
-			s := openalexSource{http: srv.Client(), baseURL: srv.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				srv := openalexBodyServer(t, status, "")
+				s := openalexSource{http: srv.Client(), baseURL: srv.URL}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+			})
 		}
 	})
 

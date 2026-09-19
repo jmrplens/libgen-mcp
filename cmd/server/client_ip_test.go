@@ -145,10 +145,12 @@ func TestClientIPChargesThePeerWhenAHopIsNotAnAddress(t *testing.T) {
 	proxies := mustParseProxies(t, "127.0.0.1/32")
 
 	for _, value := range []string{"not-an-address", "203.0.113.7, unknown", "_hidden", ""} {
-		r := requestFrom(t, "127.0.0.1:52144", map[string]string{realIP: value})
-		if got := clientIP(r, realIP, proxies); got != "127.0.0.1" {
-			t.Errorf("clientIP with %q = %q, want the peer 127.0.0.1", value, got)
-		}
+		t.Run(value, func(t *testing.T) {
+			r := requestFrom(t, "127.0.0.1:52144", map[string]string{realIP: value})
+			if got := clientIP(r, realIP, proxies); got != "127.0.0.1" {
+				t.Errorf("clientIP with %q = %q, want the peer 127.0.0.1", value, got)
+			}
+		})
 	}
 }
 
@@ -163,10 +165,12 @@ func TestClientIPReadsAHopWrittenWithAPort(t *testing.T) {
 		{value: "[2001:db8::1]", want: "2001:db8::1"},
 		{value: "::ffff:203.0.113.7", want: "203.0.113.7"},
 	} {
-		r := requestFrom(t, "127.0.0.1:52144", map[string]string{realIP: tc.value})
-		if got := clientIP(r, realIP, proxies); got != tc.want {
-			t.Errorf("clientIP with %q = %q, want %q", tc.value, got, tc.want)
-		}
+		t.Run(tc.value, func(t *testing.T) {
+			r := requestFrom(t, "127.0.0.1:52144", map[string]string{realIP: tc.value})
+			if got := clientIP(r, realIP, proxies); got != tc.want {
+				t.Errorf("clientIP with %q = %q, want %q", tc.value, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -243,17 +247,21 @@ func TestParseTrustedProxiesReadsEverySpelling(t *testing.T) {
 			{addr: "2001:db8::1", want: true},
 			{addr: "2001:db8::2", want: false},
 		} {
-			if got := containsAddr(t, proxies, tc.addr); got != tc.want {
-				t.Errorf("contains(%s) = %v, want %v", tc.addr, got, tc.want)
-			}
+			t.Run(tc.addr, func(t *testing.T) {
+				if got := containsAddr(t, proxies, tc.addr); got != tc.want {
+					t.Errorf("contains(%s) = %v, want %v", tc.addr, got, tc.want)
+				}
+			})
 		}
 	})
 
 	t.Run("an entry that is neither is refused", func(t *testing.T) {
 		for _, entry := range []string{"localhost", "10.0.0.0/64", "unixx", "127.0.0.1:8080"} {
-			if _, err := parseTrustedProxies([]string{entry}); err == nil {
-				t.Errorf("parseTrustedProxies(%q) was accepted", entry)
-			}
+			t.Run(entry, func(t *testing.T) {
+				if _, err := parseTrustedProxies([]string{entry}); err == nil {
+					t.Errorf("parseTrustedProxies(%q) was accepted", entry)
+				}
+			})
 		}
 	})
 }
@@ -386,9 +394,11 @@ func TestMainWithExitRefusesAnUnusableProxyConfig(t *testing.T) {
 // bare --trusted-proxies= would read as naming a proxy and refuse to start.
 func TestCommaSeparatedDropsEmptyEntries(t *testing.T) {
 	for _, value := range []string{"", "   ", ",", " , , "} {
-		if got := commaSeparated(value); len(got) != 0 {
-			t.Errorf("commaSeparated(%q) = %q, want no entries", value, got)
-		}
+		t.Run(value, func(t *testing.T) {
+			if got := commaSeparated(value); len(got) != 0 {
+				t.Errorf("commaSeparated(%q) = %q, want no entries", value, got)
+			}
+		})
 	}
 	if got := commaSeparated(" a , b "); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("commaSeparated = %q, want [a b]", got)

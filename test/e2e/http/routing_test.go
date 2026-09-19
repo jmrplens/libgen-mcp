@@ -155,14 +155,16 @@ func TestRouting_BasePathMovesEveryRoute(t *testing.T) {
 	// Both spellings of the mount serve MCP: a client handed a base URL may or
 	// may not keep the trailing slash, and neither is a different endpoint.
 	for _, path := range []string{base, base + "/"} {
-		reply := s.do(t, mcpPOSTAt(path))
-		if reply.status != http.StatusOK {
-			t.Errorf("POST %s = %d, want %d (body: %s)", path, reply.status, http.StatusOK, truncate(reply.body))
-			continue
-		}
-		if !strings.Contains(reply.body, `"tools"`) {
-			t.Errorf("POST %s answered %d but listed no tools: %s", path, reply.status, truncate(reply.body))
-		}
+		t.Run(path, func(t *testing.T) {
+			reply := s.do(t, mcpPOSTAt(path))
+			if reply.status != http.StatusOK {
+				t.Errorf("POST %s = %d, want %d (body: %s)", path, reply.status, http.StatusOK, truncate(reply.body))
+				return
+			}
+			if !strings.Contains(reply.body, `"tools"`) {
+				t.Errorf("POST %s answered %d but listed no tools: %s", path, reply.status, truncate(reply.body))
+			}
+		})
 	}
 
 	// A GET there is the endpoint refusing a method, not the catch-all
@@ -170,9 +172,11 @@ func TestRouting_BasePathMovesEveryRoute(t *testing.T) {
 	// here. (The root mount's 405 and its Allow header are pinned by
 	// TestLimits_StatelessDefaultIssuesNoSession.)
 	for _, path := range []string{base, base + "/"} {
-		if got := s.do(t, request{method: http.MethodGet, path: path}).status; got != http.StatusMethodNotAllowed {
-			t.Errorf("GET %s = %d, want %d", path, got, http.StatusMethodNotAllowed)
-		}
+		t.Run(path, func(t *testing.T) {
+			if got := s.do(t, request{method: http.MethodGet, path: path}).status; got != http.StatusMethodNotAllowed {
+				t.Errorf("GET %s = %d, want %d", path, got, http.StatusMethodNotAllowed)
+			}
+		})
 	}
 
 	health := s.do(t, request{method: http.MethodGet, path: base + "/health"})
@@ -181,15 +185,19 @@ func TestRouting_BasePathMovesEveryRoute(t *testing.T) {
 	}
 
 	for _, path := range []string{serverCardCurrentPath, serverCardLegacyPath} {
-		if got := s.do(t, request{method: http.MethodGet, path: base + path}).status; got != http.StatusOK {
-			t.Errorf("GET %s%s = %d, want %d", base, path, got, http.StatusOK)
-		}
+		t.Run(path, func(t *testing.T) {
+			if got := s.do(t, request{method: http.MethodGet, path: base + path}).status; got != http.StatusOK {
+				t.Errorf("GET %s%s = %d, want %d", base, path, got, http.StatusOK)
+			}
+		})
 	}
 
 	// Nothing stayed at the root, and the 404 names the moved endpoint rather
 	// than the "/" it was compiled with.
 	for _, path := range []string{"/", "/health", serverCardCurrentPath, serverCardLegacyPath, base + "/nope"} {
-		assertNotFound(t, s, request{method: http.MethodGet, path: path}, base)
+		t.Run(path, func(t *testing.T) {
+			assertNotFound(t, s, request{method: http.MethodGet, path: path}, base)
+		})
 	}
 }
 

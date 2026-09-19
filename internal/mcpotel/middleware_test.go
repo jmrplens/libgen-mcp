@@ -153,9 +153,11 @@ func TestMiddlewareRecordsOneSpanAndOneMeasurement(t *testing.T) {
 		string(AttrGenAIOperationName): "execute_tool",
 		string(AttrNetworkTransport):   TransportTCP,
 	} {
-		if attrs[key] != want {
-			t.Errorf("span %s = %q, want %q", key, attrs[key], want)
-		}
+		t.Run(key, func(t *testing.T) {
+			if attrs[key] != want {
+				t.Errorf("span %s = %q, want %q", key, attrs[key], want)
+			}
+		})
 	}
 
 	points := got.durationAttrs(t)
@@ -190,9 +192,11 @@ func TestMiddlewareNeverPutsIdentityOnAMetric(t *testing.T) {
 	}
 	for _, point := range got.durationAttrs(t) {
 		for _, forbidden := range []string{"user.hash", "client.address", "user.id", "user.name"} {
-			if _, present := point[forbidden]; present {
-				t.Errorf("%s reached a metric dimension: %v", forbidden, point)
-			}
+			t.Run(forbidden, func(t *testing.T) {
+				if _, present := point[forbidden]; present {
+					t.Errorf("%s reached a metric dimension: %v", forbidden, point)
+				}
+			})
 		}
 	}
 }

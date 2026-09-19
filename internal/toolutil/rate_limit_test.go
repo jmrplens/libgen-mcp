@@ -209,9 +209,11 @@ func TestUnmeteredMethodsPassThrough(t *testing.T) {
 // the middleware's own switch.
 func TestIsMeteredNamesEveryMeteredMethod(t *testing.T) {
 	for _, method := range []string{methodToolsCall, methodPromptsGet, methodSubscriptionsListen, methodToolsList} {
-		if !IsMetered(method) {
-			t.Errorf("IsMetered(%q) = false, but the middleware charges it", method)
-		}
+		t.Run(method, func(t *testing.T) {
+			if !IsMetered(method) {
+				t.Errorf("IsMetered(%q) = false, but the middleware charges it", method)
+			}
+		})
 	}
 	if IsMetered("prompts/list") {
 		t.Error("IsMetered claims prompts/list is charged, and it is not")
@@ -228,11 +230,13 @@ func TestADisabledLimiterAllowsEverything(t *testing.T) {
 		t.Error("a negative rate produced a limiter")
 	}
 	for _, method := range []string{methodToolsCall, methodPromptsGet, methodToolsList} {
-		for range 100 {
-			if _, err, reached := drive(t, nil, method, callRequest("search")); err != nil || !reached {
-				t.Fatalf("a nil limiter refused %s (%v)", method, err)
+		t.Run(method, func(t *testing.T) {
+			for range 100 {
+				if _, err, reached := drive(t, nil, method, callRequest("search")); err != nil || !reached {
+					t.Fatalf("a nil limiter refused %s (%v)", method, err)
+				}
 			}
-		}
+		})
 	}
 }
 

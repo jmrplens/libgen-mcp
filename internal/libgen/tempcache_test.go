@@ -138,9 +138,11 @@ func TestTempCache_SizeEvictionDropsTheLeastRecentlyUsed(t *testing.T) {
 		t.Errorf("the least-recently-used file should be removed, stat err = %v", statErr)
 	}
 	for _, key := range []string{"mid", "new"} {
-		if _, ok := tc.entries[key]; !ok {
-			t.Errorf("entry %q was evicted; only the oldest should have been", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if _, ok := tc.entries[key]; !ok {
+				t.Errorf("entry %q was evicted; only the oldest should have been", key)
+			}
+		})
 	}
 	if _, statErr := os.Stat(newPath); statErr != nil {
 		t.Errorf("the most-recently-used file was removed: %v", statErr)

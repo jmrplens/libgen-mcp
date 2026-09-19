@@ -110,9 +110,11 @@ func TestTitleTokensDropsStopwordsAndRepeats(t *testing.T) {
 		t.Fatalf("tokens = %v, want %v", got, want)
 	}
 	for tok := range want {
-		if !got[tok] {
-			t.Errorf("missing token %q in %v", tok, got)
-		}
+		t.Run(tok, func(t *testing.T) {
+			if !got[tok] {
+				t.Errorf("missing token %q in %v", tok, got)
+			}
+		})
 	}
 }
 
@@ -124,9 +126,11 @@ func TestTitleTokensDropsStopwordsAndRepeats(t *testing.T) {
 func TestTitleTokensKeepsNonASCIILetters(t *testing.T) {
 	got := titleTokens("Éléments—mathématique")
 	for _, want := range []string{"éléments", "mathématique"} {
-		if !got[want] {
-			t.Errorf("missing token %q in %v", want, got)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !got[want] {
+				t.Errorf("missing token %q in %v", want, got)
+			}
+		})
 	}
 	if len(got) != 2 {
 		t.Errorf("tokens = %v, want exactly the two content words", got)

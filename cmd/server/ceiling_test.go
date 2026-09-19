@@ -136,6 +136,9 @@ func TestTheProcessCeilingRefusesEverybody(t *testing.T) {
 	records, _ := testRecords(t, 64)
 	ceiling := heavyCeiling{perClient: 4, perProcess: 3}
 
+	// Each call must stay in flight while the next one starts, so the deferred
+	// finish belongs to this function rather than to a per-case subtest.
+	// sequential: the calls are held open together, not run one at a time
 	for i, address := range []string{"a", "b", "c"} {
 		_, finish := startCall(t, records, ceiling, address, heavyCall("download"))
 		defer finish()

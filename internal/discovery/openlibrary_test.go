@@ -172,9 +172,11 @@ func TestOpenLibrary_AvailabilityFieldsRequested(t *testing.T) {
 		t.Fatalf("Search() error = %v", err)
 	}
 	for _, field := range []string{"ebook_access", "has_fulltext", "ia"} {
-		if !strings.Contains(gotFields, field) {
-			t.Errorf("fields projection %q missing %q", gotFields, field)
-		}
+		t.Run(field, func(t *testing.T) {
+			if !strings.Contains(gotFields, field) {
+				t.Errorf("fields projection %q missing %q", gotFields, field)
+			}
+		})
 	}
 	if strings.Contains(gotFields, "cover_i") {
 		t.Errorf("fields projection %q still asks for cover_i, which no DiscoveryResult field carries", gotFields)

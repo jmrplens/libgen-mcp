@@ -242,9 +242,11 @@ func TestResolveTransportRefusesAnUnknownSelector(t *testing.T) {
 		t.Fatal("resolveTransport() accepted an unknown selector")
 	}
 	for _, want := range []string{"htpp", transportStdio, transportHTTP, transportAuto} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error = %q, want it to name %q", err, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %q", err, want)
+			}
+		})
 	}
 }
 
@@ -313,9 +315,11 @@ func TestTerminalGuidanceSaysWhatTheSilenceMeans(t *testing.T) {
 		"--http",
 		"getting-started",
 	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("the guidance does not mention %q:\n%s", want, text)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(text, want) {
+				t.Errorf("the guidance does not mention %q:\n%s", want, text)
+			}
+		})
 	}
 	if !strings.HasSuffix(text, "\n") {
 		t.Error("the guidance does not end in a newline, so it runs into whatever is logged next")
@@ -352,9 +356,11 @@ func TestTransportDecisionExplainsItselfOnlyWhenThereIsSomethingToSay(t *testing
 		`"level":"WARN"`, "127.0.0.1:9000",
 		`"level":"INFO"`, "transport inferred from stdin", `"transport":"stdio"`, "stdin is a pipe",
 	} {
-		if !strings.Contains(logged, want) {
-			t.Errorf("the explanation does not carry %q:\n%s", want, logged)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logged, want) {
+				t.Errorf("the explanation does not carry %q:\n%s", want, logged)
+			}
+		})
 	}
 
 	if got := transportName(true); got != transportHTTP {

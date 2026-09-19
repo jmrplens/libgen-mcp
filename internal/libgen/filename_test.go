@@ -305,9 +305,11 @@ func TestNormalizeExt(t *testing.T) {
 		"": "", ".": "", ".0020124": "", ".x": "", ".toolong": "", ".7z": "", ".p df": "",
 	}
 	for in, want := range cases {
-		if got := normalizeExt(in); got != want {
-			t.Errorf("normalizeExt(%q) = %q, want %q", in, got, want)
-		}
+		t.Run(in, func(t *testing.T) {
+			if got := normalizeExt(in); got != want {
+				t.Errorf("normalizeExt(%q) = %q, want %q", in, got, want)
+			}
+		})
 	}
 }
 
@@ -474,13 +476,17 @@ func TestSuggestFilename(t *testing.T) {
 // the real titles that must not be mistaken for one.
 func TestIsPlaceholderStem(t *testing.T) {
 	for _, in := range []string{"download", "Download", "file", "fulltext", "download (1)", "download_2", "untitled"} {
-		if !isPlaceholderStem(in) {
-			t.Errorf("isPlaceholderStem(%q) = false, want true", in)
-		}
+		t.Run(in, func(t *testing.T) {
+			if !isPlaceholderStem(in) {
+				t.Errorf("isPlaceholderStem(%q) = false, want true", in)
+			}
+		})
 	}
 	for _, in := range []string{"Volume 2", "npre2007361-1", "Downloading the Future", "Dataism"} {
-		if isPlaceholderStem(in) {
-			t.Errorf("isPlaceholderStem(%q) = true, want false", in)
-		}
+		t.Run(in, func(t *testing.T) {
+			if isPlaceholderStem(in) {
+				t.Errorf("isPlaceholderStem(%q) = true, want false", in)
+			}
+		})
 	}
 }

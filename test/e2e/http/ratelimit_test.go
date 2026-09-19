@@ -134,9 +134,11 @@ func TestRateLimit_TheWarningNamesTheFlagsThatFixIt(t *testing.T) {
 		t.Errorf("the warning appears %d times after two requests, want exactly 1:\n%s", got, logs)
 	}
 	for _, want := range []string{"--trusted-proxy-header", "--trusted-proxies"} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("the warning does not name %s:\n%s", want, logs)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logs, want) {
+				t.Errorf("the warning does not name %s:\n%s", want, logs)
+			}
+		})
 	}
 }
 

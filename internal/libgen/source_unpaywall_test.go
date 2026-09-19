@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -78,11 +79,13 @@ func TestUnpaywallErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			srv := unpaywallStatusServer(t, status, "")
-			s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				srv := unpaywallStatusServer(t, status, "")
+				s := unpaywallSource{email: "e@example.com", http: srv.Client(), baseURL: srv.URL}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+			})
 		}
 	})
 

@@ -101,14 +101,16 @@ func TestTheSDKsPerSessionChatterIsDebugOnly(t *testing.T) {
 			"server session disconnected",
 			"client log level set",
 		} {
-			record, found := sdkRecord(got, message)
-			if !found {
-				t.Errorf("%q was not written at debug, so the SDK's session records are lost rather than demoted", message)
-				continue
-			}
-			if record["level"] != "DEBUG" {
-				t.Errorf("%q is at %v, want DEBUG", message, record["level"])
-			}
+			t.Run(message, func(t *testing.T) {
+				record, found := sdkRecord(got, message)
+				if !found {
+					t.Errorf("%q was not written at debug, so the SDK's session records are lost rather than demoted", message)
+					return
+				}
+				if record["level"] != "DEBUG" {
+					t.Errorf("%q is at %v, want DEBUG", message, record["level"])
+				}
+			})
 		}
 	})
 }
@@ -220,14 +222,16 @@ func TestANonChatterRecordKeepsItsLevel(t *testing.T) {
 		{"keepalive ping failed; closing session", "WARN"},
 		{"jsonrpc2 internal error", "ERROR"},
 	} {
-		record, found := sdkRecord(got, tc.message)
-		if !found {
-			t.Errorf("%q was demoted out of an operator's default stream", tc.message)
-			continue
-		}
-		if record["level"] != tc.level {
-			t.Errorf("%q is at %v, want %s", tc.message, record["level"], tc.level)
-		}
+		t.Run(tc.message, func(t *testing.T) {
+			record, found := sdkRecord(got, tc.message)
+			if !found {
+				t.Errorf("%q was demoted out of an operator's default stream", tc.message)
+				return
+			}
+			if record["level"] != tc.level {
+				t.Errorf("%q is at %v, want %s", tc.message, record["level"], tc.level)
+			}
+		})
 	}
 }
 

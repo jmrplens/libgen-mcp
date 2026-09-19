@@ -402,10 +402,15 @@ func TestCertStampReportsAPairItCannotStat(t *testing.T) {
 	certPath, keyPath, _ := stampedPair(t, time.Now().Add(-time.Hour))
 	absent := filepath.Join(filepath.Dir(certPath), "absent.pem")
 
-	for _, pair := range [][2]string{{absent, keyPath}, {certPath, absent}} {
-		if stamp, err := stampOf(pair[0], pair[1]); err == nil {
-			t.Errorf("stampOf(%q, %q) = %+v, nil, want an error", pair[0], pair[1], stamp)
-		}
+	for name, pair := range map[string][2]string{
+		"the certificate is absent": {absent, keyPath},
+		"the key is absent":         {certPath, absent},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if stamp, err := stampOf(pair[0], pair[1]); err == nil {
+				t.Errorf("stampOf(%q, %q) = %+v, nil, want an error", pair[0], pair[1], stamp)
+			}
+		})
 	}
 }
 

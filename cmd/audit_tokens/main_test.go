@@ -241,9 +241,11 @@ func TestWriteReport(t *testing.T) {
 		"PROMPT", "acquire_book", "TOTAL (1 prompts)",
 		"adds ~150 tokens", "~100 for its 1 tool definitions", "~50 for its 1 prompt definitions",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("report missing %q; got:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("report missing %q; got:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -260,8 +262,10 @@ func TestRunEndToEnd(t *testing.T) {
 		"search", "get_details", "download", "read", "TOTAL (4 tools)",
 		"acquire_book", "research_topic", "get_paper", "download_troubleshoot", "TOTAL (4 prompts)",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("report missing %q; got:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("report missing %q; got:\n%s", want, out)
+			}
+		})
 	}
 }

@@ -331,9 +331,11 @@ func TestArchiveIsRestricted(t *testing.T) {
 		{"open collection", archiveItemMetadata{Identifier: "x", MediaType: "texts", Collection: flexStrings{"americana"}}, false},
 	}
 	for _, c := range cases {
-		if got := archiveIsRestricted(c.meta); got != c.want {
-			t.Errorf("%s: archiveIsRestricted() = %v, want %v", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if got := archiveIsRestricted(c.meta); got != c.want {
+				t.Errorf("%s: archiveIsRestricted() = %v, want %v", c.name, got, c.want)
+			}
+		})
 	}
 }
 

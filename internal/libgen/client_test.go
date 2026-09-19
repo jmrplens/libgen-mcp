@@ -112,9 +112,11 @@ func TestGetAllMirrorsPermanent(t *testing.T) {
 		t.Errorf("err = %v, want ErrRequestRejected", err)
 	}
 	for _, bad := range []string{"unreachable", "VPN", "DNS"} {
-		if strings.Contains(err.Error(), bad) {
-			t.Errorf("err = %q, must not contain connectivity text %q", err, bad)
-		}
+		t.Run(bad, func(t *testing.T) {
+			if strings.Contains(err.Error(), bad) {
+				t.Errorf("err = %q, must not contain connectivity text %q", err, bad)
+			}
+		})
 	}
 }
 
@@ -557,9 +559,11 @@ func TestChainMirrorErrorsKeepsTheCauses(t *testing.T) {
 	err := chainMirrorErrors(ErrAllMirrorsFailed, errors.Join(first, second))
 
 	for _, want := range []error{ErrAllMirrorsFailed, first, second} {
-		if !errors.Is(err, want) {
-			t.Errorf("errors.Is(err, %v) = false", want)
-		}
+		t.Run(want.Error(), func(t *testing.T) {
+			if !errors.Is(err, want) {
+				t.Errorf("errors.Is(err, %v) = false", want)
+			}
+		})
 	}
 }
 
@@ -609,12 +613,14 @@ func TestClientsCarryTheOperatorNamedDestinations(t *testing.T) {
 		{name: "http", client: named.http},
 		{name: "dl", client: named.dl},
 	} {
-		resp, err := fetchThrough(t, tc.client, srv.URL)
-		if err != nil {
-			t.Errorf("%s client could not reach the configured mirror: %v", tc.name, err)
-			continue
-		}
-		_ = resp.Body.Close()
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := fetchThrough(t, tc.client, srv.URL)
+			if err != nil {
+				t.Errorf("%s client could not reach the configured mirror: %v", tc.name, err)
+				return
+			}
+			_ = resp.Body.Close()
+		})
 	}
 
 	// The same address, from a deployment that configured no mirror at all, is
@@ -772,9 +778,11 @@ func TestTheClientsGaugesReadTheResourceTheyName(t *testing.T) {
 		{mcpotel.InstrumentSourceCooldownEntries, 1},
 		{mcpotel.InstrumentSourceCooldownCapacity, 2},
 	} {
-		if got := gaugeValue(t, metrics, tc.name); got != tc.want {
-			t.Errorf("%s = %d, want %d", tc.name, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gaugeValue(t, metrics, tc.name); got != tc.want {
+				t.Errorf("%s = %d, want %d", tc.name, got, tc.want)
+			}
+		})
 	}
 }
 

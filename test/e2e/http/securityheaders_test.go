@@ -217,10 +217,12 @@ func TestSecurity_NoHSTSAnywhere(t *testing.T) {
 
 	paths := []string{"/", "/health", serverCardCurrentPath, serverCardLegacyPath, "/nope"}
 	for _, path := range paths {
-		reply := s.do(t, request{method: http.MethodGet, path: path})
-		if got := reply.header.Get("Strict-Transport-Security"); got != "" {
-			t.Errorf("GET %s (%d): Strict-Transport-Security = %q, want none", path, reply.status, got)
-		}
+		t.Run(path, func(t *testing.T) {
+			reply := s.do(t, request{method: http.MethodGet, path: path})
+			if got := reply.header.Get("Strict-Transport-Security"); got != "" {
+				t.Errorf("GET %s (%d): Strict-Transport-Security = %q, want none", path, reply.status, got)
+			}
+		})
 	}
 
 	// And the POST, which is the only request that reaches a handler rather

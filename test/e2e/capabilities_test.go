@@ -622,15 +622,17 @@ func TestE2EReadFindIgnoresWhitespaceLive(t *testing.T) {
 		{"space doubled", strings.ReplaceAll(phrase, " ", "  ")},
 		{"space dropped", strings.ReplaceAll(phrase, " ", "")},
 	} {
-		pace()
-		got := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "find": tc.query, "max_matches": 3})
-		if got.MatchCount == 0 {
-			t.Errorf("%s: find %q reported no matches in a document that contains the phrase", tc.name, tc.query)
-			continue
-		}
-		if len(got.Matches) == 0 || strings.TrimSpace(got.Matches[0].Snippet) == "" {
-			t.Errorf("%s: find %q reported %d matches but returned no usable snippet", tc.name, tc.query, got.MatchCount)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			pace()
+			got := callRead(t, ctx, session, map[string]any{"md5": target.MD5, "find": tc.query, "max_matches": 3})
+			if got.MatchCount == 0 {
+				t.Errorf("%s: find %q reported no matches in a document that contains the phrase", tc.name, tc.query)
+				return
+			}
+			if len(got.Matches) == 0 || strings.TrimSpace(got.Matches[0].Snippet) == "" {
+				t.Errorf("%s: find %q reported %d matches but returned no usable snippet", tc.name, tc.query, got.MatchCount)
+			}
+		})
 	}
 }
 

@@ -41,14 +41,16 @@ func TestRedaction_NothingSensitiveSurvivesIntoADecodedDocument(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	for _, file := range []string{tracesFile, metricsFile, logsFile} {
-		raw, err := os.ReadFile(filepath.Join(c.outDir, file)) //#nosec G304 -- a path this package built in its own temp dir
-		if err != nil {
-			continue
-		}
-		for _, forbidden := range []string{query, secret} {
-			if strings.Contains(string(raw), forbidden) {
-				t.Errorf("%q survived into %s, which is the form a backend stores", forbidden, file)
+		t.Run(file, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join(c.outDir, file)) //#nosec G304 -- a path this package built in its own temp dir
+			if err != nil {
+				return
 			}
-		}
+			for _, forbidden := range []string{query, secret} {
+				if strings.Contains(string(raw), forbidden) {
+					t.Errorf("%q survived into %s, which is the form a backend stores", forbidden, file)
+				}
+			}
+		})
 	}
 }
