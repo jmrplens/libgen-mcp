@@ -592,11 +592,11 @@ func TestRandombookDownloadAPISkipsDeadMirror(t *testing.T) {
 	}))
 	defer live.Close()
 
-	// A closed listener's address stands in for a mirror that is down: dialing it
-	// fails at the transport level, exactly as libgen.me did when observed.
-	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	deadAddr := dead.Listener.Addr().String()
-	dead.Close()
+	// Port zero stands in for a mirror that is down: dialing it fails at the
+	// transport level, exactly as libgen.me did when observed. A closed
+	// listener's address would not, reliably — the kernel is free to hand that
+	// port to the next listener that asks, and a runner under load does.
+	const deadAddr = "127.0.0.1:0"
 
 	const deadHost, liveHost = "libgen.dead", "libgen.live"
 	httpClient := &http.Client{Transport: &http.Transport{
