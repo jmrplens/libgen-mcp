@@ -10,6 +10,22 @@
     "source": "github",
     "id": "1304827801"
   },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/site/public/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/mcpb/icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
