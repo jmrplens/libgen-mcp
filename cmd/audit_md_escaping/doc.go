@@ -24,6 +24,13 @@
 // that prints it and by the names in the call chain, and a chain the walk
 // cannot follow is reported as unresolved rather than assumed safe.
 //
+// It is flow-insensitive, so a name is what any assignment to it can hold. Two
+// shapes are therefore read more strictly than they run: a local escaped on one
+// branch and left raw on another is reported, and a parameter a function
+// escapes into itself — s = toolutil.EscapeMdTableCell(s) — is judged by what
+// the caller passed. Escape into a new name, which is what a reader follows
+// anyway, or declare the value with the directive below.
+//
 // A value that needs no escaping is declared in the source, beside the
 // formatter that writes it:
 //

@@ -194,6 +194,14 @@ func TestAudit_FollowsAValueToWhereItCameFrom(t *testing.T) {
 			want: []string{"unescaped table-cell cell"},
 		},
 		{
+			// The audit is flow-insensitive, so it reads this more strictly
+			// than it runs. The doc comment says so and says what to do
+			// instead, and the direction is the one a gate has to err in.
+			name: "a parameter escaped into itself is judged by what the caller passed",
+			body: "// row writes a table row.\nfunc row(b *strings.Builder, cell string) {\n\tcell = toolutil.EscapeMdTableCell(cell)\n\tfmt.Fprintf(b, \"| %s |\\n\", cell)\n}\n\n// table writes the rows.\nfunc table(b *strings.Builder, r record) {\n\trow(b, r.Title)\n}",
+			want: []string{"unescaped table-cell cell"},
+		},
+		{
 			name: "cells appended into a row",
 			body: "// table writes a row built cell by cell.\nfunc table(b *strings.Builder, r record) {\n\tcells := make([]string, 0, 2)\n\tcells = append(cells, toolutil.EscapeMdTableCell(r.Title))\n\tb.WriteString(\"| \")\n\tb.WriteString(strings.Join(cells, \" | \"))\n}",
 			want: nil,
