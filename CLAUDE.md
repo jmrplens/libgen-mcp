@@ -761,6 +761,23 @@ skill is a rule an agent has to invoke something to see:
   the wrong bytes. `scripts/update-server-json-sha.sh` refuses that run, and
   `make check-stamper` (CI's `server.json` job) drives the refusal on a fixture.
 
+**A release can be rehearsed, and a dispatch is always a rehearsal.**
+`gh workflow run release.yml --ref main` runs every job of the release on the
+dispatched tree and publishes nothing: `REHEARSAL` comes from
+`github.event_name` alone, and there is no input that turns it off. The steps
+that cannot be undone carry `if: env.REHEARSAL != 'true'`; everything else runs,
+including the image build (exported to an OCI layout, so its digest is real and
+the `server.json` stamp is exercised rather than skipped) and the registry
+logins, which mint a credential and spend nothing. **Skipping the wrong step
+proves less than it appears**: what is skipped is exactly what cannot be undone.
+
+**The GitHub release is a draft until every asset is attached.** GoReleaser
+creates it with `draft: true` and the workflow's "Publish the release" step flips
+it after the `.mcpb` upload — before the registry publish, because a draft
+release's assets are not publicly downloadable and the registry fetches the
+bundle `server.json` declares. With `draft: false` the release was public for the
+minutes it took to build and attach that bundle.
+
 **There are two plugin manifests, and they are different schemas for different
 directories rather than a copy.** `.plugin/plugin.json` is the Open Plugins
 location, validating against a `plugin.schema.json` beside it and carrying a
