@@ -405,6 +405,27 @@ a blank line so it is not treated as a second package doc.
 
 ## CI shape
 
+**Every `uses:` is pinned to a commit SHA, with the version in a trailing
+comment.** A tag is a pointer its owner can move, and an action runs inside jobs
+that hold this repository's publishing identities — `id-token: write` for three
+trusted publishers, a deploy key for the Homebrew tap, the registry logins — so a
+moved tag is arbitrary code in a credentialed job. The one exception is
+`./.github/workflows/race.yml`, which is this repository.
+
+The trailing `# v7` is not decoration: Dependabot reads it to know which version
+the SHA stands for, and without it an action is pinned **and** frozen. To bump
+one by hand, resolve the tag first — `gh api repos/<owner>/<repo>/commits/<tag>
+-q .sha` — and move the comment with it.
+
+`cooldown: {default-days: 3}` on every Dependabot ecosystem holds a release for
+three days before a pull request proposes it, which is the window a compromised
+or withdrawn publish is usually caught in. It does not delay a security fix that
+matters here: `govulncheck` runs on every pull request and fails on a
+vulnerability that reaches this module's call graph, whatever Dependabot has
+proposed. Use `default-days` alone — the SemVer sub-keys are rejected outright
+for the docker ecosystem, and a configuration file Dependabot refuses stops
+every update rather than that one.
+
 **One required check, `CI verdict`.** It `needs` every other job and runs
 `.github/scripts/needs-verdict.sh`, which fails unless each one reported
 `success`. Adding a job to the pipeline means adding it to that `needs` list —
