@@ -50,6 +50,13 @@ env:
   # the docs.
   GORELEASER_VERSION: "v2.18.2"
   COSIGN_VERSION: "v3.1.3"
+  # syft and oras are fetched by hand in the jobs that hold a signing identity,
+  # so they are pinned here and their SHA256 beside each install. Dependabot
+  # does not see a curl, so these move when somebody moves them — deliberately
+  # a release old rather than the newest, which is the same window the
+  # `cooldown: 3` on every Dependabot ecosystem buys.
+  SYFT_VERSION: "v1.51.1"
+  ORAS_VERSION: "1.3.4"
 
 jobs:
   # The one check that runs before anything else spends a runner, and the answer
@@ -166,7 +173,48 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
-      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      # Fetched by hand rather than through anchore/sbom-action/download-syft.
+      # That action is pinned by SHA, but on Linux it downloads
+      # raw.githubusercontent.com/anchore/syft/main/install.sh and runs it with
+      # sh — so the code that executed here came from a branch head. This job
+      # mints the release's cosign signature and holds the identity npm, PyPI,
+      # NuGet and the attestation store trust, which is precisely where nothing
+      # may be resolved at run time. Pinning the action pinned nothing about
+      # the thing it fetched, the same trap GORELEASER_VERSION exists for.
+      #
+      # The bytes are pinned by SHA256, and cosign additionally proves they came
+      # from anchore's own release workflow. That certificate identity ends in
+      # refs/heads/main because syft releases from main rather than from a tag,
+      # and the certificate asset is base64-wrapped.
+      - name: Install syft
+        env:
+          SYFT_SHA256: "8fcb33017a0dc1058298c923c436d19dfa68ae93968e0b423248542e3afb9fc3"
+        run: |
+          set -euo pipefail
+          # In the runner's temp directory, not the checkout: GoReleaser
+          # refuses a dirty tree on a tag, and the tarball and its four
+          # signature files would be exactly that if a step here failed
+          # between the download and the cleanup.
+          cd "${RUNNER_TEMP}"
+          TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+          BASE="https://github.com/anchore/syft/releases/download/${SYFT_VERSION}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          echo "${SYFT_SHA256}  ${TARBALL}" | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
+          base64 -d syft-checksums.pem > syft-checksums.decoded.pem
+          cosign verify-blob \
+            --certificate syft-checksums.decoded.pem \
+            --signature syft-checksums.sig \
+            --certificate-identity "https://github.com/anchore/syft/.github/workflows/release.yaml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            syft-checksums.txt
+          grep " ${TARBALL}\$" syft-checksums.txt | sha256sum -c -
+          tar xzf "${TARBALL}" syft
+          install -m 0755 syft /usr/local/bin/syft
+          rm -f "${TARBALL}" syft-checksums.txt syft-checksums.pem syft-checksums.decoded.pem syft-checksums.sig syft
+          syft --version
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           # Exact, not `latest` and not `~> v2`: this binary is downloaded at
@@ -602,6 +650,13 @@ jobs:
       - name: Extract version
         id: version
         run: echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+      # cosign is here to *verify* a download — syft's own signed checksums,
+      # below — and for nothing else. This job has no `id-token`, so there is
+      # no keyless identity to sign with even if a step tried to; signing lives
+      # in sign-attest, which runs none of the build code this job does.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
       # The registry logins run in a rehearsal too. They mint a credential and
       # spend nothing, and a policy that has drifted is exactly the kind of
       # failure a rehearsal is for; only the push below is skipped.
@@ -744,6 +799,111 @@ jobs:
             echo "${arch}=${digest}" >> "$GITHUB_OUTPUT"
             echo "linux/${arch} manifest ${digest}"
           done
+
+      # An SBOM of the image, discoverable by a reader of the registry, beside
+      # the one BuildKit already writes. `sbom: true` on the build puts an SPDX
+      # document *inside* the index as an attestation manifest, one per
+      # platform, and a client reading the registry's referrers never sees it:
+      # those two `unknown/unknown` manifests are part of the index rather than
+      # referrers of anything. Both are kept — they answer different readers
+      # and neither replaces the other.
+      #
+      # Per platform rather than over the index, because an SBOM describes
+      # contents and an index has none of its own: it lists manifests, and the
+      # two platform images have different contents. The platform digest is
+      # also what a scanner that pulled the image for its own architecture
+      # looks under, which is why the provenance steps cover those digests too.
+      #
+      # syft is fetched by hand for the reason spelled out at the release job's
+      # own copy of this install, and pinned the same way.
+      #
+      # Not gated on the rehearsal switch. This install, the scan and the guard
+      # below are the whole of the feature that can rot, and a rehearsal is the
+      # only thing that runs them before a tag does; gated, a typo here would
+      # fail for the first time on a release, after the image was pushed.
+      - name: Install syft
+        env:
+          SYFT_SHA256: "8fcb33017a0dc1058298c923c436d19dfa68ae93968e0b423248542e3afb9fc3"
+        run: |
+          set -euo pipefail
+          # In the runner's temp directory, not the checkout: GoReleaser
+          # refuses a dirty tree on a tag, and the tarball and its four
+          # signature files would be exactly that if a step here failed
+          # between the download and the cleanup.
+          cd "${RUNNER_TEMP}"
+          TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+          BASE="https://github.com/anchore/syft/releases/download/${SYFT_VERSION}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          echo "${SYFT_SHA256}  ${TARBALL}" | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
+          base64 -d syft-checksums.pem > syft-checksums.decoded.pem
+          cosign verify-blob \
+            --certificate syft-checksums.decoded.pem \
+            --signature syft-checksums.sig \
+            --certificate-identity "https://github.com/anchore/syft/.github/workflows/release.yaml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            syft-checksums.txt
+          grep " ${TARBALL}\$" syft-checksums.txt | sha256sum -c -
+          tar xzf "${TARBALL}" syft
+          install -m 0755 syft /usr/local/bin/syft
+          rm -f "${TARBALL}" syft-checksums.txt syft-checksums.pem syft-checksums.decoded.pem syft-checksums.sig syft
+          syft --version
+
+      # Scanned from ghcr.io alone: both registries hold the byte-identical
+      # index, so a platform digest names the same bytes on either and one
+      # document is what gets attested to both. `--platform` beside the digest
+      # is for the document's own record — a manifest digest already names one
+      # platform's bytes, but syft learns the architecture only from the flag,
+      # and without it the image purl carries an empty arch qualifier.
+      #
+      # A rehearsal pushes nothing, so there is no registry image to scan; it
+      # scans the two smoke images the daemon already holds, built from the
+      # same layers and listing the same packages. The attest steps stay
+      # skipped there: an attestation whose subject exists nowhere would be
+      # pollution of the store rather than a rehearsal of it.
+      - name: Generate the per-platform image SBOMs
+        env:
+          IMAGE_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          AMD64_DIGEST: ${{ steps.platform-digests.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.platform-digests.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            case "$arch" in
+              amd64) digest="${AMD64_DIGEST}" ;;
+              arm64) digest="${ARM64_DIGEST}" ;;
+            esac
+            if [ "$REHEARSAL" = "true" ]; then
+              source="docker:libgen-mcp:smoke-${arch}"
+              syft scan "$source" -o spdx-json > "image-sbom-${arch}.spdx.json"
+            else
+              source="registry:${IMAGE_REPO}@${digest}"
+              syft scan "$source" --platform "linux/${arch}" -o spdx-json > "image-sbom-${arch}.spdx.json"
+            fi
+            # A document with no packages means syft read nothing, which would
+            # attest an empty claim rather than fail.
+            packages=$(jq '.packages | length' "image-sbom-${arch}.spdx.json")
+            if [ "${packages:-0}" -lt 1 ]; then
+              echo "::error::the ${arch} SBOM lists no packages; syft scanned nothing"
+              exit 1
+            fi
+            echo "linux/${arch}: ${packages} packages from ${source}"
+          done
+
+      # The documents cross to sign-attest as an artifact rather than being
+      # attested here, because the signing identity is no longer in this job.
+      # A rehearsal uploads too: the upload is part of the path a release takes
+      # and costs a few hundred kilobytes.
+      - name: Keep the SBOMs for the signing job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: image-sboms
+          path: image-sbom-*.spdx.json
+          retention-days: 1
+          if-no-files-found: error
+
       # The Docker Hub repository descriptions are owned by this repo so they
       # cannot drift (they had been empty since the repository was published,
       # across thousands of pulls): the short description and the curated
@@ -822,6 +982,12 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Take the SBOMs the docker job generated
+        if: env.REHEARSAL != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: image-sboms
 
       # The digests this job was handed must be real before anything is signed
       # against them: a job output that arrived empty would sign the string "@"
@@ -931,12 +1097,179 @@ jobs:
           subject-digest: ${{ needs.docker.outputs.arm64 }}
           push-to-registry: true
 
+      # `actions/attest` itself rather than the `actions/attest-sbom` wrapper,
+      # which is deprecated and says so with a warning on every run.
+      #
+      # `predicate-type` + `predicate-path` rather than `sbom-path`. sbom-path
+      # does two things: it checks the file is SPDX or CycloneDX, which the
+      # docker job's package-count guard already covers, and it derives the
+      # predicate type from `spdxVersion`, which yields
+      # https://spdx.dev/Document/v2.3. The in-toto specification blesses that
+      # spelling and the unversioned https://spdx.dev/Document equally — both
+      # are listed as Type URIs — so this is interoperability, not correctness.
+      # It matters because Trivy matches the unversioned literal by exact
+      # equality: the versioned form is read as "unknown" and refused. cosign,
+      # BuildKit and in-toto-golang all emit the unversioned form.
+      #
+      # Six steps, the index included. An index has no contents of its own, so
+      # the index attestation carries the amd64 document by convention rather
+      # than by right — and it is there because a consumer that resolves a tag
+      # looks at the index and nowhere else: with the SBOM on the platform
+      # manifests alone, `trivy image <tag>` finds nothing and `--platform`
+      # does not change it.
+      - name: Attest SBOM (ghcr.io, index)
+        if: env.REHEARSAL != 'true'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.digest }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest SBOM (ghcr.io, linux/amd64)
+        if: env.REHEARSAL != 'true'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.amd64 }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest SBOM (ghcr.io, linux/arm64)
+        if: env.REHEARSAL != 'true'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.arm64 }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-arm64.spdx.json
+          push-to-registry: true
+
+      - name: Attest SBOM (Docker Hub, index)
+        if: env.REHEARSAL != 'true' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.digest }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest SBOM (Docker Hub, linux/amd64)
+        if: env.REHEARSAL != 'true' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.amd64 }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest SBOM (Docker Hub, linux/arm64)
+        if: env.REHEARSAL != 'true' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.arm64 }}
+          predicate-type: https://spdx.dev/Document
+          predicate-path: image-sbom-arm64.spdx.json
+          push-to-registry: true
+
+      # oras is fetched by hand for the reason spelled out at syft's install,
+      # and pinned the same way. Unlike syft it publishes no cosign signature,
+      # only a detached GPG one, so the certificate check has no counterpart
+      # here and the SHA256 is the binding control: it names the exact bytes,
+      # and the release's own checksums file is cross-checked against it so a
+      # mismatch says which of the two moved.
+      #
+      # Not gated on the rehearsal switch, for the same reason syft's is not:
+      # this is the only thing that exercises the download and the pin before a
+      # tag does.
+      - name: Install oras
+        env:
+          ORAS_SHA256: "f27adb935022d94df8dc77719c322dda592c78a0d57a6f7dcdd8d900b248c454"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}" # same reason as syft's install: never in the checkout
+          TARBALL="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
+          BASE="https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          echo "${ORAS_SHA256}  ${TARBALL}" | sha256sum -c -
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o oras-checksums.txt "${BASE}/oras_${ORAS_VERSION}_checksums.txt"
+          grep " ${TARBALL}\$" oras-checksums.txt | sha256sum -c -
+          tar xzf "${TARBALL}" oras
+          install -m 0755 oras /usr/local/bin/oras
+          rm -f "${TARBALL}" oras-checksums.txt oras
+          oras version
+
+      # A second, unsigned copy of the same documents, published bare, beside
+      # the attestations above and never instead of them. The attestation is
+      # the authenticated answer and needs a Sigstore verifier to unwrap four
+      # layers; this is the one a consumer reads with one referrers query and
+      # one blob GET, and its artifactType is the registered SPDX media type
+      # rather than a signature-container type that says nothing about what is
+      # inside.
+      #
+      # Last, and after every attestation, for two reasons: all of these
+      # clients maintain the referrers fallback tag by read-modify-write, so
+      # they must be sequential; and a failure in the unsigned copy then cannot
+      # cost the signed ones. oras reads the credentials docker/login-action
+      # already wrote and needs none of its own.
+      - name: Publish the SBOMs as bare SPDX referrers
+        if: env.REHEARSAL != 'true'
+        env:
+          GHCR_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          HUB_REPO: ${{ env.DOCKERHUB_SKIP == 'false' && format('docker.io/{0}', env.DOCKERHUB_IMAGE) || '' }}
+        run: |
+          set -euo pipefail
+          for repo in "${GHCR_REPO}" ${HUB_REPO:+"${HUB_REPO}"}; do
+            for pair in "${INDEX_DIGEST}:amd64" "${AMD64_DIGEST}:amd64" "${ARM64_DIGEST}:arm64"; do
+              digest="${pair%:*}"
+              arch="${pair##*:}"
+              oras attach --artifact-type application/spdx+json \
+                "${repo}@${digest}" \
+                "image-sbom-${arch}.spdx.json:application/spdx+json"
+              echo "attached ${arch} SBOM to ${repo}@${digest}"
+            done
+          done
+
+      # ghcr.io only, and last of all. It serves no referrers API, so the
+      # referrers list there is the client-maintained sha256-<hex> fallback
+      # tag, and an entry in it says only what the client that appended it
+      # wrote. The distribution spec says that descriptor MUST carry the pushed
+      # manifest's artifactType and copy all of its annotations; cosign writes
+      # it through go-containerregistry, whose releases before v0.22.1 wrote
+      # less — so a signature lands in the list as
+      # "application/vnd.oci.empty.v1+json" with no annotations. The manifest
+      # behind it is right; the list entry is not, and `gh attestation verify
+      # --bundle-from-oci`, Kyverno and Trivy all filter on exactly those
+      # fields.
+      #
+      # A failure here warns and does not fail the job. This job gates every
+      # publisher, and that gate exists so an image nobody signed never ships
+      # beside versions that cannot be withdrawn. Every signature and
+      # attestation above stands whatever happens here, and a tag whose entries
+      # are what cosign wrote is what every earlier release shipped with;
+      # holding the publishers for a list entry would price it as a signature.
+      # The warning names the command to run by hand.
+      - name: Make the ghcr.io referrers fallback tags say what they list
+        if: env.REHEARSAL != 'true'
+        env:
+          GHCR_REPO: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          set -uo pipefail
+          if ! bash .github/scripts/referrers-fallback-repair.sh "${GHCR_REPO}" "${INDEX_DIGEST}" "${AMD64_DIGEST}" "${ARM64_DIGEST}"; then
+            echo "::warning title=ghcr.io referrers fallback tags::not rewritten; the signatures and attestations stand and the entries are what cosign wrote. Run by hand: bash .github/scripts/referrers-fallback-repair.sh ${GHCR_REPO} ${INDEX_DIGEST} ${AMD64_DIGEST} ${ARM64_DIGEST}"
+          fi
+
       # A skipped job with a message rather than a hole in the graph: reading a
       # rehearsal's job list should not suggest the signing was forgotten.
       - name: Nothing to sign in a rehearsal
         if: env.REHEARSAL == 'true'
         run: |
-          echo "::notice::rehearsal: the image was exported rather than pushed, so there is no published index to sign or attest"
+          echo "::notice::rehearsal: the image was exported rather than pushed, so there is no published index to sign or attest; the SBOMs were still generated and their guard still ran in the docker job, and syft's and oras's pinned installs still ran"
 
   # Homebrew is the fastest path from a tag to a running binary on somebody's
   # machine, so it waits for the release job: a tap that advertises a version
