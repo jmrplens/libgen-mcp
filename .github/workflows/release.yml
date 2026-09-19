@@ -198,11 +198,11 @@ jobs:
           cd "${RUNNER_TEMP}"
           TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
           BASE="https://github.com/anchore/syft/releases/download/${SYFT_VERSION}"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o "${TARBALL}" "${BASE}/${TARBALL}"
           echo "${SYFT_SHA256}  ${TARBALL}" | sha256sum -c -
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
           base64 -d syft-checksums.pem > syft-checksums.decoded.pem
           cosign verify-blob \
             --certificate syft-checksums.decoded.pem \
@@ -210,6 +210,9 @@ jobs:
             --certificate-identity "https://github.com/anchore/syft/.github/workflows/release.yaml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             syft-checksums.txt
+          # Strict, unlike oras's cross-check below: this file is the one cosign
+          # signed, so fetching it is how the provenance claim is made at all,
+          # not a second opinion about a pin that already matched.
           grep " ${TARBALL}\$" syft-checksums.txt | sha256sum -c -
           tar xzf "${TARBALL}" syft
           install -m 0755 syft /usr/local/bin/syft
@@ -506,8 +509,8 @@ jobs:
           TARBALL="mcp-publisher_linux_amd64.tar.gz"
           SIGSTORE_BUNDLE="${TARBALL}.sigstore.json"
           URL="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${TARBALL}"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${URL}"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${SIGSTORE_BUNDLE}" "${URL}.sigstore.json"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o "${TARBALL}" "${URL}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o "${SIGSTORE_BUNDLE}" "${URL}.sigstore.json"
           echo "${MCP_PUBLISHER_SHA256}  ${TARBALL}" | sha256sum -c -
           cosign verify-blob \
             --bundle "${SIGSTORE_BUNDLE}" \
@@ -833,11 +836,11 @@ jobs:
           cd "${RUNNER_TEMP}"
           TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
           BASE="https://github.com/anchore/syft/releases/download/${SYFT_VERSION}"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o "${TARBALL}" "${BASE}/${TARBALL}"
           echo "${SYFT_SHA256}  ${TARBALL}" | sha256sum -c -
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.txt "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.pem "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.pem"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o syft-checksums.sig "${BASE}/syft_${SYFT_VERSION#v}_checksums.txt.sig"
           base64 -d syft-checksums.pem > syft-checksums.decoded.pem
           cosign verify-blob \
             --certificate syft-checksums.decoded.pem \
@@ -845,6 +848,9 @@ jobs:
             --certificate-identity "https://github.com/anchore/syft/.github/workflows/release.yaml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             syft-checksums.txt
+          # Strict, unlike oras's cross-check below: this file is the one cosign
+          # signed, so fetching it is how the provenance claim is made at all,
+          # not a second opinion about a pin that already matched.
           grep " ${TARBALL}\$" syft-checksums.txt | sha256sum -c -
           tar xzf "${TARBALL}" syft
           install -m 0755 syft /usr/local/bin/syft
@@ -1195,10 +1201,21 @@ jobs:
           cd "${RUNNER_TEMP}" # same reason as syft's install: never in the checkout
           TARBALL="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
           BASE="https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}"
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o "${TARBALL}" "${BASE}/${TARBALL}"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o "${TARBALL}" "${BASE}/${TARBALL}"
           echo "${ORAS_SHA256}  ${TARBALL}" | sha256sum -c -
-          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -o oras-checksums.txt "${BASE}/oras_${ORAS_VERSION}_checksums.txt"
-          grep " ${TARBALL}\$" oras-checksums.txt | sha256sum -c -
+          # The pin above is the control, and it has already passed here. This
+          # second fetch only cross-checks it against the publisher's own
+          # manifest so a mismatch says which of the two moved, and a release
+          # must not stop because that file was briefly unreachable: a rehearsal
+          # lost the whole signing job to three HTTP 500s from
+          # github.com/oras-project/oras/releases while the tarball itself had
+          # downloaded and matched. A 500 is a fact about GitHub; a mismatch is
+          # a fact about the bytes, and only the second one still fails.
+          if curl -fsSL --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -o oras-checksums.txt "${BASE}/oras_${ORAS_VERSION}_checksums.txt"; then
+            grep " ${TARBALL}\$" oras-checksums.txt | sha256sum -c -
+          else
+            echo "::warning title=oras checksums::could not fetch ${BASE}/oras_${ORAS_VERSION}_checksums.txt; the SHA256 pin matched, so the bytes are the pinned ones and only the cross-check against the publisher's manifest was skipped"
+          fi
           tar xzf "${TARBALL}" oras
           install -m 0755 oras /usr/local/bin/oras
           rm -f "${TARBALL}" oras-checksums.txt oras
