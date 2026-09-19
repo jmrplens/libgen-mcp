@@ -17,24 +17,14 @@ import (
 // person). The "💡 Next steps" block mirrors the structured next_steps field so
 // guidance is visible in both channels.
 
-// writeNextSteps appends a "💡 Next steps" section listing the guidance strings.
-// It is a no-op when there are none.
+// writeNextSteps appends the "next steps" section listing the guidance
+// strings. It is a no-op when there are none.
 //
-// Each step is escaped here rather than where it was built, because the steps
-// are built in eight places and every one of them quotes something a third
-// party sent: a pinned source name, a resolved mirror URL, the path a
-// downloaded file was saved under. A step is one line of a list by
-// construction, so collapsing a newline into a space takes nothing away from
-// the guidance and stops a value ending the item it is in and writing the rest
-// as a step of its own.
+// The package-local spelling of [toolutil.WriteNextSteps], which is where the
+// section's shape and the escaping of each step live: the steps are built in
+// eight places and every one of them quotes something a third party sent.
 func writeNextSteps(b *strings.Builder, steps []string) {
-	if len(steps) == 0 {
-		return
-	}
-	b.WriteString("\n💡 **Next steps:**\n")
-	for _, s := range steps {
-		fmt.Fprintf(b, "- %s\n", toolutil.EscapeMdTableCell(s))
-	}
+	toolutil.WriteNextSteps(b, steps...)
 }
 
 // mdCell sanitizes a value for a Markdown table cell.
@@ -197,34 +187,44 @@ func openAccessLocator(h discovery.DiscoveryResult) string {
 	}
 }
 
-// renderDetailsMarkdown renders a details record as a short field list (title,
-// authors, year, identifiers) drawn from the file/edition maps, plus next steps.
+// renderDetailsMarkdown renders a details record as a card: the title as the
+// heading, one row per field drawn from the file/edition maps, then the
+// citation and enrichment sections, then next steps.
+//
+// The rows go through [toolutil.Card] rather than a sequence of Fprintf calls,
+// because a hand-written row decides for itself what to escape, whether to
+// write anything when the value is empty, and how to separate itself from
+// whatever the last section left behind — and those per-site decisions are
+// where the leaks were.
 func renderDetailsMarkdown(out DetailsOutput) string {
 	var b strings.Builder
 	rec := out.File
 	if rec == nil {
 		rec = out.Edition
 	}
-	title := stringField(rec, "title")
-	if title == "" {
-		title = "(record)"
-	}
-	fmt.Fprintf(&b, "**%s**\n", mdCell(title))
-	for _, f := range []struct{ label, key string }{
-		{"Authors", "author"},
-		{"Year", "year"},
-		{"Publisher", "publisher"},
-		{"md5", "md5"},
-		{"doi", "doi"},
-	} {
-		if v := stringField(rec, f.key); v != "" {
-			fmt.Fprintf(&b, "- %s: %s\n", f.label, mdCell(v))
-		}
-	}
+	card := toolutil.NewCard(&b, detailsHeading(rec))
+	card.Field("Authors", stringField(rec, "author"))
+	card.Field("Year", stringField(rec, "year"))
+	card.Field("Publisher", stringField(rec, "publisher"))
+	// An md5 and a DOI are values the reader copies into the next call, so
+	// each is a code span: nothing inside one is Markdown, and what is shown
+	// is exactly what has to be pasted.
+	card.Code("md5", stringField(rec, "md5"))
+	card.Code("doi", stringField(rec, "doi"))
 	writeCitation(&b, out.Citations)
 	writeEnrichment(&b, out.Enrichment)
-	writeNextSteps(&b, out.NextSteps)
+	card.End(out.NextSteps...)
 	return b.String()
+}
+
+// detailsHeading is the record's title, or a placeholder when the catalog sent
+// none: a card with no heading would leave the rows with nothing saying what
+// they describe.
+func detailsHeading(rec map[string]any) string {
+	if title := stringField(rec, "title"); title != "" {
+		return title
+	}
+	return "(record)"
 }
 
 // writeCitation appends the ready-to-paste BibTeX block followed by its
@@ -236,12 +236,9 @@ func writeCitation(b *strings.Builder, c *Citations) {
 	if c == nil || c.BibTeX == "" {
 		return
 	}
-	b.WriteString("\n### Citation (BibTeX)\n\n")
-	b.WriteString(fencedBlock("bibtex", c.BibTeX))
-	b.WriteString("\n")
-	if c.Provenance != "" {
-		fmt.Fprintf(b, "\n> %s\n", mdCell(c.Provenance))
-	}
+	section := toolutil.NewCard(b, "").Section("Citation (BibTeX)")
+	section.Fence("bibtex", c.BibTeX)
+	section.Quote(c.Provenance)
 }
 
 // writeEnrichment appends a short "External metadata" section for the best-effort
@@ -252,25 +249,20 @@ func writeEnrichment(b *strings.Builder, e *libgen.Enrichment) {
 	if e == nil {
 		return
 	}
-	b.WriteString("\n### External metadata (open sources)\n")
+	section := toolutil.NewCard(b, "").Section("External metadata (open sources)")
 	if cr := e.Crossref; cr != nil {
-		if cr.ContainerTitle != "" {
-			fmt.Fprintf(b, "- Journal / container: %s (via Crossref)\n", mdCell(cr.ContainerTitle))
-		}
-		if cr.PublishedYear > 0 {
-			fmt.Fprintf(b, "- Published year: %d (via Crossref)\n", cr.PublishedYear)
-		}
-		if cr.CitationCount > 0 {
-			fmt.Fprintf(b, "- Times cited: %d (via Crossref)\n", cr.CitationCount)
-		}
+		section.Field("Journal / container (via Crossref)", cr.ContainerTitle)
+		// Count rather than Int for both: a zero here is Crossref not saying,
+		// not a work published in year zero or one nobody has ever cited.
+		section.Count("Published year (via Crossref)", int64(cr.PublishedYear))
+		section.Count("Times cited (via Crossref)", int64(cr.CitationCount))
 	}
 	if ol := e.OpenLibrary; ol != nil {
-		if ol.OpenLibURL != "" {
-			fmt.Fprintf(b, "- OpenLibrary record: %s\n", mdCell(ol.OpenLibURL))
-		}
-		if ol.Description != "" {
-			fmt.Fprintf(b, "- Description (OpenLibrary): %s\n", mdCell(ol.Description))
-		}
+		section.URL("OpenLibrary record", ol.OpenLibURL)
+		// A description is prose somebody typed and runs to paragraphs, so it
+		// goes through Text: one line stays on the row, and a longer one
+		// becomes a blockquote nothing inside can break out of.
+		section.Text("Description (OpenLibrary)", ol.Description)
 	}
 }
 
@@ -385,21 +377,28 @@ func renderDownloadMarkdown(out DownloadOutput) string {
 	if out.Path == "" {
 		name = out.OriginalFilename
 	}
-	verified := "no"
-	if out.Verified {
-		verified = "yes"
+	card := toolutil.NewCard(&b, "")
+	card.Field("Downloaded", name)
+	// Int rather than Count: a zero-byte file is a download that happened and
+	// produced nothing, which is exactly the row a reader needs to see.
+	card.Int("Size in bytes", out.SizeBytes)
+	card.Code("Path", out.Path)
+	card.Field("Verified", verifiedLabel(out.Verified))
+	if out.OriginalFilename != name {
+		card.Field("Announced by the source", out.OriginalFilename)
 	}
-	fmt.Fprintf(&b, "Downloaded **%s** — %d bytes.\n", mdCell(name), out.SizeBytes)
-	fmt.Fprintf(&b, "- Path: %s\n- Verified: %s\n", mdCell(out.Path), verified)
-	if out.OriginalFilename != "" && out.OriginalFilename != name {
-		fmt.Fprintf(&b, "- Announced by the source: %s\n", mdCell(out.OriginalFilename))
-	}
-	if out.NameOrigin != "" {
-		fmt.Fprintf(&b, "- Name origin: %s\n", mdCell(string(out.NameOrigin)))
-	}
-	if out.Resumed {
-		b.WriteString("- Resumed from a partial download.\n")
-	}
-	writeNextSteps(&b, out.NextSteps)
+	card.Field("Name origin", string(out.NameOrigin))
+	card.Flag("Resumed from a partial download", out.Resumed)
+	card.End(out.NextSteps...)
 	return b.String()
+}
+
+// verifiedLabel renders the digest check as the two words a reader acts on.
+// Unlike most rows, "no" is an answer rather than an absence, so it is a
+// string the card always writes rather than a flag it omits when false.
+func verifiedLabel(verified bool) string {
+	if verified {
+		return "yes"
+	}
+	return "no"
 }

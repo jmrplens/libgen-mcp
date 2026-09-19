@@ -2209,20 +2209,21 @@ func resolveNextSteps(link ResolvedLink) []string {
 // renderResolvedMarkdown renders a resolved link as a short human-readable block.
 func renderResolvedMarkdown(link ResolvedLink) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Resolved a download link via **%s** (not downloaded — fetch it yourself):\n", mdCell(link.Source))
+	// The heading says what this result is and what it is not: nothing was
+	// saved, which is the fact a reader most needs before acting on the rows.
+	// What to do instead is guidance, and guidance is what resolveNextSteps
+	// writes.
+	card := toolutil.NewCard(&b, "Resolved a download link (nothing was saved)")
+	card.Field("Source", link.Source)
 	// The resolved URL is third-party text and is the one value here a reader
 	// is meant to act on, so it is written as a link when it is one and in a
 	// code span when it is not. Written raw, a URL carrying a close
 	// parenthesis or a newline ended the line it was on and the rest rendered
 	// as prose.
-	fmt.Fprintf(&b, "- URL: %s\n", toolutil.MdAutolink(link.URL))
-	if link.Filename != "" {
-		fmt.Fprintf(&b, "- Suggested filename: %s\n", mdCell(link.Filename))
-	}
-	if len(link.Headers) > 0 {
-		fmt.Fprintf(&b, "- Required headers: %s\n", mdCell(headerList(link.Headers)))
-	}
-	writeNextSteps(&b, resolveNextSteps(link))
+	card.URL("URL", link.URL)
+	card.Field("Suggested filename", link.Filename)
+	card.Field("Required headers", headerList(link.Headers))
+	card.End(resolveNextSteps(link)...)
 	return b.String()
 }
 

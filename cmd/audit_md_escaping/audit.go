@@ -37,6 +37,7 @@ type Summary struct {
 	Judged     int `json:"judged"`
 	Safe       int `json:"safe"`
 	Unescaped  int `json:"unescaped"`
+	Shape      int `json:"shape"`
 	Unresolved int `json:"unresolved"`
 	Excused    int `json:"excused"`
 	Stale      int `json:"stale"`
@@ -105,35 +106,54 @@ func audit(prog *program, sel selection, root string) Report {
 	return pass.report
 }
 
+// handwritten is the verdict a shape finding carries: not a statement about
+// the value, which may be perfectly escaped, but about the line it is on.
+const handwritten = "hand-written"
+
 // judge classifies one hole and files it where its verdict belongs.
 func (p *auditPass) judge(hole sinkHole) {
 	p.report.Summary.Holes++
-	if !p.sel.judges(hole.ctx) || !hole.escapable() {
+	if !p.sel.judges(hole.ctx) {
+		return
+	}
+	// The shape verdict comes first and is asked of every hole in the row, the
+	// ones printed with a verb that can carry nothing included: a row written
+	// by hand is written by hand whatever it interpolates.
+	if hole.ctx.shape() {
+		p.report.Summary.Judged++
+		p.file(hole, p.newFinding(hole, handwritten, "the row is composed here rather than written by toolutil.Card"))
+		return
+	}
+	if !hole.escapable() {
 		return
 	}
 	p.report.Summary.Judged++
-	where := scope{pkg: hole.fn.pkg, fn: hole.fn}
-	result, why := p.classifier.classify(hole.expr, where, 0)
+	result, why := p.classifier.classify(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, 0)
 	if result == safe {
 		p.report.Summary.Safe++
 		return
 	}
-	finding := p.newFinding(hole, result, why)
-	key := directiveKey{pkg: hole.fn.pkg.dir, expression: finding.Expression}
+	p.file(hole, p.newFinding(hole, result.String(), why))
+}
+
+// file puts one finding in the list its verdict belongs to, or in the excused
+// list when a declaration covers it.
+func (p *auditPass) file(hole sinkHole, finding Finding) {
+	key := directiveKey{pkg: hole.fn.pkg.dir, kind: kindFor(hole.ctx), expression: finding.Expression}
 	if _, excused := p.directives[key]; excused {
 		p.used[key] = true
 		p.report.Excused = append(p.report.Excused, finding)
 		return
 	}
-	if result == unescaped {
-		p.report.Findings = append(p.report.Findings, finding)
+	if finding.Verdict == unresolved.String() {
+		p.report.Unresolved = append(p.report.Unresolved, finding)
 		return
 	}
-	p.report.Unresolved = append(p.report.Unresolved, finding)
+	p.report.Findings = append(p.report.Findings, finding)
 }
 
 // newFinding renders one hole's verdict for a report.
-func (p *auditPass) newFinding(hole sinkHole, result verdict, why string) Finding {
+func (p *auditPass) newFinding(hole sinkHole, result, why string) Finding {
 	at := p.prog.position(hole.pos)
 	return Finding{
 		Package:    hole.fn.pkg.dir,
@@ -143,7 +163,7 @@ func (p *auditPass) newFinding(hole sinkHole, result verdict, why string) Findin
 		Context:    hole.ctx.String(),
 		Verb:       hole.verb,
 		Expression: exprText(p.prog.fset, hole.expr),
-		Verdict:    result.String(),
+		Verdict:    result,
 		Reason:     why,
 		Wants:      hole.ctx.wants(),
 	}
@@ -164,7 +184,13 @@ func (p *auditPass) finish() {
 		return staleLess(p.report.Stale[i], p.report.Stale[j])
 	})
 	p.report.Missing = missingEntryPoints(p.prog)
-	p.report.Summary.Unescaped = len(p.report.Findings)
+	for _, finding := range p.report.Findings {
+		if finding.Verdict == handwritten {
+			p.report.Summary.Shape++
+			continue
+		}
+		p.report.Summary.Unescaped++
+	}
 	p.report.Summary.Unresolved = len(p.report.Unresolved)
 	p.report.Summary.Excused = len(p.report.Excused)
 	p.report.Summary.Stale = len(p.report.Stale)

@@ -302,10 +302,10 @@ check-gateway-chars: ## Fail when the served surface carries a character an MCP 
 	go run ./cmd/audit_gateway_chars/ -check
 
 audit-md-escaping: ## Report catalog text reaching a Markdown construct with no escaper between it and the page
-	go run ./cmd/audit_md_escaping/ -v
+	go run ./cmd/audit_md_escaping/ -v -contexts all,card
 
-check-md-escaping: ## Fail when a value reaches a Markdown construct unescaped (CI gate)
-	go run ./cmd/audit_md_escaping/ -check -fail-unresolved-in internal/toolutil
+check-md-escaping: ## Fail when a value reaches a Markdown construct unescaped or a card row is written by hand (CI gate)
+	go run ./cmd/audit_md_escaping/ -check -contexts all,card -fail-unresolved-in internal/toolutil
 
 check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
 	go run ./cmd/audit_install_buttons/

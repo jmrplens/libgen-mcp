@@ -17,7 +17,7 @@ var marshalReport = json.MarshalIndent
 // writeReport prints what the sweep found, in the order a person would work
 // through it.
 func writeReport(out io.Writer, report Report, verbose bool) {
-	writeGroup(out, "Unescaped", report.Findings)
+	writeGroup(out, "Findings", report.Findings)
 	if verbose {
 		writeGroup(out, "Unresolved", report.Unresolved)
 		writeGroup(out, "Excused", report.Excused)
@@ -73,8 +73,9 @@ func writeMissing(out io.Writer, missing []string) {
 func writeSummary(out io.Writer, summary Summary, contexts string) {
 	fmt.Fprintf(out, "\n%s: %d values in %d packages, %d judged in %s\n",
 		toolName, summary.Holes, summary.Packages, summary.Judged, orDash(contexts))
-	fmt.Fprintf(out, "  escaped %d, unescaped %d, unresolved %d, excused %d, stale %d, missing %d\n",
-		summary.Safe, summary.Unescaped, summary.Unresolved, summary.Excused, summary.Stale, summary.Missing)
+	fmt.Fprintf(out, "  escaped %d, unescaped %d, hand-written rows %d, unresolved %d, excused %d, stale %d, missing %d\n",
+		summary.Safe, summary.Unescaped, summary.Shape, summary.Unresolved,
+		summary.Excused, summary.Stale, summary.Missing)
 }
 
 // orDash renders an empty value as a dash, so a column is never blank.
@@ -110,6 +111,9 @@ func summarize(report Report) string {
 	parts := []string{
 		fmt.Sprintf("%d unescaped", report.Summary.Unescaped),
 		fmt.Sprintf("%d unresolved", report.Summary.Unresolved),
+	}
+	if report.Summary.Shape > 0 {
+		parts = append(parts, fmt.Sprintf("%d hand-written card rows", report.Summary.Shape))
 	}
 	if report.Summary.Stale > 0 {
 		parts = append(parts, fmt.Sprintf("%d stale exemptions", report.Summary.Stale))

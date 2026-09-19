@@ -281,7 +281,44 @@ func (w *writeWalk) hole(cursor docCursor, arg ast.Expr, verb string) docCursor 
 		return cursor.writeText(indent)
 	}
 	w.holes = append(w.holes, sinkHole{expr: arg, fn: w.fn, ctx: cursor.context(), verb: verb, pos: arg.Pos()})
+	// A hole carries two verdicts when it sits in a hand-written card row: what
+	// the value can do to the construct, and what the line itself is. They are
+	// separate holes because they are separate questions — a row whose value is
+	// properly escaped is still a row the writer should have written — and a
+	// run that does not ask the second one must still ask the first.
+	if w.writesCardRows() && cardRowShape(cursor.line) {
+		w.holes = append(w.holes, sinkHole{expr: arg, fn: w.fn, ctx: ctxCard, verb: verb, pos: arg.Pos()})
+	}
 	return cursor.writeValue()
+}
+
+// writesCardRows reports whether the card rule reads this function at all.
+//
+// The package that declares the writer is exempt, because the rule's whole
+// content is "ask toolutil.Card for the row instead of composing one", and
+// toolutil.Card is where the row is composed. Reporting it would be the gate
+// pointing at its own answer.
+func (w *writeWalk) writesCardRows() bool {
+	return w.fn.pkg.dir != toolutilDir
+}
+
+// cardRowShape reports whether the text written before a value makes its line
+// a card row: an optional list marker, a bold label, and the colon that
+// introduces the value.
+//
+// It is the shape toolutil.Card writes, recognized in the constant text a
+// renderer wrote by hand. The label itself is not read — what matters is that
+// a renderer is composing a one-object row rather than asking the writer for
+// one, because that is where the decision about escaping, emptiness and
+// separation gets made a second time.
+func cardRowShape(before string) bool {
+	line := strings.TrimLeft(before, " \t")
+	line = strings.TrimPrefix(line, "- ")
+	label, rest, bold := strings.Cut(strings.TrimPrefix(line, "**"), "**")
+	if !bold || !strings.HasPrefix(line, "**") || strings.TrimSpace(label) == "" {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimLeft(rest, " "), ":")
 }
 
 // knownDestination reports whether an argument names a destination this walk

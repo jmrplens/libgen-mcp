@@ -363,6 +363,37 @@ Pick by where the value lands, never by interpolating it directly:
 | a link's two halves | `MdTitleLink` | either half ending the link it is in |
 | an address shown on its own | `MdAutolink` | the same, without writing the address twice |
 | an address that must not be live | `MdCodeSpan` | a scheme a client would execute |
+| a body that runs to lines | `WrapQuotedBody` | a heading or a list item inside it becoming one |
+
+**A result about one record is a card, and `toolutil.Card` writes it.** A row
+written by hand decides for itself what to escape, whether to write anything
+when the value is empty, and how to separate itself from whatever the last
+section left behind — and those per-site decisions are where the leaks were.
+The writer makes each one once:
+
+- **The member says what the value is**, and the escaping follows from that:
+  `Field` for inline text, `Code` for a value the reader copies (an md5, a
+  DOI), `Link`/`URL` for an address, `Text` for prose — one line stays on the
+  row, a longer one becomes an indented quote — and `Secret` for a value shown
+  once, which also makes `End` say it is not stored. Nothing calls `Secret`
+  yet; it is there so the safe form is the easy form the day something does.
+- **`Int` and `Count` are the same row with opposite zeros.** A zero-byte file
+  is a fact worth a row; a citation count nobody reported is not. Picking the
+  wrong one either hides an answer or invents one.
+- **A blank value writes no row**, so an optional field is one line of code and
+  a label never appears with nothing after it.
+- **The mark is what keeps a card composable.** The card records the builder's
+  length after each of its own writes; when anything else has written since,
+  the next row starts after a blank line. That is what lets a card follow a
+  table, a quote or a fence, and lets a second renderer add rows to one.
+  `Section`, `Fence` and `Quote` are blocks rather than rows, so each ends the
+  previous block unconditionally — including this card's own list.
+- **`WriteNextSteps` is the one writer of the guidance block**, and the heading
+  is treated as a marker: a value carrying it is rewritten to the HTML entity
+  for the same glyph, which renders identically and is no longer the marker.
+  Nothing here parses the block back out, so this is about the reader — a book
+  description that opens with the heading and continues with three bullets is,
+  to a model, three instructions on the server's authority.
 
 **A URL is not a string.** `[%s](%s)` with the destination raw was a live leak
 here: a mirror URL carrying a close parenthesis ended the link at that
@@ -411,6 +442,16 @@ shape. Four things about it are worth knowing before changing a renderer:
   renamed or split drops out of the sweep silently, and a gate that reports
   nothing because it found nothing to look at reads exactly like a gate that
   passed. Rename a renderer, and rename it there too.
+- **A second rule asks a second question.** `-contexts all,card` (which the
+  Makefile passes) reports a `- **Label**:` line a renderer composed instead of
+  asking `toolutil.Card` for it. It is asked of every hole in such a row, the
+  ones printed with `%d` included, because a row written by hand is written by
+  hand whatever it interpolates — and it is asked separately, so a row whose
+  value is properly escaped is still reported and a raw value in one is
+  reported twice, once per question. Its own declaration is
+  `//libgen:allow-raw`, because a value excused for escaping is not thereby
+  excused for the line it is on. The package that declares the writer is
+  exempt: reporting `Card.row` would be the gate pointing at its own answer.
 
 ### Secrets in an outbound URL
 

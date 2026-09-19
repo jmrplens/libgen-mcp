@@ -260,13 +260,13 @@ func TestRenderDownloadMarkdownNames(t *testing.T) {
 		Verified:         true,
 		NameOrigin:       libgen.NameFromMetadata,
 	})
-	if !strings.Contains(out, "**Jane Doe - Great Book (2020).epub**") {
+	if !strings.Contains(out, "**Downloaded**: Jane Doe - Great Book (2020).epub") {
 		t.Errorf("the headline should be the saved name; got:\n%s", out)
 	}
-	if !strings.Contains(out, "Announced by the source: Great Book [10.1_x] - libgen.li.epub") {
+	if !strings.Contains(out, "**Announced by the source**: Great Book [10.1_x] - libgen.li.epub") {
 		t.Errorf("the announced name should still be reported; got:\n%s", out)
 	}
-	if !strings.Contains(out, "Name origin: metadata") {
+	if !strings.Contains(out, "**Name origin**: metadata") {
 		t.Errorf("the name origin should be reported; got:\n%s", out)
 	}
 
@@ -274,8 +274,14 @@ func TestRenderDownloadMarkdownNames(t *testing.T) {
 	noPath := renderDownloadMarkdown(DownloadOutput{
 		OriginalFilename: "book.pdf", Source: "scihub",
 	})
-	if !strings.Contains(noPath, "**book.pdf**") {
+	if !strings.Contains(noPath, "**Downloaded**: book.pdf") {
 		t.Errorf("with no path the announced name should headline; got:\n%s", noPath)
+	}
+	// The announced name IS the saved name here, so the row that reports a
+	// disagreement must not appear: a card writes a row when there is
+	// something to say and no row when there is not.
+	if strings.Contains(noPath, "Announced by the source") {
+		t.Errorf("the announced name matched the saved one; got:\n%s", noPath)
 	}
 }
 
@@ -355,7 +361,13 @@ func TestWriteEnrichment_UserFacingLabels(t *testing.T) {
 			OpenLibrary: &libgen.OLBook{OpenLibURL: "https://openlibrary.org/works/OL1W", Description: "A classic."},
 		},
 	})
-	for _, want := range []string{"Journal / container: Cell", "Times cited: 56374", "Published year: 2011", "OpenLibrary record:", "A classic."} {
+	for _, want := range []string{
+		"**Journal / container (via Crossref)**: Cell",
+		"**Times cited (via Crossref)**: 56374",
+		"**Published year (via Crossref)**: 2011",
+		"**OpenLibrary record**: <https://openlibrary.org/works/OL1W>",
+		"A classic.",
+	} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(out, want) {
 				t.Errorf("enrichment markdown should contain %q; got:\n%s", want, out)
@@ -420,7 +432,7 @@ func TestRenderResolvedMarkdown_TheURLLineIsNotRaw(t *testing.T) {
 		Source: "annas",
 		URL:    "https://example.org/get?f=a(b)c",
 	})
-	if !strings.Contains(out, "- URL: <https://example.org/get?f=a%28b%29c>") {
+	if !strings.Contains(out, "- **URL**: <https://example.org/get?f=a%28b%29c>") {
 		t.Errorf("resolved markdown = %q, want the URL as an autolink with its parentheses encoded", out)
 	}
 }

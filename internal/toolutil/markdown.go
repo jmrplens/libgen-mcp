@@ -211,6 +211,51 @@ func MarkdownFencedBlock(lang, content string) string {
 	return fence + lang + "\n" + content + "\n" + fence
 }
 
+// WrapQuotedBody renders a body a third party typed as a Markdown blockquote,
+// one "> " per line.
+//
+// A quote is containment for a whole block rather than for a character: a
+// heading, a list item or a table row inside it stays inside it, so prose
+// nobody checked cannot add a field to the card it was written under or a
+// section to the document. An empty body quotes nothing.
+//
+// The line endings are normalized first, and that is load-bearing. CommonMark
+// counts a CRLF and a bare CR as line endings too, so splitting on LF alone
+// leaves whatever follows a CR outside the quote — and a heading there is
+// structure rather than a lazy paragraph continuation, which is precisely what
+// the quote exists to prevent.
+func WrapQuotedBody(body string) string {
+	if body == "" {
+		return ""
+	}
+	body = DefuseNextStepsHeading(StripControlBytes(body))
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if line == "" {
+			lines[i] = ">"
+			continue
+		}
+		lines[i] = "> " + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+// EndBlock leaves the builder empty or ending in a blank line, whatever it
+// ends with now, so a heading, a quote, a fence or a card row opens a block of
+// its own rather than continuing the last line as a lazy paragraph.
+func EndBlock(b *strings.Builder) {
+	written := b.String()
+	switch {
+	case written == "" || strings.HasSuffix(written, "\n\n"):
+	case strings.HasSuffix(written, "\n"):
+		b.WriteString("\n")
+	default:
+		b.WriteString("\n\n")
+	}
+}
+
 // longestBacktickRun returns the length of the longest run of consecutive
 // backticks in s, or 0 when s contains none.
 func longestBacktickRun(s string) int {

@@ -10,14 +10,23 @@ func TestParseDirective_RequiresBothHalves(t *testing.T) {
 	testCases := []struct {
 		name       string
 		comment    string
+		kind       directiveKind
 		expression string
 		reason     string
 	}{
 		{
 			name:       "an expression and a reason",
 			comment:    "//libgen:allow-unescaped r.Source: the source name is one of a closed set this server compiled in",
+			kind:       kindUnescaped,
 			expression: "r.Source",
 			reason:     "the source name is one of a closed set this server compiled in",
+		},
+		{
+			name:       "the shape verdict has a declaration of its own",
+			comment:    "//libgen:allow-raw r.Source: this row predates the card writer",
+			kind:       kindRaw,
+			expression: "r.Source",
+			reason:     "this row predates the card writer",
 		},
 		{
 			// Go's own directives are written with no space after the
@@ -51,12 +60,15 @@ func TestParseDirective_RequiresBothHalves(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			expression, reason, ok := parseDirective(tc.comment)
+			kind, expression, reason, ok := parseDirective(tc.comment)
 			if ok != (tc.expression != "") {
 				t.Fatalf("parseDirective(%q) accepted = %v, want %v", tc.comment, ok, tc.expression != "")
 			}
 			if expression != tc.expression {
 				t.Errorf("parseDirective(%q) excused %q, want %q", tc.comment, expression, tc.expression)
+			}
+			if ok && kind != tc.kind {
+				t.Errorf("parseDirective(%q) answers %q, want %q", tc.comment, kind, tc.kind)
 			}
 			if ok && reason != tc.reason {
 				t.Errorf("parseDirective(%q) reason = %q, want %q", tc.comment, reason, tc.reason)
@@ -69,7 +81,7 @@ func TestParseDirective_RequiresBothHalves(t *testing.T) {
 // reason that carries a colon of its own: the split is on the first one, so
 // the expression is what the report printed and the rest is the reason whole.
 func TestParseDirective_ReadsTheFirstColonAsTheSeparator(t *testing.T) {
-	expression, reason, ok := parseDirective("//libgen:allow-unescaped r.Kind: a closed set: book, article")
+	_, expression, reason, ok := parseDirective("//libgen:allow-unescaped r.Kind: a closed set: book, article")
 	if !ok || expression != "r.Kind" {
 		t.Fatalf("parseDirective() excused %q (accepted = %v), want r.Kind", expression, ok)
 	}
