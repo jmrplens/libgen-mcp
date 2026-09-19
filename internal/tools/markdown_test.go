@@ -366,3 +366,61 @@ func TestWriteEnrichment_UserFacingLabels(t *testing.T) {
 		t.Error("enrichment markdown should not use the old 'Crossref container' jargon")
 	}
 }
+
+// TestRenderSearchMarkdown_ALinkCannotEndTheRowItIsIn is the renderer-level
+// assertion for the leak the escaping helpers replaced.
+//
+// A mirror's download URL is third-party text and routinely carries a close
+// parenthesis; written raw into [label](url) it ended the link at that
+// parenthesis, and the remainder of the address rendered as prose in the cell
+// beside a link pointing somewhere else. A title carrying a pipe ended the cell
+// the same way.
+func TestRenderSearchMarkdown_ALinkCannotEndTheRowItIsIn(t *testing.T) {
+	const url = "https://mirror.example/get.php?f=Vol(2).pdf&md5=abc"
+	out := renderSearchMarkdown(SearchOutput{
+		Page: 1, Mirror: "https://libgen.li",
+		Results: []libgen.Result{{
+			Title:     "A Title | With A Pipe",
+			MD5:       "d48739b6ac9e01d70dda1de46805d797",
+			Downloads: []libgen.DownloadOption{{Label: "libgen", URL: url}},
+		}},
+	})
+
+	row := ""
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "A Title") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("no result row in:\n%s", out)
+	}
+	if strings.Contains(row, "Vol(2)") {
+		t.Errorf("row = %q, want the parentheses in the destination encoded", row)
+	}
+	if !strings.Contains(row, "%28") || !strings.Contains(row, "%29") {
+		t.Errorf("row = %q, want %%28 and %%29 in the destination", row)
+	}
+	if !strings.Contains(row, `A Title \| With A Pipe`) {
+		t.Errorf("row = %q, want the title's pipe escaped so it cannot end the cell", row)
+	}
+	// Eight columns means eight separators plus the two that bound the row: a
+	// value that ended a cell early would change the count.
+	if got := strings.Count(row, "|") - strings.Count(row, `\|`) - strings.Count(row, "%7C"); got != 9 {
+		t.Errorf("row = %q has %d live pipes, want 9 for an eight-column row", row, got)
+	}
+}
+
+// TestRenderResolvedMarkdown_TheURLLineIsNotRaw covers the second site the same
+// leak had: a resolved link written as "- URL: <raw>", where a newline in the
+// address ended the line and the rest rendered as prose.
+func TestRenderResolvedMarkdown_TheURLLineIsNotRaw(t *testing.T) {
+	out := renderResolvedMarkdown(ResolvedLink{
+		Source: "annas",
+		URL:    "https://example.org/get?f=a(b)c",
+	})
+	if !strings.Contains(out, "- URL: <https://example.org/get?f=a%28b%29c>") {
+		t.Errorf("resolved markdown = %q, want the URL as an autolink with its parentheses encoded", out)
+	}
+}

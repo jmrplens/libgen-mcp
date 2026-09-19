@@ -346,10 +346,35 @@ commit.
 
 ### Escaping untrusted content
 
-Record titles, authors, and any other externally-sourced text are **untrusted**.
-When rendering them into Markdown, always pass them through `mdCell` (table
-cells) or `fencedBlock` (code blocks) from `internal/tools/markdown.go`. Never
-interpolate external strings into Markdown directly.
+Record titles, authors, mirror URLs and any other externally-sourced text are
+**untrusted**, and the rules for rendering them live in
+`internal/toolutil/markdown.go` — not in `internal/tools`, because
+`internal/prompts` writes Markdown too and two packages with two vocabularies is
+how one of them ends up with a hole the other already closed. `internal/tools`
+keeps `mdCell` and `fencedBlock` as one-line spellings of the shared helpers.
+
+Pick by where the value lands, never by interpolating it directly:
+
+| Where | Helper | What it takes away |
+| --- | --- | --- |
+| a table cell | `EscapeMdTableCell` | a pipe ends the cell, a newline ends the row |
+| a heading | `EscapeMdHeading` | a leading `#` changes the level, a newline splits it |
+| a code block | `MarkdownFencedBlock` | content closing the fence and being read as Markdown |
+| a link's two halves | `MdTitleLink` | either half ending the link it is in |
+| an address shown on its own | `MdAutolink` | the same, without writing the address twice |
+| an address that must not be live | `MdCodeSpan` | a scheme a client would execute |
+
+**A URL is not a string.** `[%s](%s)` with the destination raw was a live leak
+here: a mirror URL carrying a close parenthesis ended the link at that
+parenthesis, and the rest of the address rendered as prose beside a link
+pointing somewhere else. `MdTitleLink` percent-encodes the delimiters — the link
+still resolves — and refuses to link anything that is not an absolute `http` or
+`https` address, because a `javascript:` or `data:` destination is a whole link
+that some clients render live.
+
+**Control bytes come off first.** `StripControlBytes` runs before every check,
+because `java\x00script:` is the destination `javascript:` once a renderer has
+dropped the NUL, and a scheme check made on the bytes as sent would pass it.
 
 ### Secrets in an outbound URL
 
