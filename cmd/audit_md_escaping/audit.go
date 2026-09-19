@@ -59,10 +59,16 @@ var markdownEntryPoints = map[string][]string{
 		"renderDownloadMarkdown", "renderResolvedMarkdown",
 		"writeNextSteps", "writeOpenAccess", "writeCitation", "writeEnrichment",
 		"renderMatches", "renderOutline",
+		// The two citation formats are not Markdown, and they are here because
+		// of that: each is contained by the fence writeCitation puts around it
+		// and by nothing of its own, so a renamed one that stopped going
+		// through writeCitation would be text nobody had judged.
+		"renderBibTeX", "renderRIS",
 	},
 	"internal/prompts": {
-		"noCandidatesText", "requestedLine", "candidateText",
-		"renderTable", "renderCandidates", "researchTopicText", "writeSection",
+		"noCandidatesText", "requestedLine", "candidateText", "doiText",
+		"renderTable", "renderCandidates", "renderPaperCandidates",
+		"researchTopicText", "writeSection",
 	},
 	toolutilDir: {
 		"MdTitleLink", "MdAutolink", "MdCodeSpan", "MarkdownFencedBlock",
