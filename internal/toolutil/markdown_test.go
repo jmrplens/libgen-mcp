@@ -265,3 +265,76 @@ func TestLinkableDestination_ReadsTheSchemeTheWayAClientDoes(t *testing.T) {
 		})
 	}
 }
+
+// TestWrapQuotedBody_ContainsAWholeBlockNotACharacter verifies what a quote
+// takes away that an escaper cannot: a heading, a list item and a table row
+// inside the body all stay inside it, so prose nobody checked cannot add a
+// section to the document it was written into.
+func TestWrapQuotedBody_ContainsAWholeBlockNotACharacter(t *testing.T) {
+	got := WrapQuotedBody("First line.\n\n## Forged heading\n- forged item\n| a | b |")
+
+	for line := range strings.SplitSeq(got, "\n") {
+		t.Run(line, func(t *testing.T) {
+			if !strings.HasPrefix(line, ">") {
+				t.Errorf("WrapQuotedBody() left %q outside the quote", line)
+			}
+		})
+	}
+	if !strings.Contains(got, ">\n") {
+		t.Errorf("WrapQuotedBody() = %q, want a blank body line quoted as a bare marker", got)
+	}
+}
+
+// TestWrapQuotedBody_ReadsEveryLineEndingCommonMarkDoes pins the detail the
+// containment rests on: a bare CR is a line ending too, so splitting on LF
+// alone would leave whatever follows it outside the quote — and a heading
+// there is structure, which is exactly what the quote prevents.
+func TestWrapQuotedBody_ReadsEveryLineEndingCommonMarkDoes(t *testing.T) {
+	testCases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "empty", body: "", want: ""},
+		{name: "one line", body: "plain", want: "> plain"},
+		{name: "a bare CR", body: "a\r## b", want: "> a\n> ## b"},
+		{name: "a CRLF", body: "a\r\n## b", want: "> a\n> ## b"},
+		{name: "a control byte is dropped", body: "a\x00b", want: "> ab"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := WrapQuotedBody(tc.body); got != tc.want {
+				t.Errorf("WrapQuotedBody(%q) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEndBlock_LeavesTheBuilderReadyForABlock verifies the rule every block
+// write rests on: whatever the builder ends with, what follows opens a block
+// rather than continuing the last line as a lazy paragraph.
+func TestEndBlock_LeavesTheBuilderReadyForABlock(t *testing.T) {
+	testCases := []struct {
+		name   string
+		before string
+		want   string
+	}{
+		{name: "empty stays empty", before: "", want: ""},
+		{name: "mid-line gets two", before: "text", want: "text\n\n"},
+		{name: "a line end gets one", before: "text\n", want: "text\n\n"},
+		{name: "a blank line is enough", before: "text\n\n", want: "text\n\n"},
+		{name: "more than a blank line is left alone", before: "text\n\n\n", want: "text\n\n\n"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var b strings.Builder
+			b.WriteString(tc.before)
+			EndBlock(&b)
+			if got := b.String(); got != tc.want {
+				t.Errorf("EndBlock(%q) left %q, want %q", tc.before, got, tc.want)
+			}
+		})
+	}
+}

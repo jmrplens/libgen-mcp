@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -31,12 +32,27 @@ const (
 	// by the line it sits on, because a fence is opened on one line and closed
 	// on another.
 	ctxFence
+	// ctxCard is a card row a renderer wrote by hand: a line whose constant
+	// text is "- **Label**: " or "**Label**: ". It is not a place a value
+	// lands but a shape the constant text has, and it is reported as it is,
+	// because the fix is the same whatever the value: toolutil.Card writes the
+	// row, escapes the value by its shape, omits the row when there is nothing
+	// to say, and separates itself from whatever came before.
+	ctxCard
 )
 
 // structuralContexts are the contexts a value can change the shape of, in the
 // order a report lists them. Prose is absent because a paragraph holds a pipe,
 // an angle bracket and a newline without the document changing shape.
+//
+// They are what "all" selects. The staged context below is selectable by name
+// and is deliberately not in this list.
 var structuralContexts = []mdContext{ctxCell, ctxHeading, ctxListItem, ctxLinkLabel, ctxLinkDest, ctxFence}
+
+// stagedContexts are the rules that are asked for by name, so a run that says
+// "all" keeps the meaning it had before the rule existed and the Makefile
+// stages a rule into the gate by naming it beside "all".
+var stagedContexts = []mdContext{ctxCard}
 
 // contextLabels name each context for the command line and for a report.
 var contextLabels = map[mdContext]string{
@@ -47,6 +63,7 @@ var contextLabels = map[mdContext]string{
 	ctxLinkLabel: "link-label",
 	ctxLinkDest:  "link-destination",
 	ctxFence:     "fence",
+	ctxCard:      "card",
 }
 
 // String names the context for a report.
@@ -69,10 +86,17 @@ func (c mdContext) wants() string {
 		return "toolutil.MdTitleLink"
 	case ctxFence:
 		return "toolutil.MarkdownFencedBlock"
+	case ctxCard:
+		return "toolutil.Card"
 	default:
 		return ""
 	}
 }
+
+// shape reports whether this context judges what the constant text around a
+// value looks like rather than what the value can do to it. Such a finding is
+// the line, not the value, so nothing is classified for it.
+func (c mdContext) shape() bool { return c == ctxCard }
 
 // structural reports whether a value landing in this context can change the
 // shape of the document around it rather than only its own text.
@@ -98,8 +122,8 @@ func (s selection) judges(c mdContext) bool {
 // contextNames lists the accepted -contexts values, for the flag's own help
 // and for the error a wrong one produces.
 func contextNames() string {
-	names := make([]string, 0, len(structuralContexts))
-	for _, c := range structuralContexts {
+	names := make([]string, 0, len(structuralContexts)+len(stagedContexts))
+	for _, c := range append(slices.Clone(structuralContexts), stagedContexts...) {
 		names = append(names, c.String())
 	}
 	sort.Strings(names)
@@ -148,7 +172,7 @@ func chooseContext(name string, choose func(mdContext)) error {
 		}
 		return nil
 	}
-	for _, c := range structuralContexts {
+	for _, c := range append(slices.Clone(structuralContexts), stagedContexts...) {
 		if c.String() == name {
 			choose(c)
 			return nil

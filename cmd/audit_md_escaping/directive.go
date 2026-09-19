@@ -23,20 +23,56 @@ import (
 // teaches the next reader a rule that is not the rule.
 const exemptionDirective = "//libgen:allow-unescaped"
 
+// rawDirective is the same declaration for the second verdict:
+//
+//	//libgen:allow-raw <expression>: <reason>
+//
+// It is a directive of its own rather than a second meaning of the first, so
+// that a value excused for escaping is not thereby excused for shape. The two
+// verdicts ask different questions — what the value can do to the line, and
+// what the line is — and each is answered on its own.
+const rawDirective = "//libgen:allow-raw"
+
+// directiveKind names which verdict a directive answers.
+type directiveKind string
+
+const (
+	// kindUnescaped excuses the escaping verdict.
+	kindUnescaped directiveKind = "unescaped"
+	// kindRaw excuses the shape verdict, which today is the card row.
+	kindRaw directiveKind = "raw"
+)
+
+// directivePrefixes maps each directive's spelling to the verdict it answers.
+var directivePrefixes = map[string]directiveKind{
+	exemptionDirective: kindUnescaped,
+	rawDirective:       kindRaw,
+}
+
+// kindFor is the directive a context's findings are excused by.
+func kindFor(ctx mdContext) directiveKind {
+	if ctx.shape() {
+		return kindRaw
+	}
+	return kindUnescaped
+}
+
 // Directive is one declared exemption, kept with where it was declared so a
 // stale one can be pointed at.
 type Directive struct {
-	Package    string `json:"package"`
-	File       string `json:"file"`
-	Line       int    `json:"line"`
-	Expression string `json:"expression"`
-	Reason     string `json:"reason"`
+	Package    string        `json:"package"`
+	File       string        `json:"file"`
+	Line       int           `json:"line"`
+	Kind       directiveKind `json:"kind"`
+	Expression string        `json:"expression"`
+	Reason     string        `json:"reason"`
 }
 
 // directiveKey identifies the findings one directive excuses: an expression,
-// in the package that writes it.
+// in the package that writes it, for one verdict.
 type directiveKey struct {
 	pkg        string
+	kind       directiveKind
 	expression string
 }
 
@@ -57,16 +93,17 @@ func collectDirectives(prog *program, root string) map[directiveKey]Directive {
 
 // collectOne records one comment, when it is an exemption.
 func collectOne(prog *program, pkg *auditPkg, root, text string, pos token.Pos, found map[directiveKey]Directive) {
-	expression, reason, ok := parseDirective(text)
+	kind, expression, reason, ok := parseDirective(text)
 	if !ok {
 		return
 	}
 	at := prog.position(pos)
-	key := directiveKey{pkg: pkg.dir, expression: expression}
+	key := directiveKey{pkg: pkg.dir, kind: kind, expression: expression}
 	found[key] = Directive{
 		Package:    pkg.dir,
 		File:       relativePath(at.Filename, root),
 		Line:       at.Line,
+		Kind:       kind,
 		Expression: expression,
 		Reason:     reason,
 	}
@@ -79,16 +116,20 @@ func collectOne(prog *program, pkg *auditPkg, root, text string, pos token.Pos, 
 // exemption at all, because the reason is the whole value of the mechanism:
 // the next reader has to be able to tell a value that needs no escaping from
 // one somebody decided not to escape.
-func parseDirective(text string) (expression, reason string, ok bool) {
-	rest, isDirective := strings.CutPrefix(strings.TrimSpace(text), exemptionDirective)
-	if !isDirective {
-		return "", "", false
+func parseDirective(text string) (kind directiveKind, expression, reason string, ok bool) {
+	text = strings.TrimSpace(text)
+	for prefix, candidate := range directivePrefixes {
+		rest, isDirective := strings.CutPrefix(text, prefix)
+		if !isDirective {
+			continue
+		}
+		excused, why, hasReason := strings.Cut(strings.TrimSpace(rest), ":")
+		excused = strings.TrimSpace(excused)
+		why = strings.TrimSpace(why)
+		if excused == "" || !hasReason || why == "" {
+			return "", "", "", false
+		}
+		return candidate, excused, why, true
 	}
-	excused, why, hasReason := strings.Cut(strings.TrimSpace(rest), ":")
-	excused = strings.TrimSpace(excused)
-	why = strings.TrimSpace(why)
-	if excused == "" || !hasReason || why == "" {
-		return "", "", false
-	}
-	return excused, why, true
+	return "", "", "", false
 }

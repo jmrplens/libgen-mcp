@@ -291,6 +291,119 @@ func TestAudit_ReportsARendererItWasToldToFind(t *testing.T) {
 	}
 }
 
+// auditFixtureContexts sweeps one renderer body under a named set of contexts,
+// for the rules that are asked for by name rather than selected by "all".
+func auditFixtureContexts(t *testing.T, contexts, body string) Report {
+	t.Helper()
+	declared := markdownEntryPoints
+	markdownEntryPoints = nil
+	t.Cleanup(func() { markdownEntryPoints = declared })
+
+	root := writeFixture(t, map[string]string{
+		"internal/toolutil/markdown.go": fixtureToolutil,
+		"internal/render/render.go":     fixtureRenderer(body),
+	})
+	prog, err := loadProgram(root, []string{"internal/render", toolutilDir})
+	if err != nil {
+		t.Fatalf("load the fixture: %v", err)
+	}
+	sel, err := parseContexts(contexts)
+	if err != nil {
+		t.Fatalf("parse the contexts: %v", err)
+	}
+	return audit(prog, sel, root)
+}
+
+// TestAudit_ReportsACardRowComposedByHand is the staged rule: a "- **Label**:"
+// line a renderer composed is reported whatever it interpolates, because the
+// fix is the same for every one of them — toolutil.Card writes the row,
+// escapes the value by its shape, omits the row when there is nothing to say
+// and separates itself from what came before.
+func TestAudit_ReportsACardRowComposedByHand(t *testing.T) {
+	testCases := []struct {
+		name     string
+		body     string
+		contexts string
+		want     []string
+	}{
+		{
+			name:     "a hand-written row is reported under the rule",
+			contexts: "all,card",
+			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			want:     []string{"hand-written card toolutil.EscapeMdTableCell(r.Title)"},
+		},
+		{
+			name:     "and not under a run that did not ask for it",
+			contexts: allContexts,
+			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			want:     nil,
+		},
+		{
+			name:     "a row printed with a number is a row too",
+			contexts: "card",
+			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Pages**: %d\\n\", r.Pages)\n}",
+			want:     []string{"hand-written card r.Pages"},
+		},
+		{
+			name:     "an unbolded list item is not a card row",
+			contexts: "all,card",
+			body:     "// matches writes one entry per hit.\nfunc matches(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- p.%d: %s\\n\", r.Pages, toolutil.EscapeMdTableCell(r.Title))\n}",
+			want:     nil,
+		},
+		{
+			name:     "a bold word in prose is not a card row",
+			contexts: "all,card",
+			body:     "// lead writes a sentence.\nfunc lead(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"Downloaded **%s** today.\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			want:     nil,
+		},
+		{
+			name:     "a declaration excuses the row",
+			contexts: "all,card",
+			body:     "//libgen:allow-raw toolutil.EscapeMdTableCell(r.Title): the fixture writes this row before the card exists\n// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			want:     nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := verdicts(auditFixtureContexts(t, tc.contexts, tc.body))
+			if strings.Join(got, "; ") != strings.Join(tc.want, "; ") {
+				t.Errorf("audit reported %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAudit_TheTwoVerdictsAreAskedSeparately verifies a row that is both
+// hand-written and unescaped is reported twice, once for each question: a row
+// whose value is properly escaped is still a row the writer should have
+// written, and a value that is not escaped is a leak whoever wrote the row.
+func TestAudit_TheTwoVerdictsAreAskedSeparately(t *testing.T) {
+	body := "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", r.Title)\n}"
+	got := verdicts(auditFixtureContexts(t, "all,card", body))
+	want := []string{"unescaped list-item r.Title", "hand-written card r.Title"}
+
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("audit reported %v, want %v", got, want)
+	}
+}
+
+// TestAudit_AnEscapingExemptionDoesNotExcuseTheShape pins why the two
+// declarations are separate spellings: a value excused for escaping is not
+// thereby excused for the line it is on.
+func TestAudit_AnEscapingExemptionDoesNotExcuseTheShape(t *testing.T) {
+	body := "//libgen:allow-unescaped r.Title: the fixture's title is compiled in\n" +
+		"// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", r.Title)\n}"
+	report := auditFixtureContexts(t, "all,card", body)
+
+	if got := verdicts(report); strings.Join(got, "; ") != "hand-written card r.Title" {
+		t.Errorf("audit reported %v, want the shape finding alone", got)
+	}
+	if len(report.Stale) != 0 {
+		t.Errorf("Stale = %v, want the escaping declaration counted as used", report.Stale)
+	}
+}
+
 // TestFailing_CountsUnresolvedOnlyWherePolicySaysSo pins the staging rule: a
 // value the audit cannot follow is reported everywhere and fails the gate only
 // in the packages held to the stricter rule.
