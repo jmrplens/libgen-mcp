@@ -200,6 +200,7 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 	b.WriteString("For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `\"type\": \"stdio\"` to the `libgen` entry.\n\n")
 	b.WriteString("Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture: set `command` to `docker` and `args` to `[\"run\", \"-i\", \"--rm\", \"ghcr.io/jmrplens/libgen-mcp:latest\"]`.\n\n")
 	b.WriteString("Claude Code (CLI): `claude mcp add libgen -- /usr/local/bin/libgen-mcp` (native binary), or `claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (Docker).\n\n")
+	writeInstallChannels(&b)
 
 	// Derived from configEnvVars — the same list llms-full.txt tabulates, and the
 	// one TestConfigEnvVarsCoversConfigGo holds against config.go. This summary
@@ -653,6 +654,49 @@ func writeLLMSFullInstall(b *strings.Builder) {
 	b.WriteString("Docker alternative (no download; pulls the image on first run and runs over stdio) — useful when you cannot determine the user's OS and architecture:\n\n")
 	writeMcpServersJSON(b, "docker", []string{"run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"})
 	b.WriteString("For VS Code / GitHub Copilot, use the `servers` key instead of `mcpServers` and add `\"type\": \"stdio\"` to the `libgen` entry.\n\n")
+	writeInstallChannels(b)
+}
+
+// installChannel is one way a person can get this server, as the generated
+// files name it: the channel and the one line that installs or runs it.
+type installChannel struct {
+	name    string
+	command string
+}
+
+// installChannels are every channel the release workflow publishes that a
+// reader can act on, in the order a reader would try them: the two that need
+// nothing installed first, then the ones that need a package manager.
+//
+// **Adding a channel to the release means adding a row here.** That is the
+// honest version of this list until server.json carries every channel and can
+// be the source of truth: the release workflow is YAML and the generator is
+// Go, so nothing can derive one from the other today, and a list with a rule
+// beside it beats a list with nothing. TestInstallChannelsReachTheGeneratedFiles
+// holds the generated text to every row, so a row added here without the
+// generator writing it fails; what it cannot catch is a channel published and
+// never added, which is what this paragraph is for.
+//
+// The registry entries (MCP Registry, LobeHub) are absent on purpose: they are
+// directories that point at these channels rather than channels of their own,
+// so naming them here would tell a reader to install something twice.
+var installChannels = []installChannel{
+	{name: "Docker", command: "docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest"},
+	{name: "npm (Node 18+)", command: "npx -y @jmrp.io/libgen-mcp"},
+	{name: "prebuilt binary", command: "download the release asset for the OS and architecture, then run it"},
+	{name: "PyPI", command: "uvx --from libgen-mcp libgen-mcp"},
+	{name: "NuGet (.NET 10+)", command: "dnx libgen-mcp -- --help"},
+	{name: "Homebrew", command: "brew install jmrplens/tap/libgen-mcp"},
+	{name: "Claude Desktop bundle", command: "install the .mcpb asset from the release"},
+}
+
+// writeInstallChannels writes the channel list both generated files carry.
+func writeInstallChannels(b *strings.Builder) {
+	b.WriteString("Every channel this server publishes to, and the one line that runs it:\n\n")
+	for _, channel := range installChannels {
+		fmt.Fprintf(b, "- %s: `%s`\n", channel.name, channel.command)
+	}
+	b.WriteString("\n")
 }
 
 // writeMcpServersJSON writes a fenced ```json block holding an `mcpServers`

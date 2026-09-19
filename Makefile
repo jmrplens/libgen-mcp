@@ -13,6 +13,7 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons audit-gateway-chars check-gateway-chars \
         audit-md-escaping check-md-escaping gen-stats check-stats \
+        audit-doc-names check-doc-names \
         audit-test-goroutines check-test-goroutines check-test-file-names \
         audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
@@ -193,7 +194,8 @@ ANALYZE_STEPS = \
 	check-test-goroutines \
 	check-md-tables \
 	check-doc-links \
-	check-stats
+	check-stats \
+	check-doc-names
 
 analyze: ## Run the pre-commit sweep: lint, vet and the doc/surface gates, reporting every failure
 	@failed=""; \
@@ -335,6 +337,12 @@ audit-gateway-chars: ## Report served strings carrying characters an MCP gateway
 
 check-gateway-chars: ## Fail when the served surface carries a character an MCP gateway may reject (CI gate)
 	go run ./cmd/audit_gateway_chars/ -check
+
+audit-doc-names: ## Report names in the documentation that the server does not have
+	go run ./cmd/audit_doc_names/
+
+check-doc-names: ## Fail when the documentation names a variable, source, tool or prompt the server does not have (CI gate)
+	go run ./cmd/audit_doc_names/ -check
 
 gen-stats: ## Recount the surface and rewrite the stats tables in README.md
 	go run ./cmd/gen_stats/

@@ -518,6 +518,8 @@ exception is `--http` itself, whose variable is `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_
 read as a switch rather than as an address. The full list is in
 [Configuration → HTTP listener](configuration.md#http-listener).
 
+<!-- libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use -->
+
 **A flag you type still wins**, so a base image that sets its defaults in `environment:` and a
 `command:` that overrides one of them behaves the way it looks. Typing a flag counts even when
 you type its default value: `--stateless=true` beats `LIBGEN_MCP_STATELESS=0`, because the

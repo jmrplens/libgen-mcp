@@ -95,6 +95,8 @@ variable underneath it. The naming rule is mechanical — `LIBGEN_MCP_` plus the
 case with dashes as underscores — with one exception: `--http` is `LIBGEN_MCP_HTTP_ADDR`,
 because `LIBGEN_MCP_HTTP` would read as a switch rather than as an address.
 
+<!-- libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use -->
+
 They exist for the deployment that has no command line to write on: a compose file's
 `environment:`, a systemd unit's `Environment=`, a Kubernetes ConfigMap. What each setting
 *does* is documented once, with the flags, in
@@ -486,6 +488,8 @@ started from, beside every other tool that person uses, and a bare `TIMEOUT` may
 to one of them. An `OTEL_*` name is not ours to choose: the SDK reads the spelling the
 specification gives it, so `LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT` would be a variable nothing
 reads. The same applies to `LIBGEN_MIRROR`, which follows the mirror family's own convention.
+
+<!-- libgen:allow-name LIBGEN_MCP_OTEL_EXPORTER_OTLP_ENDPOINT: named above as the prefixed spelling nothing reads -->
 
 Two consequences worth knowing before you set them:
 
