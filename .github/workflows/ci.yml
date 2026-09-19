@@ -352,6 +352,15 @@ jobs:
       # assembled from half a dozen strings and a schema's from struct tags.
       - name: Nothing served carries a character a gateway rejects
         run: make check-gateway-chars
+      # Every tool result and every prompt message is Markdown built from
+      # catalog metadata, so a value carrying a pipe ends the cell it is in and
+      # one carrying a newline ends the row. This walks each renderer in the
+      # order it writes and asks, for every runtime value, which construct it
+      # lands in and whether an escaper stands in front of it. It is not
+      # FRESHNESS-gated: a leak is introduced by editing a renderer, which is
+      # the layer this checks.
+      - name: No catalog text reaches a Markdown construct unescaped
+        run: make check-md-escaping
 
   analyze-md:
     name: Analyze Markdown

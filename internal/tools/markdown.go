@@ -19,13 +19,21 @@ import (
 
 // writeNextSteps appends a "💡 Next steps" section listing the guidance strings.
 // It is a no-op when there are none.
+//
+// Each step is escaped here rather than where it was built, because the steps
+// are built in eight places and every one of them quotes something a third
+// party sent: a pinned source name, a resolved mirror URL, the path a
+// downloaded file was saved under. A step is one line of a list by
+// construction, so collapsing a newline into a space takes nothing away from
+// the guidance and stops a value ending the item it is in and writing the rest
+// as a step of its own.
 func writeNextSteps(b *strings.Builder, steps []string) {
 	if len(steps) == 0 {
 		return
 	}
 	b.WriteString("\n💡 **Next steps:**\n")
 	for _, s := range steps {
-		fmt.Fprintf(b, "- %s\n", s)
+		fmt.Fprintf(b, "- %s\n", toolutil.EscapeMdTableCell(s))
 	}
 }
 

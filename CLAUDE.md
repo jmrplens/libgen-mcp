@@ -375,6 +375,42 @@ that some clients render live.
 **Control bytes come off first.** `StripControlBytes` runs before every check,
 because `java\x00script:` is the destination `javascript:` once a renderer has
 dropped the NUL, and a scheme check made on the bytes as sent would pass it.
+`StripControlBytes` on its own is **not** an escaper — it leaves the pipe and
+the angle bracket, which is exactly what the rules above take away.
+
+**`make check-md-escaping` is what holds the table true.**
+`cmd/audit_md_escaping` walks every function in `internal/tools`,
+`internal/prompts` and `internal/toolutil` **in the order it writes**, keeping a
+cursor over the document being assembled, and asks two questions of every
+runtime value: which construct it lands in, given everything written before it,
+and whether an escaper stands between it and that construct. A value landing in
+prose is not judged — a paragraph holds a pipe without the document changing
+shape. Four things about it are worth knowing before changing a renderer:
+
+- **The context comes from the writes, not from the line.** A fence is opened by
+  one call and closed by another, and `internal/prompts` builds a table out of
+  bare `WriteString` calls, so a cursor is the only thing that can say what
+  `b.WriteString(x)` lands in. A call that hands the builder to a function —
+  `writeNextSteps(&b, …)` — stops the cursor rather than guessing.
+- **It reads syntax, not types**, because this module does not depend on
+  `golang.org/x/tools` and the sibling audits read the tree the same way. So a
+  value is judged by the verb that prints it (`%d` and `%t` can carry nothing;
+  `%q` is *not* safe — it contains a newline and leaves a pipe a pipe) and by the
+  names in the call chain. A chain it cannot follow is reported **unresolved**,
+  never assumed safe, and `-fail-unresolved-in internal/toolutil` makes such a
+  value fatal there — a blind spot in the package that owns the escapers is a
+  blind spot behind every formatter that calls it.
+- **A value that needs no escaping is declared in the source**, beside the
+  formatter, as `//libgen:allow-unescaped <expression>: <reason>`. The
+  expression is the one the report printed. Both halves are required, and a
+  declaration that excuses nothing is itself a finding, so one left behind by a
+  later change cannot quietly widen the gate.
+- **`markdownEntryPoints` names the renderers, and a name with no declaration
+  behind it fails the run.** The sweep walks every function, so the list adds
+  nothing to a clean report — it covers the other direction: a renderer that is
+  renamed or split drops out of the sweep silently, and a gate that reports
+  nothing because it found nothing to look at reads exactly like a gate that
+  passed. Rename a renderer, and rename it there too.
 
 ### Secrets in an outbound URL
 
@@ -546,6 +582,7 @@ make check-doc-links                                       # local doc links res
 make audit-surface-quality                                 # tool surface conventions
 make check-install-buttons                                 # the one-click buttons agree
 make check-gateway-chars                                   # served text stays gateway-safe
+make check-md-escaping                                     # no catalog text reaches a Markdown construct raw
 make check-test-goroutines                                 # no testing.T abort off the test goroutine
 make check-test-file-names                                 # test files named after their module
 make check-test-subtests                                   # every case loop runs under t.Run
