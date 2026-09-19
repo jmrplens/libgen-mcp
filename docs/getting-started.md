@@ -77,9 +77,39 @@ chmod +x libgen-mcp
 sudo mv libgen-mcp /usr/local/bin/
 ```
 
-The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothing on
-the host and runs straight away. Each release also ships a `checksums.txt`; verify your
-download against it before running.
+The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it
+names no dynamic loader, depends on nothing on the host and runs straight away — on glibc,
+on musl, and in a distroless or `scratch` container.
+
+#### Verifying what you downloaded
+
+Every release ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can
+check that the bytes are the ones this project's release workflow produced rather than
+only that they match a hash published beside them:
+
+```bash
+cd "$(mktemp -d)"
+gh release download --repo jmrplens/libgen-mcp \
+  --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' \
+  --pattern 'libgen-mcp-linux-amd64'
+
+# 1. The manifest was signed by this repository's release workflow.
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+# 2. The file you downloaded is the one that manifest names.
+sha256sum --ignore-missing -c checksums.txt
+```
+
+The first command is the one that matters and the one usually skipped: a `checksums.txt`
+fetched from the same page as the binary proves only that the two agree with each other.
+The signature is keyless — there is no public key to distribute, the identity **is** the
+workflow that produced it, which is what the `--certificate-identity-regexp` above pins.
+[cosign](https://docs.sigstore.dev/cosign/installation/) is the only extra tool needed;
+`gh` can be replaced with any download you like.
 
 ### 3. Docker
 

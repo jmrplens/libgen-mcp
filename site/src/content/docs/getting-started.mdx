@@ -167,7 +167,23 @@ Every channel below ends in the same single static binary: nothing is compiled, 
     	sudo mv libgen-mcp /usr/local/bin/
     	```
 
-    	The binary is fully static (built with `CGO_ENABLED=0`), so it depends on nothing on the host and runs straight away. Each release also ships a `checksums.txt`; verify your download against it before running.
+    	The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it names no dynamic loader, depends on nothing on the host and runs straight away — on glibc, on musl, and in a distroless or `scratch` container.
+
+    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them:
+
+    	```bash
+    	# 1. The manifest was signed by this repository's release workflow.
+    	cosign verify-blob \
+    	  --bundle checksums.txt.sigstore.json \
+    	  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+    	  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    	  checksums.txt
+
+    	# 2. The file you downloaded is the one that manifest names.
+    	sha256sum --ignore-missing -c checksums.txt
+    	```
+
+    	The first command is the one that matters and the one usually skipped: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. The signature is keyless — there is no public key to distribute, the identity **is** the workflow that produced it, which is what `--certificate-identity-regexp` pins.
     </TabItem>
     <TabItem label="Docker">
     	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:
