@@ -20,8 +20,8 @@ type Citations struct {
 	RIS    string `json:"ris,omitempty" jsonschema:"TY..ER entry"`
 	// DOIStatus is machine-readable so a caller can branch on it without parsing
 	// Provenance; it is empty when the record carries no DOI at all.
-	DOIStatus  string `json:"doi_status,omitempty" jsonschema:"Crossref check on the DOI: confirmed (same title, entries state it), unverified (not checked) or mismatch (other work); the last two omit the DOI"`
-	Provenance string `json:"provenance,omitempty" jsonschema:"field sources and what was verified; relay it, do not present the citation as authoritative"`
+	DOIStatus  string `json:"doi_status,omitempty" jsonschema:"Crossref check on the DOI: confirmed (same title, entries state it), unverified (not checked) or mismatch (other work). The last two omit the DOI"`
+	Provenance string `json:"provenance,omitempty" jsonschema:"field sources and what was verified. Relay it, and do not present the citation as authoritative"`
 }
 
 type citeFields struct {

@@ -42,7 +42,7 @@ var md5Re = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
 // the handshake Instructions, which every client receives before any tool list.
 const searchDescription = `Federated search for books, papers, comics, magazines and standards, returning per-result metadata, md5 and download links.
 
-Beyond the primary catalog it also reaches Anna's Archive and the keyless open-access providers, returned as a separate open_access array labeled by origin; the extra_sources parameter decides when.
+Beyond the primary catalog it also reaches Anna's Archive and the keyless open-access providers, returned as a separate open_access array labeled by origin. The extra_sources parameter decides when.
 
 Example: {"query": "organic chemistry Hoffmann", "extra_sources": "always"} to include open-access and public-domain copies alongside the catalog.
 
@@ -94,9 +94,9 @@ func detailsInputSchema() *jsonschema.Schema {
 // citations needs to know a DOI can be absent from one on purpose — otherwise the
 // obvious repair is to paste the record's doi field back in, which is exactly the
 // fabrication buildCitations refuses.
-const detailsDescription = `Full metadata for one bibliographic record — identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its citations field. Use it whenever a citation is requested.
+const detailsDescription = `Full metadata for one bibliographic record: identifiers, DOI, cover and related edition, plus ready-to-paste BibTeX and RIS exports in its citations field. Use it whenever a citation is requested.
 
-Look up by exactly one of md5, edition/file id, or an article's doi, taken from a prior search result. An md5 the catalog does not carry falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. A DOI reaches the exports only once corroborated against Crossref; otherwise it is left out and citations.doi_status says why, so relay citations.provenance rather than presenting a citation as verified.
+Look up by exactly one of md5, edition/file id, or an article's doi, taken from a prior search result. An md5 the catalog does not carry falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. A DOI reaches the exports only once corroborated against Crossref. Otherwise it is left out and citations.doi_status says why, so relay citations.provenance rather than presenting a citation as verified.
 
 Example: {"md5": "<md5 from a search result>", "enrich": true} to add best-effort journal, ISSN, subject and cover metadata.
 
@@ -111,42 +111,42 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"page number from 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value, not an array, to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value, not an array: asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value, not an array: always also queries Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC; auto (default) reaches them only when the catalog finds nothing or fails; never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value, not an array: always also queries Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
 // leads so the model sees what to do with the results before reading them.
 type SearchOutput struct {
 	NextSteps      []string                    `json:"next_steps,omitempty" jsonschema:"suggested follow-up calls for these results"`
-	Results        []libgen.Result             `json:"results" jsonschema:"file records, each with the md5/doi/id for get_details or download; beyond-catalog hits show origin=annas"`
+	Results        []libgen.Result             `json:"results" jsonschema:"file records, each with the md5/doi/id for get_details or download. Beyond-catalog hits show origin=annas"`
 	Page           int                         `json:"page" jsonschema:"page returned"`
 	ResultsPerPage int                         `json:"results_per_page" jsonschema:"page size in effect"`
 	TotalFiles     string                      `json:"total_files,omitempty" jsonschema:"total matches reported, possibly capped (e.g. 1000+)"`
 	Reachable      int                         `json:"reachable" jsonschema:"results actually reachable across all pages"`
 	Truncated      bool                        `json:"truncated" jsonschema:"true when some matches cannot be paged to"`
-	Hint           string                      `json:"hint,omitempty" jsonschema:"how to refine the query; only when truncated"`
+	Hint           string                      `json:"hint,omitempty" jsonschema:"how to refine the query, and only when truncated"`
 	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, so a next page may exist"`
 	Mirror         string                      `json:"mirror" jsonschema:"mirror base URL that served this search"`
-	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits, labeled by origin. Only open_access true is free to read, and the publisher may still refuse a fetch; dblp and pubmed are records to cite, not files. Pass the doi to read/download rather than the UNVERIFIED crossref pdf_url; with no doi (arXiv, ERIC, gutenberg) fetch pdf_url/full_text_url yourself, and an isbn goes to download"`
+	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits, labeled by origin. Only open_access true is free to read, and the publisher may still refuse a fetch. dblp and pubmed are records to cite, not files. Pass the doi to read/download rather than the UNVERIFIED crossref pdf_url. With no doi (arXiv, ERIC, gutenberg) fetch pdf_url/full_text_url yourself, and an isbn goes to download"`
 }
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5    string `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field; use exactly one of md5, id or doi"`
-	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id; use exactly one of md5, id or doi"`
-	DOI    string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013; use exactly one of md5, id or doi. The record returned carries the md5 for download"`
+	MD5    string `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field. Use exactly one of md5, id or doi"`
+	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id. Use exactly one of md5, id or doi"`
+	DOI    string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id or doi. The record returned carries the md5 for download"`
 	Object string `json:"object,omitempty" jsonschema:"with id, one value: edition (default) or file"`
-	Enrich bool   `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata; off by default"`
+	Enrich bool   `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default"`
 }
 
 // DetailsOutput holds the file and/or edition record returned by get_details.
 // NextSteps leads so the model sees the download follow-up before the payload.
 type DetailsOutput struct {
 	NextSteps  []string           `json:"next_steps,omitempty" jsonschema:"suggested follow-up call for this record"`
-	File       map[string]any     `json:"file,omitempty" jsonschema:"file record; for an md5 lookup or an id lookup with object=file"`
-	Edition    map[string]any     `json:"edition,omitempty" jsonschema:"edition record; the related edition of an md5 lookup, or an id lookup with object=edition"`
+	File       map[string]any     `json:"file,omitempty" jsonschema:"file record, for an md5 lookup or an id lookup with object=file"`
+	Edition    map[string]any     `json:"edition,omitempty" jsonschema:"edition record, the related edition of an md5 lookup, or an id lookup with object=edition"`
 	Citations  *Citations         `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
-	Enrichment *libgen.Enrichment `json:"enrichment,omitempty" jsonschema:"external Crossref/OpenLibrary metadata; only when enrich was requested and found"`
+	Enrichment *libgen.Enrichment `json:"enrichment,omitempty" jsonschema:"external Crossref/OpenLibrary metadata, only when enrich was requested and found"`
 }
 
 // ResolvedLink is the result of a resolve-only download: a direct URL the caller
@@ -158,7 +158,7 @@ type ResolvedLink struct {
 	Source    string            `json:"source" jsonschema:"source that resolved the URL, from the download tool's source enum"`
 	Filename  string            `json:"filename,omitempty" jsonschema:"suggested filename"`
 	MIMEType  string            `json:"mime_type,omitempty" jsonschema:"likely content type"`
-	Headers   map[string]string `json:"headers,omitempty" jsonschema:"headers to set when fetching the URL (e.g. Referer); absent when fetchable as-is"`
+	Headers   map[string]string `json:"headers,omitempty" jsonschema:"headers to set when fetching the URL (e.g. Referer), absent when fetchable as-is"`
 	VerifyMD5 bool              `json:"verify_md5" jsonschema:"true when the fetched bytes should hash to the requested md5"`
 }
 
@@ -168,20 +168,20 @@ type ResolvedLink struct {
 // direct URL instead and the DownloadResult fields stay zero.
 type DownloadOutput struct {
 	NextSteps []string      `json:"next_steps,omitempty" jsonschema:"suggested follow-up now the file is saved or the link resolved"`
-	Resolved  *ResolvedLink `json:"resolved,omitempty" jsonschema:"direct URL to fetch instead of a saved file; only when resolve_only was set"`
+	Resolved  *ResolvedLink `json:"resolved,omitempty" jsonschema:"direct URL to fetch instead of a saved file, only when resolve_only was set"`
 	libgen.DownloadResult
 }
 
 // DownloadInput holds the parameters for the download tool. Provide md5 or isbn
-// (books) or doi (articles); at least one is required.
+// (books) or doi (articles). At least one is required.
 type DownloadInput struct {
-	MD5         string `json:"md5,omitempty" jsonschema:"file md5 from a book search result; provide md5, isbn or doi"`
-	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result; provide md5, isbn or doi"`
-	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book, 10 or 13 characters, hyphens optional; fetches an openly licensed copy. Provide md5, isbn or doi"`
-	Path        string `json:"path,omitempty" jsonschema:"destination directory (default LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads); ignored when resolve_only is true. Confined to the working directory, the OS temp directory, the download directory, and anything in LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS"`
-	Filename    string `json:"filename,omitempty" jsonschema:"destination filename, sanitized to one path component. Unset: an md5 download is named 'Author - Title (Year).ext' from the record; doi/isbn keeps the announced name, else the identifier"`
-	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all; the enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
-	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"Anna's Archive member (fast) downloads; needs a paid membership. With no server key the client is asked for one, used once, never stored. False: keyless IPFS"`
+	MD5         string `json:"md5,omitempty" jsonschema:"file md5 from a book search result. Provide md5, isbn or doi"`
+	DOI         string `json:"doi,omitempty" jsonschema:"DOI from an article search result. Provide md5, isbn or doi"`
+	ISBN        string `json:"isbn,omitempty" jsonschema:"ISBN of a book, 10 or 13 characters, hyphens optional. Fetches an openly licensed copy. Provide md5, isbn or doi"`
+	Path        string `json:"path,omitempty" jsonschema:"destination directory (default LIBGEN_MCP_DOWNLOAD_DIR or ~/Downloads), ignored when resolve_only is true. Confined to the working directory, the OS temp directory, the download directory, and anything in LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS"`
+	Filename    string `json:"filename,omitempty" jsonschema:"destination filename, sanitized to one path component. Unset: an md5 download is named 'Author - Title (Year).ext' from the record, while doi/isbn keeps the announced name, else the identifier"`
+	Source      string `json:"source,omitempty" jsonschema:"restrict the download to a single source instead of trying all. The enum lists the sources this deployment can run. Omit to try every compatible source in order with failover. Overwritten at registration by downloadInputSchema, which pins both the enum and this text from the enabled chain"`
+	AnnasMember bool   `json:"annas_member,omitempty" jsonschema:"Anna's Archive member (fast) downloads, which need a paid membership. With no server key the client is asked for one, used once, never stored. False: keyless IPFS"`
 	ResolveOnly bool   `json:"resolve_only,omitempty" jsonschema:"return the direct download URL as a link WITHOUT downloading - for a server remote from the user, or to fetch it yourself. False (default) saves to the server's disk"`
 	//nolint:lll // one sentence per clause; splitting the tag would hurt the rendered schema.
 }
@@ -621,7 +621,7 @@ func downloadContractParagraph(book, isbnBook, article []string, contract downlo
 		b.WriteString("This server does not fetch files: download ALWAYS returns a " +
 			"direct link (a resource_link) to fetch yourself, never a saved file, and resolve_only is implied.")
 	case contractSaves:
-		b.WriteString("Returns the saved path and size; resolve_only=true returns a link instead.")
+		b.WriteString("Returns the saved path and size. resolve_only=true returns a link instead.")
 	}
 	return b.String()
 }
@@ -764,7 +764,7 @@ func sourceChainDisclosureParagraph(enabled []string) string {
 	if len(named) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("Openly licensed and open-access sources are tried first; the shadow-library mirrors "+
+	return fmt.Sprintf("Openly licensed and open-access sources are tried first. The shadow-library mirrors "+
 		"(%s) are reached only when none of them serves the item. The serving source is chosen while resolving "+
 		"and is named back only beside a resolved link, or in the optional account block. Which sources and "+
 		"credentials this server holds is set by the operator and is not visible to you: do not infer from this "+
@@ -802,7 +802,7 @@ func downloadKeysSentence(book, isbnBook, article []string) string {
 	for i, k := range keys {
 		labeled[i] = labels[k]
 	}
-	return "Provide " + strings.Join(labeled, ", ") + "; at least one is required. "
+	return "Provide " + strings.Join(labeled, ", ") + ". At least one is required. "
 }
 
 // hintIncludeLinks tells the model to surface the results' download links to the

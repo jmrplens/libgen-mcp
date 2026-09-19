@@ -339,6 +339,13 @@ jobs:
       # only layer that does not look at it.
       - name: The install buttons agree within each command
         run: make check-install-buttons
+      # A gateway that refuses "unsafe characters" matches a character class,
+      # not a codepoint list, so the served surface is held to pure ASCII prose
+      # plus a short list of rejected ASCII characters. It reads the surface a
+      # client receives rather than the source, because a description here is
+      # assembled from half a dozen strings and a schema's from struct tags.
+      - name: Nothing served carries a character a gateway rejects
+        run: make check-gateway-chars
 
   analyze-md:
     name: Analyze Markdown

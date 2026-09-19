@@ -175,7 +175,7 @@ type Result struct {
 	DOI       string   `json:"doi,omitempty" jsonschema:"article DOI"`
 	Title     string   `json:"title" jsonschema:"record title"`
 	Issue     string   `json:"issue,omitempty" jsonschema:"volume/issue, e.g. vol. 26 iss. 2"`
-	Edition   string   `json:"edition,omitempty" jsonschema:"e.g. 1st ed; not in the title"`
+	Edition   string   `json:"edition,omitempty" jsonschema:"e.g. 1st ed, when it is not in the title"`
 	ISBNs     []string `json:"isbns,omitempty" jsonschema:"ISBNs"`
 	Authors   string   `json:"authors,omitempty" jsonschema:"authors"`
 	Publisher string   `json:"publisher,omitempty" jsonschema:"publisher"`
@@ -189,7 +189,7 @@ type Result struct {
 	// can tell a catalog hit from one federated in from elsewhere. "libgen" for
 	// catalog results; other searchers stamp their own name.
 	Origin    string           `json:"origin,omitempty" jsonschema:"searcher: libgen or annas"`
-	Downloads []DownloadOption `json:"downloads" jsonschema:"raw links; prefer the download tool"`
+	Downloads []DownloadOption `json:"downloads" jsonschema:"raw links. Prefer the download tool"`
 }
 
 // SearchPage is a parsed page of search results plus the total file count.
