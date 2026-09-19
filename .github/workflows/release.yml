@@ -252,6 +252,38 @@ jobs:
       - name: Build and validate the PyPI wheels
         run: make validate-pypi-local PYPI_BINARIES=dist VERSION="${RELEASE_TAG#v}"
 
+      # Rehearsal only, and the counterpart of the NuGet login below: it
+      # performs the same OIDC exchange the publish would, gets a short-lived
+      # API token back and throws it away. Without this a rehearsal proves
+      # nothing about PyPI — the upload is the only step that touches the
+      # policy, and it is skipped — so a publisher named for the wrong workflow
+      # file or with an environment set would surface for the first time at a
+      # tag, after the release is already public.
+      #
+      # The minted token is masked before anything else can print it, and it is
+      # never used: it expires on its own.
+      - name: PyPI trusted publisher (mint a token, upload nothing)
+        if: env.REHEARSAL == 'true'
+        run: |
+          set -euo pipefail
+          oidc=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" | jq -r '.value')
+          if [ -z "${oidc}" ] || [ "${oidc}" = "null" ]; then
+            echo "::error::no OIDC token was issued for audience 'pypi'"
+            exit 1
+          fi
+          response=$(curl -sS -X POST https://pypi.org/_/oidc/mint-token \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -cn --arg t "${oidc}" '{token: $t}')")
+          token=$(jq -r '.token // empty' <<<"${response}")
+          if [ -z "${token}" ]; then
+            echo "::error::pypi.org refused the OIDC exchange: $(jq -c '.message // .' <<<"${response}")"
+            echo "::error::the trusted publisher must name owner jmrplens, repository libgen-mcp, workflow release.yml and a blank environment"
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "pypi.org accepted this workflow's identity and issued a token; nothing was uploaded"
+
       # OIDC trusted publisher: no stored token, PEP 740 attestations attached
       # automatically, and skip-existing lets a re-run land on files already
       # uploaded without failing. The publisher on pypi.org names this

@@ -51,10 +51,14 @@ Everything else runs, and that is the point:
   layout** instead of pushed. Its digest is real, so the `server.json` stamp runs
   on a real value — without that, a rehearsal could not exercise the one thing
   the stamper's refusals exist for.
-- **The registry logins run**, because they mint a credential and spend nothing,
-  and a trusted-publishing policy that has drifted is exactly what a rehearsal
-  should catch. The rule generalises: a credential exchange that *mints* runs in
-  a rehearsal; only the upload that spends it is skipped.
+- **Both trusted-publishing exchanges run**, because they mint a credential and
+  spend nothing, and a policy that has drifted is exactly what a rehearsal should
+  catch. NuGet's is its `NuGet/login` step; PyPI's is a step of its own, since
+  the publish action performs the exchange only as part of an upload — without it
+  a rehearsal would prove nothing about PyPI at all. Both fail loudly and name
+  the four values the policy has to carry. The rule generalises: a credential
+  exchange that *mints* runs in a rehearsal; only the upload that spends it is
+  skipped.
 - **The `.mcpb` is packed and `server.json` is stamped**, locally, and nothing is
   uploaded.
 
@@ -134,8 +138,8 @@ A tag publishes to seven places. Six are automatic; LobeHub is not.
 | GitHub release | `GITHUB_TOKEN` | — |
 | ghcr.io + Docker Hub | `GITHUB_TOKEN`, `DOCKERHUB_*` | — |
 | npm | OIDC trusted publisher | done (bootstrap publish, then the publisher) |
-| PyPI | OIDC trusted publisher | **1.7.2 uploaded by hand**; publisher to be added |
-| NuGet | `NuGet/login` OIDC → 1-hour key | **1.7.2 pushed by hand**; policy to be added |
+| PyPI | OIDC trusted publisher | done (1.7.2 uploaded by hand, then the publisher) |
+| NuGet | `NuGet/login` OIDC → 1-hour key | done (1.7.2 pushed by hand, then the policy) |
 | Homebrew tap | `TAP_DEPLOY_KEY_B64` | the `jmrplens/homebrew-tap` repository and its deploy key |
 | winget | `WINGET_TOKEN` | the `jmrplens/winget-pkgs` fork, and one manual manifest submission accepted upstream |
 | LobeHub | interactive `lhm login` | `make publish-lobehub`, by hand after the tag |
