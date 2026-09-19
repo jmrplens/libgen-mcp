@@ -245,6 +245,20 @@ chmod +x libgen-mcp && sudo mv libgen-mcp /usr/local/bin/
 
 The binary is fully static (`CGO_ENABLED=0`), so it runs anywhere for that OS/arch with nothing else installed. Each release ships a `checksums.txt` to verify the download. Then register `libgen-mcp` with your client using the binary variant of any snippet [above](#add-to-your-mcp-client), or see the [getting-started guide](docs/getting-started.md). **No token or account is required** — Library Genesis needs no credentials.
 
+## Other install channels
+
+The same binary is published to the package manager you already use. Each one installs the native executable rather than a wrapper around it, and none of them compiles anything or runs a script at install time.
+
+```bash
+uvx libgen-mcp                            # PyPI, without installing
+pipx install libgen-mcp                   # PyPI
+brew install jmrplens/tap/libgen-mcp      # Homebrew
+dnx libgen-mcp                            # NuGet, without installing
+dotnet tool install -g libgen-mcp         # NuGet
+```
+
+Two things worth knowing: the PyPI Linux wheels carry both `manylinux` and `musllinux` tags, so the same file installs on Debian and on Alpine; and under `dnx` the server's own arguments go after `--`, because everything before it belongs to `dnx` (`dnx libgen-mcp -- --http :8080`). Details for each in the [getting-started guide](docs/getting-started.md#5-other-package-managers).
+
 ## Tools
 
 Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/libgen-mcp/tools/)).

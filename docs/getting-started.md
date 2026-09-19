@@ -5,12 +5,23 @@ running your first search.
 
 ## Install
 
-`libgen-mcp` installs four ways. If you already have Node 18 or newer,
-**npm/npx** is the shortest path — one command, nothing to download by hand.
-Otherwise the
-**prebuilt binary** is a single static executable with nothing else to install:
-no Go toolchain, no Docker, no runtime. Docker and `go install` are offered as
-alternatives if they fit your setup better.
+`libgen-mcp` is published to most of the places you already get software from.
+Whichever you pick, you end up with the same single static binary: nothing is
+compiled, nothing runs at install time, and no account, API key or token is
+needed.
+
+| Channel        | Run it without installing                               | Install it                                                    |
+| -------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| npm            | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                          |
+| PyPI           | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                     |
+| Homebrew       | —                                                       | `brew install jmrplens/tap/libgen-mcp`                        |
+| NuGet          | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                           |
+| Docker         | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                             |
+| Release binary | —                                                       | download and put it on your `PATH`                            |
+| Go             | —                                                       | `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` |
+
+The four below are the ones worth spelling out; the rest are one command each
+and are covered under [other package managers](#5-other-package-managers).
 
 ### 1. npm / npx (shortest path if you have Node 18 or newer)
 
@@ -142,6 +153,42 @@ go build -o libgen-mcp ./cmd/server
 ```
 
 Make sure the resulting binary is on your `PATH`.
+
+### 5. Other package managers
+
+Three more channels carry the same release binaries. Each is one command, and
+each installs the native executable rather than a wrapper around it.
+
+**PyPI**, as [`libgen-mcp`](https://pypi.org/project/libgen-mcp/). The wheel
+carries the binary and pip puts it on the scripts path, so `libgen-mcp` is the
+command afterwards — no Python runs when you use it:
+
+```bash
+uvx libgen-mcp            # run it without installing
+pipx install libgen-mcp   # or: pip install libgen-mcp
+```
+
+The Linux wheels carry both `manylinux` and `musllinux` tags, so the same file
+installs on Debian and on Alpine.
+
+**Homebrew**, from this project's tap:
+
+```bash
+brew install jmrplens/tap/libgen-mcp
+```
+
+The formula pins each platform's release asset by SHA256, and `brew upgrade`
+follows new releases.
+
+**NuGet**, as a .NET tool. `dnx` runs it without installing anything
+permanently; note that arguments for the server go after `--`, because
+everything before it belongs to `dnx`:
+
+```bash
+dnx libgen-mcp                       # run it
+dnx libgen-mcp -- --http :8080       # with arguments
+dotnet tool install -g libgen-mcp    # or install it
+```
 
 ## Configure an MCP client
 
