@@ -111,7 +111,17 @@ signs:
       - ${artifact}
 
 sboms:
-  - artifacts: archive
+  # `binary`, not `archive`. `archives.formats: [binary]` above means every
+  # artifact GoReleaser produces is of type Binary, and the archive filter
+  # never matches one: it logs "no artifacts matching current filters", writes
+  # no SBOM and exits 0. v1.7.2 shipped none for exactly that reason, and
+  # nothing reported it — the release succeeded, the assets just were not there.
+  #
+  # `documents` has to be named too: the default template is derived from the
+  # archive name, which a binary artifact does not have.
+  - artifacts: binary
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
     cmd: syft
     args:
       - scan
