@@ -12,7 +12,7 @@
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons \
-        audit-test-goroutines check-test-goroutines \
+        audit-test-goroutines check-test-goroutines check-test-file-names \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published \
@@ -295,6 +295,9 @@ audit-surface-quality: ## Fail if the MCP tool surface violates a quality conven
 
 check-install-buttons: ## Decode every one-click install button and hold them to one configuration per command
 	go run ./cmd/audit_install_buttons/
+
+check-test-file-names: ## Fail when a _test.go file is not named after a module it tests (CI gate)
+	go run ./cmd/audit_test_names/ -check-files cmd internal test
 
 audit-test-goroutines: ## Report every testing.T abort made off the test goroutine, plus the advisory Errorf sites
 	go run ./cmd/audit_test_goroutines/
