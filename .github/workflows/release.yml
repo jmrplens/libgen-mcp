@@ -313,22 +313,73 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "v${RELEASE_TAG#v}" --draft=false
 
-      # A rehearsal has no release for the Homebrew job to read checksums from,
-      # and the formula's hashes are the part of it that can be wrong. Handing
-      # that job this file is what lets the rendering run for real on a
-      # dispatch; on a tag it downloads the published one and verifies its
-      # signature instead.
-      - name: Keep the rehearsal's checksums for the tap job
+      # A rehearsal hands its build to every job downstream the way a release
+      # hands them the published assets: the staged binaries, checksums.txt and
+      # the bundle, which fetch-release-assets.sh unpacks and checks in place of
+      # downloading. One tar rather than the files, so the executable bits
+      # survive the trip.
+      #
+      # Without it those jobs would have nothing to run on at all: they produce
+      # no artifacts of their own by design, and a dispatch publishes no release
+      # for them to fetch.
+      - name: Hand the rehearsal's build to the jobs downstream
         if: env.REHEARSAL == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: rehearsal-checksums
-          path: dist/checksums.txt
-          retention-days: 1
+        run: |
+          set -euo pipefail
+          (cd dist && tar -cf "${RUNNER_TEMP}/rehearsal-assets.tar" checksums.txt libgen-mcp.mcpb libgen-mcp-*)
+          tar -tf "${RUNNER_TEMP}/rehearsal-assets.tar"
 
-      # npm publish via OIDC trusted publisher — no stored token. dist/ already
-      # holds the release binaries under their published names here, the same
-      # spot the .mcpb step above reads from. The workflow's id-token: write
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: env.REHEARSAL == 'true'
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal-assets.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  # The three package registries publish from jobs of their own, each one
+  # fetching the release's own assets rather than reading the build directory
+  # the GoReleaser job happened to leave behind. What gets packed is then the
+  # same bytes that were published, by construction, and a job that holds a
+  # publishing identity no longer also holds GoReleaser's output and the deploy
+  # key for main.
+  #
+  # None of them declares an `environment:`, and that is load-bearing rather
+  # than an omission: npm, PyPI and NuGet each match a trusted publisher on the
+  # repository, the workflow file **and** the environment, and all three
+  # publishers here name a blank one. Adding an environment breaks all three at
+  # once, during a real release, on the one path that never runs before a tag.
+  npm:
+    name: Publish to npm
+    needs: [preflight, release]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets
+      id-token: write # npm's OIDC trusted-publisher exchange
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      - name: Fetch and verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist
+
+      # npm publish via OIDC trusted publisher — no stored token. dist/ holds
+      # the release binaries under their published names, fetched and checked
+      # against the signed checksums.txt above. This job's id-token: write
       # permission lets npm mint the OIDC token; npm >= 11.5.1 performs the
       # exchange, so setup-node's Node 22 is upgraded first. Provenance is
       # attached automatically under trusted publishing (no --provenance flag),
@@ -367,15 +418,42 @@ jobs:
           # than rebuilding it and shipping bytes nothing looked at.
           bash scripts/publish-npm.sh dist "${RELEASE_TAG#v}" --no-assemble
 
-      # PyPI and NuGet follow npm here, and all three come before the registry
-      # publish below: mcp-publisher validates ownership by fetching each
-      # package server.json declares, so a package declared and not yet
-      # published fails the whole release at that step.
-      #
-      # Both build from the same dist/ the npm step used, and both validate
-      # before uploading, because a PyPI file name is burned forever even if
-      # the release is deleted and a NuGet version can be unlisted but never
-      # replaced.
+  # PyPI runs beside npm rather than after it — they share no state now that
+  # each fetches the release for itself — and all three come before the registry
+  # publish, which is an explicit `needs:` edge on the mcp-registry job:
+  # mcp-publisher validates ownership by fetching each package server.json
+  # declares, so a package declared and not yet published fails the release
+  # there.
+  #
+  # It validates before uploading because a PyPI file name is burned forever,
+  # even if the release is deleted.
+  pypi:
+    name: Publish to PyPI
+    needs: [preflight, release]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets
+      id-token: write # PyPI's OIDC trusted-publisher exchange
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      - name: Fetch and verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist
 
       - name: Build and validate the PyPI wheels
         run: make validate-pypi-local PYPI_BINARIES=dist VERSION="${RELEASE_TAG#v}"
@@ -425,6 +503,36 @@ jobs:
           packages-dir: pypi/dist
           skip-existing: true
 
+  # NuGet, like the other two, fetches the release for itself. It validates
+  # before pushing because a NuGet version can be unlisted but never replaced.
+  nuget:
+    name: Publish to NuGet
+    needs: [preflight, release]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets
+      id-token: write # NuGet/login's OIDC exchange for a temporary API key
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      - name: Fetch and verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist
+
       # An exact SDK version rather than 10.0.x: dnx's behaviour is an SDK
       # property, and this is the same line the container `make validate-nuget`
       # pins by digest. Bump the two together.
@@ -467,9 +575,50 @@ jobs:
             bash scripts/publish-nuget.sh dist "${RELEASE_TAG#v}" --no-assemble
           fi
 
+  # The MCP Registry publish, last of the publishers and behind every one of
+  # them as an explicit `needs:` edge. The registry validates the npm entry by
+  # reading mcpName off the published package, the PyPI one by GETting
+  # pypi.org's JSON for this version, the NuGet one by reading that version's
+  # README off the v3 feed, and the two OCI entries by resolving the image tag
+  # — so racing any of those uploads spends the retry budget on a version that
+  # is not there yet. `sign-attest` is named too: this job is what points
+  # installers at the image, and it must not advertise an index nobody signed.
+  mcp-registry:
+    name: Publish to the MCP Registry
+    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets
+      id-token: write # mcp-publisher login github-oidc
+      attestations: read # verify the .mcpb provenance before hashing it
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      # Only the bundle and the checksums: this job stamps server.json and
+      # publishes it, and the binaries are not its business.
+      - name: Fetch and verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist "libgen-mcp.mcpb"
+
       # Runs in a rehearsal too, and that is the point: this is where the
       # stamper meets a real digest and a real bundle, and a rehearsal that
-      # skipped it could not catch the one thing S39's refusals exist for.
+      # skipped it could not catch the one thing the stamper's refusals exist
+      # for. The working tree only — the commit to main is a separate job with
+      # a separate credential.
       - name: Pin server.json version and SHA256 hashes
         env:
           OCI_DIGEST: ${{ needs.docker.outputs.digest }}
@@ -570,6 +719,48 @@ jobs:
           fi
           echo "::notice::MCP Registry now serves ${VERSION} as the latest version"
 
+  # Last, deliberately. The commit lands the stamped server.json on main, and a
+  # push to main runs check-server-json-packages, which fetches every package
+  # the manifest declares. Committing before npm, PyPI and NuGet have published
+  # would fail that gate on a version that is merely not there yet. Depending on
+  # the publishers also preserves the old single-job semantics: a failed publish
+  # aborted before the commit ever happened.
+  #
+  # It holds the deploy key alone and runs no third-party code — no build
+  # action, no CLI resolved at run time — which is the point of it being a job
+  # rather than the tail of one that does.
+  commit-manifests:
+    name: Commit manifests to main
+    needs: [preflight, release, docker, sign-attest, npm, pypi, nuget, homebrew, mcp-registry]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+    permissions:
+      contents: read # download the published release assets; the push uses the deploy key
+      attestations: read # verify the .mcpb provenance before hashing it
+    steps:
+      # main, not the tag: main is what the commit lands on, so this job runs
+      # main's scripts against this release's assets. A change to a script this
+      # job calls is therefore only rehearsed once it is on main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Take the rehearsal's own build
+        if: env.REHEARSAL == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
+      - name: Fetch and verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist "libgen-mcp.mcpb"
+
       - name: Commit pinned server.json back to main
         if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
         env:
@@ -596,10 +787,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # The checkout is already main; refresh it in case another job of
+          # this release landed something while this one waited.
           git fetch origin main
-          git checkout main
-          # dist/ is untracked, so the bundle the stamp above hashed survives
-          # the checkout and the two runs agree on every field.
+          git reset --hard origin/main
+          # The script is idempotent and reads checksums.txt, the version and
+          # the bundle — all of which were checked against this release's
+          # cosign-signed manifest by the fetch step above — so running it here
+          # on current main produces the same fields the registry job stamped.
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
             dist/libgen-mcp.mcpb "${OCI_DIGEST}"
           # Every manifest the script stamps, not just the two it stamped first;
@@ -1308,30 +1503,23 @@ jobs:
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
-      - name: Take the rehearsal's own checksums
+      - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: rehearsal-checksums
-          path: dist
+          name: rehearsal-assets
+          path: ${{ runner.temp }}/rehearsal
 
       # The formula's sha256 lines are only as trustworthy as where they came
       # from, so on a real release the manifest is downloaded with its sigstore
-      # bundle and verified before a single hash is read out of it.
+      # bundle and verified before a single hash is read out of it. Only the
+      # manifest: the formula names URLs, and the binaries themselves are no
+      # business of this job.
       - name: Fetch and verify the release checksums
-        if: env.REHEARSAL != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          gh release download "v${RELEASE_TAG#v}" --dir dist \
-            --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' --clobber
-          cosign verify-blob \
-            --bundle dist/checksums.txt.sigstore.json \
-            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            dist/checksums.txt
+          REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
+        run: bash scripts/fetch-release-assets.sh --checksums-only "${RELEASE_TAG#v}" dist
 
       - name: Update the tap formula
         env:
