@@ -511,7 +511,7 @@ services:
 
 El nombre es el de la opción en mayúsculas y con los guiones como guiones bajos, bajo `LIBGEN_MCP_`. La única excepción es `--http`, cuya variable es `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_MCP_HTTP` se leería como un interruptor y no como una dirección. La lista completa está en [Configuración → Listener HTTP](/libgen-mcp/es/configuration/#listener-http).
 
-<!-- libgen:allow-name LIBGEN_MCP_HTTP: se nombra arriba como la grafia que este servidor deliberadamente no usa -->
+{/* libgen:allow-name LIBGEN_MCP_HTTP: se nombra arriba como la grafia que este servidor deliberadamente no usa */}
 
 **Una opción que teclees sigue ganando**, así que una imagen base que fija sus valores por defecto en `environment:` y un `command:` que sobrescribe uno de ellos se comportan como parece. Teclear una opción cuenta incluso si tecleas su valor por defecto: `--stateless=true` gana a `LIBGEN_MCP_STATELESS=0`, porque la pregunta es si lo pediste, no si la respuesta cambia. Una variable que no se puede interpretar aborta el arranque nombrando la variable y la opción, en lugar de dejar el valor por defecto en silencio — y el log de arranque nombra las variables que configuraron el listener, que es la respuesta más rápida a «¿por qué está en ese puerto?».
 

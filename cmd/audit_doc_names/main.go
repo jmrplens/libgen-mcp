@@ -250,7 +250,38 @@ var envToken = regexp.MustCompile(`LIBGEN_MCP_[A-Z0-9_]+`)
 // on its own. Both halves are required, and a declaration that excuses nothing
 // is itself a finding, so one left behind by a later edit cannot quietly widen
 // the gate.
-var nameDirective = regexp.MustCompile(`<!--\s*libgen:allow-name\s+([A-Za-z0-9_]+)\s*:\s*(\S[^>]*?)\s*-->`)
+// Both comment syntaxes are accepted because both are needed. MDX does not
+// parse an HTML comment at all — it reads the "!" as the start of a name and
+// fails the build — so a declaration in a .mdx page is written the MDX way,
+// and one in a .md page the Markdown way. Neither renders.
+// They are two expressions rather than one with the delimiters alternated,
+// because RE2 has no backreference: an alternation accepts an opener closed by
+// the other syntax, which is a malformed comment neither parser hides — so
+// the name would be excused in text a reader sees.
+var nameDirectives = []*regexp.Regexp{
+	regexp.MustCompile(`<!--\s*libgen:allow-name\s+([A-Za-z0-9_]+)\s*:\s*(\S.*?)\s*-->`),
+	regexp.MustCompile(`\{/\*\s*libgen:allow-name\s+([A-Za-z0-9_]+)\s*:\s*(\S.*?)\s*\*/\}`),
+}
+
+// declaredNames lists the names a line declares, in either syntax.
+func declaredNames(line string) []string {
+	var names []string
+	for _, directive := range nameDirectives {
+		for _, match := range directive.FindAllStringSubmatch(line, -1) {
+			names = append(names, match[1])
+		}
+	}
+	return names
+}
+
+// withoutDeclarations returns a line with every declaration taken out of it, so
+// what a declaration has to write is not read as what the page says.
+func withoutDeclarations(line string) string {
+	for _, directive := range nameDirectives {
+		line = directive.ReplaceAllString(line, "")
+	}
+	return line
+}
 
 // sourceValue matches a source named in a shape that can only mean a source:
 // a JSON "source" field, or one of the pinning arguments spelled as JSON.
@@ -283,30 +314,9 @@ func auditPage(page Page, surface Surface, report *Report, mentioned map[string]
 		// of the line before anything is matched in it. Otherwise every
 		// declaration would excuse itself and no stale one could ever be
 		// reported, which is the half of the mechanism that keeps it honest.
-		line := nameDirective.ReplaceAllString(raw, "")
-		for _, name := range envToken.FindAllString(line, -1) {
-			if slices.Contains(surface.EnvNames, name) {
-				continue
-			}
-			if _, excused := declared[name]; excused {
-				declared[name] = true
-				continue
-			}
-			report.Summary.EnvTokens++
-			report.Findings = append(report.Findings, Finding{
-				Kind: "env", File: page.Path, Line: number + 1, Name: name,
-				Message: "no LIBGEN_MCP_ variable of that name is read by internal/config",
-			})
-		}
-		for _, name := range namedSources(line) {
-			if !slices.Contains(surface.Sources, name) {
-				report.Summary.Sources++
-				report.Findings = append(report.Findings, Finding{
-					Kind: "source", File: page.Path, Line: number + 1, Name: name,
-					Message: "no download source of that name is in config.KnownSources",
-				})
-			}
-		}
+		line := withoutDeclarations(raw)
+		auditEnvTokens(line, page, number+1, surface, report, declared)
+		auditSourceNames(line, page, number+1, surface, report)
 		noteMentions(line, surface, mentioned)
 	}
 	for name, used := range declared {
@@ -321,6 +331,40 @@ func auditPage(page Page, surface Surface, report *Report, mentioned map[string]
 	}
 }
 
+// auditEnvTokens reports the variables one line names that nothing reads, and
+// marks the declaration that excuses one as used.
+func auditEnvTokens(line string, page Page, number int, surface Surface, report *Report, declared map[string]bool) {
+	for _, name := range envToken.FindAllString(line, -1) {
+		if slices.Contains(surface.EnvNames, name) {
+			continue
+		}
+		if _, excused := declared[name]; excused {
+			declared[name] = true
+			continue
+		}
+		report.Summary.EnvTokens++
+		report.Findings = append(report.Findings, Finding{
+			Kind: "env", File: page.Path, Line: number, Name: name,
+			Message: "no LIBGEN_MCP_ variable of that name is read by internal/config",
+		})
+	}
+}
+
+// auditSourceNames reports the sources one line names, in a shape that can
+// only mean a source, that nobody can select.
+func auditSourceNames(line string, page Page, number int, surface Surface, report *Report) {
+	for _, name := range namedSources(line) {
+		if slices.Contains(surface.Sources, name) {
+			continue
+		}
+		report.Summary.Sources++
+		report.Findings = append(report.Findings, Finding{
+			Kind: "source", File: page.Path, Line: number, Name: name,
+			Message: "no download source of that name is in config.KnownSources",
+		})
+	}
+}
+
 // declarations reads the names a page declares on purpose, and the line each
 // declaration is on so a stale one can be pointed at. The value is whether the
 // declaration was used, which auditPage fills in.
@@ -330,9 +374,9 @@ func declarations(page Page) (used map[string]bool, at map[string]int) {
 		// A directive inside a code span is being shown, not made: the gate
 		// record documents this mechanism by printing its syntax, and reading
 		// that as a declaration made the record's own row a stale one.
-		for _, match := range nameDirective.FindAllStringSubmatch(codeSpans.ReplaceAllString(line, ""), -1) {
-			used[match[1]] = false
-			at[match[1]] = number + 1
+		for _, name := range declaredNames(codeSpans.ReplaceAllString(line, "")) {
+			used[name] = false
+			at[name] = number + 1
 		}
 	}
 	return used, at

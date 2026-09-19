@@ -155,10 +155,9 @@ func TestParseDirective_RequiresBothHalves(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			match := nameDirective.FindStringSubmatch(tc.comment)
 			got := ""
-			if match != nil {
-				got = match[1]
+			if found := declaredNames(tc.comment); len(found) > 0 {
+				got = found[0]
 			}
 			if got != tc.want {
 				t.Errorf("the directive read %q from %q, want %q", got, tc.comment, tc.want)
@@ -319,5 +318,45 @@ func TestDeclarations_ADirectiveInACodeSpanIsShownNotMade(t *testing.T) {
 	}
 	if at["LIBGEN_MCP_HTTP"] != 1 {
 		t.Errorf("the declaration is recorded at line %d, want 1", at["LIBGEN_MCP_HTTP"])
+	}
+}
+
+// TestNameDirective_ReadsBothCommentSyntaxes pins the reason there are two.
+// MDX does not parse an HTML comment at all — it reads the "!" as the start of
+// a name and fails the build — so a declaration in a .mdx page has to be
+// written the MDX way, and the audit has to read both.
+func TestNameDirective_ReadsBothCommentSyntaxes(t *testing.T) {
+	testCases := []struct {
+		name    string
+		comment string
+		want    string
+	}{
+		{
+			name:    "the Markdown syntax",
+			comment: "<!-- libgen:allow-name LIBGEN_MCP_HTTP: a reason -->",
+			want:    "LIBGEN_MCP_HTTP",
+		},
+		{
+			name:    "the MDX syntax",
+			comment: "{/* libgen:allow-name LIBGEN_MCP_HTTP: a reason */}",
+			want:    "LIBGEN_MCP_HTTP",
+		},
+		{
+			name:    "a mismatched pair is neither",
+			comment: "<!-- libgen:allow-name LIBGEN_MCP_HTTP: a reason */}",
+			want:    "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ""
+			if found := declaredNames(tc.comment); len(found) > 0 {
+				got = found[0]
+			}
+			if got != tc.want {
+				t.Errorf("the directive read %q from %q, want %q", got, tc.comment, tc.want)
+			}
+		})
 	}
 }
