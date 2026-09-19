@@ -453,6 +453,35 @@ You can restrict which sources participate with `LIBGEN_MCP_SOURCES`; the chain 
 
 - Guides live in [`docs/`](docs/): getting started, configuration, tools reference, architecture, and troubleshooting.
 - Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/libgen-mcp/>
+- Changing the code? [`docs/development/`](docs/development/) has the gate record and the testing reference.
+
+## By the numbers
+
+Counted from the source, not typed: `make gen-stats` rewrites the tables below
+by registering the tools and prompts for real and walking the tree, and
+`make check-stats` fails when they no longer match.
+
+<!-- START STATS -->
+
+| Surface                  | Count |
+| ------------------------ | ----: |
+| Tools                    |     4 |
+| Prompts                  |     4 |
+| Download sources         |    21 |
+| Discovery providers      |     8 |
+| `LIBGEN_MCP_*` variables |    55 |
+| Go packages              |    46 |
+| Test files               |   217 |
+
+| Test surface         | Files |
+| -------------------- | ----: |
+| unit (internal)      |   101 |
+| unit (cmd)           |    64 |
+| HTTP end-to-end      |    29 |
+| stdio end-to-end     |    10 |
+| collector acceptance |     7 |
+| live end-to-end      |     6 |
+<!-- END STATS -->
 
 ## Building
 

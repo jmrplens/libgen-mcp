@@ -5,14 +5,14 @@
 
 .PHONY: all build build-probe build-all run version \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
-        lint golangci-lint govulncheck analyze fmt tidy vet \
+        lint golangci-lint govulncheck analyze analyze-fix fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
         gen-icon-webp check-icon-webp \
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons audit-gateway-chars check-gateway-chars \
-        audit-md-escaping check-md-escaping \
+        audit-md-escaping check-md-escaping gen-stats check-stats \
         audit-test-goroutines check-test-goroutines check-test-file-names \
         audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
@@ -175,7 +175,42 @@ cover-check: ## Fail if coverage over internal/, cmd/server and cmd/internal is 
 # ─── Static Analysis ────────────────────────────────────────────────────────
 lint: golangci-lint govulncheck ## Run all static analysis (golangci-lint + govulncheck)
 
-analyze: lint ## Alias for lint
+# analyze runs every step and reports which ones failed, rather than stopping at
+# the first. A sweep that stops at the first failure makes a contributor pay one
+# round trip per finding, and the steps are independent: a stale generated file
+# says nothing about whether the linter is happy.
+#
+# It is a deliberate pre-commit action, not a per-save one: the linter runs under
+# every build tag and several generators run in check mode.
+ANALYZE_STEPS = \
+	golangci-lint \
+	vet \
+	godoc-check \
+	check-md-escaping \
+	check-gateway-chars \
+	check-test-file-names \
+	check-test-subtests \
+	check-test-goroutines \
+	check-md-tables \
+	check-doc-links \
+	check-stats
+
+analyze: ## Run the pre-commit sweep: lint, vet and the doc/surface gates, reporting every failure
+	@failed=""; \
+	for step in $(ANALYZE_STEPS); do \
+		printf '\n\033[1m=== %s ===\033[0m\n' "$$step"; \
+		$(MAKE) --no-print-directory "$$step" || failed="$$failed $$step"; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		printf '\n\033[31manalyze: failed:%s\033[0m\n' "$$failed"; exit 1; \
+	fi; \
+	printf '\n\033[32manalyze: every step passed\033[0m\n'
+
+analyze-fix: ## Apply what the sweep can fix by itself, then run it
+	golangci-lint fmt
+	go run ./cmd/audit_test_subtests/ -fix
+	go run ./cmd/format_md_tables/
+	@$(MAKE) --no-print-directory analyze
 
 golangci-lint: ## Verify config, check formatting, and run golangci-lint
 	@echo "=== golangci-lint config verify ==="
@@ -300,6 +335,12 @@ audit-gateway-chars: ## Report served strings carrying characters an MCP gateway
 
 check-gateway-chars: ## Fail when the served surface carries a character an MCP gateway may reject (CI gate)
 	go run ./cmd/audit_gateway_chars/ -check
+
+gen-stats: ## Recount the surface and rewrite the stats tables in README.md
+	go run ./cmd/gen_stats/
+
+check-stats: ## Fail if README.md's stats tables no longer match the source (CI gate)
+	go run ./cmd/gen_stats/ --check
 
 audit-md-escaping: ## Report catalog text reaching a Markdown construct with no escaper between it and the page
 	go run ./cmd/audit_md_escaping/ -v -contexts all,card
