@@ -1,6 +1,7 @@
 {
   "name": "@jmrp.io/libgen-mcp",
   "version": "1.7.2",
+  "mcpName": "io.github.jmrplens/libgen-mcp",
   "description": "Model Context Protocol (MCP) server for federated search, citation and reading of books and papers across Library Genesis and open-access sources. Runs as a local binary over stdio or HTTP.",
   "keywords": [
     "mcp",

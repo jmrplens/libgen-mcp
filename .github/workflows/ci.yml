@@ -121,6 +121,14 @@ jobs:
       # nothing in CI ever read them.
       - name: Every version-bearing manifest matches the VERSION file
         run: make check-manifests
+      # The stamper writes what the registry serves, and it runs once per
+      # release inside the job holding this repository's publishing identities.
+      # Two of its rewrites fail in a shape that still reads correctly — an OCI
+      # entry stamped with another entry's repository, and a digest-pinned
+      # identifier stamped without a digest — so they are driven here, on a
+      # fixture, rather than discovered on a tag.
+      - name: The release stamper does what server.json's entries need
+        run: make check-stamper
       - name: Validate server.json against the MCP Registry schema
         run: |
           set -euo pipefail
