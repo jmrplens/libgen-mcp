@@ -230,9 +230,11 @@ func TestResearchLimit(t *testing.T) {
 		"":    researchTopicDefaultLimit,
 	}
 	for raw, want := range cases {
-		if got := researchLimit(raw); got != want {
-			t.Errorf("researchLimit(%q) = %d, want %d", raw, got, want)
-		}
+		t.Run(raw, func(t *testing.T) {
+			if got := researchLimit(raw); got != want {
+				t.Errorf("researchLimit(%q) = %d, want %d", raw, got, want)
+			}
+		})
 	}
 }
 
@@ -410,9 +412,11 @@ func TestGetPaper_DOINoSearch(t *testing.T) {
 	// steered a model away from the only route that produces a citation. Pinned so
 	// the claim cannot come back.
 	for _, denial := range []string{"does NOT accept", "does not accept", "bare DOI as input"} {
-		if strings.Contains(txt, denial) {
-			t.Errorf("the prompt tells the model get_details rejects a DOI, which it does not:\n%s", txt)
-		}
+		t.Run(denial, func(t *testing.T) {
+			if strings.Contains(txt, denial) {
+				t.Errorf("the prompt tells the model get_details rejects a DOI, which it does not:\n%s", txt)
+			}
+		})
 	}
 	if !strings.Contains(txt, "citation") {
 		t.Errorf("the DOI path should name the citation get_details can produce:\n%s", txt)
@@ -773,15 +777,17 @@ func TestResearchTopic_BothSections(t *testing.T) {
 func TestResearchTopic_BadLimitClamped(t *testing.T) {
 	client := newFixtureClient(t)
 	for _, limit := range []string{"0", "-3", "abc"} {
-		res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
-			Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "limit": limit}},
+		t.Run(limit, func(t *testing.T) {
+			res, err := handleResearchTopic(context.Background(), client, &mcp.GetPromptRequest{
+				Params: &mcp.GetPromptParams{Arguments: map[string]string{"topic": "linux", "limit": limit}},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error for limit=%q: %v", limit, err)
+			}
+			txt := res.Messages[0].Content.(*mcp.TextContent).Text
+			if txt == "" {
+				t.Errorf("expected non-empty message for limit=%q", limit)
+			}
 		})
-		if err != nil {
-			t.Fatalf("unexpected error for limit=%q: %v", limit, err)
-		}
-		txt := res.Messages[0].Content.(*mcp.TextContent).Text
-		if txt == "" {
-			t.Errorf("expected non-empty message for limit=%q", limit)
-		}
 	}
 }

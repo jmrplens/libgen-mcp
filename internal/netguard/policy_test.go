@@ -84,9 +84,11 @@ func TestNewPolicyNormalizesWhatTheOperatorWrote(t *testing.T) {
 	}, false)
 
 	for _, host := range []string{"libgen.li", "192.168.1.5", "sci-hub.ee", "mirror.example.test", "fd00::1"} {
-		if !p.Names(host) {
-			t.Errorf("Names(%q) = false, want the configured host recognized; got %v", host, p.Hosts())
-		}
+		t.Run(host, func(t *testing.T) {
+			if !p.Names(host) {
+				t.Errorf("Names(%q) = false, want the configured host recognized; got %v", host, p.Hosts())
+			}
+		})
 	}
 	if got := len(p.Hosts()); got != 5 {
 		t.Errorf("len(Hosts()) = %d, want 5; an empty entry became a member: %v", got, p.Hosts())
@@ -348,25 +350,27 @@ func TestPolicyTransportStampsEveryRequest(t *testing.T) {
 		{rawURL: "https://mirror.operator.test/get?md5=abc", named: true},
 		{rawURL: "https://cdn.somebody-elses.test/file.pdf", named: false},
 	} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, tc.rawURL, http.NoBody)
-		if err != nil {
-			t.Fatalf("NewRequestWithContext(%q) error = %v", tc.rawURL, err)
-		}
-		resp, rerr := transport.RoundTrip(req)
-		if rerr != nil {
-			t.Fatalf("RoundTrip(%q) error = %v", tc.rawURL, rerr)
-		}
-		_ = resp.Body.Close()
-		decision, stamped := dialDecisionFrom(recorder.seen)
-		if !stamped {
-			t.Fatalf("%s reached the dialer with no decision stamped on it", tc.rawURL)
-		}
-		if decision.operatorNamed != tc.named {
-			t.Errorf("%s: operatorNamed = %v, want %v", tc.rawURL, decision.operatorNamed, tc.named)
-		}
-		if decision.policy != policy {
-			t.Errorf("%s: the request carries a different policy than the client was built with", tc.rawURL)
-		}
+		t.Run(tc.rawURL, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, tc.rawURL, http.NoBody)
+			if err != nil {
+				t.Fatalf("NewRequestWithContext(%q) error = %v", tc.rawURL, err)
+			}
+			resp, rerr := transport.RoundTrip(req)
+			if rerr != nil {
+				t.Fatalf("RoundTrip(%q) error = %v", tc.rawURL, rerr)
+			}
+			_ = resp.Body.Close()
+			decision, stamped := dialDecisionFrom(recorder.seen)
+			if !stamped {
+				t.Fatalf("%s reached the dialer with no decision stamped on it", tc.rawURL)
+			}
+			if decision.operatorNamed != tc.named {
+				t.Errorf("%s: operatorNamed = %v, want %v", tc.rawURL, decision.operatorNamed, tc.named)
+			}
+			if decision.policy != policy {
+				t.Errorf("%s: the request carries a different policy than the client was built with", tc.rawURL)
+			}
+		})
 	}
 }
 

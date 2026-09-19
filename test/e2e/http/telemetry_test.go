@@ -132,8 +132,10 @@ func TestTelemetry_TheStartupLineNamesTheCollectorAndThePolicy(t *testing.T) {
 
 	logs := s.logs()
 	for _, want := range []string{"telemetry enabled", c.URL, "pseudonymous", "keyed digest"} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("the startup log does not carry %q, at a level a warn deployment keeps:\n%s", want, tail(logs))
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logs, want) {
+				t.Errorf("the startup log does not carry %q, at a level a warn deployment keeps:\n%s", want, tail(logs))
+			}
+		})
 	}
 }

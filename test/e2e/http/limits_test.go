@@ -82,13 +82,15 @@ func TestLimits_StatelessDefaultIssuesNoSession(t *testing.T) {
 	// GET and DELETE are what a session-based client uses to open a stream and
 	// end a session; neither exists here.
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {
-		got := s.do(t, request{method: method, path: "/"})
-		if got.status != http.StatusMethodNotAllowed {
-			t.Errorf("%s / = %d, want %d in stateless mode", method, got.status, http.StatusMethodNotAllowed)
-		}
-		if method == http.MethodGet && !strings.Contains(got.header.Get("Allow"), http.MethodPost) {
-			t.Errorf("405 Allow = %q, want it to name POST", got.header.Get("Allow"))
-		}
+		t.Run(method, func(t *testing.T) {
+			got := s.do(t, request{method: method, path: "/"})
+			if got.status != http.StatusMethodNotAllowed {
+				t.Errorf("%s / = %d, want %d in stateless mode", method, got.status, http.StatusMethodNotAllowed)
+			}
+			if method == http.MethodGet && !strings.Contains(got.header.Get("Allow"), http.MethodPost) {
+				t.Errorf("405 Allow = %q, want it to name POST", got.header.Get("Allow"))
+			}
+		})
 	}
 }
 

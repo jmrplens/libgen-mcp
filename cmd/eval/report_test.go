@@ -48,9 +48,11 @@ func TestWriteResultsDocCreatesTable(t *testing.T) {
 		"| Scenario | Mode | Status | Measured | Detail |",
 		"| S1 | local | PASS | 2026-01-02 | first |",
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("results doc does not contain %q; got:\n%s", want, got)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(got, want) {
+				t.Errorf("results doc does not contain %q; got:\n%s", want, got)
+			}
+		})
 	}
 }
 

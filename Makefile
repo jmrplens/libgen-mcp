@@ -13,6 +13,7 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons audit-gateway-chars check-gateway-chars \
         audit-test-goroutines check-test-goroutines check-test-file-names \
+        audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published \
@@ -304,6 +305,15 @@ check-install-buttons: ## Decode every one-click install button and hold them to
 
 check-test-file-names: ## Fail when a _test.go file is not named after a module it tests (CI gate)
 	go run ./cmd/audit_test_names/ -check-files cmd internal test
+
+audit-test-subtests: ## Report case loops that assert without opening a subtest
+	go run ./cmd/audit_test_subtests/
+
+fix-test-subtests: ## Rewrite the case loops whose subtest name is unambiguous
+	go run ./cmd/audit_test_subtests/ -fix
+
+check-test-subtests: ## Fail when a case loop still asserts without a subtest (CI gate)
+	go run ./cmd/audit_test_subtests/ -check
 
 audit-test-goroutines: ## Report every testing.T abort made off the test goroutine, plus the advisory Errorf sites
 	go run ./cmd/audit_test_goroutines/

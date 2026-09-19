@@ -281,9 +281,11 @@ func TestLoadDownloadTuningDefaults(t *testing.T) {
 		t.Fatalf("DownloadStartRetryWaits = %v, want %v", cfg.DownloadStartRetryWaits, want)
 	}
 	for i, w := range want {
-		if cfg.DownloadStartRetryWaits[i] != w {
-			t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
-		}
+		t.Run(w.String(), func(t *testing.T) {
+			if cfg.DownloadStartRetryWaits[i] != w {
+				t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
+			}
+		})
 	}
 }
 
@@ -305,9 +307,11 @@ func TestLoadDownloadTuningOverrides(t *testing.T) {
 		t.Fatalf("DownloadStartRetryWaits = %v, want %v", cfg.DownloadStartRetryWaits, want)
 	}
 	for i, w := range want {
-		if cfg.DownloadStartRetryWaits[i] != w {
-			t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
-		}
+		t.Run(w.String(), func(t *testing.T) {
+			if cfg.DownloadStartRetryWaits[i] != w {
+				t.Errorf("DownloadStartRetryWaits[%d] = %v, want %v", i, cfg.DownloadStartRetryWaits[i], w)
+			}
+		})
 	}
 }
 
@@ -574,9 +578,11 @@ func TestLoadScihubHostsDefault(t *testing.T) {
 		t.Fatalf("ScihubHosts = %v, want %v", cfg.ScihubHosts, want)
 	}
 	for i, h := range want {
-		if cfg.ScihubHosts[i] != h {
-			t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
-		}
+		t.Run(h, func(t *testing.T) {
+			if cfg.ScihubHosts[i] != h {
+				t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
+			}
+		})
 	}
 }
 
@@ -592,9 +598,11 @@ func TestLoadScihubHostsOverride(t *testing.T) {
 		t.Fatalf("ScihubHosts = %v, want %v", cfg.ScihubHosts, want)
 	}
 	for i, h := range want {
-		if cfg.ScihubHosts[i] != h {
-			t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
-		}
+		t.Run(h, func(t *testing.T) {
+			if cfg.ScihubHosts[i] != h {
+				t.Errorf("ScihubHosts[%d] = %q, want %q", i, cfg.ScihubHosts[i], h)
+			}
+		})
 	}
 }
 
@@ -806,9 +814,11 @@ func TestKnownSourcesOrder(t *testing.T) {
 		t.Fatalf("KnownSources = %v, want %v", KnownSources, want)
 	}
 	for i, w := range want {
-		if KnownSources[i] != w {
-			t.Fatalf("KnownSources[%d] = %q, want %q (full: %v)", i, KnownSources[i], w, KnownSources)
-		}
+		t.Run(w, func(t *testing.T) {
+			if KnownSources[i] != w {
+				t.Fatalf("KnownSources[%d] = %q, want %q (full: %v)", i, KnownSources[i], w, KnownSources)
+			}
+		})
 	}
 }
 
@@ -875,14 +885,16 @@ func TestLoadAnnasKey(t *testing.T) {
 // defaults to auto, and rejects an unknown value at startup rather than guessing.
 func TestLoadExtraSources(t *testing.T) {
 	for _, want := range []ExtraSourcesMode{ExtraSourcesAuto, ExtraSourcesAlways, ExtraSourcesNever} {
-		t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", string(want))
-		cfg, err := Load()
-		if err != nil {
-			t.Fatalf("Load(%s): %v", want, err)
-		}
-		if cfg.ExtraSources != want {
-			t.Fatalf("ExtraSources = %q, want %q", cfg.ExtraSources, want)
-		}
+		t.Run(string(want), func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", string(want))
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load(%s): %v", want, err)
+			}
+			if cfg.ExtraSources != want {
+				t.Fatalf("ExtraSources = %q, want %q", cfg.ExtraSources, want)
+			}
+		})
 	}
 
 	t.Setenv("LIBGEN_MCP_EXTRA_SOURCES", "")
@@ -1068,10 +1080,12 @@ func TestOperatorHostsReportsOnlyWhatWasConfigured(t *testing.T) {
 	// An unset mirror is not a host, and a whitespace-only one is the same thing
 	// spelled differently.
 	for _, mirror := range []string{"", "   "} {
-		got := (&Config{Mirror: mirror, ScihubHosts: []string{"sci-hub.ee"}}).OperatorHosts()
-		if !reflect.DeepEqual(got, []string{"sci-hub.ee"}) {
-			t.Errorf("OperatorHosts() with Mirror=%q = %v, want only the Sci-Hub host", mirror, got)
-		}
+		t.Run(mirror, func(t *testing.T) {
+			got := (&Config{Mirror: mirror, ScihubHosts: []string{"sci-hub.ee"}}).OperatorHosts()
+			if !reflect.DeepEqual(got, []string{"sci-hub.ee"}) {
+				t.Errorf("OperatorHosts() with Mirror=%q = %v, want only the Sci-Hub host", mirror, got)
+			}
+		})
 	}
 
 	if got := (&Config{}).OperatorHosts(); len(got) != 0 {

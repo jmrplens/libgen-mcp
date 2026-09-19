@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -180,11 +181,13 @@ func TestTaggedErrorKeepsItsMessage(t *testing.T) {
 // asserted several layers away.
 func TestUnavailableStatusLeavesNonTransientErrorsUntouched(t *testing.T) {
 	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, 451, 499} {
-		in := errors.New("source: some diagnosis")
-		got := unavailableStatus(status, in)
-		if got != in { //nolint:errorlint // identity is exactly what is being asserted
-			t.Errorf("unavailableStatus(%d) returned %v, want the original error value unchanged", status, got)
-		}
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			in := errors.New("source: some diagnosis")
+			got := unavailableStatus(status, in)
+			if got != in { //nolint:errorlint // identity is exactly what is being asserted
+				t.Errorf("unavailableStatus(%d) returned %v, want the original error value unchanged", status, got)
+			}
+		})
 	}
 }
 

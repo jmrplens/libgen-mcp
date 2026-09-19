@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -78,12 +79,14 @@ func TestEuropePMCErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			search := europePMCSearchServer(t, "europepmc_oa.json", status, nil)
-			s := europePMCSource{http: search.Client(), searchBase: search.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				search := europePMCSearchServer(t, "europepmc_oa.json", status, nil)
+				s := europePMCSource{http: search.Client(), searchBase: search.URL}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
-			search.Close()
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+				search.Close()
+			})
 		}
 	})
 

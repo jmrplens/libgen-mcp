@@ -37,14 +37,18 @@ func TestDiscoveryCardCarriesIdentityAndNothingElse(t *testing.T) {
 	card := decodeDiscoveryCard(t, "", true)
 
 	for _, key := range []string{"$schema", "name", "version", "description", "title", "websiteUrl", "repository"} {
-		if _, ok := card[key]; !ok {
-			t.Errorf("the card carries no %q", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if _, ok := card[key]; !ok {
+				t.Errorf("the card carries no %q", key)
+			}
+		})
 	}
 	for _, key := range []string{"tools", "prompts", "resources", "resourceTemplates", "capabilities", "authentication"} {
-		if _, ok := card[key]; ok {
-			t.Errorf("the card carries %q; a SEP-2127 card carries no primitives and no capability block", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if _, ok := card[key]; ok {
+				t.Errorf("the card carries %q; a SEP-2127 card carries no primitives and no capability block", key)
+			}
+		})
 	}
 	if card["version"] != buildversion.Current() {
 		t.Errorf("version = %v, want the running binary's %q", card["version"], buildversion.Current())
@@ -94,9 +98,11 @@ func TestDiscoveryCardAgreesWithServerJSON(t *testing.T) {
 		{field: "repository.url", got: repo["url"], want: registry.Repository.URL},
 		{field: "repository.source", got: repo["source"], want: registry.Repository.Source},
 	} {
-		if tc.got != tc.want {
-			t.Errorf("%s = %v, want server.json's %v", tc.field, tc.got, tc.want)
-		}
+		t.Run(tc.field, func(t *testing.T) {
+			if tc.got != tc.want {
+				t.Errorf("%s = %v, want server.json's %v", tc.field, tc.got, tc.want)
+			}
+		})
 	}
 }
 

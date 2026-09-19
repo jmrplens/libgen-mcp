@@ -34,12 +34,14 @@ func TestServerCard_EachLocationServesItsOwnDocument(t *testing.T) {
 		{path: serverCardLegacyPath, reply: legacy, want: "application/json"},
 		{path: serverCardCurrentPath, reply: discovery, want: "application/mcp-server-card+json"},
 	} {
-		if tc.reply.status != http.StatusOK {
-			t.Fatalf("GET %s = %d, want %d", tc.path, tc.reply.status, http.StatusOK)
-		}
-		if ct := tc.reply.header.Get("Content-Type"); ct != tc.want {
-			t.Errorf("GET %s Content-Type = %q, want %q", tc.path, ct, tc.want)
-		}
+		t.Run(tc.path, func(t *testing.T) {
+			if tc.reply.status != http.StatusOK {
+				t.Fatalf("GET %s = %d, want %d", tc.path, tc.reply.status, http.StatusOK)
+			}
+			if ct := tc.reply.header.Get("Content-Type"); ct != tc.want {
+				t.Errorf("GET %s Content-Type = %q, want %q", tc.path, ct, tc.want)
+			}
+		})
 	}
 
 	if legacy.body == discovery.body {

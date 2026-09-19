@@ -336,9 +336,11 @@ func TestPrivateHatchRefusedWhenTransportHTTPSuppliesTheAddress(t *testing.T) {
 		t.Fatalf("the server started with the hatch set and --transport http. Output:\n%s", out)
 	}
 	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":8080"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -362,9 +364,11 @@ func TestPrivateHatchRefusedWhenTheFlagSetsIt(t *testing.T) {
 		t.Fatalf("the server started with --allow-private-addresses on a wildcard listener. Output:\n%s", out)
 	}
 	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":0"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -386,9 +390,11 @@ func TestPrivateHatchRefusedWhenTheEnvironmentSuppliesTheAddress(t *testing.T) {
 		t.Fatalf("the server started with the hatch set and its listener named by the environment. Output:\n%s", out)
 	}
 	for _, want := range []string{"LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES", ":0"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("the refusal does not name %q, so an operator cannot act on it. Output:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -473,8 +479,10 @@ func TestEnvOverlay_AnUnparseableVariableFailsStartup(t *testing.T) {
 		t.Fatalf("the server started with an unparseable variable. Output:\n%s", out)
 	}
 	for _, want := range []string{"LIBGEN_MCP_DRAIN_DELAY", "--drain-delay"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the refusal does not name %q. Output:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("the refusal does not name %q. Output:\n%s", want, out)
+			}
+		})
 	}
 }

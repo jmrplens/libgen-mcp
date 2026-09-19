@@ -475,9 +475,11 @@ func TestOperatorHostsCoversConfigurationAndTheFamilyConstants(t *testing.T) {
 		"https://mirror.example.test", "sci-hub.ee",
 		DefaultSourceURL, DefaultPreferred, AnnasFamily.SourceURL, AnnasFamily.Preferred,
 	} {
-		if !slices.Contains(got, want) {
-			t.Errorf("OperatorHosts() = %v, missing %q", got, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(got, want) {
+				t.Errorf("OperatorHosts() = %v, missing %q", got, want)
+			}
+		})
 	}
 	for _, f := range KnownFamilies {
 		for _, want := range f.Fallback {

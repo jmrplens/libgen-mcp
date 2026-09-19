@@ -153,9 +153,11 @@ func TestAcceptance_TheCollectorLogsNoRejection(t *testing.T) {
 
 	logs := c.containerLogs(t)
 	for _, sign := range []string{"error", "Permanent error", "failed to"} {
-		if strings.Contains(logs, sign) {
-			t.Errorf("the collector reported %q, so it did not accept what was sent:\n%s", sign, logs)
-		}
+		t.Run(sign, func(t *testing.T) {
+			if strings.Contains(logs, sign) {
+				t.Errorf("the collector reported %q, so it did not accept what was sent:\n%s", sign, logs)
+			}
+		})
 	}
 	// And the server's own SDK error handler stayed quiet: an export the
 	// receiver refused arrives here as a logged failure rather than as silence.

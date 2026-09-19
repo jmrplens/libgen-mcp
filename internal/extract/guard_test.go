@@ -337,9 +337,11 @@ func TestFormatHint(t *testing.T) {
 		"mystery.unknown": "",
 	}
 	for path, want := range cases {
-		if got := formatHint(path); got != want {
-			t.Errorf("formatHint(%q) = %q, want %q", path, got, want)
-		}
+		t.Run(path, func(t *testing.T) {
+			if got := formatHint(path); got != want {
+				t.Errorf("formatHint(%q) = %q, want %q", path, got, want)
+			}
+		})
 	}
 }
 

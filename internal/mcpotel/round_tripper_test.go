@@ -100,9 +100,11 @@ func TestOutboundSpanRecordsTheEndpointAndNeverTheURL(t *testing.T) {
 		string(attrHTTPResponseStatus):  "200",
 		string(attrNetworkProtocolName): "http",
 	} {
-		if attrs[key] != want {
-			t.Errorf("%s = %q, want %q", key, attrs[key], want)
-		}
+		t.Run(key, func(t *testing.T) {
+			if attrs[key] != want {
+				t.Errorf("%s = %q, want %q", key, attrs[key], want)
+			}
+		})
 	}
 
 	// Nothing on the span may carry the path, the query or the whole URL —
@@ -110,9 +112,11 @@ func TestOutboundSpanRecordsTheEndpointAndNeverTheURL(t *testing.T) {
 	// disclosure is the string and not the name it arrived under.
 	for key, value := range attrs {
 		for _, forbidden := range []string{"9f2b7c1e4a5d6083f1c2b3a4d5e6f708", "get.php", "key=secret"} {
-			if strings.Contains(value, forbidden) {
-				t.Errorf("%s = %q, which carries %q", key, value, forbidden)
-			}
+			t.Run(forbidden, func(t *testing.T) {
+				if strings.Contains(value, forbidden) {
+					t.Errorf("%s = %q, which carries %q", key, value, forbidden)
+				}
+			})
 		}
 	}
 	if _, present := attrs["url.full"]; present {

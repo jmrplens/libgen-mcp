@@ -127,9 +127,11 @@ func TestAttributesPerPolicy(t *testing.T) {
 			AttrMCPClientVersion: "1.4.0",
 		}
 		for key, value := range want {
-			if got[key] != value {
-				t.Errorf("%s = %q, want %q", key, got[key], value)
-			}
+			t.Run(key, func(t *testing.T) {
+				if got[key] != value {
+					t.Errorf("%s = %q, want %q", key, got[key], value)
+				}
+			})
 		}
 		if len(got) != len(want) {
 			t.Errorf("the full policy exported %v, want exactly %v", got, want)
@@ -514,16 +516,21 @@ func TestStripExportedRemovesTheGovernedFieldsAtAnyDepth(t *testing.T) {
 		"not-a-credential-only-a-test-fixture",
 		"somebody@example.org",
 	} {
-		if strings.Contains(rendered, gone) {
-			t.Errorf("%q survived the strip:\n%s", gone, rendered)
-		}
+		t.Run(gone, func(t *testing.T) {
+			t.Parallel()
+			if strings.Contains(rendered, gone) {
+				t.Errorf("%q survived the strip:\n%s", gone, rendered)
+			}
+		})
 	}
 	// What is not governed is kept: a strip that removed everything would pass
 	// every assertion above and leave the export useless.
 	for _, kept := range []string{"tool", "search", "results", "3"} {
-		if !strings.Contains(rendered, kept) {
-			t.Errorf("%q was removed, and nothing asked for that:\n%s", kept, rendered)
-		}
+		t.Run(kept, func(t *testing.T) {
+			if !strings.Contains(rendered, kept) {
+				t.Errorf("%q was removed, and nothing asked for that:\n%s", kept, rendered)
+			}
+		})
 	}
 }
 

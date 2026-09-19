@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"testing"
 )
@@ -154,14 +155,16 @@ func TestRandombookErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(status)
-			}))
-			s := randombookSource{apiBase: srv.URL, http: srv.Client()}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(status)
+				}))
+				s := randombookSource{apiBase: srv.URL, http: srv.Client()}
 
-			_, err := s.Resolve(context.Background(), Item{MD5: md5})
-			assertUnavailable(t, err)
-			srv.Close()
+				_, err := s.Resolve(context.Background(), Item{MD5: md5})
+				assertUnavailable(t, err)
+				srv.Close()
+			})
 		}
 	})
 
@@ -423,9 +426,11 @@ func TestFilterLibgenFamily(t *testing.T) {
 		t.Fatalf("filterLibgenFamily(%v) = %v, want %v", in, got, want)
 	}
 	for i, w := range want {
-		if got[i] != w {
-			t.Errorf("filterLibgenFamily()[%d] = %q, want %q", i, got[i], w)
-		}
+		t.Run(w, func(t *testing.T) {
+			if got[i] != w {
+				t.Errorf("filterLibgenFamily()[%d] = %q, want %q", i, got[i], w)
+			}
+		})
 	}
 }
 
@@ -558,9 +563,11 @@ func TestRandombookRealCapturedCandidates(t *testing.T) {
 		t.Fatalf("filterLibgenFamily(lookupMirrors()) = %v, want %v", got, want)
 	}
 	for i, w := range want {
-		if got[i] != w {
-			t.Errorf("filtered mirrors[%d] = %q, want %q", i, got[i], w)
-		}
+		t.Run(w, func(t *testing.T) {
+			if got[i] != w {
+				t.Errorf("filtered mirrors[%d] = %q, want %q", i, got[i], w)
+			}
+		})
 	}
 }
 

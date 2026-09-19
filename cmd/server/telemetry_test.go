@@ -627,9 +627,11 @@ func TestTheOutboundMetricNamesTheHostsThisDeploymentReaches(t *testing.T) {
 	})
 
 	for _, want := range []string{"libgen.example", "sci-hub.example"} {
-		if !slices.Contains(got, want) {
-			t.Errorf("hosts = %v, want the configured %q", got, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(got, want) {
+				t.Errorf("hosts = %v, want the configured %q", got, want)
+			}
+		})
 	}
 	// A URL never reaches the comparison, which is against a hostname: an entry
 	// with a scheme in it is one that can never match, so a set full of them is
@@ -648,13 +650,15 @@ func TestTheOutboundMetricNamesTheHostsThisDeploymentReaches(t *testing.T) {
 	// One from each built-in family's own definition: the page a mirror list is
 	// discovered from, and a mirror the chain reaches on the ordinary path.
 	for _, want := range []string{"shadowlibraries.github.io", mirrors.LibgenFamily.Preferred} {
-		host := want
-		if parsed, err := url.Parse(want); err == nil && parsed.Hostname() != "" {
-			host = parsed.Hostname()
-		}
-		if !slices.Contains(families, host) {
-			t.Errorf("hosts = %v, want the built-in mirror family host %q", families, host)
-		}
+		t.Run(want, func(t *testing.T) {
+			host := want
+			if parsed, err := url.Parse(want); err == nil && parsed.Hostname() != "" {
+				host = parsed.Hostname()
+			}
+			if !slices.Contains(families, host) {
+				t.Errorf("hosts = %v, want the built-in mirror family host %q", families, host)
+			}
+		})
 	}
 }
 

@@ -441,9 +441,11 @@ func TestCheckRedirectLogsWithoutTheURL(t *testing.T) {
 		t.Errorf("the log line names the path of the URL it stripped:\n%s", logged)
 	}
 	for _, want := range []string{"annas.invalid", "cdn.elsewhere.invalid", "Referer", "Authorization"} {
-		if !strings.Contains(logged, want) {
-			t.Errorf("the log line does not mention %q, so it says less than it usefully could:\n%s", want, logged)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logged, want) {
+				t.Errorf("the log line does not mention %q, so it says less than it usefully could:\n%s", want, logged)
+			}
+		})
 	}
 }
 
@@ -551,8 +553,10 @@ func TestCheckRedirectLogsThePortThatMadeItOffOrigin(t *testing.T) {
 
 	logged := buf.String()
 	for _, want := range []string{"mirror.invalid:8443", "mirror.invalid:9443"} {
-		if !strings.Contains(logged, want) {
-			t.Errorf("the log line does not carry %q, so it reports two origins as one:\n%s", want, logged)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(logged, want) {
+				t.Errorf("the log line does not carry %q, so it reports two origins as one:\n%s", want, logged)
+			}
+		})
 	}
 }

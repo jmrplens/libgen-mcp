@@ -28,9 +28,11 @@ func TestOpenAccessLocator(t *testing.T) {
 		{"none", discovery.DiscoveryResult{Title: "T"}, ""},
 	}
 	for _, tc := range cases {
-		if got := openAccessLocator(tc.hit); got != tc.want {
-			t.Errorf("%s: openAccessLocator = %q, want %q", tc.name, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := openAccessLocator(tc.hit); got != tc.want {
+				t.Errorf("%s: openAccessLocator = %q, want %q", tc.name, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -193,9 +195,11 @@ func TestSearchTitleCarriesTheEdition(t *testing.T) {
 		"Sisterhood of Dune (1st ed)",
 		"A Paper (vol. 26 iss. 2, ed. 2)",
 	} {
-		if !strings.Contains(md, want) {
-			t.Errorf("table should contain %q; got:\n%s", want, md)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("table should contain %q; got:\n%s", want, md)
+			}
+		})
 	}
 }
 
@@ -235,9 +239,11 @@ func TestRenderDownloadMarkdownWithholdsProvenance(t *testing.T) {
 		Path: "/p", SizeBytes: 9, Source: "libgen", Mirror: "https://libgen.li",
 	})
 	for _, leak := range []string{"libgen", "libgen.li", "source you asked for"} {
-		if strings.Contains(out, leak) {
-			t.Errorf("markdown leaked %q; got:\n%s", leak, out)
-		}
+		t.Run(leak, func(t *testing.T) {
+			if strings.Contains(out, leak) {
+				t.Errorf("markdown leaked %q; got:\n%s", leak, out)
+			}
+		})
 	}
 }
 
@@ -350,9 +356,11 @@ func TestWriteEnrichment_UserFacingLabels(t *testing.T) {
 		},
 	})
 	for _, want := range []string{"Journal / container: Cell", "Times cited: 56374", "Published year: 2011", "OpenLibrary record:", "A classic."} {
-		if !strings.Contains(out, want) {
-			t.Errorf("enrichment markdown should contain %q; got:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("enrichment markdown should contain %q; got:\n%s", want, out)
+			}
+		})
 	}
 	if strings.Contains(out, "Crossref container") {
 		t.Error("enrichment markdown should not use the old 'Crossref container' jargon")

@@ -27,6 +27,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/internal/config"
 	"github.com/jmrplens/libgen-mcp/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/internal/pathguard"
 	"github.com/jmrplens/libgen-mcp/internal/toolutil"
 )
 
@@ -282,9 +283,11 @@ func TestDownloadNextSteps(t *testing.T) {
 		t.Fatalf("want 1 step, got %d", len(steps))
 	}
 	for _, want := range []string{"/tmp/book.pdf", "123"} {
-		if !strings.Contains(steps[0], want) {
-			t.Errorf("download step should mention %q; got %q", want, steps[0])
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(steps[0], want) {
+				t.Errorf("download step should mention %q; got %q", want, steps[0])
+			}
+		})
 	}
 	if strings.Contains(steps[0], "libgen") {
 		t.Errorf("download step must not name the serving source; got %q", steps[0])
@@ -365,9 +368,11 @@ func TestToolsRegistered(t *testing.T) {
 		names[tool.Name] = true
 	}
 	for _, want := range []string{"search", "get_details", "download", "read"} {
-		if !names[want] {
-			t.Errorf("missing tool %q; registered: %v", want, names)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !names[want] {
+				t.Errorf("missing tool %q; registered: %v", want, names)
+			}
+		})
 	}
 	if len(res.Tools) != 4 {
 		t.Errorf("got %d tools, want 4", len(res.Tools))
@@ -553,13 +558,15 @@ func TestGetDetailsToolValidation(t *testing.T) {
 		{},
 		{"md5": "87a4ebdaf21fa6cc70009a3dd63194ee", "id": "1"},
 	} {
-		res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_details", Arguments: args})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !res.IsError {
-			t.Errorf("args %v should return a tool error", args)
-		}
+		t.Run(fmt.Sprintf("%v", args), func(t *testing.T) {
+			res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_details", Arguments: args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !res.IsError {
+				t.Errorf("args %v should return a tool error", args)
+			}
+		})
 	}
 }
 
@@ -813,9 +820,11 @@ func TestDownloadFailureSteps_PinnedSourceVersusExhaustedChain(t *testing.T) {
 
 	// Both paths must forbid inventing a result.
 	for name, steps := range map[string]string{"pinned": pinned, "exhausted": exhausted} {
-		if !strings.Contains(steps, "never state or imply that anything was saved") {
-			t.Errorf("%s guidance drops the do-not-claim-success guardrail; got %q", name, steps)
-		}
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(steps, "never state or imply that anything was saved") {
+				t.Errorf("%s guidance drops the do-not-claim-success guardrail; got %q", name, steps)
+			}
+		})
 	}
 }
 
@@ -986,9 +995,11 @@ func TestIntField(t *testing.T) {
 		{"absent", 0},
 	}
 	for _, tt := range tests {
-		if got := intField(record, tt.key); got != tt.want {
-			t.Errorf("intField(%q) = %d, want %d", tt.key, got, tt.want)
-		}
+		t.Run(tt.key, func(t *testing.T) {
+			if got := intField(record, tt.key); got != tt.want {
+				t.Errorf("intField(%q) = %d, want %d", tt.key, got, tt.want)
+			}
+		})
 	}
 	if got := intField(nil, "filesize"); got != 0 {
 		t.Errorf("intField(nil) = %d, want 0", got)
@@ -1075,9 +1086,11 @@ func TestResolveHelpers(t *testing.T) {
 		"djvu": "image/vnd.djvu", "cbr": "application/vnd.comicbook-rar", "cbz": "application/vnd.comicbook+zip",
 		"txt": "text/plain", "zzz": "application/octet-stream",
 	} {
-		if got := mimeForExt(ext, libgen.Item{}); got != want {
-			t.Errorf("mimeForExt(%q) = %q, want %q", ext, got, want)
-		}
+		t.Run(ext, func(t *testing.T) {
+			if got := mimeForExt(ext, libgen.Item{}); got != want {
+				t.Errorf("mimeForExt(%q) = %q, want %q", ext, got, want)
+			}
+		})
 	}
 	if mimeForExt("", libgen.Item{DOI: "10.1/x"}) != "application/pdf" {
 		t.Error("empty ext + doi should default to pdf")
@@ -1199,7 +1212,7 @@ func TestDownloadToolRemoteMode(t *testing.T) {
 	cfg := &config.Config{DownloadDir: dir, Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
-	Register(server, client, cfg, WithRemoteDownloads())
+	registerRestoringLocalAccess(t, server, client, cfg, WithRemoteDownloads())
 	st, ct := mcp.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := server.Connect(ctx, st, nil); err != nil {
@@ -1489,9 +1502,11 @@ func TestDownloadWithholdsProvenance(t *testing.T) {
 	}
 	raw := downloadStructuredKeys(t, res)
 	for _, banned := range []string{"source", "mirror"} {
-		if v, present := raw[banned]; present {
-			t.Errorf("structured output must not carry %q; got %v", banned, v)
-		}
+		t.Run(banned, func(t *testing.T) {
+			if v, present := raw[banned]; present {
+				t.Errorf("structured output must not carry %q; got %v", banned, v)
+			}
+		})
 	}
 	text := textContent(res)
 	if strings.Contains(text, "scihub") {
@@ -1521,9 +1536,11 @@ func TestDownloadPinnedCallGetsNoProvenanceEither(t *testing.T) {
 	}
 	raw := downloadStructuredKeys(t, res)
 	for _, banned := range []string{"source", "mirror", "served_by_requested_source"} {
-		if v, present := raw[banned]; present {
-			t.Errorf("a pinned call must not get %q back; got %v", banned, v)
-		}
+		t.Run(banned, func(t *testing.T) {
+			if v, present := raw[banned]; present {
+				t.Errorf("a pinned call must not get %q back; got %v", banned, v)
+			}
+		})
 	}
 	if text := textContent(res); strings.Contains(text, "scihub") || strings.Contains(text, "source you asked for") {
 		t.Errorf("the Markdown block should say nothing about the pin or the source; got:\n%s", text)
@@ -1694,9 +1711,11 @@ func TestDownloadDescriptionDisclosesShadowLibraries(t *testing.T) {
 		"Openly licensed and open-access sources are tried first",
 		"only when none of them serves the item",
 	} {
-		if !strings.Contains(desc, want) {
-			t.Errorf("download description must disclose %q; got:\n%s", want, desc)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(desc, want) {
+				t.Errorf("download description must disclose %q; got:\n%s", want, desc)
+			}
+		})
 	}
 	clean := downloadToolDescription(nil, []string{"oapen"}, []string{"unpaywall"}, contractSaves)
 	if strings.Contains(clean, "shadow-library") {
@@ -1736,9 +1755,11 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 		"without the rightsholder's permission", "copyrighted works",
 		"and named in the result", "whether a source you pinned served the file",
 	} {
-		if strings.Contains(desc, banned) {
-			t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
-		}
+		t.Run(banned, func(t *testing.T) {
+			if strings.Contains(desc, banned) {
+				t.Errorf("download description must not pass judgement on the chain (%q); got:\n%s", banned, desc)
+			}
+		})
 	}
 	for _, want := range []string{
 		// The source is not selected when the description is read.
@@ -1756,9 +1777,11 @@ func TestDownloadDescriptionDoesNotPrejudgeTheCall(t *testing.T) {
 		"is set by the operator and is not visible to you",
 		"do not infer from this list whether a given request is licensed",
 	} {
-		if !strings.Contains(desc, want) {
-			t.Errorf("download description must state %q; got:\n%s", want, desc)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(desc, want) {
+				t.Errorf("download description must state %q; got:\n%s", want, desc)
+			}
+		})
 	}
 }
 
@@ -1777,18 +1800,20 @@ func TestReadOnlyToolsLeadWithTheirCapability(t *testing.T) {
 		"get_details": detailsDescription,
 		"read":        readToolDescription,
 	} {
-		lead := desc
-		if para, _, found := strings.Cut(lead, "\n\n"); found {
-			lead = para
-		}
-		if sentence, _, found := strings.Cut(lead, ". "); found {
-			lead = sentence
-		}
-		for _, banned := range []string{"Library Genesis", "Anna's Archive", "Sci-Hub"} {
-			if strings.Contains(lead, banned) {
-				t.Errorf("%s must not lead with %q; opening line is:\n%s", name, banned, lead)
+		t.Run(name, func(t *testing.T) {
+			lead := desc
+			if para, _, found := strings.Cut(lead, "\n\n"); found {
+				lead = para
 			}
-		}
+			if sentence, _, found := strings.Cut(lead, ". "); found {
+				lead = sentence
+			}
+			for _, banned := range []string{"Library Genesis", "Anna's Archive", "Sci-Hub"} {
+				if strings.Contains(lead, banned) {
+					t.Errorf("%s must not lead with %q; opening line is:\n%s", name, banned, lead)
+				}
+			}
+		})
 	}
 }
 
@@ -1803,9 +1828,11 @@ func TestDownloadDescriptionNamesEachKeysChain(t *testing.T) {
 		"- isbn (book): oapen then archive",
 		"- doi (article): scihub",
 	} {
-		if !strings.Contains(desc, want) {
-			t.Errorf("description should contain %q; got:\n%s", want, desc)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(desc, want) {
+				t.Errorf("description should contain %q; got:\n%s", want, desc)
+			}
+		})
 	}
 
 	noISBN := downloadToolDescription([]string{"libgen"}, nil, []string{"scihub"}, contractSaves)
@@ -2653,15 +2680,19 @@ func TestDownloadTool_NoElicitCapabilityFallsBack(t *testing.T) {
 func TestLooksLikeEmail(t *testing.T) {
 	valid := []string{"a@b.co", "you@example.com", "x.y@sub.domain.org"}
 	for _, e := range valid {
-		if !looksLikeEmail(e) {
-			t.Errorf("looksLikeEmail(%q) = false, want true", e)
-		}
+		t.Run(e, func(t *testing.T) {
+			if !looksLikeEmail(e) {
+				t.Errorf("looksLikeEmail(%q) = false, want true", e)
+			}
+		})
 	}
 	invalid := []string{"", "nope", "@example.com", "a@b", "a@b.", "a@.com"}
 	for _, e := range invalid {
-		if looksLikeEmail(e) {
-			t.Errorf("looksLikeEmail(%q) = true, want false", e)
-		}
+		t.Run(e, func(t *testing.T) {
+			if looksLikeEmail(e) {
+				t.Errorf("looksLikeEmail(%q) = true, want false", e)
+			}
+		})
 	}
 	// A trimmed, plausible address must survive the handler's TrimSpace + check.
 	if !looksLikeEmail(strings.TrimSpace("  ok@ok.io  ")) {
@@ -2693,9 +2724,11 @@ func TestEnrichmentNextStep_Facts(t *testing.T) {
 		CitationCount:  56374,
 	}})
 	for _, want := range []string{"Cell", "2011", "56374", "journal"} {
-		if !strings.Contains(step, want) {
-			t.Errorf("next step %q should mention %q", step, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(step, want) {
+				t.Errorf("next step %q should mention %q", step, want)
+			}
+		})
 	}
 	// An untrusted journal title with a newline must be neutralized (no raw newline).
 	evil := enrichmentNextStep(&libgen.Enrichment{Crossref: &libgen.CrossrefWork{ContainerTitle: "Evil\nJournal"}})
@@ -2731,9 +2764,11 @@ func TestDetailsEnrich_AppendsNextStep(t *testing.T) {
 	}
 	joined := strings.Join(out.NextSteps, " ")
 	for _, want := range []string{"Cell", "56374"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("next_steps should mention %q; got %q", want, joined)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(joined, want) {
+				t.Errorf("next_steps should mention %q; got %q", want, joined)
+			}
+		})
 	}
 }
 
@@ -2936,9 +2971,11 @@ func TestSearchTool_OpenAccessOptIn(t *testing.T) {
 		origins[r.Origin] = true
 	}
 	for _, want := range []string{"arxiv", "crossref", "openlibrary", "dblp", "pubmed", "eric"} {
-		if !origins[want] {
-			t.Errorf("expected a hit labeled %q, got origins %v", want, origins)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !origins[want] {
+				t.Errorf("expected a hit labeled %q, got origins %v", want, origins)
+			}
+		})
 	}
 	assertEricHitIsFetchable(t, oa)
 
@@ -3017,13 +3054,15 @@ func TestResolveExtraModePrecedence(t *testing.T) {
 func TestDeploymentNeverCannotBeOverridden(t *testing.T) {
 	cfg := &config.Config{ExtraSources: config.ExtraSourcesNever}
 	for _, asked := range []string{"", "auto", "always", "never"} {
-		got, err := resolveExtraMode(SearchInput{ExtraSources: asked}, cfg)
-		if err != nil {
-			t.Fatalf("extra_sources=%q returned an error: %v", asked, err)
-		}
-		if got != config.ExtraSourcesNever {
-			t.Errorf("extra_sources=%q resolved to %q against a never deployment; want never", asked, got)
-		}
+		t.Run(asked, func(t *testing.T) {
+			got, err := resolveExtraMode(SearchInput{ExtraSources: asked}, cfg)
+			if err != nil {
+				t.Fatalf("extra_sources=%q returned an error: %v", asked, err)
+			}
+			if got != config.ExtraSourcesNever {
+				t.Errorf("extra_sources=%q resolved to %q against a never deployment; want never", asked, got)
+			}
+		})
 	}
 }
 
@@ -3037,9 +3076,11 @@ func TestForcedEscalationIsAlwaysModeOnly(t *testing.T) {
 		config.ExtraSourcesNever:  false,
 	}
 	for mode, want := range cases {
-		if got := forcedEscalation(mode); got != want {
-			t.Errorf("forcedEscalation(%q) = %v, want %v", mode, got, want)
-		}
+		t.Run(string(mode), func(t *testing.T) {
+			if got := forcedEscalation(mode); got != want {
+				t.Errorf("forcedEscalation(%q) = %v, want %v", mode, got, want)
+			}
+		})
 	}
 }
 
@@ -3251,9 +3292,11 @@ func TestHumanBytes(t *testing.T) {
 		{2 * 1024 * 1024 * 1024, "2.0 GB"},
 	}
 	for _, tc := range cases {
-		if got := humanBytes(tc.n); got != tc.want {
-			t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
-		}
+		t.Run(tc.want, func(t *testing.T) {
+			if got := humanBytes(tc.n); got != tc.want {
+				t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -4623,6 +4666,22 @@ func bodyCountingMirror(t *testing.T, payload []byte, bodyHits *atomic.Int32) *h
 // noFetchSession registers the four tools with the given options against a mirror
 // that counts body fetches, and returns the connected client session, the mirror,
 // the md5 of the file it serves and the download directory.
+// registerRestoringLocalAccess calls Register and puts the process-wide
+// local-access setting back afterwards.
+//
+// Register decides it from its options — `pathguard.SetLocalAccess(!remote)` —
+// which is right for a server but is a side effect on a package global inside a
+// test binary: a test that registers a remote deployment leaves every test that
+// runs after it looking like one, and a local-path read then fails for a reason
+// that has nothing to do with the test. It only shows up under -shuffle, which
+// is exactly the kind of order dependence that is invisible until it is not.
+func registerRestoringLocalAccess(t *testing.T, server *mcp.Server, client *libgen.Client, cfg *config.Config, opts ...RegisterOption) {
+	t.Helper()
+	previous := pathguard.LocalAccessAllowed()
+	t.Cleanup(func() { pathguard.SetLocalAccess(previous) })
+	Register(server, client, cfg, opts...)
+}
+
 func noFetchSession(t *testing.T, bodyHits *atomic.Int32, opts ...RegisterOption) (session *mcp.ClientSession, srv *httptest.Server, fileMD5, dir string) {
 	t.Helper()
 	payload := []byte("%PDF-1.4 the server must not fetch this")
@@ -4643,7 +4702,7 @@ func noFetchSession(t *testing.T, bodyHits *atomic.Int32, opts ...RegisterOption
 	}
 	client := libgen.New(staticMirrors{srv.URL}, cfg)
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0.0.1"}, nil)
-	Register(server, client, cfg, opts...)
+	registerRestoringLocalAccess(t, server, client, cfg, opts...)
 	st, ct := mcp.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := server.Connect(ctx, st, nil); err != nil {
@@ -4724,9 +4783,11 @@ func TestNoServerFetchHidesRead(t *testing.T) {
 	}
 	// The three that do not pull a body stay, so the surface is trimmed, not gutted.
 	for _, want := range []string{"search", "get_details", "download"} {
-		if !contains(names, want) {
-			t.Errorf("%s is missing; tools = %v", want, names)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !contains(names, want) {
+				t.Errorf("%s is missing; tools = %v", want, names)
+			}
+		})
 	}
 
 	// And the unadvertised tool is genuinely unreachable, not merely unlisted.

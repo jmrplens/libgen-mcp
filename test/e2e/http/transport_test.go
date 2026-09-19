@@ -38,9 +38,11 @@ func TestTransport_HealthPayload(t *testing.T) {
 		t.Fatalf("body is not JSON: %v (%s)", err, truncate(reply.body))
 	}
 	for _, key := range []string{"status", "version", "commit", "started_at", "uptime_seconds"} {
-		if _, ok := payload[key]; !ok {
-			t.Errorf("payload has no %q: %s", key, truncate(reply.body))
-		}
+		t.Run(key, func(t *testing.T) {
+			if _, ok := payload[key]; !ok {
+				t.Errorf("payload has no %q: %s", key, truncate(reply.body))
+			}
+		})
 	}
 	if payload["status"] != "ok" {
 		t.Errorf("status = %v, want \"ok\"", payload["status"])

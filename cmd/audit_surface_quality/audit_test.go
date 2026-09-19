@@ -71,9 +71,11 @@ func TestAuditMetadata_Violations(t *testing.T) {
 	}
 	got := categorySet(auditMetadata(tool))
 	for _, want := range []string{"title", "annotations", "description", "input-schema"} {
-		if !got[want] {
-			t.Errorf("auditMetadata() missing category %q; got %v", want, got)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !got[want] {
+				t.Errorf("auditMetadata() missing category %q; got %v", want, got)
+			}
+		})
 	}
 }
 
@@ -308,9 +310,11 @@ func TestWriteMarkdownReport_Grouped(t *testing.T) {
 	writeMarkdownReport(&b, []*mcp.Tool{{Name: "search"}, {Name: "read"}}, vs)
 	out := b.String()
 	for _, want := range []string{"## field-description (1)", "## title (1)", "`search`", "Tools audited | 2"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("report missing %q; got:\n%s", want, out)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(out, want) {
+				t.Errorf("report missing %q; got:\n%s", want, out)
+			}
+		})
 	}
 }
 
@@ -349,9 +353,11 @@ func TestListToolsEndToEnd(t *testing.T) {
 		names[tool.Name] = true
 	}
 	for _, want := range []string{"search", "get_details", "download", "read"} {
-		if !names[want] {
-			t.Errorf("tool %q not registered; got %v", want, names)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !names[want] {
+				t.Errorf("tool %q not registered; got %v", want, names)
+			}
+		})
 	}
 	if vs := auditTools(toolList); len(vs) != 0 {
 		t.Fatalf("current tool surface has %d violations, want 0:\n%+v", len(vs), vs)

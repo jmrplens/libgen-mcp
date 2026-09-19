@@ -277,9 +277,11 @@ func TestClient_ServerCardIsReadableWithoutASession(t *testing.T) {
 		t.Fatalf("card = %d, want %d", card.status, http.StatusOK)
 	}
 	for _, want := range []string{`"serverInfo"`, `"capabilities"`, `"tools"`, `"prompts"`} {
-		if !strings.Contains(card.body, want) {
-			t.Errorf("card does not carry %s", want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(card.body, want) {
+				t.Errorf("card does not carry %s", want)
+			}
+		})
 	}
 	// The deprecated capability must not reappear: it is advertised by the
 	// SDK's default whenever ServerOptions.Capabilities is left nil, so this

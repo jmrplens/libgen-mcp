@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -57,10 +58,12 @@ func TestSciDBErrorClassification(t *testing.T) {
 
 	t.Run("a transient status is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable} {
-			s := scidbSource{mirrors: staticMirrors{scidbStatusMirror(t, status)}, http: http.DefaultClient}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				s := scidbSource{mirrors: staticMirrors{scidbStatusMirror(t, status)}, http: http.DefaultClient}
 
-			_, err := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, err)
+				_, err := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, err)
+			})
 		}
 	})
 

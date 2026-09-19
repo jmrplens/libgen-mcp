@@ -16,6 +16,7 @@
 /audit_gateway_chars
 /audit_test_goroutines
 /audit_test_names
+/audit_test_subtests
 /gen_icon_webp
 /dist/
 

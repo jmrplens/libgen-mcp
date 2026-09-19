@@ -523,6 +523,7 @@ make check-install-buttons                                 # the one-click butto
 make check-gateway-chars                                   # served text stays gateway-safe
 make check-test-goroutines                                 # no testing.T abort off the test goroutine
 make check-test-file-names                                 # test files named after their module
+make check-test-subtests                                   # every case loop runs under t.Run
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
@@ -645,7 +646,32 @@ exempt for a reason the rule cannot absorb:
 `test/e2e` is exempt as a tree — its files have no source modules to be named
 after — and so is everything `cmd/internal/testsource` prunes.
 
-### Assertions off the test goroutine
+### A table of cases runs under `t.Run`
+
+A loop over a table that asserts directly reports the whole table as one
+failure, stops the rest at the first `t.Fatal`, and cannot be selected with
+`go test -run`. Opening a subtest per case fixes all three, and
+`make check-test-subtests` gates it. `make fix-test-subtests` rewrites the ones
+whose name is unambiguous — a `[]string` names each case after its element, a
+struct table after a `name`/`desc`/`label`/`title`/`id` field, a
+`map[string]…` after its key — and leaves the rest for a hand rewrite.
+
+**A loop that walks dependent steps is not a table**, and says so:
+
+```go
+// sequential: the calls are held open together, not run one at a time
+for i, address := range []string{"a", "b", "c"} {
+```
+
+The marker has to be on its own line **directly above** the `for`, or at the end
+of its first line; a two-line explanation above the marker is fine, but the
+marker itself must be the last comment line before the loop.
+
+**Read what the fixer did before trusting it.** Wrapping a body in `t.Run`
+moves every `defer` inside it into the subtest, so a `defer` that was holding
+something open for the *next* iteration now releases it at the end of this one.
+That is a real behaviour change, and it is why `cmd/server/ceiling_test.go`
+carries the marker: it starts three calls that must stay in flight together.
 
 `testing.T.FailNow` — and therefore `t.Fatal` and `t.Fatalf` — must be called
 from the goroutine running the test. Anywhere else it terminates only *that*

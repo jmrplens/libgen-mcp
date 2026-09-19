@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -214,14 +215,16 @@ func TestBiorxivErrorClassification(t *testing.T) {
 
 	t.Run("a transient status on both servers is unavailability", func(t *testing.T) {
 		for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
-			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(status)
-			}))
-			s := biorxivSource{http: api.Client(), apiBase: api.URL}
+			t.Run(strconv.Itoa(status), func(t *testing.T) {
+				api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(status)
+				}))
+				s := biorxivSource{http: api.Client(), apiBase: api.URL}
 
-			_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
-			assertUnavailable(t, rerr)
-			api.Close()
+				_, rerr := s.Resolve(context.Background(), Item{DOI: doi})
+				assertUnavailable(t, rerr)
+				api.Close()
+			})
 		}
 	})
 

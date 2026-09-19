@@ -292,13 +292,15 @@ func TestAllowedHosts(t *testing.T) {
 func TestAllowedHostsDeclaresNothingForASocketAddress(t *testing.T) {
 	var checked int
 	for _, addr := range []string{"/run/libgen-mcp.sock", "./mcp.sock", `C:\run\libgen-mcp.sock`} {
-		if !isUnixSocketAddr(addr) {
-			continue
-		}
-		checked++
-		if got := allowedHosts(addr); got != nil {
-			t.Errorf("allowedHosts(%q) = %v, want nil: no name resolves to a file on disk", addr, got)
-		}
+		t.Run(addr, func(t *testing.T) {
+			if !isUnixSocketAddr(addr) {
+				return
+			}
+			checked++
+			if got := allowedHosts(addr); got != nil {
+				t.Errorf("allowedHosts(%q) = %v, want nil: no name resolves to a file on disk", addr, got)
+			}
+		})
 	}
 	if checked == 0 {
 		t.Fatal("no address in the list reads as a socket on this build, so nothing was checked")
@@ -328,9 +330,11 @@ func TestHostGuardedRefusesWithSomethingActionable(t *testing.T) {
 		t.Error("the refused request reached the handler behind the guard")
 	}
 	for _, want := range []string{"--public-url", "--trusted-proxies"} {
-		if !strings.Contains(rec.Body.String(), want) {
-			t.Errorf("the refusal does not name %s, so it does not say how to fix it: %q", want, rec.Body.String())
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(rec.Body.String(), want) {
+				t.Errorf("the refusal does not name %s, so it does not say how to fix it: %q", want, rec.Body.String())
+			}
+		})
 	}
 }
 
@@ -367,9 +371,11 @@ func TestLoggedHostPrefixIsBounded(t *testing.T) {
 func TestValidatePublicURL(t *testing.T) {
 	t.Run("accepted", func(t *testing.T) {
 		for _, value := range []string{"", "  ", publicOrigin, "http://localhost:8080", "https://mcp.example.org"} {
-			if err := validatePublicURL(value); err != nil {
-				t.Errorf("validatePublicURL(%q) = %v, want accepted", value, err)
-			}
+			t.Run(value, func(t *testing.T) {
+				if err := validatePublicURL(value); err != nil {
+					t.Errorf("validatePublicURL(%q) = %v, want accepted", value, err)
+				}
+			})
 		}
 	})
 
@@ -378,14 +384,16 @@ func TestValidatePublicURL(t *testing.T) {
 		// empty scheme and an empty host, so accepting it would declare nothing
 		// while looking exactly like a configured deployment.
 		for _, value := range []string{publicName, "mcp.example.org/libgen", "ftp://mcp.example.org", "://nope", "https://"} {
-			err := validatePublicURL(value)
-			if err == nil {
-				t.Errorf("validatePublicURL(%q) was accepted", value)
-				continue
-			}
-			if !strings.Contains(err.Error(), "--public-url") {
-				t.Errorf("error %q does not name the flag to change", err)
-			}
+			t.Run(value, func(t *testing.T) {
+				err := validatePublicURL(value)
+				if err == nil {
+					t.Errorf("validatePublicURL(%q) was accepted", value)
+					return
+				}
+				if !strings.Contains(err.Error(), "--public-url") {
+					t.Errorf("error %q does not name the flag to change", err)
+				}
+			})
 		}
 	})
 }

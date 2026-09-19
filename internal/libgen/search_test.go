@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -46,9 +47,11 @@ func TestSearchParamsValues(t *testing.T) {
 func TestSearchParamsMinimalOmitsDefaults(t *testing.T) {
 	v := SearchParams{Query: "golang"}.values()
 	for _, k := range []string{"topics[]", "columns[]", "res", "page", "order", "ordermode"} {
-		if _, ok := v[k]; ok {
-			t.Errorf("values() includes %q that was not requested", k)
-		}
+		t.Run(k, func(t *testing.T) {
+			if _, ok := v[k]; ok {
+				t.Errorf("values() includes %q that was not requested", k)
+			}
+		})
 	}
 }
 
@@ -63,9 +66,11 @@ func TestSearchParamsValidate(t *testing.T) {
 		{Query: "x", OrderMode: "up"},
 	}
 	for i, p := range cases {
-		if err := p.Validate(); err == nil {
-			t.Errorf("case %d: Validate() = nil, want error", i)
-		}
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if err := p.Validate(); err == nil {
+				t.Errorf("case %d: Validate() = nil, want error", i)
+			}
+		})
 	}
 }
 
@@ -293,9 +298,11 @@ func TestParseSearchStandardJoinsBothTitleParts(t *testing.T) {
 	}
 	got := page.Results[0]
 	for _, want := range []string{"ISO 8359:1996", "Oxygen concentrators for medical use"} {
-		if !strings.Contains(got.Title, want) {
-			t.Errorf("Title = %q, want it to contain %q", got.Title, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(got.Title, want) {
+				t.Errorf("Title = %q, want it to contain %q", got.Title, want)
+			}
+		})
 	}
 	if len(got.ISBNs) != 0 {
 		t.Errorf("ISBNs = %q, want none", got.ISBNs)
@@ -476,9 +483,11 @@ func TestSearchParamsAllColumns(t *testing.T) {
 		t.Fatalf("combined columns[] = %v, want %d entries", got, len(all))
 	}
 	for i, col := range all {
-		if got[i] != want[col] {
-			t.Errorf("combined columns[][%d] = %q, want %q (%s)", i, got[i], want[col], col)
-		}
+		t.Run(col, func(t *testing.T) {
+			if got[i] != want[col] {
+				t.Errorf("combined columns[][%d] = %q, want %q (%s)", i, got[i], want[col], col)
+			}
+		})
 	}
 }
 
@@ -528,9 +537,11 @@ func TestSearchParamsOrderPagination(t *testing.T) {
 	// Nothing requested: order/ordermode/res/page all omitted.
 	none := SearchParams{Query: "x"}.values()
 	for _, k := range []string{"order", "ordermode", "res", "page"} {
-		if _, ok := none[k]; ok {
-			t.Errorf("values() includes %q that was not requested", k)
-		}
+		t.Run(k, func(t *testing.T) {
+			if _, ok := none[k]; ok {
+				t.Errorf("values() includes %q that was not requested", k)
+			}
+		})
 	}
 }
 
@@ -554,9 +565,11 @@ func TestParseDownloadOptions(t *testing.T) {
 		labels[d.Label] = true
 	}
 	for _, want := range []string{"anna's archive", "libgen.pw", "Randombook"} {
-		if !labels[want] {
-			t.Errorf("books first result missing external mirror %q; labels = %v", want, labels)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !labels[want] {
+				t.Errorf("books first result missing external mirror %q; labels = %v", want, labels)
+			}
+		})
 	}
 
 	comics := parseFixture(t, "search_comics.html")
@@ -687,9 +700,11 @@ func TestParseSearchRowISBNsAndType(t *testing.T) {
 		t.Fatalf("ISBNs = %v, want %v", r.ISBNs, want)
 	}
 	for i := range want {
-		if r.ISBNs[i] != want[i] {
-			t.Errorf("ISBNs[%d] = %q, want %q", i, r.ISBNs[i], want[i])
-		}
+		t.Run(want[i], func(t *testing.T) {
+			if r.ISBNs[i] != want[i] {
+				t.Errorf("ISBNs[%d] = %q, want %q", i, r.ISBNs[i], want[i])
+			}
+		})
 	}
 }
 
@@ -730,8 +745,10 @@ func TestTopicNames(t *testing.T) {
 		t.Fatal("TopicNames() returned no topics")
 	}
 	for _, want := range []string{"nonfiction", "fiction", "articles"} {
-		if !slices.Contains(names, want) {
-			t.Errorf("TopicNames() = %v, missing %q", names, want)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(names, want) {
+				t.Errorf("TopicNames() = %v, missing %q", names, want)
+			}
+		})
 	}
 }

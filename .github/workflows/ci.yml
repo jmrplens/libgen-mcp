@@ -65,6 +65,12 @@ jobs:
       # match a .gitignore coverage_* rule and sit untracked indefinitely.
       - name: Every test file is named after a module it tests
         run: make check-test-file-names
+      # A case loop that asserts without opening a subtest reports the whole
+      # table as one failure, stops at the first t.Fatal, and cannot be selected
+      # with -run. A loop that walks dependent steps rather than independent
+      # cases says so with a `// sequential:` marker.
+      - name: Every case loop runs its cases under t.Run
+        run: make check-test-subtests
       - name: Run tests with coverage
         run: |
           go test -count=1 -coverpkg=./internal/...,./cmd/server/...,./cmd/internal/... -coverprofile=coverage.out ./cmd/... ./internal/...

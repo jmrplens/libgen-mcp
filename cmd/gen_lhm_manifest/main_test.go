@@ -124,9 +124,11 @@ func TestManifestTools_Order(t *testing.T) {
 		t.Fatalf("got %d tools, want %d", len(got), len(want))
 	}
 	for i := range want {
-		if got[i].Name != want[i] {
-			t.Errorf("position %d: got %q, want %q", i, got[i].Name, want[i])
-		}
+		t.Run(want[i], func(t *testing.T) {
+			if got[i].Name != want[i] {
+				t.Errorf("position %d: got %q, want %q", i, got[i].Name, want[i])
+			}
+		})
 	}
 }
 
@@ -140,8 +142,10 @@ func TestManifestPrompts_SortedByName(t *testing.T) {
 	})
 	want := []string{"acquire_book", "get_paper", "research_topic"}
 	for i := range want {
-		if got[i].Name != want[i] {
-			t.Errorf("position %d: got %q, want %q", i, got[i].Name, want[i])
-		}
+		t.Run(want[i], func(t *testing.T) {
+			if got[i].Name != want[i] {
+				t.Errorf("position %d: got %q, want %q", i, got[i].Name, want[i])
+			}
+		})
 	}
 }

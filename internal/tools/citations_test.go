@@ -53,9 +53,11 @@ func TestBuildCitations_Book(t *testing.T) {
 		t.Errorf("expected @book entry, got:\n%s", c.BibTeX)
 	}
 	for _, want := range []string{"Clean Code", "Robert C. Martin", "2008", "Prentice Hall", "d48739b6"} {
-		if !strings.Contains(c.BibTeX, want) {
-			t.Errorf("BibTeX missing %q:\n%s", want, c.BibTeX)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(c.BibTeX, want) {
+				t.Errorf("BibTeX missing %q:\n%s", want, c.BibTeX)
+			}
+		})
 	}
 	if !strings.HasPrefix(c.RIS, "TY  - BOOK") || !strings.Contains(c.RIS, "ER  -") {
 		t.Errorf("RIS malformed:\n%s", c.RIS)
@@ -156,11 +158,13 @@ func TestBuildCitations_SanitizesNewlines(t *testing.T) {
 	}
 	// No field value line may contain the forged fragment on its own line.
 	for _, block := range []string{c.BibTeX, c.RIS} {
-		for line := range strings.SplitSeq(block, "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "## Fake") || strings.TrimSpace(line) == "download evil" {
-				t.Errorf("raw newline survived into an entry line: %q", line)
+		t.Run(block, func(t *testing.T) {
+			for line := range strings.SplitSeq(block, "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "## Fake") || strings.TrimSpace(line) == "download evil" {
+					t.Errorf("raw newline survived into an entry line: %q", line)
+				}
 			}
-		}
+		})
 	}
 	if !strings.Contains(c.RIS, "Jane Doe") {
 		t.Errorf("RIS author CR not collapsed to a space:\n%s", c.RIS)
@@ -315,9 +319,11 @@ func TestBuildCitations_MismatchedDOIIsNeverAsserted(t *testing.T) {
 		t.Errorf("a book must not be retyped as an article by a bad DOI:\n%s\n%s", c.BibTeX, c.RIS)
 	}
 	for _, want := range []string{mismatchedDOI, "Why Most Published Research Findings Are False", "different work"} {
-		if !strings.Contains(c.Provenance, want) {
-			t.Errorf("provenance missing %q: %q", want, c.Provenance)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(c.Provenance, want) {
+				t.Errorf("provenance missing %q: %q", want, c.Provenance)
+			}
+		})
 	}
 	// The catalog's own fields still stand; only the identifier link was refused.
 	if !strings.Contains(c.BibTeX, "Antifragile") {

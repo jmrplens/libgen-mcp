@@ -314,9 +314,11 @@ func TestFatcatFulltextURLsFromCapturedPage(t *testing.T) {
 		t.Fatalf("fatcatFulltextURLs() = %v, want %v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("candidate %d = %q, want %q", i, got[i], want[i])
-		}
+		t.Run(want[i], func(t *testing.T) {
+			if got[i] != want[i] {
+				t.Errorf("candidate %d = %q, want %q", i, got[i], want[i])
+			}
+		})
 	}
 }
 

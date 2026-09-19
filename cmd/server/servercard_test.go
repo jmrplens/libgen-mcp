@@ -181,9 +181,11 @@ func TestServerCardOmitsDeprecatedLoggingCapability(t *testing.T) {
 		t.Errorf("capabilities = %s, want no logging key: SEP-2577 deprecated it and this server logs to stderr", rawCaps)
 	}
 	for _, key := range []string{"tools", "prompts"} {
-		if _, present := caps[key]; !present {
-			t.Errorf("capabilities = %s, want the %s key this surface serves", rawCaps, key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if _, present := caps[key]; !present {
+				t.Errorf("capabilities = %s, want the %s key this surface serves", rawCaps, key)
+			}
+		})
 	}
 }
 
@@ -334,20 +336,22 @@ func TestServerCardRouteAbsentWhenUnbuilt(t *testing.T) {
 	handler := newHTTPHandler(stub, serverCards{}, nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
-		for _, method := range []string{http.MethodGet, http.MethodOptions} {
-			req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
+		t.Run(path, func(t *testing.T) {
+			for _, method := range []string{http.MethodGet, http.MethodOptions} {
+				req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
+				rec := httptest.NewRecorder()
+				handler.ServeHTTP(rec, req)
 
-			if rec.Code != http.StatusNotFound {
-				t.Errorf("%s %s status = %d, want %d for a card that was never built",
-					method, path, rec.Code, http.StatusNotFound)
+				if rec.Code != http.StatusNotFound {
+					t.Errorf("%s %s status = %d, want %d for a card that was never built",
+						method, path, rec.Code, http.StatusNotFound)
+				}
+				if rec.Body.String() == "" {
+					t.Errorf("%s %s answered %d with an empty body, want the not-found document",
+						method, path, rec.Code)
+				}
 			}
-			if rec.Body.String() == "" {
-				t.Errorf("%s %s answered %d with an empty body, want the not-found document",
-					method, path, rec.Code)
-			}
-		}
+		})
 	}
 }
 
@@ -465,22 +469,24 @@ func TestServerCardOverridesCacheControl(t *testing.T) {
 	handler := newHTTPHandler(teapotHandler(), testCards(t, raw), nil, "/", false, testHealth())
 
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
 
-		if rec.Code != http.StatusOK {
-			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
-		}
-		if got := sentHeader(rec).Get("Cache-Control"); got != "public, max-age=3600" {
-			t.Errorf("%s Cache-Control = %q, want the card's own lifetime rather than the middleware's no-store", path, got)
-		}
-		// Set over the top, not appended: two values here are two instructions,
-		// and a cache reading the first one wins by accident.
-		if values := sentHeader(rec).Values("Cache-Control"); len(values) != 1 {
-			t.Errorf("%s Cache-Control appears %d times (%q), want the override to replace it", path, len(values), values)
-		}
-		// The other four must survive the override on this same response.
-		assertSecurityHeaders(t, rec, "Cache-Control")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+			}
+			if got := sentHeader(rec).Get("Cache-Control"); got != "public, max-age=3600" {
+				t.Errorf("%s Cache-Control = %q, want the card's own lifetime rather than the middleware's no-store", path, got)
+			}
+			// Set over the top, not appended: two values here are two instructions,
+			// and a cache reading the first one wins by accident.
+			if values := sentHeader(rec).Values("Cache-Control"); len(values) != 1 {
+				t.Errorf("%s Cache-Control appears %d times (%q), want the override to replace it", path, len(values), values)
+			}
+			// The other four must survive the override on this same response.
+			assertSecurityHeaders(t, rec, "Cache-Control")
+		})
 	}
 }
 
@@ -506,12 +512,14 @@ func TestServerCardRoutesServeTheirOwnDocument(t *testing.T) {
 
 	bodies := make(map[string][]byte, 2)
 	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
-		}
-		bodies[path] = rec.Body.Bytes()
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+			}
+			bodies[path] = rec.Body.Bytes()
+		})
 	}
 
 	if bytes.Equal(bodies[serverCardPath], bodies[serverCardCurrentPath]) {

@@ -850,13 +850,15 @@ func TestReadNextStepsForbidsInventingContent(t *testing.T) {
 		"no matches":               {Extractable: true, Query: "pointer", MatchCount: 0},
 	}
 	for name, out := range cases {
-		joined := strings.ToLower(strings.Join(readNextSteps(out), "\n"))
-		if !strings.Contains(joined, "do not") {
-			t.Errorf("%s: guidance must state plainly what not to do; got %q", name, joined)
-		}
-		if !strings.Contains(joined, "did not receive") && !strings.Contains(joined, "were not returned") {
-			t.Errorf("%s: guidance must name the thing not to invent; got %q", name, joined)
-		}
+		t.Run(name, func(t *testing.T) {
+			joined := strings.ToLower(strings.Join(readNextSteps(out), "\n"))
+			if !strings.Contains(joined, "do not") {
+				t.Errorf("%s: guidance must state plainly what not to do; got %q", name, joined)
+			}
+			if !strings.Contains(joined, "did not receive") && !strings.Contains(joined, "were not returned") {
+				t.Errorf("%s: guidance must name the thing not to invent; got %q", name, joined)
+			}
+		})
 	}
 }
 

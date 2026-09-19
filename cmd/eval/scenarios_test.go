@@ -208,12 +208,14 @@ func TestSecondCallRecoveryNamesTheModelsOwnRetry(t *testing.T) {
 		t.Errorf("secondCallRecovery re-reporting the scenario's own pin = %q, want no \"instead\" clause", same)
 	}
 	for _, msg := range []string{unpinned, repinned, same} {
-		if strings.Contains(msg, "recovered to") {
-			t.Errorf("detail %q still says the pinned call recovered to another source, which a pin cannot do", msg)
-		}
-		if !strings.Contains(msg, "a pin is the whole chain") {
-			t.Errorf("detail %q must state why no substitution happened behind the pin", msg)
-		}
+		t.Run(msg, func(t *testing.T) {
+			if strings.Contains(msg, "recovered to") {
+				t.Errorf("detail %q still says the pinned call recovered to another source, which a pin cannot do", msg)
+			}
+			if !strings.Contains(msg, "a pin is the whole chain") {
+				t.Errorf("detail %q must state why no substitution happened behind the pin", msg)
+			}
+		})
 	}
 }
 
@@ -1091,16 +1093,18 @@ func TestAcousticsFetchGradesTheWorkAndNotTheScan(t *testing.T) {
 		{"Formulas of Acoustics 2nd", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		{"Formulas of Acoustics (Springer Reference)", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
 	} {
-		tr := transcript{
-			Calls: []toolCall{
-				acousticsSearch(tc.title, tc.md5),
-				okCall("download", map[string]any{"md5": tc.md5}, saved),
-			},
-			FinalText: "Saved it.",
-		}
-		if pass, why := assertAcousticsTitleFetch(tr); !pass {
-			t.Fatalf("%q is a catalog spelling of the work and must pass: %s", tc.title, why)
-		}
+		t.Run(tc.title, func(t *testing.T) {
+			tr := transcript{
+				Calls: []toolCall{
+					acousticsSearch(tc.title, tc.md5),
+					okCall("download", map[string]any{"md5": tc.md5}, saved),
+				},
+				FinalText: "Saved it.",
+			}
+			if pass, why := assertAcousticsTitleFetch(tr); !pass {
+				t.Fatalf("%q is a catalog spelling of the work and must pass: %s", tc.title, why)
+			}
+		})
 	}
 
 	// The neighbor: Blevins' "Formulas for Dynamics, Acoustics and Vibration" carries
@@ -1150,9 +1154,11 @@ func TestAcousticsFetchNamesTheHarnessCapNotALicense(t *testing.T) {
 	// The cause has to be named as the harness's own limit, with the knob that sets
 	// it, so nobody reads the row as the book being unobtainable.
 	for _, want := range []string{"HARNESS", "50 MiB", "LIBGEN_MCP_MAX_DOWNLOAD_BYTES"} {
-		if !strings.Contains(why, want) {
-			t.Fatalf("the detail must name %s as the cause, got %q", want, why)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(why, want) {
+				t.Fatalf("the detail must name %s as the cause, got %q", want, why)
+			}
+		})
 	}
 
 	// The same refusal, claimed as a success: the one thing the model still controls.
@@ -1352,9 +1358,11 @@ func TestTopicAndPublisherFetchGradesBehaviorAndCause(t *testing.T) {
 		t.Fatalf("a file past the harness's own cap is not a model failure: %s", why)
 	}
 	for _, want := range []string{"HARNESS", "LIBGEN_MCP_MAX_DOWNLOAD_BYTES", harnessSizeCapMarker} {
-		if !strings.Contains(why, want) {
-			t.Fatalf("the detail must name %q as the cause, got %q", want, why)
-		}
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(why, want) {
+				t.Fatalf("the detail must name %q as the cause, got %q", want, why)
+			}
+		})
 	}
 
 	// A plain miss quotes the chain too, and claiming a file anyway is the one failure

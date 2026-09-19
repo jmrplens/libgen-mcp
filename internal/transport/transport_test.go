@@ -43,13 +43,17 @@ func TestStreamableHTTPMapsFlags(t *testing.T) {
 // flags in hand. Turning this back on would put the SDK's answer back in front
 // of it, one layer further in, where no flag can reach it.
 func TestLocalhostProtectionIsOffOnEveryShape(t *testing.T) {
-	for _, opts := range []Options{
-		DefaultOptions(),
-		{},
-		{Stateless: false, JSONResponse: true, MaxRequestBodyBytes: 1 << 20, ServesTLS: true},
+	for name, opts := range map[string]Options{
+		"the defaults":   DefaultOptions(),
+		"the zero value": {},
+		"every knob turned the other way": {
+			Stateless: false, JSONResponse: true, MaxRequestBodyBytes: 1 << 20, ServesTLS: true,
+		},
 	} {
-		if !StreamableHTTP(opts).DisableLocalhostProtection {
-			t.Errorf("StreamableHTTP(%+v) left the SDK's localhost protection on", opts)
-		}
+		t.Run(name, func(t *testing.T) {
+			if !StreamableHTTP(opts).DisableLocalhostProtection {
+				t.Errorf("StreamableHTTP(%+v) left the SDK's localhost protection on", opts)
+			}
+		})
 	}
 }

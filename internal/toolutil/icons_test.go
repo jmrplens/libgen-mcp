@@ -69,18 +69,20 @@ func TestIcon_ThreeEntryShape(t *testing.T) {
 	}
 
 	for i, want := range []mcp.IconTheme{mcp.IconThemeLight, mcp.IconThemeDark} {
-		entry := got[i+1]
-		if entry.MIMEType != webpMIME {
-			t.Errorf("entry %d MIMEType = %q, want %q", i+1, entry.MIMEType, webpMIME)
-		}
-		if entry.Theme != want {
-			t.Errorf("entry %d Theme = %q, want %q", i+1, entry.Theme, want)
-		}
-		// A raster is not resolution-independent, so unlike the SVG it must
-		// advertise the concrete size it was generated at.
-		if len(entry.Sizes) != 1 || entry.Sizes[0] != "16x16" {
-			t.Errorf("entry %d Sizes = %v, want [16x16]", i+1, entry.Sizes)
-		}
+		t.Run(string(want), func(t *testing.T) {
+			entry := got[i+1]
+			if entry.MIMEType != webpMIME {
+				t.Errorf("entry %d MIMEType = %q, want %q", i+1, entry.MIMEType, webpMIME)
+			}
+			if entry.Theme != want {
+				t.Errorf("entry %d Theme = %q, want %q", i+1, entry.Theme, want)
+			}
+			// A raster is not resolution-independent, so unlike the SVG it must
+			// advertise the concrete size it was generated at.
+			if len(entry.Sizes) != 1 || entry.Sizes[0] != "16x16" {
+				t.Errorf("entry %d Sizes = %v, want [16x16]", i+1, entry.Sizes)
+			}
+		})
 	}
 }
 

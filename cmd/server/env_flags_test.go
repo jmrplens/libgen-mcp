@@ -94,9 +94,11 @@ func TestAFlagThatWasNotTypedLeavesTheVariableAlone(t *testing.T) {
 		"LIBGEN_MIRROR",
 		config.EnvFileVar,
 	} {
-		if got := os.Getenv(envName); got != "set-by-the-client" {
-			t.Errorf("%s = %q, want it untouched: no flag named it", envName, got)
-		}
+		t.Run(envName, func(t *testing.T) {
+			if got := os.Getenv(envName); got != "set-by-the-client" {
+				t.Errorf("%s = %q, want it untouched: no flag named it", envName, got)
+			}
+		})
 	}
 }
 
@@ -129,9 +131,11 @@ func TestNoCredentialHasAFlag(t *testing.T) {
 	withFlagSet(t)
 
 	for _, name := range []string{"annas-key", "core-key", "unpaywall-email"} {
-		if flag.CommandLine.Lookup(name) != nil {
-			t.Errorf("--%s exists; a secret on a command line is world-readable through ps and lands in shell history", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			if flag.CommandLine.Lookup(name) != nil {
+				t.Errorf("--%s exists; a secret on a command line is world-readable through ps and lands in shell history", name)
+			}
+		})
 	}
 	for _, entry := range envBackedFlags {
 		switch entry.envShortName {
