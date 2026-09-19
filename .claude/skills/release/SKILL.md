@@ -5,16 +5,17 @@ description: Cut a libgen-mcp release — bump VERSION, mirror it into the versi
 
 # Cutting a libgen-mcp release
 
-The version lives in `VERSION` and is mirrored into five manifests. To cut a
+The version lives in `VERSION` and is mirrored into six manifests. To cut a
 release:
 
 1. Bump `VERSION`.
 2. Update the version in `server.json` (`.version`, the bundle's release-asset
    URL, the tag in each image reference and the npm entry's `version`),
-   `mcpb/manifest.json`, `lhm.plugin.json` and `.plugin/plugin.json`, and
+   `mcpb/manifest.json`, `lhm.plugin.json`, `.plugin/plugin.json` and
+   `plugin.json`, and
    run `make sync-npm-version` for `npm/libgen-mcp/package.json` (it moves the
    version and all six dependency pins together — never hand-edit it).
-3. Run `make check-manifests`. It gates all five against `VERSION`, and CI runs
+3. Run `make check-manifests`. It gates all six against `VERSION`, and CI runs
    it in the `server.json` job. Add any new version-bearing manifest to
    `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
    gated, and will silently ship the previous release's number.
@@ -27,11 +28,20 @@ release:
 The tag is enough for the version-bearing files the workflow owns: on release,
 `scripts/update-server-json-sha.sh` re-stamps `server.json`'s version, its
 per-package versions, its identifiers and their `fileSha256` digests,
-then stamps the version into the other four manifests (`lhm.plugin.json`,
-`mcpb/manifest.json`, `.plugin/plugin.json`, `npm/libgen-mcp/package.json`) — the
+then stamps the version into the other five manifests (`lhm.plugin.json`,
+`mcpb/manifest.json`, `.plugin/plugin.json`, `plugin.json`,
+`npm/libgen-mcp/package.json`) — the
 same set `check-manifests` gates — and commits the result back to main. The manual
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.
+
+**The two plugin manifests are different schemas for different directories.**
+`.plugin/plugin.json` is the Open Plugins location and validates against a
+`plugin.schema.json` beside it; `plugin.json` at the repository root is the Agent
+Plugins one and names the remote `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`,
+so a validator can fetch it. Keep them separate rather than symlinking one to the
+other — the root schema sets `additionalProperties: false` and has no `logo` or
+`mcpServers`, both of which the Open Plugins file carries.
 
 **What `server.json` declares is four real packages**, and each one's shape is
 load-bearing:

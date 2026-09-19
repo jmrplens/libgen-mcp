@@ -85,6 +85,12 @@ new_case() {
 JSON
   : >"$dir/checksums.txt"
   printf 'not really a bundle\n' >"$dir/libgen-mcp.mcpb"
+  # The two plugin manifests, which are different schemas for different
+  # directories and are both stamped from here. A run that reaches only one of
+  # them ships a listing advertising the previous release.
+  mkdir -p "$dir/.plugin"
+  printf '{"name":"libgen-mcp","version":"0.0.1"}\n' >"$dir/.plugin/plugin.json"
+  printf '{"name":"libgen-mcp","version":"0.0.1"}\n' >"$dir/plugin.json"
   echo "$dir"
 }
 
@@ -112,6 +118,8 @@ want "docker hub identifier" \
 # the registry rejects a version on an OCI package, whose version is its tag.
 want "oci entries carry no version field" "0" \
   "$(jq '[.packages[] | select(.registryType == "oci") | select(has("version"))] | length' "$dir/server.json")"
+want "the Open Plugins manifest" "9.9.9" "$(jq -r '.version' "$dir/.plugin/plugin.json")"
+want "the Agent Plugins manifest" "9.9.9" "$(jq -r '.version' "$dir/plugin.json")"
 rm -rf "$dir"
 
 # 2. A digest-pinned identifier with no digest is refused rather than stamped.

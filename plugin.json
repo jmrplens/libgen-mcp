@@ -1,0 +1,35 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "libgen-mcp",
+  "version": "1.7.2",
+  "description": "MCP server in Go for federated search, citation and reading of books, papers, comics, magazines and standards — querying the Library Genesis catalog alongside open-access discovery (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) and article downloads from Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE and OAPEN. Four focused tools (search, get_details, download, read), one static binary, no account required.",
+  "author": {
+    "name": "José Manuel Requena Plens",
+    "url": "https://github.com/jmrplens"
+  },
+  "homepage": "https://jmrp.io/docs/libgen-mcp",
+  "repository": "https://github.com/jmrplens/libgen-mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "libgen",
+    "library-genesis",
+    "go",
+    "golang",
+    "claude",
+    "cursor",
+    "llm",
+    "ai",
+    "books",
+    "ebooks",
+    "research-papers",
+    "doi",
+    "read",
+    "open-access",
+    "arxiv",
+    "pdf",
+    "epub"
+  ]
+}

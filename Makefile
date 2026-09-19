@@ -309,7 +309,7 @@ release-check: ## Validate the GoReleaser config
 # and commits it back, so a bump that skips `make sync-npm-version` would leave
 # main advertising the previous version on npm until the next tag.
 VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plugin.json \
-                     npm/libgen-mcp/package.json
+                     plugin.json npm/libgen-mcp/package.json
 
 check-manifests: ## Verify every version-bearing manifest parses and matches the VERSION file
 	@VF=$$(tr -d '[:space:]' < VERSION); \

@@ -162,18 +162,23 @@ fi
 # 5. Stamp the version into every other version-bearing manifest.
 #
 # server.json is handled above because it carries far more than a version —
-# per-package fields, pinned identifiers and digests. These three carry only the
+# per-package fields, pinned identifiers and digests. These four carry only the
 # one field, and they are exactly the rest of the set `make check-manifests`
-# gates against VERSION, so a tag now leaves all four consistent instead of the
+# gates against VERSION, so a tag now leaves all five consistent instead of the
 # two that happened to be wired first. That asymmetry was not harmless:
 # .plugin/plugin.json once spent a whole release cycle advertising a version the
 # repository had already left behind.
+#
+# The two plugin manifests are different schemas for different directories, not
+# a copy of each other: .plugin/plugin.json is the Open Plugins location and
+# plugin.json at the root is the Agent Plugins one. Both are stamped here for
+# the same reason, and neither is generated from the other.
 #
 # lhm.plugin.json is among them for a second reason: the actual publish to
 # LobeHub is a manual step (`make publish-lobehub`, the CLI has no
 # non-interactive auth), so stamping here is what keeps its version honest
 # between the tag and that step.
-for manifest in lhm.plugin.json mcpb/manifest.json .plugin/plugin.json; do
+for manifest in lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.json; do
   if [[ -f "$manifest" ]]; then
     jq --arg v "$VERSION" '.version = $v' "$manifest" >tmp.$$.json && mv tmp.$$.json "$manifest"
     echo "$manifest version set to $VERSION"
