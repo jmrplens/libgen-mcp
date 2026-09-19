@@ -495,6 +495,7 @@ make check-doc-links                                       # local doc links res
 make audit-surface-quality                                 # tool surface conventions
 make check-install-buttons                                 # the one-click buttons agree
 make check-test-goroutines                                 # no testing.T abort off the test goroutine
+make check-test-file-names                                 # test files named after their module
 cd site && pnpm run lint                                   # the docs site, if you touched it
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
@@ -591,6 +592,31 @@ Docs are **bilingual and kept in parity**:
 
 **Unit tests** run offline with `go test ./...`. HTML fixtures live in each
 package's `testdata/`.
+
+### Test files are named after the module they test
+
+`register.go` → `register_test.go`, and nothing else. A theme-named file
+(`coverage_boost_test.go`, `secretredaction_test.go`) hides its tests from a
+reader looking beside the module, and can hide them from CI too: a
+`coverage_*` name matches a `.gitignore` rule this repository actually has.
+`make check-test-file-names` gates it. Four shapes are exempt, and each is
+exempt for a reason the rule cannot absorb:
+
+- `export_test.go`, the standard idiom for exporting internals.
+- `<module>_<qualifier>_test.go` with a `//go:build` constraint, when
+  `<module>.go` exists — a platform-gated test cannot live in the module's
+  unconstrained test file.
+- the same shape in an external test package (`package x_test`), when an
+  internal `<module>_test.go` already holds the plain name. Go allows one
+  package per file name, so this qualifier is forced rather than chosen.
+- **a file declaring `TestMain` and nothing else**: a harness for the package,
+  with no module to be named after. Six packages here relax the netguard policy
+  once per binary so their `httptest` fixtures on loopback are reachable at all,
+  and folding that into some arbitrary `<module>_test.go` would hide a
+  package-wide decision inside a file about one thing.
+
+`test/e2e` is exempt as a tree — its files have no source modules to be named
+after — and so is everything `cmd/internal/testsource` prunes.
 
 ### Assertions off the test goroutine
 

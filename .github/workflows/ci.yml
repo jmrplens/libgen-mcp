@@ -60,6 +60,11 @@ jobs:
       # error, and the test fails somewhere else entirely.
       - name: No testing.T abort is made off the test goroutine
         run: make check-test-goroutines
+      # A theme-named test file hides its tests from a reader looking beside the
+      # module, and can hide them from CI too: a coverage_boost_test.go would
+      # match a .gitignore coverage_* rule and sit untracked indefinitely.
+      - name: Every test file is named after a module it tests
+        run: make check-test-file-names
       - name: Run tests with coverage
         run: |
           go test -count=1 -coverpkg=./internal/...,./cmd/server/...,./cmd/internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
