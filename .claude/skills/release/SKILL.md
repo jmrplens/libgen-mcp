@@ -9,12 +9,20 @@ The version lives in `VERSION` and is mirrored into six manifests. To cut a
 release:
 
 1. Bump `VERSION`.
-2. Update the version in `server.json` (`.version`, the bundle's release-asset
-   URL, the tag in each image reference and the npm entry's `version`),
-   `mcpb/manifest.json`, `lhm.plugin.json`, `.plugin/plugin.json` and
-   `plugin.json`, and
-   run `make sync-npm-version` for `npm/libgen-mcp/package.json` (it moves the
-   version and all six dependency pins together — never hand-edit it).
+2. Update the version in `mcpb/manifest.json`, `lhm.plugin.json`,
+   `.plugin/plugin.json` and `plugin.json`, and run `make sync-npm-version` for
+   `npm/libgen-mcp/package.json` (it moves the version and all six dependency
+   pins together — never hand-edit it).
+
+   In `server.json`, bump **`.version` and the `version` field of the npm, PyPI
+   and NuGet entries — and nothing else.** Leave the `.mcpb` identifier, its
+   `fileSha256` and both OCI identifiers pointing at the **published** release:
+   the stamper rewrites all three at release time, and bumping them by hand
+   declares files that do not exist yet, which `make check-server-json-packages`
+   fails on (the bundle URL 404s and the image tag does not resolve). The npm
+   entry has to move with the launcher because the same gate holds the two in
+   lockstep; an unpublished *version* is a note there, an inconsistent one is
+   not.
 3. Run `make check-manifests`. It gates all six against `VERSION`, and CI runs
    it in the `server.json` job. Add any new version-bearing manifest to
    `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
