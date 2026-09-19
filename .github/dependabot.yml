@@ -11,6 +11,21 @@ updates:
       interval: "weekly"
       day: "monday"
       timezone: "Europe/Madrid"
+    # Let a release sit for three days before a pull request proposes it.
+    #
+    # The window is against a compromised or withdrawn publish, which is caught
+    # by the ecosystem within hours and days respectively; it is not against an
+    # ordinary bug, and it is not a substitute for reading the diff. What is
+    # NOT delayed is a genuine security fix: `govulncheck` runs in CI on every
+    # pull request and fails on a vulnerability that reaches this module's call
+    # graph, whatever Dependabot has or has not proposed yet.
+    #
+    # `default-days` alone, on every ecosystem: the SemVer sub-keys
+    # (`semver-major-days` and friends) are rejected outright for docker, and a
+    # configuration file Dependabot refuses stops every update, not just that
+    # one.
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -32,6 +47,8 @@ updates:
       interval: "weekly"
       day: "monday"
       timezone: "Europe/Madrid"
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -51,6 +68,8 @@ updates:
       interval: "weekly"
       day: "monday"
       timezone: "Europe/Madrid"
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -65,6 +84,8 @@ updates:
       interval: "weekly"
       day: "monday"
       timezone: "Europe/Madrid"
+    cooldown:
+      default-days: 3
     commit-message:
       prefix: "chore"
       include: "scope"
