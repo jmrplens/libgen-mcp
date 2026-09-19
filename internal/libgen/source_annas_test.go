@@ -474,10 +474,13 @@ func TestAnnasUnreachableMemberURLFallsBackToIPFS(t *testing.T) {
 	const cidV1 = "bafyunreachablecidzz234567"
 	const md5 = "d64efd386ed7227592499460aca2044b"
 
-	// A closed listener's address stands in for a host that cannot be dialed.
-	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	deadURL := dead.URL
-	dead.Close()
+	// Port zero stands in for a host that cannot be dialed, which is this
+	// repository's spelling for one everywhere else. A closed listener's
+	// address is not: the kernel is free to hand that port to the next
+	// listener that asks, and on a loaded runner it does — another test's
+	// httptest server answered on it, the member URL was reachable after all,
+	// and the fallback this test is about never ran.
+	const deadURL = "http://127.0.0.1:0"
 
 	gw := gatewayServing(http.StatusPartialContent)
 	defer gw.Close()
