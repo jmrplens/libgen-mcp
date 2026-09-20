@@ -544,12 +544,12 @@ func TestEveryRendererSurvivesAZeroAndAPopulatedValue(t *testing.T) {
 	nilOnZero := 0
 	for _, renderer := range renderers {
 		t.Run(renderer.name+" on a zero value", func(t *testing.T) {
-			if rendered := renderer.zero(); rendered == "" {
+			if renderer.zero() == "" {
 				nilOnZero++
 			}
 		})
 		t.Run(renderer.name+" on a populated value", func(t *testing.T) {
-			if rendered := renderer.populated(); strings.TrimSpace(rendered) == "" {
+			if strings.TrimSpace(renderer.populated()) == "" {
 				t.Errorf("%s rendered nothing for a populated value", renderer.name)
 			}
 		})

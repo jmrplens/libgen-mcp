@@ -110,6 +110,14 @@ func auditMetadata(t *mcp.Tool) []violation {
 	return append(vs, auditOutputRoot(t)...)
 }
 
+// The categories the output rules file their findings under. A category is
+// what a report groups by and what a reader greps for, so the two the output
+// rules use are named once rather than spelled at each site.
+const (
+	categoryOutputSchema      = "output-schema"
+	categoryOutputDescription = "output-description"
+)
+
 // auditOutputRoot checks what a caller is told they get back.
 //
 // A tool with no OutputSchema leaves a client nothing to validate a result
@@ -120,23 +128,23 @@ func auditMetadata(t *mcp.Tool) []violation {
 // whole.
 func auditOutputRoot(t *mcp.Tool) []violation {
 	if t.OutputSchema == nil {
-		return []violation{{t.Name, "output-schema", "tool has no OutputSchema"}}
+		return []violation{{t.Name, categoryOutputSchema, "tool has no OutputSchema"}}
 	}
 	schema, ok := t.OutputSchema.(map[string]any)
 	if !ok {
-		return []violation{{t.Name, "output-schema", "OutputSchema is not a JSON object"}}
+		return []violation{{t.Name, categoryOutputSchema, "OutputSchema is not a JSON object"}}
 	}
 	var vs []violation
 	if typ, _ := schema["type"].(string); typ != "object" {
 		vs = append(vs, violation{
-			t.Name, "output-schema",
+			t.Name, categoryOutputSchema,
 			fmt.Sprintf("OutputSchema type=%q, want \"object\"", typ),
 		})
 	}
 	description, _ := schema["description"].(string)
 	if len(description) < minDescLen {
 		vs = append(vs, violation{
-			t.Name, "output-description",
+			t.Name, categoryOutputDescription,
 			fmt.Sprintf("OutputSchema root description is %d chars, want >= %d: a client has no sentence for what the tool returns",
 				len(description), minDescLen),
 		})
