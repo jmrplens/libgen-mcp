@@ -81,7 +81,8 @@ func TestAuditPackage_AcceptsCommandPackageDoc(t *testing.T) {
 	t.Parallel()
 
 	pkg := writePackageFixture(t, "main", map[string]string{
-		"main.go": "// Command widget audits widgets.\npackage main\n",
+		"doc.go":  "// Command widget audits widgets.\npackage main\n",
+		"main.go": "package main\n\nfunc main() {}\n",
 	})
 	findings, err := auditPackage(pkg, false)
 	if err != nil {
