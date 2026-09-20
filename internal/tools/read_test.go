@@ -914,9 +914,7 @@ func TestReadEmitsProgressNotifications(t *testing.T) {
 		defer mu.Unlock()
 		return len(got)
 	}
-	if count() == 0 {
-		reportMissingProgress(t, "read", count)
-	}
+	awaitProgress(t, "read", count)
 
 	mu.Lock()
 	defer mu.Unlock()

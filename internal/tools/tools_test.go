@@ -1311,9 +1311,7 @@ func TestDownloadToolWithProgressToken(t *testing.T) {
 		defer mu.Unlock()
 		return len(progresses)
 	}
-	if count() == 0 {
-		reportMissingProgress(t, "download", count)
-	}
+	awaitProgress(t, "download", count)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -3147,35 +3145,39 @@ func captureToolsLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// progressGrace bounds the extra wait a failing progress assertion allows itself
-// before it reports. It is diagnostic only — the assertion fails either way.
+// progressGrace bounds how long a progress assertion waits for the first
+// notification to reach the client's handler.
 const progressGrace = 3 * time.Second
 
-// reportMissingProgress fails the calling test with the diagnosis a flaking run
-// needs, having waited up to progressGrace for a notification the assertion may
-// simply have raced.
+// awaitProgress waits for the first progress notification to reach the
+// client's handler, and fails when none arrives within progressGrace.
 //
-// The distinction is the whole point. One that lands during the grace period
-// means delivery lost a race with CallTool returning, which is a problem with
-// this assertion. One that never lands means it was never emitted or was dropped
-// in transit, which is a problem with the server — and progressNotifier now logs
-// a failed send, so a run that hits this carries that half of the answer too.
+// It waits rather than requiring the notification to have already arrived,
+// because the ordering the earlier assertion rested on is not one the protocol
+// gives. The server writes the notification before the result, so it is on the
+// wire first — but the client dispatches a notification to its handler on a
+// different goroutine than the one resuming CallTool, and nothing orders the
+// two. On a loaded runner the reply wins.
 //
-// Neither case is tolerated: this always fails. TestDownloadToolWithProgressToken
-// flaked once in CI on 2026-08-21 and could not be reproduced locally across the
-// coverage and GOMAXPROCS variations, so the next occurrence has to explain
-// itself rather than be waited out.
-func reportMissingProgress(t *testing.T, what string, count func() int) {
+// That assertion was left in deliberately, failing on the race as well as on a
+// missing notification, so the next occurrence would explain itself rather than
+// be waited out. It did, on 2026-09-20, saying in its own words that the
+// assertion raced delivery — on a pull request that touched neither file. The
+// question it was asked is answered, and this is the answer.
+//
+// What is still asserted is what the test is about: a notification is emitted,
+// and its values are the ones the caller should see. Only the claim about when
+// it lands is gone, and that claim was never the server's to keep.
+func awaitProgress(t *testing.T, what string, count func() int) {
 	t.Helper()
 	deadline := time.Now().Add(progressGrace)
 	for time.Now().Before(deadline) {
 		if count() > 0 {
-			t.Fatalf("%s: no progress notification had arrived when the tool call returned, "+
-				"but one landed within %s — the assertion raced delivery", what, progressGrace)
+			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("%s: no progress notification arrived at all, even %s after the tool call returned "+
+	t.Fatalf("%s: no progress notification arrived, even %s after the tool call returned "+
 		"— it was never emitted, or it was dropped in transit", what, progressGrace)
 }
 
