@@ -522,14 +522,30 @@ OTLP endpoint.
 ### Doc comments
 
 Every exported (and, per the audit config, every) declaration needs a godoc
-comment that starts with the identifier's name. `main` packages get exactly one
-package comment starting with the word `Command` (and a space), placed in
-`main.go`; secondary files
-in the same package start with a plain comment separated from `package main` by
-a blank line so it is not treated as a second package doc.
+comment that starts with the identifier's name. A `main` package's starts with
+the word `Command` (and a space) instead of `Package`.
+
+**The package comment lives in `doc.go`, and nowhere else.** Go attaches it
+above any file's package clause, so a comment in some other file is one edit
+away from being joined by a second — and two package comments are not an error,
+they are two package comments, with whichever the toolchain reads first
+becoming the package's documentation. Every other file in the package opens
+with a plain comment separated from the package clause by a blank line, so it
+is not read as one.
+
+`go run ./cmd/godoc_tool/ move-package-doc <dirs...>` moves an existing one. It
+copies the comment verbatim above a new `doc.go`'s package clause, cuts it from
+the file it came from, and **carries the build constraint with it**: a
+constraint governs the file it is in, and `doc.go` is a new file of the same
+package — leaving it behind would give `cmd/eval` one file that builds without
+its tag, which is a `main` package with no `main` function. It declines three
+shapes: a package that already has a `doc.go`, one with no comment, and one
+whose comment the convention refuses, because moving that last one would
+enshrine as the documentation a comment the audit already reports.
 
 `go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings` (also
-`make godoc-check`) enforces this, including test files.
+`make godoc-check`) enforces all of it, including test files and including
+where the comment lives.
 
 ## CI shape
 

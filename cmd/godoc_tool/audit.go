@@ -27,6 +27,7 @@ const (
 	categoryPackageDocMissing  = "pkgdoc_missing"
 	categoryPackageDocForm     = "pkgdoc_form"
 	categoryPackageDocMultiple = "pkgdoc_multiple"
+	categoryPackageDocPlace    = "pkgdoc_place"
 	categoryFuncMissing        = "func_missing"
 	categoryFuncForm           = "func_form"
 	categoryMethodMissing      = "method_missing"
@@ -301,6 +302,15 @@ func checkPackageDocs(pkg packageInfo, files map[string]*ast.File, findings *[]f
 	}
 
 	for _, path := range packageDocs {
+		// Where the comment lives, before whether it is well formed. Go
+		// attaches the package comment above any file's package clause, so a
+		// comment in some other file is one edit away from being joined by a
+		// second one — and two package comments are not an error, they are two
+		// package comments. `godoc_tool move-package-doc` moves it.
+		if filepath.Base(path) != packageDocFile {
+			*findings = append(*findings, newFinding(categoryPackageDocPlace, pkg, path, pkg.Name,
+				"the package comment is not in "+packageDocFile+"; run godoc_tool move-package-doc on this directory"))
+		}
 		docText := strings.TrimSpace(files[path].Doc.Text())
 		if validPackageDoc(pkg.Name, docText) {
 			continue
