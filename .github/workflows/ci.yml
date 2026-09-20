@@ -21,7 +21,7 @@ permissions:
 
 env:
   GO_VERSION: "1.27.0"
-  COVERAGE_MIN: "85"
+  COVERAGE_MIN: "90"
 
   # Whether this run checks that the committed generated artifacts — llms.txt,
   # llms-full.txt, lhm.plugin.json, tool-schema.json, the evaluator pages and the
@@ -73,7 +73,7 @@ jobs:
         run: make check-test-subtests
       - name: Run tests with coverage
         run: |
-          go test -count=1 -coverpkg=./internal/...,./cmd/server/...,./cmd/internal/... -coverprofile=coverage.out ./cmd/... ./internal/...
+          go test -count=1 -coverpkg=./internal/...,./cmd/... -coverprofile=coverage.out ./cmd/... ./internal/...
           go tool cover -func=coverage.out | grep '^total:'
           # The summary line is anchored: a plain "total" also matches any function
           # whose name contains it, which yields two values and turns the comparison

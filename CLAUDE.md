@@ -59,21 +59,55 @@ a plain route; both server-card locations answering the same bytes under their o
 types, with the card's `Cache-Control` override; and the `--json-response` content type. Run
 it after touching `internal/transport` or the HTTP wiring in `cmd/server`.
 
-Coverage is scoped to `./internal/...`, `./cmd/server/...` and
-`./cmd/internal/...` (`COVERAGE_PKGS`, mirrored into both
-`sonar-project.properties` and the CI profile — **all three have to agree**, or a
+Coverage is scoped to `./internal/...` and `./cmd/...` — everything this module
+builds — against a **90%** floor (`COVERAGE_PKGS`, mirrored into both
+`sonar-project.properties` and the CI profile; **all three have to agree**, or a
 package ends up counted and uninstrumented, which reports as 0% and is not).
-The rest of `cmd/` is not counted toward the 85% floor — but it must still have tests for its core
-logic (see `cmd/audit_tokens` and `cmd/audit_surface_quality` for the pattern).
 
-`cmd/server` was excluded until 2026-08-27, on the premise that it was thin
-wiring. That premise expired: it now decides cross-origin access, answers both
-preflights and mounts the middleware chain on the request path, which is the
-code most worth measuring. **Excluding a package from the metric hides more than
-a number** — `cmd/gen_tool_schema` shipped with no test file at all and nothing
-reported it, because the rule above is prose and the exclusion was
-configuration. When adding a command, check it appears in a coverage report
-somewhere, not only that you remember writing tests.
+It was narrower twice, and each narrowing was wrong for the same reason.
+`cmd/server` was out until 2026-08-27 on the premise that it was thin wiring;
+the rest of `cmd/` was out until 2026-09-20 on the premise that build tooling is
+gated by its own `check-*` targets rather than by a number. **Excluding a
+package from the metric hides more than a number** — `cmd/gen_tool_schema`
+shipped with no test file at all and nothing reported it, because the rule was
+prose and the exclusion was configuration.
+
+**`cmd/eval` is the one exclusion left, and it is measurement rather than
+policy**: its files are behind the `eval` build tag, CI does not set it, so no
+profile CI produces can carry a line of it. Counting it would report a package
+as 0% for being untestable here rather than untested.
+
+**The number is measured on one platform.** The unit suite runs on three, but
+the profile CI keeps is Linux's; a per-platform floor would measure the same
+tests three times and gate on whichever runner was slowest to warm its cache.
+
+### Where a number stops helping
+
+Line coverage says a statement ran. It does not say a test would notice if the
+statement were wrong, and on the download chain — where the point is which
+branch runs when a source declines — that is most of the question. Two targets
+answer the other half, both per-package and both hand-run:
+
+```sh
+make coverage-conditions PKG=./internal/netguard   # gobco: conditions never evaluated both ways
+make coverage-mutants    PKG=./internal/netguard   # gremlins: mutants no test killed
+```
+
+- **`coverage-conditions`** reports every boolean never evaluated both ways.
+  `&&`, `||` and `!` operands count separately, so a line reported is a missing
+  test case rather than a missing line.
+- **`coverage-mutants`** changes the code and checks the tests notice. The gate
+  on a package a change touches is **`Lived 0` and `Not covered 0`**. It is not
+  a CI job: a single package takes minutes, and it runs on one platform for the
+  same reason the coverage number does — **do not put gremlins on the matrix**.
+- **`test/e2e*` is outside both.** Each runs a package's tests once per mutant
+  or per condition, and those suites start real binaries, so the cost is the
+  suite's runtime multiplied by the mutant count.
+- The per-mutant timeout is derived from the package's own baseline, because
+  gremlins applies no floor and a budget under the cost of starting `go test`
+  reports every mutant as TIMED OUT having never run — which is not a kill, so
+  the default flatters exactly the packages it never tested. `MUTANT_BUDGET`
+  raises it; the floor beneath it is not negotiable.
 
 ## Key Development Patterns
 
