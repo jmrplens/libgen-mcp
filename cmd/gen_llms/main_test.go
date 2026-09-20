@@ -1036,3 +1036,41 @@ func TestInstallChannelsAreNamedOnce(t *testing.T) {
 		})
 	}
 }
+
+// TestWriteSchemaSection_LeadsWithTheRootDescription verifies the sentence a
+// schema carries about itself reaches the reference before the property list.
+// A list of fields says what comes back and never says what it is for, and a
+// reader deciding whether to call the tool needs the sentence more.
+func TestWriteSchemaSection_LeadsWithTheRootDescription(t *testing.T) {
+	schema := map[string]any{
+		"type":        "object",
+		"description": "What the tool returns, in one sentence.",
+		"properties":  map[string]any{"mirror": map[string]any{"type": "string", "description": "the mirror"}},
+	}
+
+	var b strings.Builder
+	writeSchemaSection(&b, "**Returns:**", schema)
+	written := b.String()
+
+	if !strings.Contains(written, "What the tool returns, in one sentence.") {
+		t.Fatalf("section = %q, want the root description in it", written)
+	}
+	if strings.Index(written, "What the tool returns") > strings.Index(written, "mirror") {
+		t.Errorf("section = %q, want the sentence before the property list", written)
+	}
+}
+
+// TestWriteSchemaSection_WritesNoBlankLeadWithoutOne verifies a schema with no
+// root description still opens on its properties rather than on an empty line.
+func TestWriteSchemaSection_WritesNoBlankLeadWithoutOne(t *testing.T) {
+	schema := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"mirror": map[string]any{"type": "string", "description": "the mirror"}},
+	}
+
+	var b strings.Builder
+	writeSchemaSection(&b, "**Returns:**", schema)
+	if got := b.String(); !strings.HasPrefix(got, "**Returns:**\n\n- ") {
+		t.Errorf("section = %q, want the property list right after the heading", got)
+	}
+}

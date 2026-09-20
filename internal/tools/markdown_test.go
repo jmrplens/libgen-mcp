@@ -468,3 +468,92 @@ func TestResolveNextSteps_CarriesTheURLThroughTheEscapedBullet(t *testing.T) {
 		t.Errorf("resolved markdown = %q, want the newline in the address collapsed", out)
 	}
 }
+
+// TestEveryRendererSurvivesAZeroAndAPopulatedValue drives the five renderers
+// with both ends of what a handler can hand them.
+//
+// A renderer runs on whatever the mirrors returned, which includes a result
+// nothing filled in: a search that failed after the struct was built, a
+// details lookup whose record is nil, a download that resolved and saved
+// nothing. Every one of those has reached a renderer in this repository's
+// history, and a panic there is a tool result the client never receives.
+//
+// A zero value that renders nothing is counted and not failed. A renderer that
+// writes no rows for a record with no fields is a guard, not a defect — the
+// card writer is built on exactly that rule — so the count is reported for a
+// reader and the assertion is about surviving, not about producing.
+func TestEveryRendererSurvivesAZeroAndAPopulatedValue(t *testing.T) {
+	renderers := []struct {
+		name      string
+		zero      func() string
+		populated func() string
+	}{
+		{
+			name: "renderSearchMarkdown",
+			zero: func() string { return renderSearchMarkdown(SearchOutput{}) },
+			populated: func() string {
+				return renderSearchMarkdown(SearchOutput{
+					Mirror: "https://libgen.li", Page: 1, TotalFiles: "12",
+					Results:   []libgen.Result{{Title: "A Title", Authors: "An Author", MD5: "abc"}},
+					NextSteps: []string{"Call get_details."},
+				})
+			},
+		},
+		{
+			name: "renderDetailsMarkdown",
+			zero: func() string { return renderDetailsMarkdown(DetailsOutput{}) },
+			populated: func() string {
+				return renderDetailsMarkdown(DetailsOutput{
+					File:      map[string]any{"title": "A Title", "md5": "abc"},
+					Citations: &Citations{BibTeX: "@book{x}", Provenance: "catalog"},
+					NextSteps: []string{"Call download."},
+				})
+			},
+		},
+		{
+			name: "renderReadMarkdown",
+			zero: func() string { return renderReadMarkdown(ReadOutput{}) },
+			populated: func() string {
+				return renderReadMarkdown(ReadOutput{
+					Extractable: true, Format: "pdf", TotalPages: 10,
+					PageStart: 1, PageEnd: 2, Text: "some text", NextSteps: []string{"Re-call with the cursor."},
+				})
+			},
+		},
+		{
+			name: "renderDownloadMarkdown",
+			zero: func() string { return renderDownloadMarkdown(DownloadOutput{}) },
+			populated: func() string {
+				// The embedded result is filled field by field rather than as
+				// a literal: an embedded struct literal is what the modernize
+				// linter asks to have its type elided, and Go elides a
+				// composite literal's type inside a slice, an array or a map,
+				// never as a struct field's value.
+				out := DownloadOutput{NextSteps: []string{"Open it."}}
+				out.Path, out.SizeBytes, out.Verified = "/books/a.pdf", 9, true
+				return renderDownloadMarkdown(out)
+			},
+		},
+		{
+			name:      "renderResolvedMarkdown",
+			zero:      func() string { return renderResolvedMarkdown(ResolvedLink{}) },
+			populated: func() string { return renderResolvedMarkdown(ResolvedLink{URL: "https://x/y.pdf", Source: "annas"}) },
+		},
+	}
+
+	nilOnZero := 0
+	for _, renderer := range renderers {
+		t.Run(renderer.name+" on a zero value", func(t *testing.T) {
+			if renderer.zero() == "" {
+				nilOnZero++
+			}
+		})
+		t.Run(renderer.name+" on a populated value", func(t *testing.T) {
+			if strings.TrimSpace(renderer.populated()) == "" {
+				t.Errorf("%s rendered nothing for a populated value", renderer.name)
+			}
+		})
+	}
+	t.Logf("%d of %d renderers write nothing for a zero value, which is a guard rather than a defect",
+		nilOnZero, len(renderers))
+}

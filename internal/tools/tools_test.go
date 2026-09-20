@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -4961,4 +4964,110 @@ func TestSavingServerKeepsTheResolveOnlyContrast(t *testing.T) {
 		return
 	}
 	t.Fatal("download is missing")
+}
+
+// TestEveryContentBlockCarriesItsAudience walks this package's own syntax and
+// holds every content block it constructs to the annotation rule.
+//
+// It reads the source rather than a result, because the alternative is calling
+// the tools, and every one of them reaches a mirror. A composite literal is
+// where a block is written, so a new one is the thing to catch — and the
+// failure it catches is silent: a block with no annotation states no audience,
+// so a client deciding what to show a person and a model deciding what to read
+// both guess, and nothing anywhere reports it.
+//
+// internal/prompts is deliberately not covered. A prompt message carries a
+// Role of its own, which is the audience for a prompt, and annotating the
+// content inside a user-role message would state the same thing twice.
+func TestEveryContentBlockCarriesItsAudience(t *testing.T) {
+	fset := token.NewFileSet()
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read the package directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			file, parseErr := parser.ParseFile(fset, name, nil, 0)
+			if parseErr != nil {
+				t.Fatalf("parse %s: %v", name, parseErr)
+			}
+			for _, at := range unannotatedContent(file) {
+				t.Errorf("%s: this mcp.TextContent sets no Annotations, so it states no audience", fset.Position(at).String())
+			}
+		})
+	}
+}
+
+// unannotatedContent lists the positions of the mcp.TextContent literals in a
+// file that do not set Annotations.
+func unannotatedContent(file *ast.File) []token.Pos {
+	var found []token.Pos
+	ast.Inspect(file, func(node ast.Node) bool {
+		lit, ok := node.(*ast.CompositeLit)
+		if !ok || !isTextContent(lit.Type) {
+			return true
+		}
+		for _, elt := range lit.Elts {
+			kv, isKV := elt.(*ast.KeyValueExpr)
+			if !isKV {
+				continue
+			}
+			if key, isIdent := kv.Key.(*ast.Ident); isIdent && key.Name == "Annotations" {
+				return true
+			}
+		}
+		found = append(found, lit.Pos())
+		return true
+	})
+	return found
+}
+
+// isTextContent reports whether a composite literal's type is mcp.TextContent.
+func isTextContent(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "TextContent" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "mcp"
+}
+
+// TestMarkdownResult_AnnotatesForBothAudiences verifies the shared constructor
+// states what the rule says: the rendering is for the person who reads it and
+// for the model that acts on its caveats.
+func TestMarkdownResult_AnnotatesForBothAudiences(t *testing.T) {
+	result := markdownResult("# A result")
+	if len(result.Content) != 1 {
+		t.Fatalf("markdownResult() wrote %d content blocks, want one", len(result.Content))
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("markdownResult() wrote %T, want *mcp.TextContent", result.Content[0])
+	}
+	if text.Annotations == nil {
+		t.Fatal("the block carries no Annotations")
+	}
+	got := fmt.Sprint(text.Annotations.Audience)
+	if got != "[user assistant]" {
+		t.Errorf("audience = %s, want both", got)
+	}
+}
+
+// TestBothAudiences_IsANewValueEachTime pins why it is a function: one shared
+// instance would be one slice every result aliases, and a mutation through any
+// of them would change every other result's annotation.
+func TestBothAudiences_IsANewValueEachTime(t *testing.T) {
+	first, second := bothAudiences(), bothAudiences()
+	if first == second {
+		t.Fatal("bothAudiences() returned the same pointer twice")
+	}
+	first.Audience[0] = "nobody"
+	if second.Audience[0] != "user" {
+		t.Errorf("mutating one annotation changed another: %v", second.Audience)
+	}
 }
