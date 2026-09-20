@@ -143,3 +143,200 @@ func TestMeasuredSpanWithoutDates(t *testing.T) {
 		t.Error("dateless ES wording is empty")
 	}
 }
+
+// TestIdRange_DescribesTheListTheWayTheProseDoes verifies the span and the
+// lettered variants are told apart: a variant carries a letter, so it has no
+// place in a numeric range, and the prose names it separately.
+func TestIdRange_DescribesTheListTheWayTheProseDoes(t *testing.T) {
+	testCases := []struct {
+		name         string
+		rows         []scenarioRow
+		wantSpan     string
+		wantVariants string
+	}{
+		{
+			name:     "a plain run",
+			rows:     []scenarioRow{{ID: "S3"}, {ID: "S1"}, {ID: "S12"}},
+			wantSpan: "S1–S12",
+		},
+		{
+			name:         "one variant",
+			rows:         []scenarioRow{{ID: "S1"}, {ID: "S6b"}, {ID: "S9"}},
+			wantSpan:     "S1–S9",
+			wantVariants: "S6b",
+		},
+		{
+			name:         "two variants",
+			rows:         []scenarioRow{{ID: "S1"}, {ID: "S6b"}, {ID: "S7c"}},
+			wantSpan:     "S1–S1",
+			wantVariants: "S6b,S7c",
+		},
+		{name: "no rows at all", rows: nil, wantSpan: "S0–S0"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			span, variants := idRange(tc.rows)
+			if span != tc.wantSpan {
+				t.Errorf("idRange() span = %q, want %q", span, tc.wantSpan)
+			}
+			if got := strings.Join(variants, ","); got != tc.wantVariants {
+				t.Errorf("idRange() variants = %q, want %q", got, tc.wantVariants)
+			}
+		})
+	}
+}
+
+// TestVariantSuffix_PicksTheTemplateAndWritesNothingForNone verifies the tail
+// agrees with itself in number, and that a run with no variants gets no tail
+// rather than an empty phrase.
+func TestVariantSuffix_PicksTheTemplateAndWritesNothingForNone(t *testing.T) {
+	testCases := []struct {
+		name     string
+		variants []string
+		want     string
+	}{
+		{name: "none", variants: nil, want: ""},
+		{name: "one", variants: []string{"S6b"}, want: " plus the S6b variant"},
+		{name: "two", variants: []string{"S6b", "S7c"}, want: " plus the S6b, S7c variants"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := variantSuffix(tc.variants, " plus the %s variant", " plus the %s variants")
+			if got != tc.want {
+				t.Errorf("variantSuffix(%v) = %q, want %q", tc.variants, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestStatusIcon_MarksAnUnknownStatusRatherThanHidingIt verifies a status the
+// pages do not know is shown with a warning and its own name: a run that
+// reported something new should say so, not render as blank.
+func TestStatusIcon_MarksAnUnknownStatusRatherThanHidingIt(t *testing.T) {
+	testCases := []struct{ status, want string }{
+		{status: "PASS", want: "✅ PASS"},
+		{status: "pass", want: "✅ PASS"},
+		{status: "FAIL", want: "❌ FAIL"},
+		{status: "SKIP", want: "⏭️ SKIP"},
+		{status: "flaked", want: "⚠️ FLAKED"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.status, func(t *testing.T) {
+			if got := statusIcon(tc.status); got != tc.want {
+				t.Errorf("statusIcon(%q) = %q, want %q", tc.status, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReplaceRegion_RefusesAMarkerItCannotFindOrClose verifies the two ways a
+// page can be wrong, because the alternative to an error is a page written
+// with the generated block in the wrong place or not at all.
+func TestReplaceRegion_RefusesAMarkerItCannotFindOrClose(t *testing.T) {
+	const begin = "{/* BEGIN:table */}"
+
+	t.Run("a region it replaces", func(t *testing.T) {
+		page := "before\n" + begin + "\nold\n" + regionEnd + "\nafter\n"
+		got, err := replaceRegion(page, begin, "new")
+		if err != nil {
+			t.Fatalf("replaceRegion() = %v", err)
+		}
+		if !strings.Contains(got, "new") || strings.Contains(got, "old") {
+			t.Errorf("replaceRegion() = %q, want the body replaced", got)
+		}
+		if !strings.Contains(got, "{/* prettier-ignore */}") {
+			t.Errorf("replaceRegion() = %q, want the generated table left to the generator", got)
+		}
+		if !strings.HasPrefix(got, "before\n") || !strings.HasSuffix(got, "after\n") {
+			t.Errorf("replaceRegion() = %q, want everything outside the region kept", got)
+		}
+	})
+
+	t.Run("a marker that is not there", func(t *testing.T) {
+		if _, err := replaceRegion("nothing here\n", begin, "new"); err == nil {
+			t.Error("replaceRegion() accepted a page with no begin marker")
+		}
+	})
+
+	t.Run("a region nothing closes", func(t *testing.T) {
+		if _, err := replaceRegion("before\n"+begin+"\nold\n", begin, "new"); err == nil {
+			t.Error("replaceRegion() accepted a region that is never closed")
+		}
+	})
+}
+
+// TestReadModel_FindsTheBannerOrSaysWhyNot verifies the model a run was
+// measured with is read from the run itself, and that a run with no banner is
+// refused rather than published under no model at all.
+func TestReadModel_FindsTheBannerOrSaysWhyNot(t *testing.T) {
+	t.Run("a run with a banner", func(t *testing.T) {
+		path := writeResultsFixture(t, "# Run\n\nModel: `claude-haiku-4-5`\n\n| S1 | stdio |\n")
+		got, err := readModel(path)
+		if err != nil {
+			t.Fatalf("readModel() = %v", err)
+		}
+		if got != "claude-haiku-4-5" {
+			t.Errorf("readModel() = %q, want the model from the banner", got)
+		}
+	})
+
+	t.Run("a run with none", func(t *testing.T) {
+		path := writeResultsFixture(t, "# Run\n\nno banner here\n")
+		if _, err := readModel(path); err == nil {
+			t.Error("readModel() accepted a run with no Model line")
+		}
+	})
+
+	t.Run("a path that is not there", func(t *testing.T) {
+		if _, err := readModel(filepath.Join(t.TempDir(), "absent.md")); err == nil {
+			t.Error("readModel() accepted a path that is not there")
+		}
+	})
+}
+
+// TestRenderScenarios_BothLanguagesRenderEveryRow verifies the two tables stay
+// the same length, which is what the i18n parity of these pages rests on.
+func TestRenderScenarios_BothLanguagesRenderEveryRow(t *testing.T) {
+	rows := []scenarioRow{{ID: "S1", What: "a first check"}, {ID: "S2", What: "a second"}}
+
+	for _, tc := range []struct {
+		name     string
+		rendered string
+	}{
+		{name: "English", rendered: renderScenariosEN(rows)},
+		{name: "Spanish", rendered: renderScenariosES(rows)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := strings.Count(tc.rendered, "\n| S"); got != len(rows) {
+				t.Errorf("%s table has %d scenario rows, want %d:\n%s", tc.name, got, len(rows), tc.rendered)
+			}
+		})
+	}
+}
+
+// TestRenderScenarioSummary_BothLanguagesQuoteTheSameCounts verifies the tally
+// each page opens with is built from the rows rather than typed, so the two
+// cannot drift from each other or from the table below them.
+func TestRenderScenarioSummary_BothLanguagesQuoteTheSameCounts(t *testing.T) {
+	rows := []scenarioRow{{ID: "S1"}, {ID: "S2"}, {ID: "S6b"}}
+	sum := runSummary{Remote: 2}
+
+	for _, tc := range []struct {
+		name     string
+		rendered string
+	}{
+		{name: "English", rendered: renderScenarioSummaryEN(rows, sum)},
+		{name: "Spanish", rendered: renderScenarioSummaryES(rows, sum)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, want := range []string{"3", "S1–S2", "S6b", "2"} {
+				if !strings.Contains(tc.rendered, want) {
+					t.Errorf("%s summary = %q, want it to carry %q", tc.name, tc.rendered, want)
+				}
+			}
+		})
+	}
+}

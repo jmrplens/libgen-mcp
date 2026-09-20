@@ -4,6 +4,7 @@
 # golangci-lint (bundles govet, staticcheck, gosec, ...) + govulncheck.
 
 .PHONY: all build build-probe build-all run version \
+        coverage-conditions coverage-mutants \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
         lint golangci-lint govulncheck analyze analyze-fix fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
@@ -42,14 +43,25 @@ GO_ANALYSIS_PKGS := ./...
 # file, which is how a whole harness can go unanalyzed — so a new tag belongs
 # here in the same change that introduces it.
 GO_ANALYSIS_TAGS := e2e,eval,httpe2e,stdioe2e,collectore2e
-COVERAGE_MIN     := 85
-# cmd/server joins internal/ in the measured set: it is no longer thin wiring —
-# it decides cross-origin access and mounts the middleware chain on the request
-# path. The rest of cmd/ stays out, being build tooling and a live diagnostic
-# whose value is gated by the check-* targets rather than by a coverage number.
-COVERAGE_PKGS    := ./internal/... ./cmd/server/... ./cmd/internal/...
+COVERAGE_MIN     := 90
+# Everything this module builds is measured. The rest of cmd/ used to be out,
+# on the premise that build tooling is gated by its own check-* targets rather
+# than by a coverage number — but excluding a package hides more than a number,
+# which this repository learned once already when cmd/gen_tool_schema shipped
+# with no test file at all and nothing reported it. The rule that caught that
+# was prose; the exclusion was configuration, and configuration wins.
+#
+# The three places this is written have to agree — here, the CI profile, and
+# sonar-project.properties — or a package is counted and uninstrumented, which
+# reports as 0% and is not.
+#
+# cmd/eval is in the list and contributes nothing, because its files are behind
+# the eval build tag and CI does not set it. That is the honest state rather
+# than a gap: the harness is measured by running it, which costs Anthropic
+# tokens and reaches real mirrors.
+COVERAGE_PKGS    := ./internal/... ./cmd/...
 # The same list as one comma-separated argument, for -coverpkg.
-COVERAGE_COVERPKG := ./internal/...,./cmd/server/...,./cmd/internal/...
+COVERAGE_COVERPKG := ./internal/...,./cmd/...
 
 # Version from the VERSION file (single source of truth); commit from git.
 # Use shell `cat` (portable to GNU Make 3.81 on macOS; `$(file ...)` needs Make 4+).
@@ -154,6 +166,52 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 	  --results-doc cmd/eval/testdata/latest-run.md
 	@echo "Merging those scenarios into the results pages..."
 	go run ./cmd/gen_eval_pages/
+
+coverage-conditions: ## Report the boolean conditions of PKG never evaluated both ways (gobco; PKG=./internal/netguard)
+	@test -n "$(PKG)" || { echo "usage: make coverage-conditions PKG=./internal/netguard"; exit 2; }
+	cd $(PKG) && go run github.com/rillig/gobco@v1.3.4
+
+# The per-mutant timeout is derived from PKG's own baseline, because gremlins
+# computes it as that baseline times a coefficient and applies no floor. On a
+# fast package that product is smaller than the fixed cost of starting `go test`
+# at all, so every mutant is reported TIMED OUT having never run — and a timeout
+# is not a kill, so the default flatters exactly the packages it never managed
+# to test.
+#
+# MUTANT_BUDGET is the floor in seconds and the coefficient is whatever reaches
+# it, never below 8 so a slow package still gets a real multiple of its own
+# runtime. A timeout that survives a budget this size is a finding rather than a
+# setting: it is a mutant that made the package pathologically slow, which is
+# what mutating a memo does, and the answer is a test that asserts the memo.
+#
+# A package that does not pass its own tests is refused rather than measured.
+# Gremlins would otherwise run against a suite that already fails, where every
+# mutant is reported KILLED: a perfect score over a broken package.
+#
+# -count=1 is what makes the coefficient mean what it says. Gremlins multiplies
+# it by the elapsed time of its OWN coverage run, and that run is a plain
+# `go test -cover`, which Go's test cache answers instantly for a package whose
+# files have not changed — so a second invocation would derive the budget from a
+# fraction of a second and report a well-tested package as entirely timed out.
+MUTANT_BUDGET ?= 30
+MUTANT_BUDGET_FLOOR ?= 10
+coverage-mutants: ## Mutation-test PKG with gremlins (PKG=./internal/netguard). The gate on a changed package is Lived 0 and Not covered 0
+	@test -n "$(PKG)" || { echo "usage: make coverage-mutants PKG=./internal/netguard"; exit 2; }
+	@budget=$$(awk -v want="$(MUTANT_BUDGET)" -v floor="$(MUTANT_BUDGET_FLOOR)" \
+		'BEGIN{print (want+0 < floor+0) ? floor : want}'); \
+	[ "$$budget" = "$(MUTANT_BUDGET)" ] || \
+		echo "gremlins: MUTANT_BUDGET=$(MUTANT_BUDGET)s is under the $(MUTANT_BUDGET_FLOOR)s floor and would report untested mutants as timeouts; using $${budget}s"; \
+	baseline=$$(go test -count=1 $(PKG) 2>&1) || { \
+		printf '%s\n' "$$baseline" >&2; \
+		echo "gremlins: $(PKG) does not pass its own tests, so every mutant would read as killed; refusing to measure" >&2; \
+		exit 1; \
+	}; \
+	base=$$(printf '%s\n' "$$baseline" | tail -1 | grep -oE '[0-9]+\.[0-9]+s$$' | tr -d 's'); \
+	[ -n "$$base" ] || base=0.010; \
+	coeff=$$(awk -v b="$$base" -v f="$$budget" 'BEGIN{c=int(f/b)+1; if(c<8)c=8; if(c>6000)c=6000; print c}'); \
+	echo "gremlins: $(PKG) tests take $${base}s, so -timeout-coefficient $$coeff for a ~$${budget}s budget"; \
+	GOFLAGS="$${GOFLAGS} -count=1" go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 \
+		unleash --invert-logical --workers 4 --timeout-coefficient $$coeff $(GREMLINS_FLAGS) $(PKG)
 
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html
