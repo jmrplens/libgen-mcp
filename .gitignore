@@ -21,6 +21,7 @@
 /audit_test_names
 /audit_test_subtests
 /gen_icon_webp
+/bench_resources
 /dist/
 
 # npm publish set: the six per-platform packages are generated from the release

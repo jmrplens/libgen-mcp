@@ -18,20 +18,21 @@ are grouped by them: a tutorial is followed start to finish, a how-to guide
 answers a goal you already have, a reference is looked things up in, and an
 explanation is read to understand why.
 
-| Page                                    | Kind        | What it covers                                                                                                                                       |
-| --------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Getting started](getting-started.md)   | Tutorial    | The shortest path from nothing to a working client: install it, wire it in, run your first search.                                                   |
-| [Installation](installation.md)         | How-to      | Every channel, one section each: what you get, install, verify what you installed, upgrade, uninstall.                                               |
-| [HTTP server mode](http-server-mode.md) | How-to      | Deploying the server over streamable HTTP: the declared host, trusted proxies and what identity a deployment has, the limits, TLS, drain and probes. |
-| [Troubleshooting](troubleshooting.md)   | How-to      | Fixes for unreachable mirrors, failed downloads, missing articles, truncated searches, and disk-space errors.                                        |
-| [Configuration](configuration.md)       | Reference   | Every environment variable, with its default, valid range, and meaning.                                                                              |
-| [Tools](tools.md)                       | Reference   | The `search`, `get_details`, `download`, and `read` tools — inputs, outputs, and error behavior.                                                     |
-| [Download sources](sources.md)          | Reference   | Per-source reference for the twenty-one download sources: corpus, resolve mechanics, measured traps, keys, and crawl-rule constraints.               |
-| [Telemetry](telemetry.md)               | Reference   | OpenTelemetry: off by default, exported to a collector you run, what each signal records and what none of them ever will.                            |
-| [Architecture](architecture.md)         | Explanation | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, the multi-source chain, and the transports.                     |
-| [How search works](how-search-works.md) | Explanation | A conceptual walk through what a search queries, when it escalates beyond the catalog, and how each result's origin guides the download.             |
+| Page                                                     | Kind        | What it covers                                                                                                                                       |
+| -------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Getting started](getting-started.md)                    | Tutorial    | The shortest path from nothing to a working client: install it, wire it in, run your first search.                                                   |
+| [Installation](installation.md)                          | How-to      | Every channel, one section each: what you get, install, verify what you installed, upgrade, uninstall.                                               |
+| [HTTP server mode](http-server-mode.md)                  | How-to      | Deploying the server over streamable HTTP: the declared host, trusted proxies and what identity a deployment has, the limits, TLS, drain and probes. |
+| [Troubleshooting](troubleshooting.md)                    | How-to      | Fixes for unreachable mirrors, failed downloads, missing articles, truncated searches, and disk-space errors.                                        |
+| [Configuration](configuration.md)                        | Reference   | Every environment variable, with its default, valid range, and meaning.                                                                              |
+| [Tools](tools.md)                                        | Reference   | The `search`, `get_details`, `download`, and `read` tools — inputs, outputs, and error behavior.                                                     |
+| [Download sources](sources.md)                           | Reference   | Per-source reference for the twenty-one download sources: corpus, resolve mechanics, measured traps, keys, and crawl-rule constraints.               |
+| [Telemetry](telemetry.md)                                | Reference   | OpenTelemetry: off by default, exported to a collector you run, what each signal records and what none of them ever will.                            |
+| [What it costs to run](benchmarks/resource-benchmark.md) | Reference   | Measured memory, startup and latency on both transports, and what the outbound budget does to a tool call.                                           |
+| [Architecture](architecture.md)                          | Explanation | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, the multi-source chain, and the transports.                     |
+| [How search works](how-search-works.md)                  | Explanation | A conceptual walk through what a search queries, when it escalates beyond the catalog, and how each result's origin guides the download.             |
 
-The kinds are a label on the rows rather than four directories on disk. Ten
+The kinds are a label on the rows rather than four directories on disk. Eleven
 pages and an index are not a navigation problem, and moving them would break
 every inbound link — from `README.md`, from the site, from `CLAUDE.md` and from
 doc comments in the source — to buy a directory listing this table already is.

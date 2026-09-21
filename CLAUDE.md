@@ -81,6 +81,40 @@ as 0% for being untestable here rather than untested.
 the profile CI keeps is Linux's; a per-platform floor would measure the same
 tests three times and gate on whichever runner was slowest to warm its cache.
 
+### What the server costs to run
+
+`make bench-resources` measures it, from the real binary, on both transports,
+against an in-process stand-in for the catalog on loopback. The record is
+`docs/benchmarks/resource-benchmark.json` and the page beside it is generated
+from that record, never written by hand.
+
+Four things about it are load-bearing:
+
+- **The gate redraws, it does not re-measure.** `make check-bench-resources`
+  reads the committed record and asks whether the page still says what the
+  numbers say. A check that re-measured would fail for running on a different
+  CPU, which is a gate nobody can keep green — so the measurement is hand-run
+  and only the drawing is gated.
+- **A client is what a client is on each transport.** On HTTP it is a distinct
+  address, because that is what `internal/clientid` charges a caller by, so the
+  driver presents an `X-Real-IP` per client and the target is started with
+  `--trusted-proxies`. On stdio it is a process, because a client that wants a
+  stdio server starts one. Measuring anything else would measure a dimension no
+  deployment has.
+- **A scenario whose tool calls fail does not finish.** A search that cannot
+  reach its catalog answers in under a millisecond with `isError`, and a driver
+  that only read the JSON-RPC envelope would publish that as the cost of a
+  search. It did, on the first run, and the guard is why the numbers are not
+  that.
+- **The outbound budget is a dimension, not a constant.** `LIBGEN_MCP_RATE_RPS`
+  ships at one request per second, and every `tools/call` queues behind that one
+  token: measured here, sixteen searches in flight took fifteen seconds to
+  drain. Every scenario but one opens the valve to the ceiling config accepts
+  (20 rps) so the server's own cost is visible, and `http-8-shipped-rate` leaves
+  it shut so the record still says what a deployment does out of the box. That
+  pair is the answer to the sizing question: an inbound limit above the outbound
+  bucket only moves the queue.
+
 ### Where a number stops helping
 
 Line coverage says a statement ran. It does not say a test would notice if the

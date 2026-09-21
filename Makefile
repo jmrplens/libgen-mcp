@@ -14,6 +14,7 @@
         eval-only eval-pages check-eval-pages audit-tokens audit-surface-quality \
         check-install-buttons audit-gateway-chars check-gateway-chars \
         audit-md-escaping check-md-escaping gen-stats check-stats \
+        bench-resources bench-resources-render check-bench-resources \
         audit-doc-names check-doc-names \
         audit-test-goroutines check-test-goroutines check-test-file-names \
         audit-test-subtests fix-test-subtests check-test-subtests \
@@ -253,7 +254,8 @@ ANALYZE_STEPS = \
 	check-md-tables \
 	check-doc-links \
 	check-stats \
-	check-doc-names
+	check-doc-names \
+	check-bench-resources
 
 analyze: ## Run the pre-commit sweep: lint, vet and the doc/surface gates, reporting every failure
 	@failed=""; \
@@ -407,6 +409,19 @@ gen-stats: ## Recount the surface and rewrite the stats tables in README.md
 
 check-stats: ## Fail if README.md's stats tables no longer match the source (CI gate)
 	go run ./cmd/gen_stats/ --check
+
+# The measurement is hand-run and the gate is not, which is the whole
+# arrangement: the numbers come from one machine and the check only asks whether
+# the page still says what they say. A gate that re-measured would fail for
+# running on a different CPU, which is a gate nobody can keep green.
+bench-resources: ## Measure what the server costs to run and rewrite the record (hand-run; minutes)
+	go run ./cmd/bench_resources/ $(if $(SCENARIOS),-scenarios $(SCENARIOS)) $(if $(QUICK),-quick) -v
+
+bench-resources-render: ## Redraw the benchmark page from the committed record, without measuring
+	go run ./cmd/bench_resources/ -render
+
+check-bench-resources: ## Fail if the benchmark page no longer matches its record (CI gate)
+	go run ./cmd/bench_resources/ -check
 
 audit-md-escaping: ## Report catalog text reaching a Markdown construct with no escaper between it and the page
 	go run ./cmd/audit_md_escaping/ -v -contexts all,card
