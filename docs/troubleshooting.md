@@ -407,7 +407,7 @@ certificates at all unless told to.
 - **Prefer a unix socket when the proxy is on the same machine.** It removes the segment
   instead of encrypting it, so there is no certificate to issue, trust or rotate, and this
   whole class of failure disappears. See
-  [Architecture](architecture.md#where-the-server-listens).
+  [HTTP server mode](http-server-mode.md#where-the-server-listens).
 
 ## A renewed certificate is not being served
 

@@ -341,7 +341,7 @@ These are the server's own diagnostic logs, written straight to stderr. They are
     	- For a client rather than a proxy, add the CA to its trust store — `curl --cacert ca.pem` first, to confirm the chain before changing anything system-wide.
     	- A handshake that fails on the protocol version is the TLS 1.2 floor: this listener refuses TLS 1.0 and 1.1.
     	- If the process never got as far as serving and exited with `loading the TLS certificate and key`, the pair itself is the problem — a missing file, an unreadable one, or a key that does not match the certificate. That check runs at startup on purpose, so it is not discovered at a handshake nobody is watching. `--tls-cert was given without --tls-key` (or the reverse) is the other half of the same guard.
-    	- **Prefer a unix socket when the proxy is on the same machine.** It removes the network segment instead of encrypting it, so there is no certificate to issue, trust or rotate and this whole class of failure disappears. See [Architecture](/libgen-mcp/architecture/#where-the-server-listens).
+    	- **Prefer a unix socket when the proxy is on the same machine.** It removes the network segment instead of encrypting it, so there is no certificate to issue, trust or rotate and this whole class of failure disappears. See [HTTP server mode](/libgen-mcp/http-server-mode/#where-the-server-listens).
     </Fact>
 
 </Facts>

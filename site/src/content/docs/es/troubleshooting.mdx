@@ -341,7 +341,7 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
     	- Para un cliente y no un proxy, añade la CA a su almacén de confianza — antes `curl --cacert ca.pem`, para confirmar la cadena sin tocar nada del sistema.
     	- Un handshake que falla por la versión del protocolo es el suelo de TLS 1.2: este listener rechaza TLS 1.0 y 1.1.
     	- Si el proceso ni siquiera llegó a servir y salió con `loading the TLS certificate and key`, el problema es la propia pareja — un archivo que falta, uno ilegible, o una clave que no case con el certificado. Esa comprobación se hace al arrancar a propósito, para que no se descubra en un handshake que nadie está mirando. `--tls-cert was given without --tls-key` (o al revés) es la otra mitad de la misma guarda.
-    	- **Prefiere un socket unix cuando el proxy está en la misma máquina.** Elimina el segmento de red en lugar de cifrarlo, así que no hay certificado que emitir, en el que confiar ni que rotar, y toda esta clase de fallo desaparece. Consulta [Arquitectura](/libgen-mcp/es/architecture/#dónde-escucha-el-servidor).
+    	- **Prefiere un socket unix cuando el proxy está en la misma máquina.** Elimina el segmento de red en lugar de cifrarlo, así que no hay certificado que emitir, en el que confiar ni que rotar, y toda esta clase de fallo desaparece. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#dónde-escucha-el-servidor).
     </Fact>
 
 </Facts>

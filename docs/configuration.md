@@ -100,8 +100,8 @@ because `LIBGEN_MCP_HTTP` would read as a switch rather than as an address.
 They exist for the deployment that has no command line to write on: a compose file's
 `environment:`, a systemd unit's `Environment=`, a Kubernetes ConfigMap. What each setting
 *does* is documented once, with the flags, in
-[Architecture → Stateless mode](architecture.md#stateless-mode) and
-[Where the server listens](architecture.md#where-the-server-listens).
+[Architecture → Stateless mode](architecture.md#stateless-mode); how to choose the values for a
+deployment is [HTTP server mode](http-server-mode.md).
 
 | Variable                             | Flag                        | Default                               |
 | ------------------------------------ | --------------------------- | ------------------------------------- |
