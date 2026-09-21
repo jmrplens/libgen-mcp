@@ -149,11 +149,18 @@ func baseEnv(opts targetOptions) []string {
 		"HTTPS_PROXY=http://127.0.0.1:1",
 		"NO_PROXY=127.0.0.1,localhost",
 		// PATH is carried because the process still has to exec nothing but
-		// itself; HOME because the mirror cache and the settled-state paths are
-		// resolved from it, and a process with no HOME resolves them to the
-		// working directory.
+		// itself. The other four are how the standard library finds a home and
+		// a cache directory, and all four are set because it reads a different
+		// one per platform: os.UserHomeDir takes HOME or USERPROFILE, and
+		// os.UserCacheDir takes HOME or LocalAppData. Setting only the Unix
+		// pair leaves a Windows run resolving its cache to the real profile —
+		// where the seeded mirror list is not, so the first search goes to the
+		// internet for one, which is the one thing this command must not do.
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + opts.downloadDir,
+		"USERPROFILE=" + opts.downloadDir,
+		"LocalAppData=" + filepath.Join(opts.downloadDir, "AppData", "Local"),
+		"AppData=" + filepath.Join(opts.downloadDir, "AppData", "Roaming"),
 	}
 	if opts.telemetry != "" {
 		env = append(env,
@@ -171,15 +178,20 @@ func baseEnv(opts targetOptions) []string {
 // mirrorCacheDir is where the measured process looks for its cached mirror
 // list, given the home it was started with.
 //
-// It is a function rather than two lines inside the writer because a test has
-// to look in the same place: os.UserCacheDir answers $HOME/.cache on Linux and
-// %LocalAppData% on Windows, and a test that hardcoded the first one passed on
-// two platforms and failed on the third.
+// All three branches are here because os.UserCacheDir has three answers, and
+// seeding the wrong one does not fail: the process simply finds no cache and
+// goes to the internet for a mirror list, which is the one thing this command
+// must not do. Linux is $HOME/.cache, macOS is $HOME/Library/Caches, and
+// Windows is %LocalAppData%, which baseEnv sets for exactly this reason.
 func mirrorCacheDir(home string) string {
-	if runtimeGOOS == "windows" {
+	switch runtimeGOOS {
+	case "windows":
 		return filepath.Join(home, "AppData", "Local", "libgen-mcp")
+	case "darwin":
+		return filepath.Join(home, "Library", "Caches", "libgen-mcp")
+	default:
+		return filepath.Join(home, ".cache", "libgen-mcp")
 	}
-	return filepath.Join(home, ".cache", "libgen-mcp")
 }
 
 // seedMirrorCache writes a mirror list naming the stand-in catalog into the

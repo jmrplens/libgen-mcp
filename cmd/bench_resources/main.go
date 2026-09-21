@@ -88,6 +88,10 @@ func execute(ctx context.Context, opts options) error {
 		return redraw(opts)
 	}
 
+	if err := validate(opts); err != nil {
+		return err
+	}
+
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -159,6 +163,25 @@ func execute(ctx context.Context, opts options) error {
 	return nil
 }
 
+// validate refuses a run whose settings cannot produce a measurement.
+//
+// Both of these fail late and badly otherwise. A sample interval under a
+// millisecond becomes zero or negative once it is recorded in milliseconds, and
+// time.NewTicker panics on either — halfway through the first scenario, after a
+// build. A round count below one drives no calls at all, and a record written
+// from that carries a scenario with empty timings, which reads like a
+// measurement of a very fast server.
+func validate(opts options) error {
+	if opts.rounds < 1 {
+		return fmt.Errorf("-rounds is %d; a run with no rounds measures nothing", opts.rounds)
+	}
+	if opts.sampleInterval < time.Millisecond {
+		return fmt.Errorf("-sample-interval is %s; the record keeps it in milliseconds, so anything under 1ms is no interval at all",
+			opts.sampleInterval)
+	}
+	return nil
+}
+
 // redraw rewrites the page from the committed record, or reports that it
 // differs.
 //
@@ -193,24 +216,25 @@ func matrixFor(quick bool) []scenarioPlan {
 
 // fillServerInfo lifts the measured build out of the scenario notes, so the
 // record names it once at the top rather than only inside a scenario.
+//
+// Both halves are carried. Two builds of one tag are different bytes, and a
+// record meant to be compared with a later one has to be able to say which of
+// them it measured.
 func fillServerInfo(run *Run) {
 	for _, scenario := range run.Scenarios {
 		for _, note := range scenario.Notes {
-			if version, found := cutPrefix(note, "measured build "); found {
-				run.Server.Version = version
-				return
+			stamped, found := strings.CutPrefix(note, "measured build ")
+			if !found {
+				continue
 			}
+			version, commit, hasCommit := strings.Cut(stamped, " (")
+			run.Server.Version = version
+			if hasCommit {
+				run.Server.Commit = strings.TrimSuffix(commit, ")")
+			}
+			return
 		}
 	}
-}
-
-// cutPrefix is strings.CutPrefix, named here so the one caller reads as what it
-// is doing rather than as a string operation.
-func cutPrefix(s, prefix string) (string, bool) {
-	if len(s) >= len(prefix) && s[:len(prefix)] == prefix {
-		return s[len(prefix):], true
-	}
-	return "", false
 }
 
 // describeScenario is the one-line summary the terminal prints under -v.

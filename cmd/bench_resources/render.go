@@ -49,7 +49,7 @@ func renderPreamble(run *Run) string {
 	b.WriteString("second machine measures this server rather than its own network.\n\n")
 	fmt.Fprintf(&b, "- **Host**: %s\n", run.Host.describe())
 	if run.Server.Version != "" {
-		fmt.Fprintf(&b, "- **Build**: %s\n", run.Server.Version)
+		fmt.Fprintf(&b, "- **Build**: %s\n", buildLabel(run.Server))
 	}
 	if run.Server.BytesOnDisk > 0 {
 		fmt.Fprintf(&b, "- **Binary**: %.1f MiB on disk\n", float64(run.Server.BytesOnDisk)/(1024*1024))
@@ -110,16 +110,16 @@ func renderMemoryTable(run *Run) string {
 
 // renderLatencyTable is the per-method timing.
 func renderLatencyTable(run *Run) string {
-	headers := []string{"Scenario", "Method", "Calls", "Outbound rps", "p50 (ms)", "p99 (ms)", "max (ms)"}
+	headers := []string{"Scenario", "Method", "Calls", "Outbound rps", "Burst", "p50 (ms)", "p99 (ms)", "max (ms)"}
 	align := []docgen.Alignment{
-		docgen.AlignLeft, docgen.AlignLeft, docgen.AlignRight,
+		docgen.AlignLeft, docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight,
 		docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
 	}
 	var rows [][]string
 	for _, s := range run.Scenarios {
 		for _, m := range s.Latency {
 			rows = append(rows, []string{
-				s.ID, "`" + m.Method + "`", itoa(m.Calls), trimNumber(s.OutboundRPS),
+				s.ID, "`" + m.Method + "`", itoa(m.Calls), trimNumber(s.OutboundRPS), itoa(s.OutboundBurst),
 				decimal(m.P50Ms), decimal(m.P99Ms), decimal(m.MaxMs),
 			})
 		}
@@ -130,9 +130,10 @@ func renderLatencyTable(run *Run) string {
 			"carries an error column because a scenario whose calls failed does not finish:\n"+
 			"a search that cannot reach its catalog answers in under a millisecond, and\n"+
 			"averaging that with a real one publishes an error path as a cost.\n"+
-			"\n**The outbound budget is the number to read these against.** `tools/call` reaches\n"+
-			"the catalog, and every catalog request waits for a token from\n"+
-			"`LIBGEN_MCP_RATE_RPS`, which ships at one per second with a burst of one. That\n"+
+			"\n**The outbound budget is the number to read these against**, both halves of it.\n"+
+			"`tools/call` reaches the catalog, and every catalog request waits for a token\n"+
+			"from `LIBGEN_MCP_RATE_RPS` out of a bucket `LIBGEN_MCP_RATE_BURST` deep. It\n"+
+			"ships at one per second with a burst of one. That\n"+
 			"is why the shipped-rate scenario's tool calls take seconds while the same work\n"+
 			"with the valve open takes milliseconds: what is being measured there is the\n"+
 			"queue, not the server. An inbound rate limit set above the outbound bucket only\n"+
@@ -152,6 +153,16 @@ func renderNotes(run *Run) string {
 		return ""
 	}
 	return "\n## Notes from the run\n\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// buildLabel names the build that was measured, with its revision when the
+// binary stated one: a version alone cannot tell two builds of the same tag
+// apart, which is exactly what a second run of this is often comparing.
+func buildLabel(server ServerInfo) string {
+	if server.Commit == "" || server.Commit == "none" {
+		return server.Version
+	}
+	return server.Version + " (" + server.Commit + ")"
 }
 
 // tableWithNote puts a paragraph under a table with exactly one blank line

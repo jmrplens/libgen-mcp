@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,10 +154,11 @@ func percentile(samples []time.Duration, q float64) float64 {
 	sorted := make([]time.Duration, len(samples))
 	copy(sorted, samples)
 	slices.Sort(sorted)
-	index := int(q * float64(len(sorted)))
-	if index >= len(sorted) {
-		index = len(sorted) - 1
-	}
+	// Nearest rank is ceil(q*n), one-based, which is index ceil(q*n)-1 here.
+	// Truncating q*n instead lands one place too high for every q that does not
+	// divide the sample count evenly — a p50 of four samples would report the
+	// third, which is a number above the median presented as the median.
+	index := min(max(int(math.Ceil(q*float64(len(sorted))))-1, 0), len(sorted)-1)
 	return round(float64(sorted[index].Microseconds()) / 1000)
 }
 

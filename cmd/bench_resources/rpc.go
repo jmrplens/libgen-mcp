@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -146,7 +147,11 @@ type httpCaller struct {
 	url     string
 	address string
 	client  *http.Client
-	nextID  int
+	// nextID is atomic because one caller serves several calls at once: a
+	// scenario with Parallel above one hands this same caller to that many
+	// goroutines, and an unsynchronized counter is both a data race and a
+	// source of duplicate JSON-RPC ids.
+	nextID atomic.Int64
 }
 
 // newHTTPCaller builds a caller that presents the given address to the server.
@@ -167,8 +172,9 @@ func newHTTPCaller(baseURL, address string) *httpCaller {
 
 // call posts one JSON-RPC frame and times the round trip.
 func (c *httpCaller) call(ctx context.Context, method string, params any) (callResult, error) {
-	c.nextID++
-	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: c.nextID, Method: method, Params: params})
+	body, err := json.Marshal(rpcRequest{
+		JSONRPC: "2.0", ID: int(c.nextID.Add(1)), Method: method, Params: params,
+	})
 	if err != nil {
 		return callResult{}, fmt.Errorf("encode %s: %w", method, err)
 	}

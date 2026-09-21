@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -124,7 +125,10 @@ func (r *runner) measureHTTP(ctx context.Context, plan scenarioPlan) (Scenario, 
 				r.collector.requestCount()-exportsBefore))
 	}
 	if info, infoErr := serverInfo(ctx, t); infoErr == nil {
-		out.Notes = appendNote(out.Notes, "measured build "+info.Version)
+		// Both halves, because a version alone cannot tell two builds of the
+		// same tag apart and this record is meant to be compared with a later
+		// one.
+		out.Notes = appendNote(out.Notes, "measured build "+info.Version+" ("+info.Commit+")")
 	}
 	return out, nil
 }
@@ -181,6 +185,9 @@ func (r *runner) measureStartupAndSurface(ctx context.Context, out *Scenario, fi
 	if err != nil {
 		return fmt.Errorf("first %s: %w", methodToolsList, err)
 	}
+	if sErr := served(cold); sErr != nil {
+		return fmt.Errorf("first %s: %w", methodToolsList, sErr)
+	}
 	out.Startup.FirstListMs = round(float64(cold.Duration.Microseconds()) / 1000)
 	out.ListBytes = cold.Bytes
 
@@ -188,8 +195,31 @@ func (r *runner) measureStartupAndSurface(ctx context.Context, out *Scenario, fi
 	if err != nil {
 		return fmt.Errorf("warm %s: %w", methodToolsList, err)
 	}
+	if sErr := served(warm); sErr != nil {
+		return fmt.Errorf("warm %s: %w", methodToolsList, sErr)
+	}
 	out.Startup.WarmListMs = round(float64(warm.Duration.Microseconds()) / 1000)
 	return nil
+}
+
+// served reports why a completed call was not service, and nil when it was.
+//
+// One check for every measured call, because there are three ways to come back
+// quickly without having done the work: the envelope carries an error, the tool
+// inside it reports one, or the server refused the call for rate. All three
+// take a fraction of the time serving does, so any of them averaged into a
+// timing makes the server look faster the less of its job it did.
+func served(res callResult) error {
+	switch {
+	case res.Err != nil:
+		return fmt.Errorf("the server answered %s", errText(res.Err))
+	case res.ToolError:
+		return fmt.Errorf("the tool reported a failure: %s", res.ToolErrText)
+	case res.Throttled:
+		return errors.New("the server refused the call for rate (HTTP 429)")
+	default:
+		return nil
+	}
 }
 
 // measureSteady drives every client through every method for the configured
@@ -351,10 +381,10 @@ func (t *timings) record(method string, res callResult) {
 		t.order = append(t.order, method)
 	}
 	t.byMethod[method] = append(t.byMethod[method], res.Duration)
-	if res.Err != nil || res.ToolError {
+	if failure := served(res); failure != nil {
 		t.errors[method]++
 		if t.said == "" {
-			t.said = firstNonEmpty(res.ToolErrText, errText(res.Err))
+			t.said = failure.Error()
 		}
 	}
 	if res.Throttled {

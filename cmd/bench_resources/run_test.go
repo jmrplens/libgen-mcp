@@ -34,7 +34,7 @@ func TestTimings_CountsAToolFailureAsAFailure(t *testing.T) {
 	if rows[0].P50Ms == 0 || rows[0].Calls != 2 {
 		t.Errorf("row = %+v, want two calls with a median", rows[0])
 	}
-	if got := tm.diagnosis(); got != "mirror unreachable" {
+	if got := tm.diagnosis(); !strings.Contains(got, "mirror unreachable") {
 		t.Errorf("diagnosis() = %q, want the first failure's own words", got)
 	}
 }
@@ -57,6 +57,60 @@ func TestTimings_FallsBackToTheProtocolErrorForItsDiagnosis(t *testing.T) {
 	if firstNonEmpty() != "" {
 		t.Error("firstNonEmpty() with nothing to pick should say nothing")
 	}
+}
+
+// TestServed_TellsServiceFromTheThreeWaysOfComingBackFast verifies the one
+// check every measured call goes through.
+//
+// There are three ways to answer without having done the work, and all three
+// take a fraction of the time serving does: the envelope carries an error, the
+// tool inside it reports one, or the server refuses the call for rate. Any of
+// them averaged into a timing makes the server look faster the less of its job
+// it did. The refusal is the one that is easy to miss, because HTTP 429 is a
+// perfectly good response.
+func TestServed_TellsServiceFromTheThreeWaysOfComingBackFast(t *testing.T) {
+	testCases := []struct {
+		name    string
+		res     callResult
+		wantErr string
+	}{
+		{name: "a served call", res: callResult{Duration: time.Millisecond}},
+		{
+			name:    "a protocol error",
+			res:     callResult{Err: &rpcError{Code: -32601, Message: "no such method"}},
+			wantErr: "no such method",
+		},
+		{
+			name:    "a tool failure",
+			res:     callResult{ToolError: true, ToolErrText: "mirror unreachable"},
+			wantErr: "mirror unreachable",
+		},
+		{name: "a refusal for rate", res: callResult{Throttled: true}, wantErr: "429"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := served(tc.res)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("served: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("served() = %v, want it to say %q", err, tc.wantErr)
+			}
+		})
+	}
+
+	t.Run("a throttled call counts against the method", func(t *testing.T) {
+		tm := newTimings()
+		tm.record(methodToolsCall, callResult{Duration: time.Millisecond, Throttled: true})
+		rows := tm.methods()
+		if len(rows) != 1 || rows[0].Errors != 1 {
+			t.Errorf("methods() = %+v, want the refusal counted as a failure", rows)
+		}
+	})
 }
 
 // TestAssertServed_RefusesAScenarioWhoseCallsDidNotWork verifies the guard that

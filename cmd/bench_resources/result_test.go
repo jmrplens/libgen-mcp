@@ -21,10 +21,17 @@ func TestPercentile_PublishesAValueTheRunObserved(t *testing.T) {
 		q    float64
 		want float64
 	}{
-		{name: "the median", q: 0.5, want: 30},
+		// Nearest rank of four samples: p50 is the second, not the third. The
+		// first version of this truncated q*n instead of taking its ceiling and
+		// reported the third, which is a number above the median published as
+		// the median — and the test agreed with it, because it was written from
+		// the code rather than from the definition.
+		{name: "the median", q: 0.5, want: 20},
 		{name: "the tail", q: 0.99, want: 40},
 		{name: "the maximum", q: 1, want: 40},
 		{name: "the floor", q: 0, want: 10},
+		{name: "a quarter", q: 0.25, want: 10},
+		{name: "three quarters", q: 0.75, want: 30},
 	}
 
 	for _, tc := range testCases {

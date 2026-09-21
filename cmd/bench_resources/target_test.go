@@ -146,7 +146,7 @@ func TestMirrorCacheDir_FollowsTheStandardLibrarysRulePerPlatform(t *testing.T) 
 		name, goos, want string
 	}{
 		{name: "linux", goos: "linux", want: filepath.Join("home", ".cache", "libgen-mcp")},
-		{name: "darwin", goos: "darwin", want: filepath.Join("home", ".cache", "libgen-mcp")},
+		{name: "darwin", goos: "darwin", want: filepath.Join("home", "Library", "Caches", "libgen-mcp")},
 		{name: "windows", goos: "windows", want: filepath.Join("home", "AppData", "Local", "libgen-mcp")},
 	}
 

@@ -137,7 +137,9 @@ func TestExecute_TakesTheRenderPathWithoutMeasuring(t *testing.T) {
 // TestExecute_RefusesAScenarioNameNothingMatches verifies a typo stops the run
 // before anything is built, rather than writing an empty record.
 func TestExecute_RefusesAScenarioNameNothingMatches(t *testing.T) {
-	err := execute(t.Context(), options{scenarios: "nonsense", quick: true})
+	err := execute(t.Context(), options{
+		scenarios: "nonsense", quick: true, rounds: 1, sampleInterval: time.Millisecond,
+	})
 	if err == nil || !strings.Contains(err.Error(), "nonsense") {
 		t.Errorf("execute() error = %v, want it to name the scenario", err)
 	}
@@ -173,23 +175,27 @@ func TestFillServerInfo_NamesTheBuildOnceAtTheTop(t *testing.T) {
 	})
 }
 
-// TestCutPrefix_MatchesOnlyTheWholePrefix verifies the note reader does not
-// mistake a shorter string for a match.
-func TestCutPrefix_MatchesOnlyTheWholePrefix(t *testing.T) {
+// TestFillServerInfo_ReadsBothHalvesOfTheStamp verifies the version and the
+// revision are both recovered, and that a note from an older run carrying only
+// a version still reads.
+func TestFillServerInfo_ReadsBothHalvesOfTheStamp(t *testing.T) {
 	testCases := []struct {
-		name, in, prefix, want string
-		wantOK                 bool
+		name, note, wantVersion, wantCommit string
 	}{
-		{name: "a match", in: "measured build 1.2.3", prefix: "measured build ", want: "1.2.3", wantOK: true},
-		{name: "no match", in: "something else", prefix: "measured build "},
-		{name: "shorter than the prefix", in: "m", prefix: "measured build "},
+		{
+			name: "a version and a revision", note: "measured build 1.7.3 (abc1234)",
+			wantVersion: "1.7.3", wantCommit: "abc1234",
+		},
+		{name: "a version alone", note: "measured build 1.7.3", wantVersion: "1.7.3"},
+		{name: "a note about something else", note: "3 requests reached the stand-in catalog"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := cutPrefix(tc.in, tc.prefix)
-			if ok != tc.wantOK || got != tc.want {
-				t.Errorf("cutPrefix() = %q, %t; want %q, %t", got, ok, tc.want, tc.wantOK)
+			run := &Run{Scenarios: []Scenario{{ID: "a", Notes: []string{tc.note}}}}
+			fillServerInfo(run)
+			if run.Server.Version != tc.wantVersion || run.Server.Commit != tc.wantCommit {
+				t.Errorf("Server = %+v, want %q / %q", run.Server, tc.wantVersion, tc.wantCommit)
 			}
 		})
 	}
@@ -328,18 +334,62 @@ func TestParseFlags_ReadsRepeatedTargetEnv(t *testing.T) {
 		t.Errorf("targetEnv = %v, want both entries", opts.targetEnv)
 	}
 
+	// A value that is not a pair has to be refused rather than ignored, and the
+	// assertion says so: with ContinueOnError the parser returns and a test that
+	// accepted either outcome would pass against a flag that silently dropped
+	// what it could not read. PanicOnError makes the refusal observable.
 	t.Run("a value that is not a pair", func(t *testing.T) {
-		set := flag.NewFlagSet("bench", flag.ContinueOnError)
+		set := flag.NewFlagSet("bench", flag.PanicOnError)
 		set.SetOutput(io.Discard)
 		flag.CommandLine = set
 		os.Args = []string{"bench", "-target-env", "nonsense"}
 		defer func() {
 			if recover() == nil {
-				t.Log("parseFlags returned rather than panicking, which is also acceptable")
+				t.Error("parseFlags accepted a -target-env that is not NAME=VALUE")
 			}
 		}()
 		parseFlags()
 	})
+}
+
+// TestValidate_RefusesSettingsThatCannotMeasureAnything verifies the two knobs
+// that fail late and badly: a sample interval under a millisecond becomes zero
+// once the record rounds it and panics the ticker halfway through the first
+// scenario, and a round count below one drives no calls at all, which would
+// write a record whose empty timings read like a very fast server.
+func TestValidate_RefusesSettingsThatCannotMeasureAnything(t *testing.T) {
+	testCases := []struct {
+		name    string
+		opts    options
+		wantErr string
+	}{
+		{name: "a sane run", opts: options{rounds: 1, sampleInterval: time.Millisecond}},
+		{name: "no rounds", opts: options{rounds: 0, sampleInterval: time.Millisecond}, wantErr: "-rounds"},
+		{name: "negative rounds", opts: options{rounds: -1, sampleInterval: time.Millisecond}, wantErr: "-rounds"},
+		{
+			name: "a sub-millisecond interval",
+			opts: options{rounds: 1, sampleInterval: 100 * time.Microsecond}, wantErr: "-sample-interval",
+		},
+		{
+			name: "a negative interval",
+			opts: options{rounds: 1, sampleInterval: -time.Second}, wantErr: "-sample-interval",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validate(tc.opts)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validate: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("validate() error = %v, want it to name %s", err, tc.wantErr)
+			}
+		})
+	}
 }
 
 // TestBuildServer_CompilesTheBinaryThatShips verifies the build a measuring run
