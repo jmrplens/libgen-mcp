@@ -1,9 +1,22 @@
 #!/usr/bin/env node
 
-// Verifies that local (relative) links and paths in tracked Markdown/MDX files
-// resolve to a real file on disk. External URLs, anchors, and absolute paths are
-// skipped — only same-repo references are checked. Exits non-zero and lists the
-// offending targets when any local link is broken.
+// Verifies that local (relative) links and paths in this repository's Markdown
+// and MDX files resolve to a real file on disk. External URLs, anchors, and
+// absolute paths are skipped — only same-repo references are checked. Exits
+// non-zero and lists the offending targets when any local link is broken.
+//
+// `--others --exclude-standard` is why a page written five minutes ago is
+// covered. The listing used to be `--cached` only, which is the run where the
+// answer matters least: a new page is untracked until it is committed, so
+// running this before the commit reported "local links are valid" while having
+// read nothing of the page whose links were the reason for running it. That is
+// how docs/development/release-chain.md was written with two links to a page
+// that did not exist on its branch, past a green local check. A gate that
+// reports nothing because it found nothing to look at reads exactly like a gate
+// that passed.
+//
+// `--exclude-standard` keeps `plan/` and every other ignored path out, and the
+// explicit filters below keep the two skill trees out.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -16,7 +29,16 @@ const trackedDocs = [
 	...new Set(
 		execFileSync(
 			"git",
-			["ls-files", "*.md", "*.mdx", ":(glob)**/*.md", ":(glob)**/*.mdx"],
+			[
+				"ls-files",
+				"--cached",
+				"--others",
+				"--exclude-standard",
+				"*.md",
+				"*.mdx",
+				":(glob)**/*.md",
+				":(glob)**/*.mdx",
+			],
 			{
 				cwd: repoRoot,
 				encoding: "utf8",
@@ -29,7 +51,11 @@ const trackedDocs = [
 ]
 	.filter((file) => !file.startsWith("plan/"))
 	.filter((file) => !file.startsWith(".github/skills/"))
-	.filter((file) => !file.startsWith(".claude/skills/"));
+	.filter((file) => !file.startsWith(".claude/skills/"))
+	// `--cached` lists what the index holds, which includes a file deleted from
+	// the working tree but not yet staged as a deletion. Reading it would throw
+	// before a single link was checked.
+	.filter((file) => existsSync(path.join(repoRoot, file)));
 
 const issues = [];
 
