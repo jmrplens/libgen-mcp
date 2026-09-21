@@ -43,7 +43,11 @@ func buildServer(ctx context.Context, dir string) (string, error) {
 	if runtimeGOOS == "windows" {
 		out += ".exe"
 	}
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", out, serverPackage)
+	// NOSONAR: S4036 asks whether PATH is trustworthy. The command is the Go
+	// toolchain this repository is built with, on a maintainer's own shell, and
+	// anybody able to put a different `go` on that PATH could have changed the
+	// source this is about to compile.
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", out, serverPackage) // NOSONAR
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build ./cmd/server: %w\n%s", err, combined)
@@ -233,7 +237,11 @@ func startHTTP(ctx context.Context, opts targetOptions) (*target, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.baseURL = "http://" + addr
+	// NOSONAR: S5332 asks why this is not HTTPS. The address is a loopback port
+	// this command just reserved and handed to a process it just started, so
+	// there is no network between the two ends. Measuring through TLS would
+	// measure TLS, which is a deployment's choice and not this server's cost.
+	t.baseURL = "http://" + addr // NOSONAR
 	if waitErr := waitForHealth(ctx, t); waitErr != nil {
 		t.stop()
 		return nil, waitErr

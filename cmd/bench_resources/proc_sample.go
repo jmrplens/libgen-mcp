@@ -29,7 +29,12 @@ import (
 var clockTicks = func() float64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "getconf", "CLK_TCK").Output()
+	// NOSONAR: S4036 asks whether PATH is trustworthy. This is a maintainer's
+	// benchmark run from a developer's own shell, the command is a fixed
+	// literal, and an answer that is missing or unparseable falls back to the
+	// value every Linux this runs on has. Naming an absolute path instead would
+	// be wrong on the platforms that have it somewhere else.
+	out, err := exec.CommandContext(ctx, "getconf", "CLK_TCK").Output() // NOSONAR
 	return ticksFromGetconf(out, err)
 }()
 
@@ -78,8 +83,11 @@ func readProcStat(ctx context.Context, pid int) (procStat, error) {
 	}
 	psCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	// NOSONAR: S4036, as above — a fixed command name on a maintainer's own
+	// shell, whose failure is recorded as an unreadable sample rather than
+	// acted on.
 	//#nosec G204 -- the only argument is a process id this command started
-	out, err := exec.CommandContext(psCtx, "ps", "-o", "rss=,time=", "-p", strconv.Itoa(pid)).Output()
+	out, err := exec.CommandContext(psCtx, "ps", "-o", "rss=,time=", "-p", strconv.Itoa(pid)).Output() // NOSONAR
 	if err != nil {
 		return procStat{}, fmt.Errorf("ps for pid %d: %w", pid, err)
 	}
