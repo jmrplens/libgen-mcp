@@ -420,8 +420,15 @@ func TestStartStdio_SpeaksOverItsOwnPipes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	if got.Bytes == 0 || got.Duration <= 0 {
-		t.Errorf("call() = %+v, want a timed reply", got)
+	// The bytes are asserted and the duration is not. A reply from a stand-in
+	// on the same machine can arrive inside the monotonic clock's resolution,
+	// which on Windows is coarse enough to report exactly zero — a true reading
+	// of a call that fast, and not something a test should refuse.
+	if got.Bytes == 0 {
+		t.Errorf("call() = %+v, want a reply", got)
+	}
+	if got.Duration < 0 {
+		t.Errorf("call() = %+v, want a duration of zero or more", got)
 	}
 	c.close()
 }

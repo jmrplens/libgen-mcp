@@ -394,8 +394,17 @@ func assertScenarioMeasured(t *testing.T, plan scenarioPlan, got Scenario) {
 	if got.ID != plan.ID || got.Transport != plan.Transport {
 		t.Errorf("measure() = %+v, want the plan it was given", got)
 	}
-	if got.Startup.ProcessReadyMs <= 0 || got.Startup.FirstListMs <= 0 {
-		t.Errorf("startup = %+v, want both waits measured", got.Startup)
+	// Only the process start is asserted to be positive. Starting one takes
+	// milliseconds anywhere, while a list call answered by a stand-in on the
+	// same machine can land inside the monotonic clock's resolution — which on
+	// Windows reports it as exactly zero. That is a true reading of a call that
+	// fast, so the assertion is that the figure was taken, not that the machine
+	// was slow enough to see it.
+	if got.Startup.ProcessReadyMs <= 0 {
+		t.Errorf("startup = %+v, want the process start measured", got.Startup)
+	}
+	if got.Startup.FirstListMs < 0 || got.Startup.WarmListMs < 0 {
+		t.Errorf("startup = %+v, want no negative wait", got.Startup)
 	}
 	if got.ListBytes == 0 {
 		t.Error("ListBytes = 0; the surface a client downloads was never measured")
