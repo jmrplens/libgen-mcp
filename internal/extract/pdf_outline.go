@@ -18,6 +18,27 @@ import (
 const noPDFOutlineReason = "no embedded table of contents (none found, or it could not be read); " +
 	"the text layer is readable, so read the text sequentially or use find"
 
+// pdfcpu installs a configuration directory the first time anything asks it for
+// a configuration: model.NewDefaultConfiguration writes a config.yml, a certs
+// directory and a Roboto font under os.UserConfigDir, or under os.TempDir when
+// no config directory can be resolved. This package asks for one on every
+// outline read, and it is the only thing in this module that touches pdfcpu.
+//
+// Disabling it is both a correctness fix and a courtesy. The courtesy: reading
+// somebody's PDF is not a reason to leave a directory in their home, and the
+// installation page's list of what this server writes on a machine does not
+// name one. The correctness: when the write fails — a read-only root
+// filesystem, which is what the distroless and scratch images this server
+// ships as have — pdfcpu panics, readBookmarks recovers, and every document
+// comes back with "no embedded table of contents" for a reason that has
+// nothing to do with the document.
+//
+// api.DisableConfigDir is pdfcpu's own switch for this (the command line spells
+// it -conf disable) and makes model.NewDefaultConfiguration return the
+// compiled-in defaults instead. What it costs is user fonts, which are for
+// stamping text into a PDF; this package only reads bookmarks out of one.
+func init() { api.DisableConfigDir() }
+
 // pdfOutline reads a PDF's embedded bookmarks best-effort via pdfcpu and returns
 // them as a flat, in-order OutlineResult. pdfcpu can panic or error on malformed
 // input, so the read is guarded: any panic or error becomes an absent outline
