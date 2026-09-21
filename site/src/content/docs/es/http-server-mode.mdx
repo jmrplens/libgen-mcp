@@ -1,0 +1,298 @@
+---
+title: Modo servidor HTTP
+description: "Desplegar libgen-mcp sobre HTTP en streaming: el nombre declarado, el par de flags del proxy de confianza y qué identidad tiene cada despliegue, los límites por llamante, la renovación de TLS, el drenaje y las sondas."
+chips:
+  - text: "Nombre declarado y proxy de confianza"
+  - text: "Límites por llamante"
+  - text: "Renovar TLS sin reiniciar"
+  - text: "Primeros pasos"
+    href: "/libgen-mcp/es/getting-started/"
+datePublished: "2026-09-21"
+---
+
+Ejecutar `libgen-mcp` sobre HTTP en streaming convierte un servidor stdio de un cliente por proceso en un servicio compartido: varios clientes, un solo presupuesto de salida, un solo semáforo de descargas, una sola caché. Esta página es la guía de despliegue de ese modo — qué hay que decidir, en el orden en que unas decisiones dependen de otras, y qué cuesta cada una cuando se deja sin tomar.
+
+Tres documentos comparten el tema y no se repiten entre sí:
+
+- **Esta página** explica cómo desplegarlo, y es la dueña de la prosa operativa.
+- [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming) tiene las recetas listas para copiar: nginx, docker-compose, el socket, TLS.
+- [Arquitectura → Transportes](/libgen-mcp/es/architecture/#transportes) explica cómo está construido el transporte y lleva la **[tabla completa de flags](/libgen-mcp/es/architecture/#modo-sin-estado)**. Cada flag que se nombra aquí está definido allí, junto con su variable `LIBGEN_MCP_*`.
+
+## Primero, elige un listener
+
+`--http` acepta una dirección TCP o la ruta de un socket unix, y la regla es el separador de rutas: un valor que contiene `/` es una ruta, y cualquier otra cosa es una dirección. Así que `--http :8080` y `--http 127.0.0.1:8080` abren TCP, `--http /run/mcp-libgen.sock` abre un socket, y un `--http mcp.sock` a secas abre **TCP** a propósito, porque un nombre suelto no se distingue de un hostname. El detalle está en [Dónde escucha el servidor](#dónde-escucha-el-servidor), más abajo; la versión corta es que un proxy en la misma máquina quiere el socket y un proxy en otra máquina quiere TCP, con TLS terminado en este proceso o delante de él.
+
+Todo lo que viene hasta allí depende de cuál hayas elegido, porque le dan a este servidor dos respuestas distintas a "quién está llamando".
+
+## El nombre que usan los clientes, y por qué sin él se rechaza una petición que pasa por un proxy
+
+A todo servidor MCP se le pide que rechace una cabecera `Host` que no sirve, como defensa contra el DNS rebinding: un atacante resuelve un nombre que controla a la dirección en la que escucha este servidor, y un navegador que ya tenía cargado llega entonces a él bajo ese nombre. La regla es que una conexión **aceptada en una dirección de loopback** solo puede llevar un `Host` de loopback.
+
+Eso es exactamente lo que hace toda receta de proxy inverso de esta página. El proxy reenvía el `Host` del cliente — `mcp.example.org` — y conecta con este servidor por loopback, así que la petición llega con un nombre público sobre una conexión de loopback y se rechaza con `403`.
+
+**La condición es la dirección local de la conexión aceptada, no la del bind**, así que atrapa un bind comodín exactamente igual que uno de loopback: un contenedor que abre `0.0.0.0:8080` y se publica con `-p 127.0.0.1:8811:8080` se alcanza por loopback y se rechaza igual. Un socket unix queda exento — ningún nombre resuelve a un fichero en disco, así que responde a cualquier `Host`.
+
+Dos flags lo arreglan, y con cualquiera de los dos basta:
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 --public-url https://mcp.example.org/libgen
+```
+
+`--public-url` declara el origen en el que los clientes alcanzan este despliegue. Su host pasa a ser un nombre al que este servidor responde, y es además lo que pone una entrada `remotes` en la tarjeta de descubrimiento, así que es el flag al que recurrir cuando el despliegue es público. `--trusted-proxies` consigue lo mismo por otra vía — se cree cualquier cosa que reenvíe un peer de confianza — y es el flag al que recurrir cuando el nombre es interno o cuando hay varios.
+
+Una petición que no lleva `Host` en absoluto se sirve en vez de rechazarse: ningún navegador lo omite, y lo que sí lo hace es un health check. El `option httpchk` de HAProxy no envía ninguno si no se configura, y rechazarlo marcaría como caída una instancia que funciona.
+
+## Qué identidad tiene este despliegue
+
+Tres cosas de este servidor preguntan _quién es este llamante_: el límite de tasa de entrada, el techo de llamadas en vuelo y el atributo de telemetría `user.hash`. Las tres leen una sola respuesta: **la dirección desde la que llegó la conexión**, salvo que se haya nombrado un proxy de confianza y este le haya dicho otra cosa al servidor.
+
+Hay tres formas de despliegue y dan tres respuestas distintas. Averigua cuál es la tuya antes de leer el resto de la página, porque dos de ellas convierten un límite por llamante en uno para todo el despliegue.
+
+### Un listener TCP detrás de un proxy
+
+Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint hospedado en `mcp.jmrp.io/libgen`.
+
+Sin `--trusted-proxies`, **todas las peticiones llegan desde el proxy**, así que todos los llamantes son el mismo llamante: el límite de tasa es un solo cubo para el mundo entero, el techo de llamadas en vuelo es un segundo techo de proceso disfrazado de techo por llamante, y `user.hash` es una constante. No hay nada sutil ni raro en ello: es el resultado por defecto de la forma que se recomienda.
+
+El arreglo son dos flags más el proxy poniendo realmente la cabecera:
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 \
+  --trusted-proxies 127.0.0.1/32 \
+  --trusted-proxy-header X-Real-IP
+```
+
+```nginx
+proxy_set_header X-Real-IP $remote_addr;
+```
+
+Los dos flags o ninguno — cualquiera de ellos a solas falla al arrancar — porque una cabecera leída de un peer que no es de confianza es texto que escribió el llamante, y un llamante que puede elegir a qué dirección se carga su tráfico puede elegir la de otro, o una distinta en cada petición.
+
+**Averigua la dirección en vez de copiar una.** `--trusted-proxies` nombra el peer del que este servidor _acepta conexiones_, que no siempre es la dirección que usa la línea de upstream del propio proxy:
+
+| Dónde corre este servidor                                      | El peer que ve                                         |
+| -------------------------------------------------------------- | ------------------------------------------------------ |
+| Una máquina normal, con el proxy en la misma máquina           | La dirección del propio proxy, normalmente `127.0.0.1` |
+| Un contenedor publicado en loopback (`-p 127.0.0.1:8811:8080`) | La pasarela del bridge del contenedor, una RFC 1918    |
+| Un contenedor en una red definida por el usuario               | La dirección del contenedor del proxy en esa red       |
+
+Si te equivocas, nada falla de forma ruidosa: la cabecera simplemente se ignora y vuelves a tener un solo cubo para todo el mundo. El log de arranque nombra el listener, y el aviso único que se describe abajo nombra la dirección a la que realmente se cargó una petición — esa dirección es la que va en `--trusted-proxies`.
+
+**`X-Real-IP` en vez de `X-Forwarded-For`** es la recomendación aquí solo porque es lo que ya ponen las recetas de nginx y lo que ya lee el servidor hermano del mismo dominio. Sirven las dos: un `X-Forwarded-For` de varios saltos se lee desde la **derecha**, parando en el primer salto que no es a su vez un proxy de confianza, y una cabecera de un solo valor es ese mismo recorrido sobre un valor.
+
+### Un socket unix
+
+Un socket detrás de un proxy en la misma máquina tiene el mismo problema por otra vía: el peer de una conexión unix no es una dirección en absoluto, así que sin ayuda todos los llamantes vuelven a ser uno solo. La confianza se declara con el literal `unix`, que significa _todo peer de este socket es un proxy de confianza_ — una afirmación que el modo `0660` del socket ya limita a su propietario y su grupo:
+
+```bash
+libgen-mcp --http /run/mcp-libgen.sock \
+  --trusted-proxies unix \
+  --trusted-proxy-header X-Real-IP
+```
+
+`unix` se rechaza sobre una dirección TCP, y una dirección se rechaza sobre un socket.
+
+### Un listener TCP expuesto directamente
+
+Sin proxy y sin flags: el peer es el cliente, y todos los límites de esta página funcionan tal como están escritos. Es la más rara de las tres formas, porque un endpoint MCP público suele querer terminación TLS, un nombre y un log por delante.
+
+### Qué decide la identidad
+
+Una vez sabes en qué forma estás, tres comportamientos se siguen de ella:
+
+- **El límite de tasa de entrada** (`--rate-limit-rps`) está apagado por defecto en un listener cuyos peers son todos esta máquina — un bind de loopback o un socket unix — salvo que `--trusted-proxies` nombre al proxy. Pasar `--rate-limit-rps` explícitamente ahí es un **rechazo al arrancar** que nombra los dos flags del proxy, en vez de un límite que hace otra cosa en silencio. En un bind comodín se queda encendido, porque este proceso no puede ver cómo se publicó el puerto; en su lugar, la primera petición cargada a una dirección que ningún cliente público podría tener (loopback, RFC 1918, CGNAT, link-local, unique-local) escribe **un** aviso que nombra los dos flags.
+- **El techo de llamadas en vuelo** (`--max-inflight-per-client`) degenera en un segundo techo de proceso con nombre de techo por llamante. Sigue acotando el proceso; deja de distinguir a dos llamantes.
+- **`user.hash`**, que se exporta cuando `LIBGEN_MCP_TELEMETRY_IDENTITY` vale `pseudonymous`, pasa a ser un único digest para todo el mundo. Eso es un síntoma de configuración y **no** una propiedad de privacidad — ver [Telemetría](/libgen-mcp/es/telemetry/#un-userhash-constante-es-un-síntoma-de-configuración).
+
+Quien despliegue detrás de un proxy y lea solo el párrafo del socket concluirá que nada de esto le afecta, que es justo lo contrario de la verdad.
+
+## El endpoint hospedado, escrito entero
+
+La instancia pública en `https://mcp.jmrp.io/libgen` es la primera forma: tres contenedores que abren cada uno `0.0.0.0:8080`, publicados en el loopback del host, alcanzados por un nginx en otra máquina. Su configuración es el ejemplo trabajado:
+
+```bash
+libgen-mcp \
+  --http 0.0.0.0:8080 \
+  --public-url https://mcp.jmrp.io/libgen \
+  --trusted-proxies 172.19.0.1/32 \
+  --trusted-proxy-header X-Real-IP \
+  --rate-limit-rps 60
+```
+
+`172.19.0.1/32` es **la pasarela del bridge de Docker de este despliegue** — la dirección que ven estos contenedores cuando el proxy los alcanza por un puerto publicado en loopback. No es un valor para copiar: en una máquina normal el peer es `127.0.0.1`, en el bridge de otra máquina es otro `/32`, y pegar este en un despliegue sin contenedores da una cabecera que se ignora en silencio. Léela de tu propio despliegue, como describe la tabla de arriba.
+
+El resto se traslada sin cambios, y coincide con lo que lleva el servidor hermano del mismo dominio, de modo que los dos endpoints responden igual: una URL pública declarada, un proxy nombrado, `X-Real-IP` y un límite de tasa puesto a conciencia en vez de dejado por defecto.
+
+## Qué puede pedir un llamante
+
+`tools/call`, `prompts/get` y `subscriptions/listen` beben de un cubo de fichas por dirección cargada; `tools/list` bebe de un segundo cubo propio. `--rate-limit-rps` (por defecto `10`) es la tasa de recarga y `--rate-limit-burst` (por defecto `40`) es cuántas peticiones puede hacer de golpe una dirección antes de que esa tasa se aplique. `0` o menos apaga el límite.
+
+Los dos cubos están separados para que vaciar el cubo de las llamadas nunca le cueste a un llamante su descubrimiento: un listado rechazado es peor que una llamada rechazada, porque no hay ningún modelo en el bucle que lea el mensaje y se eche atrás. Los métodos que no llegan a nada no se miden en absoluto: `initialize`, `prompts/list`, las notificaciones y los métodos de recursos.
+
+**La tabla de registros es un LRU acotado, no un conjunto fijo de claves.** Al llegar al tope expulsa en vez de rechazar: rechazar en el tope dejaría fuera a todo cliente legítimo nuevo en cuanto se hubieran visto unos pocos miles de direcciones, lo cual es trivial sobre IPv6, y negarse a _registrar_ en el tope dejaría sin límite a la siguiente dirección, que es justo el bypass. Una expulsión cuesta como mucho una ráfaga completa, prefiere un registro sin peticiones en vuelo y barre primero los registros caducados.
+
+**Qué número es el contrato del despliegue, y ojo con las dos grafías.** El límite de entrada es lo que le prometes a un llamante, y sus variables son `LIBGEN_MCP_RATE_LIMIT_RPS` y `LIBGEN_MCP_RATE_LIMIT_BURST`. El presupuesto de **salida** es otro ajuste con un nombre engañosamente parecido — `LIBGEN_MCP_RATE_RPS` y `LIBGEN_MCP_RATE_BURST`, un solo cubo compartido por todo el proceso, con una petición por segundo por defecto — y es lo que les llega a los mirrors diga lo que diga el límite de entrada.
+
+No son la misma garantía y ninguna se deriva de la otra: sube el límite de entrada y los llamantes harán cola en el de salida en vez de ser rechazados, lo cual es más lento, no más rápido. Los valores por defecto de entrada son las cifras HTTP del proyecto hermano; cuáles deberían ser frente al presupuesto de salida de _este_ servidor es una medición que nadie ha tomado todavía.
+
+Un `tools/call` rechazado vuelve como un resultado JSON-RPC **correcto** marcado `isError`, para que el modelo reciba un diagnóstico estructurado y un bucle de agente pueda echarse atrás. Los otros tres no tienen marca de error propia, así que su rechazo es un error JSON-RPC con código `-42900`. Los rechazos se registran como mucho una vez cada diez segundos con la cuenta de lo que representa la línea, porque su ritmo es el de llegada menos el límite y una línea por cada uno sería una avalancha.
+
+## Qué puede retener un llamante
+
+El cubo acota con qué rapidez llegan las peticiones. No dice nada sobre cuánto tiempo una de ellas retiene algo, y aquí eso es lo caro: `download` y `read` ocupan una plaza de `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` mientras dure la transferencia, así que un llamante que arranque cuatro se ha llevado todas las plazas de la réplica mientras su cubo lo sigue mostrando muy dentro de su tasa.
+
+`--max-inflight-per-client` acota eso por dirección cargada. Si no se pone, vale el `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` configurado, así que la cota arranca en el semáforo entero y no cambia nada de lo que un llamante puede hacer hoy — lo que cambia es que un _segundo_ llamante todavía puede conseguir una plaza en cuanto alguien mida lo que cuesta una descarga y la apriete. `0` o menos apaga la cota por llamante. Un techo aparte, no configurable, de **64** acota el proceso diga lo que diga esto, porque el de por llamante se multiplica por tantos llamantes como haya.
+
+**El tope de reloj de pared es la otra mitad del mismo recurso.** `LIBGEN_MCP_ACTION_TIMEOUT` (por defecto `1h`, `0` lo desactiva) termina una llamada que simplemente va lenta: un mirror goteando por debajo de la ventana de atasco retendría una plaza indefinidamente. El techo termina una llamada cuyo cliente sigue esperando demasiadas cosas a la vez; la cancelación termina una llamada cuyo cliente se fue. Tres fallos distintos, tres cotas distintas, y un despliegue quiere las tres.
+
+Todos los rechazos de aquí usan la misma forma de resultado `isError` que usa el límite de tasa, para que un modelo se encuentre una sola respuesta de "esto es cosa tuya" en vez de leer un techo como un fallo de mirror y reintentar contra él para siempre.
+
+## Drenar antes de cerrar el listener
+
+Al apagarse, `GET /health` pasa a `503` con `{"status":"draining"}` y `--drain-delay` mantiene el listener abierto ese tiempo antes de cerrarlo. El valor por defecto es `0`, que cierra de inmediato.
+
+**Dimensiónalo contra el intervalo de sondeo de lo que tengas delante.** Por debajo de un intervalo el retardo no hace nada: el balanceador se entera de que esta instancia se va porque falla una conexión, después de haberle mandado trabajo. No hay un valor por defecto seguro, porque solo el despliegue sabe qué lo sondea — el propio `HEALTHCHECK` de la imagen corre cada 30 segundos, y un chequeo de upstream de nginx o una readiness probe de Kubernetes tienen el suyo. Está limitado a cinco minutos; más allá no es un relevo sino un apagado que parece colgado, y cualquier supervisor mata el proceso mucho antes.
+
+La fase de gracia posterior al cierre del listener está acotada en **15 segundos**, y el corchete es estrecho por los dos lados. Por debajo quedan las cosas que una petición puede estar haciendo legítimamente: una resolución dentro de `LIBGEN_MCP_RESOLVE_BUDGET`, una transferencia dentro de `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`. Por encima queda la gracia del propio supervisor: diez segundos para `docker stop`, treinta para un pod de Kubernetes, tras lo cual el proceso muere y el presupuesto es académico. Es un techo y nunca un suelo, así que un proceso al que le dicen que tiene menos cierra su listener en vez de morir a medio drenar.
+
+## El digest de configuración
+
+`GET /health` responde `200` con `status`, `version`, `commit`, `build`, `config_digest`, `started_at` y `uptime_seconds` mientras el servidor está sirviendo. Dos de esos campos conviene conocerlos antes de levantar más de una réplica.
+
+`started_at` es el dato estable — idéntico byte a byte entre sondeos, así que un monitor puede cachearlo y detectar un reinicio al ver que se movió. `uptime_seconds` es la comodidad derivada, y es también la razón de que `/health` no lleve `ETag`: el cuerpo cambia en cada sondeo.
+
+`config_digest` son doce caracteres hexadecimales que hacen huella de los ajustes que deciden la superficie servida y las respuestas que puede dar: las fuentes habilitadas, `extra_sources`, `server_fetch` (que decide si `read` se registra siquiera), `remote_downloads`, `enrich`, `confirm_downloads`, la ruta base, si es sin estado, y los tres límites que cambian lo que devuelve una misma llamada — `max_download_bytes`, `read_max_chars` y `read_default_pages`.
+
+**Las réplicas detrás de un mismo balanceador tienen que coincidir en todos ellos**, o un cliente recibe un catálogo distinto según a qué nodo llegue y nada más se entera. Comparar el digest entre réplicas es justo para lo que se publica, y es independiente del orden allí donde el ajuste es un conjunto.
+
+**Es una huella para comparar, no un secreto.** Los ajustes que cubre son pocos y públicos, así que quien lo lea puede deducir qué combinación lo produjo. Nada en él es una credencial, y tratarlo como tal es equivocarse en la otra dirección. Lo que queda fuera a propósito: contadores, los propios valores de configuración y cualquier cosa que necesite una ida y vuelta a un servidor externo. Por eso también el endpoint no necesita credencial.
+
+## Dos tarjetas, y cuál quiere un escáner
+
+Un despliegue HTTP publica dos tarjetas de servidor, en dos rutas, porque dos especificaciones describen dos documentos. A cuál apuntar depende de qué sea lo que pregunta:
+
+| Si quiere                                            | Apúntalo a                              | Recibe                                                                                                     |
+| ---------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Descubrir el despliegue: nombre, versión, dónde está | `GET /server-card`                      | La tarjeta de descubrimiento de SEP-2127, más una entrada `remotes` cuando `--public-url` nombra una       |
+| La superficie entera sin conectarse                  | `GET /.well-known/mcp/server-card.json` | La tarjeta enumerativa anterior: `serverInfo`, capacidades y los listados completos de `tools` y `prompts` |
+
+Un registro o un directorio quiere la primera. Un escáner que enumera lo que expone este endpoint quiere la segunda, y es la que hay que mantener alcanzable a través de un proxy que filtre `.well-known`.
+
+Las dos son sin autenticación, las dos responden `Access-Control-Allow-Origin: *` para que un directorio basado en navegador pueda leerlas, y las dos llevan un `ETag` fuerte sobre sus propios bytes — así que dos réplicas que rindieron el mismo documento publican el mismo validador y revalidar tras la hora que permite su `Cache-Control` cuesta un `304`. Las dos se mueven con `--http-path`.
+
+**`remotes` no aparece si no se da `--public-url`**, y esa ausencia es deliberada: una dirección de escucha es muchas veces loopback o un socket detrás de un proxy, y publicarla mandaría al cliente a donde no puede ir. Si un directorio informa de que este despliegue no tiene endpoint remoto, ese flag es la respuesta. Qué contiene cada documento, y por qué la tarjeta de descubrimiento no lista herramientas, está en [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado).
+
+## Dónde escucha el servidor
+
+La regla del separador de rutas está más arriba. Lo que sigue es lo que necesita cada clase de listener.
+
+### Un socket unix, para un proxy en la misma máquina
+
+Prefiere un socket a TLS cuando lo único que habla con este servidor es un proxy en la misma máquina. Los dos hacen ilegible el salto, pero no de la misma manera: TLS cifra el segmento de red, un socket lo elimina. No hay bridge que leer, ni salto por `docker-proxy`, ni puerto que otro proceso local pueda alcanzar o disputar, ni certificado que emitir, distribuir o rotar — los bits de permiso de un inodo son toda la historia del control de acceso.
+
+Una cosa sorprende: un socket unix sigue siendo un valor no vacío de `--http`, así que `download` se queda en modo remoto (solo enlaces) y `read` no se registra. Es correcto — un socket detrás de un proxy sirve a clientes que no están en esta máquina — pero "socket unix" se lee como "local", y no lo es.
+
+### Permisos del socket
+
+`--http-socket-mode` fija el modo en octal con o sin cero delante, y vale `0660` por defecto: lectura y escritura para el propietario y el grupo, nada para nadie más. Solo-grupo es el valor por defecto porque a un socket se llega a través del sistema de ficheros, así que la alternativa no es "solo localhost" sino "toda cuenta local". El proxy se une al grupo del socket en su lugar.
+
+En nginx eso significa los procesos _worker_, que es el segundo argumento de la directiva `user` (`user nginx 10001;`): nginx llama a `initgroups()` al soltar privilegios y por tanto no hereda un `group_add` del contenedor. La alternativa más burda es `--http-socket-mode 0666`, razonable solo cuando el directorio del propio socket ya está restringido, porque el permiso de travesía del directorio controla el acceso antes de que se consulte el modo del socket.
+
+El modo se aplica dos veces y las dos mitades importan. El kernel crea el inodo como `0777 &^ umask`, así que el bind corre bajo un umask estrechado para que el socket nunca llegue a existir abierto al mundo, y un `chmod` justo después deja el modo exacto, porque un umask solo puede quitar bits. Un valor explícito se rechaza al arrancar cuando `--http` es una dirección TCP, y en una plataforma sin modos de fichero, en vez de aceptarse y perderse en silencio.
+
+### Un fichero que ya está en esa ruta
+
+Tres casos, deliberadamente distintos. Una ruta que existe y **no** es un socket se rechaza y no se borra nunca — el operador apuntó a algo, y reemplazarlo no le toca a este programa. Un socket en el que un proceso vivo todavía responde, comprobado con una conexión de 200 ms, también se rechaza, para que una segunda instancia no pueda robarle en silencio el endpoint a la primera. Un socket en el que no responde nadie es lo que deja un predecesor que se cayó, así que se borra con un aviso que lo dice. Un apagado limpio desenlaza el socket por sí mismo.
+
+### Terminar TLS en este proceso
+
+Cuando el proxy está en otra máquina hay un segmento de red que tiene que existir, y este servidor puede terminar TLS él mismo:
+
+```bash
+libgen-mcp --http 0.0.0.0:8443 --tls-cert /etc/ssl/mcp.crt --tls-key /etc/ssl/mcp.key
+```
+
+Los dos flags o ninguno: un certificado sin clave es un despliegue que cree estar sirviendo TLS y no lo está, así que la media pareja se rechaza al arrancar. La pareja además se _carga_ al arrancar y no en el primer handshake, así que un fichero ilegible o una clave que no corresponde a su certificado es un error de arranque con nombre en vez de un handshake fallido días después, cuando ya nadie mira el log.
+
+El listener fija TLS 1.2 como suelo y anuncia `h2` y `http/1.1` por ALPN. Este es además el único caso en que el servidor envía `Strict-Transport-Security`: detrás de un proxy que termina TLS, ese proxy es la capa que conoce la vida de su propio certificado y envía la suya.
+
+Un certificado de una CA privada requiere decirle al proxy de delante que confíe en ella. En nginx eso es `proxy_ssl_verify on` **más** un `proxy_ssl_trusted_certificate` que nombre el fichero de la CA: allí la verificación está apagada por defecto, y encenderla sin fichero de CA hace fallar todas las conexiones.
+
+### Renovar son dos escrituras de fichero, no un reinicio
+
+La pareja viaja detrás de `tls.Config.GetCertificate`, y cada handshake hace primero un stat de los dos ficheros: si no han cambiado, se presenta el certificado que ya está en memoria y no se lee nada; si han cambiado, la pareja se relee y se sirve desde ese handshake en adelante, mientras las conexiones ya abiertas conservan la anterior hasta que se reemplazan. Así que certbot, el agente de Vault y un secreto de Kubernetes remontado son todos escrituras que este servidor recoge solo.
+
+Un reinicio haría lo mismo a un precio mucho mayor: se corta toda descarga en vuelo, y la caché temporal que habría servido el reintento se va con el proceso.
+
+La comprobación es un stat y no un temporizador ni una señal — un temporizador necesita un intervalo que explicar y deja una ventana, y una señal necesita a dónde enviarse, que es lo que no tiene un contenedor cuya renovación es un secreto montado que cambia. **Una recarga que falla conserva el certificado anterior** y escribe un aviso por cada estado roto distinto, porque rechazar el handshake convertiría una renovación rutinaria en una caída que dura lo que dura una escritura de fichero. La primera carga es la excepción y sigue siendo estricta: el arranque es el único momento en que no hay nada a lo que volver y alguien está mirando.
+
+## Sondear una instancia que ya está corriendo
+
+`libgen-mcp --healthcheck` encuentra la instancia que corre en esta máquina, lee `--http`, `--http-path`, `--tls-cert` y `--transport` de su propia línea de órdenes, deduce dónde se sirve `/health` y pregunta — saliendo con `0` cuando responde, `1` cuando no, y `2` para un objetivo que no se puede interpretar. El `HEALTHCHECK` de la imagen corre exactamente eso, cada 30 segundos con cinco de timeout; un intento está acotado en tres segundos y la ejecución entera en cuatro, así que el chequeo responde en vez de morir sin veredicto.
+
+**Lee la instancia en vez de repetir su configuración**, que es lo que hace que funcione en un despliegue configurado enteramente por entorno: una línea de `curl` o `wget` en la imagen tendría que repetir los flags, y se equivoca en cuatro de las cinco formas de listener — otro puerto, un socket unix, TLS terminado en este proceso y un montaje bajo `--http-path` sirven perfectamente mientras una sonda así informa de "no sano", y un orquestador reinicia entonces un contenedor cuyo reinicio no cambia nada.
+
+Un listener `https` se verifica contra el certificado que nombra `--tls-cert`, como única raíz de confianza, pidiendo un nombre que ese certificado lleve — así que un certificado autofirmado en una dirección de loopback se verifica de la forma normal. Una instancia que sirve stdio no tiene listener que sondear y se informa como sana mientras corre. El único listener que no puede descubrir es uno abierto en el puerto `0`, cuyo puerto real solo conocen el kernel y el propio log del servidor; pásale el objetivo directamente ahí, que es además lo que hace una sonda lanzada desde fuera del contenedor:
+
+```bash
+libgen-mcp --healthcheck http://127.0.0.1:8080/health
+libgen-mcp --healthcheck unix:/run/mcp-libgen.sock
+libgen-mcp --healthcheck 127.0.0.1:8080
+```
+
+Esto **no** es `cmd/probe`, que es el diagnóstico en vivo de quien mantiene el proyecto contra los mirrors reales.
+
+Su vecino es `libgen-mcp --shutdown`, que pide a todas las demás instancias de este binario en la máquina que salgan y mata lo que quede a los cinco segundos. Existe para la actualización: cambiar el binario bajo un lanzador de npm, un paquete `.mcpb` o un `cp` a secas deja al proceso viejo reteniendo una plaza de descarga, una entrada de caché temporal y el listener que quiere el nuevo. Los nombres de binario se comparan quitando el sufijo de plataforma, así que `libgen-mcp-linux-amd64` corresponde a `libgen-mcp` y ninguno corresponde al proceso de otra persona en una máquina compartida.
+
+## Una imagen, dos transportes
+
+La imagen publicada decide su transporte a partir de qué es la entrada estándar, porque una misma imagen tiene que servir tanto a un cliente MCP como a un puerto publicado:
+
+```dockerfile
+CMD ["--transport", "auto", "--http", "0.0.0.0:8080"]
+```
+
+`docker run -i` conecta una tubería y obtiene un servidor stdio, que es lo que arranca un cliente MCP. Una ejecución sin `-i` — un compose sin `stdin_open`, un pod de Kubernetes, cualquier cosa que arranque un orquestador — conecta `/dev/null` y obtiene el listener HTTP que anuncia el `EXPOSE 8080` de la imagen. Antes de `auto` obtenía un servidor stdio leyendo `/dev/null`, que es un proceso levantado, sano e inalcanzable.
+
+La inferencia pregunta "¿le ha dado alguien una stdin a este proceso?", no "¿es esto un terminal?": un terminal y `/dev/null` son los dos dispositivos de caracteres. Solo `/dev/null` significa HTTP; una tubería, un terminal, un fichero regular y un socket significan todos stdio, y una forma no reconocida también, porque ese error se ve en segundos mientras el otro es un cliente colgado sin ninguna salida.
+
+**Cualquier argumento reemplaza el `CMD` entero**, así que `docker run <imagen> --http :9000` se lleva por delante `--transport auto` — lo cual está bien, porque nombrar un listener es decidir el transporte. `--transport stdio` y `--transport http` declaran la elección sin rodeos para un despliegue que prefiera no depender de cómo se arrancó; `--transport stdio` junto a un valor de `--http` avisa en vez de ignorarlo, porque una dirección que no hace nada en silencio es la clase de mala configuración más difícil de notar.
+
+## El alias `/mcp`
+
+El endpoint MCP es el propio montaje — `POST /` por defecto — y `POST /mcp` es un alias suyo. Bastantes clientes y bastantes guías dan por hecha esa ruta como para que una URL base pegada con ella o sin ella llegue al mismo sitio en vez de a un `404` que se lee como "este servidor no habla MCP".
+
+Viaja con `--http-path`, así que bajo `--http-path=/libgen` el endpoint es `POST /libgen` y el alias es `POST /libgen/mcp`. Tanto `/mcp` como `/mcp/` se montan como coincidencias exactas. La grafía canónica sigue siendo el propio montaje: es lo que anuncia la tarjeta y lo que usan todos los ejemplos de aquí.
+
+## Con qué se niega a arrancar el servidor
+
+Cada rechazo al arrancar de los de abajo es deliberado. Un despliegue que no corresponde a su propia configuración no debe llegar a producción con aspecto de estar sano, y cada uno de estos sería, si no, un ajuste que parece estar en vigor y no lo está:
+
+| Rechazado                                                                          | Porque                                                                                          |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` en un listener que otras máquinas alcanzan    | Cualquier llamante que pueda hacer POST podría apuntar el servidor a direcciones solo de tu red |
+| `--tls-cert` sin `--tls-key`, o al revés                                           | Un despliegue que cree estar sirviendo TLS y no lo está                                         |
+| `--trusted-proxies` sin `--trusted-proxy-header`, o al revés                       | Una cabecera de un peer sin nombrar es texto que escribió el llamante                           |
+| `--rate-limit-rps` en un bind de loopback o un socket sin proxy de confianza       | La cota no puede hacer lo que pidió el operador, y decirlo es mejor que degradarla              |
+| `--http-socket-mode` con un `--http` TCP, o en una plataforma sin modos de fichero | Una garantía que la plataforma no puede dar                                                     |
+| `--trusted-proxies unix` sobre una dirección TCP                                   | No hay ningún peer unix en el que confiar                                                       |
+| `--http-path` con query, fragmento, segmento `..` o escape porcentual              | Un servidor montado en una ruta que nunca puede casar responde `404` a todo                     |
+| `--public-url` que no es una URL `http`/`https` con host                           | Anunciaría un endpoint que nada puede alcanzar                                                  |
+| Una entrada mal formada en `--trusted-origins`                                     | Una entrada descartada es un origen que deja de funcionar en silencio                           |
+| Un `--max-request-body-bytes` negativo                                             | Levantaría el tope por completo                                                                 |
+| Un valor `LIBGEN_MCP_*` que no se puede interpretar                                | Caer al valor por defecto en silencio es como sobrevive un despliegue que no corresponde        |
+| Un fichero que no es socket, o un socket vivo, en la ruta de `--http`              | Reemplazarlo no le toca a este programa, y robar un endpoint vivo es peor                       |
+
+El primero merece una nota, porque el caso del contenedor se pasa por alto fácilmente: el listener por defecto de la imagen abre `0.0.0.0:8080`, que es exactamente la forma de la que habla el rechazo, incluso cuando el puerto se publica en el loopback del host. Usa una dirección de loopback o un socket unix, o quita la variable — un mirror nombrado en `LIBGEN_MIRROR` o en `LIBGEN_MCP_SCIHUB_HOSTS` ya está exento del guardián de direcciones sin ella.
+
+## Dónde está documentado el resto
+
+| Para                                                                | Ver                                                                            |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Cada flag y su variable `LIBGEN_MCP_*`, con sus valores por defecto | [Arquitectura → Modo sin estado](/libgen-mcp/es/architecture/#modo-sin-estado) |
+| Rutas, cabeceras de seguridad, CORS, cancelación, pistas de caché   | [Arquitectura → Transportes](/libgen-mcp/es/architecture/#transportes)         |
+| Recetas de nginx y docker-compose listas para copiar                | [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming)     |
+| Todas las variables de entorno que lee este servidor                | [Configuración](/libgen-mcp/es/configuration/#listener-http)                   |
+| Qué le hace un despliegue remoto a `download` y a `read`            | [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto)   |
+| Qué puede decir una señal exportada sobre un llamante               | [Telemetría](/libgen-mcp/es/telemetry/)                                        |
+| Un síntoma que estás mirando ahora mismo                            | [Solución de problemas](/libgen-mcp/es/troubleshooting/)                       |

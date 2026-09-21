@@ -393,6 +393,27 @@ El endpoint es el propio montaje — aquí `POST /` — y `POST /mcp` es un alia
 libgen-mcp --http :8080 --public-url https://mcp.example.org
 ```
 
+**Y nombra el proxy, o todos los llamantes serán uno solo.** Declarar el nombre consigue que la petición se sirva; no le dice a este servidor quién la envió. Detrás de un proxy todas las conexiones vienen del proxy, así que el límite de tasa por llamante y el techo de llamadas en vuelo por llamante pasan a ser un único presupuesto para todo el despliegue hasta que se nombra el proxy y se cree su cabecera:
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 \
+  --public-url https://mcp.example.org \
+  --trusted-proxies 127.0.0.1/32 \
+  --trusted-proxy-header X-Real-IP
+```
+
+```nginx
+location / {
+    proxy_pass         http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_buffering    off;   # la respuesta del POST es un flujo SSE real
+    proxy_read_timeout 1h;    # las descargas emiten progreso durante minutos
+    proxy_set_header   X-Real-IP $remote_addr;
+}
+```
+
+Los dos flags o ninguno: cualquiera de ellos a solas aborta el arranque. `--trusted-proxies` nombra el par **del que este servidor acepta conexiones**, que detrás de un puerto de contenedor publicado es la pasarela del bridge y no el `127.0.0.1` que usa la línea `proxy_pass`; si te equivocas, la cabecera se ignora en silencio. [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/) recorre las tres formas de despliegue, qué le hace cada una a los límites y cómo leer esa dirección de tu propio despliegue.
+
 En modo HTTP el servidor expone además un endpoint `GET /health` de disponibilidad que devuelve `200` mientras está sirviendo, cómodo para las comprobaciones de salud de contenedores y balanceadores de carga. Responde al `Host` que envíe quien sondea, incluso a ninguno — el `option httpchk` de HAProxy no envía `Host` salvo que se configure, y una sonda rechazada marca como caída una instancia que funciona.
 
 En modo HTTP el servidor publica además **dos server cards**, una por ubicación, porque las dos especificaciones que reservan esas rutas describen documentos distintos:
@@ -527,7 +548,7 @@ Las dos opciones o ninguna — un certificado sin clave aborta el arranque, igua
 
 Si el certificado viene de una CA privada, hay que apuntar el proxy de delante a esa CA — en nginx, `proxy_ssl_verify on;` **junto con** `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` y un `proxy_ssl_name` que case con el certificado. nginx no verifica por defecto los certificados de los upstream, así que dejar `proxy_ssl_verify` desactivado oculta una cadena mala, y activarlo sin el archivo de la CA hace fallar todas las peticiones.
 
-Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de entorno que puedes fijar en cualquiera de estos casos, y [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo funcionan los transportes.
+Consulta [Configuración](/libgen-mcp/es/configuration/) para las variables de entorno que puedes fijar en cualquiera de estos casos, [Arquitectura](/libgen-mcp/es/architecture/) para saber cómo funcionan los transportes, y [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/) para las decisiones que un despliegue tiene que tomar por encima de estas recetas: el par de flags del proxy de confianza, el límite de tasa y el techo de llamadas en vuelo, el retardo de drenaje, el digest de configuración y con qué se niega a arrancar el servidor.
 
 ## Tu primera búsqueda
 

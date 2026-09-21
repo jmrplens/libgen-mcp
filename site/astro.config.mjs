@@ -634,6 +634,11 @@ export default defineConfig({
 							translations: { es: "Configuración" },
 						},
 						{
+							slug: "http-server-mode",
+							label: "HTTP server mode",
+							translations: { es: "Modo servidor HTTP" },
+						},
+						{
 							slug: "troubleshooting",
 							label: "Troubleshooting",
 							translations: { es: "Solución de problemas" },

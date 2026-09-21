@@ -340,6 +340,34 @@ is optional on a wildcard bind, which declares no name of its own:
 libgen-mcp --http :8080 --public-url https://mcp.example.org
 ```
 
+**And name the proxy, or every caller is one caller.** Declaring the name gets the request
+served; it does not tell this server who sent it. Behind a proxy every connection comes from
+the proxy, so the per-caller rate limit and the per-caller in-flight ceiling become one budget
+for the whole deployment until the proxy is named and its header believed:
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 \
+  --public-url https://mcp.example.org \
+  --trusted-proxies 127.0.0.1/32 \
+  --trusted-proxy-header X-Real-IP
+```
+
+```nginx
+location / {
+    proxy_pass         http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_buffering    off;   # the POST response is a real SSE stream
+    proxy_read_timeout 1h;    # downloads emit progress for minutes
+    proxy_set_header   X-Real-IP $remote_addr;
+}
+```
+
+Both flags or neither — either one alone fails startup. `--trusted-proxies` names the peer
+**this server accepts connections from**, which behind a published container port is the bridge
+gateway rather than the `127.0.0.1` the `proxy_pass` line uses; get it wrong and the header is
+silently ignored. [HTTP server mode](http-server-mode.md) works through the three deployment
+shapes, what each one does to the limits, and how to read that address off your own deployment.
+
 In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200`
 while serving, handy for container and load-balancer health checks. It answers whatever `Host`
 a prober sends, including none at all — HAProxy's `option httpchk` sends no `Host` unless one
@@ -554,7 +582,10 @@ default, so leaving `proxy_ssl_verify` off hides a bad chain, and turning it on 
 file fails every request instead.
 
 See [Configuration](configuration.md) for the environment variables you can set on any of
-these, and [Architecture](architecture.md) for how the transports work.
+these, [Architecture](architecture.md) for how the transports work, and
+[HTTP server mode](http-server-mode.md) for the decisions a deployment has to make on top of
+these recipes: the trusted-proxy pair, the rate limit and the in-flight ceiling, the drain
+delay, the configuration digest, and what the server refuses to start with.
 
 ## Your first search
 
