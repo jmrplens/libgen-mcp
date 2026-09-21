@@ -665,7 +665,7 @@ go test ./...                                              # unit tests
 go test -race ./...                                        # race detector
 make test-e2e-http && make test-e2e-stdio                  # the two transport modules (CI runs both)
 make test-e2e-collector                                    # only if you touched telemetry (needs Docker; no CI job)
-make cover-check                                           # internal/ >= 85%
+make cover-check                                           # internal/ + cmd/ >= 90%
 make check-md-tables                                       # Markdown tables normalized
 make check-llms                                            # llms.txt fresh + valid
 make check-lhm-manifest                                    # lhm.plugin.json matches the surface
