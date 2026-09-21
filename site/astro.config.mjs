@@ -629,6 +629,11 @@ export default defineConfig({
 							translations: { es: "Primeros pasos" },
 						},
 						{
+							slug: "installation",
+							label: "Installation",
+							translations: { es: "Instalación" },
+						},
+						{
 							slug: "configuration",
 							label: "Configuration",
 							translations: { es: "Configuración" },

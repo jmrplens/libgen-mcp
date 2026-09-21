@@ -1,5 +1,7 @@
 # HTTP server mode
 
+**How-to guide** — for an operator deploying this centrally.
+
 Running `libgen-mcp` over streamable HTTP turns a one-client-per-process stdio server into a
 shared service: several clients, one outbound budget, one download semaphore, one cache. This
 page is the deployment guide for that mode — what you have to decide, in the order the

@@ -1,5 +1,7 @@
 # Configuration
 
+**Reference** — for anyone tuning a deployment, at any scale.
+
 `libgen-mcp` is configured through environment variables. Every variable is optional: an
 empty or unset value uses the documented default. A variable that is present but malformed
 (a bad number, an out-of-range value, an unwritable directory, an unknown source name)

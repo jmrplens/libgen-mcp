@@ -1,5 +1,8 @@
 # Telemetry
 
+**Reference** — for an operator wiring this to a collector, and deciding what may
+leave the process.
+
 `libgen-mcp` can export OpenTelemetry traces, metrics and logs to a collector you
 run. It is **off by default**, and off means nothing is created, nothing is
 started and nothing is sent: the switch is the only thing standing between the

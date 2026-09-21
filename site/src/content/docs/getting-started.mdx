@@ -118,6 +118,8 @@ import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 Every channel below ends in the same single static binary: nothing is compiled, nothing runs at install time. If you already have Node 18 or newer, **npm** is the shortest path — one command, and your MCP client can launch the server through `npx` without installing anything. Otherwise pick whichever package manager you already use, or take the **prebuilt binary**, which needs no runtime of any kind.
 
+What follows is one command per channel. **[Installation](/libgen-mcp/installation/)** is the long form: a section per channel with what you get, how to verify it is what this project published, how to upgrade it and how to remove it.
+
 <Tabs>
 	<TabItem label="npm / npx">
 		The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). It needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: the executable rides inside a per-platform package that npm unpacks only when its `os` and `cpu` match, so nothing is compiled and no script runs at install time. Because the executable travels inside the package npm downloads anyway, `npx` and `npm ci --ignore-scripts` both work, and so does an install served from a private registry mirror — or from the local cache with `--offline`, once the tarballs are in it.
@@ -169,21 +171,7 @@ Every channel below ends in the same single static binary: nothing is compiled, 
 
     	The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it names no dynamic loader, depends on nothing on the host and runs straight away — on glibc, on musl, and in a distroless or `scratch` container.
 
-    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them:
-
-    	```bash
-    	# 1. The manifest was signed by this repository's release workflow.
-    	cosign verify-blob \
-    	  --bundle checksums.txt.sigstore.json \
-    	  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
-    	  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    	  checksums.txt
-
-    	# 2. The file you downloaded is the one that manifest names.
-    	sha256sum --ignore-missing -c checksums.txt
-    	```
-
-    	The first command is the one that matters and the one usually skipped: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. The signature is keyless — there is no public key to distribute, the identity **is** the workflow that produced it, which is what `--certificate-identity-regexp` pins.
+    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Installation → Verifying what you install](/libgen-mcp/installation/#verifying-what-you-install).
     </TabItem>
     <TabItem label="Docker">
     	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:

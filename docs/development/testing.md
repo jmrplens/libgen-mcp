@@ -1,5 +1,7 @@
 # The test surfaces
 
+**Explanation** — for a contributor deciding which suite a change needs.
+
 This repository has five of them, and they answer different questions. Knowing
 which one a change needs is most of knowing how to test it.
 
