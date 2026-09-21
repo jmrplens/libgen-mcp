@@ -11,10 +11,12 @@ it.
 
 ## The pages
 
-| Page                     | Read it when                                                                                                                |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| [gates.md](gates.md)     | A check went red and you want to know what it was asserting, where it runs, and where the rule it enforces is written down. |
-| [testing.md](testing.md) | You are deciding which of the five test surfaces a change needs.                                                            |
+| Page                                             | Read it when                                                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| [gates.md](gates.md)                             | A check went red and you want to know what it was asserting, where it runs, and where the rule it enforces is written down. |
+| [testing.md](testing.md)                         | You are deciding which of the five test surfaces a change needs.                                                            |
+| [release-chain.md](release-chain.md)             | You are about to change `.github/workflows/release.yml`, or want to know why a job waits for another.                       |
+| [repository-settings.md](repository-settings.md) | Something failed for a reason CI cannot see: a ruleset, a trusted publisher, an environment, a secret.                      |
 
 ## What is not here
 
@@ -24,11 +26,14 @@ it.
   points at it rather than restating it, because a rule written twice is a rule
   that will disagree with itself.
 - **Architecture decisions.** `docs/decisions/` holds the ADRs.
-- **The release sequence.** It is a skill, `.claude/skills/release/SKILL.md`,
-  because it is a procedure to follow rather than a page to read. The three
-  rules from it that have each already cost a publish are repeated in
-  `CLAUDE.md` § *Release Process*, because a rule that lives only in a skill is
-  a rule an agent has to invoke something to see.
+- **The release *sequence*.** It is a skill, `.claude/skills/release/SKILL.md`,
+  because it is a procedure to follow rather than a page to read: bump the
+  version, mirror it into the manifests, rehearse, tag. The three rules from it
+  that have each already cost a publish are repeated in `CLAUDE.md` § *Release
+  Process*, because a rule that lives only in a skill is a rule an agent has to
+  invoke something to see — and the chain's *shape*, which a contributor
+  changing a workflow needs and a release-cutter does not, is
+  [release-chain.md](release-chain.md).
 - **`docs/superpowers/`.** A historical tree of plans and specifications, kept
   for the record and superseded by design. It is not maintained and not held to
   the documentation gates.

@@ -120,9 +120,15 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The job now gates every version-bearing manifest, but its name is pinned:
-  # "server.json" is a required status check in the branch ruleset, and renaming
-  # it here would leave that check pending forever.
+  # The job now gates every version-bearing manifest, and keeps the narrower
+  # name.
+  #
+  # It was once named for a required status check in the branch ruleset. It is
+  # not any more: the ruleset requires `CI verdict` alone, and this job is
+  # required by being in that job's `needs` list. So renaming it is safe as long
+  # as `verdict` is renamed with it — which is the general rule for every job
+  # here, and the reason the ruleset names one check instead of sixteen. See
+  # docs/development/repository-settings.md.
   server-json:
     name: server.json
     runs-on: ubuntu-latest

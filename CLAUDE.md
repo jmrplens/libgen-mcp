@@ -1053,6 +1053,15 @@ things and a registry rule that has already broken one publish. It lives in the
 `release` skill (`.claude/skills/release/SKILL.md`) — invoke it when bumping the
 version, tagging, or publishing to the MCP registry, npm or LobeHub.
 
+**The chain's shape is a page rather than the skill**, because changing
+`release.yml` and cutting a release are different jobs:
+`docs/development/release-chain.md` has the fourteen jobs, why each edge exists,
+the digest handover that stops a tag from being pinned beside the previous
+release's image, and what a rehearsal cannot prove. The settings it depends on
+and CI cannot see — the branch ruleset, the three trusted publishers and their
+blank environment, every secret and what happens when one is missing — are
+`docs/development/repository-settings.md`.
+
 Three rules from it are repeated here, because each one has already cost a
 publish or shipped a manifest nobody could use, and a rule that lives only in a
 skill is a rule an agent has to invoke something to see:

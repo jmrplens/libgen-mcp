@@ -92,18 +92,14 @@ either is skipped. `id-token: write` *is* proven, by the two mint-only exchanges
 
 ## The shape of the release
 
-Thirteen jobs, and the edges are the point rather than the count:
+Fourteen jobs, and the edges are the point rather than the count. The graph, the
+three rules that hold it together, the ordering the registries force, and what a
+rehearsal can and cannot prove are one page:
+**`docs/development/release-chain.md`**. Read it before changing
+`.github/workflows/release.yml`; what follows here is only what a release-cutter
+needs in hand.
 
-```text
-preflight ─┬─ transport-e2e ─┐
-           ├─ race ──────────┼─ docker ── sign-attest ── release ─┬─ npm ──┐
-           └─────────────────┘                                    ├─ pypi ─┼─ verify-published ─┬─ mcp-registry ─┐
-                                                                  ├─ nuget ┘                    │                ├─ commit-manifests
-                                                                  ├─ homebrew ───────────────────────────────────┘
-                                                                  └─ winget
-```
-
-Three rules hold it together, each one a failure that happened:
+Three rules from it, because each one is a failure that happened:
 
 - **The signing identity is never live while third-party build code runs.**
   `docker` keeps `packages: write` and no `id-token`; `sign-attest` runs no build
@@ -191,8 +187,11 @@ first. Checking that nothing claims your *hostname* is not the check — the str
 is. A self-hosted templated remote is therefore only safe if no other server of
 yours already publishes the same template.
 
-The `server.json` CI job is named for a required status check in the branch
-ruleset, not for its scope — do not rename it without updating the ruleset too.
+The `server.json` CI job keeps its narrow name for history rather than for its
+scope: it gates every version-bearing manifest. It is **not** a required status
+check any more — the branch ruleset requires `CI verdict` alone — so renaming it
+means renaming it in `verdict`'s `needs` list, not in the ruleset. See
+`docs/development/repository-settings.md`.
 
 ## The channels, and what each one's first publish needed
 
