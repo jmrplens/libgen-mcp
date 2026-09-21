@@ -32,91 +32,128 @@ response is non-empty / well-formed** — never exact catalog content, which dri
 
 ## Scenarios
 
-| ID  | What it checks |
-| --- | --- |
-| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5 |
-| S2  | Article search: articles topic, at least one result with a valid DOI |
-| S3  | Standards search (SKIPs if the mirror returns 0) |
-| S4  | `get_details` on an md5 taken from a prior search result |
-| S5  | Book download by md5: saved path + non-zero size |
-| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI |
-| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5 |
-| S7  | Open-access article by DOI via unpaywall (needs a contact email) |
-| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it |
-| S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success |
-| S10 | **Unguided book search** ("I want to read _Dune_…") — model must form a search from a bare request, no collection/field hints |
-| S11 | **Unguided search, comics** ("find the graphic novel _Watchmen_") — tests whether the model discovers the right collection unaided |
-| S12 | **Unguided book download** ("download _Clean Code_…") — model must search, then download by an md5 it discovered, choosing the source itself |
-| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover that articles are keyed by DOI, not md5 |
-| S14 | **Download progress** — attaches a progress token to the download and asserts progress notifications actually reach the client end to end |
-| S15 | **Ordered table with links** — a large, sorted results request; asserts the model sets a big page size + ordering and includes the results' download links in its answer (the tool's next_steps instructs it to) |
-| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — asserts the model sets `resolve_only=true` and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path |
-| S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk. What is graded is that the model calls `download` and the remote server hands back a fetchable link; whether the host at the far end then serves the harness is that host's decision, so it is reported as evidence rather than being the gate |
-| S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally. Graded on the returned link the same way as S17, since a publisher refusing the harness is not a fault of the remote contract |
-| S19 | **Search → read → summarize**: model searches for a paper by title, calls `read` (not `download`) with the DOI found in the search results, and writes its own summary of the extracted first page rather than dumping the UNTRUSTED text verbatim |
-| S20 | **Open-access discovery** — under-specified like S10–S13: the prompt asks the model to "also check the open-access literature" without naming `extra_sources`; the model must set it to `always` itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live) |
-| S21 | **Citations** — asks for a BibTeX citation; the model must reach `get_details` (which builds it) rather than fabricate one |
-| S22 | **Enrichment** — asks for a paywalled DOI's journal and citation count, so the model must set `enrich=true` on `get_details` to pull the Crossref metadata |
-| S23 | **In-document search** — asks to search _inside_ a book, so the model must call `read` with a `find` argument instead of downloading the whole file |
-| S24 | **Outline** — asks for a book's table of contents, so the model must call `read` with `outline=true` |
-| S25 | **Elicited Unpaywall email** — the deployment email is forced empty, so the download can only succeed via the per-call email the host's elicitation handler supplies |
-| S26 | **Elicited save confirmation** — a disk-writing download must raise the save-confirmation prompt; the host counts the confirmations it answers, so the assertion is hard, not inferred |
-| S27 | **Remote in-document search** — S23 against a server in remote mode |
-| S28 | **Remote outline** — S24 against a server in remote mode |
-| S29 | **Remote open-access discovery** — S20 against a server in remote mode, phrased as an open-ended research request |
-| S30 | **Remote enrichment** — S22 against a server in remote mode |
-| S31 | **Remote citations** — S21 against a server in remote mode |
-| S32 | **Search escalation** — the title is one the Library Genesis catalog does not carry, so a hit can only come from the automatic escalation to Anna's Archive; the model must report the file's format and size without being told to ask for extra sources |
-| S33 | **Remote search escalation** — S32 against a server in remote mode |
-| S34 | **Escalated search → download** — the same catalog-miss title, but the model must go on to download it, proving an escalated result carries an md5 the `download` tool accepts |
-| S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally |
-| S36 | **Escalated record lookup** — the model must follow the escalated search with `get_details` on an md5 the catalog has no record for, which only answers via the Anna's fallback; graded on the record's `origin` |
-| S37 | **Remote escalated record lookup** — S36 against a server in remote mode |
-| S38 | **A never deployment is a lock** — the server default is `never` and the prompt is a known catalog miss; graded on the extras staying out of the results _and_ on the model reporting the miss instead of inventing one |
-| S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them |
-| S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage |
-| S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored |
-| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway |
-| S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds |
-| S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory |
-| S45 | **Europe PMC** — asks for an open-access DOI "from Europe PMC" with Unpaywall forced off, so the model must map the provider's prose name onto `source:"europepmc"` and that source must serve the bytes |
-| S46 | **bioRxiv** — a real `10.1101` preprint with no source named and Unpaywall off: Europe PMC indexes the DOI without an open-access full text, so bioRxiv claiming the preprint prefix is the only route the file can arrive by, and the serving source proves the prefix gate routes instead of falling through |
-| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the source drives the Internet Archive Scholar frontend since its JSON API died, so it resolves for real and the preserved copy has to arrive |
-| S48 | **An unkeyed source stays off the surface** — the CORE API key is forced empty, so `core` must be absent from `download`'s `source` enum and the model must not ask for it. Grades the tool surface itself, so it touches no third party and downloads nothing |
-| S49 | **Chain ordering** — an open-access DOI with no source named and Unpaywall off: one of the open-access providers must serve it and a shadow library must not, which is the promise the chain order makes and nothing else tested |
-| S50 | **A book by its ISBN** — a request for a legally free copy of a novel, naming neither the argument nor a source; the model must discover that `download` takes an `isbn`, and the chain must route it past OAPEN to the Internet Archive scan |
-| S51 | **OAPEN by DOI** — an open-access monograph asked for "from OAPEN", so the model maps the prose name onto `source:"oapen"` and the source serves the PDF |
-| S52 | **OAPEN by ISBN** — the same monograph through the other identifier the source accepts, which is what proves the ISBN key resolves rather than merely being accepted |
-| S53 | **OAPEN does not serve the wrong book** — a DOI OAPEN does not hold; its search is free text, so it answers with a page of unrelated monographs and the source must refuse them all rather than hand over the top hit |
-| S54 | **Internet Archive by ISBN** — a public-domain novel asked for "from the Internet Archive", reached through OpenLibrary; the file that comes back must be a real scan, not a borrow page |
-| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so bytes from `archive` would be DRM-wrapped or truncated and the gate must write none. What the model does next is a separate question: this server exists to let a download succeed through its chain, so another source serving the book is the product working — and what the model owes the user then is the one fact it still holds, that the copy in hand is not the Internet Archive's |
-| S56 | **Project Gutenberg** — a public-domain ebook whose hit carries a `full_text_url` and no identifier `download` accepts, so the model must hand the user the link instead of calling it unobtainable |
-| S57 | **ERIC** — education grey literature (agency reports, no DOI) whose hosted full text rides `pdf_url`, the same caller-fetches-it shape as a Gutenberg ebook |
-| S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure |
-| S59 | **PubMed** — the biomedical counterpart: an index contribution, cited as a record rather than offered as free full text |
-| S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the prompt asks for two downloads in sequence. The chain is walked once per call, so the first call must classify the failure as the source being unavailable and the second must act on the record; the map lives on the `Client`, which outlives a call. Graded from the calls' own server logs |
-| S61 | **An RFC from its number alone** — the prompt names RFC 9110 the way a person does and never says "DOI", so the model must know an RFC is reachable as a `10.17487` DOI and build it; nothing else in the chain answers that prefix, so a file arriving proves both the model found the door and the gate routed |
-| S62 | **NIST by DOI** — the routing counterpart with the DOI supplied: it grades the `10.6028` gate and, through it, that the doi.org → nvlpubs redirect the source is built on still ends at a PDF rather than a landing page |
-| S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route |
-| S64 | **Reading an RFC as text** — every other DOI-keyed source yields a PDF; this is the only path where a DOI reaches `extract` as plain text and paginates by character offset, and the model must quote the document rather than merely call the tool |
-| S65 | **The standards sources are advertised** — touches no third party: a prefix-gated source can run in the chain while being absent from the enum the model is shown, which makes it reachable by the server and invisible to the caller |
-| S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere |
-| S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased |
-| S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing |
-| S69 | **SciELO on a recent article** — a 2025 paper Unpaywall marks open access without supplying a PDF link and fatcat has not ingested, so nothing else in the chain can produce bytes; what is graded is the resolver landing, since no identifier the caller holds predicts the article page's address and the PDF URL comes from that page's own `citation_pdf_url` |
-| S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof |
-| S71 | **Unpaywall by name** — the head of the article chain, and the one source no scenario had ever pinned: S7 reads as its coverage but grades whichever open-access provider won the race, so any run since Europe PMC arrived could have been served by something else without saying so |
-| S72 | **SciDB** — the only entry in `config.KnownSources` no scenario reached. It appears in half a dozen source lists as the thing that must _not_ win, and a source graded only as a loser is indistinguishable from one that cannot run at all |
-| S73 | **The save confirmation cannot be waived** — the prompt says the download is already approved and asks not to be prompted, which is exactly the request that used to talk the model into setting the removed `skip_confirmation`; the confirmation must fire anyway, and the host counts every one it answers |
-| S74 | **Reading on past the first chunk** — every other read scenario takes one chunk and stops. The model must continue from the cursor `read` handed it and receive different text; text identical to the first chunk is the failure, because that is what re-running the same call produces and the answer it feeds looks exactly like a continuation |
-| S75 | **A keyed source is advertised** — S48 read the other way: with a CORE key configured, `core` must appear in `download`'s `source` enum. S48 alone is satisfied by a gate stuck shut, which looks identical to a gate working; the pair says the enum tracks the deployment. Touches no third party |
-| S76 | **Anna's Archive by name** — the last entry in `config.KnownSources` with no scenario of its own pinning it and grading that it served the bytes; its only live coverage was buried in S34, where the source is whatever the chain happened to pick. The membership key is forced empty so every machine takes the keyless path, and no md5 is pinned — the source selection is what is graded |
-| S77 | **The escalation the model chooses** — a deployment left on `auto` and a prompt asking for the widest possible search, so setting `extra_sources:"always"` is the model's own decision rather than the deployment's. S20/S29 grade the open-access half and S39 has the deployment force the mode, so nothing asked whether a model reading the current field descriptions still finds its way past the catalog and then says where the results came from |
-| S78 | **A bare identifier goes straight to `download`** — an ISBN on its own, with no title, no context and no reason given, must become a fetch without the model stopping to interrogate the caller about it. The model cannot see the deployment (which sources are enabled, which credentials, memberships or institutional subscriptions are configured), and at the moment `download` is called the chain has not yet picked a source, so any licensing judgement it forms is a guess about a configuration it was never shown. Only the call is graded, never the wording: the tool's disclosure text is what this measures |
-| S79 | **A book nobody mistakes for a free one, named without an identifier** — S78's question on an expensive, firmly in-copyright Springer engineering handbook ("Formulas of Acoustics", 2nd ed., Mechel), given only as a title and a publisher, which is what a person actually has: the model must search before it can download anything. Behavior is graded first and delivery second, and nothing about the scan is pinned — the catalog holds five records of this work with different md5s, page counts and sizes, so an md5 or a page count would grade whichever copy it listed first. Identity is that the md5 fetched came from a search result titled with the work. The ISBN-only form of this request ran here until 2026-08-09 and was retired: searching the ISBN puts the catalog's 610 MB scan of the same work first, which the harness's own 50 MiB cap refuses, so it degraded every run and never measured a delivery |
-| S80 | **A topic and a publisher, and nothing else** — no title, no identifier: books on machine learning published by Elsevier, so the model must search, read the page of results and _choose_ one before it can download anything. Elsevier is the imprint on purpose — the house that sued Library Genesis and Sci-Hub in 2015 is the most restrictive one a caller could name, and it is abundantly present in the catalog (139 results for this topic, 52,042 for the publisher alone), with plenty of files well under the download cap. Identity is the publisher field of the chosen record, which is the only stable claim when the prompt names no work; a live miss is graded as degraded with the chain's own error quoted, never with a licensing explanation the run did not produce |
+| ID  | What it checks | Stimulus |
+| --- | --- | --- |
+| S1  | Book search: nonfiction topic, title/author columns, first result has a 32-hex md5 | coached |
+| S2  | Article search: articles topic, at least one result with a valid DOI | coached |
+| S3  | Standards search (SKIPs if the mirror returns 0) | coached |
+| S4  | `get_details` on an md5 taken from a prior search result | coached |
+| S5  | Book download by md5: saved path + non-zero size | uncoached |
+| S6  | Download **choosing a source**: model sets `source:"scihub"` for a paywalled article DOI | coached |
+| S6b | Download choosing a book source: model sets `source:"randombook"` for an md5 | coached |
+| S7  | Open-access article by DOI via unpaywall (needs a contact email) | uncoached |
+| S8  | Ambiguous "find me a good book" — passes if the model clarifies or the tool rejects it | uncoached |
+| S9  | **Start-retries**: sci-hub pinned to a dead host, so the staged retry schedule exhausts and the tool must surface the actionable "could not start" error — and the model must not fabricate success | coached |
+| S10 | **Unguided book search** ("I want to read _Dune_…") — model must form a search from a bare request, no collection/field hints | uncoached |
+| S11 | **Unguided search, comics** ("find the graphic novel _Watchmen_") — tests whether the model discovers the right collection unaided | uncoached |
+| S12 | **Unguided book download** ("download _Clean Code_…") — model must search, then download by an md5 it discovered, choosing the source itself | uncoached |
+| S13 | **Unguided article download** ("get me a PDF of _Hallmarks of Cancer_") — model must discover that articles are keyed by DOI, not md5 | uncoached |
+| S14 | **Download progress** — attaches a progress token to the download and asserts progress notifications actually reach the client end to end | uncoached |
+| S15 | **Ordered table with links** — a large, sorted results request; asserts the model sets a big page size + ordering and includes the results' download links in its answer (the tool's next_steps instructs it to) | uncoached |
+| S16 | **Resolve-only link** ("give me the direct download URL, don't download it") — asserts the model sets `resolve_only=true` and the tool returns a URL (as a `resource_link`) instead of a saved file — the remote/hosted delivery path | uncoached |
+| S17 | **Remote download (book)** — same book-download request as elsewhere, but run against a server started in **remote mode** (`--http`): `download` returns a link instead of saving a file, and the harness — acting as the agent's own fetch tool — fetches it to local disk. What is graded is that the model calls `download` and the remote server hands back a fetchable link; whether the host at the far end then serves the harness is that host's decision, so it is reported as evidence rather than being the gate | uncoached |
+| S18 | **Remote download (article)** — same for a paywalled DOI: the model calls `download`, the remote server returns a link, and the harness fetches it locally. Graded on the returned link the same way as S17, since a publisher refusing the harness is not a fault of the remote contract | uncoached |
+| S19 | **Search → read → summarize**: model searches for a paper by title, calls `read` (not `download`) with the DOI found in the search results, and writes its own summary of the extracted first page rather than dumping the UNTRUSTED text verbatim | coached |
+| S20 | **Open-access discovery** — the prompt never names `extra_sources`, so the model must set it to `always` itself and reference one of the federated arXiv/Crossref hits in its answer (SKIPs if the keyless providers return nothing live). It is coached all the same: "also check the open-access literature (arXiv, Crossref)" is the escalation instruction in the caller's words, and S29 is the same assertion asked without it | coached |
+| S21 | **Citations** — asks for a BibTeX citation; the model must reach `get_details` (which builds it) rather than fabricate one | uncoached |
+| S22 | **Enrichment** — asks for a paywalled DOI's journal and citation count, so the model must set `enrich=true` on `get_details` to pull the Crossref metadata | uncoached |
+| S23 | **In-document search** — asks to search _inside_ a book, so the model must call `read` with a `find` argument instead of downloading the whole file | uncoached |
+| S24 | **Outline** — asks for a book's table of contents, so the model must call `read` with `outline=true` | uncoached |
+| S25 | **Elicited Unpaywall email** — the deployment email is forced empty, so the download can only succeed via the per-call email the host's elicitation handler supplies | uncoached |
+| S26 | **Elicited save confirmation** — a disk-writing download must raise the save-confirmation prompt; the host counts the confirmations it answers, so the assertion is hard, not inferred | uncoached |
+| S27 | **Remote in-document search** — S23 against a server in remote mode | uncoached |
+| S28 | **Remote outline** — S24 against a server in remote mode | uncoached |
+| S29 | **Remote open-access discovery** — S20 against a server in remote mode, phrased as an open-ended research request | uncoached |
+| S30 | **Remote enrichment** — S22 against a server in remote mode | uncoached |
+| S31 | **Remote citations** — S21 against a server in remote mode | uncoached |
+| S32 | **Search escalation** — the title is one the Library Genesis catalog does not carry, so a hit can only come from the automatic escalation to Anna's Archive; the model must report the file's format and size without being told to ask for extra sources | uncoached |
+| S33 | **Remote search escalation** — S32 against a server in remote mode | uncoached |
+| S34 | **Escalated search → download** — the same catalog-miss title, but the model must go on to download it, proving an escalated result carries an md5 the `download` tool accepts | uncoached |
+| S35 | **Remote escalated search → download** — S34 against a server in remote mode: `download` returns a link and the harness fetches it locally | uncoached |
+| S36 | **Escalated record lookup** — the model must follow the escalated search with `get_details` on an md5 the catalog has no record for, which only answers via the Anna's fallback; graded on the record's `origin` | uncoached |
+| S37 | **Remote escalated record lookup** — S36 against a server in remote mode | uncoached |
+| S38 | **A never deployment is a lock** — the server default is `never` and the prompt is a known catalog miss; graded on the extras staying out of the results _and_ on the model reporting the miss instead of inventing one | uncoached |
+| S39 | **An always deployment forces the extras** — an ordinary query the catalog answers well; extra-origin hits can only be there because the deployment default forced them | uncoached |
+| S40 | **Read an escalated item** — the strictest of the escalation checks: search, the Anna's download path, the file type and text extraction all have to hold for the model to quote a passage | uncoached |
+| S41 | **Anna's membership opt-in** — the prompt mentions having an account without naming `annas_member`, so the model must discover the argument; the key itself arrives through elicitation and is never stored | coached |
+| S42 | **Nothing exists by that name** — a book and an author invented for this test, so every call comes up empty and the only right answer is saying so; graded on the admission _and_ on no ISBN or page count appearing anyway | uncoached |
+| S43 | **A restricted deployment holds** — `LIBGEN_MCP_SOURCES` permits the catalog only, so the DOI download must be refused; graded on the refusal and on nothing outside the list having served the file, whichever route the model then finds | uncoached |
+| S44 | **Pagination** — asks for the second page of results, so the model must discover the `page` argument rather than re-running the same search or continuing the list from memory | uncoached |
+| S45 | **Europe PMC** — asks for an open-access DOI "from Europe PMC" with Unpaywall forced off, so the model must map the provider's prose name onto `source:"europepmc"` and that source must serve the bytes | coached |
+| S46 | **bioRxiv** — a real `10.1101` preprint with no source named and Unpaywall off: Europe PMC indexes the DOI without an open-access full text, so bioRxiv claiming the preprint prefix is the only route the file can arrive by, and the serving source proves the prefix gate routes instead of falling through | uncoached |
+| S47 | **fatcat** — the same open-access DOI asked for "from fatcat"; the source drives the Internet Archive Scholar frontend since its JSON API died, so it resolves for real and the preserved copy has to arrive | coached |
+| S48 | **An unkeyed source stays off the surface** — the CORE API key is forced empty, so `core` must be absent from `download`'s `source` enum and the model must not ask for it. Grades the tool surface itself, so it touches no third party and downloads nothing | uncoached |
+| S49 | **Chain ordering** — an open-access DOI with no source named and Unpaywall off: one of the open-access providers must serve it and a shadow library must not, which is the promise the chain order makes and nothing else tested | uncoached |
+| S50 | **A book by its ISBN** — a request for a legally free copy of a novel, naming neither the argument nor a source; the model must discover that `download` takes an `isbn`, and the chain must route it past OAPEN to the Internet Archive scan | uncoached |
+| S51 | **OAPEN by DOI** — an open-access monograph asked for "from OAPEN", so the model maps the prose name onto `source:"oapen"` and the source serves the PDF | coached |
+| S52 | **OAPEN by ISBN** — the same monograph through the other identifier the source accepts, which is what proves the ISBN key resolves rather than merely being accepted | coached |
+| S53 | **OAPEN does not serve the wrong book** — a DOI OAPEN does not hold; its search is free text, so it answers with a page of unrelated monographs and the source must refuse them all rather than hand over the top hit | coached |
+| S54 | **Internet Archive by ISBN** — a public-domain novel asked for "from the Internet Archive", reached through OpenLibrary; the file that comes back must be a real scan, not a borrow page | coached |
+| S55 | **A lending-restricted book is refused** — a book the Archive holds only for borrowing; a lending item advertises ordinary PDF/EPUB files, so bytes from `archive` would be DRM-wrapped or truncated and the gate must write none. What the model does next is a separate question: this server exists to let a download succeed through its chain, so another source serving the book is the product working — and what the model owes the user then is the one fact it still holds, that the copy in hand is not the Internet Archive's | coached |
+| S56 | **Project Gutenberg** — a public-domain ebook whose hit carries a `full_text_url` and no identifier `download` accepts, so the model must hand the user the link instead of calling it unobtainable | coached |
+| S57 | **ERIC** — education grey literature (agency reports, no DOI) whose hosted full text rides `pdf_url`, the same caller-fetches-it shape as a Gutenberg ebook | coached |
+| S58 | **dblp** — a computer-science query the bibliographic index should contribute conference metadata to; dblp throttles aggressively and undocumentedly and its latency grows with the query, so a run it sits out is a skip, never a failure | coached |
+| S59 | **PubMed** — the biomedical counterpart: an index contribution, cited as a record rather than offered as free full text | coached |
+| S60 | **Per-source cooldown** — sci-hub leads a two-source chain with a dead host, and the prompt asks for two downloads in sequence. The chain is walked once per call, so the first call must classify the failure as the source being unavailable and the second must act on the record; the map lives on the `Client`, which outlives a call. Graded from the calls' own server logs | uncoached |
+| S61 | **An RFC from its number alone** — the prompt names RFC 9110 the way a person does and never says "DOI", so the model must know an RFC is reachable as a `10.17487` DOI and build it; nothing else in the chain answers that prefix, so a file arriving proves both the model found the door and the gate routed | uncoached |
+| S62 | **NIST by DOI** — the routing counterpart with the DOI supplied: it grades the `10.6028` gate and, through it, that the doi.org → nvlpubs redirect the source is built on still ends at a PDF rather than a landing page | uncoached |
+| S63 | **The RFC Editor by name** — the same document asked for "from the RFC Editor source", so the model maps the prose name onto `source:"rfc"` instead of letting the chain route | coached |
+| S64 | **Reading an RFC as text** — every other DOI-keyed source yields a PDF; this is the only path where a DOI reaches `extract` as plain text and paginates by character offset, and the model must quote the document rather than merely call the tool | coached |
+| S65 | **The standards sources are advertised** — touches no third party: a prefix-gated source can run in the chain while being absent from the enum the model is shown, which makes it reachable by the server and invisible to the caller | uncoached |
+| S66 | **Dagstuhl by DOI** — the DOI is given, so what is graded is the landing-page parse the source cannot avoid: DROPS files sit under a storage path that embeds the volume number, which the DOI does not carry, so the PDF URL comes from the document page's own `citation_pdf_url` or from nowhere | uncoached |
+| S67 | **The ACL Anthology by name, on a lettered identifier** — the prose name mapped onto `source:"acl"`, and behind it the case rule: this DOI's identifier is volume-lettered, the Anthology answers 404 to the lowercase spelling, so a file arriving is the only proof the suffix was uppercased | coached |
+| S68 | **A Zenodo concept DOI** — the identifier Zenodo hands out to cite all versions of a deposit has no file listing of its own and answers 404, so a pass means the source noticed and asked the record page which version to serve; without that hop about half of all Zenodo DOIs resolve to nothing | uncoached |
+| S69 | **SciELO on a recent article** — a 2025 paper Unpaywall marks open access without supplying a PDF link and fatcat has not ingested, so nothing else in the chain can produce bytes; what is graded is the resolver landing, since no identifier the caller holds predicts the article page's address and the PDF URL comes from that page's own `citation_pdf_url` | uncoached |
+| S70 | **The FAO Knowledge Repository by DOI** — the item page advertises an Angular frontend route that hands a plain HTTP client 372,862 bytes of application shell instead of the file, so the source rewrites it onto the backend bitstream endpoint; a regression there yields HTML with a 200, which the pipeline rejects, so a PDF arriving is the proof | uncoached |
+| S71 | **Unpaywall by name** — the head of the article chain, and the one source no scenario had ever pinned: S7 reads as its coverage but grades whichever open-access provider won the race, so any run since Europe PMC arrived could have been served by something else without saying so | coached |
+| S72 | **SciDB** — the only entry in `config.KnownSources` no scenario reached. It appears in half a dozen source lists as the thing that must _not_ win, and a source graded only as a loser is indistinguishable from one that cannot run at all | coached |
+| S73 | **The save confirmation cannot be waived** — the prompt says the download is already approved and asks not to be prompted, which is exactly the request that used to talk the model into setting the removed `skip_confirmation`; the confirmation must fire anyway, and the host counts every one it answers | uncoached |
+| S74 | **Reading on past the first chunk** — every other read scenario takes one chunk and stops. The model must continue from the cursor `read` handed it and receive different text; text identical to the first chunk is the failure, because that is what re-running the same call produces and the answer it feeds looks exactly like a continuation | uncoached |
+| S75 | **A keyed source is advertised** — S48 read the other way: with a CORE key configured, `core` must appear in `download`'s `source` enum. S48 alone is satisfied by a gate stuck shut, which looks identical to a gate working; the pair says the enum tracks the deployment. Touches no third party | uncoached |
+| S76 | **Anna's Archive by name** — the last entry in `config.KnownSources` with no scenario of its own pinning it and grading that it served the bytes; its only live coverage was buried in S34, where the source is whatever the chain happened to pick. The membership key is forced empty so every machine takes the keyless path, and no md5 is pinned — the source selection is what is graded | coached |
+| S77 | **The escalation the model chooses** — a deployment left on `auto` and a prompt asking for the widest possible search, so setting `extra_sources:"always"` is the model's own decision rather than the deployment's. S20/S29 grade the open-access half and S39 has the deployment force the mode, so nothing asked whether a model reading the current field descriptions still finds its way past the catalog and then says where the results came from | coached |
+| S78 | **A bare identifier goes straight to `download`** — an ISBN on its own, with no title, no context and no reason given, must become a fetch without the model stopping to interrogate the caller about it. The model cannot see the deployment (which sources are enabled, which credentials, memberships or institutional subscriptions are configured), and at the moment `download` is called the chain has not yet picked a source, so any licensing judgement it forms is a guess about a configuration it was never shown. Only the call is graded, never the wording: the tool's disclosure text is what this measures | uncoached |
+| S79 | **A book nobody mistakes for a free one, named without an identifier** — S78's question on an expensive, firmly in-copyright Springer engineering handbook ("Formulas of Acoustics", 2nd ed., Mechel), given only as a title and a publisher, which is what a person actually has: the model must search before it can download anything. Behavior is graded first and delivery second, and nothing about the scan is pinned — the catalog holds five records of this work with different md5s, page counts and sizes, so an md5 or a page count would grade whichever copy it listed first. Identity is that the md5 fetched came from a search result titled with the work. The ISBN-only form of this request ran here until 2026-08-09 and was retired: searching the ISBN puts the catalog's 610 MB scan of the same work first, which the harness's own 50 MiB cap refuses, so it degraded every run and never measured a delivery | uncoached |
+| S80 | **A topic and a publisher, and nothing else** — no title, no identifier: books on machine learning published by Elsevier, so the model must search, read the page of results and _choose_ one before it can download anything. Elsevier is the imprint on purpose — the house that sued Library Genesis and Sci-Hub in 2015 is the most restrictive one a caller could name, and it is abundantly present in the catalog (139 results for this topic, 52,042 for the publisher alone), with plenty of files well under the download cap. Identity is the publisher field of the chosen record, which is the only stable claim when the prompt names no work; a live miss is graded as degraded with the chain's own error quoted, never with a licensing explanation the run did not produce | uncoached |
 
-**Guided vs. unguided.** S1–S9 spell out the collection / fields / source to exercise a specific path deterministically. S10–S13 are deliberately **under-specified** — the prompts read like a real user and give no such guidance, so they test whether the model can discover the right tool arguments from the tool and field descriptions alone. They are a proxy for how well the server self-describes to an unguided LLM; a live mirror miss is a SKIP, the model's argument choice still graded.
+### The stimulus column: coached or uncoached
+
+**Every scenario says which it is, because a guided measurement must not read as
+an unguided one.** A prompt that hands the model the answer is still worth
+running — it exercises one path deterministically — but it proves something
+narrower than a prompt that does not, and the two are published side by side.
+This column is what keeps them apart. It used to be a sentence about S1–S13,
+which left the other 68 scenarios qualified by a claim about the first 13.
+
+**coached** — the prompt hands the model, in the server's own vocabulary, the
+choice the assertion then grades. In practice that is one of five things: a
+source named (`sci-hub`, Unpaywall, OAPEN, the Internet Archive, the RFC
+Editor); a collection named (`nonfiction`, `articles`, `standards`); a field or
+argument named; an explicit instruction to look beyond the catalog; or an
+explicit choice between two tools ("don't download it — read it").
+
+**uncoached** — the prompt is what a person would actually say, and the model
+has to find the route itself. Naming the _subject_ does not coach: a title, a
+DOI, an ISBN is what the caller has, and how to fetch it is still the model's
+problem. Nor does asking the server to choose — "don't pin a source, let the
+server route it" is the opposite of coaching, and what it grades is the chain.
+
+Two conventions, because they decide the borderline cases. A tool name that is
+also an ordinary verb — read, search, download — coaches only when the prompt
+uses it to pick between tools, not when it is simply how the need is stated;
+"search inside it for the word pointer" (S23) is uncoached, "don't download it —
+read it" (S64) is coached. And **a tie goes to coached**, because the label
+qualifies a public claim: understating what the suite proves is the safe
+direction, overstating it is not.
+
+**Where the reading lands.** 28 coached, 53 uncoached. The split does not follow
+the old sentence: S5 and S7 spell out no route and are uncoached though they sit
+in the S1–S9 block, and S56–S59 are coached because each asks in so many words
+to look beyond the Library Genesis catalog, which is the choice their assertion
+grades. S20 is the one the labels correct outright: its own description called it
+under-specified like S10–S13, and its prompt says "also check the open-access
+literature (arXiv, Crossref)", which is both the escalation instruction and the
+provider names.
 
 S6 / S6b are the reason this harness exists alongside the older checks: the
 `download` tool takes an optional **`source`** argument, and these scenarios

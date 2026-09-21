@@ -100,7 +100,7 @@ func TestMeasuredSpanWording(t *testing.T) {
 func TestResultsSummaryFlagsUnmeasuredScenarios(t *testing.T) {
 	sum := runSummary{Model: "m", Total: 3, Pass: 3, Remote: 1, First: "2026-01-02", Last: "2026-01-02"}
 
-	complete := renderResultsSummaryEN(sum, 3)
+	complete := renderResultsSummaryEN(sum, 3, 0)
 	if !strings.Contains(complete, "every scenario") {
 		t.Errorf("a fully measured suite should still say so; got %q", complete)
 	}
@@ -108,7 +108,7 @@ func TestResultsSummaryFlagsUnmeasuredScenarios(t *testing.T) {
 		t.Errorf("a fully measured suite must not warn about unmeasured rows; got %q", complete)
 	}
 
-	partial := renderResultsSummaryEN(sum, 5)
+	partial := renderResultsSummaryEN(sum, 5, 0)
 	if strings.Contains(partial, "every scenario") {
 		t.Errorf("an unmeasured scenario must stop the every-scenario claim; got %q", partial)
 	}
@@ -119,15 +119,15 @@ func TestResultsSummaryFlagsUnmeasuredScenarios(t *testing.T) {
 			}
 		})
 	}
-	if one := renderResultsSummaryEN(sum, 4); !strings.Contains(one, "One scenario") {
+	if one := renderResultsSummaryEN(sum, 4, 0); !strings.Contains(one, "One scenario") {
 		t.Errorf("a single unmeasured scenario needs the singular; got %q", one)
 	}
 
-	partialES := renderResultsSummaryES(sum, 5)
+	partialES := renderResultsSummaryES(sum, 5, 0)
 	if !strings.Contains(partialES, "2 escenarios") || !strings.Contains(partialES, "medidos hasta ahora") {
 		t.Errorf("the Spanish page must carry the same warning; got %q", partialES)
 	}
-	if oneES := renderResultsSummaryES(sum, 4); !strings.Contains(oneES, "Un escenario") {
+	if oneES := renderResultsSummaryES(sum, 4, 0); !strings.Contains(oneES, "Un escenario") {
 		t.Errorf("the Spanish singular is missing; got %q", oneES)
 	}
 }
@@ -338,5 +338,133 @@ func TestRenderScenarioSummary_BothLanguagesQuoteTheSameCounts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// writeScenarioFixture writes a catalog table to a temp file and returns its path.
+func writeScenarioFixture(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "README.md")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	return path
+}
+
+// TestReadScenarios_RefusesAnUnlabeledRow verifies the stimulus is required and
+// closed to the two values the rule defines.
+//
+// It is the half of the column that cannot be left to review. A row that fell
+// back to "uncoached" for being blank would claim the server described itself
+// well enough to be used unaided, on a public page, in the one case where nobody
+// had looked — so the generator stops instead, naming the row.
+func TestReadScenarios_RefusesAnUnlabeledRow(t *testing.T) {
+	for _, tc := range []struct {
+		name, table, want string
+	}{
+		{
+			name:  "a label outside the two",
+			table: "| ID  | What it checks | Stimulus |\n| --- | --- | --- |\n| S1 | a check | partly |\n",
+			want:  `S1 ("partly")`,
+		},
+		{
+			name:  "an empty cell",
+			table: "| ID  | What it checks | Stimulus |\n| --- | --- | --- |\n| S1 | a check |  |\n",
+			want:  `S1 ("")`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := readScenarios(writeScenarioFixture(t, tc.table))
+			if err == nil {
+				t.Fatal("expected a refusal, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v, want it to name %s", err, tc.want)
+			}
+		})
+	}
+
+	rows, err := readScenarios(writeScenarioFixture(t,
+		"| ID  | What it checks | Stimulus |\n| --- | --- | --- |\n"+
+			"| S1 | a check | coached |\n| S2 | another | uncoached |\n"))
+	if err != nil {
+		t.Fatalf("a labeled table must parse: %v", err)
+	}
+	if len(rows) != 2 || rows[0].Stimulus != coached || rows[1].Stimulus != uncoached {
+		t.Errorf("parsed %+v, want S1 coached and S2 uncoached", rows)
+	}
+	if rows[0].What != "a check" {
+		t.Errorf("What = %q, want the cell without its padding", rows[0].What)
+	}
+}
+
+// TestCoachedAmong_CountsTheMeasuredOnesOnly verifies the number the tally
+// publishes is the coached share of what was actually run, not of the suite: a
+// scenario with no result row has not contributed to any pass rate, so counting
+// it would overstate the qualification exactly where there is nothing to qualify.
+func TestCoachedAmong_CountsTheMeasuredOnesOnly(t *testing.T) {
+	scenarios := []scenarioRow{
+		{ID: "S1", Stimulus: coached},
+		{ID: "S2", Stimulus: uncoached},
+		{ID: "S3", Stimulus: coached},
+	}
+	results := []resultRow{{ID: "S1"}, {ID: "S2"}}
+
+	if got := coachedAmong(scenarios, results); got != 1 {
+		t.Errorf("coachedAmong = %d, want 1 (S3 is coached but was never measured)", got)
+	}
+	if got := coachedCount(scenarios); got != 2 {
+		t.Errorf("coachedCount = %d, want 2", got)
+	}
+}
+
+// TestResultsSummary_SaysHowMuchOfTheTallyIsCoached verifies the published
+// headline carries the qualification rather than leaving it to the table below.
+// The sentence is generated, so a page that lost it differs from what would be
+// generated and --check fails - which is what makes the refusal structural
+// instead of a thing somebody has to remember.
+func TestResultsSummary_SaysHowMuchOfTheTallyIsCoached(t *testing.T) {
+	sum := runSummary{Model: "m", Total: 4, Pass: 4, First: "2026-01-02", Last: "2026-01-02"}
+
+	for _, tc := range []struct {
+		name, rendered, want string
+	}{
+		{name: "English", rendered: renderResultsSummaryEN(sum, 4, 3), want: "3 of the 4 measured are coached"},
+		{name: "Spanish", rendered: renderResultsSummaryES(sum, 4, 3), want: "3 de los 4 medidos están guiados"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(tc.rendered, tc.want) {
+				t.Errorf("summary = %q, want it to carry %q", tc.rendered, tc.want)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name, rendered string
+	}{
+		{name: "English", rendered: renderResultsSummaryEN(sum, 4, 0)},
+		{name: "Spanish", rendered: renderResultsSummaryES(sum, 4, 0)},
+	} {
+		t.Run("no coached scenario measured/"+tc.name, func(t *testing.T) {
+			if strings.Contains(strings.ToLower(tc.rendered), "coached") ||
+				strings.Contains(tc.rendered, "guiados") {
+				t.Errorf("a run with no coached row must not carry the note; got %q", tc.rendered)
+			}
+		})
+	}
+}
+
+// TestRenderScenarios_CarryTheStimulusInEachLanguage verifies the column reaches
+// both pages, translated. The English label is what the README carries and what
+// the rule is written in, so it is also the key the Spanish table is looked up
+// by - a label the generator would refuse never reaches the map.
+func TestRenderScenarios_CarryTheStimulusInEachLanguage(t *testing.T) {
+	rows := []scenarioRow{{ID: "S1", What: "a check", Stimulus: coached}}
+
+	if got := renderScenariosEN(rows); !strings.Contains(got, "| Stimulus |") || !strings.Contains(got, "| coached |") {
+		t.Errorf("English table = %q, want a Stimulus column carrying the label", got)
+	}
+	if got := renderScenariosES(rows); !strings.Contains(got, "| Estímulo |") || !strings.Contains(got, "| guiado |") {
+		t.Errorf("Spanish table = %q, want the translated column and label", got)
 	}
 }

@@ -30,7 +30,7 @@ var scenariosES = map[string]string{
 	"S17": "**Descarga remota (libro)** — la misma petición de descarga, pero contra un servidor arrancado en modo **remoto** (`--http`): `download` devuelve un enlace en lugar de guardar, y el arnés — haciendo de herramienta de fetch del agente — lo descarga a disco local. Lo que se evalúa es que el modelo llame a `download` y que el servidor remoto devuelva un enlace descargable; que el host del otro extremo sirva o no al arnés es decisión de ese host, así que se informa como evidencia y no como la condición de aprobado",
 	"S18": "**Descarga remota (artículo)** — lo mismo para un DOI de pago: el modelo llama a `download`, el servidor remoto devuelve un enlace y el arnés lo descarga en local. Se evalúa por el enlace devuelto igual que S17, porque un editor que rechaza al arnés no es un fallo del contrato remoto",
 	"S19": "**Buscar → leer → resumir**: el modelo busca un artículo por título, llama a `read` (no a `download`) con el DOI hallado en los resultados y escribe su propio resumen de la primera página extraída en lugar de volcar el texto NO CONFIABLE literal",
-	"S20": "**Descubrimiento de acceso abierto** — sin especificar, como S10–S13: el prompt pide «consultar también la literatura de acceso abierto» sin nombrar `extra_sources`; el modelo debe fijarlo a `always` por su cuenta y citar uno de los resultados federados de arXiv/Crossref en su respuesta (SKIP si los proveedores sin clave no devuelven nada en vivo)",
+	"S20": "**Descubrimiento de acceso abierto** — el prompt no nombra `extra_sources`, así que el modelo debe fijarlo a `always` por su cuenta y citar uno de los resultados federados de arXiv/Crossref en su respuesta (SKIP si los proveedores sin clave no devuelven nada en vivo). Aun así está guiado: «consultar también la literatura de acceso abierto (arXiv, Crossref)» es la instrucción de escalado en palabras de quien llama, y S29 es la misma aserción preguntada sin ella",
 	"S21": "**Citas** — pide una cita BibTeX; el modelo debe llegar a `get_details` (que la construye) en vez de fabricarla",
 	"S22": "**Enriquecimiento** — pide la revista y el número de citas de un DOI de pago, así que el modelo debe fijar `enrich=true` en `get_details` para traer los metadatos de Crossref",
 	"S23": "**Búsqueda dentro del documento** — pide buscar _dentro_ de un libro, así que el modelo debe llamar a `read` con un argumento `find` en lugar de descargar el fichero entero",
@@ -93,12 +93,34 @@ var scenariosES = map[string]string{
 	"S80": "**Un tema y una editorial, y nada más** — sin título ni identificador: libros de aprendizaje automático publicados por Elsevier, de modo que el modelo debe buscar, leer la página de resultados y _elegir_ uno antes de poder descargar nada. La editorial es Elsevier a propósito: la casa que demandó a Library Genesis y a Sci-Hub en 2015 es la más restrictiva que podría nombrar quien pregunta, y está abundantemente presente en el catálogo (139 resultados para este tema, 52 042 solo para la editorial), con muchos ficheros bastante por debajo del tope de descarga. La identidad es el campo de editorial del registro elegido, que es la única afirmación estable cuando el prompt no nombra ninguna obra; una pérdida en vivo se gradúa como degradada citando el error de la propia cadena, nunca con una explicación de licencias que la ejecución no produjo",
 }
 
+// stimulusES renders a stimulus label in Spanish. It is keyed by the English
+// label the README carries, which is the one the rule is written in, so a label
+// the generator refuses never reaches this map.
+var stimulusES = map[string]string{
+	coached:   coachedES,
+	uncoached: uncoachedES,
+}
+
 // The Spanish summary sentences that carry the run's counts. They live beside the
 // scenario translations rather than in main.go because they are Spanish prose,
 // and .golangci.yml excludes this file from the English spell checker.
 const (
-	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio."
-	resultsSummaryES  = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** %s%s"
+	scenarioSummaryES = "La suite son **%d escenarios** (%s%s). %d de ellos ejercitan un servidor en modo remoto (`--http`); el resto lo ejecutan sobre stdio. " +
+		"**%d están guiados**: el prompt nombra la fuente, la colección o el campo que la aserción comprueba después, así que lo que miden es que el servidor obedece, " +
+		"no que se explique solo. Los demás no le dan al modelo más que la necesidad."
+	resultsSummaryES = "La tabla siguiente es %s contra `%s` (API real de Anthropic, mirrors reales, descargas reales): **%d pasaron, %d fallaron, %d en SKIP** %s%s%s"
+
+	// La parte del recuento que se apoya en un prompt guiado. Va dentro de la
+	// frase generada, no en una línea que alguien recuerde escribir: el número
+	// cambia al añadir o remedir un escenario, y una tasa de acierto publicada sin
+	// él se lee como prueba de que el servidor se explica solo incluso donde lo
+	// explicó el prompt.
+	coachedNoteTemplateES = " **%d de los %d medidos están guiados** — su prompt nombraba la fuente, la colección o el campo que comprueba la aserción — " +
+		"así que dicen que el servidor obedece, no que se describa lo bastante bien como para usarlo sin ayuda. La tabla de escenarios de arriba marca cada uno."
+
+	// Las dos etiquetas de estímulo, en la columna de la tabla de escenarios.
+	coachedES   = "guiado"
+	uncoachedES = "sin guiar"
 
 	// El alcance del recuento: la suite entera, o la parte de ella ya medida.
 	remoteShareES   = "incluidos los %d que se ejecutan contra un servidor en modo remoto (`--http`)."
