@@ -20,8 +20,10 @@ Offline, on every platform, on every pull request. HTML fixtures live in each
 package's `testdata/`. This is where most tests belong, and a test that can
 live here should.
 
-It is also where the coverage floor is measured — `./internal/...`,
-`./cmd/server/...` and `./cmd/internal/...`, at or above 85%.
+It is also where the coverage floor is measured — everything this module builds,
+`./internal/...` and `./cmd/...`, at or above 90%. The one exclusion is
+`cmd/eval`, whose files are behind the `eval` build tag that CI never sets, so
+no profile CI produces can carry a line of it.
 
 ## Live end-to-end
 
