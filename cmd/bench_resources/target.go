@@ -164,6 +164,20 @@ func baseEnv(opts targetOptions) []string {
 	return env
 }
 
+// mirrorCacheDir is where the measured process looks for its cached mirror
+// list, given the home it was started with.
+//
+// It is a function rather than two lines inside the writer because a test has
+// to look in the same place: os.UserCacheDir answers $HOME/.cache on Linux and
+// %LocalAppData% on Windows, and a test that hardcoded the first one passed on
+// two platforms and failed on the third.
+func mirrorCacheDir(home string) string {
+	if runtimeGOOS == "windows" {
+		return filepath.Join(home, "AppData", "Local", "libgen-mcp")
+	}
+	return filepath.Join(home, ".cache", "libgen-mcp")
+}
+
 // seedMirrorCache writes a mirror list naming the stand-in catalog into the
 // cache directory the measured process will read.
 //
@@ -175,10 +189,7 @@ func baseEnv(opts targetOptions) []string {
 // preferred over a live fetch, so seeding one removes the call rather than
 // merely making it fail.
 func seedMirrorCache(home, mirrorURL string) error {
-	dir := filepath.Join(home, ".cache", "libgen-mcp")
-	if runtimeGOOS == "windows" {
-		dir = filepath.Join(home, "AppData", "Local", "libgen-mcp")
-	}
+	dir := mirrorCacheDir(home)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("seed the mirror cache: %w", err)
 	}

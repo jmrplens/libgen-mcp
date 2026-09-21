@@ -103,7 +103,7 @@ func TestSeedMirrorCache_RemovesTheCallRatherThanMakingItFail(t *testing.T) {
 
 	for _, name := range []string{"mirrors.json", "annas-mirrors.json"} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(home, ".cache", "libgen-mcp", name)
+			path := filepath.Join(mirrorCacheDir(home), name)
 			body, err := os.ReadFile(path) // #nosec G304 -- a path this test just wrote
 			if err != nil {
 				t.Fatalf("read %s: %v", name, err)
@@ -129,6 +129,35 @@ func TestSeedMirrorCache_RemovesTheCallRatherThanMakingItFail(t *testing.T) {
 			t.Error("expected an error seeding into a path that is a file")
 		}
 	})
+}
+
+// TestMirrorCacheDir_FollowsTheStandardLibrarysRulePerPlatform verifies the
+// seeded cache lands where the measured process will look for it.
+//
+// os.UserCacheDir answers $HOME/.cache on Linux and %LocalAppData% on Windows,
+// and the first version of this seeded the Linux path unconditionally — which
+// passed on two platforms and failed on the third with a file the process would
+// never have read anyway.
+func TestMirrorCacheDir_FollowsTheStandardLibrarysRulePerPlatform(t *testing.T) {
+	original := runtimeGOOS
+	t.Cleanup(func() { runtimeGOOS = original })
+
+	testCases := []struct {
+		name, goos, want string
+	}{
+		{name: "linux", goos: "linux", want: filepath.Join("home", ".cache", "libgen-mcp")},
+		{name: "darwin", goos: "darwin", want: filepath.Join("home", ".cache", "libgen-mcp")},
+		{name: "windows", goos: "windows", want: filepath.Join("home", "AppData", "Local", "libgen-mcp")},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runtimeGOOS = tc.goos
+			if got := mirrorCacheDir("home"); got != tc.want {
+				t.Errorf("mirrorCacheDir() = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestParseServerInfo_TakesTheBuildFromTheBinary verifies the record names the
