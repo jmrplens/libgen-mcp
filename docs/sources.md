@@ -1,5 +1,7 @@
 # Download sources
 
+**Reference** — for anyone asking what a given source covers, and what it does not.
+
 `download` resolves an item through an ordered chain of twenty-one sources.
 [Architecture](architecture.md#multi-source-chain) describes the chain — how it is built,
 how failover works, and how a source that proves unreachable is cooled down. This page

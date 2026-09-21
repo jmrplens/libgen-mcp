@@ -1,0 +1,304 @@
+---
+title: Instalación
+description: "Todos los canales en los que se publica libgen-mcp, con una sección cada uno: qué obtienes, cómo instalarlo, cómo verificar lo que has instalado, cómo actualizarlo y cómo quitarlo."
+chips:
+  - text: "Ocho canales, un binario"
+  - text: "Nada se compila, ningún script"
+  - text: "Firmado y con procedencia"
+  - text: "Primeros pasos"
+    href: "/libgen-mcp/es/getting-started/"
+datePublished: "2026-09-21"
+---
+
+`libgen-mcp` se publica en casi todos los sitios de los que ya sacas software. Elijas el que elijas acabas con el mismo ejecutable único: no se compila nada, no se ejecuta ningún script al instalar y ninguno de ellos necesita cuenta, clave de API ni token.
+
+Esta página es la versión larga: por canal, qué obtienes, cómo instalarlo, cómo comprobar que es lo que este proyecto publicó, cómo actualizarlo y cómo quitarlo. Para el camino más corto hasta un cliente que funcione, ve a [Primeros pasos](/libgen-mcp/es/getting-started/).
+
+## Elige un canal
+
+| Canal                                               | Ejecútalo sin instalar                                  | Instálalo                                                     |
+| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| [npm](#npm)                                         | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                          |
+| [PyPI](#pypi)                                       | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                     |
+| [Homebrew](#homebrew)                               | —                                                       | `brew install jmrplens/tap/libgen-mcp`                        |
+| [NuGet](#nuget)                                     | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                           |
+| [Docker](#docker)                                   | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                             |
+| [Binario de la release](#binario-de-la-release)     | —                                                       | descárgalo y ponlo en tu `PATH`                               |
+| [Extensión de Claude Desktop](#claude-desktop-mcpb) | —                                                       | abre el archivo `.mcpb`                                       |
+| [Go](#go-install)                                   | —                                                       | `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` |
+
+Si te da igual: **`npx` si ya tienes Node 18 o posterior, y Docker si no.** Ninguno de los dos instala nada que tengas que acordarte de actualizar.
+
+## Lo que comparten todos los canales
+
+- **El mismo binario.** Los gestores de paquetes de arriba no construyen nada. Cada uno lleva el binario de la release para tu plataforma y lo pone en una ruta, así que los bytes son los mismos viniera por donde viniera. La única excepción es [`go install`](#go-install), que compila desde el código fuente.
+- **No se ejecuta nada al instalar.** Ni script de postinstalación, ni compilador, ni descarga de red más allá del propio paquete.
+- **Sin credenciales.** Library Genesis no necesita ninguna, y tampoco ninguno de los proveedores de acceso abierto a los que recurre el servidor. Hay claves para dos fuentes opcionales y son voluntarias; ver [Configuración](/libgen-mcp/es/configuration/).
+- **Sin libc.** El binario se construye con `CGO_ENABLED=0` y **sin** `-buildmode=pie`, así que no nombra ningún cargador dinámico: el mismo archivo corre sobre glibc y sobre musl, en una imagen distroless y en `scratch`. Por eso también las ruedas de PyPI pueden llevar honestamente etiquetas `musllinux` y ningún paquete de npm declara `libc`.
+- **Seis plataformas.** Linux, macOS y Windows, en amd64 y arm64. Cualquier otra tiene que compilar desde el código fuente.
+
+**Lo que escribe en tu máquina**, lo haya instalado el canal que lo haya instalado:
+
+| Ruta                                                   | Qué guarda                                                                                |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `<dir. de caché del SO>/libgen-mcp/mirrors.json`       | La lista descubierta de mirrors de Library Genesis, cacheada 24 horas. Solo URLs públicas |
+| `<dir. de caché del SO>/libgen-mcp/annas-mirrors.json` | Lo mismo para los mirrors de Anna's Archive                                               |
+| Tu directorio de descargas                             | Lo que haya guardado `download`, allí donde apunte `LIBGEN_MCP_DOWNLOAD_DIR`              |
+| El directorio temporal del sistema                     | Las copias de trabajo de `read`, desalojadas por un tope de tamaño y un TTL               |
+| `~/.libgen-mcp.env`                                    | Ajustes, si lo creaste tú. Nada lo crea por ti                                            |
+
+El directorio de caché es `~/.cache` en Linux, `~/Library/Caches` en macOS y `%LocalAppData%` en Windows. Borrar cualquiera de esas cosas solo fuerza una descarga nueva.
+
+**Actualizar un servidor que un cliente ya tiene en marcha.** Sustituir el binario por debajo de un proceso vivo deja al viejo reteniendo una plaza de descarga, una entrada de caché temporal y, en modo HTTP, el listener que quiere el nuevo. `libgen-mcp --shutdown` pide a todas las demás instancias de este binario en la máquina que salgan y mata lo que quede a los cinco segundos, así que la secuencia de actualización es: instalar, `--shutdown`, y dejar que el cliente lo arranque otra vez.
+
+## Verificar lo que instalas
+
+Cada release va firmada, y lo que eso te da depende del canal:
+
+| Canal                          | Qué se puede verificar                                                                                | Quién lo comprueba               |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Binario de la release, `.mcpb` | Un bundle de Sigstore sobre `checksums.txt`, más procedencia SLSA por cada asset                      | Tú, con la receta de abajo       |
+| Docker                         | Una firma cosign sin claves sobre el índice y los dos manifiestos de plataforma, más procedencia SLSA | Tú, con la receta de abajo       |
+| npm                            | La procedencia de npm, adjuntada automáticamente porque la publicación es de un trusted publisher     | `npm audit signatures`           |
+| PyPI                           | Attestations PEP 740, adjuntadas automáticamente por la misma razón                                   | Se ven en la página del proyecto |
+| NuGet                          | La firma de autor y repositorio que exige nuget.org                                                   | `dotnet nuget verify`            |
+| Homebrew                       | Un SHA256 por cada asset de plataforma, fijado en la fórmula                                          | El propio `brew`, al descargar   |
+| `go install`                   | La base de datos de checksums de Go, sobre el **código fuente**                                       | La cadena de herramientas de Go  |
+
+**La firma es la mitad que se suele saltar, y es la que importa.** Un `checksums.txt` descargado de la misma página que el binario solo demuestra que los dos coinciden entre sí. El bundle de Sigstore demuestra que el manifiesto lo acuñó el workflow de release de este repositorio, y la firma es sin claves: no hay clave pública que distribuir, la identidad **es** el workflow, que es justo lo que fija `--certificate-identity-regexp` abajo.
+
+## npm
+
+**Qué obtienes.** [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp), un paquete lanzador fino, más un paquete por plataforma que lleva el binario. npm instala solo el paquete de plataforma cuyos `os`/`cpu` coinciden, así que no se compila nada y no se ejecuta ningún script al instalar. Como el binario viaja dentro del paquete que npm descarga de todas formas, funcionan `npx`, `npm ci --ignore-scripts`, un mirror privado del registro y `--offline`. Necesita Node 18 o posterior.
+
+**Instalar.**
+
+```bash
+npx @jmrp.io/libgen-mcp              # ejecútalo, sin instalar
+npm install -g @jmrp.io/libgen-mcp   # o instálalo globalmente
+pnpm add -g @jmrp.io/libgen-mcp      # con pnpm
+```
+
+La mayoría de clientes MCP pueden lanzarlo directamente por `npx`, con lo que no queda nada que instalar ni que mantener a mano:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
+	}
+}
+```
+
+Una instalación global deja `libgen-mcp` en el directorio de binarios globales de tu gestor de paquetes. Si después no encuentra la orden, ese directorio no está en tu `PATH`: `npm config get prefix` muestra el de npm (los binarios están en su subdirectorio `bin`), y el de pnpm lo prepara `pnpm setup`.
+
+**Verificar.** Los paquetes se publican con un trusted publisher OIDC, así que npm adjunta procedencia a todos ellos. `npm audit signatures` comprueba la firma del registro sobre lo que has instalado y la attestation de procedencia cuando la hay:
+
+```bash
+npm install -g @jmrp.io/libgen-mcp
+npm audit signatures
+```
+
+**Actualizar.** `npm install -g @jmrp.io/libgen-mcp@latest`. `npx` coge la última por su cuenta, según su caché.
+
+**Desinstalar.** `npm uninstall -g @jmrp.io/libgen-mcp`. El paquete de plataforma se va con él, porque el lanzador es lo único que depende de él.
+
+En una plataforma sin binario precompilado el lanzador sale con un mensaje que apunta a los binarios de la release y a compilar desde el código fuente.
+
+## PyPI
+
+**Qué obtienes.** [`libgen-mcp`](https://pypi.org/project/libgen-mcp/), una rueda por plataforma con el binario dentro. La rueda lo pone en la ruta de scripts, así que después la orden es `libgen-mcp` y **no se ejecuta nada de Python cuando lo usas**. La distribución no declara ningún console script a propósito: el punto de entrada es el propio ejecutable nativo.
+
+**Instalar.**
+
+```bash
+uvx libgen-mcp            # ejecútalo sin instalar
+pipx install libgen-mcp   # o: pip install libgen-mcp
+```
+
+Las ruedas de Linux llevan etiquetas `manylinux` y `musllinux` a la vez, así que el mismo archivo se instala en Debian y en Alpine — medido de punta a punta, bajo `python:3.13-alpine`.
+
+**Verificar.** La subida es de un trusted publisher OIDC, así que PyPI registra una attestation PEP 740 por cada archivo. Se ve en la página del proyecto junto a cada uno. Todavía no hay instalador que la verifique por ti, así que si la cadena importa en tu despliegue, prefiere el [binario de la release](#binario-de-la-release) y la receta de cosign que hay allí.
+
+**Actualizar.** `pipx upgrade libgen-mcp`, o `pip install --upgrade libgen-mcp`. `uvx libgen-mcp@latest` fija la ejecución a la release más reciente en vez de a la que uv tenga en caché.
+
+**Desinstalar.** `pipx uninstall libgen-mcp`, o `pip uninstall libgen-mcp`.
+
+## Homebrew
+
+**Qué obtienes.** Una fórmula del tap propio de este proyecto que descarga el asset de la release para tu plataforma.
+
+**Instalar.**
+
+```bash
+brew install jmrplens/tap/libgen-mcp
+```
+
+**Verificar.** La fórmula fija el asset de cada plataforma por SHA256 y `brew` rechaza una descarga que no cuadre, así que la comprobación ya está hecha cuando la orden termina.
+
+**Actualizar.** `brew upgrade libgen-mcp`. El tap lo actualiza el workflow de release, así que una versión nueva llega con el siguiente `brew update`.
+
+**Desinstalar.** `brew uninstall libgen-mcp`, y `brew untap jmrplens/tap` si no tienes nada más de ahí.
+
+## NuGet
+
+**Qué obtienes.** Una herramienta .NET cuyo punto de entrada es el ejecutable nativo: nada de lo que hay en los paquetes es código .NET. Un paquete puntero nombra un paquete por identificador de runtime, y el paquete del host lleva el binario.
+
+**Instalar.**
+
+```bash
+dnx libgen-mcp                       # ejecútalo sin instalar
+dnx libgen-mcp -- --http :8080       # con argumentos para el servidor
+dotnet tool install -g libgen-mcp    # o instálalo
+```
+
+**Los argumentos para el servidor van después de `--`**, porque todo lo anterior le pertenece a `dnx`. Es lo único de este canal que sorprende a la gente.
+
+**Verificar.** nuget.org exige una firma en todo paquete que acepta, y `dotnet nuget verify` la comprueba:
+
+```bash
+dotnet nuget verify ~/.nuget/packages/libgen-mcp/*/libgen-mcp.*.nupkg
+```
+
+**Actualizar.** `dotnet tool update -g libgen-mcp`.
+
+**Desinstalar.** `dotnet tool uninstall -g libgen-mcp`.
+
+## Docker
+
+**Qué obtienes.** Una imagen multiarquitectura en el GitHub Container Registry, replicada en Docker Hub, que corre con un usuario no root (UID `10001`).
+
+**Instalar.**
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+**La imagen decide su transporte a partir de qué es la entrada estándar.** `docker run -i` conecta una tubería y obtiene el servidor stdio, que es lo que arranca un cliente MCP:
+
+```bash
+docker run -i --rm \
+  -v "$HOME/Downloads:/downloads" \
+  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+  ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Una ejecución **sin** `-i` conecta `/dev/null` y obtiene en su lugar el listener HTTP en streaming en el puerto 8080, que es lo que obtiene un servicio de compose o un pod de Kubernetes:
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+El directorio del host que montes tiene que ser escribible por el UID `10001`. Y ten en cuenta que **cualquier argumento reemplaza el comando por defecto de la imagen entero**, `--transport auto` incluido — algo inofensivo, porque nombrar un listener es decidir el transporte, pero significa que el flag que añadas es la línea de órdenes completa y no una adición a ella. Qué necesita cada forma detrás de un proxy está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+**Verificar.** El índice y los dos manifiestos de plataforma están firmados sin claves con cosign y llevan procedencia SLSA. Verifica la firma con un cliente **cosign 3.x**: un cliente 2.x informa de «no signatures found» en una imagen que un 3.x verifica:
+
+```bash
+cosign verify ghcr.io/jmrplens/libgen-mcp:latest \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Y la procedencia, que responde a la otra pregunta — qué commit y qué ejecución la produjeron:
+
+```bash
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:latest -R jmrplens/libgen-mcp
+```
+
+**Actualizar.** `docker pull ghcr.io/jmrplens/libgen-mcp:latest`, o fija una etiqueta de versión y muévela a conciencia.
+
+**Desinstalar.** `docker image rm ghcr.io/jmrplens/libgen-mcp:latest`.
+
+## Binario de la release
+
+**Qué obtienes.** Un ejecutable precompilado de la [página de releases](https://github.com/jmrplens/libgen-mcp/releases), llamado `libgen-mcp-<so>-<arq>` — por ejemplo `libgen-mcp-linux-amd64` o `libgen-mcp-darwin-arm64`.
+
+**Instalar.**
+
+```bash
+# Ejemplo: Linux amd64
+curl -L -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
+chmod +x libgen-mcp
+sudo mv libgen-mcp /usr/local/bin/
+```
+
+**Verificar.** Cada release publica un `checksums.txt` y un bundle de Sigstore que lo firma. Comprueba primero la firma y después el archivo contra el manifiesto:
+
+```bash
+cd "$(mktemp -d)"
+gh release download --repo jmrplens/libgen-mcp \
+  --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' \
+  --pattern 'libgen-mcp-linux-amd64'
+
+# 1. El manifiesto lo firmó el workflow de release de este repositorio.
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+# 2. El archivo que descargaste es el que nombra ese manifiesto.
+sha256sum --ignore-missing -c checksums.txt
+```
+
+[cosign](https://docs.sigstore.dev/cosign/installation/) es la única herramienta extra necesaria; `gh` se puede sustituir por la descarga que prefieras.
+
+Cada asset lleva además procedencia SLSA en el almacén de attestations de GitHub, que responde a qué commit y qué ejecución del workflow lo produjeron:
+
+```bash
+gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp
+```
+
+**Actualizar.** Descarga el asset nuevo encima del viejo. Ejecuta antes `libgen-mcp --shutdown` si un cliente ya tiene uno en marcha, o el proceso viejo se queda con sus plazas y su listener.
+
+**Desinstalar.** Borra el archivo. No se instaló nada más.
+
+## Claude Desktop (`.mcpb`)
+
+**Qué obtienes.** Un paquete de extensión `.mcpb` — universal de macOS más Windows — que Claude Desktop instala por su cuenta. Sin Docker, sin Node, sin `PATH` que tocar.
+
+**Instalar.** Descarga [`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb), ábrelo con Claude Desktop y confirma.
+
+**Verificar.** El paquete lleva procedencia SLSA como cualquier otro asset de la release:
+
+```bash
+gh attestation verify libgen-mcp.mcpb -R jmrplens/libgen-mcp
+```
+
+**Actualizar.** Descarga el paquete nuevo y vuelve a abrirlo.
+
+**Desinstalar.** Quita la extensión desde los ajustes de Claude Desktop.
+
+## `go install`
+
+**Qué obtienes.** Un binario compilado por ti, desde el código fuente, con tu propia cadena de herramientas. Necesita Go 1.27 o posterior.
+
+**Instalar.**
+
+```bash
+go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+```
+
+Esto produce un binario llamado `server` en `$(go env GOPATH)/bin`, porque el paquete de la orden es `cmd/server`. Para invocarlo como `libgen-mcp`, compílalo con un nombre explícito:
+
+```bash
+git clone https://github.com/jmrplens/libgen-mcp
+cd libgen-mcp
+go build -o libgen-mcp ./cmd/server
+```
+
+**Verificar.** La cadena de herramientas de Go comprueba cada módulo que descarga contra la base de datos pública de checksums. Eso verifica el **código fuente** con el que compiló, no un binario que haya publicado este proyecto — el resultado es tu build, que es justo por lo que merece la pena y también por lo que no lleva ninguna firma de release.
+
+**Actualizar.** Ejecuta la misma orden otra vez; `@latest` vuelve a resolver.
+
+**Desinstalar.** Borra el binario de `$(go env GOPATH)/bin`.
+
+## Adónde ir después
+
+| Para                                                 | Ver                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------- |
+| Conectarlo a un cliente y hacer una primera búsqueda | [Primeros pasos](/libgen-mcp/es/getting-started/)        |
+| Cada ajuste, con su valor por defecto y su rango     | [Configuración](/libgen-mcp/es/configuration/)           |
+| Desplegarlo de forma centralizada por HTTP           | [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/)   |
+| Qué reciben y qué devuelven las cuatro herramientas  | [Herramientas](/libgen-mcp/es/tools/)                    |
+| Una instalación que no fue como dice esta página     | [Solución de problemas](/libgen-mcp/es/troubleshooting/) |

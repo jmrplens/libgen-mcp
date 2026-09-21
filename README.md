@@ -255,7 +255,7 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
 sha256sum --ignore-missing -c checksums.txt
 ```
 
-The first command is the one usually skipped and the one that matters: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. Full recipe in the [getting-started guide](docs/getting-started.md#verifying-what-you-downloaded).
+The first command is the one usually skipped and the one that matters: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. Full recipe, plus SLSA build provenance and what each other channel gives you, in the [installation guide](docs/installation.md#verifying-what-you-install).
 
 ## Other install channels
 
@@ -269,7 +269,7 @@ dnx libgen-mcp                            # NuGet, without installing
 dotnet tool install -g libgen-mcp         # NuGet
 ```
 
-Two things worth knowing: the PyPI Linux wheels carry both `manylinux` and `musllinux` tags, so the same file installs on Debian and on Alpine; and under `dnx` the server's own arguments go after `--`, because everything before it belongs to `dnx` (`dnx libgen-mcp -- --http :8080`). Details for each in the [getting-started guide](docs/getting-started.md#5-other-package-managers).
+Two things worth knowing: the PyPI Linux wheels carry both `manylinux` and `musllinux` tags, so the same file installs on Debian and on Alpine; and under `dnx` the server's own arguments go after `--`, because everything before it belongs to `dnx` (`dnx libgen-mcp -- --http :8080`). Each channel has a section of its own — install, verify, upgrade, uninstall — in the [installation guide](docs/installation.md).
 
 ## Tools
 

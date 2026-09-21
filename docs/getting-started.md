@@ -1,5 +1,7 @@
 # Getting started
 
+**Tutorial** — for someone running this for the first time.
+
 This page walks you through installing `libgen-mcp`, wiring it into an MCP client, and
 running your first search.
 
@@ -20,10 +22,11 @@ needed.
 | Release binary | —                                                       | download and put it on your `PATH`                            |
 | Go             | —                                                       | `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` |
 
-The four below are the ones worth spelling out; the rest are one command each
-and are covered under [other package managers](#5-other-package-managers).
+The two shortest paths are spelled out below. **Every channel has its own
+section in [Installation](installation.md)** — what you get, how to check it is
+what this project published, how to upgrade it and how to remove it.
 
-### 1. npm / npx (shortest path if you have Node 18 or newer)
+### npm / npx (shortest path if you have Node 18 or newer)
 
 The server is published to npm as
 [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp).
@@ -62,56 +65,7 @@ Prebuilt binaries exist for Linux, macOS and Windows on x64 and arm64. On any
 other platform the launcher exits with a message pointing at the release
 binaries and the option to build from source.
 
-### 2. Release binary
-
-Download a prebuilt binary for your platform from the
-[GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named
-`libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`),
-covering Linux, macOS, and Windows on both amd64 and arm64.
-
-```bash
-# Example: Linux amd64
-curl -L -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
-chmod +x libgen-mcp
-sudo mv libgen-mcp /usr/local/bin/
-```
-
-The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it
-names no dynamic loader, depends on nothing on the host and runs straight away — on glibc,
-on musl, and in a distroless or `scratch` container.
-
-#### Verifying what you downloaded
-
-Every release ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can
-check that the bytes are the ones this project's release workflow produced rather than
-only that they match a hash published beside them:
-
-```bash
-cd "$(mktemp -d)"
-gh release download --repo jmrplens/libgen-mcp \
-  --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' \
-  --pattern 'libgen-mcp-linux-amd64'
-
-# 1. The manifest was signed by this repository's release workflow.
-cosign verify-blob \
-  --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  checksums.txt
-
-# 2. The file you downloaded is the one that manifest names.
-sha256sum --ignore-missing -c checksums.txt
-```
-
-The first command is the one that matters and the one usually skipped: a `checksums.txt`
-fetched from the same page as the binary proves only that the two agree with each other.
-The signature is keyless — there is no public key to distribute, the identity **is** the
-workflow that produced it, which is what the `--certificate-identity-regexp` above pins.
-[cosign](https://docs.sigstore.dev/cosign/installation/) is the only extra tool needed;
-`gh` can be replaced with any download you like.
-
-### 3. Docker
+### Docker
 
 Prefer containers, or want a zero-install command your client pulls on first run? A
 multi-arch image is published to the GitHub Container Registry:
@@ -165,60 +119,13 @@ Two settings that meet in a container and surprise people apart:
   bridge network — the default — it is not, and the proxy's address is what arrives. See
   [Remote (streamable HTTP)](#remote-streamable-http) for which flags each shape needs.
 
-### 4. `go install` (from source)
+### The other channels
 
-If you already have Go 1.27 or newer and prefer building from source:
-
-```bash
-go install github.com/jmrplens/libgen-mcp/cmd/server@latest
-```
-
-This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke
-it as `libgen-mcp`, build it with an explicit name instead:
-
-```bash
-git clone https://github.com/jmrplens/libgen-mcp
-cd libgen-mcp
-go build -o libgen-mcp ./cmd/server
-```
-
-Make sure the resulting binary is on your `PATH`.
-
-### 5. Other package managers
-
-Three more channels carry the same release binaries. Each is one command, and
-each installs the native executable rather than a wrapper around it.
-
-**PyPI**, as [`libgen-mcp`](https://pypi.org/project/libgen-mcp/). The wheel
-carries the binary and pip puts it on the scripts path, so `libgen-mcp` is the
-command afterwards — no Python runs when you use it:
-
-```bash
-uvx libgen-mcp            # run it without installing
-pipx install libgen-mcp   # or: pip install libgen-mcp
-```
-
-The Linux wheels carry both `manylinux` and `musllinux` tags, so the same file
-installs on Debian and on Alpine.
-
-**Homebrew**, from this project's tap:
-
-```bash
-brew install jmrplens/tap/libgen-mcp
-```
-
-The formula pins each platform's release asset by SHA256, and `brew upgrade`
-follows new releases.
-
-**NuGet**, as a .NET tool. `dnx` runs it without installing anything
-permanently; note that arguments for the server go after `--`, because
-everything before it belongs to `dnx`:
-
-```bash
-dnx libgen-mcp                       # run it
-dnx libgen-mcp -- --http :8080       # with arguments
-dotnet tool install -g libgen-mcp    # or install it
-```
+The release binary, PyPI, Homebrew, NuGet, the Claude Desktop `.mcpb` bundle and
+`go install` are each one command, and each puts the same executable on your
+machine. They have a section apiece in [Installation](installation.md), which is
+also where the verification recipes live — the release binary and the image are
+signed, and checking that is a step worth taking once.
 
 ## Configure an MCP client
 

@@ -1,5 +1,7 @@
 # Architecture
 
+**Explanation** — for anyone asking why the server is built the way it is.
+
 `libgen-mcp` federates a set of bibliographic catalogs and open-access providers behind four
 MCP tools. Underneath, it is a thin server around an HTTP client for the primary catalog's
 `libgen.li` mirror family, plus a set of pluggable download sources. This page describes the

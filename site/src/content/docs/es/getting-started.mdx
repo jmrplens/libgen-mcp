@@ -118,6 +118,8 @@ import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 Todos los canales de abajo acaban en el mismo binario estático: no se compila nada y no se ejecuta nada al instalar. Si ya tienes Node 18 o posterior, **npm** es el camino más corto — un solo comando, y tu cliente MCP puede lanzar el servidor con `npx` sin instalar nada. Si no, elige el gestor de paquetes que ya uses, o coge el **binario precompilado**, que no necesita runtime de ningún tipo.
 
+Lo que sigue es una orden por canal. **[Instalación](/libgen-mcp/es/installation/)** es la versión larga: una sección por canal con qué obtienes, cómo verificar que es lo que este proyecto publicó, cómo actualizarlo y cómo quitarlo.
+
 <Tabs>
 	<TabItem label="npm / npx">
 		El servidor se publica en npm como [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). Necesita Node 18 o posterior. El paquete es un lanzador ligero sobre los mismos binarios precompilados que sirve la página de releases: el ejecutable viaja dentro de un paquete por plataforma que npm desempaqueta solo cuando coinciden su `os` y su `cpu`, así que no se compila nada y no se ejecuta ningún script en la instalación. Como el ejecutable viaja dentro del paquete que npm descarga de todas formas, `npx` y `npm ci --ignore-scripts` funcionan igual, y también una instalación servida desde un mirror privado del registro — o desde la caché local con `--offline`, una vez que los tarballs están en ella.
@@ -169,21 +171,7 @@ Todos los canales de abajo acaban en el mismo binario estático: no se compila n
 
     	El binario es totalmente estático (compilado con `CGO_ENABLED=0` y sin `-buildmode=pie`), así que no nombra ningún cargador dinámico, no depende de nada del host y arranca sin más — en glibc, en musl y en un contenedor distroless o `scratch`.
 
-    	Cada release publica además un `checksums.txt` **y un bundle Sigstore que lo firma**, así que puedes comprobar que los bytes salieron del workflow de release de este proyecto y no solo que coinciden con un hash publicado a su lado:
-
-    	```bash
-    	# 1. El manifiesto lo firmó el workflow de release de este repositorio.
-    	cosign verify-blob \
-    	  --bundle checksums.txt.sigstore.json \
-    	  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
-    	  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    	  checksums.txt
-
-    	# 2. El fichero que descargaste es el que ese manifiesto nombra.
-    	sha256sum --ignore-missing -c checksums.txt
-    	```
-
-    	El primero es el que importa y el que se suele saltar: un `checksums.txt` descargado de la misma página que el binario solo demuestra que ambos concuerdan entre sí. La firma es keyless — no hay clave pública que distribuir, la identidad **es** el workflow que la produjo, que es lo que fija `--certificate-identity-regexp`.
+    	Cada release publica además un `checksums.txt` **y un bundle Sigstore que lo firma**, así que puedes comprobar que los bytes salieron del workflow de release de este proyecto y no solo que coinciden con un hash publicado a su lado. La receta son dos órdenes, y la primera — la firma sobre el manifiesto — es la que importa y la que se suele saltar: [Instalación → Verificar lo que instalas](/libgen-mcp/es/installation/#verificar-lo-que-instalas).
     </TabItem>
     <TabItem label="Docker">
     	¿Prefieres contenedores, o un comando sin instalación que tu cliente descarga en el primer arranque? Se publica una imagen multi-arch en el GitHub Container Registry:

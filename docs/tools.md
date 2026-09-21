@@ -1,5 +1,7 @@
 # Tools
 
+**Reference** — for a client author, and for anyone reading a tool result.
+
 `libgen-mcp` exposes four MCP tools: [`search`](#search), [`get_details`](#get_details),
 [`download`](#download), and [`read`](#read). All four are annotated with an open-world hint and
 state an explicit destructive hint. `search`, `get_details`, and `read` are read-only,

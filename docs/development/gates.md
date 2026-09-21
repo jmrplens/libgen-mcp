@@ -1,5 +1,7 @@
 # The gates
 
+**Reference** — for a contributor whose pull request just went red.
+
 Every automated check this repository runs, what it is actually asserting, and
 where a finding comes from. One row per gate.
 

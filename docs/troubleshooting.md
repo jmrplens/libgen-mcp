@@ -1,5 +1,7 @@
 # Troubleshooting
 
+**How-to guide** — for someone looking at a symptom right now.
+
 This page collects the failures you are most likely to hit and how to resolve them. When in
 doubt, raise the log level (see [below](#raising-the-log-level)) and re-run — most errors
 carry an explanatory message.

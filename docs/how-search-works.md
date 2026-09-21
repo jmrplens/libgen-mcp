@@ -1,5 +1,7 @@
 # How search works
 
+**Explanation** — for anyone asking what a search actually queries.
+
 A `search` is federated: one question, asked of as many places as it needs. By default it
 queries the **primary catalog** — Library Genesis — and stops there. When that catalog has
 nothing, or fails outright, the search quietly reaches further, into Anna's Archive and the
