@@ -34,8 +34,19 @@ const (
 	regionEnd            = "{/* end generated */}"
 )
 
-// scenarioRow is one row of the scenario table: the id and what it checks.
-type scenarioRow struct{ ID, What string }
+// scenarioRow is one row of the scenario table: the id, what it checks, and
+// whether its prompt coached the answer out of the model.
+type scenarioRow struct{ ID, What, Stimulus string }
+
+// The two stimulus labels. A scenario is coached when its prompt hands the model,
+// in the server's own vocabulary, the choice the assertion then grades; uncoached
+// when the prompt is what a person would say and the route is the model's to find.
+// cmd/eval/README.md states the rule and the two conventions that decide the
+// borderline cases.
+const (
+	coached   = "coached"
+	uncoached = "uncoached"
+)
 
 // resultRow is one row of a run's results.
 type resultRow struct{ ID, Mode, Status, Measured, Detail string }
@@ -183,6 +194,7 @@ func run(resultsDoc string, check bool) error {
 		return merr
 	}
 	sum := summarize(model, results)
+	coachedMeasured := coachedAmong(scenarios, results)
 
 	for _, page := range []struct {
 		path    string
@@ -192,13 +204,13 @@ func run(resultsDoc string, check bool) error {
 			{scenariosBegin, renderScenariosEN(scenarios)},
 			{scenarioSummaryBegin, renderScenarioSummaryEN(scenarios, sum)},
 			{resultsBegin, renderResultsEN(results)},
-			{resultsSummaryBegin, renderResultsSummaryEN(sum, len(scenarios))},
+			{resultsSummaryBegin, renderResultsSummaryEN(sum, len(scenarios), coachedMeasured)},
 		}},
 		{pageES, []region{
 			{scenariosBegin, renderScenariosES(scenarios)},
 			{scenarioSummaryBegin, renderScenarioSummaryES(scenarios, sum)},
 			{resultsBegin, renderResultsES(results)},
-			{resultsSummaryBegin, renderResultsSummaryES(sum, len(scenarios))},
+			{resultsSummaryBegin, renderResultsSummaryES(sum, len(scenarios), coachedMeasured)},
 		}},
 	} {
 		if aerr := applyPage(page.path, page.regions, check); aerr != nil {
@@ -270,12 +282,19 @@ func replaceRegion(page, begin, body string) (string, error) {
 // which is where the descriptions are written and reviewed.
 func readScenarios(path string) ([]scenarioRow, error) {
 	rows, err := readTable(path, func(m []string) (scenarioRow, bool) {
-		// The results table in the same file also starts with an id; scenario rows
-		// are the ones with exactly two cells.
-		if strings.Contains(m[2], "|") {
+		// A results table keyed by the same ids lives in the same file, so the
+		// shape is what tells them apart: a scenario row is what it checks plus
+		// its stimulus, and a result row is four cells. No description carries a
+		// pipe, which is what keeps the count meaning what it says.
+		cells := strings.Split(m[2], "|")
+		if len(cells) != 2 {
 			return scenarioRow{}, false
 		}
-		return scenarioRow{ID: m[1], What: m[2]}, true
+		return scenarioRow{
+			ID:       m[1],
+			What:     strings.TrimSpace(cells[0]),
+			Stimulus: strings.TrimSpace(cells[1]),
+		}, true
 	})
 	if err != nil {
 		return nil, err
@@ -283,7 +302,56 @@ func readScenarios(path string) ([]scenarioRow, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("%s lists no scenarios", path)
 	}
-	return rows, nil
+	return rows, assertLabeled(rows, path)
+}
+
+// assertLabeled fails when a scenario carries no stimulus, or one outside the
+// two the rule defines.
+//
+// It is a hard error rather than a default because the label qualifies a public
+// claim: a row that silently fell back to "uncoached" would say the server
+// explained itself where nobody had looked, which is the one direction this
+// column exists to stop.
+func assertLabeled(rows []scenarioRow, path string) error {
+	var bad []string
+	for _, r := range rows {
+		if r.Stimulus != coached && r.Stimulus != uncoached {
+			bad = append(bad, fmt.Sprintf("%s (%q)", r.ID, r.Stimulus))
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: every scenario needs a stimulus of %q or %q; %s does not",
+		path, coached, uncoached, strings.Join(bad, ", "))
+}
+
+// coachedAmong counts the measured rows whose prompt coached the answer. It is
+// what the published tally has to say out loud, so a pass rate is never read as
+// evidence that the server explains itself when the prompt did the explaining.
+func coachedAmong(scenarios []scenarioRow, results []resultRow) int {
+	stimulus := make(map[string]string, len(scenarios))
+	for _, s := range scenarios {
+		stimulus[s.ID] = s.Stimulus
+	}
+	n := 0
+	for _, r := range results {
+		if stimulus[r.ID] == coached {
+			n++
+		}
+	}
+	return n
+}
+
+// coachedCount counts the whole suite's coached scenarios.
+func coachedCount(rows []scenarioRow) int {
+	n := 0
+	for _, r := range rows {
+		if r.Stimulus == coached {
+			n++
+		}
+	}
+	return n
 }
 
 // readResults reads a run's results table as written by cmd/eval --results-doc.
@@ -353,9 +421,9 @@ func statusIcon(status string) string {
 // renderScenariosEN renders the English scenario table.
 func renderScenariosEN(rows []scenarioRow) string {
 	var b strings.Builder
-	b.WriteString("| ID  | What it checks |\n| --- | --- |\n")
+	b.WriteString("| ID  | What it checks | Stimulus |\n| --- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s |\n", r.ID, r.What)
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", r.ID, r.What, r.Stimulus)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -363,9 +431,9 @@ func renderScenariosEN(rows []scenarioRow) string {
 // renderScenariosES renders the Spanish scenario table from the translations.
 func renderScenariosES(rows []scenarioRow) string {
 	var b strings.Builder
-	b.WriteString("| ID  | Qué comprueba |\n| --- | --- |\n")
+	b.WriteString("| ID  | Qué comprueba | Estímulo |\n| --- | --- | --- |\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "| %s | %s |\n", r.ID, scenariosES[r.ID])
+		fmt.Fprintf(&b, "| %s | %s | %s |\n", r.ID, scenariosES[r.ID], stimulusES[r.Stimulus])
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -374,8 +442,10 @@ func renderScenariosES(rows []scenarioRow) string {
 func renderScenarioSummaryEN(rows []scenarioRow, sum runSummary) string {
 	span, variants := idRange(rows)
 	return fmt.Sprintf(
-		"The suite is **%d scenarios** (%s%s). %d of them drive a server in remote (`--http`) mode; the rest run it over stdio.",
-		len(rows), span, variantSuffix(variants, " plus the %s variant", " plus the %s variants"), sum.Remote,
+		"The suite is **%d scenarios** (%s%s). %d of them drive a server in remote (`--http`) mode; the rest run it over stdio. "+
+			"**%d are coached**: the prompt names the source, the collection or the field the assertion then checks, so what they "+
+			"measure is that the server obeys rather than that it explains itself. The rest hand the model nothing but the need.",
+		len(rows), span, variantSuffix(variants, " plus the %s variant", " plus the %s variants"), sum.Remote, coachedCount(rows),
 	)
 }
 
@@ -383,7 +453,7 @@ func renderScenarioSummaryEN(rows []scenarioRow, sum runSummary) string {
 func renderScenarioSummaryES(rows []scenarioRow, sum runSummary) string {
 	span, variants := idRange(rows)
 	return fmt.Sprintf(scenarioSummaryES,
-		len(rows), span, variantSuffix(variants, variantSuffixES, variantSuffixPluralES), sum.Remote)
+		len(rows), span, variantSuffix(variants, variantSuffixES, variantSuffixPluralES), sum.Remote, coachedCount(rows))
 }
 
 // measuredScopeEN says what the tally is a tally OF: the whole suite, or the part
@@ -415,14 +485,29 @@ func unmeasuredNoteEN(n int) string {
 }
 
 // renderResultsSummaryEN renders the English run tally.
-func renderResultsSummaryEN(sum runSummary, scenarios int) string {
+func renderResultsSummaryEN(sum runSummary, scenarios, coachedMeasured int) string {
 	if sum.Total == 0 {
 		return ""
 	}
 	return fmt.Sprintf(
-		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s",
-		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeEN(sum, scenarios), measuredTailEN(sum),
+		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s%s",
+		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip,
+		measuredScopeEN(sum, scenarios), measuredTailEN(sum), coachedNoteEN(sum, coachedMeasured),
 	)
+}
+
+// coachedNoteEN says how much of the tally rests on a coached prompt. It is part
+// of the generated sentence rather than a line somebody remembered to write,
+// because the number moves whenever a scenario is added or re-measured, and a
+// pass rate published without it reads as evidence the server explains itself
+// even where the prompt did the explaining.
+func coachedNoteEN(sum runSummary, coachedMeasured int) string {
+	if coachedMeasured == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" **%d of the %d measured are coached** — their prompt named the source, the collection "+
+		"or the field the assertion checks — so they say the server obeys, not that it describes itself well enough "+
+		"to be used unaided. The scenario table above marks every one.", coachedMeasured, sum.Total)
 }
 
 // measuredSpanES is measuredSpanEN's Spanish counterpart.
@@ -463,12 +548,21 @@ func unmeasuredNoteES(n int) string {
 }
 
 // renderResultsSummaryES renders the Spanish run tally.
-func renderResultsSummaryES(sum runSummary, scenarios int) string {
+func renderResultsSummaryES(sum runSummary, scenarios, coachedMeasured int) string {
 	if sum.Total == 0 {
 		return ""
 	}
 	return fmt.Sprintf(resultsSummaryES,
-		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip, measuredScopeES(sum, scenarios), measuredTailES(sum))
+		measuredSpanES(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip,
+		measuredScopeES(sum, scenarios), measuredTailES(sum), coachedNoteES(sum, coachedMeasured))
+}
+
+// coachedNoteES is coachedNoteEN's Spanish counterpart.
+func coachedNoteES(sum runSummary, coachedMeasured int) string {
+	if coachedMeasured == 0 {
+		return ""
+	}
+	return fmt.Sprintf(coachedNoteTemplateES, coachedMeasured, sum.Total)
 }
 
 // mdxEvidence makes a harness message safe to paste into an MDX table cell. The
