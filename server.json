@@ -35,9 +35,9 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v1.7.3/libgen-mcp.mcpb",
-      "version": "1.7.3",
-      "fileSha256": "3ff903d2ee64aee35c4e75ff02611b9bfd4be20f0ae6dff5a7e088c5d2acd0bb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.0.0/libgen-mcp.mcpb",
+      "version": "2.0.0",
+      "fileSha256": "a6a5239db5333c405695476a0261bedaeac24ec55be8f690036a57881f451236",
       "transport": {
         "type": "stdio"
       },
@@ -64,7 +64,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmrplens/libgen-mcp:1.7.3@sha256:6435b5f60dcce10391a6b77a7d832b778ce6e4d2fc8f4fcd8059810116ed7f0d",
+      "identifier": "ghcr.io/jmrplens/libgen-mcp:2.0.0@sha256:a888f3b7427ceac24a65f5ab6c7c5288fe73f762d4a80ff898aa091c3d0ee20c",
       "transport": {
         "type": "stdio"
       },
@@ -91,7 +91,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/jmrplens/libgen-mcp:1.7.3@sha256:6435b5f60dcce10391a6b77a7d832b778ce6e4d2fc8f4fcd8059810116ed7f0d",
+      "identifier": "docker.io/jmrplens/libgen-mcp:2.0.0@sha256:a888f3b7427ceac24a65f5ab6c7c5288fe73f762d4a80ff898aa091c3d0ee20c",
       "transport": {
         "type": "stdio"
       },
