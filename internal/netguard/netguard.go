@@ -111,11 +111,20 @@ func Blocked(addr netip.Addr) bool {
 // must be as narrow as it can be. Nothing legitimate serves a book, an article
 // or a presigned download URL from one of these, so the false-positive cost is
 // as close to zero as a guard of this kind gets.
+//
+// The trailing NOSONAR on each line is there for the reason cgnatPrefix carries
+// one: S1313 asks whether a hardcoded address is safe to rely on, and here
+// relying on it is the whole control. These are destinations the server refuses
+// to reach, never ones it dials, and every one of them is a number a cloud
+// provider published rather than a value this project chose. Making them
+// configurable would let the thing being defended against switch the defense
+// off. Suppressed line by line, so an address added here later is still
+// reported and has to earn its own line.
 var metadataAddresses = map[netip.Addr]string{
-	netip.MustParseAddr("169.254.169.254"): "the cloud instance metadata address",
-	netip.MustParseAddr("169.254.170.2"):   "the AWS container credentials address",
-	netip.MustParseAddr("fd00:ec2::254"):   "the AWS instance metadata address over IPv6",
-	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address",
+	netip.MustParseAddr("169.254.169.254"): "the cloud instance metadata address",         // NOSONAR
+	netip.MustParseAddr("169.254.170.2"):   "the AWS container credentials address",       // NOSONAR
+	netip.MustParseAddr("fd00:ec2::254"):   "the AWS instance metadata address over IPv6", // NOSONAR
+	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address", // NOSONAR
 }
 
 // addressLiteral parses host as an IP address, reporting whether it was spelled

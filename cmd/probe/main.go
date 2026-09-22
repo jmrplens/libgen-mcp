@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
 )
 
 // checker accumulates the state of the checks and prints their results to w.

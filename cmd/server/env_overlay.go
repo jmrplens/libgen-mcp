@@ -39,7 +39,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // httpEnvOverlay pairs each HTTP flag with the variable that fills it in when

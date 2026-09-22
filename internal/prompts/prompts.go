@@ -10,9 +10,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // maxCandidates bounds how many search results are rendered in a prompt table.

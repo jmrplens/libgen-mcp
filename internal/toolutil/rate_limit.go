@@ -14,7 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/time/rate"
 
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
 )
 
 // RateLimitedErrorCode is the JSON-RPC code a refused request carries.

@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 // unpaywallAPIBase is the default Unpaywall REST endpoint used to look up the

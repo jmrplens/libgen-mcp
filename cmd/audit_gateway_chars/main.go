@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
 )
 
 // offendingChars lists the ASCII characters gateway validators are known to

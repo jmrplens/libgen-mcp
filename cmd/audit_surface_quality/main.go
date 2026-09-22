@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
 )
 
 func main() {

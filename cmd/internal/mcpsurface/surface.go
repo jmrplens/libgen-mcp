@@ -9,11 +9,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/prompts"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/prompts"
+	"github.com/jmrplens/libgen-mcp/v2/internal/tools"
 )
 
 // pageSize is high enough that the whole surface arrives in a single list

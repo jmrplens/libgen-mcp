@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
 )
 
 // TestParseLevel covers ParseLevel with table-driven subtests.

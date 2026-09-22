@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // noFetchClient builds a test client wired to one mirror with file fetching

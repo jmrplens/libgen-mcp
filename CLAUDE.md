@@ -24,7 +24,16 @@ prompts:
   an ordered source chain with transparent failover.
 - `read` — extract text, search within, and outline a downloaded PDF/EPUB/TXT.
 
-The module path is `github.com/jmrplens/libgen-mcp` (no major-version suffix).
+The module path is `github.com/jmrplens/libgen-mcp/v2`, and the suffix is not
+decoration: Go requires it from major 2 onward, and a repository tagged `v2.0.0`
+while its `go.mod` still says the unsuffixed path is not broken loudly. It is
+broken **silently** — `go install …@v2.0.0` refuses outright ("module contains a
+go.mod file, so major version must be compatible"), and `…@latest`, which is the
+form the README and the installation page tell people to run, quietly keeps
+resolving the newest v1 tag forever. Bumping the major therefore means the
+`go.mod` module line, every import of this module, and the `go install` command
+wherever it is documented, in one change.
+
 The single source of truth for the version is the `VERSION` file.
 
 ## Project Structure

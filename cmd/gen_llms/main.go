@@ -13,9 +13,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 const (

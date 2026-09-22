@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // adsCountingServer builds a libgen-style mirror (ads.php → get.php → CDN) that

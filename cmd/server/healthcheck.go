@@ -53,7 +53,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // healthcheckTimeout bounds one attempt. The image's HEALTHCHECK allows five

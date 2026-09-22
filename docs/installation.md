@@ -14,16 +14,16 @@ For the shortest path to a working client, see
 
 ## Pick a channel
 
-| Channel                                          | Run it without installing                               | Install it                                                    |
-| ------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------- |
-| [npm](#npm)                                      | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                          |
-| [PyPI](#pypi)                                    | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                     |
-| [Homebrew](#homebrew)                            | —                                                       | `brew install jmrplens/tap/libgen-mcp`                        |
-| [NuGet](#nuget)                                  | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                           |
-| [Docker](#docker)                                | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                             |
-| [Release binary](#release-binary)                | —                                                       | download it and put it on your `PATH`                         |
-| [Claude Desktop extension](#claude-desktop-mcpb) | —                                                       | open the `.mcpb` file                                         |
-| [Go](#go-install)                                | —                                                       | `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` |
+| Channel                                          | Run it without installing                               | Install it                                                       |
+| ------------------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| [npm](#npm)                                      | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                             |
+| [PyPI](#pypi)                                    | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        |
+| [Homebrew](#homebrew)                            | —                                                       | `brew install jmrplens/tap/libgen-mcp`                           |
+| [NuGet](#nuget)                                  | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                              |
+| [Docker](#docker)                                | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                                |
+| [Release binary](#release-binary)                | —                                                       | download it and put it on your `PATH`                            |
+| [Claude Desktop extension](#claude-desktop-mcpb) | —                                                       | open the `.mcpb` file                                            |
+| [Go](#go-install)                                | —                                                       | `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` |
 
 If you have no preference: **`npx` if you already have Node 18 or newer, Docker
 otherwise.** Neither installs anything you have to remember to update.
@@ -359,7 +359,7 @@ Needs Go 1.27 or newer.
 **Install.**
 
 ```bash
-go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
 ```
 
 This produces a binary named `server` in `$(go env GOPATH)/bin`, because the

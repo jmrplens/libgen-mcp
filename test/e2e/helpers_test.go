@@ -24,9 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
 )
 
 const (

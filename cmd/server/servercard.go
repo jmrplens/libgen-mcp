@@ -16,7 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // serverCardPath is the legacy card location, kept because scanners and

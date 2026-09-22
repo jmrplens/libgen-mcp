@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/freshness"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/freshness"
 )
 
 // repoRoot locates the repository from the package directory the test runs in.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // TestCheckDOITitle covers the three verdict bands the title comparison resolves

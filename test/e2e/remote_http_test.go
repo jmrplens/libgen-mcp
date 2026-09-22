@@ -14,11 +14,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/prompts"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
-	"github.com/jmrplens/libgen-mcp/internal/transport"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/prompts"
+	"github.com/jmrplens/libgen-mcp/v2/internal/tools"
+	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
 )
 
 // This file mirrors the local capability coverage (capabilities_test.go /

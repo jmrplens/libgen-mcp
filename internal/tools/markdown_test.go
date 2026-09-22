@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/discovery"
-	"github.com/jmrplens/libgen-mcp/internal/extract"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/v2/internal/extract"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
 )
 
 // TestOpenAccessLocator covers every arm of openAccessLocator: a DOI wins first,

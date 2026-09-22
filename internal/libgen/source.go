@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 // httpClientOr returns c, or a guarded fallback when c is nil. Every source keeps

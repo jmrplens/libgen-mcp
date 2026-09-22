@@ -17,8 +17,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 const (

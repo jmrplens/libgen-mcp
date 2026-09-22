@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // headerHSTS is the header this server states only when it terminates TLS

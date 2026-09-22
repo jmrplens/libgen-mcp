@@ -7,7 +7,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // envBackedFlags are those settings.

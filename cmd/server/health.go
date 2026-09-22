@@ -23,8 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // The two verdicts this endpoint reports.

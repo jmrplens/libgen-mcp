@@ -10,7 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // heavyCall is a tools/call for a tool that moves a file's bytes.

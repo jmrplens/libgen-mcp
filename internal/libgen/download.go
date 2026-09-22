@@ -23,10 +23,10 @@ import (
 
 	xhtml "golang.org/x/net/html"
 
-	"github.com/jmrplens/libgen-mcp/internal/logging"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/pathguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/pathguard"
 )
 
 // ProgressFunc reports live download progress: done is the number of bytes

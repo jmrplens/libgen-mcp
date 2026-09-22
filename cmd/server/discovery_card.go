@@ -32,7 +32,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 const (

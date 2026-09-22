@@ -17,7 +17,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // testLineCeiling is the ceiling these cases run at.

@@ -22,7 +22,7 @@ import (
 // instrumentation produced a signal: these records come from this server's own
 // logger, not from the MCP middleware, and a reader filtering by scope wants to
 // be able to tell them apart.
-const scopeName = "github.com/jmrplens/libgen-mcp/internal/telemetry"
+const scopeName = "github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 
 // DefaultLogSeverity is the floor for records that reach a collector.
 //

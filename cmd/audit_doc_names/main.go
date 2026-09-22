@@ -11,9 +11,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/gate"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/gate"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // toolName prefixes every line this command writes about itself.

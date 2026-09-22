@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/testsource"
 )
 
 // Finding describes one abort or missing-return site inside a non-test

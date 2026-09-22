@@ -9,8 +9,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // clientAddressHeader carries the address a POST is charged to, from the HTTP
