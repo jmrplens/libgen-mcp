@@ -265,6 +265,53 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	}
 }
 
+// TestBeQuietOnlyEverMovesTheDeadlineLater pins the rule a plain Swap breaks: a
+// goroutine that computed its deadline, was descheduled, and woke up after a
+// later one had been stored must not shorten the window.
+//
+// Concurrent challenges are ordinary — Federate runs providers in their own
+// goroutines and a server answers several searches at once — and a shortened
+// window is the one failure the cooldown exists to prevent. The stale deadline
+// is applied deliberately here rather than raced for, so the case fails every
+// time against a Swap instead of once in a thousand runs.
+func TestBeQuietOnlyEverMovesTheDeadlineLater(t *testing.T) {
+	now := time.Now()
+	p := &AnnasProvider{now: func() time.Time { return now }}
+
+	if !p.beQuiet() {
+		t.Fatal("the first challenge did not report itself as opening the window")
+	}
+	opened := p.quietUntil.Load()
+
+	// A second challenge a minute later extends the window and says nothing,
+	// because the window it belongs to has already been announced.
+	now = now.Add(time.Minute)
+	if p.beQuiet() {
+		t.Error("a challenge inside an open window reported itself as opening one")
+	}
+	extended := p.quietUntil.Load()
+	if extended <= opened {
+		t.Errorf("the deadline did not move later: %d then %d", opened, extended)
+	}
+
+	// The descheduled goroutine: its clock still reads the original instant, so
+	// the deadline it computes is earlier than the one already stored.
+	stale := now.Add(-time.Minute)
+	p.now = func() time.Time { return stale }
+	if p.beQuiet() {
+		t.Error("a stale challenge reported itself as opening a window")
+	}
+	if got := p.quietUntil.Load(); got != extended {
+		t.Errorf("a stale deadline overwrote a later one: %d, want %d", got, extended)
+	}
+
+	// Past the window, a challenge opens a new one and says so again.
+	p.now = func() time.Time { return now.Add(challengeCooldown + time.Minute) }
+	if !p.beQuiet() {
+		t.Error("a challenge after the window lapsed did not report a fresh one")
+	}
+}
+
 // TestAnnasProviderBoundedClient verifies NewAnnas equips the provider with a
 // bounded http.Client (non-nil, with a timeout) rather than leaving it to fall back
 // on the timeout-less http.DefaultClient, so a stalled mirror can never hang a

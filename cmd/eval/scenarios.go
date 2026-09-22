@@ -4088,29 +4088,17 @@ func findOutlineCall(tr transcript) (toolCall, bool) {
 	var firstOutline, firstClean toolCall
 	var haveOutline, haveClean bool
 	for _, c := range tr.Calls {
-		if c.Name != "read" {
+		asked, produced, clean := gradeOutlineAttempt(c)
+		if !asked {
 			continue
 		}
-		// Only a call that asked for an outline can be graded as one. Falling back
-		// to any read at all would report a model that did set outline=true, then
-		// read sequentially, as never having discovered the capability.
-		if asked, _ := c.Input["outline"].(bool); !asked {
-			continue
+		if produced {
+			return c, true
 		}
 		if !haveOutline {
 			firstOutline, haveOutline = c, true
 		}
-		if c.Result == nil || c.Result.IsError {
-			continue
-		}
-		var out tools.ReadOutput
-		if err := decodeStructured(c.Structured, &out); err != nil {
-			continue
-		}
-		if len(out.Outline) > 0 {
-			return c, true
-		}
-		if out.Extractable && !haveClean {
+		if clean && !haveClean {
 			firstClean, haveClean = c, true
 		}
 	}
@@ -4123,6 +4111,36 @@ func findOutlineCall(tr transcript) (toolCall, bool) {
 	// No outline call at all: hand back any read so the assertion can report the
 	// missing argument rather than the missing call.
 	return findCall(tr, "read")
+}
+
+// gradeOutlineAttempt examines one recorded call for [findOutlineCall] and
+// reports the three things that decide which rung it belongs on: whether it
+// asked for an outline at all, whether it came back with one, and whether it at
+// least opened the file cleanly.
+//
+// Split out because the loop above was doing both jobs and read as one: it
+// carried the ranking AND the examination, and adding the middle rung put it
+// past the cognitive-complexity budget the quality gate holds this repository
+// to. The loop now ranks and this decides, which is also the order they are
+// easiest to read in.
+func gradeOutlineAttempt(c toolCall) (asked, produced, clean bool) {
+	if c.Name != "read" {
+		return false, false, false
+	}
+	// Only a call that asked for an outline can be graded as one. Falling back
+	// to any read at all would report a model that did set outline=true, then
+	// read sequentially, as never having discovered the capability.
+	if wanted, _ := c.Input["outline"].(bool); !wanted {
+		return false, false, false
+	}
+	if c.Result == nil || c.Result.IsError {
+		return true, false, false
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(c.Structured, &out); err != nil {
+		return true, false, false
+	}
+	return true, len(out.Outline) > 0, out.Extractable
 }
 
 // detailsIdentifierGrounded verifies a get_details call was keyed by an identifier

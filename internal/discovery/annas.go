@@ -138,10 +138,29 @@ func (p *AnnasProvider) quiet() bool {
 
 // beQuiet starts the cooldown and reports whether this call is the one that
 // started it, so the reason is logged once per window rather than per search.
+//
+// The deadline only ever moves later. A plain Swap would let a goroutine that
+// computed its deadline, was descheduled, and woke up afterwards overwrite a
+// LATER deadline another challenge had since stored — shortening the window and
+// letting the provider ask again before fifteen minutes had passed since the
+// most recent refusal, which is the one thing the cooldown exists to prevent.
+// Concurrent challenges are ordinary here: Federate runs providers in their own
+// goroutines and a server answers several searches at once.
 func (p *AnnasProvider) beQuiet() bool {
 	next := p.clock().Add(challengeCooldown).UnixNano()
-	previous := p.quietUntil.Swap(next)
-	return previous == 0 || previous < p.clock().UnixNano()
+	for {
+		previous := p.quietUntil.Load()
+		if previous >= next {
+			// Somebody else already reserved at least this much quiet, and has
+			// already logged the reason. Nothing to extend and nothing to say.
+			return false
+		}
+		if p.quietUntil.CompareAndSwap(previous, next) {
+			// First in a fresh window: either nothing was set, or the last one
+			// had already lapsed by the time this challenge arrived.
+			return previous == 0 || previous < p.clock().UnixNano()
+		}
+	}
 }
 
 // Name reports the origin label stamped on this provider's results.
@@ -152,15 +171,16 @@ func (p *AnnasProvider) Name() string { return "annas" }
 // none answers, so a federated search is never failed by this provider. Only a
 // context error propagates.
 func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
-	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
-	// several mirrors in sequence can never outlive the discovery budget.
-	// Nothing is asked while a challenge is being waited out. This is the half
-	// that matters for traffic: giving up within one call still left every
-	// later search asking again and being refused again.
+	// Nothing is asked while a challenge is being waited out, and this comes
+	// before the budget because it spends none of it. It is the half that
+	// matters for traffic: giving up within one call still left every later
+	// search asking again and being refused again.
 	if p.quiet() {
 		return nil, nil
 	}
 
+	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
+	// several mirrors in sequence can never outlive the discovery budget.
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 

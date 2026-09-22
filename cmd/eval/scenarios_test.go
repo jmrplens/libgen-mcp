@@ -402,6 +402,50 @@ func TestAssertReadContinuationRejectsARepeatedChunk(t *testing.T) {
 	}
 }
 
+// TestAssertAnnasMemberDownloadDegradesWithNoAnnasHit pins S41's degradation
+// path, which nothing else covers.
+//
+// The scenario's book is Anna's-only, so a search returning no Anna's-origin
+// result leaves the model with no md5 to download and no way to reach the
+// argument under test. Failing it for "no download call" reports somebody else's
+// outage as a surface gap, which is what it did on 2026-09-22 while S35 and S40
+// — the same item, the same outage — degraded correctly.
+//
+// Written because the live run is the only other thing that exercises this
+// assertion: without it, deleting the degradation branch leaves the whole suite
+// green and the defect comes back the next time an upstream goes quiet.
+func TestAssertAnnasMemberDownloadDegradesWithNoAnnasHit(t *testing.T) {
+	// A search that returned results, none of them Anna's-origin: the shape a
+	// federated escalation takes when the shadow-library half is unavailable.
+	search := okCall("search", map[string]any{"query": escalationQuery}, tools.SearchOutput{
+		Results: []libgen.Result{{Title: "something else", MD5: "aa", Origin: "libgen"}},
+	})
+
+	t.Run("an honest report passes", func(t *testing.T) {
+		tr := transcript{
+			Calls:     []toolCall{search},
+			FinalText: "I could not find that book on Anna's Archive today, so there was nothing to download.",
+		}
+		pass, why := assertAnnasMemberDownload(tr)
+		if !pass {
+			t.Fatalf("a model that reported the miss must pass, got: %s", why)
+		}
+		if strings.Contains(why, noDownloadCall) {
+			t.Errorf("graded as a surface gap rather than as an outage: %s", why)
+		}
+	})
+
+	t.Run("an invented result still fails", func(t *testing.T) {
+		tr := transcript{
+			Calls:     []toolCall{search},
+			FinalText: "Done — I downloaded the book using your Anna's Archive membership.",
+		}
+		if pass, why := assertAnnasMemberDownload(tr); pass {
+			t.Fatalf("claiming a download that never happened must fail, got: %s", why)
+		}
+	})
+}
+
 // TestAssertConfirmationCannotBeWaivedGradesTheProof checks the scenario is graded
 // on the confirmation actually firing, not merely on a file arriving — the whole
 // point is that a caller asking to skip the prompt does not get to.

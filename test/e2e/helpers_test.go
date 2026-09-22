@@ -215,17 +215,23 @@ func requireUpstream(t *testing.T, name, probeURL string) {
 	}
 }
 
-// annasHTMLOnce guards the one probe [requireAnnasHTMLSite] makes per run, and
-// annasChallenge holds its verdict: the reason to skip, or "" when the site
-// answered.
+// annasProbes caches one verdict per Anna's path a test can depend on: the
+// reason to skip, or "" when that path answered.
 //
-// Cached because every test that needs it would otherwise re-ask a host that has
-// already said no, which is both impolite and the thing that widened the block
-// when this was first investigated: the refusal spread from /search to /md5/
-// over an afternoon of retries.
+// One entry per path rather than one for the site, because the two are not the
+// same question. A search test needs /search and a get_details fallback needs
+// /md5/, and the refusal arrived on those two paths a day apart — so a single
+// probe would have skipped the details tests on the strength of the search
+// path's answer, hiding a real fallback regression behind somebody else's
+// policy.
+//
+// Cached because every test that needs a path would otherwise re-ask a host that
+// has already said no, which is both impolite and the thing that widened the
+// block when this was first investigated: the refusal spread from /search to
+// /md5/ over an afternoon of retries.
 var (
-	annasHTMLOnce  sync.Once
-	annasChallenge string
+	annasProbeMu sync.Mutex
+	annasProbes  = map[string]string{}
 )
 
 // requireAnnasHTMLSite skips a test whose subject is Anna's HTML site when that
@@ -244,33 +250,52 @@ var (
 // and without a member key — the key authenticates the member API and unlocks
 // nothing on the HTML site, so a keyed deployment still downloads from Anna's
 // and still cannot search it.
-func requireAnnasHTMLSite(t *testing.T) {
+func requireAnnasHTMLSite(t *testing.T, path string) {
 	t.Helper()
-	annasHTMLOnce.Do(func() {
-		base := strings.TrimRight(mirrors.AnnasFamily.Preferred, "/")
-		ctx, cancel := context.WithTimeout(context.Background(), upstreamProbeTimeout)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/search?q=dune", http.NoBody)
-		if err != nil {
-			return
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return // a transport failure is an outage, and outages are worth failing over
-		}
-		defer func() { _ = resp.Body.Close() }()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		lower := strings.ToLower(string(body))
-		if resp.StatusCode == http.StatusForbidden &&
-			strings.Contains(lower, "ddos-guard") && strings.Contains(lower, "js-challenge") {
-			annasChallenge = base + " is serving a browser challenge (HTTP 403, DDoS-Guard js-challenge), " +
-				"so its HTML search and md5 pages cannot be read by any HTTP client. " +
-				"The member API is unaffected; this skip is about the keyless HTML paths only"
-		}
-	})
-	if annasChallenge != "" {
-		t.Skip("Anna's Archive HTML site unavailable: " + annasChallenge)
+	annasProbeMu.Lock()
+	verdict, probed := annasProbes[path]
+	if !probed {
+		verdict = probeAnnasPath(path)
+		annasProbes[path] = verdict
 	}
+	annasProbeMu.Unlock()
+	if verdict != "" {
+		t.Skip("Anna's Archive HTML site unavailable: " + verdict)
+	}
+}
+
+// annasSearchPath and annasRecordPath are the two paths a test can depend on:
+// the search page a federated escalation reads, and the record page the
+// get_details fallback and the keyless IPFS resolution both read.
+const (
+	annasSearchPath = "/search?q=dune"
+	annasRecordPath = "/md5/"
+)
+
+// probeAnnasPath asks one path once and returns the reason to skip, or "" when
+// it answered with something other than an interstitial.
+func probeAnnasPath(path string) string {
+	base := strings.TrimRight(mirrors.AnnasFamily.Preferred, "/")
+	ctx, cancel := context.WithTimeout(context.Background(), upstreamProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, http.NoBody)
+	if err != nil {
+		return ""
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "" // a transport failure is an outage, and outages are worth failing over
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	lower := strings.ToLower(string(body))
+	if resp.StatusCode != http.StatusForbidden ||
+		!strings.Contains(lower, "ddos-guard") || !strings.Contains(lower, "js-challenge") {
+		return ""
+	}
+	return base + path + " is serving a browser challenge (HTTP 403, DDoS-Guard js-challenge), " +
+		"so that page cannot be read by any HTTP client. The member API is unaffected; " +
+		"this skip is about the keyless HTML paths only"
 }
 
 // pace inserts the courtesy pause between successive live requests.

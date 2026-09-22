@@ -681,11 +681,14 @@ Anna's Archive, as an md5-keyed rescue route.
   external links point mostly back at it. The value added is download *reliability* — an
   independent route — rather than new corpus.
 - **How it resolves** with `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API is tried
-  first — on the first mirror only. Keylessly, `<mirror>/md5/<md5>` publishes the item's IPFS CID
-  (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern gateways resolve it
-  most reliably) along with the stored filepath the extension comes from, and the source then
-  streams from the first public gateway that actually serves that content, trying `dweb.link`,
-  `w3s.link`, `ipfs.io` and `gateway.pinata.cloud` in order.
+  first — on the first mirror only. Keylessly, and **only while `<mirror>/md5/<md5>` is
+  readable**, that page publishes the item's IPFS CID (a v1 `baf…` CID is preferred over the
+  legacy base58 `Qm…`, because modern gateways resolve it most reliably) along with the stored
+  filepath the extension comes from, and the source then streams from the first public gateway
+  that actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and
+  `gateway.pinata.cloud` in order. The CID is the only way in: no gateway request can start
+  without it, so while the record page answers with the challenge described below **the keyless
+  path resolves nothing**, whatever the gateways are doing.
 - **The HTML site is behind a browser challenge, and the member API is not.** Measured
   2026-09-22 from two unrelated egress addresses: `/search` and `/md5/` answer HTTP 403 with
   DDoS-Guard's `js-challenge` interstitial — the "Checking your browser" page, which needs a

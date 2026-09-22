@@ -225,7 +225,7 @@ func TestE2EHTTPRemoteSearchOpenAccess(t *testing.T) {
 // download to get a link back.
 func TestE2EHTTPRemoteSearchEscalates(t *testing.T) {
 	requireLive(t)
-	requireAnnasHTMLSite(t)
+	requireAnnasHTMLSite(t, annasSearchPath)
 	item := loadEscalationItem(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
