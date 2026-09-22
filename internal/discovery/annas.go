@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	xhtml "golang.org/x/net/html"
 )
@@ -44,6 +46,25 @@ var challengeMarkers = []string{"ddos-guard", "js-challenge"}
 // interstitial is under a kilobyte; anything longer is not one, and reading
 // further would mean buffering a page this code has already decided to discard.
 const challengeBodyPrefix = 4 << 10
+
+// challengeCooldown is how long the provider stays quiet after being challenged.
+//
+// Giving up within one call was not enough: every subsequent search asked again
+// and was refused again, which is a request per search against a host that has
+// told us to stop, and the refusal observed on 2026-09-22 widened from /search
+// to /md5/ across an afternoon of exactly that.
+//
+// It is a cooldown rather than a switch because the alternative fails in the
+// direction nobody notices. A provider disabled at build time stays dead after
+// the challenge lifts, until somebody ships a release; one that forgets after a
+// while costs a single request to find out it is welcome again.
+//
+// Fifteen minutes is the compromise: two orders of magnitude fewer requests than
+// asking every search, and short enough that a recovery is picked up inside the
+// session that is watching for it. It is deliberately much longer than
+// libgen's 45-second mirror cooldown, because a mirror that failed may be
+// healthy in a minute and an anti-bot policy will not be.
+const challengeCooldown = 15 * time.Minute
 
 // looksChallenged reports whether a non-200 response is an anti-bot
 // interstitial rather than an ordinary refusal.
@@ -80,13 +101,47 @@ type AnnasProvider struct {
 	mirrors MirrorLister
 	// http is the client used for search requests; when nil, http.DefaultClient.
 	http *http.Client
+	// quietUntil is the wall-clock instant, in Unix nanoseconds, before which a
+	// search returns without asking anything, because the site was challenged
+	// and said so. Zero means nothing has been observed yet.
+	//
+	// Atomic because Federate runs every provider in its own goroutine, and a
+	// server answers several searches at once: two concurrent calls may both
+	// meet the challenge, and the only thing that costs is one extra request.
+	// now is a seam so a test can move time without sleeping.
+	quietUntil atomic.Int64
+	now        func() time.Time
 }
 
 // NewAnnas builds a provider searching the given Anna's Archive mirrors, equipped
 // with its own bounded http.Client (via newDiscoveryClient) so a stalled mirror can
 // never hang a search on the timeout-less http.DefaultClient.
 func NewAnnas(m MirrorLister) *AnnasProvider {
-	return &AnnasProvider{mirrors: m, http: newDiscoveryClient()}
+	return &AnnasProvider{mirrors: m, http: newDiscoveryClient(), now: time.Now}
+}
+
+// clock reads the provider's time source, defaulting to the real one so a
+// zero-value AnnasProvider — which the tests build directly — still works.
+func (p *AnnasProvider) clock() time.Time {
+	if p.now == nil {
+		return time.Now()
+	}
+	return p.now()
+}
+
+// quiet reports whether a challenge is still being waited out, so no request is
+// made at all.
+func (p *AnnasProvider) quiet() bool {
+	until := p.quietUntil.Load()
+	return until != 0 && p.clock().UnixNano() < until
+}
+
+// beQuiet starts the cooldown and reports whether this call is the one that
+// started it, so the reason is logged once per window rather than per search.
+func (p *AnnasProvider) beQuiet() bool {
+	next := p.clock().Add(challengeCooldown).UnixNano()
+	previous := p.quietUntil.Swap(next)
+	return previous == 0 || previous < p.clock().UnixNano()
 }
 
 // Name reports the origin label stamped on this provider's results.
@@ -99,6 +154,13 @@ func (p *AnnasProvider) Name() string { return "annas" }
 func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
 	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
 	// several mirrors in sequence can never outlive the discovery budget.
+	// Nothing is asked while a challenge is being waited out. This is the half
+	// that matters for traffic: giving up within one call still left every
+	// later search asking again and being refused again.
+	if p.quiet() {
+		return nil, nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -120,9 +182,11 @@ func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]
 			// because otherwise this is indistinguishable from "nothing matched"
 			// — and the two call for completely different reactions.
 			if errors.Is(err, errChallenged) {
-				slog.Warn("annas search: mirror is serving a browser challenge, giving up on this provider for this call",
-					"mirror", base, "hint", "search needs the HTML site, which no API key unlocks; a configured "+
-						"member key still serves download through the member API")
+				if p.beQuiet() {
+					slog.Warn("annas search: mirror is serving a browser challenge, asking nothing for "+challengeCooldown.String(),
+						"mirror", base, "hint", "search needs the HTML site, which no API key unlocks; a configured "+
+							"member key still serves download through the member API")
+				}
 				return nil, nil
 			}
 			continue

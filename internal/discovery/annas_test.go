@@ -199,6 +199,72 @@ func TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne(t *testing.T) {
 	})
 }
 
+// TestAnnasProviderStaysQuietAfterAChallengeAndComesBack verifies the cooldown
+// in both directions, which is the whole of its value: no request at all while
+// it holds, and one request to find out the site is welcoming again once it
+// lapses.
+//
+// The clock is moved rather than waited on. A test that slept for the real
+// window would take fifteen minutes and would pin nothing a shorter constant
+// does not.
+func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
+	fixture := annasFixture(t)
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<script src="/.well-known/ddos-guard/js-challenge/index.js"></script></head></html>`
+
+	var hits atomic.Int32
+	var challenge atomic.Bool
+	challenge.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		if challenge.Load() {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(interstitial))
+			return
+		}
+		_, _ = w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	now := time.Now()
+	p := &AnnasProvider{
+		mirrors: staticMirrors{srv.URL},
+		http:    srv.Client(),
+		now:     func() time.Time { return now },
+	}
+
+	if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("the first search made %d request(s), want 1", n)
+	}
+
+	// Inside the window: the site is answering again, and must not be asked.
+	challenge.Store(false)
+	for i := range 3 {
+		if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+			t.Fatalf("Search %d during the cooldown: %v", i, err)
+		}
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("the cooldown made %d request(s) in total, want the original 1", n)
+	}
+
+	// Past the window: exactly one request, and the results come back.
+	now = now.Add(challengeCooldown + time.Second)
+	got, err := p.Search(context.Background(), "dune", 3)
+	if err != nil {
+		t.Fatalf("Search after the cooldown: %v", err)
+	}
+	if n := hits.Load(); n != 2 {
+		t.Errorf("after the cooldown the provider made %d request(s) in total, want 2", n)
+	}
+	if len(got) == 0 {
+		t.Error("the provider did not come back: no results once the challenge lifted")
+	}
+}
+
 // TestAnnasProviderBoundedClient verifies NewAnnas equips the provider with a
 // bounded http.Client (non-nil, with a timeout) rather than leaving it to fall back
 // on the timeout-less http.DefaultClient, so a stalled mirror can never hang a

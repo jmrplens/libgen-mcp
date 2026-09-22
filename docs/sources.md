@@ -697,9 +697,14 @@ Anna's Archive, as an md5-keyed rescue route.
   So a keyed deployment still downloads from Anna's and no deployment can search it. The
   discovery provider is keyless by construction and has nothing to fall back on, so it returns
   nothing and says so at WARN rather than silently — a challenged mirror is not the same fact as
-  a query that matched nothing, and only one of them is worth retrying. It also stops at the
-  first challenge instead of asking the sibling mirrors, which are the same deployment behind
-  the same provider and answer the same way.
+  a query that matched nothing, and only one of them is worth retrying. It stops at the first
+  challenge instead of asking the sibling mirrors, which are the same deployment behind the same
+  provider and answer the same way, and then **asks nothing at all for fifteen minutes**. The
+  cooldown is what keeps the traffic honest: giving up within one call still left every later
+  search being refused again, which is a request per search against a host that has said stop.
+  It is a cooldown rather than a switch because a provider disabled at build time stays dead
+  after the challenge lifts, while one that forgets after a while costs a single request to find
+  out it is welcome again.
 
   **Defeating the challenge is out of scope**, as it always has been for the slow-download tier:
   it would mean executing their anti-bot code to impersonate a browser, against a service this
