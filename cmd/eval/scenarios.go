@@ -3257,6 +3257,15 @@ var missAdmissions = []string{
 	// success because no phrase here matched it.
 	"unable to serve", "could not be served", "access issues", "temporarily unavailable",
 	"currently unavailable", "failed to download", "did not download", "no file",
+	// A source that refused the request outright. Measured on S72 in the
+	// 2026-09-22 run, where Anna's had put SciDB behind a browser challenge: the
+	// model answered "The download from the scidb source failed. The scidb mirror
+	// (Anna's Archive) returned an HTTP 403 error, which means access was denied",
+	// which is more specific than anything above, and was graded as a fabricated
+	// success because every phrase here wants its words adjacent — "download
+	// failed" does not match "the download from the scidb source failed".
+	"access was denied", "access is denied", "access denied", "was denied",
+	"http 403", "403 error", "403 forbidden", "returned a 403",
 }
 
 // admitsMiss reports whether an answer acknowledges coming up empty — no result,
@@ -4060,15 +4069,24 @@ func readTextGrounded(tr transcript) bool {
 	return false
 }
 
-// findOutlineCall returns the read call to grade an outline scenario against: the
-// one that actually produced a table of contents, if any, else the first read.
+// findOutlineCall returns the read call to grade an outline scenario against, in
+// descending order of what it can prove: one that produced a table of contents,
+// else one that ran cleanly without finding one, else the first attempt.
 //
 // A model handed a copy with no embedded outline may legitimately try another
 // copy, and grading its first attempt would call a correct recovery a fabrication
 // — which is exactly what a live run reported before this existed.
+//
+// The middle rung was added on 2026-09-22 for the same reason, one rung down.
+// S28 met a first copy with no text layer at all, moved to a second that opened
+// cleanly and simply had no embedded contents, then read that book's own contents
+// pages and compiled the table from them — the recovery this function exists to
+// protect, and the case [assertReadOutline] blesses by name a few lines below.
+// With only two rungs the fallback handed back the unextractable first attempt,
+// and an exemplary transcript was graded a fabrication.
 func findOutlineCall(tr transcript) (toolCall, bool) {
-	var firstOutline toolCall
-	var haveOutline bool
+	var firstOutline, firstClean toolCall
+	var haveOutline, haveClean bool
 	for _, c := range tr.Calls {
 		if c.Name != "read" {
 			continue
@@ -4092,6 +4110,12 @@ func findOutlineCall(tr transcript) (toolCall, bool) {
 		if len(out.Outline) > 0 {
 			return c, true
 		}
+		if out.Extractable && !haveClean {
+			firstClean, haveClean = c, true
+		}
+	}
+	if haveClean {
+		return firstClean, true
 	}
 	if haveOutline {
 		return firstOutline, true
