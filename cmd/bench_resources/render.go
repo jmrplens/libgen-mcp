@@ -71,7 +71,7 @@ func renderSeries(run *Run) string {
 
 // renderOneSeries is one series: its table, its slopes, and why it ended.
 func renderOneSeries(s *SeriesScenario) string {
-	headers := []string{"Clients", "Mean (MiB)", "Peak (MiB)", "Calls", "p50 (ms)", "p99 (ms)", "CPU ms/call"}
+	headers := []string{"Clients", colMean, colPeak, "Calls", "p50 (ms)", "p99 (ms)", colCPU}
 	align := []docgen.Alignment{
 		docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
 		docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
@@ -194,25 +194,30 @@ func renderStartupTable(run *Run) string {
 			"because they moved apart: one number would hide the one that hurts.\n")
 }
 
-// renderMemoryTable is what an operator sizes a container against.
+// The column labels more than one table carries. They are named because they are
+// the same column: a rename that reached one table and not the other would put
+// two names on one measurement across two documents.
+const (
+	colMean = "Mean (MiB)"
+	colPeak = "Peak (MiB)"
+	colCPU  = "CPU ms/call"
+)
+
+// renderMemoryTable is what an operator sizes a container against, with the
+// paragraph the repository page puts under it.
 func renderMemoryTable(run *Run) string {
-	headers := []string{"Scenario", "Idle (MiB)", "Mean (MiB)", "Peak (MiB)", "CPU ms/call"}
-	align := []docgen.Alignment{
-		docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
-	}
-	return tableWithNote(docgen.RenderMarkdownTable(headers, align, memoryRows(run)),
+	return tableWithNote(renderMemoryTableEN(run),
 		"The resident set, read from the kernel rather than from inside the process: a\n"+
 			"container limit is set against the resident set, and Go's own heap figure is a\n"+
 			"different and smaller number. **Peak** is what a limit has to survive.\n")
 }
 
-// renderMemoryTableEN is the memory table for the English site page: the table
-// alone, without the paragraph the repository page puts under it. The site page
-// says the same thing in its own words, in a section of its own, and a document
-// that made the point twice would read as though the second one meant something
-// different.
+// renderMemoryTableEN is the same table for the English site page: the table
+// alone. That page says the same thing in its own words, in a section of its
+// own, and a document that made the point twice would read as though the second
+// one meant something different.
 func renderMemoryTableEN(run *Run) string {
-	headers := []string{"Scenario", "Idle (MiB)", "Mean (MiB)", "Peak (MiB)", "CPU ms/call"}
+	headers := []string{"Scenario", "Idle (MiB)", colMean, colPeak, colCPU}
 	align := []docgen.Alignment{
 		docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
 	}
