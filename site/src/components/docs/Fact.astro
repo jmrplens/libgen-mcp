@@ -77,7 +77,10 @@ const DATA: Record<Kind, string> = {
 };
 
 const t = Astro.locals.t;
-const text = kind ? t(`lgm.fact.${kind}` as Parameters<typeof t>[0]) : label;
+// No cast: `Kind` is a closed union, so the template literal resolves to nine
+// declared keys and a tenth kind would fail here rather than render its own
+// key name.
+const text = kind ? t(`lgm.fact.${kind}`) : label;
 ---
 
 <div class="fact" data-fact={kind ? DATA[kind] : "note"}>

@@ -39,7 +39,8 @@ development build running is just:
   (the last one only for `make release-check`). Install all three with
   `make install-tools`.
 - **Node.js with Corepack** (only for the docs site) — the site under `site/`
-  pins `pnpm@11.8.0` via its `packageManager` field.
+  pins its pnpm version in its `packageManager` field, and Corepack installs
+  that one.
 - **Network access** (only for the gated end-to-end suite and the live probe).
 - **librsvg and libwebp** (only if you add or edit an MCP icon) — `rsvg-convert`
   and `cwebp` on your `PATH`, e.g. `brew install librsvg webp`. They back
