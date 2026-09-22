@@ -1,0 +1,342 @@
+{
+  "schema": 1,
+  "generated_at": "2026-09-21T23:54:35Z",
+  "server": {
+    "version": "1.7.3",
+    "commit": "4eed6907cd11f7ee26edf549b8f69035207b7ae8",
+    "bytes_on_disk": 37503818
+  },
+  "host": {
+    "os": "linux",
+    "arch": "amd64",
+    "cpu_model": "AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx",
+    "cpus": 8,
+    "mem_total_gib": 60.78,
+    "kernel": "6.1.0-53-amd64",
+    "go_version": "go1.27.0"
+  },
+  "settings": {
+    "rounds": 3,
+    "sample_interval_ms": 100,
+    "quick": false
+  },
+  "scenarios": [
+    {
+      "id": "stdio-1",
+      "transport": "stdio",
+      "telemetry": false,
+      "clients": 1,
+      "parallel": 1,
+      "rounds": 3,
+      "outbound_rps": 20,
+      "outbound_burst": 100,
+      "list_bytes": 26897,
+      "startup": {
+        "process_ready_ms": 42.59,
+        "first_list_ms": 6.04,
+        "warm_list_ms": 4.9
+      },
+      "memory": {
+        "idle_mib": 21.95,
+        "mean_mib": 25.63,
+        "peak_mib": 25.63
+      },
+      "cpu": {
+        "seconds": 0.07,
+        "ms_per_call": 7.78,
+        "calls": 9
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 3,
+          "p50_ms": 4.28,
+          "p99_ms": 5.46,
+          "max_ms": 5.46
+        },
+        {
+          "method": "prompts/list",
+          "calls": 3,
+          "p50_ms": 0.47,
+          "p99_ms": 0.76,
+          "max_ms": 0.76
+        },
+        {
+          "method": "tools/call",
+          "calls": 3,
+          "p50_ms": 9.2,
+          "p99_ms": 14.99,
+          "max_ms": 14.99
+        }
+      ],
+      "notes": [
+        "3 requests reached the stand-in catalog"
+      ]
+    },
+    {
+      "id": "stdio-8",
+      "transport": "stdio",
+      "telemetry": false,
+      "clients": 8,
+      "parallel": 1,
+      "rounds": 3,
+      "outbound_rps": 20,
+      "outbound_burst": 100,
+      "list_bytes": 26897,
+      "startup": {
+        "process_ready_ms": 21.52,
+        "first_list_ms": 5.54,
+        "warm_list_ms": 4.22
+      },
+      "memory": {
+        "idle_mib": 173.59,
+        "mean_mib": 204.88,
+        "peak_mib": 208.2
+      },
+      "cpu": {
+        "seconds": 0.66,
+        "ms_per_call": 9.17,
+        "calls": 72
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 24,
+          "p50_ms": 13.29,
+          "p99_ms": 50.6,
+          "max_ms": 50.6
+        },
+        {
+          "method": "prompts/list",
+          "calls": 24,
+          "p50_ms": 1.52,
+          "p99_ms": 12.54,
+          "max_ms": 12.54
+        },
+        {
+          "method": "tools/call",
+          "calls": 24,
+          "p50_ms": 23.55,
+          "p99_ms": 40.64,
+          "max_ms": 40.64
+        }
+      ],
+      "notes": [
+        "24 requests reached the stand-in catalog"
+      ]
+    },
+    {
+      "id": "http-1",
+      "transport": "http",
+      "telemetry": false,
+      "clients": 1,
+      "parallel": 1,
+      "rounds": 3,
+      "outbound_rps": 20,
+      "outbound_burst": 100,
+      "list_bytes": 20609,
+      "startup": {
+        "process_ready_ms": 27.26,
+        "first_list_ms": 3.16,
+        "warm_list_ms": 3.51
+      },
+      "memory": {
+        "idle_mib": 24,
+        "mean_mib": 25.66,
+        "peak_mib": 25.66
+      },
+      "cpu": {
+        "seconds": 0.08,
+        "ms_per_call": 8.89,
+        "calls": 9
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 3,
+          "p50_ms": 3.64,
+          "p99_ms": 3.9,
+          "max_ms": 3.9
+        },
+        {
+          "method": "prompts/list",
+          "calls": 3,
+          "p50_ms": 1.12,
+          "p99_ms": 1.74,
+          "max_ms": 1.74
+        },
+        {
+          "method": "tools/call",
+          "calls": 3,
+          "p50_ms": 10,
+          "p99_ms": 10.12,
+          "max_ms": 10.12
+        }
+      ],
+      "notes": [
+        "3 requests reached the stand-in catalog",
+        "measured build 1.7.3 (4eed6907cd11f7ee26edf549b8f69035207b7ae8)"
+      ]
+    },
+    {
+      "id": "http-8",
+      "transport": "http",
+      "telemetry": false,
+      "clients": 8,
+      "parallel": 2,
+      "rounds": 3,
+      "outbound_rps": 20,
+      "outbound_burst": 100,
+      "list_bytes": 20609,
+      "startup": {
+        "process_ready_ms": 26.6,
+        "first_list_ms": 4.53,
+        "warm_list_ms": 4.06
+      },
+      "memory": {
+        "idle_mib": 22.47,
+        "mean_mib": 35.42,
+        "peak_mib": 40.37
+      },
+      "cpu": {
+        "seconds": 1.14,
+        "ms_per_call": 7.92,
+        "calls": 144
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 48,
+          "p50_ms": 18.28,
+          "p99_ms": 69.97,
+          "max_ms": 69.97
+        },
+        {
+          "method": "prompts/list",
+          "calls": 48,
+          "p50_ms": 5.86,
+          "p99_ms": 19.1,
+          "max_ms": 19.1
+        },
+        {
+          "method": "tools/call",
+          "calls": 48,
+          "p50_ms": 43.45,
+          "p99_ms": 77.05,
+          "max_ms": 77.05
+        }
+      ],
+      "notes": [
+        "48 requests reached the stand-in catalog",
+        "measured build 1.7.3 (4eed6907cd11f7ee26edf549b8f69035207b7ae8)"
+      ]
+    },
+    {
+      "id": "http-8-otel",
+      "transport": "http",
+      "telemetry": true,
+      "clients": 8,
+      "parallel": 2,
+      "rounds": 3,
+      "outbound_rps": 20,
+      "outbound_burst": 100,
+      "list_bytes": 20609,
+      "startup": {
+        "process_ready_ms": 29.8,
+        "first_list_ms": 5.95,
+        "warm_list_ms": 3.07
+      },
+      "memory": {
+        "idle_mib": 25.85,
+        "mean_mib": 42.78,
+        "peak_mib": 45.63
+      },
+      "cpu": {
+        "seconds": 1.07,
+        "ms_per_call": 7.43,
+        "calls": 144
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 48,
+          "p50_ms": 14.13,
+          "p99_ms": 30.13,
+          "max_ms": 30.13
+        },
+        {
+          "method": "prompts/list",
+          "calls": 48,
+          "p50_ms": 5.13,
+          "p99_ms": 17.99,
+          "max_ms": 17.99
+        },
+        {
+          "method": "tools/call",
+          "calls": 48,
+          "p50_ms": 37.13,
+          "p99_ms": 55.71,
+          "max_ms": 55.71
+        }
+      ],
+      "notes": [
+        "48 requests reached the stand-in catalog",
+        "0 OTLP exports reached the collector during this scenario",
+        "measured build 1.7.3 (4eed6907cd11f7ee26edf549b8f69035207b7ae8)"
+      ]
+    },
+    {
+      "id": "http-8-shipped-rate",
+      "transport": "http",
+      "telemetry": false,
+      "clients": 8,
+      "parallel": 2,
+      "rounds": 3,
+      "outbound_rps": 1,
+      "outbound_burst": 1,
+      "list_bytes": 20609,
+      "startup": {
+        "process_ready_ms": 30.45,
+        "first_list_ms": 3.36,
+        "warm_list_ms": 4.66
+      },
+      "memory": {
+        "idle_mib": 22.86,
+        "mean_mib": 28.29,
+        "peak_mib": 29.34
+      },
+      "cpu": {
+        "seconds": 1.5,
+        "ms_per_call": 10.42,
+        "calls": 144
+      },
+      "latency": [
+        {
+          "method": "tools/list",
+          "calls": 48,
+          "p50_ms": 7.35,
+          "p99_ms": 33.26,
+          "max_ms": 33.26
+        },
+        {
+          "method": "prompts/list",
+          "calls": 48,
+          "p50_ms": 2.23,
+          "p99_ms": 7.62,
+          "max_ms": 7.62
+        },
+        {
+          "method": "tools/call",
+          "calls": 48,
+          "p50_ms": 14985.06,
+          "p99_ms": 16005.32,
+          "max_ms": 16005.32
+        }
+      ],
+      "notes": [
+        "48 requests reached the stand-in catalog",
+        "measured build 1.7.3 (4eed6907cd11f7ee26edf549b8f69035207b7ae8)"
+      ]
+    }
+  ]
+}
