@@ -262,9 +262,17 @@ func sameDOI(a, b string) bool {
 
 // doiPrefixes are the resolver and scheme prefixes stripped from a DOI to leave the
 // bare identifier, longest first so a match consumes the whole prefix.
+//
+// The `http://` spellings carry a NOSONAR because S5332 reads them as this code
+// choosing an insecure protocol, and they are the opposite: patterns matched
+// against a DOI somebody else wrote, and then removed. Nothing here is dialed.
+// Catalogs and citation managers have been emitting `http://dx.doi.org/` for two
+// decades and still do, so dropping these two entries would not make one request
+// safer — it would leave a DOI written that way unrecognized, which is a parsing
+// bug wearing a security fix's clothes.
 var doiPrefixes = []string{
-	"https://doi.org/", "http://doi.org/",
-	"https://dx.doi.org/", "http://dx.doi.org/",
+	"https://doi.org/", "http://doi.org/", // NOSONAR
+	"https://dx.doi.org/", "http://dx.doi.org/", // NOSONAR
 	"doi.org/", "doi:",
 }
 

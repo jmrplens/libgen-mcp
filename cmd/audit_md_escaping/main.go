@@ -104,7 +104,7 @@ func execute(cfg auditRun, out, errOut io.Writer) int {
 	if !cfg.check {
 		return 0
 	}
-	if count := failing(report, cfg.failUnresolved, splitPrefixes(cfg.failUnresolvedIn)); count > 0 {
+	if failing(report, cfg.failUnresolved, splitPrefixes(cfg.failUnresolvedIn)) > 0 {
 		fmt.Fprintf(errOut, "%s: %s\n", toolName, summarize(report))
 		return 1
 	}

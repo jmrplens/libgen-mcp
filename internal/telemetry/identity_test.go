@@ -182,7 +182,7 @@ func TestPseudonymTellsCallersApartAndIsStable(t *testing.T) {
 	if again := digest(Caller{Address: "203.0.113.7"}); again != first {
 		t.Errorf("one address produced two digests, %q and %q: a burst would read as two callers", first, again)
 	}
-	if other := digest(Caller{Address: "203.0.113.8"}); other == first {
+	if digest(Caller{Address: "203.0.113.8"}) == first {
 		t.Errorf("two addresses produced one digest %q: the policy distinguishes nobody", first)
 	}
 	// A session joins the address when there is one, which is the only thing
@@ -191,7 +191,7 @@ func TestPseudonymTellsCallersApartAndIsStable(t *testing.T) {
 	if withSession == first {
 		t.Error("a session made no difference to the digest")
 	}
-	if second := digest(Caller{Address: "203.0.113.7", Session: "s-2"}); second == withSession {
+	if digest(Caller{Address: "203.0.113.7", Session: "s-2"}) == withSession {
 		t.Error("two sessions from one address produced one digest")
 	}
 }
@@ -307,7 +307,7 @@ func TestItemDigestIsStableAndTellsItemsApart(t *testing.T) {
 	if again := digest("10.1101/2020.01.01.900000"); again != first {
 		t.Errorf("one DOI produced two digests, %q and %q", first, again)
 	}
-	if other := digest("10.1101/2020.01.01.900001"); other == first {
+	if digest("10.1101/2020.01.01.900001") == first {
 		t.Errorf("two DOIs produced one digest %q", first)
 	}
 }

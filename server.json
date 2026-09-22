@@ -3,7 +3,7 @@
   "name": "io.github.jmrplens/libgen-mcp",
   "title": "Books & Papers MCP Server",
   "description": "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading.",
-  "version": "1.7.3",
+  "version": "2.0.0",
   "websiteUrl": "https://jmrp.io/docs/libgen-mcp",
   "repository": {
     "url": "https://github.com/jmrplens/libgen-mcp",
@@ -119,7 +119,7 @@
     {
       "registryType": "npm",
       "identifier": "@jmrp.io/libgen-mcp",
-      "version": "1.7.3",
+      "version": "2.0.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -148,7 +148,7 @@
     {
       "registryType": "pypi",
       "identifier": "libgen-mcp",
-      "version": "1.7.3",
+      "version": "2.0.0",
       "runtimeHint": "uvx",
       "registryBaseUrl": "https://pypi.org",
       "transport": {
@@ -178,7 +178,7 @@
     {
       "registryType": "nuget",
       "identifier": "libgen-mcp",
-      "version": "1.7.3",
+      "version": "2.0.0",
       "runtimeHint": "dnx",
       "registryBaseUrl": "https://api.nuget.org/v3/index.json",
       "transport": {
