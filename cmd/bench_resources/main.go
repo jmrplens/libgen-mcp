@@ -147,43 +147,66 @@ func execute(ctx context.Context, opts options) error {
 		verbose:   opts.verbose,
 		env:       opts.targetEnv,
 	}
+	if mErr := r.measureMatrix(ctx, run, plans, opts.verbose); mErr != nil {
+		return mErr
+	}
+	if sErr := r.measureSeries(ctx, run, opts); sErr != nil {
+		return sErr
+	}
+	fillServerInfo(run)
+	return writeArtifacts(opts, run)
+}
+
+// measureMatrix measures every point of the plan into the record.
+func (r *runner) measureMatrix(ctx context.Context, run *Run, plans []scenarioPlan, verbose bool) error {
 	for _, plan := range plans {
 		fmt.Fprintf(os.Stderr, "bench_resources: %s — %s\n", plan.ID, plan.Why)
-		scenario, mErr := r.measure(ctx, plan)
-		if mErr != nil {
-			return fmt.Errorf("scenario %s: %w", plan.ID, mErr)
+		scenario, err := r.measure(ctx, plan)
+		if err != nil {
+			return fmt.Errorf("scenario %s: %w", plan.ID, err)
 		}
 		run.Scenarios = append(run.Scenarios, scenario)
-		if opts.verbose {
+		if verbose {
 			fmt.Fprintln(os.Stderr, describeScenario(scenario))
 		}
 	}
-	if !opts.noSeries {
-		plan, pErr := seriesPlanFor(opts)
-		if pErr != nil {
-			return pErr
-		}
-		fmt.Fprintf(os.Stderr, "bench_resources: %s — what each extra caller costs, measured rather than extrapolated\n", plan.ID)
-		series, sErr := r.runSeries(ctx, plan)
-		if sErr != nil {
-			return fmt.Errorf("series %s: %w", plan.ID, sErr)
-		}
-		run.Series = append(run.Series, series)
-		if opts.verbose {
-			fmt.Fprintln(os.Stderr, describeSeries(series))
-		}
-	}
-	fillServerInfo(run)
+	return nil
+}
 
+// measureSeries adds the concurrency series to the record, unless the run asked
+// for the matrix alone.
+func (r *runner) measureSeries(ctx context.Context, run *Run, opts options) error {
+	if opts.noSeries {
+		return nil
+	}
+	plan, err := seriesPlanFor(opts)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr,
+		"bench_resources: %s — what each extra caller costs, measured rather than extrapolated\n", plan.ID)
+	series, err := r.runSeries(ctx, plan)
+	if err != nil {
+		return fmt.Errorf("series %s: %w", plan.ID, err)
+	}
+	run.Series = append(run.Series, series)
+	if opts.verbose {
+		fmt.Fprintln(os.Stderr, describeSeries(series))
+	}
+	return nil
+}
+
+// writeArtifacts writes the record and the page, or says why it wrote neither.
+func writeArtifacts(opts options, run *Run) error {
 	if opts.noWrite {
 		fmt.Fprintln(os.Stderr, "bench_resources: -no-write, record not written")
 		return nil
 	}
-	if wErr := writeRecord(opts.record, run); wErr != nil {
-		return wErr
+	if err := writeRecord(opts.record, run); err != nil {
+		return err
 	}
-	if pErr := writePage(opts.page, run); pErr != nil {
-		return pErr
+	if err := writePage(opts.page, run); err != nil {
+		return err
 	}
 	fmt.Fprintf(os.Stderr, "bench_resources: wrote %s and %s\n", opts.record, opts.page)
 	return nil
