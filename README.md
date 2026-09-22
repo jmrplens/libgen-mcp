@@ -1,5 +1,6 @@
 <p align="center">
   <img src="assets/banner.png" alt="libgen-mcp" width="100%">
+[![MCP Queen operational grade](https://mcpqueen.com/badge/io.github.jmrplens/libgen-mcp.svg)](https://mcpqueen.com/s/io.github.jmrplens/libgen-mcp)
 </p>
 
 <p align="center">
