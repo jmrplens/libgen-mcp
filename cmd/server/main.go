@@ -76,6 +76,44 @@ const (
 	httpWriteTimeout      = 60 * time.Second
 )
 
+// The two timeouts an operator can move, and the one thing worth knowing about
+// each is which layer it belongs to.
+//
+// defaultSessionTimeout closes an MCP session whose client has stopped calling.
+// It is the SDK's own mechanism and it exists at all only in stateful mode,
+// where a session outlives the request that made it: without a timeout the only
+// thing that ends one is a DELETE the client may never send, so a client that
+// crashes leaves its session behind for the life of the process. Thirty minutes
+// is long enough that no working client is cut off and short enough that a
+// forgotten session is not a leak.
+//
+// maxSessionTimeout is a day. Past that the setting is not a timeout any more —
+// it is a session that outlives every deployment window this server has, which
+// is what "never closed" already spells, and spelling it as a number invites the
+// reader to think something is being reclaimed.
+const (
+	defaultSessionTimeout = 30 * time.Minute
+	maxSessionTimeout     = 24 * time.Hour
+)
+
+// defaultHTTPIdleTimeout is the default for --http-idle-timeout, and it is zero
+// because this flag arrived after the behavior it changes.
+//
+// Zero leaves net/http's keep-alive connections open between requests exactly as
+// they were before the flag existed, so no deployment's connection handling moves
+// by upgrading. Go falls back to ReadTimeout when IdleTimeout is zero and this
+// server sets no ReadTimeout, so zero really is "no idle closure" rather than a
+// hidden default.
+//
+// It bounds the gap BETWEEN requests on a kept-alive connection, never a response
+// being written — so an SSE stream, which is a response in progress for as long
+// as it lasts, is not what this reclaims. That is the whole reason it can be set
+// on a server whose point is long-lived streams.
+// The type is written out because zero is otherwise an untyped constant, and an
+// untyped zero would let this be compared against, printed as, or handed to
+// something that is not a duration without the compiler minding.
+const defaultHTTPIdleTimeout time.Duration = 0
+
 // version and commit are injected at release time with
 // -ldflags "-X main.version=<v> -X main.commit=<sha>".
 //
@@ -235,6 +273,8 @@ func mainWithExit() int {
 	rateLimitBurst := flag.Int("rate-limit-burst", defaultRateLimitBurst, "how many of those requests one charged address may make at once before the refill rate applies")
 	drainDelay := flag.Duration("drain-delay", 0, "how long GET /health answers 503 draining before the listener is closed on shutdown. 0 (default) closes at once. Set it to at least one probe interval of whatever is in front, or the balancer learns this instance is going by the connection failing — after it has already sent work to it. Capped at "+maxDrainDelay.String())
 	maxInflight := flag.Int("max-inflight-per-client", 0, "how many download or read calls one charged address may have in flight. Unset means the configured "+config.EnvName("MAX_CONCURRENT_DOWNLOADS")+", so the bound starts at the whole download semaphore; 0 or less turns the per-caller bound off. A ceiling is exactly as real as the identity underneath it, so behind a proxy it needs --trusted-proxy-header and --trusted-proxies too")
+	sessionTimeout := flag.Duration("session-timeout", defaultSessionTimeout, "close a legacy stateful session that has gone this long without a request from its client. 0 never closes one, which leaves a client that crashed holding its session for the life of the process. Applies to --stateless=false only, and passing it under the default stateless transport is refused rather than ignored. Capped at "+maxSessionTimeout.String())
+	httpIdleTimeout := flag.Duration("http-idle-timeout", defaultHTTPIdleTimeout, "close a kept-alive connection that has gone this long between requests. 0 (default) never closes one, which is what this server did before the flag existed. It bounds the gap between requests, never a response being written, so an SSE stream is not what it reclaims")
 	registerEnvBackedFlags()
 	flag.Parse()
 
@@ -352,6 +392,20 @@ func mainWithExit() int {
 		return 1
 	}
 
+	// The same refusal the rate limit makes, for the same reason: an operator
+	// who set an idle timeout on sessions this transport does not create has
+	// configured nothing, and nothing is the one outcome a startup log cannot
+	// distinguish from a working setting.
+	if timeoutErr := checkIdleTimeouts(idleTimeouts{
+		session:         *sessionTimeout,
+		sessionExplicit: isFlagPassed("session-timeout"),
+		httpIdle:        *httpIdleTimeout,
+		stateless:       *stateless,
+	}); timeoutErr != nil {
+		log.Print(timeoutErr)
+		return 1
+	}
+
 	// Refused at startup rather than at the first request: a server mounted on a
 	// path it cannot match would answer 404 to everything, which looks like a
 	// proxy fault and is the hardest kind of misconfiguration to find.
@@ -378,6 +432,10 @@ func mainWithExit() int {
 		MaxRequestBodyBytes: *maxBody,
 		TrustedOrigins:      trusted,
 		BasePath:            normalizeBasePath(*httpPath),
+		// Zero in stateless mode, which is what the SDK wants there anyway: the
+		// refusal above has already stopped an operator who asked for something
+		// else, so this is the mode's own answer rather than a value discarded.
+		SessionTimeout: sessionTimeoutFor(*sessionTimeout, *stateless),
 	}
 	spec := listenSpec{
 		addr:       decision.Addr,
@@ -392,10 +450,11 @@ func mainWithExit() int {
 		charge: charge,
 		// Nil on stdio, which every layer that reads it treats as "no per-caller
 		// state at all" rather than as an empty table.
-		records:    newClientRecordsFor(decision.HTTP, limit, charge),
-		inflight:   inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
-		drainDelay: *drainDelay,
-		publicURL:  strings.TrimSpace(*publicURL),
+		records:     newClientRecordsFor(decision.HTTP, limit, charge),
+		inflight:    inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
+		drainDelay:  *drainDelay,
+		idleTimeout: *httpIdleTimeout,
+		publicURL:   strings.TrimSpace(*publicURL),
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
 		log.Print(err)
@@ -1076,6 +1135,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 			charge:       spec.charge,
 			digest:       configDigest(cfg, opts.BasePath, opts.Stateless),
 			drainDelay:   spec.drainDelay,
+			idleTimeout:  spec.idleTimeout,
 			publicURL:    spec.publicURL,
 			identity:     identity.policy,
 			allowPrivate: cfg.AllowPrivateAddresses,
@@ -1324,6 +1384,10 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 		Handler: newHTTPHandler(mcpHandler, cards, opts.TrustedOrigins, opts.BasePath, opts.ServesTLS,
 			healthHandler(policy.digest, &draining)),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
+		// Zero here means what it means in net/http with no ReadTimeout set:
+		// nothing closes a kept-alive connection between requests, which is
+		// what this server did before the flag existed.
+		IdleTimeout: policy.idleTimeout,
 		// The slow-reader guard, and it is only safe because sseAware clears it
 		// on the MCP endpoint. Everything else this server answers — /health,
 		// both card paths, the 404 — is a small body with no business taking a

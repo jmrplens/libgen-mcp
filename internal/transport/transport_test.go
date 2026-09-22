@@ -2,15 +2,22 @@ package transport
 
 import (
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // TestStreamableHTTPMapsFlags verifies the flag-to-SDK-options mapping:
 // stateless defaults on (protocol 2026-07-28 requires it over HTTP), JSON
-// response and the body cap follow their flags, client aborts always propagate
-// into handler contexts so in-flight mirror fetches are canceled, and the SDK's
-// own DNS-rebinding check is always off because this server answers it itself.
+// response, the body cap and the idle-session timeout follow their flags, client
+// aborts always propagate into handler contexts so in-flight mirror fetches are
+// canceled, and the SDK's own DNS-rebinding check is always off because this
+// server answers it itself.
+//
+// The zero session timeout is a case of its own rather than a corner of the
+// defaults row, because zero is what the SDK reads as "never close an idle
+// session" — so a mapping that dropped the field would look exactly like a
+// deployment that asked for no timeout.
 func TestStreamableHTTPMapsFlags(t *testing.T) {
 	const always = true // DisableLocalhostProtection and PropagateRequestCancellation
 	tests := []struct {
@@ -22,6 +29,8 @@ func TestStreamableHTTPMapsFlags(t *testing.T) {
 		{"stateful_opt_out", Options{Stateless: false}, mcp.StreamableHTTPOptions{Stateless: false, PropagateRequestCancellation: always, DisableLocalhostProtection: always}},
 		{"json_response", Options{Stateless: true, JSONResponse: true}, mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: always, DisableLocalhostProtection: always}},
 		{"body_limit", Options{Stateless: true, MaxRequestBodyBytes: 1024}, mcp.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: 1024, PropagateRequestCancellation: always, DisableLocalhostProtection: always}},
+		{"session_timeout", Options{SessionTimeout: 30 * time.Minute}, mcp.StreamableHTTPOptions{SessionTimeout: 30 * time.Minute, PropagateRequestCancellation: always, DisableLocalhostProtection: always}},
+		{"no_session_timeout", Options{Stateless: false}, mcp.StreamableHTTPOptions{PropagateRequestCancellation: always, DisableLocalhostProtection: always}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -267,6 +267,27 @@ resolve inside `LIBGEN_MCP_RESOLVE_BUDGET`, a transfer inside
 academic. It is a ceiling and never a floor, so a process told it has less closes its listener
 instead of being killed mid-drain.
 
+## Closing what has gone idle
+
+Two timeouts, at two layers, and the distinction is the whole of it: one is about a TCP
+connection between requests, the other about an MCP session between calls.
+
+**`--http-idle-timeout` closes a kept-alive connection** that has gone that long with no request
+on it. The default is `0`, which closes none — the behaviour this server had before the flag
+existed, so upgrading moves nothing. What it bounds is the gap *between* requests, never a
+response being written, so **an SSE stream is not what it reclaims**: a stream is a response in
+progress for as long as it lasts. Set it when something in front holds connections open longer
+than it uses them and the file descriptors matter; leave it at `0` otherwise.
+
+**`--session-timeout` closes a stateful MCP session** whose client has stopped calling, and it
+exists only under `--stateless=false`. The default transport ends each POST's session with its
+own response, so there is nothing there to idle — which is why passing this flag with the
+default transport **fails startup** rather than being quietly ignored. Where sessions do
+survive, the only other thing that ends one is a `DELETE` the client may never send, so a client
+that crashed holds its session for the life of the process. The default is 30 minutes, `0`
+closes none, and it is capped at 24 hours; past a day the setting is not reclaiming anything a
+deployment outlives.
+
 ## The configuration digest
 
 `GET /health` answers `200` with `status`, `version`, `commit`, `build`, `config_digest`,
@@ -495,6 +516,8 @@ setting that appears to be in force and is not:
 | `--tls-cert` without `--tls-key`, or the reverse                              | A deployment that believes it is serving TLS and is not                                 |
 | `--trusted-proxies` without `--trusted-proxy-header`, or the reverse          | A header from an unnamed peer is text the caller wrote                                  |
 | `--rate-limit-rps` on a loopback bind or socket with no trusted proxy         | The bound cannot do what the operator asked for, so saying so beats downgrading it      |
+| `--session-timeout` under the default stateless transport                     | There is no session outliving a request for it to close                                 |
+| A negative `--http-idle-timeout`                                              | It is not a duration, and `0` already spells "close nothing"                            |
 | `--http-socket-mode` with a TCP `--http`, or on a platform with no file modes | A guarantee the platform cannot give                                                    |
 | `--trusted-proxies unix` on a TCP address                                     | There is no unix peer to trust                                                          |
 | `--http-path` carrying a query, fragment, `..` segment or percent-escape      | A server mounted on a path it can never match answers `404` to everything               |

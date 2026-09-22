@@ -71,6 +71,8 @@ var httpEnvOverlay = []struct {
 	{flagName: "rate-limit-burst", envShortName: "RATE_LIMIT_BURST"},
 	{flagName: "max-inflight-per-client", envShortName: "MAX_INFLIGHT_PER_CLIENT"},
 	{flagName: "drain-delay", envShortName: "DRAIN_DELAY"},
+	{flagName: "session-timeout", envShortName: "SESSION_TIMEOUT"},
+	{flagName: "http-idle-timeout", envShortName: "HTTP_IDLE_TIMEOUT"},
 }
 
 // applyHTTPEnvOverlay fills in every HTTP flag the operator did not pass, from

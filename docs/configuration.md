@@ -124,6 +124,8 @@ deployment is [HTTP server mode](http-server-mode.md).
 | `LIBGEN_MCP_RATE_LIMIT_BURST`        | `--rate-limit-burst`        | `40`                                  |
 | `LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT` | `--max-inflight-per-client` | `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` |
 | `LIBGEN_MCP_DRAIN_DELAY`             | `--drain-delay`             | `0`                                   |
+| `LIBGEN_MCP_HTTP_IDLE_TIMEOUT`       | `--http-idle-timeout`       | `0`                                   |
+| `LIBGEN_MCP_SESSION_TIMEOUT`         | `--session-timeout`         | `30m`                                 |
 
 Three details are worth knowing before you rely on them.
 

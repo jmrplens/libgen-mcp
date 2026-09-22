@@ -155,6 +155,14 @@ Al apagarse, `GET /health` pasa a `503` con `{"status":"draining"}` y `--drain-d
 
 La fase de gracia posterior al cierre del listener está acotada en **15 segundos**, y el corchete es estrecho por los dos lados. Por debajo quedan las cosas que una petición puede estar haciendo legítimamente: una resolución dentro de `LIBGEN_MCP_RESOLVE_BUDGET`, una transferencia dentro de `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`. Por encima queda la gracia del propio supervisor: diez segundos para `docker stop`, treinta para un pod de Kubernetes, tras lo cual el proceso muere y el presupuesto es académico. Es un techo y nunca un suelo, así que un proceso al que le dicen que tiene menos cierra su listener en vez de morir a medio drenar.
 
+## Cerrar lo que lleva tiempo inactivo
+
+Dos timeouts, en dos capas, y la distinción es todo el asunto: uno va de una conexión TCP entre peticiones, el otro de una sesión MCP entre llamadas.
+
+**`--http-idle-timeout` cierra una conexión keep-alive** que lleve ese tiempo sin ninguna petición encima. Por defecto es `0`, que no cierra ninguna — el comportamiento que este servidor tenía antes de existir la bandera, así que actualizar no mueve nada. Lo que acota es el hueco _entre_ peticiones, nunca una respuesta que se está escribiendo, así que **un stream SSE no es lo que recupera**: un stream es una respuesta en curso mientras dure. Ponlo cuando lo que tengas delante mantenga conexiones abiertas más tiempo del que las usa y los descriptores de fichero importen; déjalo en `0` en caso contrario.
+
+**`--session-timeout` cierra una sesión MCP con estado** cuyo cliente ha dejado de llamar, y solo existe con `--stateless=false`. El transporte por defecto termina la sesión de cada POST con su propia respuesta, así que ahí no hay nada que quede inactivo — por eso pasar esta bandera con el transporte por defecto **impide arrancar** en vez de ignorarse en silencio. Donde las sesiones sí sobreviven, lo único que termina una es un `DELETE` que el cliente puede no enviar nunca, así que un cliente que se cayó retiene su sesión durante toda la vida del proceso. Por defecto son 30 minutos, `0` no cierra ninguna, y el tope son 24 horas; pasado un día el ajuste no recupera nada a lo que sobreviva un despliegue.
+
 ## El digest de configuración
 
 `GET /health` responde `200` con `status`, `version`, `commit`, `build`, `config_digest`, `started_at` y `uptime_seconds` mientras el servidor está sirviendo. Dos de esos campos conviene conocerlos antes de levantar más de una réplica.
@@ -274,6 +282,8 @@ Cada rechazo al arrancar de los de abajo es deliberado. Un despliegue que no cor
 | `--tls-cert` sin `--tls-key`, o al revés                                           | Un despliegue que cree estar sirviendo TLS y no lo está                                         |
 | `--trusted-proxies` sin `--trusted-proxy-header`, o al revés                       | Una cabecera de un peer sin nombrar es texto que escribió el llamante                           |
 | `--rate-limit-rps` en un bind de loopback o un socket sin proxy de confianza       | La cota no puede hacer lo que pidió el operador, y decirlo es mejor que degradarla              |
+| `--session-timeout` con el transporte sin estado por defecto                       | No hay ninguna sesión que sobreviva a una petición y se pueda cerrar                            |
+| Un `--http-idle-timeout` negativo                                                  | No es una duración, y `0` ya significa «no cierres ninguna»                                     |
 | `--http-socket-mode` con un `--http` TCP, o en una plataforma sin modos de fichero | Una garantía que la plataforma no puede dar                                                     |
 | `--trusted-proxies unix` sobre una dirección TCP                                   | No hay ningún peer unix en el que confiar                                                       |
 | `--http-path` con query, fragmento, segmento `..` o escape porcentual              | Un servidor montado en una ruta que nunca puede casar responde `404` a todo                     |

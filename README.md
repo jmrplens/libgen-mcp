@@ -469,14 +469,14 @@ by registering the tools and prompts for real and walking the tree, and
 | Prompts                  |     4 |
 | Download sources         |    21 |
 | Discovery providers      |     8 |
-| `LIBGEN_MCP_*` variables |    55 |
+| `LIBGEN_MCP_*` variables |    57 |
 | Go packages              |    49 |
-| Test files               |   237 |
+| Test files               |   238 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
 | unit (internal)      |   101 |
-| unit (cmd)           |    84 |
+| unit (cmd)           |    85 |
 | HTTP end-to-end      |    29 |
 | stdio end-to-end     |    10 |
 | collector acceptance |     7 |

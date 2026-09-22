@@ -43,6 +43,8 @@ func overlayFlagSet(t *testing.T) *flag.FlagSet {
 	fs.Int("rate-limit-burst", defaultRateLimitBurst, "")
 	fs.Int("max-inflight-per-client", 0, "")
 	fs.Duration("drain-delay", 0, "")
+	fs.Duration("session-timeout", defaultSessionTimeout, "")
+	fs.Duration("http-idle-timeout", defaultHTTPIdleTimeout, "")
 	return fs
 }
 
@@ -301,9 +303,10 @@ func TestOverlayMarksTheFlagAsPassed(t *testing.T) {
 // because deriving it would make the test agree with whatever the code does.
 func TestOverlayCoversEverySettingAnHTTPDeploymentNeeds(t *testing.T) {
 	want := []string{
-		"drain-delay", "http", "http-path", "http-socket-mode", "json-response",
-		"max-inflight-per-client", "max-request-body-bytes", "public-url",
-		"rate-limit-burst", "rate-limit-rps", "stateless", "tls-cert", "tls-key",
+		"drain-delay", "http", "http-idle-timeout", "http-path",
+		"http-socket-mode", "json-response", "max-inflight-per-client",
+		"max-request-body-bytes", "public-url", "rate-limit-burst",
+		"rate-limit-rps", "session-timeout", "stateless", "tls-cert", "tls-key",
 		"transport", "trusted-origins", "trusted-proxies", "trusted-proxy-header",
 	}
 	got := make([]string, 0, len(httpEnvOverlay))
