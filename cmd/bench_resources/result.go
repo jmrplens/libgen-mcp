@@ -146,6 +146,25 @@ type SeriesStep struct {
 	Notes        []string `json:"notes,omitempty"`
 }
 
+// hasHeldHeap reports whether every step carries a settled heap reading.
+//
+// Every rather than any, because this answers whether a line can be drawn
+// through them. The heap comes from the measured process's profiling listener
+// and can fail for one step on its own, and a line that plotted that step's
+// missing reading as zero would draw a dip nothing measured — which is worse
+// than not drawing the line at all.
+func (s *SeriesScenario) hasHeldHeap() bool {
+	if len(s.Steps) == 0 {
+		return false
+	}
+	for _, step := range s.Steps {
+		if step.SettledHeapMiB <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // hasSettled reports whether any step of the series carries a settled reading,
 // so a renderer leaves the columns out entirely rather than printing "n/a"
 // against every row, which reads as a measurement rather than as an absence.

@@ -105,9 +105,14 @@ func TestWriteSitePages_FillsEveryRegionInBothLanguages(t *testing.T) {
 	})
 }
 
-// TestWriteSitePages_LeavesASectionAloneRatherThanEmptyingIt verifies a run that
-// measured no series does not erase the section its last run filled.
-func TestWriteSitePages_LeavesASectionAloneRatherThanEmptyingIt(t *testing.T) {
+// TestWriteSitePages_ReplacesAStaleBlockWithAnAbsence verifies a run that
+// measured no series says so rather than leaving the last run's numbers.
+//
+// Leaving them was the first arrangement, on the reasoning that a matrix-only
+// run should not erase a section. What it actually leaves is an older record's
+// measurement on a page the gate then declares current, which is the one thing a
+// generated document must not do.
+func TestWriteSitePages_ReplacesAStaleBlockWithAnAbsence(t *testing.T) {
 	dest := tempDestinations(t)
 	full := fixtureRun()
 	full.Series = []SeriesScenario{fixtureSeries()}
@@ -118,8 +123,15 @@ func TestWriteSitePages_LeavesASectionAloneRatherThanEmptyingIt(t *testing.T) {
 	if err := writeSitePages(fixtureRun(), dest, false); err != nil {
 		t.Fatalf("writeSitePages without a series: %v", err)
 	}
-	if !strings.Contains(readPage(t, dest.SitePageEN), "per caller while every caller is working") {
-		t.Error("a matrix-only run erased the series section rather than leaving it")
+	english := readPage(t, dest.SitePageEN)
+	if strings.Contains(english, "per caller while every caller is working") {
+		t.Error("the page still carries a measurement the current record does not have")
+	}
+	if !strings.Contains(english, enLabels.NotMeasured) {
+		t.Error("the page does not say the run measured nothing for that section")
+	}
+	if !strings.Contains(readPage(t, dest.SitePageES), esLabels.NotMeasured) {
+		t.Error("the Spanish page does not say it either")
 	}
 }
 

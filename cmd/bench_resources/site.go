@@ -55,12 +55,15 @@ func applySiteRegions(path string, blocks map[string]string, check bool) error {
 	}
 	updated := string(original)
 	for _, name := range regionNames {
+		// Every region is written, including the ones this record has nothing
+		// for. Leaving those as they stand was the first arrangement, on the
+		// reasoning that a matrix-only run should not erase a section — but what
+		// it actually leaves is an older record's measurement on a page the gate
+		// then declares current, which is the one thing a generated document
+		// must not do. An absence says so instead.
 		body, ok := blocks[name]
-		// A region with nothing to put in it is left as it stands rather than
-		// blanked: a run that measured no series should not erase the section
-		// its last run filled, it should leave the page saying what it said.
 		if !ok || body == "" {
-			continue
+			body = unavailableIn(path)
 		}
 		if updated, err = replaceRegion(updated, name, body); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
@@ -70,6 +73,19 @@ func applySiteRegions(path string, blocks map[string]string, check bool) error {
 		return nil
 	}
 	return docgen.WriteOrCheck(path, []byte(updated), check, "`make bench-resources-render`")
+}
+
+// unavailableIn is what a region says when the current record has nothing to put
+// in it, in that page's language.
+//
+// The page is picked by its path rather than by a label passed down, because the
+// caller that needs this is the one that no longer has a language: it is
+// filling a region for which the record produced no block at all.
+func unavailableIn(path string) string {
+	if path == sitePageES || strings.HasSuffix(path, "es-benchmarks.mdx") {
+		return esLabels.NotMeasured
+	}
+	return enLabels.NotMeasured
 }
 
 // replaceRegion swaps what sits between a region's marker and the next end
@@ -147,7 +163,7 @@ func siteBlocks(run *Run, l labels, memoryTable string) map[string]string {
 // number on this page comparable with a later one rather than just a number.
 func hostBlock(run *Run, l labels) string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf(l.Host, run.Host.describe()))
+	parts = append(parts, fmt.Sprintf(l.Host, run.Host.describeIn(l)))
 	if run.Server.Version != "" {
 		parts = append(parts, fmt.Sprintf(l.Build, buildLabel(run.Server)))
 	}

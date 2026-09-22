@@ -109,3 +109,134 @@ func TestWriteFigures_WritesThePairToBothTrees(t *testing.T) {
 		}
 	})
 }
+
+// TestWriteFigures_RemovesAFigureTheRecordNoLongerDraws verifies the pruning
+// that keeps a stale picture off the page.
+//
+// Without it a record that loses its series keeps publishing the series figures
+// its last run drew, and the check passes: every file it knows about matches,
+// and the ones it no longer knows about are never looked at. A stale picture is
+// worse than a missing one, because nothing about it says it is stale.
+func TestWriteFigures_RemovesAFigureTheRecordNoLongerDraws(t *testing.T) {
+	dest := tempDestinations(t)
+	full := fixtureRun()
+	full.Series = []SeriesScenario{fixtureSeries()}
+	if err := writeFigures(full, dest, false); err != nil {
+		t.Fatalf("writeFigures: %v", err)
+	}
+
+	if err := writeFigures(fixtureRun(), dest, false); err != nil {
+		t.Fatalf("writeFigures without a series: %v", err)
+	}
+	for _, dir := range []string{dest.DocCharts, dest.SiteCharts} {
+		t.Run(filepath.Base(dir), func(t *testing.T) {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatalf("read %s: %v", dir, err)
+			}
+			if len(entries) != 2 {
+				t.Errorf("%d files remain, want the one figure a matrix-only record draws, in two schemes", len(entries))
+			}
+			for _, entry := range entries {
+				if strings.Contains(entry.Name(), "by-clients") {
+					t.Errorf("%s is still published although the record no longer draws it", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+// TestPruneFigures_ReportsALeftoverRatherThanRemovingItUnderCheck verifies the
+// gate says what is stale instead of quietly tidying the working tree.
+func TestPruneFigures_ReportsALeftoverRatherThanRemovingItUnderCheck(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "memory-by-clients-dark.svg")
+	if err := os.WriteFile(stale, []byte("<svg/>"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	keep := filepath.Join(dir, "keep-light.svg")
+	if err := os.WriteFile(keep, []byte("<svg/>"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	// A file that is not a figure at all, which must be left alone either way.
+	other := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(other, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	expected := map[string]bool{"keep-light.svg": true}
+
+	t.Run("check reports it", func(t *testing.T) {
+		err := pruneFigures(dir, expected, true)
+		if err == nil || !strings.Contains(err.Error(), "memory-by-clients-dark.svg") {
+			t.Errorf("pruneFigures() error = %v, want it to name the stale figure", err)
+		}
+		if _, sErr := os.Stat(stale); sErr != nil {
+			t.Error("the check removed the file rather than reporting it")
+		}
+	})
+
+	t.Run("a render removes it", func(t *testing.T) {
+		if err := pruneFigures(dir, expected, false); err != nil {
+			t.Fatalf("pruneFigures: %v", err)
+		}
+		if _, err := os.Stat(stale); !os.IsNotExist(err) {
+			t.Error("the stale figure is still there")
+		}
+		for _, kept := range []string{keep, other} {
+			if _, err := os.Stat(kept); err != nil {
+				t.Errorf("%s was removed and should not have been", filepath.Base(kept))
+			}
+		}
+	})
+
+	t.Run("a directory that is not there", func(t *testing.T) {
+		if err := pruneFigures(filepath.Join(t.TempDir(), "absent"), expected, false); err != nil {
+			t.Errorf("pruneFigures() = %v, want nothing to do", err)
+		}
+	})
+}
+
+// TestHasHeldHeap_AsksWhetherALineCanBeDrawn verifies the check the held series
+// is gated on: every step, not any.
+//
+// A table can print an absence; a line cannot, and a step whose heap reading
+// failed would be plotted at zero as a dip nothing measured.
+func TestHasHeldHeap_AsksWhetherALineCanBeDrawn(t *testing.T) {
+	testCases := []struct {
+		name  string
+		steps []SeriesStep
+		want  bool
+	}{
+		{
+			name: "every step has one",
+			steps: []SeriesStep{
+				{Clients: 1, SettledHeapMiB: 2}, {Clients: 2, SettledHeapMiB: 3},
+			},
+			want: true,
+		},
+		{
+			name: "one step's heap read failed",
+			steps: []SeriesStep{
+				{Clients: 1, SettledHeapMiB: 2}, {Clients: 2, SettledRSSMiB: 30},
+			},
+		},
+		{name: "no steps at all"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &SeriesScenario{Steps: tc.steps}
+			if got := s.hasHeldHeap(); got != tc.want {
+				t.Errorf("hasHeldHeap() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("the figure drops the line rather than plotting a zero", func(t *testing.T) {
+		partial := fixtureSeries()
+		partial.Steps[1].SettledHeapMiB = 0
+		if got := memoryByClients(&partial); len(got.Chart.Series) != 2 {
+			t.Errorf("drew %d lines, want the held line dropped", len(got.Chart.Series))
+		}
+	})
+}

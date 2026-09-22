@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
@@ -74,7 +75,10 @@ func memoryByClients(s *SeriesScenario) figure {
 		{Label: "mean under load", Values: mean},
 		{Label: "peak under load", Values: peak},
 	}
-	if s.hasSettled() {
+	// Only when every step has one. A table can print an absence; a line cannot,
+	// and a step whose heap reading failed would be plotted at zero as a dip
+	// nothing measured.
+	if s.hasHeldHeap() {
 		lines = append(lines, series{Label: "held, load stopped", Values: held})
 	}
 	return figure{
@@ -139,10 +143,12 @@ func writeFigures(run *Run, dest destinations, check bool) error {
 	if err != nil {
 		return err
 	}
+	expected := map[string]bool{}
 	for _, fig := range figuresFor(run) {
 		for _, p := range schemes {
 			body := []byte(fig.Chart.svg(p))
 			name := fig.Name + "-" + p.Scheme + ".svg"
+			expected[name] = true
 			for _, dir := range []string{dest.DocCharts, dest.SiteCharts} {
 				if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 					return fmt.Errorf("create %s: %w", dir, mkErr)
@@ -152,6 +158,43 @@ func writeFigures(run *Run, dest destinations, check bool) error {
 					return wErr
 				}
 			}
+		}
+	}
+	for _, dir := range []string{dest.DocCharts, dest.SiteCharts} {
+		if pErr := pruneFigures(dir, expected, check); pErr != nil {
+			return pErr
+		}
+	}
+	return nil
+}
+
+// pruneFigures removes a figure the current record does not produce, or reports
+// it when check is set.
+//
+// Without this a record that loses its series keeps publishing the series
+// figures its last run drew, and the check passes: every file it knows about
+// matches, and the ones it no longer knows about are never looked at. A stale
+// picture is worse than a missing one, because nothing about it says it is
+// stale.
+func pruneFigures(dir string, expected map[string]bool, check bool) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read %s: %w", dir, err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".svg") || expected[name] {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		if check {
+			return fmt.Errorf("%s is not drawn from the current record; run `make bench-resources-render`", path)
+		}
+		if rErr := os.Remove(path); rErr != nil {
+			return fmt.Errorf("remove %s: %w", path, rErr)
 		}
 	}
 	return nil
