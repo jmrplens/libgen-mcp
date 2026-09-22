@@ -183,9 +183,11 @@ func TestPruneFigures_ReportsALeftoverRatherThanRemovingItUnderCheck(t *testing.
 			t.Error("the stale figure is still there")
 		}
 		for _, kept := range []string{keep, other} {
-			if _, err := os.Stat(kept); err != nil {
-				t.Errorf("%s was removed and should not have been", filepath.Base(kept))
-			}
+			t.Run(filepath.Base(kept), func(t *testing.T) {
+				if _, err := os.Stat(kept); err != nil {
+					t.Errorf("%s was removed and should not have been", filepath.Base(kept))
+				}
+			})
 		}
 	})
 
