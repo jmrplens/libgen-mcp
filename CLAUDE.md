@@ -752,21 +752,36 @@ Because the chain is `&&`-joined, the first failure hides the rest — so re-run
 it to completion after fixing one.
 
 **`js-yaml` is pinned in `site/package.json` for Starlight, not for us.** No file
-in this repo imports it. It is there because `@astrojs/starlight` ships
-TypeScript source (`utils/translations-fs.ts` does `import yaml from 'js-yaml'`,
-`schemas/head.ts` too), which Vite compiles into our bundle and leaves as a bare
-external — so it resolves at runtime from `site/node_modules`, *our* tree, not
-Starlight's. That makes the root pin the version Starlight actually gets.
+in this repo imports it. `@astrojs/starlight` does — `dist/utils/translations-fs.js`
+and `dist/schemas/head.js` both `import yaml from 'js-yaml'` — and it declares
+`js-yaml: ^4.1.1` among its own dependencies, so the copy it loads is resolved
+inside its own tree rather than ours.
 
-**It must stay inside Starlight's declared range (`^4.1.1`)**, and keep the
+**The pin is what makes that copy and ours the same one.** pnpm deduplicates a
+dependency whose range the root already satisfies, so with `4.3.1` at the root
+`node_modules/.pnpm/@astrojs+starlight@…/node_modules/js-yaml` is a symlink to
+`node_modules/.pnpm/js-yaml@4.3.1/node_modules/js-yaml` — one instance, at a
+version chosen here. Verified on 2026-09-22 against Starlight 0.42.2.
+
+It was not always this mechanism, and the difference matters when reading an
+older note. Before 0.42 Starlight shipped TypeScript source that Vite compiled
+into our bundle and left as a bare external, so the import resolved from
+`site/node_modules` and the root pin was the *only* copy. Now it is the
+deduplicated one: move the root outside `^4.1.1` and pnpm stops deduplicating
+and hands Starlight its own 4.x, which does not break the site — it quietly
+gives the tree two copies of the same library, one of them unused by anything
+here.
+
+**So it must stay inside Starlight's declared range (`^4.1.1`)**, and keep the
 version exact (no caret) so a range bump cannot drift across the major. Reject
 any bot PR that moves it to 5.x while Starlight still declares `^4.1.1` — being
 outside the range its own dependency declares is the reason on its own, no build
-run needed.
+run needed. (Dependabot #135 was closed on that ground.)
 
-Two details, because the obvious explanation is wrong and sends you down a dead
-end. First, it is **not** that "js-yaml 5 dropped the default export": v4's ESM
-build has no `export default` either. `import yaml from 'js-yaml'` works today
+Two details about what v5 would do to Starlight, which is the question the day
+Starlight itself declares one — and because the obvious explanation is wrong and
+sends you down a dead end. First, it is **not** that "js-yaml 5 dropped the
+default export": v4's ESM build has no `export default` either. `import yaml from 'js-yaml'` works today
 because the CJS path (`require` → `index.js`) reassigns `module.exports`, which
 Node/Vite interop hands over as the default; v5's CJS build emits
 `exports.load = …` per-name instead, and that synthesis is what stops. Second,
