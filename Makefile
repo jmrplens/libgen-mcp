@@ -639,11 +639,28 @@ publish-nuget: ## Assemble, validate and push the NuGet packages out of band (NU
 	@test -n "$(NUGET_BINARIES)" || { echo "ERROR: set NUGET_BINARIES=<dir of release binaries>"; exit 1; }
 	scripts/publish-nuget.sh "$(NUGET_BINARIES)" "$(VERSION)"
 
+# The marketplace CLI is pinned rather than resolved, for the reason
+# GORELEASER_VERSION and COSIGN_VERSION are: `npx -y <pkg>` downloads and runs
+# whatever the registry serves as latest, and this target runs on the
+# maintainer's own machine with a credential that can publish the listing. An
+# upstream compromise would execute there, with that credential present.
+#
+# It is not a hypothetical on this dependency, either. 0.0.41 moved the
+# repository to a positional argument and made `plugin update` the verb for an
+# existing listing, which broke this target until PR #119 caught up — an
+# unpinned upgrade arriving mid-release is how that is found.
+#
+# Bump it deliberately: read the changelog, run the target, and check the
+# published listing with a cache-buster afterwards.
+LOBEHUB_CLI_VERSION ?= 0.0.41
+
 ## publish-lobehub: publish the current version to the LobeHub Marketplace.
 ## Reads lhm.plugin.json (version kept in sync by scripts/update-server-json-sha.sh
-## on each release) and posts it via the @lobehub/market-cli. Requires a one-time
-## interactive `lhm login` + `lhm github connect` first — LobeHub has no
-## non-interactive publish path, so this cannot run in CI.
+## on each release) and posts it via the @lobehub/market-cli. It prompts for
+## nothing: the credential in ~/.lobehub-market/user-credentials.json carries a
+## refreshToken and the CLI renews itself. Only the first login on a machine is
+## interactive, which is why this is not in CI — the credential is the
+## maintainer's, not a repository secret.
 publish-lobehub:
 	@command -v node >/dev/null || { echo "ERROR: Node.js >= 22 is required"; exit 1; }
 	@NODE_MAJOR=$$(node -v | sed 's/^v\([0-9]*\).*/\1/'); \
@@ -657,7 +674,7 @@ publish-lobehub:
 	@$(MAKE) --no-print-directory check-lhm-manifest
 	@VER=$$(tr -d '[:space:]' < VERSION); \
 	echo "Updating jmrplens-libgen-mcp to v$$VER on LobeHub..."; \
-	npx -y @lobehub/market-cli plugin update --dir "$(CURDIR)"
+	npx -y @lobehub/market-cli@$(LOBEHUB_CLI_VERSION) plugin update --dir "$(CURDIR)"
 
 sonar: ## Run the SonarCloud scanner locally (needs sonar-scanner + SONAR_TOKEN)
 	@command -v sonar-scanner >/dev/null || { echo "sonar-scanner not installed"; exit 1; }

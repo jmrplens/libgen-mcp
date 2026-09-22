@@ -206,7 +206,7 @@ A tag publishes to seven places. Six are automatic; LobeHub is not.
 | NuGet | `NuGet/login` OIDC → 1-hour key | done (1.7.2 pushed by hand, then the policy) |
 | Homebrew tap | `TAP_DEPLOY_KEY_B64` | the `jmrplens/homebrew-tap` repository and its deploy key |
 | winget | `WINGET_TOKEN` | the `jmrplens/winget-pkgs` fork, and one manual manifest submission accepted upstream |
-| LobeHub | interactive `lhm login` | `make publish-lobehub`, by hand after the tag |
+| LobeHub | stored `lhm` credential, auto-renewed | `make publish-lobehub`, by hand after the tag |
 
 **Every trusted publisher on this repository names a blank environment**, and no
 publishing job declares `environment:`. npm matches on repository, workflow file
@@ -259,17 +259,33 @@ LobeHub is the one listing that is **not** part of the tagged release, and it
 needs a manual step after the tag:
 
 ```bash
-make publish-lobehub    # npx -y @lobehub/market-cli plugin publish
+make publish-lobehub    # npx -y @lobehub/market-cli@$(LOBEHUB_CLI_VERSION) plugin update
 ```
 
-It cannot be automated. LobeHub's publish endpoint authenticates over OIDC PKCE
-with a one-time interactive `lhm login` + `lhm github connect`; its own
-documentation states there is no token-only, non-interactive path, and the
-machine-to-machine credentials it does offer carry no publish permission. The
-release workflow therefore only *stamps* the version into `lhm.plugin.json`
-(step 5 of `scripts/update-server-json-sha.sh`, alongside the other two
-manifests, committed back to main); the actual publish is a human running the
-target above.
+**The CLI version is pinned in the `Makefile`**, for the reason
+`GORELEASER_VERSION` and `COSIGN_VERSION` are: an unpinned `npx -y` downloads
+and runs whatever the registry serves as latest, and this target runs on the
+maintainer's machine with a credential that can publish the listing. Bump
+`LOBEHUB_CLI_VERSION` deliberately — 0.0.41 changed the command's signature and
+broke this target until PR #119 caught up.
+
+**Run it and walk away: it prompts for nothing.** The credential lives in
+`~/.lobehub-market/user-credentials.json` and carries a `refreshToken`, so the
+CLI renews itself on the first command and prints `✓ Authenticated as …` — even
+when `lhm auth status` claims the token expired. Measured again on 2026-09-22
+publishing v2.0.0, which took one command and no browser.
+
+Only the **first** login on a machine is interactive: `lhm login` is OAuth2 PKCE
+with a localhost callback, with no device-code flow and no token flag. That is a
+one-time cost, already paid here, and it is the reason this step is not in CI —
+the credential is the maintainer's machine's, not a repository secret. It is not
+a reason to warn about a prompt before every release, which this page did until
+now and which cost the maintainer the same correction several releases running.
+
+So the release workflow only *stamps* the version into `lhm.plugin.json` (step 5
+of `scripts/update-server-json-sha.sh`, alongside the other two manifests,
+committed back to main); the publish is a human running one target that finishes
+on its own.
 
 The manifest also carries the full `tools` and `prompts` arrays, and it has to:
 LobeHub derives a listing's capability badges from those arrays, because its
