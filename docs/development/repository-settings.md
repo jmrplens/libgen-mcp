@@ -101,6 +101,26 @@ The one legitimate `environment:` is `github-pages`, on the deploy job in
 environment, `copilot`, exists for GitHub's coding agent and is unrelated to any
 workflow here.
 
+## Immutable releases
+
+**Immutable releases are on** (`gh api repos/jmrplens/libgen-mcp/immutable-releases`
+answers `enabled: true`; v1.7.3 carries `immutable: true`). Once a release leaves
+draft, its assets and its tag are fixed.
+
+It is the one setting on this page that a gate reads rather than merely depends
+on: `scripts/validate-server-json-packages.sh` checks each release's `immutable`
+flag and **warns on a mutable one**, because every other artefact `server.json`
+declares is pinned by a digest or held by a registry that does not allow a
+version to be replaced, and a mutable GitHub release is the one place where an
+asset and the `checksums.txt` that vouches for it can be swapped together.
+
+**Draft-then-publish is its precondition, not a separate nicety.** An immutable
+release cannot grow an asset afterwards, and the `.mcpb` bundle is uploaded after
+GoReleaser has created the release — so GoReleaser creates it with `draft: true`
+and the workflow flips it only once every asset is attached. Reversing those two
+steps does not produce a release with a late asset; it produces a release that
+cannot accept one.
+
 ## Secrets
 
 | Secret                                       | Held by                                   | If it is missing                                        |
