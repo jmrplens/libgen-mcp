@@ -106,6 +106,14 @@ Four things about it are load-bearing:
   that only read the JSON-RPC envelope would publish that as the cost of a
   search. It did, on the first run, and the guard is why the numbers are not
   that.
+- **Everything downstream of the record is drawn, never written.** The record is
+  the artifact; the Markdown page, the six SVG figures and the two site pages
+  are generated from it, and `make bench-resources-render` redraws all of them.
+  The figures take their palette from `site/src/styles/theme.css` rather than
+  restating it, because a palette written twice drifts and a chart that has
+  drifted reads as a foreign object on the page. Each is drawn light and dark,
+  and the page switches between them with a `picture` element rather than
+  JavaScript.
 - **The outbound budget is a dimension, not a constant.** `LIBGEN_MCP_RATE_RPS`
   ships at one request per second, and every `tools/call` queues behind that one
   token: measured here, sixteen searches in flight took fifteen seconds to

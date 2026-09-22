@@ -169,19 +169,30 @@ func round(value float64) float64 {
 	return math.Round(value*100) / 100
 }
 
-// describe renders the host as one sentence, for the record's own header and
-// for the terminal.
+// describe renders the host as one sentence for the terminal and the repository
+// page, which are both English.
 func (h HostInfo) describe() string {
+	return h.describeIn(enLabels)
+}
+
+// describeIn renders the host in a page's own language.
+//
+// The values are the machine's and stay exactly as they are — a processor model,
+// an architecture, a kernel release and a toolchain version are not translated,
+// and neither are the units. What moves is the nouns around them: a Spanish page
+// carrying "8 logical CPUs" is half translated, which reads worse than either
+// language on its own.
+func (h HostInfo) describeIn(l labels) string {
 	parts := []string{h.CPUModel}
 	if h.CPUs > 0 {
-		parts = append(parts, strconv.Itoa(h.CPUs)+" logical CPUs")
+		parts = append(parts, strconv.Itoa(h.CPUs)+" "+l.HostCPUs)
 	}
 	if h.MemTotalGiB > 0 {
-		parts = append(parts, strconv.FormatFloat(h.MemTotalGiB, 'f', 0, 64)+" GiB RAM")
+		parts = append(parts, strconv.FormatFloat(h.MemTotalGiB, 'f', 0, 64)+" "+l.HostRAM)
 	}
 	parts = append(parts, h.OS+"/"+h.Arch)
 	if h.Kernel != "" && h.Kernel != unknownFact {
-		parts = append(parts, "kernel "+h.Kernel)
+		parts = append(parts, l.HostKernel+" "+h.Kernel)
 	}
 	return strings.Join(append(parts, h.GoVersion), ", ")
 }

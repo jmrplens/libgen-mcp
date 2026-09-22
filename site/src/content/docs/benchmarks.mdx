@@ -1,0 +1,120 @@
+---
+title: What it costs to run
+description: "Measured, not estimated: what libgen-mcp weighs on both transports, what each extra caller adds, and what bounds a shared deployment."
+chips:
+  - text: "Measured on the real binary"
+  - text: "Offline, against a stand-in catalog"
+  - text: "Configuration"
+    href: "/libgen-mcp/configuration/"
+datePublished: "2026-09-22"
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Everything else measured about this server is about its tool surface. None of it
+tells you how much memory to give a container, how long a client waits before
+its first call answers, or what a second caller adds to a deployment you are
+already running. This page answers those, and every number on it comes from the
+real binary rather than from an estimate.
+
+The measurement runs **offline**: Library Genesis is stood in for by a server on
+loopback serving a captured results page, so a second machine measures this
+server rather than its own network.
+
+<Aside type="note">
+	These are one machine's numbers, and the machine is named below. They are
+	useful as ratios — what a second caller adds, what a transport costs against
+	the other — rather than as absolutes to plan capacity from on hardware that is
+	not this.
+</Aside>
+
+## The machine, and the build
+
+{/* generated:host — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 GiB RAM, linux/amd64, kernel 6.1.0-53-amd64, go1.27.0, build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5), 35.8 MiB on disk, on 2026-09-22T00:42:49Z.
+
+{/* end generated */}
+
+## What the process weighs
+
+{/* generated:memory-figure — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+<figure>
+  <picture>
+    <source srcset="/libgen-mcp/benchmarks/memory-by-scenario-dark.svg" media="(prefers-color-scheme: dark)" />
+    <img src="/libgen-mcp/benchmarks/memory-by-scenario-light.svg" alt="Resident set per scenario, idle and at peak" loading="lazy" />
+  </picture>
+</figure>
+
+{/* end generated */}
+
+{/* generated:memory-table — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+| Scenario            | Idle (MiB) | Mean (MiB) | Peak (MiB) | CPU ms/call |
+| ------------------- | ---------: | ---------: | ---------: | ----------: |
+| stdio-1             |      21.47 |      24.39 |      24.39 |        7.78 |
+| stdio-8             |     172.65 |     204.02 |     204.21 |        7.92 |
+| http-1              |      24.14 |      26.41 |      26.41 |        7.78 |
+| http-8              |      22.87 |      36.79 |      39.00 |        7.85 |
+| http-8-otel         |      25.03 |      43.82 |      44.05 |        7.29 |
+| http-8-shipped-rate |      24.30 |      29.58 |      30.44 |       11.46 |
+
+{/* end generated */}
+
+## What each extra caller costs
+
+{/* generated:series-figure — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+<figure>
+  <picture>
+    <source srcset="/libgen-mcp/benchmarks/memory-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
+    <img src="/libgen-mcp/benchmarks/memory-by-clients-light.svg" alt="Resident set and held heap as the client count grows" loading="lazy" />
+  </picture>
+</figure>
+
+{/* end generated */}
+
+{/* generated:series-summary — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+Fitted across the steps, **0.22 MiB per caller while every caller is working** and **91 KiB per caller held**, with nothing in flight. Reading the first as the second overstates a shared deployment by whatever its requests are carrying.
+
+{/* end generated */}
+
+## What it feels like as the callers pile up
+
+{/* generated:latency-figure — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+<figure>
+  <picture>
+    <source srcset="/libgen-mcp/benchmarks/latency-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
+    <img src="/libgen-mcp/benchmarks/latency-by-clients-light.svg" alt="Call latency as the client count grows" loading="lazy" />
+  </picture>
+</figure>
+
+{/* end generated */}
+
+{/* generated:latency-summary — run `make bench-resources-render`, do not edit by hand */}
+
+{/* prettier-ignore */}
+At 500 client addresses the median call took **827 ms** and the tail **2596 ms**. The load is `tools/list`, paced at 5 calls a second per caller, which is a busy client rather than a spinning one.
+
+{/* end generated */}
+
+## Reading these numbers
+
+The resident set is read from the kernel rather than from inside the process. Go's
+own heap figure is a different and smaller number, and only one of the two gets a
+container OOM-killed.
+
+Percentiles are nearest-rank, so every figure published is one the run actually
+observed rather than a point interpolated between two calls nobody made. A
+scenario whose calls failed does not finish at all: a search that cannot reach
+its catalog answers in under a millisecond, and averaging that with a real one
+would publish an error path as a cost.

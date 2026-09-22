@@ -684,6 +684,11 @@ export default defineConfig({
 							label: "LLM eval results",
 							translations: { es: "Resultados del eval con LLM" },
 						},
+						{
+							slug: "benchmarks",
+							label: "What it costs to run",
+							translations: { es: "Lo que cuesta ejecutarlo" },
+						},
 					],
 				},
 				{

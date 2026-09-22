@@ -146,8 +146,8 @@ func TestRenderPreamble_LeavesOutWhatItCouldNotLearn(t *testing.T) {
 // checkout does.
 func TestWritePage_CreatesTheDirectoryItGoesIn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "benchmarks", "page.md")
-	if err := writePage(path, fixtureRun()); err != nil {
-		t.Fatalf("writePage: %v", err)
+	if err := writePageTo(path, fixtureRun(), false); err != nil {
+		t.Fatalf("writePageTo: %v", err)
 	}
 	body, err := os.ReadFile(path) // #nosec G304 -- a path this test just wrote
 	if err != nil {

@@ -232,6 +232,18 @@ linters:
         linters:
           - misspell
 
+      # The benchmark pages' Spanish prose, for the same reason.
+      - path: "cmd/bench_resources/translations\\.go"
+        linters:
+          - misspell
+
+      # This test seeds a temporary tree from the repository's own stylesheet and
+      # page templates, at paths it builds itself from constants; gosec's taint
+      # analysis cannot see that nothing there comes from outside the test.
+      - path: "cmd/bench_resources/site_test\\.go"
+        linters:
+          - gosec
+
       # This generator reads and writes a fixed set of project paths plus a run
       # report the operator points it at; gosec cannot see that the paths are not
       # attacker-controlled.

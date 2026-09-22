@@ -78,10 +78,11 @@ func TestRedraw_RewritesThePageOrReportsThatItDiffers(t *testing.T) {
 	if err := writeRecord(record, fixtureRun()); err != nil {
 		t.Fatalf("writeRecord: %v", err)
 	}
-	opts := options{record: record, page: page}
+	dest := benchDest(t, page)
+	opts := options{record: record, page: page, dest: dest}
 
 	t.Run("render writes the page", func(t *testing.T) {
-		if err := redraw(options{record: record, page: page, render: true}); err != nil {
+		if err := redraw(options{record: record, page: page, render: true, dest: dest}); err != nil {
 			t.Fatalf("redraw: %v", err)
 		}
 		body, err := os.ReadFile(page) // #nosec G304 -- a path this test just wrote
@@ -111,7 +112,7 @@ func TestRedraw_RewritesThePageOrReportsThatItDiffers(t *testing.T) {
 	})
 
 	t.Run("a record that is not there", func(t *testing.T) {
-		if err := redraw(options{record: filepath.Join(dir, "absent.json"), page: page, check: true}); err == nil {
+		if err := redraw(options{record: filepath.Join(dir, "absent.json"), page: page, check: true, dest: dest}); err == nil {
 			t.Error("expected an error with no record to draw from")
 		}
 	})
@@ -128,7 +129,7 @@ func TestExecute_TakesTheRenderPathWithoutMeasuring(t *testing.T) {
 	}
 	// A binary path that does not exist: if execute measured anything it would
 	// fail on it, so reaching the end proves it did not.
-	opts := options{record: record, page: page, render: true, binary: filepath.Join(dir, "no-such-binary")}
+	opts := options{record: record, page: page, render: true, binary: filepath.Join(dir, "no-such-binary"), dest: benchDest(t, page)}
 	if err := execute(t.Context(), opts); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -254,6 +255,7 @@ func TestExecute_MeasuresAndWritesBothArtifacts(t *testing.T) {
 		// would add six seconds to the unit suite for nothing.
 		noSeries:  true,
 		targetEnv: map[string]string{fakeServerEnv: transportHTTP},
+		dest:      benchDest(t, filepath.Join(dir, "page.md")),
 	}
 	if err := execute(t.Context(), opts); err != nil {
 		t.Fatalf("execute: %v", err)
@@ -426,6 +428,7 @@ func TestExecute_MeasuresTheSeriesToo(t *testing.T) {
 		seriesClients:  "1,2",
 		stepDuration:   150 * time.Millisecond,
 		targetEnv:      map[string]string{fakeServerEnv: transportHTTP},
+		dest:           benchDest(t, filepath.Join(dir, "page.md")),
 	}
 	if err := execute(t.Context(), opts); err != nil {
 		t.Fatalf("execute: %v", err)
