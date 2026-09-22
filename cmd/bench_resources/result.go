@@ -151,7 +151,11 @@ type SeriesStep struct {
 // against every row, which reads as a measurement rather than as an absence.
 func (s *SeriesScenario) hasSettled() bool {
 	for _, step := range s.Steps {
-		if step.SettledHeapMiB > 0 {
+		// Either field, because they are taken separately: the resident set is
+		// read from the kernel and always available, while the heap comes from
+		// the measured process's profiling listener and can fail on its own. A
+		// check on the heap alone would hide a resident reading that was taken.
+		if step.SettledHeapMiB > 0 || step.SettledRSSMiB > 0 {
 			return true
 		}
 	}
@@ -165,7 +169,8 @@ func (s *SeriesScenario) hasSettled() bool {
 // It is only wrong when it is read as the cost of holding a caller, which is
 // what tenancySlopeKiB answers.
 func (s *SeriesScenario) loadSlopeMiB() (float64, bool) {
-	return s.slopePerClient(func(step SeriesStep) float64 { return step.RSSPeakMiB })
+	slope, ok := s.slopePerClient(func(step SeriesStep) float64 { return step.RSSPeakMiB })
+	return round(slope), ok
 }
 
 // tenancySlopeKiB is how much the settled live heap grows per client address,
@@ -202,7 +207,10 @@ func (s *SeriesScenario) slopePerClient(pick func(SeriesStep) float64) (float64,
 	if slope <= 0 {
 		return 0, false
 	}
-	return round(slope), ok
+	// Unrounded. Each caller rounds in the unit it publishes, because rounding
+	// here rounds in mebibytes: a tenancy slope of 0.1056 MiB became 0.11, and
+	// the multiply to kibibytes turned that into 113 against a true 108.
+	return slope, ok
 }
 
 // fitLine fits a least-squares line through the points and reports its slope

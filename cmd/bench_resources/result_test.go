@@ -106,3 +106,32 @@ func TestRecordRoundTrip_RefusesASchemaItDoesNotKnow(t *testing.T) {
 		}
 	})
 }
+
+// TestTenancySlopeKiB_IsNotRoundedTwice verifies the published held cost is the
+// one the record's own numbers give.
+//
+// The slope was rounded to two decimals in mebibytes before being multiplied
+// into kibibytes, so 0.1056 became 0.11 and the page published 113 KiB per
+// caller against a true 108. Rounding belongs in the unit each figure is
+// published in, and nowhere earlier.
+func TestTenancySlopeKiB_IsNotRoundedTwice(t *testing.T) {
+	// The committed series' own settled heap readings.
+	s := &SeriesScenario{Steps: []SeriesStep{
+		{Clients: 1, SettledHeapMiB: 1.98},
+		{Clients: 2, SettledHeapMiB: 2},
+		{Clients: 5, SettledHeapMiB: 2.14},
+		{Clients: 10, SettledHeapMiB: 2.36},
+		{Clients: 25, SettledHeapMiB: 2.55},
+		{Clients: 50, SettledHeapMiB: 3.38},
+		{Clients: 100, SettledHeapMiB: 4.14},
+		{Clients: 200, SettledHeapMiB: 15.89},
+		{Clients: 500, SettledHeapMiB: 55.42},
+	}}
+	got, ok := s.tenancySlopeKiB()
+	if !ok {
+		t.Fatal("tenancySlopeKiB() withheld a slope these readings support")
+	}
+	if got != 108.1 {
+		t.Errorf("tenancySlopeKiB() = %v, want 108.1 — the fit through these steps", got)
+	}
+}

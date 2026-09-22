@@ -139,9 +139,9 @@ func renderStop(s *SeriesScenario) string {
 			"and taking the host down is not a measurement.\n",
 			s.StoppedAt, stop.NextClients, stop.EstimateMiB, s.BudgetMiB)
 	case stopLatency:
-		return fmt.Sprintf("\n**The series stopped at %d clients**, where the tool-call tail reached "+
+		return fmt.Sprintf("\n**The series stopped at %d clients**, where the `%s` tail reached "+
 			"%.0f ms. Past that a client has given up, so the next step would measure timeouts "+
-			"rather than the server.\n", s.StoppedAt, stop.P99Ms)
+			"rather than the server.\n", s.StoppedAt, s.Method, stop.P99Ms)
 	default:
 		return fmt.Sprintf("\n**The series stopped at %d clients**, because the step at %d failed: %s\n",
 			s.StoppedAt, stop.NextClients, stop.Error)

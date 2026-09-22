@@ -174,13 +174,25 @@ func (r *runner) stepThrough(
 		out.StoppedAt = count
 
 		if step.P99Ms > float64(latencyCeiling.Milliseconds()) {
-			out.Stop = &SeriesStop{Kind: stopLatency, NextClients: count, P99Ms: step.P99Ms}
+			// NextClients is the count that was not started, not the one that
+			// crossed: the one that crossed already ran and is in StoppedAt.
+			// Zero when the ladder had nothing left, which is not a stop at all
+			// so much as a coincidence of ending.
+			out.Stop = &SeriesStop{Kind: stopLatency, NextClients: nextIn(plan.Clients, i), P99Ms: step.P99Ms}
 			out.StopReason = stopLatency
 			out.Skipped = plan.Clients[i+1:]
 			return
 		}
 	}
 	out.StopReason = stopComplete
+}
+
+// nextIn names the count after the one at index i, zero when there is none.
+func nextIn(clients []int, i int) int {
+	if i+1 < len(clients) {
+		return clients[i+1]
+	}
+	return 0
 }
 
 // budgetStop reports whether the next count is expected to cost more memory
@@ -191,18 +203,43 @@ func (r *runner) stepThrough(
 // constant, because the per-caller cost is what the series is measuring and a
 // guess made before it started would be the extrapolation this exists to avoid.
 func (r *runner) budgetStop(out *SeriesScenario, next int) *SeriesStop {
-	if out.BudgetMiB == 0 || len(out.Steps) < 2 {
+	if out.BudgetMiB == 0 {
 		return nil
 	}
-	slope, intercept, ok := fitLine(stepCounts(out.Steps), stepPeaks(out.Steps))
-	if !ok {
-		return nil
-	}
-	estimate := round(intercept + slope*float64(next))
+	estimate := estimatePeakMiB(out.Steps, next)
 	if estimate <= out.BudgetMiB {
 		return nil
 	}
 	return &SeriesStop{Kind: stopBudget, NextClients: next, EstimateMiB: estimate}
+}
+
+// bootstrapPerClientMiB is what a caller is assumed to cost before enough steps
+// have run to fit a line through.
+//
+// It is an order of magnitude above anything measured — 0.23 MiB per caller on
+// eight cores — and that is the point: a guess used to protect a host should err
+// towards refusing, not towards trying. Without it the guard did nothing until
+// two steps had completed, so a ladder of 1,500000 would start its second step
+// and allocate half a million callers on both sides of the socket before
+// anything had an opinion about it.
+const bootstrapPerClientMiB = 1.0
+
+// estimatePeakMiB is what a step at this count is expected to reach.
+//
+// With two or more steps behind it the estimate is the fit through them, which
+// is the measurement doing the work. With fewer it is the largest peak seen so
+// far plus the bootstrap allowance, which is deliberately pessimistic.
+func estimatePeakMiB(steps []SeriesStep, next int) float64 {
+	if len(steps) >= 2 {
+		if slope, intercept, ok := fitLine(stepCounts(steps), stepPeaks(steps)); ok {
+			return round(intercept + slope*float64(next))
+		}
+	}
+	var base float64
+	for _, step := range steps {
+		base = max(base, step.RSSPeakMiB)
+	}
+	return round(base + bootstrapPerClientMiB*float64(next))
 }
 
 // stepCounts and stepPeaks are the fit's two axes.

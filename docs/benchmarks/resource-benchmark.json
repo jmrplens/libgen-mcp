@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "generated_at": "2026-09-22T00:20:46Z",
+  "generated_at": "2026-09-22T00:42:49Z",
   "server": {
     "version": "1.7.3",
-    "commit": "b196ddde5ab6850d20de445ea78091d98d6d7c41",
+    "commit": "e572df62a1fc2d1896fdd9cd91f02cf2382539f5",
     "bytes_on_disk": 37503818
   },
   "host": {
@@ -32,14 +32,14 @@
       "outbound_burst": 100,
       "list_bytes": 26897,
       "startup": {
-        "process_ready_ms": 21.05,
-        "first_list_ms": 7.83,
-        "warm_list_ms": 4.71
+        "process_ready_ms": 22.7,
+        "first_list_ms": 5.74,
+        "warm_list_ms": 3.6
       },
       "memory": {
-        "idle_mib": 22.64,
-        "mean_mib": 26.71,
-        "peak_mib": 26.71
+        "idle_mib": 21.47,
+        "mean_mib": 24.39,
+        "peak_mib": 24.39
       },
       "cpu": {
         "seconds": 0.07,
@@ -50,23 +50,23 @@
         {
           "method": "tools/list",
           "calls": 3,
-          "p50_ms": 4.46,
-          "p99_ms": 4.66,
-          "max_ms": 4.66
+          "p50_ms": 4.6,
+          "p99_ms": 5.34,
+          "max_ms": 5.34
         },
         {
           "method": "prompts/list",
           "calls": 3,
-          "p50_ms": 0.58,
-          "p99_ms": 0.61,
-          "max_ms": 0.61
+          "p50_ms": 0.69,
+          "p99_ms": 0.73,
+          "max_ms": 0.73
         },
         {
           "method": "tools/call",
           "calls": 3,
-          "p50_ms": 10.35,
-          "p99_ms": 13.55,
-          "max_ms": 13.55
+          "p50_ms": 9.51,
+          "p99_ms": 10.9,
+          "max_ms": 10.9
         }
       ],
       "notes": [
@@ -84,41 +84,41 @@
       "outbound_burst": 100,
       "list_bytes": 26897,
       "startup": {
-        "process_ready_ms": 20.51,
-        "first_list_ms": 5.53,
-        "warm_list_ms": 2.87
+        "process_ready_ms": 20.56,
+        "first_list_ms": 6.25,
+        "warm_list_ms": 3.96
       },
       "memory": {
-        "idle_mib": 171.92,
-        "mean_mib": 201.73,
-        "peak_mib": 202.18
+        "idle_mib": 172.65,
+        "mean_mib": 204.02,
+        "peak_mib": 204.21
       },
       "cpu": {
-        "seconds": 0.65,
-        "ms_per_call": 9.03,
+        "seconds": 0.57,
+        "ms_per_call": 7.92,
         "calls": 72
       },
       "latency": [
         {
           "method": "tools/list",
           "calls": 24,
-          "p50_ms": 8.1,
-          "p99_ms": 20.82,
-          "max_ms": 20.82
+          "p50_ms": 7.32,
+          "p99_ms": 27.76,
+          "max_ms": 27.76
         },
         {
           "method": "prompts/list",
           "calls": 24,
-          "p50_ms": 1.43,
-          "p99_ms": 9.09,
-          "max_ms": 9.09
+          "p50_ms": 1.05,
+          "p99_ms": 5.55,
+          "max_ms": 5.55
         },
         {
           "method": "tools/call",
           "calls": 24,
-          "p50_ms": 19.02,
-          "p99_ms": 33.52,
-          "max_ms": 33.52
+          "p50_ms": 21.09,
+          "p99_ms": 27.88,
+          "max_ms": 27.88
         }
       ],
       "notes": [
@@ -136,46 +136,46 @@
       "outbound_burst": 100,
       "list_bytes": 20609,
       "startup": {
-        "process_ready_ms": 27.36,
-        "first_list_ms": 4.44,
-        "warm_list_ms": 3.74
+        "process_ready_ms": 24.87,
+        "first_list_ms": 4.15,
+        "warm_list_ms": 3.4
       },
       "memory": {
-        "idle_mib": 22.94,
-        "mean_mib": 25.25,
-        "peak_mib": 25.25
+        "idle_mib": 24.14,
+        "mean_mib": 26.41,
+        "peak_mib": 26.41
       },
       "cpu": {
-        "seconds": 0.08,
-        "ms_per_call": 8.89,
+        "seconds": 0.07,
+        "ms_per_call": 7.78,
         "calls": 9
       },
       "latency": [
         {
           "method": "tools/list",
           "calls": 3,
-          "p50_ms": 4.45,
-          "p99_ms": 5.43,
-          "max_ms": 5.43
+          "p50_ms": 4.29,
+          "p99_ms": 5.06,
+          "max_ms": 5.06
         },
         {
           "method": "prompts/list",
           "calls": 3,
-          "p50_ms": 0.72,
-          "p99_ms": 0.77,
-          "max_ms": 0.77
+          "p50_ms": 0.77,
+          "p99_ms": 0.87,
+          "max_ms": 0.87
         },
         {
           "method": "tools/call",
           "calls": 3,
-          "p50_ms": 10.4,
-          "p99_ms": 10.86,
-          "max_ms": 10.86
+          "p50_ms": 9.97,
+          "p99_ms": 12.53,
+          "max_ms": 12.53
         }
       ],
       "notes": [
         "3 requests reached the stand-in catalog",
-        "measured build 1.7.3 (b196ddde5ab6850d20de445ea78091d98d6d7c41)"
+        "measured build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5)"
       ]
     },
     {
@@ -189,14 +189,14 @@
       "outbound_burst": 100,
       "list_bytes": 20609,
       "startup": {
-        "process_ready_ms": 27.74,
-        "first_list_ms": 3.67,
-        "warm_list_ms": 4.26
+        "process_ready_ms": 26.33,
+        "first_list_ms": 4.6,
+        "warm_list_ms": 4.39
       },
       "memory": {
-        "idle_mib": 24.14,
-        "mean_mib": 34.92,
-        "peak_mib": 36.96
+        "idle_mib": 22.87,
+        "mean_mib": 36.79,
+        "peak_mib": 39
       },
       "cpu": {
         "seconds": 1.13,
@@ -207,28 +207,28 @@
         {
           "method": "tools/list",
           "calls": 48,
-          "p50_ms": 15.51,
-          "p99_ms": 27.71,
-          "max_ms": 27.71
+          "p50_ms": 15.42,
+          "p99_ms": 44.99,
+          "max_ms": 44.99
         },
         {
           "method": "prompts/list",
           "calls": 48,
-          "p50_ms": 4.63,
-          "p99_ms": 16.35,
-          "max_ms": 16.35
+          "p50_ms": 3.7,
+          "p99_ms": 8.54,
+          "max_ms": 8.54
         },
         {
           "method": "tools/call",
           "calls": 48,
-          "p50_ms": 35.42,
-          "p99_ms": 71.63,
-          "max_ms": 71.63
+          "p50_ms": 38.36,
+          "p99_ms": 94.71,
+          "max_ms": 94.71
         }
       ],
       "notes": [
         "48 requests reached the stand-in catalog",
-        "measured build 1.7.3 (b196ddde5ab6850d20de445ea78091d98d6d7c41)"
+        "measured build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5)"
       ]
     },
     {
@@ -242,47 +242,47 @@
       "outbound_burst": 100,
       "list_bytes": 20609,
       "startup": {
-        "process_ready_ms": 29.15,
-        "first_list_ms": 5.05,
-        "warm_list_ms": 3.13
+        "process_ready_ms": 32.67,
+        "first_list_ms": 15.02,
+        "warm_list_ms": 4.26
       },
       "memory": {
-        "idle_mib": 24.66,
-        "mean_mib": 44.05,
-        "peak_mib": 47.84
+        "idle_mib": 25.03,
+        "mean_mib": 43.82,
+        "peak_mib": 44.05
       },
       "cpu": {
-        "seconds": 1.06,
-        "ms_per_call": 7.36,
+        "seconds": 1.05,
+        "ms_per_call": 7.29,
         "calls": 144
       },
       "latency": [
         {
           "method": "tools/list",
           "calls": 48,
-          "p50_ms": 12.48,
-          "p99_ms": 30.54,
-          "max_ms": 30.54
+          "p50_ms": 15.45,
+          "p99_ms": 39.39,
+          "max_ms": 39.39
         },
         {
           "method": "prompts/list",
           "calls": 48,
-          "p50_ms": 3.34,
-          "p99_ms": 21.17,
-          "max_ms": 21.17
+          "p50_ms": 4.55,
+          "p99_ms": 14.07,
+          "max_ms": 14.07
         },
         {
           "method": "tools/call",
           "calls": 48,
-          "p50_ms": 34.48,
-          "p99_ms": 66.59,
-          "max_ms": 66.59
+          "p50_ms": 33.8,
+          "p99_ms": 68.78,
+          "max_ms": 68.78
         }
       ],
       "notes": [
         "48 requests reached the stand-in catalog",
         "0 OTLP exports reached the collector during this scenario",
-        "measured build 1.7.3 (b196ddde5ab6850d20de445ea78091d98d6d7c41)"
+        "measured build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5)"
       ]
     },
     {
@@ -296,46 +296,46 @@
       "outbound_burst": 1,
       "list_bytes": 20609,
       "startup": {
-        "process_ready_ms": 28.37,
-        "first_list_ms": 3.57,
-        "warm_list_ms": 3.74
+        "process_ready_ms": 29.5,
+        "first_list_ms": 3.08,
+        "warm_list_ms": 4.39
       },
       "memory": {
-        "idle_mib": 24,
-        "mean_mib": 29.35,
-        "peak_mib": 30.35
+        "idle_mib": 24.3,
+        "mean_mib": 29.58,
+        "peak_mib": 30.44
       },
       "cpu": {
-        "seconds": 1.79,
-        "ms_per_call": 12.43,
+        "seconds": 1.65,
+        "ms_per_call": 11.46,
         "calls": 144
       },
       "latency": [
         {
           "method": "tools/list",
           "calls": 48,
-          "p50_ms": 7.73,
-          "p99_ms": 30.72,
-          "max_ms": 30.72
+          "p50_ms": 6.86,
+          "p99_ms": 34.07,
+          "max_ms": 34.07
         },
         {
           "method": "prompts/list",
           "calls": 48,
-          "p50_ms": 2.24,
-          "p99_ms": 6.2,
-          "max_ms": 6.2
+          "p50_ms": 1.84,
+          "p99_ms": 7.95,
+          "max_ms": 7.95
         },
         {
           "method": "tools/call",
           "calls": 48,
-          "p50_ms": 14983.87,
-          "p99_ms": 15994.65,
-          "max_ms": 15994.65
+          "p50_ms": 14982.47,
+          "p99_ms": 15997.87,
+          "max_ms": 15997.87
         }
       ],
       "notes": [
         "48 requests reached the stand-in catalog",
-        "measured build 1.7.3 (b196ddde5ab6850d20de445ea78091d98d6d7c41)"
+        "measured build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5)"
       ]
     }
   ],
@@ -360,108 +360,108 @@
         200,
         500
       ],
-      "budget_mib": 30693.82,
+      "budget_mib": 30847.82,
       "stopped_at": 500,
       "stop_reason": "complete",
       "steps": [
         {
           "clients": 1,
-          "rss_mean_mib": 25.84,
-          "rss_peak_mib": 26.66,
+          "rss_mean_mib": 26.12,
+          "rss_peak_mib": 27.57,
           "settled_heap_mib": 1.98,
-          "settled_rss_mib": 24.95,
-          "cpu_ms_per_call": 9,
+          "settled_rss_mib": 26.41,
+          "cpu_ms_per_call": 8.2,
           "calls": 50,
-          "p50_ms": 6.75,
-          "p99_ms": 9.13
+          "p50_ms": 6.04,
+          "p99_ms": 12.49
         },
         {
           "clients": 2,
-          "rss_mean_mib": 27.41,
-          "rss_peak_mib": 28.73,
+          "rss_mean_mib": 28.92,
+          "rss_peak_mib": 30.03,
           "settled_heap_mib": 2,
-          "settled_rss_mib": 25.41,
-          "cpu_ms_per_call": 8.7,
+          "settled_rss_mib": 26.63,
+          "cpu_ms_per_call": 8.2,
           "calls": 100,
-          "p50_ms": 7.05,
-          "p99_ms": 11.38
+          "p50_ms": 7.76,
+          "p99_ms": 14.79
         },
         {
           "clients": 5,
-          "rss_mean_mib": 30.31,
-          "rss_peak_mib": 31.52,
-          "settled_heap_mib": 2.14,
-          "settled_rss_mib": 26.33,
-          "cpu_ms_per_call": 8.56,
+          "rss_mean_mib": 31.37,
+          "rss_peak_mib": 32.39,
+          "settled_heap_mib": 2.18,
+          "settled_rss_mib": 27.48,
+          "cpu_ms_per_call": 9.72,
           "calls": 250,
-          "p50_ms": 15.39,
-          "p99_ms": 49.42
+          "p50_ms": 18.3,
+          "p99_ms": 41.4
         },
         {
           "clients": 10,
-          "rss_mean_mib": 31.78,
-          "rss_peak_mib": 33.34,
-          "settled_heap_mib": 2.36,
-          "settled_rss_mib": 27.59,
-          "cpu_ms_per_call": 9.22,
+          "rss_mean_mib": 32.82,
+          "rss_peak_mib": 35.36,
+          "settled_heap_mib": 2.38,
+          "settled_rss_mib": 28.88,
+          "cpu_ms_per_call": 9.08,
           "calls": 500,
-          "p50_ms": 26.98,
-          "p99_ms": 52.87
+          "p50_ms": 28.96,
+          "p99_ms": 49.01
         },
         {
           "clients": 25,
-          "rss_mean_mib": 34.74,
-          "rss_peak_mib": 39.23,
-          "settled_heap_mib": 2.55,
-          "settled_rss_mib": 28.88,
-          "cpu_ms_per_call": 7.22,
+          "rss_mean_mib": 36.05,
+          "rss_peak_mib": 40.12,
+          "settled_heap_mib": 2.54,
+          "settled_rss_mib": 33.57,
+          "cpu_ms_per_call": 7.15,
           "calls": 1250,
-          "p50_ms": 41.58,
-          "p99_ms": 82.05
+          "p50_ms": 40.37,
+          "p99_ms": 69.25
         },
         {
           "clients": 50,
-          "rss_mean_mib": 37.97,
-          "rss_peak_mib": 45.34,
-          "settled_heap_mib": 3.38,
-          "settled_rss_mib": 37.8,
-          "cpu_ms_per_call": 6.1,
+          "rss_mean_mib": 38.38,
+          "rss_peak_mib": 42.54,
+          "settled_heap_mib": 3.03,
+          "settled_rss_mib": 31.54,
+          "cpu_ms_per_call": 6.03,
           "calls": 2500,
-          "p50_ms": 56.55,
-          "p99_ms": 124.89
+          "p50_ms": 43.53,
+          "p99_ms": 142.97
         },
         {
           "clients": 100,
-          "rss_mean_mib": 45.75,
-          "rss_peak_mib": 59.68,
+          "rss_mean_mib": 45.54,
+          "rss_peak_mib": 53.38,
           "settled_heap_mib": 4.14,
-          "settled_rss_mib": 41.75,
-          "cpu_ms_per_call": 5.3,
+          "settled_rss_mib": 43.64,
+          "cpu_ms_per_call": 5.29,
           "calls": 5000,
-          "p50_ms": 54.14,
-          "p99_ms": 184.53
+          "p50_ms": 33.79,
+          "p99_ms": 215.77
         },
         {
           "clients": 200,
-          "rss_mean_mib": 63.23,
-          "rss_peak_mib": 74.7,
-          "settled_heap_mib": 15.89,
-          "settled_rss_mib": 58.1,
-          "cpu_ms_per_call": 5.09,
-          "calls": 9654,
-          "p50_ms": 137.22,
-          "p99_ms": 614.26
+          "rss_mean_mib": 61.5,
+          "rss_peak_mib": 82.08,
+          "settled_heap_mib": 20.77,
+          "settled_rss_mib": 65.18,
+          "cpu_ms_per_call": 5,
+          "calls": 9371,
+          "p50_ms": 91.32,
+          "p99_ms": 629.32
         },
         {
           "clients": 500,
-          "rss_mean_mib": 127.33,
-          "rss_peak_mib": 144.8,
-          "settled_heap_mib": 55.42,
-          "settled_rss_mib": 88.35,
-          "cpu_ms_per_call": 5.49,
-          "calls": 9051,
-          "p50_ms": 450.75,
-          "p99_ms": 2617.25
+          "rss_mean_mib": 125.25,
+          "rss_peak_mib": 140.32,
+          "settled_heap_mib": 45.09,
+          "settled_rss_mib": 112.23,
+          "cpu_ms_per_call": 5.44,
+          "calls": 7277,
+          "p50_ms": 827.12,
+          "p99_ms": 2596.26
         }
       ]
     }

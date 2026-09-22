@@ -121,17 +121,45 @@ func TestBudgetStop_RefusesAStepItCannotAfford(t *testing.T) {
 			t.Errorf("budgetStop() = %+v, want nil with nothing to measure against", stop)
 		}
 	})
-	t.Run("too few steps to extrapolate from", func(t *testing.T) {
-		out := &SeriesScenario{BudgetMiB: 1, Steps: measured[:1]}
-		if stop := r.budgetStop(out, 1000); stop != nil {
-			t.Errorf("budgetStop() = %+v, want nil before there is a line to fit", stop)
+	// Before two steps exist there is no line to fit, and the guard used to do
+	// nothing at all there. A ladder of 1,500000 would then start its second
+	// step and allocate half a million callers on both sides of the socket
+	// before anything had an opinion about it. The bootstrap allowance is what
+	// stands in until the measurement can speak for itself, and it is
+	// deliberately an order of magnitude above anything measured.
+	t.Run("a huge step before there is a line to fit", func(t *testing.T) {
+		out := &SeriesScenario{BudgetMiB: 1000, Steps: measured[:1]}
+		stop := r.budgetStop(out, 500000)
+		if stop == nil {
+			t.Fatal("expected the step to be refused on the bootstrap allowance")
+		}
+		if stop.EstimateMiB < 500000 {
+			t.Errorf("estimate = %v, want it built from the allowance", stop.EstimateMiB)
 		}
 	})
-	t.Run("steps that fix no line", func(t *testing.T) {
+	t.Run("a modest step before there is a line to fit", func(t *testing.T) {
+		out := &SeriesScenario{BudgetMiB: 1000, Steps: measured[:1]}
+		if stop := r.budgetStop(out, 10); stop != nil {
+			t.Errorf("budgetStop() = %+v, want a small step to run", stop)
+		}
+	})
+	t.Run("the very first step of all", func(t *testing.T) {
+		out := &SeriesScenario{BudgetMiB: 1000}
+		if stop := r.budgetStop(out, 1); stop != nil {
+			t.Errorf("budgetStop() = %+v, want the first step to run", stop)
+		}
+		if stop := r.budgetStop(out, 500000); stop == nil {
+			t.Error("expected a ladder that starts enormous to be refused before anything runs")
+		}
+	})
+	t.Run("steps that fix no line fall back to the allowance", func(t *testing.T) {
 		flat := []SeriesStep{{Clients: 2, RSSPeakMiB: 30}, {Clients: 2, RSSPeakMiB: 40}}
-		out := &SeriesScenario{BudgetMiB: 1, Steps: flat}
-		if stop := r.budgetStop(out, 1000); stop != nil {
-			t.Errorf("budgetStop() = %+v, want nil when the steps fix no slope", stop)
+		out := &SeriesScenario{BudgetMiB: 1000, Steps: flat}
+		if stop := r.budgetStop(out, 10); stop != nil {
+			t.Errorf("budgetStop() = %+v, want a small step to run", stop)
+		}
+		if stop := r.budgetStop(out, 5000); stop == nil {
+			t.Error("expected the allowance to refuse a step no fit could judge")
 		}
 	})
 }

@@ -228,6 +228,13 @@ func validate(opts options) error {
 		return fmt.Errorf("-sample-interval is %s; the record keeps it in milliseconds, so anything under 1ms is no interval at all",
 			opts.sampleInterval)
 	}
+	// Only zero means "take the default". A negative one reaches
+	// context.WithTimeout as a deadline that has already passed, so every step
+	// ends before it starts and the run writes a failed series rather than
+	// reporting a flag it could not use.
+	if opts.stepDuration < 0 {
+		return fmt.Errorf("-step-duration is %s; a step cannot last less than no time", opts.stepDuration)
+	}
 	return nil
 }
 

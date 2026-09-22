@@ -167,9 +167,18 @@ func sortedKeys(set map[string]bool) []string {
 
 // clientAddress is the address the nth HTTP client presents.
 //
-// They are drawn from 198.51.100.0/24, which RFC 5737 reserves for
-// documentation: nothing routes there, so a header that escaped into a log
-// names an address that cannot belong to a real person.
+// They are drawn from 198.18.0.0/15, which RFC 2544 reserves for benchmark
+// testing of network devices — which is what this is. Nothing routes there, so
+// a header that escaped into a log names an address that cannot belong to a
+// real person, and the block is large enough that every client of a series gets
+// one of its own.
+//
+// That second property is not a detail. The first version of this took a /24
+// and wrapped at 254, so a step measuring five hundred callers was really
+// measuring two hundred and fifty-four of them twice — and the per-caller slope
+// fitted through it was a number about the wrapping.
 func clientAddress(n int) string {
-	return fmt.Sprintf("198.51.100.%d", 1+n%254)
+	const addresses = 1 << 17 // a /15
+	n %= addresses
+	return fmt.Sprintf("198.%d.%d.%d", 18+n>>16, n>>8&0xff, n&0xff)
 }

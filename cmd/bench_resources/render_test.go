@@ -226,7 +226,7 @@ func TestRenderSeries_PublishesBothCostsAndTellsThemApart(t *testing.T) {
 	t.Run("a series with no settled reading leaves the columns out", func(t *testing.T) {
 		bare := fixtureSeries()
 		for i := range bare.Steps {
-			bare.Steps[i].SettledHeapMiB = 0
+			bare.Steps[i].SettledHeapMiB, bare.Steps[i].SettledRSSMiB = 0, 0
 		}
 		if strings.Contains(renderOneSeries(&bare), "Held heap") {
 			t.Error("the settled columns were drawn with nothing to put in them")
