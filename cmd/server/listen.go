@@ -77,6 +77,11 @@ type listenSpec struct {
 	// drainDelay is --drain-delay: how long /health answers 503 before the
 	// listener is closed.
 	drainDelay time.Duration
+	// idleTimeout is --http-idle-timeout, handed to http.Server.IdleTimeout. It
+	// belongs to the listener rather than to the transport: it bounds a
+	// kept-alive connection between requests, which is a property of the socket
+	// and not of the MCP session that may or may not be riding on it.
+	idleTimeout time.Duration
 	// publicURL is --public-url, carried from flag parsing to the serving path
 	// for the server card. The Host guard reads it too, but through the value it
 	// was built from rather than through this field.
@@ -105,6 +110,9 @@ type httpPolicy struct {
 	digest string
 	// drainDelay is how long /health answers 503 before the listener closes.
 	drainDelay time.Duration
+	// idleTimeout is --http-idle-timeout, applied to the http.Server this
+	// policy's listener is served with. Zero leaves idle connections alone.
+	idleTimeout time.Duration
 	// publicURL is --public-url, the only address this process knows to be
 	// reachable from outside. The SEP-2127 card publishes it and omits its
 	// connection block entirely without one, which is true rather than

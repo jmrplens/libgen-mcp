@@ -1,6 +1,10 @@
 package transport
 
-import "github.com/modelcontextprotocol/go-sdk/mcp"
+import (
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
 
 // Options carries the HTTP-transport tuning flags.
 type Options struct {
@@ -29,6 +33,14 @@ type Options struct {
 	// which is a claim only the endpoint that actually negotiated the
 	// connection is in a position to make.
 	ServesTLS bool
+	// SessionTimeout closes a stateful session that has gone this long without
+	// a request from its client. Zero — the default — never closes one.
+	//
+	// It is meaningful only when Stateless is false, because a stateless POST's
+	// session ends with its own response and there is nothing left to idle.
+	// cmd/server refuses the flag outright in stateless mode rather than
+	// accepting a setting that cannot do what it says.
+	SessionTimeout time.Duration
 }
 
 // DefaultOptions returns the shipped defaults (stateless on).
@@ -52,6 +64,7 @@ func StreamableHTTP(opts Options) *mcp.StreamableHTTPOptions {
 		Stateless:                    opts.Stateless,
 		JSONResponse:                 opts.JSONResponse,
 		MaxRequestBodyBytes:          opts.MaxRequestBodyBytes,
+		SessionTimeout:               opts.SessionTimeout,
 		PropagateRequestCancellation: true,
 		DisableLocalhostProtection:   true,
 	}

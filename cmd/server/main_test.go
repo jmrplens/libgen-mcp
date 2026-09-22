@@ -364,6 +364,68 @@ func TestServeHTTPServesRequests(t *testing.T) {
 	}
 }
 
+// TestServeHTTPClosesAConnectionThatGoesIdle drives --http-idle-timeout against
+// a real socket, because the value is handed to a field of an http.Server this
+// function builds and does not return, so there is nothing to inspect.
+//
+// It asserts on the connection rather than on the setting: one request is made
+// and answered, then the socket is read with nothing more sent on it. A server
+// honoring the timeout closes the kept-alive connection and the read ends; a
+// server that dropped the field leaves it open and the read blocks until the
+// deadline below. The request is /health rather than the MCP endpoint, so what
+// is timed is the gap between requests and not a stream still being written.
+func TestServeHTTPClosesAConnectionThatGoesIdle(t *testing.T) {
+	// The listener is handed to serveHTTPOn still bound, for the reason the
+	// tests above give: closing a reserved port leaves a window for anything
+	// else on this machine to take it.
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	addr := ln.Addr().String()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- serveHTTPOn(ctx, newTestServer(), ln, transport.DefaultOptions(), httpPolicy{
+			guard:       newHostGuard(addr, "", trustedProxies{}),
+			idleTimeout: 150 * time.Millisecond,
+		})
+	}()
+	waitForHealth(t, "http://"+addr)
+
+	dialer := net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err = fmt.Fprintf(conn, "GET /health HTTP/1.1\r\nHost: %s\r\n\r\n", addr); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	// Generous against a loaded runner and still far under a suite anyone would
+	// wait for: the point is that the read ends at all, not when.
+	if err = conn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatalf("set deadline: %v", err)
+	}
+	if _, err = io.Copy(io.Discard, conn); err != nil {
+		t.Errorf("reading the idle connection ended with %v, want the server to have closed it", err)
+	}
+
+	cancel()
+	select {
+	case sErr := <-done:
+		if sErr != nil {
+			t.Errorf("serveHTTPOn() = %v, want nil after graceful shutdown", sErr)
+		}
+	case <-time.After(httpShutdownTimeout + 5*time.Second):
+		t.Error("serveHTTPOn did not return after cancel")
+	}
+}
+
 // TestServeHTTPClosesStreamsThatOutlastShutdown pins the forced-close path. A
 // stateful session's GET stream stays open until the client or the server ends
 // it, so the connection never returns to idle and graceful shutdown runs out its
