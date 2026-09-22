@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -91,6 +92,111 @@ func TestAnnasProviderSearchesFirstReachableMirror(t *testing.T) {
 	if p.Name() != "annas" {
 		t.Errorf("Name() = %q, want annas", p.Name())
 	}
+}
+
+// TestLooksChallenged pins what counts as an interstitial, because the cost of
+// getting it wrong runs both ways: too loose and an ordinary refusal stops the
+// provider from trying the next mirror, too tight and the giving-up never
+// happens.
+//
+// Both the status and the markers are required. A 403 alone is an ordinary
+// refusal — a mirror may simply decline a query — and a page that mentions
+// ddos-guard while answering 200 is a search page that happens to say so.
+func TestLooksChallenged(t *testing.T) {
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<link rel="stylesheet" href="/.well-known/ddos-guard/js-challenge/index.css"></head></html>`
+
+	testCases := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{name: "the real interstitial", status: http.StatusForbidden, body: interstitial, want: true},
+		{name: "mixed case still matches", status: http.StatusForbidden, body: strings.ToUpper(interstitial), want: true},
+		{name: "a bare refusal", status: http.StatusForbidden, body: "forbidden", want: false},
+		{name: "only one marker", status: http.StatusForbidden, body: "<title>DDoS-Guard</title>", want: false},
+		{name: "the same page on a 200", status: http.StatusOK, body: interstitial, want: false},
+		{name: "a server error", status: http.StatusInternalServerError, body: interstitial, want: false},
+		{name: "an empty body", status: http.StatusForbidden, body: "", want: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksChallenged(tc.status, []byte(tc.body)); got != tc.want {
+				t.Errorf("looksChallenged(%d, %q) = %t, want %t", tc.status, tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne verifies the two
+// refusals are handled oppositely, which is the whole point of telling them
+// apart.
+//
+// A challenged mirror ends the call: every Anna's mirror is the same deployment
+// behind the same provider, so the siblings would answer the same way and the
+// only thing asking them adds is refused requests against a host that has just
+// said no. An ordinary refusal is what the mirror list exists for, and must
+// still fall through to the next one.
+func TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne(t *testing.T) {
+	fixture := annasFixture(t)
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<script src="/.well-known/ddos-guard/js-challenge/index.js"></script></head></html>`
+
+	serve := func(hits *atomic.Int32, status int, body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+
+	t.Run("a challenge ends the call", func(t *testing.T) {
+		var challenged, sibling atomic.Int32
+		first := serve(&challenged, http.StatusForbidden, interstitial)
+		defer first.Close()
+		second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			sibling.Add(1)
+			_, _ = w.Write(fixture)
+		}))
+		defer second.Close()
+
+		p := &AnnasProvider{mirrors: staticMirrors{first.URL, second.URL}, http: first.Client()}
+		got, err := p.Search(context.Background(), "dune", 3)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("Search returned %d results, want none: the provider gave up", len(got))
+		}
+		if n := sibling.Load(); n != 0 {
+			t.Errorf("the sibling mirror was asked %d time(s); a challenge must not be retried across mirrors", n)
+		}
+	})
+
+	t.Run("an ordinary refusal falls through", func(t *testing.T) {
+		var refused, sibling atomic.Int32
+		first := serve(&refused, http.StatusForbidden, "forbidden")
+		defer first.Close()
+		second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			sibling.Add(1)
+			_, _ = w.Write(fixture)
+		}))
+		defer second.Close()
+
+		p := &AnnasProvider{mirrors: staticMirrors{first.URL, second.URL}, http: first.Client()}
+		got, err := p.Search(context.Background(), "dune", 3)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(got) == 0 {
+			t.Error("Search returned nothing; a plain 403 must fall through to the next mirror")
+		}
+		if n := sibling.Load(); n != 1 {
+			t.Errorf("the sibling mirror was asked %d time(s), want exactly 1", n)
+		}
+	})
 }
 
 // TestAnnasProviderBoundedClient verifies NewAnnas equips the provider with a

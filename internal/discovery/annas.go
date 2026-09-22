@@ -3,8 +3,10 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,6 +21,44 @@ const annasSearchMaxBody = 4 << 20 // 4 MiB
 
 // annasMD5Href matches a result link, capturing the item's md5.
 var annasMD5Href = regexp.MustCompile(`/md5/([0-9a-f]{32})`)
+
+// errChallenged reports that a mirror answered with an anti-bot interstitial
+// instead of content: an HTTP 403 whose body is a "checking your browser" page
+// asking the caller to run JavaScript and hand back a token.
+//
+// It is told apart from an ordinary refusal because the two deserve opposite
+// responses. A 403 from one mirror is worth trying the next one for; a
+// challenge is not, because every Anna's mirror sits behind the same provider
+// and answers the same way — so trying the siblings buys nothing and spends
+// three refused requests per search on a host that has just asked us to stop.
+// Observed 2026-09-22: /search and /md5/ both challenged on every mirror, from
+// two unrelated egress addresses.
+var errChallenged = errors.New("mirror served a browser challenge instead of content")
+
+// challengeMarkers are the strings an interstitial carries and a search page
+// does not. Both are required together with the status, because a bare 403 is
+// an ordinary refusal and must keep its ordinary handling.
+var challengeMarkers = []string{"ddos-guard", "js-challenge"}
+
+// challengeBodyPrefix is how much of a refusal body is read to classify it. An
+// interstitial is under a kilobyte; anything longer is not one, and reading
+// further would mean buffering a page this code has already decided to discard.
+const challengeBodyPrefix = 4 << 10
+
+// looksChallenged reports whether a non-200 response is an anti-bot
+// interstitial rather than an ordinary refusal.
+func looksChallenged(status int, body []byte) bool {
+	if status != http.StatusForbidden {
+		return false
+	}
+	lower := strings.ToLower(string(body))
+	for _, marker := range challengeMarkers {
+		if !strings.Contains(lower, marker) {
+			return false
+		}
+	}
+	return true
+}
 
 // MirrorLister supplies candidate base URLs, preferred first. It is declared here
 // rather than imported so this package stays independent of the libgen client;
@@ -73,6 +113,18 @@ func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
+			// A challenge is answered by stopping, not by asking the siblings.
+			// They are the same deployment behind the same provider and answer
+			// the same way, so the only thing trying them adds is refused
+			// requests against a host that has just said no. Said once, at WARN,
+			// because otherwise this is indistinguishable from "nothing matched"
+			// — and the two call for completely different reactions.
+			if errors.Is(err, errChallenged) {
+				slog.Warn("annas search: mirror is serving a browser challenge, giving up on this provider for this call",
+					"mirror", base, "hint", "search needs the HTML site, which no API key unlocks; a configured "+
+						"member key still serves download through the member API")
+				return nil, nil
+			}
 			continue
 		}
 		if out := parseAnnasSearch(body, limit); len(out) > 0 {
@@ -97,6 +149,14 @@ func (p *AnnasProvider) fetch(ctx context.Context, httpClient *http.Client, base
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
+		// The body is read before the status is reported on, because a refusal
+		// and an interstitial share a status code and only the body tells them
+		// apart. A read error here leaves it classified as the ordinary refusal
+		// it was already going to be.
+		prefix, _ := io.ReadAll(io.LimitReader(resp.Body, challengeBodyPrefix))
+		if looksChallenged(resp.StatusCode, prefix) {
+			return nil, fmt.Errorf("annas search: %q: %w", base, errChallenged)
+		}
 		return nil, fmt.Errorf("annas search: %q returned HTTP %d", base, resp.StatusCode)
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, annasSearchMaxBody))

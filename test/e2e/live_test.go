@@ -1922,6 +1922,7 @@ func callSearch(t *testing.T, ctx context.Context, env *liveEnv, args map[string
 // caller asking for anything special.
 func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	env := requireLive(t)
+	requireAnnasHTMLSite(t)
 	item := loadEscalationItem(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -2097,6 +2098,7 @@ func TestE2EReadEscalatedItem(t *testing.T) {
 // file with no edition at all.
 func TestE2EAnnasFallbackEnrichesByISBN(t *testing.T) {
 	env := requireLive(t)
+	requireAnnasHTMLSite(t)
 	item := loadEscalationItem(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -2271,6 +2273,7 @@ func classifyAnnasFailure(t *testing.T, err error) {
 // through the MCP tools layer, since that is the only path a real client takes.
 func TestE2EGetDetailsFallsBackToAnnas(t *testing.T) {
 	env := requireLive(t)
+	requireAnnasHTMLSite(t)
 	item := loadEscalationItem(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

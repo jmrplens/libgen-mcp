@@ -680,17 +680,36 @@ Anna's Archive, as an md5-keyed rescue route.
 - **Corpus** largely the same libgen family this server already reaches: Anna's non-IPFS
   external links point mostly back at it. The value added is download *reliability* — an
   independent route — rather than new corpus.
-- **How it resolves** keyless by default. `<mirror>/md5/<md5>` served anonymously with no
-  CAPTCHA or JS challenge when this was written — but see the measurement below — publishing the
-  item's IPFS CID (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern
-  gateways resolve it most reliably) along with the stored filepath the extension comes from. The source then streams from the first public gateway that
-  actually serves that content, trying `dweb.link`, `w3s.link`, `ipfs.io` and
-  `gateway.pinata.cloud` in order. With `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API
-  is tried first — on the first mirror only — and IPFS remains the fallback.
-- **What it does not cover** the anonymous "slow download" tier, deliberately: it sits behind a
-  DDoS-Guard JS challenge (HTTP 403, "Checking your browser") that no pure-Go HTTP client can
-  satisfy. Public IPFS gateway availability also varies enough that this is a genuine fallback
-  rather than a fast path — an arbitrary item can be very slow or time out.
+- **How it resolves** with `LIBGEN_MCP_ANNAS_KEY` set, the member fast-download API is tried
+  first — on the first mirror only. Keylessly, `<mirror>/md5/<md5>` publishes the item's IPFS CID
+  (a v1 `baf…` CID is preferred over the legacy base58 `Qm…`, because modern gateways resolve it
+  most reliably) along with the stored filepath the extension comes from, and the source then
+  streams from the first public gateway that actually serves that content, trying `dweb.link`,
+  `w3s.link`, `ipfs.io` and `gateway.pinata.cloud` in order.
+- **The HTML site is behind a browser challenge, and the member API is not.** Measured
+  2026-09-22 from two unrelated egress addresses: `/search` and `/md5/` answer HTTP 403 with
+  DDoS-Guard's `js-challenge` interstitial — the "Checking your browser" page, which needs a
+  JavaScript runtime to compute and return a token — while `/dyn/api/fast_download.json`
+  authenticates a member key and serves normally. **A key does not unlock the HTML site**: the
+  same 403 arrives with the key in the query string and as the account cookie, because the two
+  are different doors.
+
+  So a keyed deployment still downloads from Anna's and no deployment can search it. The
+  discovery provider is keyless by construction and has nothing to fall back on, so it returns
+  nothing and says so at WARN rather than silently — a challenged mirror is not the same fact as
+  a query that matched nothing, and only one of them is worth retrying. It also stops at the
+  first challenge instead of asking the sibling mirrors, which are the same deployment behind
+  the same provider and answer the same way.
+
+  **Defeating the challenge is out of scope**, as it always has been for the slow-download tier:
+  it would mean executing their anti-bot code to impersonate a browser, against a service this
+  project is a guest of. A browser `User-Agent` does not help either — measured the same day,
+  the interstitial arrives whatever the header says, because the gate is the token and not the
+  string.
+- **What it does not cover** the anonymous "slow download" tier, for the reason above, and — for
+  as long as the challenge stands — search and the md5 page. Public IPFS gateway availability
+  also varies enough that the keyless path is a genuine fallback rather than a fast path: an
+  arbitrary item can be very slow or time out.
 - **Keys** optional. `LIBGEN_MCP_ANNAS_KEY` needs an *active paid membership*; a free account is
   rejected. An unset, expired or rejected key costs one request and falls through to the keyless
   IPFS path, so the key can only make the source better, never worse. A client may also supply

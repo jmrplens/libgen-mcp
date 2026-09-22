@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -211,6 +212,64 @@ func requireUpstream(t *testing.T, name, probeURL string) {
 	t.Helper()
 	if _, err := probeStatus(probeURL, upstreamProbeTimeout); err != nil {
 		t.Skipf("upstream unreachable: %s did not answer %s within %s (%v)", name, probeURL, upstreamProbeTimeout, err)
+	}
+}
+
+// annasHTMLOnce guards the one probe [requireAnnasHTMLSite] makes per run, and
+// annasChallenge holds its verdict: the reason to skip, or "" when the site
+// answered.
+//
+// Cached because every test that needs it would otherwise re-ask a host that has
+// already said no, which is both impolite and the thing that widened the block
+// when this was first investigated: the refusal spread from /search to /md5/
+// over an afternoon of retries.
+var (
+	annasHTMLOnce  sync.Once
+	annasChallenge string
+)
+
+// requireAnnasHTMLSite skips a test whose subject is Anna's HTML site when that
+// site is serving an anti-bot interstitial rather than content.
+//
+// This is the precondition [requireUpstream]'s own comment says a source with
+// this failure mode needs: one that inspects the body. A challenged mirror
+// answers promptly and with a well-formed page, so every status-only gate passes
+// and the test then fails on an assertion about results that were never going to
+// come.
+//
+// **It skips on the interstitial and on nothing else.** Not on an empty result,
+// which is what a real regression looks like, and not on a transport error,
+// which is an outage worth failing over. Observed 2026-09-22: /search and /md5/
+// challenged on every Anna's mirror, from two unrelated egress addresses, with
+// and without a member key — the key authenticates the member API and unlocks
+// nothing on the HTML site, so a keyed deployment still downloads from Anna's
+// and still cannot search it.
+func requireAnnasHTMLSite(t *testing.T) {
+	t.Helper()
+	annasHTMLOnce.Do(func() {
+		base := strings.TrimRight(mirrors.AnnasFamily.Preferred, "/")
+		ctx, cancel := context.WithTimeout(context.Background(), upstreamProbeTimeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/search?q=dune", http.NoBody)
+		if err != nil {
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return // a transport failure is an outage, and outages are worth failing over
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		lower := strings.ToLower(string(body))
+		if resp.StatusCode == http.StatusForbidden &&
+			strings.Contains(lower, "ddos-guard") && strings.Contains(lower, "js-challenge") {
+			annasChallenge = base + " is serving a browser challenge (HTTP 403, DDoS-Guard js-challenge), " +
+				"so its HTML search and md5 pages cannot be read by any HTTP client. " +
+				"The member API is unaffected; this skip is about the keyless HTML paths only"
+		}
+	})
+	if annasChallenge != "" {
+		t.Skip("Anna's Archive HTML site unavailable: " + annasChallenge)
 	}
 }
 
