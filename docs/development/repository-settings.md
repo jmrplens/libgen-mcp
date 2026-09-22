@@ -90,16 +90,18 @@ three things:
 blank one, so adding an environment to any of those jobs breaks all three at
 once — during a real release, on the one path that never runs before a tag.
 
-This is easier to trip than it sounds, because **an environment named `release`
-exists on this repository** (created 2026-07-25, no protection rules) and no job
-uses it. Adding `environment: release` to a publishing job would therefore look
-entirely reasonable and resolve without error, and would break every trusted
-publisher. If it is not going to be used, deleting it removes the trap.
+**An environment named `release` used to make that easy to trip** — created
+2026-07-25 with no protection rules and used by no job, so `environment: release`
+on a publishing job would have looked entirely reasonable, resolved without
+error, and broken every trusted publisher. It was **deleted on 2026-09-22**, so
+the name no longer resolves and a job that names it fails at once instead of
+publishing nothing. Recording it because the trap is worth recognising if anyone
+recreates the environment.
 
-The one legitimate `environment:` is `github-pages`, on the deploy job in
-`pages.yml`, which is how GitHub Pages deployments are addressed at all. A third
-environment, `copilot`, exists for GitHub's coding agent and is unrelated to any
-workflow here.
+The only environments left are `github-pages`, which the deploy job in
+`pages.yml` declares because that is how GitHub Pages deployments are addressed
+at all, and `copilot`, which exists for GitHub's coding agent and is unrelated to
+any workflow here.
 
 ## Immutable releases
 
@@ -136,13 +138,18 @@ cannot accept one.
 must not be held up by a channel whose external half does not exist yet.
 
 `WINGET_TOKEN` is a personal access token against a fork of
-`microsoft/winget-pkgs`, so `public_repo` is the whole scope it needs; anything
-wider is a credential in a job that opens a pull request against somebody else's
-repository.
+`microsoft/winget-pkgs`, and **its scope is `public_repo` and nothing else** —
+anything wider is a credential in a job that opens a pull request against
+somebody else's repository. A token's scope is not readable through the API, so
+this one is stated here from the maintainer rather than measured; treat replacing
+it as a scope change to be recorded on this line.
 
-**`FLY_API_TOKEN` is set on this repository and no workflow reads it.** A
-credential nothing uses still exists, still grants what it grants, and produces
-no log line when it is used elsewhere. Remove it or record what it is for.
+**No secret on this repository is unread by a workflow.** `FLY_API_TOKEN` was the
+exception and was **deleted on 2026-09-22**: nothing referenced it, and a
+credential nothing uses still grants what it grants while producing no log line
+here when it is used somewhere else. The same test applies to the next one —
+a secret no `uses:` or `env:` in `.github/workflows/` names is a standing grant
+with no audit trail, not a spare.
 
 ## Actions defaults
 
