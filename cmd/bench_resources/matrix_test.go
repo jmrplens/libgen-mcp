@@ -144,25 +144,44 @@ func joinIDs(plans []scenarioPlan) string {
 	return strings.Join(ids, ",")
 }
 
-// TestClientAddress_StaysInTheDocumentationRange verifies the addresses a
-// concurrency series presents belong to nobody.
+// TestClientAddress_GivesEveryClientOneOfItsOwn verifies the two properties the
+// synthesized addresses need.
 //
-// They are drawn from 198.51.100.0/24, which RFC 5737 reserves for
-// documentation: a header that escaped into a log names an address that cannot
-// belong to a real person, which is the only safe thing to synthesize.
-func TestClientAddress_StaysInTheDocumentationRange(t *testing.T) {
+// They are drawn from 198.18.0.0/15, which RFC 2544 reserves for benchmark
+// testing of network devices — so nothing routes there and a header that
+// escaped into a log names an address that cannot belong to a real person. And
+// there are enough of them: the first version took a /24 and wrapped at 254, so
+// a step measuring five hundred callers was really measuring two hundred and
+// fifty-four of them twice, and the per-caller slope fitted through it was a
+// number about the wrapping.
+func TestClientAddress_GivesEveryClientOneOfItsOwn(t *testing.T) {
 	seen := map[string]bool{}
-	for i := range 254 {
+	for i := range 2000 {
 		address := clientAddress(i)
-		if !strings.HasPrefix(address, "198.51.100.") {
-			t.Fatalf("clientAddress(%d) = %q, outside the documentation range", i, address)
+		if !strings.HasPrefix(address, "198.18.") && !strings.HasPrefix(address, "198.19.") {
+			t.Fatalf("clientAddress(%d) = %q, outside the benchmarking range", i, address)
 		}
 		if seen[address] {
 			t.Fatalf("clientAddress(%d) = %q, which an earlier client already presented", i, address)
 		}
 		seen[address] = true
 	}
-	if clientAddress(0) == clientAddress(1) {
-		t.Error("two clients present the same address")
-	}
+
+	t.Run("the largest ladder still gets distinct addresses", func(t *testing.T) {
+		biggest := defaultSeriesClients()[len(defaultSeriesClients())-1]
+		distinct := map[string]bool{}
+		for i := range biggest {
+			distinct[clientAddress(i)] = true
+		}
+		if len(distinct) != biggest {
+			t.Errorf("%d clients drew %d addresses; a repeat makes the per-caller slope a number about the wrapping",
+				biggest, len(distinct))
+		}
+	})
+
+	t.Run("the block wraps rather than escaping it", func(t *testing.T) {
+		if got := clientAddress(1 << 17); got != clientAddress(0) {
+			t.Errorf("clientAddress(131072) = %q, want it back at the start of the block", got)
+		}
+	})
 }

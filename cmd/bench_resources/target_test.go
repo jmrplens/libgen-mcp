@@ -329,11 +329,29 @@ func runFakeHTTP(args []string) int {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`)
 	})
+	// The profiling listener, when the series asked for one. It answers the
+	// text heap profile the settled reading parses, so the whole series path
+	// including the forced collection is exercised against a real process.
+	if pprofAddr := flagValue(args, "--pprof-addr"); pprofAddr != "" {
+		go serveFakePprof(pprofAddr)
+	}
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	if err := srv.ListenAndServe(); err != nil {
 		fmt.Fprintf(os.Stderr, "fake server: %v\n", err)
 	}
 	return 0
+}
+
+// serveFakePprof answers the one profiling route the series reads.
+func serveFakePprof(addr string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/heap", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "heap profile: 1: 2 [3: 4] @ heap/1048576\n\n# HeapAlloc = 4194304\n# Sys = 8388608\n")
+	})
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	if err := srv.ListenAndServe(); err != nil {
+		fmt.Fprintf(os.Stderr, "fake profiler: %v\n", err)
+	}
 }
 
 // runFakeStdio answers every framed request on stdin with an empty result.

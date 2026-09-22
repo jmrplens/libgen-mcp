@@ -258,6 +258,25 @@ func TestSampler_RemembersThePeakAndSurvivesADeadProcess(t *testing.T) {
 		}
 	})
 
+	// The settled reading asks a different question from the peak — what the
+	// process weighs now that it is idle — so it has to read now rather than
+	// returning the worst of the window. Reporting the peak there put the same
+	// number in two columns of the published table and called one of them
+	// settled.
+	t.Run("the current reading is now, not the peak", func(t *testing.T) {
+		pids = []int{1}
+		if got := mibOf(sam.currentRSS()); got != mibOf(10240*1024) {
+			t.Errorf("currentRSS() = %v MiB, want what is resident now", got)
+		}
+		pids = nil
+		if got := sam.currentRSS(); got != 0 {
+			t.Errorf("currentRSS() = %d with nothing to read, want 0", got)
+		}
+		// Put the set back: the subtests below share this sampler, and one that
+		// left it empty would be deciding what the next one measures.
+		pids = []int{1}
+	})
+
 	t.Run("reset starts the window again", func(t *testing.T) {
 		sam.reset()
 		if got := mibOf(sam.peakRSS()); got != mibOf(10240*1024) {

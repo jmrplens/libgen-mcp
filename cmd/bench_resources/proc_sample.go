@@ -324,6 +324,20 @@ func (s *sampler) peakRSS() uint64 {
 	return s.peak
 }
 
+// currentRSS reports the resident set right now, zero when it cannot be read.
+//
+// It is not peakRSS: the peak is the worst of a window, and a reading taken
+// after a phase has stopped is a different question — what the process weighs
+// now that it is idle. Reporting the peak there would put the same number in
+// two columns and call one of them settled.
+func (s *sampler) currentRSS() uint64 {
+	stat, err := s.current()
+	if err != nil {
+		return 0
+	}
+	return stat.rssBytes
+}
+
 // reset forgets the current window, so the next phase is measured on its own
 // rather than inheriting the peak of the one before it.
 func (s *sampler) reset() {
