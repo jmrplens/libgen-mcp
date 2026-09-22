@@ -3567,6 +3567,18 @@ func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
 			return true, skipPrefix + " no Anna's membership key was available, so the member tier cannot be exercised"
 		}
 	}
+	// Nothing to opt in *for*. This scenario's book is Anna's-only, so a search
+	// that returned no Anna's-origin result leaves the model with no md5 to
+	// download and no way to reach the argument under test — and failing it for
+	// "no download call" would report a live outage as a surface gap.
+	//
+	// Graded the way its two siblings grade the same outage, on whether the model
+	// said so plainly. Added 2026-09-22, when Anna's put its HTML search behind a
+	// browser challenge: S35 and S40 degraded correctly and this one, alone in
+	// the trio, had no such path.
+	if len(annasHits(tr)) == 0 {
+		return gradeDegraded(tr, "no Anna's-origin result to download (live network)")
+	}
 	if _, called := findDownloadCall(tr); !called {
 		return false, noDownloadCall
 	}
