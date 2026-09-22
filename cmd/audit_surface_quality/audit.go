@@ -167,9 +167,42 @@ func auditSchema(toolName, kind string, raw any) []violation {
 		return nil
 	}
 	var vs []violation
+	vs = append(vs, auditTopLevelCombinators(toolName, kind, schema)...)
 	walkSchema(schema, kind, scope{}, func(category, detail string) {
 		vs = append(vs, violation{toolName, category, detail})
 	})
+	return vs
+}
+
+// auditTopLevelCombinators reports oneOf, anyOf or allOf at the root of a
+// schema, which is the one JSON Schema construct this surface may not use
+// where a client looks for it.
+//
+// **The Anthropic Messages API refuses the whole request** over a custom tool
+// whose `input_schema` carries one — `input_schema does not support oneOf,
+// allOf, or anyOf at the top level`, HTTP 400 — so a single such tool disables
+// every tool in the call, not only itself. The MCP specification does not
+// forbid it (its `Tool.inputSchema` declares `type`, `properties`, `required`
+// and no `additionalProperties: false`), but it declares no combinator there
+// either, so this is a keyword the surface cannot rely on being tolerated.
+//
+// Only the root is judged. Nested in a property a combinator is accepted
+// everywhere, which is why [walkSchema] keeps walking into them.
+//
+// This checks the surface a client receives, rather than the builder that made
+// it, so a schema assembled anywhere — inferred, hand-written, or arriving from
+// a future SDK — is covered. `internal/tools.noTopLevelCombinators` is the
+// other end of the same rule.
+func auditTopLevelCombinators(toolName, kind string, schema map[string]any) []violation {
+	var vs []violation
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		if _, present := schema[keyword]; present {
+			vs = append(vs, violation{
+				toolName, "schema-combinator",
+				fmt.Sprintf("%s schema carries %s at the top level, which the Anthropic Messages API refuses with HTTP 400 for every tool in the request", kind, keyword),
+			})
+		}
+	}
 	return vs
 }
 
