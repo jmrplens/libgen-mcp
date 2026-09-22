@@ -259,8 +259,15 @@ LobeHub is the one listing that is **not** part of the tagged release, and it
 needs a manual step after the tag:
 
 ```bash
-make publish-lobehub    # npx -y @lobehub/market-cli plugin publish
+make publish-lobehub    # npx -y @lobehub/market-cli@$(LOBEHUB_CLI_VERSION) plugin update
 ```
+
+**The CLI version is pinned in the `Makefile`**, for the reason
+`GORELEASER_VERSION` and `COSIGN_VERSION` are: an unpinned `npx -y` downloads
+and runs whatever the registry serves as latest, and this target runs on the
+maintainer's machine with a credential that can publish the listing. Bump
+`LOBEHUB_CLI_VERSION` deliberately — 0.0.41 changed the command's signature and
+broke this target until PR #119 caught up.
 
 **Run it and walk away: it prompts for nothing.** The credential lives in
 `~/.lobehub-market/user-credentials.json` and carries a `refreshToken`, so the
