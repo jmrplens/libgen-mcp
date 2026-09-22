@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" role="img" aria-label="What the process weighs">
+<rect width="720" height="380" fill="#ffffff"/>
+<rect x="64" y="48" width="632" height="268" fill="#f6f8fa"/>
+<text x="64" y="24" fill="#24292f" font-family="system-ui, sans-serif" font-size="16" font-weight="600">What the process weighs</text>
+<text x="64" y="40" fill="#59636e" font-family="system-ui, sans-serif" font-size="11">Resident set, read from the kernel. A container limit is set against the peak.</text>
+<line x1="64" y1="48" x2="696" y2="48" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="52" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">240</text>
+<line x1="64" y1="92" x2="696" y2="92" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="96" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">200</text>
+<line x1="64" y1="137" x2="696" y2="137" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="141" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">160</text>
+<line x1="64" y1="182" x2="696" y2="182" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="186" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">120</text>
+<line x1="64" y1="226" x2="696" y2="226" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="230" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">80</text>
+<line x1="64" y1="271" x2="696" y2="271" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="275" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">40</text>
+<line x1="64" y1="316" x2="696" y2="316" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="320" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">0</text>
+<text x="14" y="182" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" transform="rotate(-90 14 182)" text-anchor="middle">MiB</text>
+<text x="116" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">stdio-1</text>
+<text x="222" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">stdio-8</text>
+<text x="327" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">http-1</text>
+<text x="432" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">http-8</text>
+<text x="538" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">http-8-otel</text>
+<text x="643" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">http-8-shipped-rate</text>
+<rect x="77" y="292.03" width="37" height="23.97" fill="#8a5a12"/>
+<rect x="183" y="123.21" width="37" height="192.79" fill="#8a5a12"/>
+<rect x="288" y="289.04" width="37" height="26.96" fill="#8a5a12"/>
+<rect x="393" y="290.46" width="37" height="25.54" fill="#8a5a12"/>
+<rect x="499" y="288.05" width="37" height="27.95" fill="#8a5a12"/>
+<rect x="604" y="288.87" width="37" height="27.14" fill="#8a5a12"/>
+<rect x="116" y="288.76" width="37" height="27.24" fill="#0a58ca"/>
+<rect x="222" y="87.97" width="37" height="228.03" fill="#0a58ca"/>
+<rect x="327" y="286.51" width="37" height="29.49" fill="#0a58ca"/>
+<rect x="432" y="272.45" width="37" height="43.55" fill="#0a58ca"/>
+<rect x="538" y="266.81" width="37" height="49.19" fill="#0a58ca"/>
+<rect x="643" y="282.01" width="37" height="33.99" fill="#0a58ca"/>
+<rect x="64" y="341" width="10" height="10" fill="#8a5a12"/>
+<text x="79" y="350" fill="#24292f" font-family="system-ui, sans-serif" font-size="11">idle</text>
+<rect x="112" y="341" width="10" height="10" fill="#0a58ca"/>
+<text x="127" y="350" fill="#24292f" font-family="system-ui, sans-serif" font-size="11">peak under load</text>
+</svg>

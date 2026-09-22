@@ -10,8 +10,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
 // Default output locations, relative to the module root.
@@ -43,6 +41,36 @@ type options struct {
 	noSeries      bool
 	seriesClients string
 	stepDuration  time.Duration
+	// dest is where everything drawn from the record is written.
+	dest destinations
+}
+
+// destinations are the artifacts a record is drawn into.
+//
+// They are a value rather than a set of constants because everything downstream
+// of the record goes through one function, and that function has to be runnable
+// somewhere other than the module root — by a test, and by anyone rendering into
+// a tree of their own. Constants read directly would make the drawing untestable
+// except by writing into the repository.
+type destinations struct {
+	Page       string
+	DocCharts  string
+	SiteCharts string
+	SitePageEN string
+	SitePageES string
+	ThemeSheet string
+}
+
+// defaultDestinations is where a run from the module root writes.
+func defaultDestinations() destinations {
+	return destinations{
+		Page:       defaultPage,
+		DocCharts:  docChartsDir,
+		SiteCharts: siteChartsDir,
+		SitePageEN: sitePageEN,
+		SitePageES: sitePageES,
+		ThemeSheet: themeSheet,
+	}
 }
 
 // exitProcess is the exit main takes on failure, so a test can drive main
@@ -66,6 +94,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.binary, "binary", "", "server binary to measure; empty builds one into a temporary directory")
 	flag.StringVar(&opts.record, "json", defaultRecord, "measurement record to write")
 	flag.StringVar(&opts.page, "page", defaultPage, "Markdown record to write beside it")
+	opts.dest = defaultDestinations()
 	flag.StringVar(&opts.scenarios, "scenarios", "", "comma-separated scenario ids to measure; empty runs the whole matrix")
 	flag.IntVar(&opts.rounds, "rounds", 3, "measured rounds per method per client")
 	flag.DurationVar(&opts.sampleInterval, "sample-interval", 100*time.Millisecond, "how often the resident set is sampled")
@@ -89,6 +118,7 @@ func parseFlags() options {
 		return nil
 	})
 	flag.Parse()
+	opts.dest.Page = opts.page
 	return opts
 }
 
@@ -205,11 +235,27 @@ func writeArtifacts(opts options, run *Run) error {
 	if err := writeRecord(opts.record, run); err != nil {
 		return err
 	}
-	if err := writePage(opts.page, run); err != nil {
+	if err := drawFrom(run, opts.dest, false); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "bench_resources: wrote %s and %s\n", opts.record, opts.page)
+	fmt.Fprintf(os.Stderr, "bench_resources: wrote %s and everything drawn from it\n", opts.record)
 	return nil
+}
+
+// drawFrom writes every artifact the record produces, or reports the first one
+// that differs from what it would produce.
+//
+// Everything downstream of the record goes through here, so a measuring run and
+// the gate cannot disagree about what "drawn from it" means — which is the only
+// way a check that never measures can be trusted to say the drawing is current.
+func drawFrom(run *Run, dest destinations, check bool) error {
+	if err := writePageTo(dest.Page, run, check); err != nil {
+		return err
+	}
+	if err := writeFigures(run, dest, check); err != nil {
+		return err
+	}
+	return writeSitePages(run, dest, check)
 }
 
 // validate refuses a run whose settings cannot produce a measurement.
@@ -251,14 +297,14 @@ func redraw(opts options) error {
 	if err != nil {
 		return err
 	}
-	if cErr := docgen.WriteOrCheck(opts.page, []byte(renderPage(run)), opts.check, "`make bench-resources-render`"); cErr != nil {
-		return cErr
+	if dErr := drawFrom(run, opts.dest, opts.check); dErr != nil {
+		return dErr
 	}
 	if opts.check {
-		fmt.Fprintln(os.Stderr, "bench_resources: the benchmark page matches its record")
+		fmt.Fprintln(os.Stderr, "bench_resources: the page, the figures and the site pages match their record")
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "bench_resources: redrew %s from %s\n", opts.page, opts.record)
+	fmt.Fprintf(os.Stderr, "bench_resources: redrew everything from %s\n", opts.record)
 	return nil
 }
 

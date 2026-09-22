@@ -17,12 +17,13 @@ import (
 	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
 )
 
-// writePage renders the record as Markdown and writes it.
-func writePage(path string, run *Run) error {
+// writePageTo renders the record as Markdown and writes it, or reports that the
+// committed one differs.
+func writePageTo(path string, run *Run, check bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
-	return docgen.WriteOrCheck(path, []byte(renderPage(run)), false, "`make bench-resources`")
+	return docgen.WriteOrCheck(path, []byte(renderPage(run)), check, "`make bench-resources-render`")
 }
 
 // renderPage is the whole document.
@@ -199,6 +200,40 @@ func renderMemoryTable(run *Run) string {
 	align := []docgen.Alignment{
 		docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
 	}
+	return tableWithNote(docgen.RenderMarkdownTable(headers, align, memoryRows(run)),
+		"The resident set, read from the kernel rather than from inside the process: a\n"+
+			"container limit is set against the resident set, and Go's own heap figure is a\n"+
+			"different and smaller number. **Peak** is what a limit has to survive.\n")
+}
+
+// renderMemoryTableEN is the memory table for the English site page: the table
+// alone, without the paragraph the repository page puts under it. The site page
+// says the same thing in its own words, in a section of its own, and a document
+// that made the point twice would read as though the second one meant something
+// different.
+func renderMemoryTableEN(run *Run) string {
+	headers := []string{"Scenario", "Idle (MiB)", "Mean (MiB)", "Peak (MiB)", "CPU ms/call"}
+	align := []docgen.Alignment{
+		docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
+	}
+	return docgen.RenderMarkdownTable(headers, align, memoryRows(run))
+}
+
+// renderMemoryTableES is the memory table for the Spanish page.
+//
+// The headers are translated and the numbers are not, which is the only way
+// this can work: a figure is a figure in both languages, and translating a
+// decimal separator would make two pages state different measurements.
+func renderMemoryTableES(run *Run) string {
+	headers := []string{"Escenario", "Reposo (MiB)", "Media (MiB)", "Pico (MiB)", "ms de CPU por llamada"}
+	align := []docgen.Alignment{
+		docgen.AlignLeft, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
+	}
+	return docgen.RenderMarkdownTable(headers, align, memoryRows(run))
+}
+
+// memoryRows is the memory table's body, which both languages share.
+func memoryRows(run *Run) [][]string {
 	var rows [][]string
 	for _, s := range run.Scenarios {
 		cpu := decimal(s.CPU.MsPerCall)
@@ -209,10 +244,7 @@ func renderMemoryTable(run *Run) string {
 			s.ID, decimal(s.Memory.IdleMiB), decimal(s.Memory.MeanMiB), decimal(s.Memory.PeakMiB), cpu,
 		})
 	}
-	return tableWithNote(docgen.RenderMarkdownTable(headers, align, rows),
-		"The resident set, read from the kernel rather than from inside the process: a\n"+
-			"container limit is set against the resident set, and Go's own heap figure is a\n"+
-			"different and smaller number. **Peak** is what a limit has to survive.\n")
+	return rows
 }
 
 // renderLatencyTable is the per-method timing.
