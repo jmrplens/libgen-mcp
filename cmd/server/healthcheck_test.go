@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // TestParseListenerFlagsReadsEverySpellingTheFlagPackageAccepts covers the

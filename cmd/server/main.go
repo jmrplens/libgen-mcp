@@ -25,18 +25,18 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/cachehints"
-	"github.com/jmrplens/libgen-mcp/internal/capguard"
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/logging"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/prompts"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
-	"github.com/jmrplens/libgen-mcp/internal/transport"
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/v2/internal/capguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/prompts"
+	"github.com/jmrplens/libgen-mcp/v2/internal/tools"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // httpShutdownTimeout bounds how long a graceful HTTP shutdown may take before
@@ -132,7 +132,7 @@ func init() {
 }
 
 // resolveCommit fills in an unstamped commit from the module build info Go
-// embeds in every binary. `go install github.com/jmrplens/libgen-mcp/cmd/server@version`
+// embeds in every binary. `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@version`
 // carries no -ldflags, so without this it always reports "none" even though the
 // VCS revision that produced the binary is right there in its build info. A
 // release build's stamped value always wins.

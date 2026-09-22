@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 // callerFaultCodes are the JSON-RPC error codes that a server does not count as

@@ -12,7 +12,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // resilientStdio builds the reader and writer the stdio transport runs on, with

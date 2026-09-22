@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/logging"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
-	"github.com/jmrplens/libgen-mcp/internal/transport"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
 )
 
 // collectorCredentialFixture stands in for the collector credential the

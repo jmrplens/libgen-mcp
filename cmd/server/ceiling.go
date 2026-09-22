@@ -8,8 +8,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // heavyTools are the calls that occupy a download slot and move a file's bytes.

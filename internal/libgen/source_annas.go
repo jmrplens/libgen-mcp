@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 // annasMaxBody bounds how many bytes of an Anna's Archive book page are read

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jmrplens/libgen-mcp/internal/discovery"
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // This file renders each tool's structured output as a human-readable Markdown

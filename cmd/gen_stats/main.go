@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/gate"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/gate"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/testsource"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/discovery"
 )
 
 // toolName prefixes every line this command writes about itself.

@@ -30,7 +30,7 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // pprofReadHeaderTimeout bounds a request's headers. There is deliberately no

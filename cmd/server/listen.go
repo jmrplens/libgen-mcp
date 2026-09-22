@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // defaultSocketMode is the permission mode a unix socket is created with when

@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // idleTimeouts is the pair of settings that decide what this deployment closes

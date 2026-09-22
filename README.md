@@ -488,7 +488,7 @@ by registering the tools and prompts for real and walking the tree, and
 Install the binary with Go:
 
 ```bash
-go install github.com/jmrplens/libgen-mcp/cmd/server@latest
+go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
 ```
 
 This produces a binary named `server` in `$(go env GOPATH)/bin`. Rename it to `libgen-mcp` (or build with an explicit name) and put it on your `PATH`:

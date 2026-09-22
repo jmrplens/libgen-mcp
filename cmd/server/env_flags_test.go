@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // withFlagSet installs a fresh flag set for one test and parses args into it.

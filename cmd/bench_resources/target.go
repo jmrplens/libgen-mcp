@@ -26,7 +26,7 @@ import (
 )
 
 // serverPackage is the binary under measurement.
-const serverPackage = "github.com/jmrplens/libgen-mcp/cmd/server"
+const serverPackage = "github.com/jmrplens/libgen-mcp/v2/cmd/server"
 
 // buildServer compiles the server into dir and returns the binary's path.
 //

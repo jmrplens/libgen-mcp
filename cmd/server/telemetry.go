@@ -12,13 +12,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/logging"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // startTelemetry brings up the OpenTelemetry providers and returns the function

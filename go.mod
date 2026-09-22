@@ -1,4 +1,4 @@
-module github.com/jmrplens/libgen-mcp
+module github.com/jmrplens/libgen-mcp/v2
 
 go 1.27.0
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // overlayFlagSet declares the HTTP flags on a set of its own, with the same

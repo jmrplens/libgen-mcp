@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
 )
 
 // maxDownloadBytesLimit is the allowed ceiling for MaxDownloadBytes (50 GiB).

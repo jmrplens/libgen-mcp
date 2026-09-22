@@ -12,15 +12,15 @@ Whichever you pick, you end up with the same single static binary: nothing is
 compiled, nothing runs at install time, and no account, API key or token is
 needed.
 
-| Channel        | Run it without installing                               | Install it                                                    |
-| -------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
-| npm            | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                          |
-| PyPI           | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                     |
-| Homebrew       | —                                                       | `brew install jmrplens/tap/libgen-mcp`                        |
-| NuGet          | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                           |
-| Docker         | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                             |
-| Release binary | —                                                       | download and put it on your `PATH`                            |
-| Go             | —                                                       | `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` |
+| Channel        | Run it without installing                               | Install it                                                       |
+| -------------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| npm            | `npx @jmrp.io/libgen-mcp`                               | `npm install -g @jmrp.io/libgen-mcp`                             |
+| PyPI           | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        |
+| Homebrew       | —                                                       | `brew install jmrplens/tap/libgen-mcp`                           |
+| NuGet          | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                              |
+| Docker         | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                                |
+| Release binary | —                                                       | download and put it on your `PATH`                               |
+| Go             | —                                                       | `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` |
 
 The two shortest paths are spelled out below. **Every channel has its own
 section in [Installation](installation.md)** — what you get, how to check it is

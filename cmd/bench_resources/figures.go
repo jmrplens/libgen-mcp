@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
 )
 
 // Where the rendered pairs are written. The site copy is under public/ because

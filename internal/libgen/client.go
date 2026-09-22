@@ -16,11 +16,11 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/mirrors"
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // userAgent is the User-Agent every request from this package carries. It is a

@@ -8,8 +8,8 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
 
 // The shipped inbound limit, per charged address.

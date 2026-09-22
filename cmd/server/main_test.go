@@ -22,12 +22,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/cachehints"
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
-	"github.com/jmrplens/libgen-mcp/internal/transport"
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/cachehints"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // awaitReturn runs fn in a goroutine and fails the test if it does not return

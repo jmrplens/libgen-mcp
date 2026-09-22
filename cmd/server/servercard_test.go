@@ -13,11 +13,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/telemetry"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // newCardTestServer registers one tool and one prompt, which is all the card

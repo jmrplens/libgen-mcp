@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/logging"
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
 )
 
 // sourceCooldownDuration is how long a download source is set aside after a failure

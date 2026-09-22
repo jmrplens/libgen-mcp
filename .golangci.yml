@@ -273,7 +273,7 @@ formatters:
       - "\\.claude($|/)"
   settings:
     gofumpt:
-      module-path: github.com/jmrplens/libgen-mcp
+      module-path: github.com/jmrplens/libgen-mcp/v2
       extra:
         group-params: true
         clothe-returns: true
@@ -282,8 +282,8 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.com/jmrplens/libgen-mcp)
+        - prefix(github.com/jmrplens/libgen-mcp/v2)
       custom-order: true
     goimports:
       local-prefixes:
-        - github.com/jmrplens/libgen-mcp
+        - github.com/jmrplens/libgen-mcp/v2

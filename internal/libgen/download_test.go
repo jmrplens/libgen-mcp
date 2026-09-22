@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/jmrplens/libgen-mcp/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // TestExtractGetLinkFixture verifies ExtractGetLinkFixture.

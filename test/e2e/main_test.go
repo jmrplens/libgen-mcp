@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
 // credentialVars are the optional settings that decide how much of the suite

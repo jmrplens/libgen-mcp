@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
 )
 
 // tempEntry is one cached temp download: the file path, its size in bytes, the

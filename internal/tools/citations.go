@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/internal/libgen"
+	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
 )
 
 // Citations holds ready-to-paste bibliographic exports built from a record's

@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jmrplens/libgen-mcp/internal/netguard"
-	"github.com/jmrplens/libgen-mcp/internal/pathguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/pathguard"
 )
 
 // TestMain permits private destinations for this package's tests.

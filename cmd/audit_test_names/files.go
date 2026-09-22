@@ -41,7 +41,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/testsource"
 )
 
 // testFileSuffix is the suffix that makes a Go file a test file, and the

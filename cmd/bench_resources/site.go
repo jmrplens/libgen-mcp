@@ -13,7 +13,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
 )
 
 // The two pages and the markers that open each generated region.

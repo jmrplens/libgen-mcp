@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
 )
 
 const (

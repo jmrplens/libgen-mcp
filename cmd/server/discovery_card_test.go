@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	buildversion "github.com/jmrplens/libgen-mcp/internal/version"
+	buildversion "github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
 // decodeDiscoveryCard builds the SEP-2127 card and returns it as a map.

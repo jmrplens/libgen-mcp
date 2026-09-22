@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
 )
 
 // writePageTo renders the record as Markdown and writes it, or reports that the

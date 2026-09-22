@@ -14,7 +14,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/testsource"
 )
 
 // Pattern classifications for test function names. The four buckets a name is

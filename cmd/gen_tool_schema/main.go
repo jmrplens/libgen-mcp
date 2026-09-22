@@ -14,9 +14,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/docgen"
-	"github.com/jmrplens/libgen-mcp/cmd/internal/mcpsurface"
-	"github.com/jmrplens/libgen-mcp/internal/tools"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/internal/tools"
 )
 
 // relPath is where the generated file lives, relative to the repository root.

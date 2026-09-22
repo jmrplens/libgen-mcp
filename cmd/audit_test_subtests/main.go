@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jmrplens/libgen-mcp/cmd/internal/testsource"
+	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/testsource"
 )
 
 // Finding is one case loop that asserts without a subtest.

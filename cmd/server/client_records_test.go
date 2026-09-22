@@ -8,9 +8,9 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/jmrplens/libgen-mcp/internal/mcpotel"
-	"github.com/jmrplens/libgen-mcp/internal/toolutil"
-	"github.com/jmrplens/libgen-mcp/internal/transport"
+	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
+	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
+	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
 )
 
 // testRecords builds a table with bounds small enough to reach in a test and a
