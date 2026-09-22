@@ -20,3 +20,20 @@ declare module "virtual:starlight/components/*" {
 	const component: (props: Record<string, unknown>) => unknown;
 	export default component;
 }
+
+/**
+ * This site's own UI strings, registered with Starlight's translation system.
+ *
+ * `Astro.locals.t` is typed against the keys Starlight knows about, so a key
+ * this site adds is a type error until it is declared here. The key set is read
+ * off `content/i18n/en.json` rather than restated: a list written twice drifts,
+ * and the drift would be a label that renders as its own key name in one
+ * language. English is the reference because `scripts/check-facts.mjs` already
+ * reads that file, so a key removed there fails two checks rather than none.
+ */
+declare namespace StarlightApp {
+	interface I18n extends Record<
+		keyof typeof import("./content/i18n/en.json"),
+		string
+	> {}
+}
