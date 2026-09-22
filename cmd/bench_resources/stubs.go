@@ -9,6 +9,8 @@
 package main
 
 import (
+	// embed is imported for its side effect: the //go:embed directive below
+	// needs it in scope, and nothing here calls it.
 	_ "embed"
 	"io"
 	"net/http"

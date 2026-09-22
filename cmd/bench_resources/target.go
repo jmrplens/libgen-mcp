@@ -186,13 +186,18 @@ func baseEnv(opts targetOptions) []string {
 func mirrorCacheDir(home string) string {
 	switch runtimeGOOS {
 	case "windows":
-		return filepath.Join(home, "AppData", "Local", "libgen-mcp")
+		return filepath.Join(home, "AppData", "Local", cacheSubdir)
 	case "darwin":
-		return filepath.Join(home, "Library", "Caches", "libgen-mcp")
+		return filepath.Join(home, "Library", "Caches", cacheSubdir)
 	default:
-		return filepath.Join(home, ".cache", "libgen-mcp")
+		return filepath.Join(home, ".cache", cacheSubdir)
 	}
 }
+
+// cacheSubdir is the directory the server creates inside whatever
+// os.UserCacheDir resolves to. It is the server's own name, so it is spelled
+// once here rather than at each platform's branch.
+const cacheSubdir = "libgen-mcp"
 
 // seedMirrorCache writes a mirror list naming the stand-in catalog into the
 // cache directory the measured process will read.
