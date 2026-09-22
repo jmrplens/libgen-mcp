@@ -112,6 +112,22 @@ func totalMemoryGiB(ctx context.Context) float64 {
 	return 0
 }
 
+// availableMemoryMiB reports what the kernel says could be given to a new
+// process without swapping, which is what the concurrency series budgets
+// against.
+//
+// Linux only, from MemAvailable, which accounts for reclaimable cache; the free
+// figure alone would under-report by whatever the page cache holds. Elsewhere
+// this answers zero, and the series then runs with no budget and says so in its
+// notes rather than inventing one from installed memory, which says nothing
+// about what is in use.
+func availableMemoryMiB() float64 {
+	if runtimeGOOS != "linux" {
+		return 0
+	}
+	return round(parseMeminfoKiB(readFileString("/proc/meminfo"), "MemAvailable:") / 1024)
+}
+
 // parseMeminfoKiB extracts one field of /proc/meminfo content, in kibibytes,
 // zero when the field is absent or unreadable.
 func parseMeminfoKiB(meminfo, field string) float64 {

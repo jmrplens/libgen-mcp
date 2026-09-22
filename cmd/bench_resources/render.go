@@ -37,8 +37,115 @@ func renderPage(run *Run) string {
 	b.WriteString(renderMemoryTable(run))
 	b.WriteString("\n## Latency per method\n\n")
 	b.WriteString(renderLatencyTable(run))
+	b.WriteString(renderSeries(run))
 	b.WriteString(renderNotes(run))
 	return b.String()
+}
+
+// renderSeries writes what each extra caller costs, and says where the series
+// stopped. It writes nothing at all for a run that measured none.
+func renderSeries(run *Run) string {
+	if len(run.Series) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n## What each extra caller costs\n\n")
+	b.WriteString("Measured rather than extrapolated: one process, more client addresses at each\n")
+	b.WriteString("step, and a reading taken twice. **Under load** is what N callers cost while all\n")
+	b.WriteString("of them are calling, which is what a host has to survive. **Held** is what they\n")
+	b.WriteString("cost with the load stopped and a collection forced, which is what a reader means\n")
+	b.WriteString("by the cost of another caller.\n\n")
+	b.WriteString("The load is `tools/list` rather than a tool call, and that is the honest choice\n")
+	b.WriteString("rather than a convenient one: a tool call reaches the catalog, every catalog\n")
+	b.WriteString("request takes a token from the outbound bucket, and a series driving flat out\n")
+	b.WriteString("exhausts it in the first step — measured, 2,758 of 2,817 calls came back refused\n")
+	b.WriteString("by the limiter. What that measures is the limiter. `tools/list` is served inside\n")
+	b.WriteString("the process, so it measures what this section is about, and it is also the call\n")
+	b.WriteString("every client really does make on every reconnect.\n")
+	for i := range run.Series {
+		b.WriteString(renderOneSeries(&run.Series[i]))
+	}
+	return b.String()
+}
+
+// renderOneSeries is one series: its table, its slopes, and why it ended.
+func renderOneSeries(s *SeriesScenario) string {
+	headers := []string{"Clients", "Mean (MiB)", "Peak (MiB)", "Calls", "p50 (ms)", "p99 (ms)", "CPU ms/call"}
+	align := []docgen.Alignment{
+		docgen.AlignRight, docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
+		docgen.AlignRight, docgen.AlignRight, docgen.AlignRight,
+	}
+	if s.hasSettled() {
+		headers = append(headers, "Held heap (MiB)", "Settled RSS (MiB)")
+		align = append(align, docgen.AlignRight, docgen.AlignRight)
+	}
+
+	var rows [][]string
+	for _, step := range s.Steps {
+		row := []string{
+			itoa(step.Clients), decimal(step.RSSMeanMiB), decimal(step.RSSPeakMiB), itoa(step.Calls),
+			decimal(step.P50Ms), decimal(step.P99Ms), decimal(step.CPUMsPerCall),
+		}
+		if s.hasSettled() {
+			row = append(row, decimal(step.SettledHeapMiB), decimal(step.SettledRSSMiB))
+		}
+		rows = append(rows, row)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n**%s** — every client driving `%s`, %d in flight each, %.0f s per step.\n\n",
+		s.ID, s.Method, s.Parallel, s.StepSeconds)
+	b.WriteString(tableWithNote(docgen.RenderMarkdownTable(headers, align, rows),
+		strings.TrimPrefix(renderSlopes(s), "\n")+renderStop(s)))
+	return b.String()
+}
+
+// renderSlopes is the sentence under a series table.
+//
+// Both figures are named for what they answer, because one of them read as the
+// other is the mistake this series exists to stop: the load slope is what a
+// deployment needs while N callers are all working, and the tenancy slope is
+// what one more caller costs to hold.
+func renderSlopes(s *SeriesScenario) string {
+	var said []string
+	if load, ok := s.loadSlopeMiB(); ok {
+		said = append(said, fmt.Sprintf("**%.2f MiB per caller under load**", load))
+	}
+	if tenancy, ok := s.tenancySlopeKiB(); ok {
+		said = append(said, fmt.Sprintf("**%.0f KiB per caller held**", tenancy))
+	}
+	if len(said) == 0 {
+		return "\nNo per-caller figure is published from this series: the fit came out at or below\n" +
+			"zero, which means the noise between steps was larger than what a caller adds. A\n" +
+			"longer ladder is what separates them; a negative cost is not a measurement.\n"
+	}
+	return "\nFitted across the steps: " + strings.Join(said, " and ") +
+		". The first is what a host needs while that many callers are all working at once;\n" +
+		"the second is what holding one more costs with nothing in flight. Reading the first\n" +
+		"as the second overstates a shared deployment by whatever its requests are carrying.\n"
+}
+
+// renderStop says where a series ended and why, so a shorter series is never
+// presented as the whole one.
+func renderStop(s *SeriesScenario) string {
+	stop := s.Stop
+	if stop == nil {
+		return fmt.Sprintf("\nEvery planned step ran, up to %d clients.\n", s.StoppedAt)
+	}
+	switch stop.Kind {
+	case stopBudget:
+		return fmt.Sprintf("\n**The series stopped at %d clients.** The next step, %d, was estimated at "+
+			"%.0f MiB against a budget of %.0f, so it was not started: this measures a server, "+
+			"and taking the host down is not a measurement.\n",
+			s.StoppedAt, stop.NextClients, stop.EstimateMiB, s.BudgetMiB)
+	case stopLatency:
+		return fmt.Sprintf("\n**The series stopped at %d clients**, where the tool-call tail reached "+
+			"%.0f ms. Past that a client has given up, so the next step would measure timeouts "+
+			"rather than the server.\n", s.StoppedAt, stop.P99Ms)
+	default:
+		return fmt.Sprintf("\n**The series stopped at %d clients**, because the step at %d failed: %s\n",
+			s.StoppedAt, stop.NextClients, stop.Error)
+	}
 }
 
 // renderPreamble says what was measured, on what, and how to read it.

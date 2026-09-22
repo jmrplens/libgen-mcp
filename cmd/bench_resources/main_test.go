@@ -249,7 +249,11 @@ func TestExecute_MeasuresAndWritesBothArtifacts(t *testing.T) {
 		sampleInterval: 10 * time.Millisecond,
 		quick:          true,
 		verbose:        true,
-		targetEnv:      map[string]string{fakeServerEnv: transportHTTP},
+		// The series has a test of its own; what this one is about is the
+		// matrix and the two artifacts, and running a three-step series here
+		// would add six seconds to the unit suite for nothing.
+		noSeries:  true,
+		targetEnv: map[string]string{fakeServerEnv: transportHTTP},
 	}
 	if err := execute(t.Context(), opts); err != nil {
 		t.Fatalf("execute: %v", err)
@@ -291,6 +295,7 @@ func TestExecute_NoWriteLeavesTheRecordAlone(t *testing.T) {
 		sampleInterval: 10 * time.Millisecond,
 		quick:          true,
 		noWrite:        true,
+		noSeries:       true,
 		targetEnv:      map[string]string{fakeServerEnv: transportHTTP},
 	}
 	if err := execute(t.Context(), opts); err != nil {
@@ -404,4 +409,47 @@ func TestBuildServer_CompilesTheBinaryThatShips(t *testing.T) {
 	if binarySize(path) == 0 {
 		t.Errorf("buildServer() produced %s, which weighs nothing", path)
 	}
+}
+
+// TestExecute_MeasuresTheSeriesToo verifies the concurrency series reaches the
+// record through the ordinary path, and that -no-series takes it out.
+func TestExecute_MeasuresTheSeriesToo(t *testing.T) {
+	dir := t.TempDir()
+	opts := options{
+		binary:         os.Args[0],
+		record:         filepath.Join(dir, "record.json"),
+		page:           filepath.Join(dir, "page.md"),
+		scenarios:      "http-1",
+		rounds:         1,
+		sampleInterval: 10 * time.Millisecond,
+		quick:          true,
+		seriesClients:  "1,2",
+		stepDuration:   150 * time.Millisecond,
+		targetEnv:      map[string]string{fakeServerEnv: transportHTTP},
+	}
+	if err := execute(t.Context(), opts); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	run, err := readRecord(opts.record)
+	if err != nil {
+		t.Fatalf("readRecord: %v", err)
+	}
+	if len(run.Series) != 1 || len(run.Series[0].Steps) != 2 {
+		t.Fatalf("the record holds %+v, want one series of two steps", run.Series)
+	}
+	body, err := os.ReadFile(opts.page) // #nosec G304 -- a path this test just wrote
+	if err != nil {
+		t.Fatalf("read the page: %v", err)
+	}
+	if !strings.Contains(string(body), "What each extra caller costs") {
+		t.Error("the page does not carry the series section")
+	}
+
+	t.Run("a ladder that is refused stops the run", func(t *testing.T) {
+		bad := opts
+		bad.seriesClients = "4,2"
+		if err = execute(t.Context(), bad); err == nil {
+			t.Error("expected a descending ladder to stop the run")
+		}
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -37,6 +38,11 @@ type options struct {
 	// does not expose, and it is the seam the tests drive a stand-in process
 	// through.
 	targetEnv map[string]string
+	// The concurrency series: whether to run it at all, the ladder of client
+	// counts, and how long each step's steady phase lasts.
+	noSeries      bool
+	seriesClients string
+	stepDuration  time.Duration
 }
 
 // exitProcess is the exit main takes on failure, so a test can drive main
@@ -68,6 +74,11 @@ func parseFlags() options {
 	flag.BoolVar(&opts.noWrite, "no-write", false, "measure and print, then stop without touching the record")
 	flag.BoolVar(&opts.render, "render", false, "skip measurement: redraw the page from the committed record")
 	flag.BoolVar(&opts.check, "check", false, "verify the committed page matches the committed record; implies -render")
+	flag.BoolVar(&opts.noSeries, "no-series", false, "measure the matrix and stop, without the concurrency series")
+	flag.StringVar(&opts.seriesClients, "series-clients", "",
+		"comma-separated client-address counts for the concurrency series, ascending; empty uses the default ladder")
+	flag.DurationVar(&opts.stepDuration, "step-duration", 0,
+		"steady phase per series step; empty uses 10s, or 2s with -quick")
 	opts.targetEnv = map[string]string{}
 	flag.Func("target-env", "NAME=VALUE added to every measured process; repeatable", func(entry string) error {
 		name, value, found := strings.Cut(entry, "=")
@@ -147,6 +158,21 @@ func execute(ctx context.Context, opts options) error {
 			fmt.Fprintln(os.Stderr, describeScenario(scenario))
 		}
 	}
+	if !opts.noSeries {
+		plan, pErr := seriesPlanFor(opts)
+		if pErr != nil {
+			return pErr
+		}
+		fmt.Fprintf(os.Stderr, "bench_resources: %s — what each extra caller costs, measured rather than extrapolated\n", plan.ID)
+		series, sErr := r.runSeries(ctx, plan)
+		if sErr != nil {
+			return fmt.Errorf("series %s: %w", plan.ID, sErr)
+		}
+		run.Series = append(run.Series, series)
+		if opts.verbose {
+			fmt.Fprintln(os.Stderr, describeSeries(series))
+		}
+	}
 	fillServerInfo(run)
 
 	if opts.noWrite {
@@ -204,6 +230,89 @@ func redraw(opts options) error {
 	}
 	fmt.Fprintf(os.Stderr, "bench_resources: redrew %s from %s\n", opts.page, opts.record)
 	return nil
+}
+
+// seriesPlanFor builds the concurrency series a run measures, from the flags
+// and the defaults the run's shape implies.
+func seriesPlanFor(opts options) (seriesPlan, error) {
+	clients := defaultSeriesClients()
+	if opts.quick {
+		clients = quickSeriesClients()
+	}
+	if strings.TrimSpace(opts.seriesClients) != "" {
+		parsed, err := parseClientLadder(opts.seriesClients)
+		if err != nil {
+			return seriesPlan{}, err
+		}
+		clients = parsed
+	}
+	step := opts.stepDuration
+	if step == 0 {
+		step = 10 * time.Second
+		if opts.quick {
+			step = 2 * time.Second
+		}
+	}
+	return seriesPlan{
+		ID:            "series-http",
+		Clients:       clients,
+		Parallel:      2,
+		PerClientRPS:  5,
+		StepDuration:  step,
+		Method:        methodToolsList,
+		OutboundRPS:   benchOutboundRPS,
+		OutboundBurst: benchOutboundBurst,
+	}, nil
+}
+
+// parseClientLadder reads a comma-separated list of client counts, refusing one
+// that is not ascending.
+//
+// Ascending is not a style rule: the budget guard fits a line through the steps
+// measured so far to decide whether the next one is affordable, and a ladder
+// that went down would have it extrapolating backwards into a step it had
+// already run.
+func parseClientLadder(list string) ([]int, error) {
+	var clients []int
+	for field := range strings.SplitSeq(list, ",") {
+		trimmed := strings.TrimSpace(field)
+		if trimmed == "" {
+			continue
+		}
+		count, err := strconv.Atoi(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("-series-clients %q: %w", trimmed, err)
+		}
+		if count < 1 {
+			return nil, fmt.Errorf("-series-clients %q: a step needs at least one client", trimmed)
+		}
+		if len(clients) > 0 && count <= clients[len(clients)-1] {
+			return nil, fmt.Errorf("-series-clients must ascend; %d follows %d", count, clients[len(clients)-1])
+		}
+		clients = append(clients, count)
+	}
+	if len(clients) == 0 {
+		return nil, fmt.Errorf("-series-clients %q names no step", list)
+	}
+	return clients, nil
+}
+
+// describeSeries is the one-line summary the terminal prints under -v.
+func describeSeries(s SeriesScenario) string {
+	load, hasLoad := s.loadSlopeMiB()
+	tenancy, hasTenancy := s.tenancySlopeKiB()
+	reason := s.StopReason
+	if s.Stop != nil && s.Stop.Error != "" {
+		reason += ": " + s.Stop.Error
+	}
+	parts := []string{fmt.Sprintf("    %d steps, stopped at %d clients (%s)", len(s.Steps), s.StoppedAt, reason)}
+	if hasLoad {
+		parts = append(parts, fmt.Sprintf("%.2f MiB/client under load", load))
+	}
+	if hasTenancy {
+		parts = append(parts, fmt.Sprintf("%.0f KiB/client held", tenancy))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // matrixFor picks the plan a run measures.

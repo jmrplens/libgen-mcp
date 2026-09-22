@@ -471,12 +471,12 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |     8 |
 | `LIBGEN_MCP_*` variables |    55 |
 | Go packages              |    49 |
-| Test files               |   232 |
+| Test files               |   233 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
 | unit (internal)      |   101 |
-| unit (cmd)           |    79 |
+| unit (cmd)           |    80 |
 | HTTP end-to-end      |    29 |
 | stdio end-to-end     |    10 |
 | collector acceptance |     7 |

@@ -178,3 +178,132 @@ func TestNumberFormatting_WritesEachKindAsItself(t *testing.T) {
 		})
 	}
 }
+
+// fixtureSeries is a measured series, for the renderers.
+func fixtureSeries() SeriesScenario {
+	return SeriesScenario{
+		ID: "series-http", Transport: transportHTTP, Method: methodToolsList,
+		Parallel: 2, PerClientRPS: 5, StepSeconds: 10, BudgetMiB: 30000,
+		Clients: []int{1, 10, 100}, StoppedAt: 100, StopReason: stopComplete,
+		OutboundRPS: 20, OutboundBurst: 100,
+		Steps: []SeriesStep{
+			{Clients: 1, RSSMeanMiB: 25, RSSPeakMiB: 26, Calls: 50, P50Ms: 1, P99Ms: 3, SettledHeapMiB: 3, SettledRSSMiB: 26},
+			{Clients: 10, RSSMeanMiB: 28, RSSPeakMiB: 31, Calls: 500, P50Ms: 2, P99Ms: 9, SettledHeapMiB: 4, SettledRSSMiB: 30},
+			{Clients: 100, RSSMeanMiB: 45, RSSPeakMiB: 55, Calls: 5000, P50Ms: 4, P99Ms: 20, SettledHeapMiB: 16, SettledRSSMiB: 50},
+		},
+	}
+}
+
+// TestRenderSeries_PublishesBothCostsAndTellsThemApart verifies the section
+// that exists to stop one figure being read as the other: what N callers cost
+// while they are all working, and what one more costs to hold.
+func TestRenderSeries_PublishesBothCostsAndTellsThemApart(t *testing.T) {
+	run := fixtureRun()
+	run.Series = []SeriesScenario{fixtureSeries()}
+	page := renderPage(run)
+
+	for _, want := range []string{
+		"## What each extra caller costs",
+		"`tools/list`",
+		"per caller under load",
+		"per caller held",
+		"Held heap (MiB)",
+		"Every planned step ran",
+	} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(page, want) {
+				t.Errorf("the page does not carry %q", want)
+			}
+		})
+	}
+
+	t.Run("a run with no series writes no section", func(t *testing.T) {
+		if strings.Contains(renderPage(fixtureRun()), "What each extra caller costs") {
+			t.Error("a run that measured no series still got the section")
+		}
+	})
+
+	t.Run("a series with no settled reading leaves the columns out", func(t *testing.T) {
+		bare := fixtureSeries()
+		for i := range bare.Steps {
+			bare.Steps[i].SettledHeapMiB = 0
+		}
+		if strings.Contains(renderOneSeries(&bare), "Held heap") {
+			t.Error("the settled columns were drawn with nothing to put in them")
+		}
+	})
+}
+
+// TestRenderStop_SaysWhereTheSeriesEndedAndWhy verifies a shorter series is
+// never presented as the whole one, in each of the three ways it can end early.
+func TestRenderStop_SaysWhereTheSeriesEndedAndWhy(t *testing.T) {
+	testCases := []struct {
+		name string
+		stop *SeriesStop
+		want string
+	}{
+		{name: "every step ran", stop: nil, want: "Every planned step ran"},
+		{
+			name: "the budget", want: "was not started",
+			stop: &SeriesStop{Kind: stopBudget, NextClients: 200, EstimateMiB: 40000},
+		},
+		{
+			name: "the latency ceiling", want: "a client has given up",
+			stop: &SeriesStop{Kind: stopLatency, NextClients: 100, P99Ms: 31000},
+		},
+		{
+			name: "a failure", want: "the mirror refused",
+			stop: &SeriesStop{Kind: stopFailure, NextClients: 100, Error: "the mirror refused"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := fixtureSeries()
+			s.Stop = tc.stop
+			if got := renderStop(&s); !strings.Contains(got, tc.want) {
+				t.Errorf("renderStop() = %q, want it to say %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRenderSlopes_WithholdsACostItCouldNotMeasure verifies the page says so
+// rather than publishing a negative per-caller cost, which is what a fit over a
+// short, noisy ladder produces.
+func TestRenderSlopes_WithholdsACostItCouldNotMeasure(t *testing.T) {
+	noisy := fixtureSeries()
+	noisy.Steps = []SeriesStep{
+		{Clients: 1, RSSPeakMiB: 40, SettledHeapMiB: 11},
+		{Clients: 10, RSSPeakMiB: 30, SettledHeapMiB: 10},
+	}
+	got := renderSlopes(&noisy)
+	if !strings.Contains(got, "a negative cost is not a measurement") {
+		t.Errorf("renderSlopes() = %q, want it to withhold the figure and say why", got)
+	}
+	if strings.Contains(got, "per caller under load") {
+		t.Error("renderSlopes() published a figure the fit could not support")
+	}
+}
+
+// TestBuildLabel_NamesTheRevisionWhenThereIsOne verifies two builds of one tag
+// can be told apart, and that an unstamped binary does not get "(none)".
+func TestBuildLabel_NamesTheRevisionWhenThereIsOne(t *testing.T) {
+	testCases := []struct {
+		name   string
+		server ServerInfo
+		want   string
+	}{
+		{name: "a stamped build", server: ServerInfo{Version: "1.7.3", Commit: "abc1234"}, want: "1.7.3 (abc1234)"},
+		{name: "no revision", server: ServerInfo{Version: "1.7.3"}, want: "1.7.3"},
+		{name: "an unstamped revision", server: ServerInfo{Version: "1.7.3", Commit: "none"}, want: "1.7.3"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := buildLabel(tc.server); got != tc.want {
+				t.Errorf("buildLabel() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
