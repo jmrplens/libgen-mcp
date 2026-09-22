@@ -131,6 +131,41 @@ func TestAuditSchema_MissingDescription(t *testing.T) {
 	}
 }
 
+// TestAuditSchema_TopLevelCombinator covers the rule that cost this project a
+// working evaluator: a combinator at a schema's root is refused by the Anthropic
+// Messages API for the whole request, so the gate has to see it.
+//
+// Both halves are asserted. The root is a violation, and the same keyword nested
+// inside a property is not — nesting is accepted everywhere, and a gate that
+// flagged it would push every future schema into a shape JSON Schema has no
+// reason to avoid.
+func TestAuditSchema_TopLevelCombinator(t *testing.T) {
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		t.Run("root "+keyword, func(t *testing.T) {
+			schema := objectSchema(map[string]any{
+				"a": map[string]any{"type": "string", "description": "ok"},
+			})
+			schema[keyword] = []any{map[string]any{"required": []any{"a"}}}
+			vs := auditSchema("tool", "input", schema)
+			if !hasSubstr(detailSet(vs), keyword+" at the top level") {
+				t.Errorf("a root %s was not reported; got %v", keyword, detailSet(vs))
+			}
+		})
+
+		t.Run("nested "+keyword, func(t *testing.T) {
+			schema := objectSchema(map[string]any{
+				"a": map[string]any{
+					"description": "ok",
+					keyword:       []any{map[string]any{"type": "string"}, map[string]any{"type": "number"}},
+				},
+			})
+			if vs := auditSchema("tool", "input", schema); hasSubstr(detailSet(vs), "at the top level") {
+				t.Errorf("a %s nested in a property was reported; got %v", keyword, detailSet(vs))
+			}
+		})
+	}
+}
+
 // TestAuditSchema_Defs walks $defs and definitions blocks.
 func TestAuditSchema_Defs(t *testing.T) {
 	schema := map[string]any{
@@ -403,35 +438,39 @@ func hasSubstr(list []string, sub string) bool {
 }
 
 // TestAuditSchema_ConstraintStubsInGroupBranches pins the two halves of the
-// stub exemption. A required-group branch constrains a field the top level
-// already describes — {"pattern":"\\S"} on md5 inside anyOf is a refinement,
-// not a field, and must not be reported. The discriminator is type: a real
-// field always carries one, so an undescribed field inside the same branch is
-// still caught.
+// stub exemption. A required-group branch constrains a field already described
+// beside it — {"pattern":"\\S"} on md5 inside anyOf is a refinement, not a
+// field, and must not be reported. The discriminator is type: a real field
+// always carries one, so an undescribed field inside the same branch is still
+// caught.
+//
+// The group sits **inside a property** rather than at the schema root, which is
+// the only place a combinator may now live — see
+// [TestAuditSchema_TopLevelCombinator]. The fixture used to be a root anyOf,
+// which is the shape this surface shipped until the Messages API refused it;
+// keeping it there would test the exemption on a path no schema can take.
 func TestAuditSchema_ConstraintStubsInGroupBranches(t *testing.T) {
-	schema := objectSchema(map[string]any{
-		"md5": map[string]any{"type": "string", "description": "the file md5"},
-	})
-	schema["anyOf"] = []any{
-		map[string]any{
-			"required": []any{"md5"},
-			"properties": map[string]any{
-				"md5": map[string]any{"pattern": `\S`},
+	group := func(md5 map[string]any) map[string]any {
+		return map[string]any{
+			"description": "how the item is identified",
+			"anyOf": []any{
+				map[string]any{
+					"required":   []any{"md5"},
+					"properties": map[string]any{"md5": md5},
+				},
 			},
-		},
+			"properties": map[string]any{
+				"md5": map[string]any{"type": "string", "description": "the file md5"},
+			},
+		}
 	}
+
+	schema := objectSchema(map[string]any{"ids": group(map[string]any{"pattern": `\S`})})
 	if vs := auditSchema("download", "input", schema); len(vs) != 0 {
 		t.Fatalf("a constraint stub in a group branch must pass; got %v", detailSet(vs))
 	}
 
-	schema["anyOf"] = []any{
-		map[string]any{
-			"required": []any{"md5"},
-			"properties": map[string]any{
-				"md5": map[string]any{"type": "string", "pattern": `\S`},
-			},
-		},
-	}
+	schema = objectSchema(map[string]any{"ids": group(map[string]any{"type": "string", "pattern": `\S`})})
 	got := categorySet(auditSchema("download", "input", schema))
 	if !got["field-description"] {
 		t.Error("a typed, undescribed property inside a branch must still be reported")

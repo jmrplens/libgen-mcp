@@ -4165,84 +4165,89 @@ func TestNoParamHeaderAnnotations(t *testing.T) {
 	}
 }
 
-// requiredGroupKeys flattens a list of single-key required branches into the
-// keys they name, failing on any branch that is not exactly that shape — the
-// shape is the contract, since a multi-key branch would mean AND, not OR. Each
-// branch must also constrain its key's value (pattern or minLength): required
-// alone counts key presence, so a blank identifier would satisfy a branch its
-// handler ignores, and schema and validator would disagree on inputs like
-// {"md5":"","doi":"…"}.
-func requiredGroupKeys(t *testing.T, branches []*jsonschema.Schema) []string {
-	t.Helper()
-	keys := make([]string, 0, len(branches))
-	for i, b := range branches {
-		if b == nil || len(b.Required) != 1 {
-			t.Fatalf("branch %d = %+v, want exactly one required key", i, b)
-		}
-		key := b.Required[0]
-		prop := b.Properties[key]
-		if prop == nil || (prop.Pattern == "" && prop.MinLength == nil) {
-			t.Errorf("branch %d (%s) does not constrain the value; a blank %s would satisfy it while the handler ignores blanks", i, key, key)
-		}
-		keys = append(keys, key)
+// TestNoInputSchemaCarriesATopLevelCombinator is the unit half of the rule
+// [noTopLevelCombinators] states: no tool's input schema may carry oneOf, anyOf
+// or allOf at its root.
+//
+// It is asserted per builder rather than only over a real tools/list, because a
+// builder is where one gets added: the three this repository shipped were each
+// written directly onto the schema a builder had just inferred. The audit gate
+// covers the other direction, over the surface as a client receives it.
+//
+// The test that stood here asserted the opposite, branch by branch. It was not
+// wrong about JSON Schema — it was pinning a shape the Anthropic Messages API
+// refuses outright, with a 400 that takes down every tool in the request, and no
+// test here could see that because nothing in this package talks to an API.
+func TestNoInputSchemaCarriesATopLevelCombinator(t *testing.T) {
+	schemas := map[string]*jsonschema.Schema{
+		"download":    downloadInputSchema([]string{"libgen"}, contractSaves),
+		"get_details": detailsInputSchema(),
+		"read local":  readInputSchema([]string{"libgen"}, false),
+		"read remote": readInputSchema([]string{"libgen"}, true),
+		"search":      searchInputSchema(),
 	}
-	return keys
+	for name, schema := range schemas {
+		t.Run(name, func(t *testing.T) {
+			if schema == nil {
+				t.Fatalf("%s input schema = nil", name)
+			}
+			if schema.OneOf != nil {
+				t.Errorf("oneOf = %v, want none: the Messages API refuses a top-level combinator", schema.OneOf)
+			}
+			if schema.AnyOf != nil {
+				t.Errorf("anyOf = %v, want none: the Messages API refuses a top-level combinator", schema.AnyOf)
+			}
+			if schema.AllOf != nil {
+				t.Errorf("allOf = %v, want none: the Messages API refuses a top-level combinator", schema.AllOf)
+			}
+		})
+	}
 }
 
-// TestIdentifierGroupsMatchTheirValidators pins each input schema's
-// required-group to the rule its handler enforces, so the two cannot drift:
-// download's handler accepts any non-empty combination of md5/isbn/doi
-// (anyOf), get_details' handler demands exactly one of md5/id/doi (oneOf), and
-// read's accepts md5/doi/path locally while a remote server rejects any call
-// that sets path — so remotely the property itself is gone, not merely
+// TestNoTopLevelCombinatorsClearsAllThree drives the helper directly, including
+// the nil it is allowed to be handed — every builder returns nil when inference
+// of its static struct fails, and the helper sits on that return path.
+func TestNoTopLevelCombinatorsClearsAllThree(t *testing.T) {
+	if got := noTopLevelCombinators(nil); got != nil {
+		t.Errorf("noTopLevelCombinators(nil) = %v, want nil", got)
+	}
+	branch := []*jsonschema.Schema{{Required: []string{"md5"}}}
+	schema := &jsonschema.Schema{
+		Type:  "object",
+		OneOf: branch,
+		AnyOf: branch,
+		AllOf: branch,
+	}
+	got := noTopLevelCombinators(schema)
+	if got.OneOf != nil || got.AnyOf != nil || got.AllOf != nil {
+		t.Errorf("combinators survived: oneOf=%v anyOf=%v allOf=%v", got.OneOf, got.AnyOf, got.AllOf)
+	}
+	// Nothing else may be touched: the helper is a scalpel, not a rebuild.
+	if got.Type != "object" {
+		t.Errorf("Type = %q, want it untouched", got.Type)
+	}
+}
+
+// TestReadOffersPathLocallyAndNotRemotely keeps the half of the removed test
+// that was about this server rather than about JSON Schema: a remote deployment
+// rejects any call that sets path, so the property is gone rather than merely
 // unlisted.
-func TestIdentifierGroupsMatchTheirValidators(t *testing.T) {
-	t.Run("download states at least one of md5, isbn, doi", func(t *testing.T) {
-		schema := downloadInputSchema([]string{"libgen"}, contractSaves)
-		if schema == nil {
-			t.Fatal("downloadInputSchema() = nil")
-		}
-		if got, want := requiredGroupKeys(t, schema.AnyOf), []string{"md5", "isbn", "doi"}; !slices.Equal(got, want) {
-			t.Errorf("anyOf keys = %v, want %v", got, want)
-		}
-		if schema.OneOf != nil {
-			t.Errorf("oneOf = %v, want none: the handler accepts several identifiers at once", schema.OneOf)
-		}
-	})
+func TestReadOffersPathLocallyAndNotRemotely(t *testing.T) {
+	local := readInputSchema([]string{"libgen"}, false)
+	if local == nil {
+		t.Fatal("readInputSchema(local) = nil")
+	}
+	if local.Properties["path"] == nil {
+		t.Error("local schema lost the path property")
+	}
 
-	t.Run("get_details states exactly one of md5, id, doi", func(t *testing.T) {
-		schema := detailsInputSchema()
-		if schema == nil {
-			t.Fatal("detailsInputSchema() = nil")
-		}
-		if got, want := requiredGroupKeys(t, schema.OneOf), []string{"md5", "id", "doi"}; !slices.Equal(got, want) {
-			t.Errorf("oneOf keys = %v, want %v", got, want)
-		}
-		if schema.AnyOf != nil {
-			t.Errorf("anyOf = %v, want none: the handler refuses more than one identifier", schema.AnyOf)
-		}
-	})
-
-	t.Run("read local offers path, remote removes it", func(t *testing.T) {
-		local := readInputSchema([]string{"libgen"}, false)
-		if local == nil {
-			t.Fatal("readInputSchema(local) = nil")
-		}
-		if got, want := requiredGroupKeys(t, local.AnyOf), []string{"md5", "doi", "path"}; !slices.Equal(got, want) {
-			t.Errorf("local anyOf keys = %v, want %v", got, want)
-		}
-		if local.Properties["path"] == nil {
-			t.Error("local schema lost the path property")
-		}
-
-		remote := readInputSchema([]string{"libgen"}, true)
-		if got, want := requiredGroupKeys(t, remote.AnyOf), []string{"md5", "doi"}; !slices.Equal(got, want) {
-			t.Errorf("remote anyOf keys = %v, want %v", got, want)
-		}
-		if remote.Properties["path"] != nil {
-			t.Error("remote schema still offers path, which validateReadInput rejects whenever it is set")
-		}
-	})
+	remote := readInputSchema([]string{"libgen"}, true)
+	if remote == nil {
+		t.Fatal("readInputSchema(remote) = nil")
+	}
+	if remote.Properties["path"] != nil {
+		t.Error("remote schema still offers path, which validateReadInput rejects whenever it is set")
+	}
 }
 
 // TestDetailsObjectEnumMatchesItsValidator asserts get_details advertises the
