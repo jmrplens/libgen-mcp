@@ -3257,6 +3257,15 @@ var missAdmissions = []string{
 	// success because no phrase here matched it.
 	"unable to serve", "could not be served", "access issues", "temporarily unavailable",
 	"currently unavailable", "failed to download", "did not download", "no file",
+	// A source that refused the request outright. Measured on S72 in the
+	// 2026-09-22 run, where Anna's had put SciDB behind a browser challenge: the
+	// model answered "The download from the scidb source failed. The scidb mirror
+	// (Anna's Archive) returned an HTTP 403 error, which means access was denied",
+	// which is more specific than anything above, and was graded as a fabricated
+	// success because every phrase here wants its words adjacent — "download
+	// failed" does not match "the download from the scidb source failed".
+	"access was denied", "access is denied", "access denied", "was denied",
+	"http 403", "403 error", "403 forbidden", "returned a 403",
 }
 
 // admitsMiss reports whether an answer acknowledges coming up empty — no result,
@@ -3566,6 +3575,18 @@ func assertAnnasMemberDownload(tr transcript) (pass bool, detail string) {
 		if strings.Contains(strings.ToLower(e.Field), "key") && e.Action != "accept" {
 			return true, skipPrefix + " no Anna's membership key was available, so the member tier cannot be exercised"
 		}
+	}
+	// Nothing to opt in *for*. This scenario's book is Anna's-only, so a search
+	// that returned no Anna's-origin result leaves the model with no md5 to
+	// download and no way to reach the argument under test — and failing it for
+	// "no download call" would report a live outage as a surface gap.
+	//
+	// Graded the way its two siblings grade the same outage, on whether the model
+	// said so plainly. Added 2026-09-22, when Anna's put its HTML search behind a
+	// browser challenge: S35 and S40 degraded correctly and this one, alone in
+	// the trio, had no such path.
+	if len(annasHits(tr)) == 0 {
+		return gradeDegraded(tr, "no Anna's-origin result to download (live network)")
 	}
 	if _, called := findDownloadCall(tr); !called {
 		return false, noDownloadCall
@@ -4048,38 +4069,41 @@ func readTextGrounded(tr transcript) bool {
 	return false
 }
 
-// findOutlineCall returns the read call to grade an outline scenario against: the
-// one that actually produced a table of contents, if any, else the first read.
+// findOutlineCall returns the read call to grade an outline scenario against, in
+// descending order of what it can prove: one that produced a table of contents,
+// else one that ran cleanly without finding one, else the first attempt.
 //
 // A model handed a copy with no embedded outline may legitimately try another
 // copy, and grading its first attempt would call a correct recovery a fabrication
 // — which is exactly what a live run reported before this existed.
+//
+// The middle rung was added on 2026-09-22 for the same reason, one rung down.
+// S28 met a first copy with no text layer at all, moved to a second that opened
+// cleanly and simply had no embedded contents, then read that book's own contents
+// pages and compiled the table from them — the recovery this function exists to
+// protect, and the case [assertReadOutline] blesses by name a few lines below.
+// With only two rungs the fallback handed back the unextractable first attempt,
+// and an exemplary transcript was graded a fabrication.
 func findOutlineCall(tr transcript) (toolCall, bool) {
-	var firstOutline toolCall
-	var haveOutline bool
+	var firstOutline, firstClean toolCall
+	var haveOutline, haveClean bool
 	for _, c := range tr.Calls {
-		if c.Name != "read" {
+		asked, produced, clean := gradeOutlineAttempt(c)
+		if !asked {
 			continue
 		}
-		// Only a call that asked for an outline can be graded as one. Falling back
-		// to any read at all would report a model that did set outline=true, then
-		// read sequentially, as never having discovered the capability.
-		if asked, _ := c.Input["outline"].(bool); !asked {
-			continue
+		if produced {
+			return c, true
 		}
 		if !haveOutline {
 			firstOutline, haveOutline = c, true
 		}
-		if c.Result == nil || c.Result.IsError {
-			continue
+		if clean && !haveClean {
+			firstClean, haveClean = c, true
 		}
-		var out tools.ReadOutput
-		if err := decodeStructured(c.Structured, &out); err != nil {
-			continue
-		}
-		if len(out.Outline) > 0 {
-			return c, true
-		}
+	}
+	if haveClean {
+		return firstClean, true
 	}
 	if haveOutline {
 		return firstOutline, true
@@ -4087,6 +4111,36 @@ func findOutlineCall(tr transcript) (toolCall, bool) {
 	// No outline call at all: hand back any read so the assertion can report the
 	// missing argument rather than the missing call.
 	return findCall(tr, "read")
+}
+
+// gradeOutlineAttempt examines one recorded call for [findOutlineCall] and
+// reports the three things that decide which rung it belongs on: whether it
+// asked for an outline at all, whether it came back with one, and whether it at
+// least opened the file cleanly.
+//
+// Split out because the loop above was doing both jobs and read as one: it
+// carried the ranking AND the examination, and adding the middle rung put it
+// past the cognitive-complexity budget the quality gate holds this repository
+// to. The loop now ranks and this decides, which is also the order they are
+// easiest to read in.
+func gradeOutlineAttempt(c toolCall) (asked, produced, clean bool) {
+	if c.Name != "read" {
+		return false, false, false
+	}
+	// Only a call that asked for an outline can be graded as one. Falling back
+	// to any read at all would report a model that did set outline=true, then
+	// read sequentially, as never having discovered the capability.
+	if wanted, _ := c.Input["outline"].(bool); !wanted {
+		return false, false, false
+	}
+	if c.Result == nil || c.Result.IsError {
+		return true, false, false
+	}
+	var out tools.ReadOutput
+	if err := decodeStructured(c.Structured, &out); err != nil {
+		return true, false, false
+	}
+	return true, len(out.Outline) > 0, out.Extractable
 }
 
 // detailsIdentifierGrounded verifies a get_details call was keyed by an identifier

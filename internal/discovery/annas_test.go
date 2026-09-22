@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -90,6 +91,224 @@ func TestAnnasProviderSearchesFirstReachableMirror(t *testing.T) {
 	}
 	if p.Name() != "annas" {
 		t.Errorf("Name() = %q, want annas", p.Name())
+	}
+}
+
+// TestLooksChallenged pins what counts as an interstitial, because the cost of
+// getting it wrong runs both ways: too loose and an ordinary refusal stops the
+// provider from trying the next mirror, too tight and the giving-up never
+// happens.
+//
+// Both the status and the markers are required. A 403 alone is an ordinary
+// refusal — a mirror may simply decline a query — and a page that mentions
+// ddos-guard while answering 200 is a search page that happens to say so.
+func TestLooksChallenged(t *testing.T) {
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<link rel="stylesheet" href="/.well-known/ddos-guard/js-challenge/index.css"></head></html>`
+
+	testCases := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{name: "the real interstitial", status: http.StatusForbidden, body: interstitial, want: true},
+		{name: "mixed case still matches", status: http.StatusForbidden, body: strings.ToUpper(interstitial), want: true},
+		{name: "a bare refusal", status: http.StatusForbidden, body: "forbidden", want: false},
+		{name: "only one marker", status: http.StatusForbidden, body: "<title>DDoS-Guard</title>", want: false},
+		{name: "the same page on a 200", status: http.StatusOK, body: interstitial, want: false},
+		{name: "a server error", status: http.StatusInternalServerError, body: interstitial, want: false},
+		{name: "an empty body", status: http.StatusForbidden, body: "", want: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksChallenged(tc.status, []byte(tc.body)); got != tc.want {
+				t.Errorf("looksChallenged(%d, %q) = %t, want %t", tc.status, tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne verifies the two
+// refusals are handled oppositely, which is the whole point of telling them
+// apart.
+//
+// A challenged mirror ends the call: every Anna's mirror is the same deployment
+// behind the same provider, so the siblings would answer the same way and the
+// only thing asking them adds is refused requests against a host that has just
+// said no. An ordinary refusal is what the mirror list exists for, and must
+// still fall through to the next one.
+func TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne(t *testing.T) {
+	fixture := annasFixture(t)
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<script src="/.well-known/ddos-guard/js-challenge/index.js"></script></head></html>`
+
+	serve := func(hits *atomic.Int32, status int, body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+
+	t.Run("a challenge ends the call", func(t *testing.T) {
+		var challenged, sibling atomic.Int32
+		first := serve(&challenged, http.StatusForbidden, interstitial)
+		defer first.Close()
+		second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			sibling.Add(1)
+			_, _ = w.Write(fixture)
+		}))
+		defer second.Close()
+
+		p := &AnnasProvider{mirrors: staticMirrors{first.URL, second.URL}, http: first.Client()}
+		got, err := p.Search(context.Background(), "dune", 3)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("Search returned %d results, want none: the provider gave up", len(got))
+		}
+		if n := sibling.Load(); n != 0 {
+			t.Errorf("the sibling mirror was asked %d time(s); a challenge must not be retried across mirrors", n)
+		}
+	})
+
+	t.Run("an ordinary refusal falls through", func(t *testing.T) {
+		var refused, sibling atomic.Int32
+		first := serve(&refused, http.StatusForbidden, "forbidden")
+		defer first.Close()
+		second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			sibling.Add(1)
+			_, _ = w.Write(fixture)
+		}))
+		defer second.Close()
+
+		p := &AnnasProvider{mirrors: staticMirrors{first.URL, second.URL}, http: first.Client()}
+		got, err := p.Search(context.Background(), "dune", 3)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if len(got) == 0 {
+			t.Error("Search returned nothing; a plain 403 must fall through to the next mirror")
+		}
+		if n := sibling.Load(); n != 1 {
+			t.Errorf("the sibling mirror was asked %d time(s), want exactly 1", n)
+		}
+	})
+}
+
+// TestAnnasProviderStaysQuietAfterAChallengeAndComesBack verifies the cooldown
+// in both directions, which is the whole of its value: no request at all while
+// it holds, and one request to find out the site is welcoming again once it
+// lapses.
+//
+// The clock is moved rather than waited on. A test that slept for the real
+// window would take fifteen minutes and would pin nothing a shorter constant
+// does not.
+func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
+	fixture := annasFixture(t)
+	const interstitial = `<html><head><title>DDoS-Guard</title>` +
+		`<script src="/.well-known/ddos-guard/js-challenge/index.js"></script></head></html>`
+
+	var hits atomic.Int32
+	var challenge atomic.Bool
+	challenge.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		if challenge.Load() {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(interstitial))
+			return
+		}
+		_, _ = w.Write(fixture)
+	}))
+	defer srv.Close()
+
+	now := time.Now()
+	p := &AnnasProvider{
+		mirrors: staticMirrors{srv.URL},
+		http:    srv.Client(),
+		now:     func() time.Time { return now },
+	}
+
+	if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Fatalf("the first search made %d request(s), want 1", n)
+	}
+
+	// Inside the window: the site is answering again, and must not be asked.
+	challenge.Store(false)
+	for i := range 3 {
+		if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+			t.Fatalf("Search %d during the cooldown: %v", i, err)
+		}
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("the cooldown made %d request(s) in total, want the original 1", n)
+	}
+
+	// Past the window: exactly one request, and the results come back.
+	now = now.Add(challengeCooldown + time.Second)
+	got, err := p.Search(context.Background(), "dune", 3)
+	if err != nil {
+		t.Fatalf("Search after the cooldown: %v", err)
+	}
+	if n := hits.Load(); n != 2 {
+		t.Errorf("after the cooldown the provider made %d request(s) in total, want 2", n)
+	}
+	if len(got) == 0 {
+		t.Error("the provider did not come back: no results once the challenge lifted")
+	}
+}
+
+// TestBeQuietOnlyEverMovesTheDeadlineLater pins the rule a plain Swap breaks: a
+// goroutine that computed its deadline, was descheduled, and woke up after a
+// later one had been stored must not shorten the window.
+//
+// Concurrent challenges are ordinary — Federate runs providers in their own
+// goroutines and a server answers several searches at once — and a shortened
+// window is the one failure the cooldown exists to prevent. The stale deadline
+// is applied deliberately here rather than raced for, so the case fails every
+// time against a Swap instead of once in a thousand runs.
+func TestBeQuietOnlyEverMovesTheDeadlineLater(t *testing.T) {
+	now := time.Now()
+	p := &AnnasProvider{now: func() time.Time { return now }}
+
+	if !p.beQuiet() {
+		t.Fatal("the first challenge did not report itself as opening the window")
+	}
+	opened := p.quietUntil.Load()
+
+	// A second challenge a minute later extends the window and says nothing,
+	// because the window it belongs to has already been announced.
+	now = now.Add(time.Minute)
+	if p.beQuiet() {
+		t.Error("a challenge inside an open window reported itself as opening one")
+	}
+	extended := p.quietUntil.Load()
+	if extended <= opened {
+		t.Errorf("the deadline did not move later: %d then %d", opened, extended)
+	}
+
+	// The descheduled goroutine: its clock still reads the original instant, so
+	// the deadline it computes is earlier than the one already stored.
+	stale := now.Add(-time.Minute)
+	p.now = func() time.Time { return stale }
+	if p.beQuiet() {
+		t.Error("a stale challenge reported itself as opening a window")
+	}
+	if got := p.quietUntil.Load(); got != extended {
+		t.Errorf("a stale deadline overwrote a later one: %d, want %d", got, extended)
+	}
+
+	// Past the window, a challenge opens a new one and says so again.
+	p.now = func() time.Time { return now.Add(challengeCooldown + time.Minute) }
+	if !p.beQuiet() {
+		t.Error("a challenge after the window lapsed did not report a fresh one")
 	}
 }
 

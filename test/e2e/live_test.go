@@ -1922,6 +1922,7 @@ func callSearch(t *testing.T, ctx context.Context, env *liveEnv, args map[string
 // caller asking for anything special.
 func TestE2ESearchEscalatesOnCatalogMiss(t *testing.T) {
 	env := requireLive(t)
+	requireAnnasHTMLSite(t, annasSearchPath)
 	item := loadEscalationItem(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -2098,6 +2099,7 @@ func TestE2EReadEscalatedItem(t *testing.T) {
 func TestE2EAnnasFallbackEnrichesByISBN(t *testing.T) {
 	env := requireLive(t)
 	item := loadEscalationItem(t)
+	requireAnnasHTMLSite(t, annasRecordPath+item.MD5)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -2272,6 +2274,7 @@ func classifyAnnasFailure(t *testing.T, err error) {
 func TestE2EGetDetailsFallsBackToAnnas(t *testing.T) {
 	env := requireLive(t)
 	item := loadEscalationItem(t)
+	requireAnnasHTMLSite(t, annasRecordPath+item.MD5)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
