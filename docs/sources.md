@@ -714,6 +714,18 @@ Anna's Archive, as an md5-keyed rescue route.
   project is a guest of. A browser `User-Agent` does not help either — measured the same day,
   the interstitial arrives whatever the header says, because the gate is the token and not the
   string.
+- **When it gives up at once** Anna's is the last source in the chain, so a failure there used to
+  spend the whole start-retry schedule, re-asking the member API on every attempt. Two answers
+  now end the attempt on the first request, because neither changes within a minute. The member
+  API answering `Invalid domain_index or path_index` (or `Record not found`) means the md5 has no
+  copy on a fast server: the API takes a collection index and a server index, both defaulting to
+  zero, and says so when the defaults name nothing. And a record page answering with the
+  challenge is refused, for this call, on every retry. The attempt ends only when **both** routes
+  said so: a member miss beside a record page that answered 503 still gets the schedule, since
+  the page may answer in ten seconds and carry a CID. Neither answer sets Anna's aside, because
+  the member API keeps working while the pages are challenged. The failure then tells the model
+  to download another copy of the same work, which is what a user reported doing by hand after
+  a hundred seconds of retries.
 - **What it does not cover** the anonymous "slow download" tier, for the reason above, and — for
   as long as the challenge stands — search and the md5 page. Public IPFS gateway availability
   also varies enough that the keyless path is a genuine fallback rather than a fast path: an

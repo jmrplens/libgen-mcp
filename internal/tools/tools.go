@@ -63,7 +63,7 @@ func detailsInputSchema() *jsonschema.Schema {
 	// rather than leaving the model to read it out of the prose and learn it was
 	// wrong from an error.
 	setStringEnum(schema, "object", detailsObjectNames())
-	return noTopLevelCombinators(schema)
+	return withExample(noTopLevelCombinators(schema), detailsExample)
 }
 
 // detailsDescription is the get_details tool's description.
@@ -371,7 +371,7 @@ func readInputSchema(enabled []string, remote bool) *jsonschema.Schema {
 		src.Description = "one source only: " + strings.Join(enabled, ", ") +
 			". Omit to try all compatible sources with failover"
 	}
-	return noTopLevelCombinators(schema)
+	return withExample(noTopLevelCombinators(schema), readExample)
 }
 
 // destructiveWhenWriting reports the download tool's destructiveHint: true for a
@@ -452,6 +452,37 @@ func noTopLevelCombinators(schema *jsonschema.Schema) *jsonschema.Schema {
 	return schema
 }
 
+// Each tool's canonical call, served in its input schema's `examples` keyword.
+//
+// Every tool description already shows a call in prose, and the model reads that.
+// The schema keyword says the same thing where a program can find it: a client
+// that renders a schema, or a registry that checks whether a tool documents its
+// use, reads `examples` and not the description. The Anthropic Messages API
+// accepts the keyword at the root of an input schema and counts it toward the
+// prompt (measured 2026-09-23 with count_tokens: 22 tokens for one example), so
+// the model sees it too.
+//
+// Each example is a call this server accepts on every deployment:
+// TestInputExamplesValidateAgainstTheirSchemas holds each against its own
+// schema, on a local and a remote server alike. That is why none of them names a
+// source, which is an enum that differs by deployment, or read's path, which a
+// remote server removes.
+var (
+	searchExample   = map[string]any{"query": "organic chemistry Hoffmann", "extra_sources": "always"}
+	detailsExample  = map[string]any{"md5": "da9009e8bd25e2c5206475d289feec90", "enrich": true}
+	downloadExample = map[string]any{"doi": "10.1038/nature12373"}
+	readExample     = map[string]any{"doi": "10.1038/nature12373", "find": "methods"}
+)
+
+// withExample sets a tool input schema's `examples` to the one canonical call.
+func withExample(schema *jsonschema.Schema, example map[string]any) *jsonschema.Schema {
+	if schema == nil {
+		return nil
+	}
+	schema.Examples = []any{example}
+	return schema
+}
+
 // downloadSchemaFor is a seam for tests to exercise the defensive
 // schema-inference error guard below; it defaults to the real jsonschema.For.
 var downloadSchemaFor = jsonschema.For[DownloadInput]
@@ -481,7 +512,7 @@ func downloadInputSchema(enabled []string, contract downloadContract) *jsonschem
 		ro.Description = "ignored here: this deployment always returns the direct download URL as a link " +
 			"and never saves a file, so the link comes back whether or not this is set"
 	}
-	return noTopLevelCombinators(schema)
+	return withExample(noTopLevelCombinators(schema), downloadExample)
 }
 
 // searchSchemaFor is a seam for tests to exercise the schema-inference error
@@ -545,7 +576,7 @@ func searchInputSchema() *jsonschema.Schema {
 			rpp.Enum[i] = v
 		}
 	}
-	return schema
+	return withExample(schema, searchExample)
 }
 
 // setStringEnum pins an enum onto a scalar string property, leaving the property

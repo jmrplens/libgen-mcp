@@ -24,6 +24,21 @@ var ErrSourceUnavailable = errors.New("download source unavailable")
 // does not carry an item would otherwise be punished for being honest.
 var ErrNotIndexed = errors.New("item not held by this download source")
 
+// ErrSourceRefused marks a third outcome: the source answered, and the answer was
+// a refusal no retry inside this call can change. An anti-bot interstitial in
+// front of a page, or a member API rejecting the account key, is the same refusal
+// five seconds later and sixty seconds later, so spending the start-retry schedule
+// on it only delays the failure. Measured on Anna's Archive with the record page
+// challenged: about a hundred seconds to report what the first request already
+// said.
+//
+// It is kept apart from ErrNotIndexed because it is not an answer about the item:
+// the same source may well hold it and serve it once the refusal lifts. It is kept
+// apart from ErrSourceUnavailable because it must not put the source in cooldown:
+// a refusal on one route of a source says nothing about its other routes, and
+// Anna's member API keeps answering while its HTML pages are challenged.
+var ErrSourceRefused = errors.New("download source refused the request")
+
 // taggedError attaches one of the taxonomy sentinels to a source's own error
 // WITHOUT changing its message: Error returns the underlying text verbatim while
 // Unwrap exposes both the original error and the tag, so errors.Is finds either.
@@ -52,6 +67,18 @@ func unavailable(err error) error { return taggedError{err: err, tag: ErrSourceU
 // notIndexed tags err as the source's correct answer that it does not hold this
 // particular item, keeping its message intact.
 func notIndexed(err error) error { return taggedError{err: err, tag: ErrNotIndexed} }
+
+// refused tags err as a refusal that no retry inside this call can change,
+// keeping its message intact.
+func refused(err error) error { return taggedError{err: err, tag: ErrSourceRefused} }
+
+// settledFailure reports whether err is an answer asking again cannot change:
+// a clean miss or a refusal. Both skip the start-retry schedule, neither puts the
+// source in cooldown, and both rank lowest when a multi-host source picks its
+// verdict.
+func settledFailure(err error) bool {
+	return errors.Is(err, ErrNotIndexed) || errors.Is(err, ErrSourceRefused)
+}
 
 // unavailableStatus tags err as unavailability when status is a transient HTTP
 // status — 5xx (the service is broken) or 429 (it is asking us to back off) — and
@@ -99,9 +126,10 @@ func cooldownWorthy(ctx context.Context, err error) bool {
 	if err == nil || ctx.Err() != nil {
 		return false
 	}
-	// A clean miss wins over every other signal: it is a correct answer about the
-	// item, whatever else the error chain happens to carry.
-	if errors.Is(err, ErrNotIndexed) {
+	// A settled answer wins over every other signal: a clean miss is a correct
+	// answer about the item, and a refusal says nothing about the source's other
+	// routes, whatever else the error chain happens to carry.
+	if settledFailure(err) {
 		return false
 	}
 	if errors.Is(err, ErrSourceUnavailable) || errors.Is(err, ErrAllMirrorsFailed) ||
@@ -116,7 +144,8 @@ func cooldownWorthy(ctx context.Context, err error) bool {
 // multi-host source's verdict, so a loop over mirrors reports the strongest
 // classification rather than whichever host happened to answer last.
 //
-// The order is unavailable, then untagged, then a clean miss. A source that tried
+// The order is unavailable, then untagged, then a settled answer (a clean miss or
+// a refusal). A source that tried
 // several hosts has only proved the item absent when EVERY host said so: one host
 // being down, or answering a challenge nobody can classify, leaves the question
 // open. Reporting a clean miss there would be worse than saying nothing, because
@@ -141,7 +170,7 @@ func errorRank(err error) int {
 	switch {
 	case errors.Is(err, ErrSourceUnavailable):
 		return 2
-	case errors.Is(err, ErrNotIndexed):
+	case settledFailure(err):
 		return 0
 	default:
 		return 1

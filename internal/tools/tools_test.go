@@ -4204,6 +4204,51 @@ func TestNoInputSchemaCarriesATopLevelCombinator(t *testing.T) {
 	}
 }
 
+// TestInputExamplesValidateAgainstTheirSchemas holds every tool's `examples`
+// to the schema it sits in, on each shape a deployment can give that schema.
+//
+// An example is a call the server is telling the model to make. One the schema
+// rejects teaches a call that fails, and it would fail quietly: nothing else
+// reads the keyword until a model copies it. The shapes differ in ways an
+// example could trip over — a remote read has no path, and the source enum is
+// whatever this deployment runs — so each is checked, not just the default.
+func TestInputExamplesValidateAgainstTheirSchemas(t *testing.T) {
+	schemas := map[string]*jsonschema.Schema{
+		"download saving":      downloadInputSchema([]string{"libgen"}, contractSaves),
+		"download remote":      downloadInputSchema([]string{"libgen"}, contractRemote),
+		"download no fetch":    downloadInputSchema([]string{"libgen"}, contractNoFetch),
+		"get_details":          detailsInputSchema(),
+		"read local":           readInputSchema([]string{"libgen"}, false),
+		"read remote":          readInputSchema([]string{"libgen"}, true),
+		"search":               searchInputSchema(),
+		"read, one source":     readInputSchema([]string{"unpaywall"}, true),
+		"download, one source": downloadInputSchema([]string{"unpaywall"}, contractSaves),
+	}
+	for name, schema := range schemas {
+		t.Run(name, func(t *testing.T) {
+			if schema == nil {
+				t.Fatalf("%s input schema = nil", name)
+			}
+			if len(schema.Examples) != 1 {
+				t.Fatalf("examples = %v, want exactly one canonical call", schema.Examples)
+			}
+			resolved, err := schema.Resolve(nil)
+			if err != nil {
+				t.Fatalf("resolving the schema: %v", err)
+			}
+			if vErr := resolved.Validate(schema.Examples[0]); vErr != nil {
+				t.Errorf("example %v does not validate against its own schema: %v", schema.Examples[0], vErr)
+			}
+		})
+	}
+
+	t.Run("a nil schema stays nil", func(t *testing.T) {
+		if got := withExample(nil, searchExample); got != nil {
+			t.Errorf("withExample(nil) = %v, want nil", got)
+		}
+	})
+}
+
 // TestNoTopLevelCombinatorsClearsAllThree drives the helper directly, including
 // the nil it is allowed to be handed — every builder returns nil when inference
 // of its static struct fails, and the helper sits on that return path.

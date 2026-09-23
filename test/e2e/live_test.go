@@ -757,6 +757,14 @@ func shadowLibraryClassCases() []classificationCase {
 			`Get "https://annas-archive.gl/md5/abc": dial tcp: i/o timeout`, annasFailures, true},
 		{"annas/no-mirrors", "annas", "source annas: " + startWrap +
 			`annas: no mirrors available for "abc"`, annasFailures, true},
+		// Settled failures carry no start-retry wrap: the chain asks once.
+		{"annas/challenged-no-fast-copy", "annas", "source annas: " +
+			`annas: no mirror resolved "abc": annas: mirror "https://annas-archive.gl" answered with a browser challenge ` +
+			`instead of the record page (member API: annas: member API holds no fast-download copy of "abc": ` +
+			`Invalid domain_index or path_index)`, annasFailures, true},
+		{"annas/challenged-keyless", "annas", "source annas: " +
+			`annas: no mirror resolved "abc": annas: mirror "https://annas-archive.gl" answered with a browser challenge ` +
+			`instead of the record page`, annasFailures, true},
 		{"annas/integrity-must-fail", "annas", "source annas: integrity check failed: MD5 mismatch", annasFailures, false},
 	}
 }
@@ -2245,7 +2253,10 @@ var annasFailures = []sourceFailure{
 		"every Anna's mirror was unreachable"),
 	diagnosed("annas", `no mirror resolved "[^"]*": annas: reading "https://annas-archive\.`,
 		"a mirror closed the connection mid-response"),
+	diagnosed("annas", `no mirror resolved "[^"]*": annas: mirror "[^"]*" answered with a browser challenge`,
+		"the record page is behind an anti-bot interstitial"),
 	diagnosed("annas", `member API rejected the key`, "the membership key is absent, expired or not a member tier"),
+	diagnosed("annas", `member API holds no fast-download copy`, "the file has no copy on a fast server"),
 	diagnosed("annas", `member API returned no URL`, "the member API answered without a download URL"),
 	diagnosed("annas", `member URL from "[^"]*" is unreachable`, "the file host the member API named does not answer"),
 	{

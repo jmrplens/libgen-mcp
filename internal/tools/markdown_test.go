@@ -176,6 +176,34 @@ func TestSearchTitleCarriesTheIssue(t *testing.T) {
 	}
 }
 
+// TestSearchTableCarriesTheFilename verifies the original file name reaches the
+// reader in a column of its own, beside the year it so often stands in for, and
+// that it is escaped like every other cell: it is uploader-chosen text, and a pipe
+// in it would otherwise end the cell and shift every column after it.
+func TestSearchTableCarriesTheFilename(t *testing.T) {
+	out := SearchOutput{
+		Mirror: "m", Page: 1,
+		Results: []libgen.Result{
+			{Title: "Acoustics", MD5: "da9009e8bd25e2c5206475d289feec90", Filename: "ISO 03743-2-2018", Extension: "pdf"},
+			{Title: "Hostile", MD5: "0123456789abcdef0123456789abcdef", Filename: "a | b"},
+			{Title: "Unnamed", MD5: "fedcba9876543210fedcba9876543210"},
+		},
+	}
+	md := renderSearchMarkdown(out)
+	for _, want := range []string{
+		"| Year | File name | Ext |",
+		"|  | ISO 03743-2-2018 | pdf |",
+		`a \| b`,
+		"| Unnamed |  |  |  |",
+	} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("table should contain %q; got:\n%s", want, md)
+			}
+		})
+	}
+}
+
 // TestSearchTitleCarriesTheEdition verifies that the edition marker, which is
 // parsed out of the title so titles compare cleanly, still reaches the reader:
 // two printings of one book must not render as the same row. A bare ordinal is
@@ -417,10 +445,10 @@ func TestRenderSearchMarkdown_ALinkCannotEndTheRowItIsIn(t *testing.T) {
 	if !strings.Contains(row, `A Title \| With A Pipe`) {
 		t.Errorf("row = %q, want the title's pipe escaped so it cannot end the cell", row)
 	}
-	// Eight columns means eight separators plus the two that bound the row: a
-	// value that ended a cell early would change the count.
-	if got := strings.Count(row, "|") - strings.Count(row, `\|`) - strings.Count(row, "%7C"); got != 9 {
-		t.Errorf("row = %q has %d live pipes, want 9 for an eight-column row", row, got)
+	// Nine columns means ten live pipes, one before each cell and one closing the
+	// row: a value that ended a cell early would change the count.
+	if got := strings.Count(row, "|") - strings.Count(row, `\|`) - strings.Count(row, "%7C"); got != 10 {
+		t.Errorf("row = %q has %d live pipes, want 10 for a nine-column row", row, got)
 	}
 }
 

@@ -23,6 +23,14 @@ func describedOutputSchema() map[string]any {
 	return schema
 }
 
+// exampledInputSchema is the input schema a well-formed tool carries: an object
+// with one example call in its `examples`.
+func exampledInputSchema() map[string]any {
+	schema := objectSchema(nil)
+	schema["examples"] = []any{map[string]any{"query": "dune"}}
+	return schema
+}
+
 // TestAuditMetadata_Clean verifies a well-formed tool produces no metadata
 // violations.
 func TestAuditMetadata_Clean(t *testing.T) {
@@ -31,11 +39,45 @@ func TestAuditMetadata_Clean(t *testing.T) {
 		Title:        "Search",
 		Description:  "A sufficiently long description for the tool.",
 		Annotations:  &mcp.ToolAnnotations{DestructiveHint: new(bool)},
-		InputSchema:  objectSchema(nil),
+		InputSchema:  exampledInputSchema(),
 		OutputSchema: describedOutputSchema(),
 	}
 	if vs := auditMetadata(tool); len(vs) != 0 {
 		t.Fatalf("auditMetadata() = %+v, want none", vs)
+	}
+}
+
+// TestAuditMetadata_InputExamples pins the examples rule: no `examples` and an
+// empty one are both reported, since neither shows a caller anything.
+func TestAuditMetadata_InputExamples(t *testing.T) {
+	testCases := []struct {
+		name     string
+		examples any
+	}{
+		{name: "absent"},
+		{name: "empty", examples: []any{}},
+		{name: "not an array", examples: map[string]any{"query": "dune"}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := objectSchema(nil)
+			if tc.examples != nil {
+				schema["examples"] = tc.examples
+			}
+			tool := &mcp.Tool{
+				Name:         "search",
+				Title:        "Search",
+				Description:  "A sufficiently long description for the tool.",
+				Annotations:  &mcp.ToolAnnotations{DestructiveHint: new(bool)},
+				InputSchema:  schema,
+				OutputSchema: describedOutputSchema(),
+			}
+			vs := auditMetadata(tool)
+			if len(vs) != 1 || vs[0].Category != categoryInputExamples {
+				t.Errorf("auditMetadata() = %+v, want exactly one %s finding", vs, categoryInputExamples)
+			}
+		})
 	}
 }
 
@@ -48,7 +90,7 @@ func TestAuditMetadata_UndeclaredDestructiveHint(t *testing.T) {
 			Name:         "search",
 			Title:        "Search",
 			Description:  "A sufficiently long description for the tool.",
-			InputSchema:  objectSchema(nil),
+			InputSchema:  exampledInputSchema(),
 			OutputSchema: describedOutputSchema(),
 		}
 	}

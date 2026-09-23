@@ -11,7 +11,20 @@
 #   ├── icon.png
 #   └── server/
 #       ├── libgen-mcp               (darwin universal: arm64 + amd64)
-#       └── libgen-mcp.exe           (windows amd64)
+#       ├── libgen-mcp.exe           (windows amd64)
+#       └── libgen-mcp-linux         (linux amd64)
+#
+# The manifest picks a binary per operating system (platform_overrides) and has
+# no key for the architecture, so each OS gets exactly one file. macOS can have
+# both architectures because lipo makes one file of them. Windows and Linux
+# cannot, so each ships amd64: Windows on Arm runs it under emulation, and an
+# arm64 Linux host installs from the release binaries or a package manager.
+#
+# Linux is here for the hosts that are not Claude Desktop. The MCPB format is
+# open, and a Linux client that installs bundles, or a registry that runs a
+# bundle in a Linux sandbox to read its tool surface, otherwise finds nothing it
+# can execute: verifymcp.io scored the 2.0.0 bundle's whole MCP surface as
+# unverified for exactly that reason.
 #
 # Usage: build-mcpb.sh <version> [dist-dir]
 #
@@ -56,6 +69,7 @@ find_binary() {
 
 DARWIN_BIN=$(find_binary "*darwin_all*" "libgen-mcp")
 WINDOWS_BIN=$(find_binary "*windows_amd64*" "libgen-mcp.exe")
+LINUX_BIN=$(find_binary "*linux_amd64*" "libgen-mcp")
 
 BUNDLE_DIR="$DIST_DIR/mcpb-bundle"
 rm -rf "$BUNDLE_DIR"
@@ -65,7 +79,8 @@ jq --arg v "$VERSION" '.version = $v' "$MANIFEST" > "$BUNDLE_DIR/manifest.json"
 cp "$ICON" "$BUNDLE_DIR/icon.png"
 cp "$DARWIN_BIN" "$BUNDLE_DIR/server/libgen-mcp"
 cp "$WINDOWS_BIN" "$BUNDLE_DIR/server/libgen-mcp.exe"
-chmod +x "$BUNDLE_DIR/server/libgen-mcp"
+cp "$LINUX_BIN" "$BUNDLE_DIR/server/libgen-mcp-linux"
+chmod +x "$BUNDLE_DIR/server/libgen-mcp" "$BUNDLE_DIR/server/libgen-mcp-linux"
 
 OUTPUT="$DIST_DIR/libgen-mcp.mcpb"
 rm -f "$OUTPUT"

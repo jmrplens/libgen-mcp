@@ -180,6 +180,7 @@ type Result struct {
 	Authors   string   `json:"authors,omitempty" jsonschema:"authors"`
 	Publisher string   `json:"publisher,omitempty" jsonschema:"publisher"`
 	Year      string   `json:"year,omitempty" jsonschema:"publication year"`
+	Filename  string   `json:"filename,omitempty" jsonschema:"original file name. Often names the revision or year when the catalog leaves year empty"`
 	Language  string   `json:"language,omitempty" jsonschema:"language"`
 	Pages     string   `json:"pages,omitempty" jsonschema:"page count"`
 	Size      string   `json:"size,omitempty" jsonschema:"human-readable size"`
@@ -328,6 +329,9 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 		if r.EditionID == "" {
 			r.EditionID = queryParam(attr(a, "href"), "id")
 		}
+		if r.Filename == "" {
+			r.Filename = tooltipFilename(attr(a, "title"))
+		}
 		if part := absorbEditionLink(a, r); part != "" {
 			titleParts = append(titleParts, part)
 		}
@@ -339,6 +343,40 @@ func parseIdentifiers(cell *html.Node, r *Result) {
 	if t := badgeType(cell); t != "" {
 		r.Type = t
 	}
+}
+
+// tooltipFilenamePrefix opens the tooltip libgen puts on a row's edition links,
+// ahead of the dates and file id: "Add/Edit : 2024-04-25/2024-04-25; ID: 104719772".
+const tooltipFilenamePrefix = "Add/Edit"
+
+// tooltipFilename returns the original file name libgen records for a row, or ""
+// when the tooltip carries none.
+//
+// The name is printed in the edition link's tooltip after a line break, and it is
+// often the only place a row says which revision it is. Searching "ISO 3743-2"
+// returned seven rows, six with no year in the catalog and none with one in the
+// title, while their file names read DIN_EN_ISO_3743-2__2009-11,
+// BS EN ISO 3743-2-1997 and ISO 03743-2-2018: without them the 2018 edition looked
+// absent from a page that listed it.
+//
+// The tooltip is rendered as HTML (data-html="true"), so what a reader of the page
+// sees is the attribute's value read as markup: the name is the text after the
+// last line break, with its entities decoded. A tooltip of any other shape is not
+// this one and yields nothing, so a later layout change drops the field rather
+// than filling it with something else.
+func tooltipFilename(tip string) string {
+	if !strings.HasPrefix(strings.TrimSpace(tip), tooltipFilenamePrefix) {
+		return ""
+	}
+	i := strings.LastIndex(strings.ToLower(tip), "<br")
+	if i < 0 {
+		return ""
+	}
+	end := strings.IndexByte(tip[i:], '>')
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(html.UnescapeString(tip[i+end+1:]))
 }
 
 // editionLinks returns the cell's edition.php links in document order.

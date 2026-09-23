@@ -107,8 +107,21 @@ func auditMetadata(t *mcp.Tool) []violation {
 			fmt.Sprintf("InputSchema type=%q, want \"object\"", typ),
 		})
 	}
+	if examples, _ := schema["examples"].([]any); len(examples) == 0 {
+		vs = append(vs, violation{t.Name, categoryInputExamples, "InputSchema carries no examples: a client or registry " +
+			"reading the schema finds no call that shows how the tool is used"})
+	}
 	return append(vs, auditOutputRoot(t)...)
 }
+
+// categoryInputExamples files a tool whose input schema shows no example call.
+//
+// The description shows one in prose, which is what a model reads. The schema
+// keyword is what a program reads: a client rendering a form, or a registry
+// scoring whether a tool documents its use. verifymcp.io reported "none of the
+// tools include examples" over descriptions that each ended in one, and a rule
+// here is what keeps a tool added later from reopening that.
+const categoryInputExamples = "input-examples"
 
 // The categories the output rules file their findings under. A category is
 // what a report groups by and what a reader greps for, so the two the output

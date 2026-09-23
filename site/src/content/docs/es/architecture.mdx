@@ -199,6 +199,8 @@ Una fuente que falla porque está **no disponible** — un error de transporte, 
 
 Una fuente que responde correctamente que **no tiene el elemento** — no indexado, sin acceso abierto, sin copia preservada — nunca se aparta: es una respuesta normal y correcta sobre un elemento y no dice nada sobre la salud del proveedor. Ambos casos se distinguen por la taxonomía de errores con la que cada fuente etiqueta sus fallos (`ErrSourceUnavailable` frente a `ErrNotIndexed`).
 
+Una tercera etiqueta, `ErrSourceRefused`, cubre una negativa que no cambia por volver a preguntar: una pantalla anti-bot interpuesta delante de una página, o una API de miembros que rechaza la clave de la cuenta. Como un fallo limpio, se salta el calendario de reintentos de arranque, porque la negativa sigue en pie tras todas las esperas que ese calendario gastaría. A diferencia de la indisponibilidad, nunca aparta la fuente, porque una negativa en una vía no dice nada de las demás vías de la fuente: la API de miembros de Anna's sigue respondiendo mientras sus páginas HTML están bloqueadas por el reto.
+
 Dos reglas acotan el comportamiento:
 
 - Un enfriamiento solo baja la prioridad, nunca deshabilita. Cuando **todas** las fuentes capaces de servir un elemento están en enfriamiento, la cadena las prueba igualmente — mejor intentarlo que nada — y lo indica en el log. Por eso un argumento `source:` explícito siempre llega a la fuente que nombra.
