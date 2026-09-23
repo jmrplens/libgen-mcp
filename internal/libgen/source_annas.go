@@ -226,11 +226,12 @@ func memberAPIError(status int, md5, apiErr string) error {
 			return notIndexed(fmt.Errorf("annas: member API holds no fast-download copy of %q: %s", md5, apiErr))
 		}
 	}
-	err := fmt.Errorf("annas: member API rejected the key: %s", apiErr)
+	// The wording follows the tag: a 503 reported as a rejected key sends the
+	// operator off to replace a key that works.
 	if status >= http.StatusInternalServerError || status == http.StatusTooManyRequests {
-		return unavailable(err)
+		return unavailable(fmt.Errorf("annas: member API unavailable (HTTP %d): %s", status, apiErr))
 	}
-	return refused(err)
+	return refused(fmt.Errorf("annas: member API rejected the key: %s", apiErr))
 }
 
 // mirrorLegsError is one mirror's verdict when both of its routes failed: the

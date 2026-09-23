@@ -87,9 +87,9 @@ func TestAnnasMemberAPIErrorClassification(t *testing.T) {
 		{name: "the wording in another case", status: http.StatusNotFound, apiErr: "RECORD NOT FOUND", want: ErrNotIndexed, text: "no fast-download copy"},
 		{name: "an account without membership", status: http.StatusForbidden, apiErr: "Not a member", want: ErrSourceRefused, text: "rejected the key"},
 		{name: "a key that does not exist", status: http.StatusUnauthorized, apiErr: "Invalid secret key", want: ErrSourceRefused, text: "rejected the key"},
-		{name: "the service in trouble", status: http.StatusServiceUnavailable, apiErr: "Internal error", want: ErrSourceUnavailable, text: "rejected the key"},
-		{name: "being asked to back off", status: http.StatusTooManyRequests, apiErr: "Too many requests", want: ErrSourceUnavailable, text: "rejected the key"},
-		{name: "the first server error status", status: http.StatusInternalServerError, apiErr: "boom", want: ErrSourceUnavailable, text: "rejected the key"},
+		{name: "the service in trouble", status: http.StatusServiceUnavailable, apiErr: "Internal error", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 503)"},
+		{name: "being asked to back off", status: http.StatusTooManyRequests, apiErr: "Too many requests", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 429)"},
+		{name: "the first server error status", status: http.StatusInternalServerError, apiErr: "boom", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 500)"},
 		{name: "the status just below the server range", status: 499, apiErr: "closed", want: ErrSourceRefused, text: "rejected the key"},
 	}
 
@@ -103,6 +103,11 @@ func TestAnnasMemberAPIErrorClassification(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.text) || !strings.Contains(err.Error(), tc.apiErr) {
 				t.Errorf("error = %q, want it to carry %q and the API's own words", err, tc.text)
+			}
+			// An outage worded as a rejected key sends the operator off to replace
+			// a key that works.
+			if errors.Is(err, ErrSourceUnavailable) && strings.Contains(err.Error(), "rejected the key") {
+				t.Errorf("error = %q: an outage must not read as a rejected key", err)
 			}
 		})
 	}

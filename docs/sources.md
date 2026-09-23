@@ -720,9 +720,12 @@ Anna's Archive, as an md5-keyed rescue route.
   API answering `Invalid domain_index or path_index` (or `Record not found`) means the md5 has no
   copy on a fast server: the API takes a collection index and a server index, both defaulting to
   zero, and says so when the defaults name nothing. And a record page answering with the
-  challenge is refused, for this call, on every retry. The attempt ends only when **both** routes
-  said so: a member miss beside a record page that answered 503 still gets the schedule, since
-  the page may answer in ten seconds and carry a CID. Neither answer sets Anna's aside, because
+  challenge is refused, for this call, on every retry, as is a key the member API rejects. The
+  attempt ends only when **every route the deployment has** gave such an answer: keylessly the
+  challenged page alone settles it, and with a key both routes must, whether the member answer is
+  a missing fast copy or a rejected key. A member miss beside a record page that answered 503
+  still gets the schedule, since the page may answer in ten seconds and carry a CID. None of
+  these answers sets Anna's aside, because
   the member API keeps working while the pages are challenged. The failure then tells the model
   to download another copy of the same work, which is what a user reported doing by hand after
   a hundred seconds of retries.

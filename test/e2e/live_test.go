@@ -762,6 +762,9 @@ func shadowLibraryClassCases() []classificationCase {
 			`annas: no mirror resolved "abc": annas: mirror "https://annas-archive.gl" answered with a browser challenge ` +
 			`instead of the record page (member API: annas: member API holds no fast-download copy of "abc": ` +
 			`Invalid domain_index or path_index)`, annasFailures, true},
+		{"annas/member-unavailable", "annas", "source annas: " + startWrap +
+			`annas: no mirror resolved "abc": annas: no IPFS gateway served "bafybeigd" ` +
+			`(member API: annas: member API unavailable (HTTP 503): Internal error)`, annasFailures, true},
 		{"annas/challenged-keyless", "annas", "source annas: " +
 			`annas: no mirror resolved "abc": annas: mirror "https://annas-archive.gl" answered with a browser challenge ` +
 			`instead of the record page`, annasFailures, true},
@@ -2257,6 +2260,7 @@ var annasFailures = []sourceFailure{
 		"the record page is behind an anti-bot interstitial"),
 	diagnosed("annas", `member API rejected the key`, "the membership key is absent, expired or not a member tier"),
 	diagnosed("annas", `member API holds no fast-download copy`, "the file has no copy on a fast server"),
+	diagnosed("annas", `member API unavailable \(HTTP \d+\)`, "the member API is down or rate limiting"),
 	diagnosed("annas", `member API returned no URL`, "the member API answered without a download URL"),
 	diagnosed("annas", `member URL from "[^"]*" is unreachable`, "the file host the member API named does not answer"),
 	{
