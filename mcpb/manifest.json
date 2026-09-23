@@ -48,7 +48,10 @@
           "command": "${__dirname}/server/libgen-mcp.exe"
         },
         "linux": {
-          "command": "${__dirname}/server/libgen-mcp-linux"
+          "command": "/bin/sh",
+          "args": [
+            "${__dirname}/server/linux/launch.sh"
+          ]
         }
       }
     }

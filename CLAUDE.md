@@ -740,6 +740,7 @@ cd site && pnpm run lint                                   # the docs site, if y
 npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no make target
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
 make check-manifests && make check-stamper                 # only if you touched a version-bearing manifest
+make check-mcpb                                            # only if you touched mcpb/ or scripts/build-mcpb.sh
 make check-server-json-packages                            # only if you touched server.json (needs network; CI runs it on push)
 ```
 
@@ -1190,6 +1191,36 @@ break all three at once — during a real release, on the one path that never ru
 before a tag. Ordering matters for the same reason: npm, PyPI and NuGet all
 publish **before** `mcp-publisher`, which validates ownership by fetching each
 package `server.json` declares.
+
+### The Claude Desktop bundle
+
+`scripts/build-mcpb.sh` packs `libgen-mcp.mcpb` from `mcpb/manifest.json`, the
+icon, `mcpb/linux/launch.sh` and four GoReleaser builds: the macOS universal
+binary, Windows amd64, and Linux amd64 **and** arm64. Claude Desktop has a Linux
+beta on both architectures, and the manifest picks a file per operating system,
+never per architecture, so the `linux` override runs
+`/bin/sh ${__dirname}/server/linux/launch.sh`, which picks the binary by
+`uname -m`. Listing `linux` with only one Linux binary is a bundle that installs
+on the other architecture and never starts.
+
+Four things hold it together, and the packer checks each on the archive it
+wrote, removing a bundle that fails:
+
+- **No override declares `env`.** In Desktop an override's `env` replaces the
+  base one rather than merging, which would drop `LIBGEN_MCP_CORE_KEY` and every
+  other setting.
+- **Every executable is stored `-rwxr-xr-x unx`.** Desktop extracts every file
+  0600 and gives back the execute bit only to entries whose zip mode has it.
+- **Every `${__dirname}/…` path the manifest names is in the archive**, and
+  every override is listed in `compatibility.platforms` and the other way
+  round.
+- **The launcher never writes to stdout and ends in `exec`.** Desktop reads
+  stdout as JSON-RPC, and stops a server by signalling the one PID it started.
+
+`make check-mcpb` (CI's `server.json` job) drives the launcher under every POSIX
+shell the runner has, and the packer over the release job's real `dist/`
+layout. On Linux the app registers no handler for `.mcpb` files, so the docs
+send Linux users to **Extensions > Install Extension…**.
 
 ### The npm channel
 

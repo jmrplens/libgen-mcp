@@ -150,13 +150,15 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 ### Claude Desktop
 
 The easiest path is the one-click **`.mcpb`** desktop extension from the
-[latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS universal +
-Windows, no Docker): download it and open it with Claude Desktop, then confirm the settings.
+[latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows
+and Linux, no Docker): download it and open it with Claude Desktop, then confirm the
+settings. On Linux, install it from **Extensions > Install Extension…**, since the Linux app
+does not open `.mcpb` files itself.
 
 To wire it up by hand instead, edit `claude_desktop_config.json`
 (`~/Library/Application Support/Claude/` on macOS,
-`%APPDATA%\Claude\` on Windows) and add the same `mcpServers` block, then restart Claude
-Desktop:
+`%APPDATA%\Claude\` on Windows, `~/.config/Claude/` on Linux) and add the same
+`mcpServers` block, then restart Claude Desktop:
 
 ```json
 {
