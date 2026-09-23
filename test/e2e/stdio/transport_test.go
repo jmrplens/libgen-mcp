@@ -163,6 +163,56 @@ func TestStderr_LogLinesKeepTheirSeverity(t *testing.T) {
 	}
 }
 
+// TestStderr_AStartupRefusalIsLoggedAsAnError pins the severity of the one line a
+// failed start leaves behind.
+//
+// A server that refuses its configuration exits 1, and the reason is the last
+// thing it writes. That line went out through the log package after the JSON
+// handler was installed, which the log package writes through at INFO, so the
+// explanation for a dead server was filed as routine and an operator filtering
+// for errors saw nothing at all. It is a process-level property, the handler
+// being installed by the process itself, so it is asserted on a real start.
+//
+// The value is the one that found it: an MCPB host that passes a manifest's
+// env without substituting its user_config placeholders hands the server the
+// placeholder itself.
+func TestStderr_AStartupRefusalIsLoggedAsAnError(t *testing.T) {
+	env := baseEnv(t, startMirror(t))
+	env["LIBGEN_MCP_TIMEOUT"] = "${user_config.timeout}"
+	s := startSession(t, env)
+
+	code, exited := s.waitExit(t, 10*time.Second)
+	if !exited {
+		t.Fatalf("the server kept running on a timeout it cannot parse\nstderr: %s", s.stderrText())
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1\nstderr: %s", code, s.stderrText())
+	}
+	// Anchored on the line under test: the copier may still hold it after the
+	// process is gone.
+	text := s.waitForStderr(t, "LIBGEN_MCP_TIMEOUT", 10*time.Second)
+
+	var found bool
+	for line := range strings.SplitSeq(strings.TrimSpace(text), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "LIBGEN_MCP_TIMEOUT") {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Errorf("the refusal begins like JSON and is not: %q (%v)", line, err)
+			continue
+		}
+		found = true
+		if level, _ := record["level"].(string); level != "ERROR" {
+			t.Errorf("the refusal was logged at %q, want ERROR: %s", level, line)
+		}
+	}
+	if !found {
+		t.Errorf("no JSON record named LIBGEN_MCP_TIMEOUT, so the refusal was not checked:\n%s", text)
+	}
+}
+
 // TestHandshake_DeclaresOnlyWhatThisServerServes drives the advertised
 // capabilities over the wire.
 //

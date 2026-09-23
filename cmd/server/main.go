@@ -457,7 +457,13 @@ func mainWithExit() int {
 		publicURL:   strings.TrimSpace(*publicURL),
 	}
 	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
-		log.Print(err)
+		// Through slog at ERROR, not log.Print. By the time run returns, the JSON
+		// handler is installed and the log package writes through it at INFO,
+		// so a server that refused its configuration and exited 1 said why at
+		// the severity an operator filters out: the last line of a failed start
+		// read as routine. The message is the error's own text, as before, so
+		// whatever an operator already searches for still matches.
+		slog.Error(err.Error())
 		return 1
 	}
 	return 0
