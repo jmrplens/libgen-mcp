@@ -1203,17 +1203,19 @@ never per architecture, so the `linux` override runs
 `uname -m`. Listing `linux` with only one Linux binary is a bundle that installs
 on the other architecture and never starts.
 
-Four things hold it together, and the packer checks each on the archive it
-wrote, removing a bundle that fails:
+Four things hold it together. The packer checks the first three on the
+archive it wrote and removes a bundle that fails, and `make check-mcpb`'s
+launcher test checks the fourth:
 
 - **No override declares `env`.** In Desktop an override's `env` replaces the
   base one rather than merging, which would drop `LIBGEN_MCP_CORE_KEY` and every
   other setting.
 - **Every executable is stored `-rwxr-xr-x unx`.** Desktop extracts every file
   0600 and gives back the execute bit only to entries whose zip mode has it.
-- **Every `${__dirname}/…` path the manifest names is in the archive**, and
-  every override is listed in `compatibility.platforms` and the other way
-  round.
+- **Every `${__dirname}/…` path the manifest names is in the archive**, every
+  override is listed in `compatibility.platforms`, and every listed platform
+  but `darwin` has an override. `darwin` runs the base command, the universal
+  binary, so it needs none.
 - **The launcher never writes to stdout and ends in `exec`.** Desktop reads
   stdout as JSON-RPC, and stops a server by signalling the one PID it started.
 
