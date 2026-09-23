@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net"
 	"net/http"
@@ -196,6 +198,55 @@ func TestIsCleanShutdown(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isCleanShutdown(tc.err); got != tc.want {
 				t.Errorf("isCleanShutdown(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestExitCodeFor pins the exit status run's error becomes, and that the one
+// worth reporting is reported at ERROR with the error's own text.
+//
+// A clean shutdown is reported by nothing at all, because a supervisor reading
+// an error record on every ordinary stop would learn to ignore the stream.
+// test/e2e/stdio asserts the same severity on a real process.
+func TestExitCodeFor(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		wantCode int
+		wantLog  string
+	}{
+		{name: "no error", err: nil, wantCode: 0},
+		{name: "a signal", err: fmt.Errorf("serve: %w", context.Canceled), wantCode: 0},
+		{
+			name:     "a refused start",
+			err:      errors.New("LIBGEN_MCP_TIMEOUT: invalid duration"),
+			wantCode: 1,
+			wantLog:  "LIBGEN_MCP_TIMEOUT: invalid duration",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+
+			if got := exitCodeFor(tc.err); got != tc.wantCode {
+				t.Errorf("exitCodeFor(%v) = %d, want %d", tc.err, got, tc.wantCode)
+			}
+			if tc.wantLog == "" {
+				if buf.Len() != 0 {
+					t.Errorf("a clean exit logged %q, want nothing", buf.String())
+				}
+				return
+			}
+			var record map[string]any
+			if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+				t.Fatalf("the report is not one JSON record: %q (%v)", buf.String(), err)
+			}
+			if record["level"] != "ERROR" || record["msg"] != tc.wantLog {
+				t.Errorf("logged level=%v msg=%v, want ERROR %q", record["level"], record["msg"], tc.wantLog)
 			}
 		})
 	}

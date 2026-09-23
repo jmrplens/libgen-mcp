@@ -456,11 +456,25 @@ func mainWithExit() int {
 		idleTimeout: *httpIdleTimeout,
 		publicURL:   strings.TrimSpace(*publicURL),
 	}
-	if err := run(ctx, spec, opts, decision); err != nil && !isCleanShutdown(err) {
-		log.Print(err)
-		return 1
+	return exitCodeFor(run(ctx, spec, opts, decision))
+}
+
+// exitCodeFor turns what run returned into the process's exit code, reporting
+// the error when there is one worth reporting: 0 for a clean shutdown or none
+// at all, 1 for anything else.
+//
+// The report goes through slog at ERROR, not log.Print. By the time run
+// returns, the JSON handler is installed and the log package writes through it
+// at INFO, so a server that refused its configuration and exited 1 said why at
+// the severity an operator filters out: the last line of a failed start read as
+// routine. The message is the error's own text, as before, so whatever an
+// operator already searches for still matches.
+func exitCodeFor(err error) int {
+	if isCleanShutdown(err) {
+		return 0
 	}
-	return 0
+	slog.Error(err.Error())
+	return 1
 }
 
 // utilityFlags are the invocations that are not a server: they say something
