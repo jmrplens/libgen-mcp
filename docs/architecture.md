@@ -271,6 +271,13 @@ access, no preserved copy — is never set aside: that is a normal, correct answ
 item and says nothing about the provider's health. The two cases are told apart by the error
 taxonomy each source tags its failures with (`ErrSourceUnavailable` vs `ErrNotIndexed`).
 
+A third tag, `ErrSourceRefused`, covers a refusal that asking again cannot change: an anti-bot
+interstitial in front of a page, or a member API rejecting the account key. Like a clean miss it
+skips the start-retry schedule, because the refusal is still standing after every wait the
+schedule would spend. Unlike unavailability it never sets the source aside, because a refusal on
+one route says nothing about the source's others: Anna's member API keeps answering while its
+HTML pages are challenged.
+
 Two rules bound the behavior:
 
 - A cooldown only deprioritizes. When **every** source able to serve an item is in cooldown,

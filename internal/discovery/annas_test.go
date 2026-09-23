@@ -94,42 +94,6 @@ func TestAnnasProviderSearchesFirstReachableMirror(t *testing.T) {
 	}
 }
 
-// TestLooksChallenged pins what counts as an interstitial, because the cost of
-// getting it wrong runs both ways: too loose and an ordinary refusal stops the
-// provider from trying the next mirror, too tight and the giving-up never
-// happens.
-//
-// Both the status and the markers are required. A 403 alone is an ordinary
-// refusal — a mirror may simply decline a query — and a page that mentions
-// ddos-guard while answering 200 is a search page that happens to say so.
-func TestLooksChallenged(t *testing.T) {
-	const interstitial = `<html><head><title>DDoS-Guard</title>` +
-		`<link rel="stylesheet" href="/.well-known/ddos-guard/js-challenge/index.css"></head></html>`
-
-	testCases := []struct {
-		name   string
-		status int
-		body   string
-		want   bool
-	}{
-		{name: "the real interstitial", status: http.StatusForbidden, body: interstitial, want: true},
-		{name: "mixed case still matches", status: http.StatusForbidden, body: strings.ToUpper(interstitial), want: true},
-		{name: "a bare refusal", status: http.StatusForbidden, body: "forbidden", want: false},
-		{name: "only one marker", status: http.StatusForbidden, body: "<title>DDoS-Guard</title>", want: false},
-		{name: "the same page on a 200", status: http.StatusOK, body: interstitial, want: false},
-		{name: "a server error", status: http.StatusInternalServerError, body: interstitial, want: false},
-		{name: "an empty body", status: http.StatusForbidden, body: "", want: false},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := looksChallenged(tc.status, []byte(tc.body)); got != tc.want {
-				t.Errorf("looksChallenged(%d, %q) = %t, want %t", tc.status, tc.body, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne verifies the two
 // refusals are handled oppositely, which is the whole point of telling them
 // apart.

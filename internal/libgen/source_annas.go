@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jmrplens/libgen-mcp/v2/internal/antibot"
 	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
 )
 
@@ -152,7 +153,7 @@ func (s annasSource) resolveMirror(ctx context.Context, httpClient *http.Client,
 		return fileURL, ext, nil, nil
 	}
 	if memberErr != nil {
-		return "", "", nil, fmt.Errorf("%w (member API: %w)", ipfsErr, memberErr)
+		return "", "", nil, mirrorLegsError{ipfs: ipfsErr, member: memberErr}
 	}
 	return "", "", nil, ipfsErr
 }
@@ -177,7 +178,7 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 		return "", nil, fmt.Errorf("annas: decoding member response from %q: %w", base, decErr)
 	}
 	if rec.Error != "" {
-		return "", nil, fmt.Errorf("annas: member API rejected the key: %s", rec.Error)
+		return "", nil, memberAPIError(resp.StatusCode, md5, rec.Error)
 	}
 	if rec.DownloadURL == "" {
 		return "", nil, fmt.Errorf("annas: member API returned no URL (HTTP %d)", resp.StatusCode)
@@ -200,6 +201,74 @@ func (s annasSource) resolveViaMemberAPI(ctx context.Context, httpClient *http.C
 		}
 	}
 	return rec.DownloadURL, account, nil
+}
+
+// memberRecordMisses are the member API's wordings for "this file has no
+// fast-download copy", matched case-insensitively. The API takes a path_index
+// (which collection) and a domain_index (which fast server), both defaulting to
+// zero, and answers "Invalid domain_index or path_index" when the defaults name
+// nothing: the md5 is in the catalog but none of its copies sits on a fast
+// server. "Record not found" is the same answer for an md5 it has no record of.
+var memberRecordMisses = []string{"record not found", "domain_index", "path_index"}
+
+// memberAPIError classifies an error the member API put in its JSON reply.
+//
+// Three answers arrive in the same field and need three treatments. A record-level
+// miss is final for this md5, so it is a clean miss and the caller is told to try
+// another copy. A 5xx or a 429 is the service in trouble, so it stays retryable.
+// Anything else ("Not a member", an invalid or exhausted key) is a refusal the next
+// attempt would repeat verbatim, so it is settled without being a verdict on the
+// item: the keyless IPFS route may still serve it.
+func memberAPIError(status int, md5, apiErr string) error {
+	lower := strings.ToLower(apiErr)
+	for _, miss := range memberRecordMisses {
+		if strings.Contains(lower, miss) {
+			return notIndexed(fmt.Errorf("annas: member API holds no fast-download copy of %q: %s", md5, apiErr))
+		}
+	}
+	// The wording follows the tag: a 503 reported as a rejected key sends the
+	// operator off to replace a key that works.
+	if status >= http.StatusInternalServerError || status == http.StatusTooManyRequests {
+		return unavailable(fmt.Errorf("annas: member API unavailable (HTTP %d): %s", status, apiErr))
+	}
+	return refused(fmt.Errorf("annas: member API rejected the key: %s", apiErr))
+}
+
+// mirrorLegsError is one mirror's verdict when both of its routes failed: the
+// keyless IPFS route and the member API. Its message names both, in the form the
+// logs and the e2e diagnoses have always read.
+//
+// What it unwraps to is the point. A mirror has settled the question only when
+// BOTH legs did. A clean miss on the member API next to an IPFS page that answered
+// 503 is not settled, because the page may answer in ten seconds and carry a CID;
+// letting the member leg's tag show through there would skip the retry that exists
+// for exactly that. So the error unwraps to both legs when each is settled, and
+// otherwise only to the legs a retry might change.
+type mirrorLegsError struct {
+	// ipfs is the keyless route's failure.
+	ipfs error
+	// member is the member API's failure.
+	member error
+}
+
+// Error names the IPFS failure followed by the member API's.
+func (e mirrorLegsError) Error() string {
+	return fmt.Sprintf("%v (member API: %v)", e.ipfs, e.member)
+}
+
+// Unwrap returns both legs when both are settled, and otherwise only the ones
+// that are not.
+func (e mirrorLegsError) Unwrap() []error {
+	if settledFailure(e.ipfs) && settledFailure(e.member) {
+		return []error{e.ipfs, e.member}
+	}
+	open := make([]error, 0, 2)
+	for _, leg := range []error{e.ipfs, e.member} {
+		if !settledFailure(leg) {
+			open = append(open, leg)
+		}
+	}
+	return open
 }
 
 // resolveViaIPFS reads one mirror's book page for an IPFS CID and returns the
@@ -232,6 +301,14 @@ func (s annasSource) fetchCID(ctx context.Context, httpClient *http.Client, base
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		// The body is read before the status is judged, because DDoS-Guard's
+		// interstitial and an ordinary refusal share the 403 and only the body
+		// tells them apart. A challenge is still standing after every wait the
+		// start-retry schedule would spend, so it is settled for this call.
+		prefix, _ := io.ReadAll(io.LimitReader(resp.Body, antibot.BodyPrefix))
+		if antibot.Challenged(resp.StatusCode, prefix) {
+			return "", "", refused(fmt.Errorf("annas: mirror %q answered with a browser challenge instead of the record page", base))
+		}
 		return "", "", unavailableStatus(resp.StatusCode, fmt.Errorf("annas: mirror %q returned HTTP %d", base, resp.StatusCode))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, annasMaxBody))

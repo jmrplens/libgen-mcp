@@ -229,6 +229,8 @@ func TestCooldownWorthy(t *testing.T) {
 		{name: "no failure at all", ctx: context.Background(), err: nil},
 		{name: "tagged unavailable", ctx: context.Background(), err: unavailable(errors.New("dial tcp")), want: true},
 		{name: "tagged not indexed", ctx: context.Background(), err: notIndexed(errors.New("not in index"))},
+		{name: "tagged refused", ctx: context.Background(), err: refused(errors.New("browser challenge"))},
+		{name: "a refusal beside an outage", ctx: context.Background(), err: fmt.Errorf("%w: %w", refused(errors.New("challenge")), unavailable(errors.New("dial tcp")))},
 		{name: "every mirror unreachable", ctx: context.Background(), err: fmt.Errorf("%w: x", ErrAllMirrorsFailed), want: true},
 		{name: "every mirror rejected the request", ctx: context.Background(), err: fmt.Errorf("%w: 404", ErrRequestRejected)},
 		{name: "resolve budget expired", ctx: context.Background(), err: fmt.Errorf("fatcat: %w", context.DeadlineExceeded), want: true},
@@ -271,7 +273,8 @@ func TestCooldownWorthy(t *testing.T) {
 func TestStrongerErrorPrefersTheOpenQuestion(t *testing.T) {
 	miss := notIndexed(errors.New("no record"))
 	down := unavailable(errors.New("connection refused"))
-	plain := errors.New("a challenge page nobody can classify")
+	plain := errors.New("a refusal nobody can classify")
+	refusal := refused(errors.New("a browser challenge"))
 
 	for _, tc := range []struct {
 		name     string
@@ -285,6 +288,8 @@ func TestStrongerErrorPrefersTheOpenQuestion(t *testing.T) {
 		{name: "untagged beats miss, reversed", a: plain, b: miss, wantIs: ErrNotIndexed, wantHave: false},
 		{name: "outage beats untagged", a: plain, b: down, wantIs: ErrSourceUnavailable, wantHave: true},
 		{name: "two misses stay a miss", a: miss, b: miss, wantIs: ErrNotIndexed, wantHave: true},
+		{name: "untagged beats a refusal", a: refusal, b: plain, wantIs: ErrSourceRefused, wantHave: false},
+		{name: "outage beats a refusal", a: refusal, b: down, wantIs: ErrSourceUnavailable, wantHave: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := strongerError(tc.a, tc.b)

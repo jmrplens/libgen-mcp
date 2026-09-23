@@ -115,11 +115,14 @@ func renderSearchMarkdown(out SearchOutput) string {
 		fmt.Fprintf(&b, " of %s reported", out.TotalFiles)
 	}
 	fmt.Fprintf(&b, " (mirror %s).\n\n", out.Mirror)
-	b.WriteString("| # | Title | Authors | Year | Ext | Size | Identifier | Download links |\n")
-	b.WriteString("| - | ----- | ------- | ---- | --- | ---- | ---------- | -------------- |\n")
+	// The file name sits beside the year because it is so often the year's stand-in:
+	// the catalog leaves year empty on most standards and many scans, and the name
+	// the file was uploaded under is what says which revision a row is.
+	b.WriteString("| # | Title | Authors | Year | File name | Ext | Size | Identifier | Download links |\n")
+	b.WriteString("| - | ----- | ------- | ---- | --------- | --- | ---- | ---------- | -------------- |\n")
 	for i, r := range out.Results {
-		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s | %s |\n",
-			i+1, mdCell(resultTitle(r)), mdCell(r.Authors), mdCell(r.Year),
+		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			i+1, mdCell(resultTitle(r)), mdCell(r.Authors), mdCell(r.Year), mdCell(r.Filename),
 			mdCell(r.Extension), mdCell(r.Size), mdCell(resultIdentifier(r)), resultLinks(r))
 	}
 	if out.Truncated && out.Hint != "" {

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	xhtml "golang.org/x/net/html"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/antibot"
 )
 
 // annasSearchMaxBody bounds how many bytes of a search page are read. A full page
@@ -37,16 +39,6 @@ var annasMD5Href = regexp.MustCompile(`/md5/([0-9a-f]{32})`)
 // two unrelated egress addresses.
 var errChallenged = errors.New("mirror served a browser challenge instead of content")
 
-// challengeMarkers are the strings an interstitial carries and a search page
-// does not. Both are required together with the status, because a bare 403 is
-// an ordinary refusal and must keep its ordinary handling.
-var challengeMarkers = []string{"ddos-guard", "js-challenge"}
-
-// challengeBodyPrefix is how much of a refusal body is read to classify it. An
-// interstitial is under a kilobyte; anything longer is not one, and reading
-// further would mean buffering a page this code has already decided to discard.
-const challengeBodyPrefix = 4 << 10
-
 // challengeCooldown is how long the provider stays quiet after being challenged.
 //
 // Giving up within one call was not enough: every subsequent search asked again
@@ -65,21 +57,6 @@ const challengeBodyPrefix = 4 << 10
 // libgen's 45-second mirror cooldown, because a mirror that failed may be
 // healthy in a minute and an anti-bot policy will not be.
 const challengeCooldown = 15 * time.Minute
-
-// looksChallenged reports whether a non-200 response is an anti-bot
-// interstitial rather than an ordinary refusal.
-func looksChallenged(status int, body []byte) bool {
-	if status != http.StatusForbidden {
-		return false
-	}
-	lower := strings.ToLower(string(body))
-	for _, marker := range challengeMarkers {
-		if !strings.Contains(lower, marker) {
-			return false
-		}
-	}
-	return true
-}
 
 // MirrorLister supplies candidate base URLs, preferred first. It is declared here
 // rather than imported so this package stays independent of the libgen client;
@@ -237,8 +214,8 @@ func (p *AnnasProvider) fetch(ctx context.Context, httpClient *http.Client, base
 		// and an interstitial share a status code and only the body tells them
 		// apart. A read error here leaves it classified as the ordinary refusal
 		// it was already going to be.
-		prefix, _ := io.ReadAll(io.LimitReader(resp.Body, challengeBodyPrefix))
-		if looksChallenged(resp.StatusCode, prefix) {
+		prefix, _ := io.ReadAll(io.LimitReader(resp.Body, antibot.BodyPrefix))
+		if antibot.Challenged(resp.StatusCode, prefix) {
 			return nil, fmt.Errorf("annas search: %q: %w", base, errChallenged)
 		}
 		return nil, fmt.Errorf("annas search: %q returned HTTP %d", base, resp.StatusCode)

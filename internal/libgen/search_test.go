@@ -309,6 +309,63 @@ func TestParseSearchStandardJoinsBothTitleParts(t *testing.T) {
 	}
 }
 
+// TestParseSearchKeepsTheOriginalFilename pins the field that tells revisions of
+// one standard apart. A standards row carries no year in the catalog, and its
+// title names the standard rather than the revision, so the recorded file name is
+// what says "1996".
+func TestParseSearchKeepsTheOriginalFilename(t *testing.T) {
+	testCases := []struct {
+		fixture string
+		want    string
+	}{
+		{fixture: "search_standards.html", want: "ISO 08359-1996 scan"},
+		{fixture: "search_books.html", want: "Hands-On Software Architecture with Golang(2018)"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			page := parseFixture(t, tc.fixture)
+			if len(page.Results) == 0 {
+				t.Fatalf("0 results in %s", tc.fixture)
+			}
+			if got := page.Results[0].Filename; got != tc.want {
+				t.Errorf("Filename = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTooltipFilename pins how the file name is read out of the edition link's
+// tooltip, and that a tooltip of any other shape yields nothing rather than a
+// guess.
+func TestTooltipFilename(t *testing.T) {
+	testCases := []struct {
+		name string
+		tip  string
+		want string
+	}{
+		{name: "the live shape", tip: "Add/Edit : 2024-04-25/2024-04-25; ID: 104719772<br>ISO 03743-2-2018", want: "ISO 03743-2-2018"},
+		{name: "a self-closing break", tip: "Add/Edit : 2024-04-25; ID: 1<br/>name.pdf", want: "name.pdf"},
+		{name: "an upper-case break", tip: "Add/Edit : 2024-04-25; ID: 1<BR>name", want: "name"},
+		{name: "entities are decoded", tip: "Add/Edit : 2024-04-25; ID: 1<br>Tom &amp; Jerry", want: "Tom & Jerry"},
+		{name: "the last break wins", tip: "Add/Edit : x<br>ID: 1<br>final", want: "final"},
+		{name: "surrounding space is trimmed", tip: "  Add/Edit : x<br>  padded  ", want: "padded"},
+		{name: "no name after the break", tip: "Add/Edit : 2024-04-25; ID: 1<br>", want: ""},
+		{name: "no break at all", tip: "Add/Edit : 2024-04-25; ID: 1", want: ""},
+		{name: "an unterminated break", tip: "Add/Edit : 2024-04-25; ID: 1<br", want: ""},
+		{name: "some other tooltip", tip: "Standard<br>not a file name", want: ""},
+		{name: "no tooltip", tip: "", want: ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tooltipFilename(tc.tip); got != tc.want {
+				t.Errorf("tooltipFilename(%q) = %q, want %q", tc.tip, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestParseSearchBookIdentifiersStayISBNs is the regression guard for the other
 // side of the article/comic fix: a book row's identifier link really does carry
 // ISBNs, and its single title link must stay the Title.

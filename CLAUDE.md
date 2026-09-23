@@ -177,6 +177,14 @@ Tools are registered in `internal/tools/tools.go` inside `Register` via
    writes, `OpenWorldHint` when it reaches the network).
 3. A handler wrapped with `withRecovery("<name>", handler)` so panics become
    `IsError` tool results and every call is metered.
+4. One example call, set on the input schema with `withExample` beside the
+   other three (`searchExample` and the rest in `tools.go`). The description
+   shows a call in prose for the model; the `examples` keyword is the same
+   call where a client or a registry reads it. It must be a call every
+   deployment accepts: `TestInputExamplesValidateAgainstTheirSchemas` validates
+   each one against its own schema on a local and a remote server, which is why
+   none names a `source` (an enum that differs by deployment) or read's `path`
+   (removed on a remote server).
 
 **The jsonschema tag is a description, not a DSL.** `jsonschema-go` assigns the
 entire tag string to the property's `description` and parses no directives out
@@ -187,10 +195,10 @@ as literal text to every client and model. A constrained field needs an explicit
 wherever they are validated (`internal/libgen`, `internal/config`) rather than
 restating them, so the schema and the validator cannot disagree.
 
-`make audit-surface-quality` enforces points 1–2 over a real `tools/list`
+`make audit-surface-quality` enforces points 1, 2 and 4 over a real `tools/list`
 round-trip: it fails if any field lacks a description, any enum is empty, any
-description carries an unparsed struct-tag directive, or a tool is missing its
-Title/Annotations/description.
+description carries an unparsed struct-tag directive, a tool is missing its
+Title/Annotations/description, or an input schema carries no `examples`.
 
 ### Tool naming convention
 

@@ -248,7 +248,7 @@ jobs:
       #
       # It went unnoticed because each of those channels landed after the last
       # tag, so none of them had ever run. `build-mcpb.sh` is the exception and
-      # the reason the gap stayed hidden: it looks its two binaries up with
+      # the reason the gap stayed hidden: it looks its binaries up with
       # `find` on the target path rather than by asset name.
       - name: Stage release-named binaries at the dist root
         run: |

@@ -8,8 +8,201 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
+
+// annasChallenge is the interstitial DDoS-Guard serves in front of Anna's record
+// pages, reduced to the parts the detector reads.
+const annasChallenge = `<html><head><title>DDoS-Guard</title>` +
+	`<link rel="stylesheet" href="/.well-known/ddos-guard/js-challenge/index.css"></head></html>`
+
+// annasRefusingSite stands in for a mirror whose member API answers apiErr with
+// memberStatus and whose record page answers pageStatus with pageBody. Every call
+// to the member API is counted, because each one is a request against the
+// account and the number of them is what the start-retry schedule multiplies.
+func annasRefusingSite(t *testing.T, memberStatus int, apiErr string, pageStatus int, pageBody string, memberCalls *atomic.Int32) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/dyn/api/fast_download.json") {
+			memberCalls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(memberStatus)
+			_, _ = w.Write([]byte(`{"download_url":null,"error":` + strconv.Quote(apiErr) + `}`))
+			return
+		}
+		w.WriteHeader(pageStatus)
+		_, _ = w.Write([]byte(pageBody))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestAnnasChallengeIsARefusal pins how the record page's anti-bot interstitial is
+// classified: a refusal, settled for this call, and neither a verdict on the item
+// nor a reason to set the source aside. The member API keeps answering while the
+// pages are challenged, so a cooldown would take down the one route that works.
+func TestAnnasChallengeIsARefusal(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(annasChallenge))
+	}))
+	defer site.Close()
+	s := annasSource{mirrors: staticMirrors{site.URL}, http: site.Client()}
+
+	_, err := s.Resolve(context.Background(), Item{MD5: "d64efd386ed7227592499460aca2044b"})
+	if err == nil {
+		t.Fatal("a challenged record page must not resolve")
+	}
+	if !errors.Is(err, ErrSourceRefused) {
+		t.Errorf("error %v is not tagged ErrSourceRefused", err)
+	}
+	if errors.Is(err, ErrNotIndexed) {
+		t.Error("a challenge read as the item being unheld")
+	}
+	if cooldownWorthy(context.Background(), err) {
+		t.Error("a challenge put Anna's in cooldown")
+	}
+	if !strings.Contains(err.Error(), "browser challenge") {
+		t.Errorf("error = %v, want it to name the challenge", err)
+	}
+}
+
+// TestAnnasMemberAPIErrorClassification pins the three treatments an error in the
+// member API's JSON gets. The wording is the API's own: "Invalid domain_index or
+// path_index" is what it answers for an md5 with no copy on a fast server, which
+// reached a user as a hundred seconds of retries before this classification.
+func TestAnnasMemberAPIErrorClassification(t *testing.T) {
+	const md5 = "d64efd386ed7227592499460aca2044b"
+
+	testCases := []struct {
+		name   string
+		status int
+		apiErr string
+		want   error
+		text   string
+	}{
+		{name: "no copy on a fast server", status: http.StatusBadRequest, apiErr: "Invalid domain_index or path_index", want: ErrNotIndexed, text: "no fast-download copy"},
+		{name: "an md5 it has no record of", status: http.StatusNotFound, apiErr: "Record not found", want: ErrNotIndexed, text: "no fast-download copy"},
+		{name: "the wording in another case", status: http.StatusNotFound, apiErr: "RECORD NOT FOUND", want: ErrNotIndexed, text: "no fast-download copy"},
+		{name: "an account without membership", status: http.StatusForbidden, apiErr: "Not a member", want: ErrSourceRefused, text: "rejected the key"},
+		{name: "a key that does not exist", status: http.StatusUnauthorized, apiErr: "Invalid secret key", want: ErrSourceRefused, text: "rejected the key"},
+		{name: "the service in trouble", status: http.StatusServiceUnavailable, apiErr: "Internal error", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 503)"},
+		{name: "being asked to back off", status: http.StatusTooManyRequests, apiErr: "Too many requests", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 429)"},
+		{name: "the first server error status", status: http.StatusInternalServerError, apiErr: "boom", want: ErrSourceUnavailable, text: "member API unavailable (HTTP 500)"},
+		{name: "the status just below the server range", status: 499, apiErr: "closed", want: ErrSourceRefused, text: "rejected the key"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := memberAPIError(tc.status, md5, tc.apiErr)
+			for _, tag := range []error{ErrNotIndexed, ErrSourceRefused, ErrSourceUnavailable} {
+				if errors.Is(err, tag) != errors.Is(tag, tc.want) {
+					t.Errorf("memberAPIError(%d, %q): errors.Is(_, %v) = %t", tc.status, tc.apiErr, tag, errors.Is(err, tag))
+				}
+			}
+			if !strings.Contains(err.Error(), tc.text) || !strings.Contains(err.Error(), tc.apiErr) {
+				t.Errorf("error = %q, want it to carry %q and the API's own words", err, tc.text)
+			}
+			// An outage worded as a rejected key sends the operator off to replace
+			// a key that works.
+			if errors.Is(err, ErrSourceUnavailable) && strings.Contains(err.Error(), "rejected the key") {
+				t.Errorf("error = %q: an outage must not read as a rejected key", err)
+			}
+		})
+	}
+}
+
+// TestAnnasMirrorLegsSettleOnlyTogether pins the rule mirrorLegsError exists for: a
+// mirror has settled the question only when both of its routes have. A settled
+// leg beside an open one must not lend the pair its tag, or the start-retry
+// schedule is skipped on a failure a retry could still fix.
+func TestAnnasMirrorLegsSettleOnlyTogether(t *testing.T) {
+	miss := notIndexed(errors.New("annas: member API holds no fast-download copy"))
+	challenged := refused(errors.New("annas: browser challenge"))
+	rejected := refused(errors.New("annas: member API rejected the key: Not a member"))
+	down := unavailable(errors.New("annas: mirror returned HTTP 503"))
+	plain := errors.New("annas: no IPFS gateway served the CID")
+
+	testCases := []struct {
+		name        string
+		ipfs        error
+		member      error
+		settled     bool
+		unavailable bool
+	}{
+		{name: "no fast copy and a challenged page", ipfs: challenged, member: miss, settled: true},
+		{name: "a rejected key and a page with no CID", ipfs: notIndexed(errors.New("no CID")), member: rejected, settled: true},
+		{name: "no fast copy but the page is down", ipfs: down, member: miss, unavailable: true},
+		{name: "no fast copy but no gateway answered", ipfs: plain, member: miss},
+		{name: "a challenged page but the member API is down", ipfs: challenged, member: down, unavailable: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := mirrorLegsError{ipfs: tc.ipfs, member: tc.member}
+			if got := settledFailure(err); got != tc.settled {
+				t.Errorf("settledFailure = %t, want %t", got, tc.settled)
+			}
+			if got := errors.Is(err, ErrSourceUnavailable); got != tc.unavailable {
+				t.Errorf("errors.Is(_, ErrSourceUnavailable) = %t, want %t", got, tc.unavailable)
+			}
+			if want := tc.ipfs.Error() + " (member API: " + tc.member.Error() + ")"; err.Error() != want {
+				t.Errorf("Error() = %q, want %q", err.Error(), want)
+			}
+		})
+	}
+}
+
+// TestAnnasSettledFailureSkipsTheStartRetrySchedule drives the reported case
+// through the real chain: Anna's is the last source, its member API says the file
+// has no fast copy, and its record page is challenged. Nothing about that changes
+// in a minute, so the chain must ask once and report, rather than spend the whole
+// start-retry schedule and call the member API on every attempt.
+//
+// The control row is what keeps the fix honest. The same member answer beside a
+// record page that answered 503 is a question still open, and the schedule must
+// be spent on it.
+func TestAnnasSettledFailureSkipsTheStartRetrySchedule(t *testing.T) {
+	const md5 = "d64efd386ed7227592499460aca2044b"
+	const waits = 5
+
+	testCases := []struct {
+		name       string
+		pageStatus int
+		pageBody   string
+		wantCalls  int32
+		wantMiss   bool
+	}{
+		{name: "a challenged page settles it", pageStatus: http.StatusForbidden, pageBody: annasChallenge, wantCalls: 1, wantMiss: true},
+		{name: "a page that is down leaves it open", pageStatus: http.StatusServiceUnavailable, pageBody: "busy", wantCalls: waits + 1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var memberCalls atomic.Int32
+			site := annasRefusingSite(t, http.StatusBadRequest, "Invalid domain_index or path_index", tc.pageStatus, tc.pageBody, &memberCalls)
+
+			c := newTestClient(staticMirrors{site.URL})
+			c.startRetryWaits = tinyWaits(waits)
+			c.sources = []DownloadSource{annasSource{mirrors: staticMirrors{site.URL}, http: site.Client(), key: "k"}}
+
+			_, err := c.DownloadItem(context.Background(), Item{MD5: md5}, t.TempDir(), "")
+			if err == nil {
+				t.Fatal("the download must fail")
+			}
+			if got := memberCalls.Load(); got != tc.wantCalls {
+				t.Errorf("member API calls = %d, want %d", got, tc.wantCalls)
+			}
+			if got := errors.Is(err, ErrNotIndexed); got != tc.wantMiss {
+				t.Errorf("errors.Is(_, ErrNotIndexed) = %t, want %t: %v", got, tc.wantMiss, err)
+			}
+			if got := errors.Is(err, errDownloadCouldNotStart); got == tc.wantMiss {
+				t.Errorf("errors.Is(_, errDownloadCouldNotStart) = %t: a settled failure must not read as one that could not start", got)
+			}
+		})
+	}
+}
 
 // annasBookPage renders an Anna's Archive book page embedding the IPFS CIDs the
 // way the live site does.
@@ -72,21 +265,23 @@ func TestAnnasErrorClassification(t *testing.T) {
 		assertUnavailable(t, err)
 	})
 
-	t.Run("a 403 challenge is neither", func(t *testing.T) {
-		// Anna's fronts its mirrors with a challenge that a plain HTTP client cannot
-		// satisfy. It is not proof the mirror family is down, so it stays untagged and
-		// the source keeps its place in the chain.
+	t.Run("an ordinary 403 is neither", func(t *testing.T) {
+		// A 403 whose body is not an interstitial is a mirror declining one request.
+		// It is not proof the mirror family is down and not an answer about the item,
+		// so it stays untagged, the source keeps its place in the chain, and the
+		// start-retry schedule may ask again. TestAnnasChallengeIsARefusal is the 403
+		// that does get settled.
 		s := annasSource{mirrors: staticMirrors{annasStatusMirror(t, http.StatusForbidden)}, http: http.DefaultClient}
 
 		_, err := s.Resolve(context.Background(), Item{MD5: md5})
 		if err == nil {
-			t.Fatal("a 403 challenge must not resolve")
+			t.Fatal("a 403 must not resolve")
 		}
-		if errors.Is(err, ErrNotIndexed) {
-			t.Error("a 403 challenge read as the item being unheld")
+		if settledFailure(err) {
+			t.Errorf("an ordinary 403 read as settled: %v", err)
 		}
 		if cooldownWorthy(context.Background(), err) {
-			t.Error("a 403 challenge put Anna's in cooldown")
+			t.Error("an ordinary 403 put Anna's in cooldown")
 		}
 	})
 
