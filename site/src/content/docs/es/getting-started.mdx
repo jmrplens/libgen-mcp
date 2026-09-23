@@ -307,9 +307,9 @@ Añade el servidor al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`):
 
 ### Claude Desktop
 
-La vía más sencilla es la extensión **`.mcpb`** de un clic de la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest) (universal para macOS + Windows, sin Docker): descárgala, ábrela con Claude Desktop y confirma los ajustes.
+La vía más sencilla es la extensión **`.mcpb`** de un clic de la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows y Linux, sin Docker): descárgala, ábrela con Claude Desktop y confirma los ajustes. En Linux, instálala desde **Extensions > Install Extension…**, porque la app de Linux no abre los ficheros `.mcpb` por sí misma.
 
-Para configurarlo a mano, edita `claude_desktop_config.json` (`~/Library/Application Support/Claude/` en macOS, `%APPDATA%\Claude\` en Windows) y añade el mismo bloque `mcpServers`, luego reinicia Claude Desktop:
+Para configurarlo a mano, edita `claude_desktop_config.json` (`~/Library/Application Support/Claude/` en macOS, `%APPDATA%\Claude\` en Windows, `~/.config/Claude/` en Linux) y añade el mismo bloque `mcpServers`, luego reinicia Claude Desktop:
 
 ```json
 {

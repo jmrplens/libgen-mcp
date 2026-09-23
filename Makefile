@@ -20,7 +20,7 @@
         audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
-        check-server-json-packages check-supply-chain check-verify-published \
+        check-server-json-packages check-supply-chain check-verify-published check-mcpb \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
         gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi \
@@ -492,6 +492,11 @@ check-server-json-packages: ## Download every package server.json declares and c
 
 check-verify-published: ## Exercise the published-package verifier's retry rules (offline)
 	python3 -m unittest discover -s scripts -p 'verify_published_packages_test.py'
+
+check-mcpb: ## Exercise the Claude Desktop bundle: its manifest, its Linux launcher and its packer (offline)
+	python3 -m unittest discover -s scripts -p 'mcpb_manifest_test.py'
+	python3 -m unittest discover -s scripts -p 'mcpb_launch_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'build_mcpb_sh_test.py'
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/

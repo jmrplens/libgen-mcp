@@ -159,6 +159,20 @@ jobs:
       # in one direction and invisible in the other.
       - name: The published-package verifier waits out lag and never a mismatch
         run: make check-verify-published
+      # server.json pins the Claude Desktop bundle by hash, and the bundle is
+      # built once per release. What it must be is checked here, offline, so a
+      # bundle that installs and never starts on one platform fails a pull
+      # request instead of a tag: the manifest's platforms and overrides, the
+      # Linux launcher that picks amd64 or arm64 by uname -m (under /bin/sh,
+      # dash, busybox sh and bash --posix, whichever the runner has, plus
+      # shellcheck), and the packer's refusals over the release job's dist/.
+      # The runner's busybox is busybox-static, whose own uname and chmod run
+      # whatever PATH says, so under it the launcher cases that need a stub
+      # assert the real machine's binary or are skipped with the reason.
+      # shellcheck, jq, zip and unzip come from the runner image. Off CI a test
+      # skips when one is missing; here, where GitHub sets CI, it fails instead.
+      - name: The Claude Desktop bundle starts on every platform it lists
+        run: make check-mcpb
       - name: Validate server.json against the MCP Registry schema
         run: |
           set -euo pipefail

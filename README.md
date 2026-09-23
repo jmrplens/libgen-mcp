@@ -120,7 +120,7 @@ claude mcp add libgen -- libgen-mcp
 <details>
 <summary><b>Claude Desktop</b></summary>
 
-Easiest: download the native [`.mcpb` extension](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb) (macOS universal, Windows and Linux, no Docker), open it with Claude Desktop, and confirm.
+Easiest: download the native [`.mcpb` extension](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb) (macOS, Windows and Linux, no Docker), open it with Claude Desktop, and confirm. On Linux, install it from **Extensions > Install Extension…** instead.
 
 Or edit `claude_desktop_config.json` (Settings → Developer → Edit Config):
 
