@@ -27,6 +27,12 @@
  * 4. The 404 page's canonical and hreflang links. Starlight gives it both, and
  *    both name `/404/` and `/es/404/`, which answer 404: a canonical pointing at
  *    a URL that does not exist is a claim no crawler can honour.
+ *
+ * 5. Absolute hrefs on every <link>. The sitemap, the favicons, llms.txt and the
+ *    Markdown copy were all written root-relative (`/libgen-mcp/llms.txt`), and
+ *    several agents that read a page's <head> to discover those files do not
+ *    resolve a relative href against the page. Stylesheets and scripts are left
+ *    alone: they are for browsers, which do.
  */
 import {
 	defineRouteMiddleware,
@@ -47,11 +53,37 @@ function setMeta(
 	else head.push({ tag: "meta", attrs: { [key]: value, content } });
 }
 
+/** The rel values point 5 rewrites: the ones a crawler or an agent follows. */
+const DISCOVERY_RELS = new Set([
+	"alternate",
+	"canonical",
+	"icon",
+	"shortcut icon",
+	"sitemap",
+]);
+
+/** Makes every discovery link's root-relative href absolute against `site`. */
+function absolutizeLinks(head: HeadEntry[], site: URL) {
+	for (const entry of head) {
+		const href = entry.attrs?.href;
+		if (
+			entry.tag === "link" &&
+			typeof href === "string" &&
+			href.startsWith("/") &&
+			!href.startsWith("//") &&
+			DISCOVERY_RELS.has(String(entry.attrs?.rel))
+		) {
+			entry.attrs = { ...entry.attrs, href: new URL(href, site).href };
+		}
+	}
+}
+
 export const onRequest = defineRouteMiddleware((context) => {
 	const route = context.locals.starlightRoute;
 	if (route.entry?.data?.template === "splash") {
 		route.hasSidebar = true;
 	}
+	const site = context.site ?? new URL(context.url.origin);
 
 	const head = route.head;
 	if (/\/404\/?$/.test(context.url.pathname)) {
@@ -63,6 +95,7 @@ export const onRequest = defineRouteMiddleware((context) => {
 						(e.attrs?.rel === "alternate" && e.attrs?.hreflang))
 				),
 		);
+		absolutizeLinks(route.head, site);
 		return;
 	}
 
@@ -81,4 +114,5 @@ export const onRequest = defineRouteMiddleware((context) => {
 		tag: "link",
 		attrs: { rel: "alternate", type: "text/markdown", href: `${path}index.md` },
 	});
+	absolutizeLinks(head, site);
 });

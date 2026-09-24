@@ -18,7 +18,9 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+	absolutizeLinks,
 	COMPONENTS,
+	pageUrlFor,
 	residualComponents,
 	toMarkdown,
 } from "../src/lib/page-markdown.mjs";
@@ -55,11 +57,9 @@ for (const source of walk(docsDir)) {
 	// read the copy.
 	if (/(^|\/)404$/.test(slug)) continue;
 
-	const markdown = toMarkdown(
-		readFileSync(source, "utf8"),
-		labels[locale],
-		schema,
-		chain,
+	const markdown = absolutizeLinks(
+		toMarkdown(readFileSync(source, "utf8"), labels[locale], schema, chain),
+		pageUrlFor(slug),
 	);
 	const residual = residualComponents(markdown);
 	if (residual.length) {

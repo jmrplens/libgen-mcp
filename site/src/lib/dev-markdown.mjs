@@ -14,7 +14,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { residualComponents, toMarkdown } from "./page-markdown.mjs";
+import {
+	absolutizeLinks,
+	pageUrlFor,
+	residualComponents,
+	toMarkdown,
+} from "./page-markdown.mjs";
 import { loadInputs } from "./page-markdown-inputs.mjs";
 
 /**
@@ -58,11 +63,14 @@ export function devMarkdown({ root, base }) {
 						const { labels, schema, chain } = loadInputs(root);
 						const locale =
 							slug.startsWith("es/") || slug === "es" ? "es" : "en";
-						const markdown = toMarkdown(
-							readFileSync(source, "utf8"),
-							labels[locale],
-							schema,
-							chain,
+						const markdown = absolutizeLinks(
+							toMarkdown(
+								readFileSync(source, "utf8"),
+								labels[locale],
+								schema,
+								chain,
+							),
+							pageUrlFor(slug),
 						);
 						const residual = residualComponents(markdown);
 						if (residual.length > 0) {
