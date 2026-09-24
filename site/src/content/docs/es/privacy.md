@@ -1,11 +1,16 @@
 ---
 title: Política de privacidad
-description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y va a tu colector, y cada destino de red está listado herramienta por herramienta."
-datePublished: "2026-09-17"
+description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y cada destino está listado por herramienta."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
+datePublished: "2026-09-24"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "3cc22c8c82267d84"
+privacySource: "bdfeabc52bd95a6b"
 head:
   - tag: script
     attrs:
@@ -25,7 +30,7 @@ head:
             "name": "¿Recoge libgen-mcp telemetría o analíticas?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. El servidor no tiene telemetría, ni analíticas, ni informes de fallos, ni backend propio. No crea ninguna base de datos ni ningún fichero de telemetría, y registra únicamente en la salida de error estándar, donde tu cliente MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus descargas ni ninguna información de uso."
+              "text": "No, salvo que lo actives tú, y nunca al mantenedor. No hay analíticas, ni informes de fallos, ni backend propio; el servidor no crea ninguna base de datos ni ningún fichero de telemetría, y registra en la salida de error estándar, donde tu cliente MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus descargas ni ninguna información de uso, configures lo que configures. LIBGEN_MCP_TELEMETRY te permite a ti exportar trazas, métricas y registros de OpenTelemetry a un colector que tú ejecutas; está apagado por defecto, el único destino por defecto de los exportadores es tu propio localhost, y lo que llevan describe operaciones y no lo que se buscó. Consulta OpenTelemetry, si lo activas."
             }
           },
           {
@@ -68,9 +73,10 @@ no en la tuya. Ver [Endpoint hospedado](#endpoint-hospedado).
 
 ## Qué recopilamos
 
-**Nada.** El servidor no tiene telemetría, ni analítica, ni informes de fallos,
-ni backend propio. No hay ninguna cuenta que crear ni nada a lo que iniciar
-sesión. Cuando lo ejecutas tú — que es como esta documentación recomienda usarlo —
+**Nada.** El servidor no envía telemetría salvo que la actives tú, y aun entonces
+solo a un colector que ejecutas tú (ver más abajo). No tiene analítica, ni
+informes de fallos, ni backend propio. No hay ninguna cuenta que crear ni nada a
+lo que iniciar sesión. Cuando lo ejecutas tú — que es como esta documentación recomienda usarlo —
 el mantenedor nunca recibe, almacena ni tiene acceso a ninguno de tus datos ni a tu
 información de uso, porque nada se envía jamás a ningún sitio que el mantenedor
 controle.
@@ -146,7 +152,7 @@ destinos son:
   completo cuando se ha fijado `source` de forma explícita. Si lo rechazas, la
   petición continúa sin Unpaywall. No se envía ningún otro dato personal.
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
-  DOI).** Antes de cualquier alternativa de biblioteca en la sombra, la cadena de
+  DOI).** Antes de cualquier alternativa de shadow library, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con
   licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`,
   `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
@@ -295,8 +301,8 @@ encendida, qué registra cada señal activada y qué registra sobre quien llama�
 que puede leerse en vez de preguntarse.
 
 Esa instancia se opera como parte de [mcp.jmrp.io](https://mcp.jmrp.io/) y su
-tratamiento de las peticiones se rige allí, no por esta política, que describe el
-software. Este documento solo puede contarte qué hace el software; no puede prometer
+tratamiento de las peticiones se rige por [las políticas de ese servicio](https://mcp.jmrp.io/policies/),
+no por esta, que describe el software. Este documento solo puede contarte qué hace el software; no puede prometer
 nada en nombre de un servidor que no ejecutas tú.
 
 Si lo que buscas es sensible para ti, ejecuta el servidor en local. Ese es todo el

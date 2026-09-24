@@ -5,14 +5,15 @@ description: Cut a libgen-mcp release — bump VERSION, mirror it into the versi
 
 # Cutting a libgen-mcp release
 
-The version lives in `VERSION` and is mirrored into six manifests. To cut a
-release:
+The version lives in `VERSION` and is mirrored into six manifests and the
+citation file. To cut a release:
 
 1. Bump `VERSION`.
 2. Update the version in `mcpb/manifest.json`, `lhm.plugin.json`,
    `.plugin/plugin.json` and `plugin.json`, and run `make sync-npm-version` for
    `npm/libgen-mcp/package.json` (it moves the version and all six dependency
-   pins together — never hand-edit it).
+   pins together — never hand-edit it). In `CITATION.cff`, set `version:`; leave
+   `date-released:` alone, the stamper writes the tag's date.
 
    In `server.json`, bump **`.version` and the `version` field of the npm, PyPI
    and NuGet entries — and nothing else.** Leave the `.mcpb` identifier, its
@@ -23,10 +24,11 @@ release:
    entry has to move with the launcher because the same gate holds the two in
    lockstep; an unpublished *version* is a note there, an inconsistent one is
    not.
-3. Run `make check-manifests`. It gates all six against `VERSION`, and CI runs
-   it in the `server.json` job. Add any new version-bearing manifest to
-   `VERSION_MANIFESTS` in the `Makefile` — a file that is not listed there is not
-   gated, and will silently ship the previous release's number.
+3. Run `make check-manifests`. It gates all six and `CITATION.cff` against
+   `VERSION`, and CI runs it in the `server.json` job. Add any new
+   version-bearing JSON manifest to `VERSION_MANIFESTS` in the `Makefile` — a
+   file that is not listed there is not gated, and will silently ship the
+   previous release's number.
 4. Run `make gen-llms`. `llms.txt` and `llms-full.txt` state the version in their
    opening line, so a bump leaves them stale. They are **not** covered by
    `check-manifests` — `make check-llms` is the gate that catches it, in a
@@ -119,7 +121,8 @@ The tag is enough for the version-bearing files the workflow owns: on release,
 per-package versions, its identifiers and their `fileSha256` digests,
 then stamps the version into the other five manifests (`lhm.plugin.json`,
 `mcpb/manifest.json`, `.plugin/plugin.json`, `plugin.json`,
-`npm/libgen-mcp/package.json`) — the
+`npm/libgen-mcp/package.json`) and the version and release date into
+`CITATION.cff` — the
 same set `check-manifests` gates — and commits the result back to main. The manual
 bump above exists so the pre-tag CI gates pass, not because the digests need to
 be right — they cannot be until the binaries exist.

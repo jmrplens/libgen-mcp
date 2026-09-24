@@ -490,7 +490,7 @@ func renderResultsSummaryEN(sum runSummary, scenarios, coachedMeasured int) stri
 		return ""
 	}
 	return fmt.Sprintf(
-		"The table below is %s against `%s` (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s%s",
+		"The table below is %s against %#q (real Anthropic API, real mirrors, real downloads): **%d passed, %d failed, %d skipped** %s%s%s",
 		measuredSpanEN(sum), sum.Model, sum.Pass, sum.Fail, sum.Skip,
 		measuredScopeEN(sum, scenarios), measuredTailEN(sum), coachedNoteEN(sum, coachedMeasured),
 	)

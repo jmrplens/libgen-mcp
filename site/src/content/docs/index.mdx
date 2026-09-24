@@ -1,6 +1,6 @@
 ---
 title: LibGen MCP
-description: "Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required."
+description: "Open-source MCP server in Go to search, cite and read books and papers across the Library Genesis catalog and open-access sources. No account required."
 head:
   - tag: title
     content: "LibGen MCP — MCP server for federated book & paper search"
@@ -20,6 +20,7 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/#faq",
         "inLanguage": "en",
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
@@ -37,7 +38,7 @@ head:
             "name": "What can libgen-mcp do?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It runs a federated search across the primary catalog (Library Genesis) and eight further providers, returns per-result metadata and MD5 hashes, fetches full details for a record with ready-to-paste BibTeX and RIS citations, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then the publisher's own Crossref-deposited link and OAPEN, and only then Sci-Hub and SciDB. The search tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (auto) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
+              "text": "It lets an AI assistant find a book or a paper, cite it and read it. search queries Library Genesis and eight further providers, get_details returns a record's metadata with BibTeX and RIS citations, download saves the file by md5, DOI or ISBN through a chain of twenty-one sources, and read extracts, searches and outlines the PDF, EPUB or text it saved. The extra search providers are Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC, all keyless, merged and deduplicated with the catalog results. By default (auto) they are asked only when the catalog comes up empty. An article requested by DOI goes to the open-access providers first, then to the publisher's own link, and only then to Sci-Hub and SciDB. Mirrors are discovered and cached automatically, with failover, retry with cooldown and a shared rate limiter, so the server keeps working as individual mirrors go up and down."
             }
           },
           {
@@ -61,7 +62,7 @@ head:
             "name": "Does libgen-mcp prefer legal sources?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then the publisher's own Crossref-deposited link and OAPEN, before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file."
+              "text": "For articles and for books asked for by ISBN, yes. An article requested by DOI is tried at thirteen open-access providers and the publisher's own link before Sci-Hub or SciDB, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. A book requested by md5 is the exception: no legal source is keyed by md5, so it comes from Library Genesis, whatever its copyright. The thirteen are Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, followed by the publisher's Crossref-deposited link and OAPEN. Those legal sources also refuse what they may not redistribute: OAPEN confirms the identifier instead of accepting a free-text match, lending-restricted Internet Archive scans are skipped, and Project Gutenberg records hosted by permission rather than in the public domain are dropped, each reported as a miss rather than dressed up as a file."
             }
           }
         ]
@@ -102,8 +103,8 @@ registered as `io.github.jmrplens/libgen-mcp`:
 | Download sources | Twenty-one, in a fixed chain, open access tried first           |
 | Registry id      | `io.github.jmrplens/libgen-mcp`                                 |
 
-What distinguishes it: the download chain is ordered so open-access providers
-are exhausted before any shadow library is consulted, the open-access sources
+What distinguishes it: for an article, the download chain exhausts the
+open-access providers before any shadow library is consulted, the open-access sources
 themselves refuse what they may not hand over — an OAPEN identifier is confirmed
 rather than guessed, lending-restricted Internet Archive scans are skipped, and
 permission-hosted Gutenberg records are dropped — and its tool surface is checked
@@ -114,10 +115,30 @@ asserted.
 
 <LegalNotice />
 
-libgen-mcp tries the legal open-access providers before any shadow-library
-fallback, and refuses material it may not redistribute. [Responsible
+For an article, or a book asked for by ISBN, libgen-mcp tries the legal
+open-access providers before any shadow-library fallback, and refuses material
+it may not redistribute. A book asked for by md5 comes from Library Genesis,
+since no legal source is keyed by md5. [Responsible
 use](/libgen-mcp/responsible-use/) sets out what that means in practice, what the
 server declines to do, and how to raise a concern.
+
+## Who maintains libgen-mcp
+
+libgen-mcp is written and maintained by [José Manuel Requena
+Plens](https://jmrp.io/), a firmware and software engineer in Valencia, Spain
+([ORCID](https://orcid.org/0000-0003-1250-6212),
+[GitHub](https://github.com/jmrplens)). It is an open-source project under the
+MIT licence, developed in public at
+[`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp).
+
+Every change passes the unit suite on Linux, macOS and Windows and the
+end-to-end suites for both transports, which start the real binary, before it
+is merged. The tool surface is also measured with a real model against the live
+mirrors, and the result is published scenario by scenario on the [LLM
+evaluation](/libgen-mcp/eval-results/) page, failures included. Bugs and
+proposals go to [GitHub issues](https://github.com/jmrplens/libgen-mcp/issues),
+and a vulnerability to the private channel the [security
+policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md) describes.
 
 ## Frequently asked questions
 
@@ -127,7 +148,9 @@ libgen-mcp is an open source Model Context Protocol (MCP) server, written in Go,
 
 ### What can libgen-mcp do?
 
-It runs a federated search across the primary catalog (Library Genesis) and eight further providers, returns per-result metadata and MD5 hashes, fetches full details for a record with ready-to-paste BibTeX and RIS citations, and downloads files to a local directory. Books are downloaded by MD5 from LibGen, and by ISBN from the openly licensed book sources OAPEN and the Internet Archive; articles are fetched by DOI through the open-access providers first — Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then the publisher's own Crossref-deposited link and OAPEN, and only then Sci-Hub and SciDB. The `search` tool also consults keyless extra sources — Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC — merged and deduped alongside the Library Genesis results; by default (`auto`) it does so automatically whenever the catalog comes up empty. Mirrors are discovered automatically and cached, with transparent failover, retry with cooldown, and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
+It lets an AI assistant find a book or a paper, cite it and read it. `search` queries Library Genesis and eight further providers, `get_details` returns a record's metadata with BibTeX and RIS citations, `download` saves the file by md5, DOI or ISBN through a chain of twenty-one sources, and `read` extracts, searches and outlines the PDF, EPUB or text it saved.
+
+The extra search providers are Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC, all keyless, merged and deduplicated with the catalog results. By default (`auto`) they are asked only when the catalog comes up empty. An article requested by DOI goes to the open-access providers first, then to the publisher's own link, and only then to Sci-Hub and SciDB. Mirrors are discovered and cached automatically, with failover, retry with cooldown and a shared rate limiter, so the server keeps working as individual mirrors go up and down.
 
 ### Do I need an account, API key, or token to use libgen-mcp?
 
@@ -139,4 +162,6 @@ Yes. libgen-mcp is free and open source under the MIT license. The full source c
 
 ### Does libgen-mcp prefer legal sources?
 
-Yes, by design. The download chain is ordered so the open-access providers are tried first: an article requested by DOI goes to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then the publisher's own Crossref-deposited link and OAPEN, before Sci-Hub or SciDB are considered at all, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. The server also refuses material it may not redistribute: it confirms an OAPEN identifier instead of accepting a free-text match, skips lending-restricted Internet Archive scans, and drops Project Gutenberg records hosted by permission rather than in the public domain. A refusal is reported as a miss, never dressed up as a file.
+For articles and for books asked for by ISBN, yes. An article requested by DOI is tried at thirteen open-access providers and the publisher's own link before Sci-Hub or SciDB, and a book requested by ISBN comes only from OAPEN and public-domain Internet Archive scans. A book requested by md5 is the exception: no legal source is keyed by md5, so it comes from Library Genesis, whatever its copyright.
+
+The thirteen are Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, followed by the publisher's Crossref-deposited link and OAPEN. Those legal sources also refuse what they may not redistribute: OAPEN confirms the identifier instead of accepting a free-text match, lending-restricted Internet Archive scans are skipped, and Project Gutenberg records hosted by permission rather than in the public domain are dropped, each reported as a miss rather than dressed up as a file.

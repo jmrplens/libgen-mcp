@@ -1,0 +1,41 @@
+---
+/**
+ * The byline under a page title: who wrote the page and when it last changed.
+ *
+ * The footer names the maintainer on every page, but a footer is the part of a
+ * page a reader and an extractor both skip. The TechArticle node already
+ * asserts the author and the modified date; this puts the same two facts where
+ * the article starts, so what the page says agrees with what its structured
+ * data says, next to the content it is about.
+ *
+ * The date is the one Starlight takes from git for its own "Last updated" line,
+ * and the page shows nothing when there is none, rather than a date nobody
+ * measured.
+ */
+const route = Astro.locals.starlightRoute;
+const isES = route.locale === "es";
+const updated = route.lastUpdated;
+
+const byText = isES ? "Escrito y mantenido por" : "Written and maintained by";
+const updatedText = isES ? "actualizado el" : "updated";
+const dateText = updated?.toLocaleDateString(isES ? "es-ES" : "en-GB", {
+	day: "numeric",
+	month: "long",
+	year: "numeric",
+	timeZone: "UTC",
+});
+---
+
+<p class="page-byline">
+	{byText}{" "}
+	<a href="https://jmrp.io/" rel="author">José Manuel Requena Plens</a>
+	{
+		updated && dateText && (
+			<>
+				{" · "}
+				{updatedText}{" "}
+				<time datetime={updated.toISOString().slice(0, 10)}>{dateText}</time>
+			</>
+		)
+	}
+</p>

@@ -42,9 +42,11 @@ const responsibleUrl = isES
 const securityUrl =
 	"https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md";
 const licenseText = isES ? "Licencia MIT" : "MIT-licensed";
+// "Off by default" rather than "none": the server has an opt-in OpenTelemetry
+// exporter, and a footer on every page is the one claim every crawler reads.
 const trustSuffix = isES
-	? " · sin telemetría · sin cuenta"
-	: " · no telemetry · no account required";
+	? " · telemetría apagada por defecto · sin cuenta"
+	: " · telemetry off by default · no account required";
 const privacyText = isES ? "Privacidad" : "Privacy";
 const responsibleText = isES ? "Uso responsable" : "Responsible use";
 const securityText = isES ? "Seguridad" : "Security";

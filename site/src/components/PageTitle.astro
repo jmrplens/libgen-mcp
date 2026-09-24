@@ -1,6 +1,7 @@
 ---
 /**
- * Custom Starlight <PageTitle> override: the default title, then the chip row.
+ * Custom Starlight <PageTitle> override: the default title, the chip row, then
+ * the byline.
  *
  * The chips sit here rather than in the markdown for the same reason the source
  * labels do — they are page metadata, so they belong in the frontmatter, and a
@@ -9,8 +10,14 @@
  * markdown reset would style them as a list.
  */
 import Default from "@astrojs/starlight/components/PageTitle.astro";
+import PageByline from "./docs/PageByline.astro";
 import PageChips from "./docs/PageChips.astro";
+
+// The landing page has a hero rather than an article, and says who maintains
+// the project in a section of its own.
+const isSplash = Astro.locals.starlightRoute.entry.data.template === "splash";
 ---
 
 <Default><slot /></Default>
 <PageChips />
+{!isSplash && <PageByline />}

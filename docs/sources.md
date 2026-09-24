@@ -18,8 +18,9 @@ minutes); an untagged error is the neutral case, where the chain simply advances
 neither optimization. And MD5 verification is enabled only for md5-keyed items, because a DOI- or
 ISBN-keyed item carries no LibGen digest to check the streamed bytes against.
 
-The order comes from `config.KnownSources` and is fixed in code: the legal open-access
-providers lead, and the shadow libraries are reached only after all of them have declined.
+The order comes from `config.KnownSources` and is fixed in code: for an article, the legal
+open-access providers lead, and the shadow libraries are reached only after all of them have
+declined. A book asked for by md5 has no legal source to try first, since none is keyed by md5.
 `LIBGEN_MCP_SOURCES` can remove sources from the chain; it cannot reorder them.
 
 ## Open-access article resolvers
@@ -581,9 +582,11 @@ The Internet Archive's book scans, reached through OpenLibrary.
 
 ## Shadow-library fallbacks
 
-Everything below is reached only after every source above has declined, which is the whole
-point of the chain order: a freely licensed copy is always preferred when one exists, and the
-order is fixed in code and held by a test rather than left to configuration.
+For an article, everything below is reached only after every source above has declined, which
+is the whole point of the chain order: a freely licensed copy is always preferred when one
+exists, and the order is fixed in code and held by a test rather than left to configuration. A
+book asked for by md5 is different: no source above is keyed by md5, so `libgen`, `randombook`
+and `annas` are the only ones that can serve it, and Library Genesis is the first it meets.
 
 ### `scihub`
 
@@ -796,12 +799,6 @@ program, ETSI, ECMA, 3GPP, W3C, ITU-T (deferred rather than rejected), Anna's Ar
 DDoS-Guard-gated slow-download route, and — measured on 2026-07-30 — Project Euclid, DLA
 ASSIST and EverySpec. The last three are worth a line here because two of them work:
 
-- **Measured 2026-08-21: the record page is now challenged too.** `<mirror>/md5/<md5>` answers
-  403 with DDoS-Guard's "Checking your browser" interstitial, as `/search` does, so both HTML
-  routes are closed to a pure-Go client. The member fast-download API is unaffected — it
-  answered 200 with a real `download_url` under this project's own User-Agent — so a keyed
-  download still works while the keyless IPFS route and the discovery/details scrape do not.
-  No browser User-Agent was adopted in response; see Politeness and identification.
 - **Project Euclid** serves IMS and statistics journals, and
   `journalArticle/Download?urlId=<doi>` did return real PDFs to an honest User-Agent. It is
   rejected on both counts of the bar. Unpaywall already supplies a PDF link for six of eight

@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 /**
  * @param {string} root - The site directory.
- * @returns {{labels: Record<string, Record<string,string>>, schema: object, chain: string[]}}
+ * @returns {{labels: Record<string, Record<string,string>>, schema: object, chain: {id: string, keyedBy: string}[]}}
  */
 export function loadInputs(root) {
 	return {
@@ -37,8 +37,13 @@ export function loadInputs(root) {
  * the file declares, so a refactor that changes either aborts rather than
  * quietly emitting a shorter chain into every Markdown copy.
  *
+ * Each entry carries the identifier the source is keyed by as well, because the
+ * positional rendering states it beside every source on the page, and a copy
+ * that dropped it would be the one rendering of the chain that no longer says
+ * which sources an md5 can reach.
+ *
  * @param {string} root - The site directory.
- * @returns {string[]}
+ * @returns {{id: string, keyedBy: string}[]}
  */
 export function downloadChain(root) {
 	const ts = readFileSync(join(root, "src/data/sources.ts"), "utf8");
@@ -48,14 +53,16 @@ export function downloadChain(root) {
 			"[page-markdown] cannot find SOURCES in src/data/sources.ts",
 		);
 	}
-	const ids = [...array[1].matchAll(/\bid:\s*"([a-z0-9_]+)"/g)].map(
-		(m) => m[1],
-	);
+	const entries = [
+		...array[1].matchAll(
+			/\{\s*id:\s*"([a-z0-9_]+)",[^}]*?\bkeyedBy:\s*"([a-z0-9-]+)"/g,
+		),
+	].map((m) => ({ id: m[1], keyedBy: m[2] }));
 	const declared = (ts.match(/\bid:\s*"/g) ?? []).length;
-	if (ids.length === 0 || ids.length !== declared) {
+	if (entries.length === 0 || entries.length !== declared) {
 		throw new Error(
-			`[page-markdown] parsed ${ids.length} source ids but the file declares ${declared}`,
+			`[page-markdown] parsed ${entries.length} sources but the file declares ${declared}`,
 		);
 	}
-	return ids;
+	return entries;
 }

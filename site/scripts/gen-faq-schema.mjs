@@ -27,24 +27,42 @@ const SITE = "https://jmrplens.github.io";
 const BASE = "/libgen-mcp";
 
 /**
- * The pages that carry an FAQPage, and the envelope each one already uses.
+ * The pages that carry an FAQPage, the envelope each one uses, and where its
+ * questions are.
  *
- * The envelopes are NOT uniform, and the differences are preserved rather than
- * normalised. `index` points at `#website` because it is a splash page and
- * Head.astro mints no `#article` node for it; four other pages do the same
- * without that reason, which is a pre-existing inconsistency this generator
- * deliberately does not "fix" — changing where a node says it belongs is a
- * structured-data decision, not a refactor.
+ * Every FAQPage carries its own `@id` and belongs to the page's `#article`,
+ * except `index`: it is a splash page, Head.astro mints no `#article` node for
+ * it, and it points at `#website` instead. Three other pages used to point
+ * there too, with no `@id`, for no reason but history, which left each of them
+ * with two page-level nodes that nothing tied together.
+ *
+ * `questions` says where a page keeps them. Most pages have a "Frequently asked
+ * questions" section of `###` headings, and the answer is everything under
+ * each. responsible-use is the exception: the whole page is its questions,
+ * one `##` each, and the answer is the paragraph that opens the section, since
+ * what follows it (the 21-row source table, for one) is reference material a
+ * spoken answer should not carry.
  */
 const PAGES = [
 	{ slug: "architecture", withId: true, isPartOf: "article" },
 	{ slug: "how-search-works", withId: true, isPartOf: "article" },
 	{ slug: "eval-results", withId: true, isPartOf: "article" },
 	{ slug: "tools", withId: true, isPartOf: "article" },
-	{ slug: "configuration", withId: false, isPartOf: "website" },
-	{ slug: "getting-started", withId: false, isPartOf: "website" },
-	{ slug: "index", withId: false, isPartOf: "website" },
-	{ slug: "troubleshooting", withId: false, isPartOf: "website" },
+	{ slug: "configuration", withId: true, isPartOf: "article" },
+	{ slug: "getting-started", withId: true, isPartOf: "article" },
+	{ slug: "index", withId: true, isPartOf: "website" },
+	{ slug: "troubleshooting", withId: true, isPartOf: "article" },
+	{ slug: "sources", withId: true, isPartOf: "article" },
+	{ slug: "citations", withId: true, isPartOf: "article" },
+	{ slug: "download-a-paper", withId: true, isPartOf: "article" },
+	{ slug: "limitations", withId: true, isPartOf: "article" },
+	{ slug: "comparison", withId: true, isPartOf: "article" },
+	{
+		slug: "responsible-use",
+		withId: true,
+		isPartOf: "article",
+		questions: "sections",
+	},
 ];
 
 const SOFTWARE_ID = "https://github.com/jmrplens/libgen-mcp#software";
@@ -63,7 +81,8 @@ const FAQ_HEADING = {
  * capture yields an empty answer for each one. sync-privacy.mjs records the
  * same trap.
  */
-function entriesOf(body, locale) {
+function entriesOf(body, locale, questions) {
+	if (questions === "sections") return sectionEntriesOf(body);
 	const region = body.split(FAQ_HEADING[locale])[1];
 	if (!region) return [];
 	const untilNextSection = region.split(/^## /m)[0];
@@ -73,6 +92,26 @@ function entriesOf(body, locale) {
 		if (nl < 0) continue;
 		const q = chunk.slice(0, nl).trim();
 		const a = answerText(chunk.slice(nl));
+		if (q && a) entries.push({ q, a });
+	}
+	return entries;
+}
+
+/**
+ * The questions of a page that is nothing but questions: every `##` heading,
+ * answered by the paragraph that opens its section.
+ */
+function sectionEntriesOf(body) {
+	const entries = [];
+	for (const chunk of body.split(/^## /m).slice(1)) {
+		const nl = chunk.indexOf("\n");
+		if (nl < 0) continue;
+		const q = chunk.slice(0, nl).trim();
+		const firstParagraph = chunk
+			.slice(nl)
+			.trim()
+			.split(/\n\s*\n/)[0];
+		const a = answerText(firstParagraph);
 		if (q && a) entries.push({ q, a });
 	}
 	return entries;
@@ -132,7 +171,7 @@ for (const page of PAGES) {
 		const path = join(docsDir, locale === "es" ? "es" : "", `${page.slug}.mdx`);
 		const before = readFileSync(path, "utf8");
 		const bodyStart = before.indexOf("\n---\n", 3) + 5;
-		const entries = entriesOf(before.slice(bodyStart), locale);
+		const entries = entriesOf(before.slice(bodyStart), locale, page.questions);
 		if (entries.length === 0) {
 			throw new Error(
 				`${page.slug} (${locale}): no FAQ questions found in the body`,

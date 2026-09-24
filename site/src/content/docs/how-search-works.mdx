@@ -1,6 +1,21 @@
 ---
 title: How search works
 description: A conceptual walk through what a federated search queries, when it reaches beyond the primary catalog, and how each result tells you where it came from.
+mentions:
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Anna's Archive"
+    wikidata: Q115288326
+  - name: "arXiv"
+    wikidata: Q118398
+  - name: "Crossref"
+    wikidata: Q5188229
+  - name: "Open Library"
+    wikidata: Q1201876
+  - name: "Project Gutenberg"
+    wikidata: Q22673
+  - name: "Open access"
+    wikidata: Q232932
 chips:
   - text: "Catalog first, then federate"
   - text: "Merged and deduped"
@@ -9,6 +24,8 @@ chips:
     href: "/libgen-mcp/tools/"
 datePublished: "2026-07-24"
 head:
+  - tag: title
+    content: "How libgen-mcp search works: catalog first, then federated"
   # Mirrors the "Frequently asked questions" section at the foot of this page
   # verbatim. Schema-only answers are a policy violation and a citation risk, so
   # the two must be edited together.
@@ -66,7 +83,7 @@ This page explains that flow: what a search does by default, when and why it rea
 
 ## The default: the Library Genesis catalog
 
-An ordinary search asks the Library Genesis catalog and only the catalog. It sends no traffic to any third party, because it does not need to: the catalog holds millions of books, papers, comics, magazines, and standards, and it answers in a single fast round-trip. Whatever the catalog returns — the result page, the match counts, the per-file metadata — is what you get back.
+An ordinary search asks the Library Genesis catalog and only the catalog. It sends no traffic to any third party, because it does not need to: the catalog holds millions of books, papers, comics, magazines, and standards (its own 2019 count, [cited on Wikipedia](https://en.wikipedia.org/wiki/Library_Genesis), was over 2.4 million non-fiction books and 80 million journal articles), and it answers in a single fast round-trip. Whatever the catalog returns — the result page, the match counts, the per-file metadata — is what you get back.
 
 Catalog-only is the path almost every `libgen-mcp` search takes: a single round-trip, no third-party traffic, and a predictable latency budget.
 

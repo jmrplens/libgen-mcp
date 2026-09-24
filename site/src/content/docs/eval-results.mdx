@@ -9,6 +9,8 @@ chips:
     href: "/libgen-mcp/tools/"
 datePublished: "2026-07-21"
 head:
+  - tag: title
+    content: "libgen-mcp evaluation: how a real model uses the tools"
   # Mirrors the "Frequently asked questions" section at the foot of this page
   # verbatim; the two must be edited together.
   - tag: script
@@ -44,7 +46,7 @@ head:
             "name": "What does a SKIP mean in these results?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "That the model did the right thing but a live service was unavailable — a rotating Sci-Hub host, a fresh-mirror miss, a provider returning nothing at that moment. It is a network condition, never a model failure. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read."
+              "text": "That there was nothing to grade: an optional source the scenario is about contributed nothing that day, a precondition did not arise, a capability was not configured, or the model ran out of turns. It is never a model failure, and a payload that fails to arrive is not a skip: those runs are graded on whether the answer says nothing came back. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read."
             }
           }
         ]
@@ -65,9 +67,10 @@ head:
         "description": "Results of a gated, LLM-driven evaluation harness that connects a real language model to a real libgen-mcp server over MCP and grades tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation, against the live Library Genesis site.",
         "inLanguage": "en",
         "url": "https://jmrplens.github.io/libgen-mcp/eval-results/",
-        "license": "https://opensource.org/licenses/MIT",
+        "license": "https://opensource.org/license/MIT",
         "isAccessibleForFree": true,
-        "creator": { "@id": "https://jmrp.io/#person" },
+        "keywords": "Model Context Protocol, MCP server evaluation, LLM tool use, Library Genesis, open access, Claude",
+        "creator": { "@type": "Person", "@id": "https://jmrp.io/#person", "name": "José Manuel Requena Plens" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
         "measurementTechnique": "Live end-to-end MCP session against a real language model (claude-haiku-4-5-20251001), real mirrors and real downloads",
@@ -124,9 +127,11 @@ For each scenario the harness:
 4. Grades the transcript: the tool name, the argument shape, and whether the
    real MCP response is well-formed — never exact catalog content, which drifts.
 
-Each scenario returns **PASS**, **FAIL**, or **SKIP**. A SKIP means the model did
-the right thing but a live mirror was unavailable (e.g. a rotating Sci-Hub host or
-a fresh-mirror miss) — a network condition, never a model failure.
+Each scenario returns **PASS**, **FAIL**, or **SKIP**. A SKIP means there was
+nothing to grade: an optional source the scenario is about contributed nothing
+that day, a precondition the scenario needs did not arise, a capability the
+deployment has not configured, or a model that ran out of turns before
+answering. It is never a model failure.
 
 <Aside type="note">
 	The harness is behind the `eval` build tag and only runs with `LIBGEN_EVAL=1`
@@ -271,7 +276,7 @@ evidence and does not fail the scenario. A run in which no fetchable link came
 back at all does fail it. S27–S31, and the
 remote half of S32–S37, form a second remote block: the read, open-access,
 citation, enrichment and escalation checks repeated over the same `--http`
-transport, ten scenarios in all.
+transport, eight scenarios in all. With S17 and S18, ten scenarios run over HTTP.
 
 ## Latest results
 
@@ -281,6 +286,12 @@ transport, ten scenarios in all.
 The table below is a single live run of the full suite on 2026-09-22 against `claude-haiku-4-5-20251001` (real Anthropic API, real mirrors, real downloads): **78 passed, 0 failed, 3 skipped** out of 81 — every scenario, including the 10 that run against a server in remote (`--http`) mode. **28 of the 81 measured are coached** — their prompt named the source, the collection or the field the assertion checks — so they say the server obeys, not that it describes itself well enough to be used unaided. The scenario table above marks every one.
 
 {/* end generated */}
+
+Nine of those passes grade an absence rather than a result. S32–S37, S40, S41
+and S77 exercise Anna's Archive, whose HTML site answered every request with a
+browser challenge on the day of the run, so what they measured is that the model
+said plainly that no Anna's result came back instead of inventing one. They are
+passes on honesty, and say nothing about the Anna's path itself.
 
 `libgen-mcp` reaches a clean sweep only after two sources of false confidence
 were removed from the harness: scenarios that skipped whenever live data
@@ -388,9 +399,12 @@ A live-data condition — a 403, a scanned-only PDF, a mirror that will not serv
 the harness — no longer skips a scenario. The model's behavior is still fully
 observable when the payload does not arrive, and the only wrong move left to it is
 claiming a result it never received, so those runs are graded on whether the answer
-says plainly that nothing came back. SKIP is reserved for the two cases with
-genuinely nothing to grade: a capability the deployment has not configured, and a
-model that ran out of turns before answering.
+says plainly that nothing came back. SKIP is reserved for the cases with genuinely
+nothing to grade: an optional source the scenario is about contributing nothing
+(the three skips in the run above are Anna's Archive, Project Gutenberg and dblp
+returning no hits of their own), a precondition that did not arise, a capability
+the deployment has not configured, and a model that ran out of turns before
+answering.
 
 ## Running it yourself
 
@@ -426,4 +440,4 @@ No, deliberately. It sits behind the `eval` build tag and only runs with `LIBGEN
 
 ### What does a SKIP mean in these results?
 
-That the model did the right thing but a live service was unavailable — a rotating Sci-Hub host, a fresh-mirror miss, a provider returning nothing at that moment. It is a network condition, never a model failure. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read.
+That there was nothing to grade: an optional source the scenario is about contributed nothing that day, a precondition did not arise, a capability was not configured, or the model ran out of turns. It is never a model failure, and a payload that fails to arrive is not a skip: those runs are graded on whether the answer says nothing came back. Skips are treated with suspicion rather than relief: a scenario that skips often is an unasked question, and removing the skips is what exposed a model inventing a table of contents for a file it could not read.

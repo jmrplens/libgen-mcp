@@ -1,0 +1,171 @@
+---
+title: Comparison with other MCP servers
+description: How libgen-mcp compares with other MCP servers that search and download papers and books, as read from each project's repository on 2026-09-24.
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "arXiv"
+    wikidata: Q118398
+  - name: "Open access"
+    wikidata: Q232932
+  - name: "BibTeX"
+    wikidata: Q105859274
+chips:
+  - text: "Sourced, not scored"
+  - text: "Open access first"
+  - text: "Responsible use"
+    href: "/libgen-mcp/responsible-use/"
+datePublished: "2026-09-24"
+head:
+  - tag: title
+    content: "libgen-mcp vs other paper and book MCP servers"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/comparison/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/comparison/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is the best MCP server for downloading research papers?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It depends on where the papers are. For broad academic search, paper-search-mcp covers 21 sources. For arXiv, arxiv-mcp-server reads papers section by section. For biomedicine, pubmed-mcp-server returns open-access full text with formatted citations. For books as well as papers, open access first for a DOI and no key, libgen-mcp fits."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is libgen-mcp the same as mwaraic/libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. They are unrelated projects that share a name. This one is jmrplens/libgen-mcp, a Go server registered as io.github.jmrplens/libgen-mcp that downloads through a chain of 21 sources. mwaraic/libgen-mcp is a TypeScript Cloudflare Worker that searches Library Genesis and returns mirror links without downloading a file. The home page's Which libgen-mcp is this? section sets out how to tell this one apart."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which paper MCP servers produce BibTeX citations?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Among the servers on this page, four do. libgen-mcp returns BibTeX and RIS from get_details. arxiv-mcp-server exports BibTeX from arXiv metadata. pubmed-mcp-server formats APA, MLA, BibTeX, RIS and Vancouver. zotero-mcp exports BibTeX from your Zotero library. The others do not state a BibTeX export, and paper-search-mcp-nodejs returns citation counts and references instead."
+            }
+          }
+        ]
+      }
+---
+
+libgen-mcp is a four-tool Model Context Protocol server, written in Go, that searches the Library Genesis catalog and open-access sources, tries open access first for a DOI or an ISBN, exports BibTeX and RIS, and extracts text. It needs no key. The table below compares it with the servers people most often weigh it against, as checked on 2026-09-24.
+
+The comparison is sourced rather than scored. Each cell says what the project's own repository shows, no project is ranked, and [How this was checked](#how-this-was-checked) explains how the repositories were read.
+
+## At a glance
+
+One row per project, with its language beside its name. "Not stated" means that neither the project's README nor its code shows the feature. "Not applicable" in the open-access column means the project has no shadow-library sources, or only shadow-library sources, so there is no order to compare. Distribution, transports, tool counts and maintenance are in the [notes per project](#notes-per-project).
+
+The comparison is split in two tables, because seven columns do not fit a reading column. The first says what each project searches and downloads:
+
+| Project (language)                                                                                     | Search sources                                 | Downloads full text                        | Open access first                                    |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------ | ---------------------------------------------------- |
+| [jmrplens/libgen-mcp](https://github.com/jmrplens/libgen-mcp) (Go, this project)                       | Library Genesis catalog, then 8 more providers | Yes, through a chain of 21 sources         | Yes, for a DOI or ISBN (not for an md5)              |
+| [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp) (Python)                       | 21 sources, including arXiv, PubMed, OpenAlex  | Yes, per-source PDFs and a fallback chain  | Yes, in its fallback chain (Sci-Hub last and opt-in) |
+| [Dianel555/paper-search-mcp-nodejs](https://github.com/Dianel555/paper-search-mcp-nodejs) (TypeScript) | Crossref, arXiv, PubMed, Scopus and more       | Yes, per-platform PDFs (Sci-Hub opt-in)    | Not stated (Sci-Hub off by default)                  |
+| [blazickjp/arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server) (Python)                   | arXiv (Semantic Scholar for citation graphs)   | Yes, from arXiv (HTML, PDF, LaTeX source)  | Not applicable (arXiv only)                          |
+| [cyanheads/pubmed-mcp-server](https://github.com/cyanheads/pubmed-mcp-server) (TypeScript)             | PubMed, Europe PMC                             | Returns it as content, saves no file       | Open access only (PMC, Europe PMC, Unpaywall)        |
+| [Kaago/openpapers-mcp](https://github.com/Kaago/openpapers-mcp) (Python)                               | OpenAlex, Crossref, Unpaywall                  | Yes, open-access PDFs found by Unpaywall   | Open access only                                     |
+| [yashimosh/biblio-mcp](https://github.com/yashimosh/biblio-mcp) (TypeScript)                           | Anna's Archive, LibGen, Z-Library, Sci-Hub     | Books by md5, papers as a Sci-Hub URL only | Not applicable (shadow libraries only)               |
+| [mwaraic/libgen-mcp](https://github.com/mwaraic/libgen-mcp) (TypeScript)                               | Library Genesis (libgen.is)                    | No, returns mirror links                   | Not applicable (no open-access sources)              |
+| [iosifache/annas-mcp](https://github.com/iosifache/annas-mcp) (Go)                                     | Anna's Archive                                 | Yes, by md5 or DOI (Anna's API, SciDB)     | Not applicable (Anna's Archive only)                 |
+
+The second says what each one does with a record, and what it asks of you:
+
+| Project                                                                                   | Citations                        | Reads text                           | Key needed                                |
+| ----------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------ | ----------------------------------------- |
+| [jmrplens/libgen-mcp](https://github.com/jmrplens/libgen-mcp)                             | BibTeX, RIS                      | Yes (PDF, EPUB, TXT)                 | None (three optional credentials)         |
+| [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp)                   | Not stated                       | Yes (`read_*` tools)                 | None (Unpaywall needs an email)           |
+| [Dianel555/paper-search-mcp-nodejs](https://github.com/Dianel555/paper-search-mcp-nodejs) | Counts and references only       | Only through paid ScrapingAnt        | None (keyed platforms optional)           |
+| [blazickjp/arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server)               | BibTeX                           | Yes (to Markdown)                    | None                                      |
+| [cyanheads/pubmed-mcp-server](https://github.com/cyanheads/pubmed-mcp-server)             | APA, MLA, BibTeX, RIS, Vancouver | Yes (PDF text in the Unpaywall tier) | None (Unpaywall tier needs an email)      |
+| [Kaago/openpapers-mcp](https://github.com/Kaago/openpapers-mcp)                           | Not stated                       | Not stated                           | None                                      |
+| [yashimosh/biblio-mcp](https://github.com/yashimosh/biblio-mcp)                           | Not stated                       | Not stated                           | None                                      |
+| [mwaraic/libgen-mcp](https://github.com/mwaraic/libgen-mcp)                               | Not stated                       | Not stated                           | None stated                               |
+| [iosifache/annas-mcp](https://github.com/iosifache/annas-mcp)                             | Not stated                       | Not stated                           | None to search, an Anna's key to download |
+
+## How to choose
+
+- **Breadth of academic search.** If you want one server that queries many scholarly indexes, [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp) fits better: its README lists 21 sources, from arXiv and PubMed to OpenAlex, CORE and Google Scholar, behind 57 tools by default, and its download fallback chain tries open-access routes before an optional Sci-Hub step. [Dianel555/paper-search-mcp-nodejs](https://github.com/Dianel555/paper-search-mcp-nodejs) also fits, on npm with 23 tools, and adds Web of Science, ScienceDirect and Scopus for those who hold their keys.
+- **Papers on arXiv.** [blazickjp/arxiv-mcp-server](https://github.com/blazickjp/arxiv-mcp-server) fits better when your papers are on arXiv: it reads a paper section by section as Markdown, searches passages, exports BibTeX from arXiv metadata, fetches the LaTeX source and uses Semantic Scholar for a citation graph. In libgen-mcp, arXiv is one of eight search providers, and its hits carry a direct PDF link.
+- **Biomedical literature.** [cyanheads/pubmed-mcp-server](https://github.com/cyanheads/pubmed-mcp-server) fits better for PubMed work: it searches PubMed and Europe PMC, returns full text from PMC, then Europe PMC, then Unpaywall, formats citations as APA, MLA, BibTeX, RIS and Vancouver, and has a public hosted endpoint. libgen-mcp searches PubMed too, but as a bibliographic index whose hits are never marked open access.
+- **References that already live in Zotero.** [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp) fits better, although it is adjacent rather than a direct alternative: it searches your own Zotero library, not external catalogs, and needs Zotero 7 or later with its local API enabled, or a Zotero web API key. It attaches an open-access PDF when it adds an item by DOI, exports BibTeX and reads PDF pages as Markdown.
+- **Open access and nothing else.** [Kaago/openpapers-mcp](https://github.com/Kaago/openpapers-mcp) is built on OpenAlex, Crossref and Unpaywall, and its README says "No Sci-Hub, no paywall bypass". No shadow-library code was found in pubmed-mcp-server or zotero-mcp either. libgen-mcp can drop its shadow-library download sources with `LIBGEN_MCP_SOURCES`, but its search still starts at the Library Genesis catalog.
+- **Books as well as papers, from one keyless binary.** libgen-mcp fits when you want both from one server: it searches Library Genesis first, tries open-access sources first for a DOI or an ISBN, returns BibTeX and RIS from `get_details`, and reads the PDF, EPUB or TXT it saved with `read`. It is one static Go binary, also published on npm, PyPI, Homebrew, NuGet, Docker and as a Claude Desktop `.mcpb` bundle, and it needs no key.
+
+Two limits of libgen-mcp belong beside that last point. A book asked for by md5 comes from Library Genesis, because no legal source is keyed by md5; [Responsible use](/libgen-mcp/responsible-use/) sets out the whole chain. And its search reaches the Library Genesis catalog plus eight providers, by default only when the catalog comes up empty or fails, rather than a broad academic index: for a literature search across many scholarly databases, a server from the first point covers more. [How search works](/libgen-mcp/how-search-works/) describes what it does query.
+
+## Notes per project
+
+### jmrplens/libgen-mcp
+
+This project. A Go server with four tools (`search`, `get_details`, `download`, `read`) over stdio and streamable HTTP, distributed as a static binary and on npm, PyPI, NuGet, Homebrew, Docker and as a `.mcpb` bundle. A remote deployment registers three tools by default, because `read` is left out. Last commit 2026-09-23, release v2.0.1, 15 stars as of 2026-09-24, MIT license. [Repository](https://github.com/jmrplens/libgen-mcp).
+
+### openags/paper-search-mcp
+
+A Python server that installs from PyPI, through Smithery or from source, and also ships as a Claude Code skill with a command-line tool. It registers 57 tools by default, or 63 with IEEE and ACM keys, over stdio, SSE or streamable HTTP. Its download fallback chain keeps Sci-Hub off by default, while a separate Sci-Hub download tool is always registered. Last commit 2026-09-22, PyPI version 0.1.4, 2,687 stars as of 2026-09-24, MIT license. [Repository](https://github.com/openags/paper-search-mcp).
+
+### Dianel555/paper-search-mcp-nodejs
+
+A TypeScript server for Node.js 20.18.1 or later, published on npm, with 23 tools over stdio. Crossref and arXiv need no key, while Web of Science, ScienceDirect, Scopus, Springer and Wiley do. Its Markdown tool relies on ScrapingAnt, a paid service that is opt-in. Last commit 2026-09-20, npm version 0.3.3, 185 stars as of 2026-09-24, MIT license. [Repository](https://github.com/Dianel555/paper-search-mcp-nodejs).
+
+### blazickjp/arxiv-mcp-server
+
+A Python server on PyPI, also packaged as a Claude Desktop `.mcpb` for macOS and as Claude Code, Codex and Kiro plugins. It has 19 tools, two of which need its `[pro]` extra, and 7 prompts, over stdio or streamable HTTP. Its README warns that an unrelated npm package uses the same name. Last commit 2026-08-26, release v0.7.2, 3,173 stars as of 2026-09-24, Apache-2.0 license. [Repository](https://github.com/blazickjp/arxiv-mcp-server).
+
+### cyanheads/pubmed-mcp-server
+
+A TypeScript server distributed on npm, as a GHCR image and as a `.mcpb` bundle, with a public hosted endpoint at `https://pubmed.caseyjhand.com/mcp`. It has 11 tools, 1 resource and 1 prompt over stdio or streamable HTTP, with optional JWT or OAuth authentication. Last commit 2026-09-23, release v2.10.18, 150 stars as of 2026-09-24, Apache-2.0 license. [Repository](https://github.com/cyanheads/pubmed-mcp-server).
+
+### Kaago/openpapers-mcp
+
+A server for Python 3.12 or later that runs from a clone of the repository with `uv`. It has 5 tools over stdio, and its PDF download checks the content type and the file's `%PDF-` signature. Last commit 2026-07-19 on the default branch, release v0.1.0, 3 stars as of 2026-09-24, MIT license. [Repository](https://github.com/Kaago/openpapers-mcp).
+
+### yashimosh/biblio-mcp
+
+A TypeScript server on npm that searches Anna's Archive, Library Genesis and Z-Library concurrently, deduplicates the results by md5, and resolves papers through Sci-Hub. It has 6 tools over stdio and needs no key. Last commit 2026-08-28, release v1.1.0, 16 stars as of 2026-09-24, MIT license. [Repository](https://github.com/yashimosh/biblio-mcp).
+
+### mwaraic/libgen-mcp
+
+An unrelated project that shares this project's name: see [Which libgen-mcp is this?](/libgen-mcp/#which-libgen-mcp-is-this). It is a TypeScript Cloudflare Worker with 4 tools that search Library Genesis by title or author and return mirror links, served over SSE and streamable HTTP, with no stdio transport. Last commit 2025-06-01, no releases, 5 stars as of 2026-09-24, MIT license. [Repository](https://github.com/mwaraic/libgen-mcp).
+
+### iosifache/annas-mcp
+
+A Go server, also usable as a command-line tool, released as single binaries for Linux, macOS, FreeBSD and Windows. It has 4 tools over stdio. Searching needs no key, and both download tools require an Anna's Archive key, which comes from a donation, plus a download directory. Last commit 2026-06-26, release v0.1, 1,052 stars as of 2026-09-24. No license is stated: the repository has no LICENSE file. [Repository](https://github.com/iosifache/annas-mcp).
+
+## How this was checked
+
+Every cell was read from the project's own repository on 2026-09-24: its README, its source on the default branch, and its package manifest. Stars, last-commit dates, releases and licenses come from the GitHub API, and published versions from PyPI or npm. Tool counts were counted from the tool registrations in each project's source, except zotero-mcp's, which comes from its README. Nothing was taken from reputation, blog posts or third-party directories.
+
+"Not stated" means that neither the README nor the code shows the feature. It is not written as "no", because the page records what a project shows rather than a verdict on it. Star counts and dates are a snapshot and will drift.
+
+If a cell is wrong or out of date, [open an issue](https://github.com/jmrplens/libgen-mcp/issues) with a link to the part of the project's repository that shows it. Corrections are welcome.
+
+## Frequently asked questions
+
+### What is the best MCP server for downloading research papers?
+
+It depends on where the papers are. For broad academic search, paper-search-mcp covers 21 sources. For arXiv, arxiv-mcp-server reads papers section by section. For biomedicine, pubmed-mcp-server returns open-access full text with formatted citations. For books as well as papers, open access first for a DOI and no key, libgen-mcp fits.
+
+### Is libgen-mcp the same as mwaraic/libgen-mcp?
+
+No. They are unrelated projects that share a name. This one is jmrplens/libgen-mcp, a Go server registered as `io.github.jmrplens/libgen-mcp` that downloads through a chain of 21 sources. mwaraic/libgen-mcp is a TypeScript Cloudflare Worker that searches Library Genesis and returns mirror links without downloading a file.
+
+The home page's [Which libgen-mcp is this?](/libgen-mcp/#which-libgen-mcp-is-this) section sets out how to tell this one apart.
+
+### Which paper MCP servers produce BibTeX citations?
+
+Among the servers on this page, four do. libgen-mcp returns BibTeX and RIS from `get_details`. arxiv-mcp-server exports BibTeX from arXiv metadata. pubmed-mcp-server formats APA, MLA, BibTeX, RIS and Vancouver. zotero-mcp exports BibTeX from your Zotero library. The others do not state a BibTeX export, and paper-search-mcp-nodejs returns citation counts and references instead.

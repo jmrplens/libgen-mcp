@@ -91,6 +91,9 @@ JSON
   mkdir -p "$dir/.plugin"
   printf '{"name":"libgen-mcp","version":"0.0.1"}\n' >"$dir/.plugin/plugin.json"
   printf '{"name":"libgen-mcp","version":"0.0.1"}\n' >"$dir/plugin.json"
+  # The citation file is YAML, so it is stamped by line rather than by jq, and
+  # a line that is not top-level must be left alone.
+  printf 'cff-version: 1.2.0\ntitle: libgen-mcp\nversion: 0.0.1\ndate-released: 2000-01-01\nreferences:\n  - version: 0.0.1\n' >"$dir/CITATION.cff"
   echo "$dir"
 }
 
@@ -120,6 +123,20 @@ want "oci entries carry no version field" "0" \
   "$(jq '[.packages[] | select(.registryType == "oci") | select(has("version"))] | length' "$dir/server.json")"
 want "the Open Plugins manifest" "9.9.9" "$(jq -r '.version' "$dir/.plugin/plugin.json")"
 want "the Agent Plugins manifest" "9.9.9" "$(jq -r '.version' "$dir/plugin.json")"
+want "the citation file's version" "version: 9.9.9" "$(grep '^version: ' "$dir/CITATION.cff")"
+want "the citation file's release date" "date-released: $(date -u +%Y-%m-%d)" "$(grep '^date-released: ' "$dir/CITATION.cff")"
+want "a nested version line" "  - version: 0.0.1" "$(grep '^  - version: ' "$dir/CITATION.cff")"
+rm -rf "$dir"
+
+# 1b. A citation file that has lost its version line is refused, not skipped.
+dir="$(new_case)"
+printf 'cff-version: 1.2.0\ntitle: libgen-mcp\n' >"$dir/CITATION.cff"
+if (cd "$dir" && bash "$STAMPER" checksums.txt 9.9.9 libgen-mcp.mcpb "$DIGEST" >stamp.log 2>&1); then
+  fail "a citation file with no version line was accepted"
+else
+  grep -q "no top-level version or date-released line" "$dir/stamp.log" ||
+    fail "the refusal did not say why: $(cat "$dir/stamp.log")"
+fi
 rm -rf "$dir"
 
 # 2. A digest-pinned identifier with no digest is refused rather than stamped.
@@ -159,4 +176,4 @@ if [ "$failures" -gt 0 ]; then
   echo "$failures assertion(s) failed" >&2
   exit 1
 fi
-echo "update-server-json-sha.sh: 4 cases passed"
+echo "update-server-json-sha.sh: 5 cases passed"

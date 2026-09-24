@@ -1,9 +1,14 @@
 ---
 title: Privacy policy
-description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
-datePublished: "2026-09-17"
+description: "What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default, and every destination is listed per tool."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
+datePublished: "2026-09-24"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "3cc22c8c82267d84"
+privacySource: "bdfeabc52bd95a6b"
 head:
   - tag: script
     attrs:
@@ -66,8 +71,9 @@ machine rather than yours. See [Hosted endpoint](#hosted-endpoint).
 
 ## What we collect
 
-**Nothing.** The server has no telemetry, no analytics, no crash reporting, and
-no backend of its own. There is no account to create and nothing to log in to.
+**Nothing.** The server sends no telemetry unless you turn it on, and even then
+only to a collector you run (see below). It has no analytics, no crash reporting,
+and no backend of its own. There is no account to create and nothing to log in to.
 When you run it yourself — which is how this documentation recommends using it —
 the maintainer never receives, stores, or has access to any of your data or usage
 information, because nothing is ever sent anywhere that the maintainer controls.
@@ -115,7 +121,7 @@ default nor a step anything takes for you.
 
 The full detail, including what each signal carries and the four traps in the
 standard `OTEL_*` variables, is in the
-[telemetry guide](https://jmrp.io/docs/libgen-mcp/telemetry/).
+[telemetry guide](/libgen-mcp/telemetry/).
 
 ## Data flows
 
@@ -278,8 +284,8 @@ publishes the answer — whether telemetry is on, what each enabled signal recor
 and what it records about callers — so it can be read rather than asked for.
 
 That instance is operated as part of [mcp.jmrp.io](https://mcp.jmrp.io/) and its
-handling of requests is governed there, not by this policy, which describes the
-software. This document can only tell you what the software does; it cannot make
+handling of requests is governed by [that service's own policies](https://mcp.jmrp.io/policies/),
+not by this one, which describes the software. This document can only tell you what the software does; it cannot make
 promises on behalf of a server you are not running.
 
 If what you search for is sensitive to you, run the server locally. That is the

@@ -1,6 +1,25 @@
 ---
 title: Fuentes de descarga
-description: Referencia fuente a fuente de las veintiuna fuentes de descarga — qué alcanza cada una, cómo convierte un identificador en un fichero, qué no cubre y si necesita clave.
+description: Referencia de las veintiuna fuentes de descarga, qué alcanza cada una, cómo resuelve un identificador, qué no cubre y si necesita clave.
+mentions:
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Open access"
+    wikidata: Q232932
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "Unpaywall"
+    wikidata: Q38352586
+  - name: "OpenAlex"
+    wikidata: Q107507571
+  - name: "Europe PubMed Central"
+    wikidata: Q5412157
+  - name: "Internet Archive"
+    wikidata: Q461
+  - name: "Sci-Hub"
+    wikidata: Q21980377
+  - name: "Anna's Archive"
+    wikidata: Q115288326
 chips:
   - text: "Acceso abierto primero"
   - text: "Orden de cadena fijo"
@@ -8,12 +27,63 @@ chips:
   - text: "Arquitectura"
     href: "/libgen-mcp/es/architecture/"
 datePublished: "2026-07-30"
+head:
+  - tag: title
+    content: "Fuentes de descarga de libgen-mcp: primero el acceso abierto"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/sources/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/sources/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿De qué fuentes descarga libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "La herramienta download de libgen-mcp usa veintiuna fuentes: cuatro resolutores de artículos de acceso abierto, siete fuentes directas de editor, tres de agregación y preservación, dos de libros abiertos y cinco shadow libraries: Sci-Hub, SciDB, Library Genesis, randombook y Anna's Archive. Los artículos van por DOI, los libros abiertos por ISBN o DOI y los de Library Genesis por md5."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿En qué orden prueba libgen-mcp las fuentes de descarga?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "libgen-mcp prueba sus fuentes en un orden fijado en el código: resolutores de artículos de acceso abierto, fuentes directas de editor, agregadores, libros abiertos y, al final, shadow libraries. Cada fuente solo recibe los elementos que admite: un artículo alcanza una shadow library solo cuando han declinado todas las legales anteriores, y un libro pedido por md5 empieza en libgen."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué fuentes de libgen-mcp necesitan una clave de API?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Dos de las veintiuna necesitan credencial: unpaywall, un email de contacto en LIBGEN_MCP_UNPAYWALL_EMAIL, y core, una clave gratuita de CORE en LIBGEN_MCP_CORE_KEY. annas acepta opcionalmente una clave de membresía de pago en LIBGEN_MCP_ANNAS_KEY; sin ella, recurre a IPFS. Las otras dieciocho no necesitan nada. Un email o una clave aportados por llamada se usan una vez y no se guardan."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Puedo desactivar Sci-Hub u otras fuentes en libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí. LIBGEN_MCP_SOURCES recibe una lista separada por comas de las fuentes que se conservan, y cualquier fuente que no figure en ella, scihub incluida, sale de la cadena. Quita fuentes pero nunca las reordena: las que quedan se ejecutan en el orden fijo. Un nombre desconocido detiene el servidor al arrancar, y unpaywall y core siguen necesitando sus credenciales."
+            }
+          }
+        ]
+      }
 ---
 
 import Facts from "../../../components/docs/Facts.astro";
 import Fact from "../../../components/docs/Fact.astro";
+import SourceChain from "../../../components/docs/SourceChain.astro";
 
-`download` resuelve un elemento a través de una cadena ordenada de veintiuna fuentes.
+La herramienta `download` de libgen-mcp resuelve un libro o un artículo a través de una
+cadena ordenada de veintiuna fuentes, primero las legales de acceso abierto para un artículo.
 [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena — cómo se
 construye, cómo funciona el failover y cómo se enfría una fuente que demuestra estar
 inalcanzable. Esta página describe las fuentes en sí, una sección para cada una y en el orden
@@ -30,9 +100,41 @@ cadena simplemente avanza sin ganar ninguna de las dos optimizaciones. Y la veri
 identificados por md5, porque un elemento identificado por DOI o ISBN no lleva ningún digest de
 LibGen contra el que comprobar los bytes transmitidos.
 
-El orden viene de `config.KnownSources` y está fijado en el código: los proveedores legales de
-acceso abierto van delante, y a las bibliotecas en la sombra solo se llega cuando todos ellos
-han declinado. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena; no puede reordenarla.
+El orden viene de `config.KnownSources` y está fijado en el código: para un artículo, los
+proveedores legales de acceso abierto van delante, y a las shadow libraries solo se llega
+cuando todos ellos han declinado. Un libro pedido por md5 no tiene ninguna fuente legal que
+probar antes, porque ninguna va por md5. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena; no puede reordenarla.
+
+## De un vistazo
+
+Las veintiuna fuentes, en el orden en que la cadena las prueba, con el identificador por el que va
+cada una. La cadena solo ofrece un elemento a las fuentes que lo admiten, así que un DOI, un ISBN
+y un md5 recorren cada uno sus propias entradas de esta lista, en este orden.
+
+{/* prettier-ignore */}
+<SourceChain variant="position" label="Función" keyedByLabel="Identificado por">
+	<Fragment slot="unpaywall">Servicio de OurResearch que registra copias legalmente gratuitas de DOI de Crossref.</Fragment>
+	<Fragment slot="openalex">Catálogo abierto de OurResearch sobre el índice que sostiene Unpaywall, sin credencial.</Fragment>
+	<Fragment slot="europepmc">El espejo del EMBL-EBI de PubMed Central y del contenido de sus socios europeos.</Fragment>
+	<Fragment slot="biorxiv">Los servidores de preprints bioRxiv y medRxiv del Cold Spring Harbor Laboratory.</Fragment>
+	<Fragment slot="rfc">El RFC Editor, que publica y archiva los estándares de internet del IETF.</Fragment>
+	<Fragment slot="nist">El repositorio propio del National Institute of Standards and Technology de EE. UU.</Fragment>
+	<Fragment slot="dagstuhl">DROPS, el servidor de Schloss Dagstuhl para sus series de actas de acceso abierto.</Fragment>
+	<Fragment slot="acl">La ACL Anthology, el archivo abierto de actas de la Association for Computational Linguistics.</Fragment>
+	<Fragment slot="zenodo">Zenodo, el repositorio abierto de propósito general del CERN.</Fragment>
+	<Fragment slot="scielo">La colección brasileña de SciELO, plataforma de acceso abierto de la ciencia latinoamericana.</Fragment>
+	<Fragment slot="fao">El FAO Knowledge Repository, la instancia DSpace de la FAO de las Naciones Unidas.</Fragment>
+	<Fragment slot="fatcat">El catálogo tras Internet Archive Scholar, que lista PDF preservados del editor.</Fragment>
+	<Fragment slot="core">Un agregador de artículos de acceso abierto de repositorios de todo el mundo.</Fragment>
+	<Fragment slot="crossref">Enlaces a texto completo que las editoriales depositan en Crossref, la agencia de DOI.</Fragment>
+	<Fragment slot="oapen">La plataforma del Directory of Open Access Books para monografías con licencia abierta.</Fragment>
+	<Fragment slot="archive">Los escaneos de libros de Internet Archive, alcanzados a través de OpenLibrary.</Fragment>
+	<Fragment slot="scihub">Sci-Hub, una shadow library que dejó de incorporar material nuevo.</Fragment>
+	<Fragment slot="scidb">El visor SciDB de Anna's Archive, que cubre artículos recientes que faltan en Sci-Hub.</Fragment>
+	<Fragment slot="libgen">Library Genesis a través de los mirrors `libgen.li`, el proveedor principal de libros.</Fragment>
+	<Fragment slot="randombook">randombook.org, un frontend de Library Genesis que sirve de reserva para descubrir mirrors.</Fragment>
+	<Fragment slot="annas">Anna's Archive, la última ruta de rescate por md5 de la cadena.</Fragment>
+</SourceChain>
 
 ## Resolutores de artículos de acceso abierto
 
@@ -237,7 +339,7 @@ los obtiene.
   <Fact label="Por qué sondea">un enlace depositado declara un acuerdo de sindicación, no un derecho de lectura. En una muestra de veinte registrantes, todos los enlaces `unspecified` (6 de 6) y todos los `syndication` (18 de 18) respondieron 403 a un cliente anónimo, mientras que eLife y las editoriales de acceso abierto pequeñas etiquetan su fichero orientado al lector como `text-mining` y se lo sirven a cualquiera. La etiqueta no predice nada; el registrante sí. Sin el sondeo, la canalización guardaría como `.pdf` la página de desafío de una editorial.</Fact>
   <Fact label="Por qué existe">`search` publica un resultado de Crossref con el `pdf_url` de la propia editorial, y antes de esta fuente nada en la cadena de descarga probaba ese enlace — `read` y `download` iban por los índices de acceso abierto —, de modo que los dos caminos podían llegar a conclusiones opuestas sobre un mismo artículo y el enlace que el servidor acababa de publicar solo era alcanzable por quien tuviera su propia herramienta HTTP.</Fact>
   <Fact kind="notCovered">las grandes editoriales comerciales. ACS, AIP, IOP, Wiley, SAGE, Taylor & Francis y Springer rechazan a los clientes anónimos depositen lo que depositen, así que para sus DOI esta fuente informa de una ausencia limpia y señala el navegador como la vía que queda — que a menudo es la verdad, incluso para artículos con licencia abierta: `10.1063/5.0282407` es CC-BY y se lee en un navegador mientras AIP responde 403 a todo cliente automático, y ningún repositorio guarda una copia.</Fact>
-  <Fact label="Dónde encaja">la última de las resolvedoras específicas de artículo, tras los índices de acceso abierto y los archivos: se prefiere una copia con licencia libre allá donde exista, pero un fichero que la propia editorial sirve abiertamente se prueba siempre antes que una biblioteca en la sombra. Solo la siguen las dos fuentes de libros (`oapen`, `archive`) y después las bibliotecas en la sombra.</Fact>
+  <Fact label="Dónde encaja">la última de las resolvedoras específicas de artículo, tras los índices de acceso abierto y los archivos: se prefiere una copia con licencia libre allá donde exista, pero un fichero que la propia editorial sirve abiertamente se prueba siempre antes que una shadow library. Solo la siguen las dos fuentes de libros (`oapen`, `archive`) y después las shadow libraries.</Fact>
   <Fact kind="keys">sin clave.</Fact>
 </Facts>
 ## Libros de acceso abierto y de dominio público
@@ -267,11 +369,14 @@ Los escaneos de libros de Internet Archive, alcanzados a través de OpenLibrary.
   <Fact kind="notCovered">un libro que OpenLibrary no conoce, uno que solo tiene en préstamo y uno cuyos candidatos están todos restringidos. Una consulta de metadatos que se _rompió_ en cualquiera de los dos saltos se reporta como indisponibilidad y nunca como «no existe copia libre».</Fact>
   <Fact kind="keys">sin clave.</Fact>
 </Facts>
-## Reservas de biblioteca en la sombra
+## Shadow libraries de reserva
 
-A todo lo que sigue solo se llega cuando todas las fuentes anteriores han declinado, que es el
-sentido entero del orden de la cadena: siempre se prefiere una copia con licencia libre cuando
-existe, y el orden está fijado en el código y sujeto por un test, no dejado a la configuración.
+Para un artículo, a todo lo que sigue solo se llega cuando todas las fuentes anteriores han
+declinado, que es el sentido entero del orden de la cadena: siempre se prefiere una copia con
+licencia libre cuando existe, y el orden está fijado en el código y sujeto por un test, no dejado
+a la configuración. Un libro pedido por md5 es distinto: ninguna fuente anterior va por md5, así
+que `libgen`, `randombook` y `annas` son las únicas que pueden servirlo, y Library Genesis es la
+primera con la que se encuentra.
 
 ### `scihub`
 
@@ -394,13 +499,6 @@ descarga lenta de Anna's Archive, cerrada por DDoS-Guard, y — medidas el 2026-
 Euclid, DLA ASSIST y EverySpec. Estas tres últimas merecen una línea aquí porque dos de ellas
 funcionan:
 
-- **Medido el 2026-08-21: la página de registro también está protegida.** `<mirror>/md5/<md5>`
-  responde 403 con el interstitial "Checking your browser" de DDoS-Guard, igual que `/search`,
-  así que ambas rutas HTML están cerradas a un cliente Go puro. La API de descarga rápida de
-  miembro no está afectada — respondió 200 con un `download_url` real bajo el propio User-Agent
-  de este proyecto —, de modo que una descarga con clave sigue funcionando mientras que la ruta
-  IPFS sin clave y el scrape de descubrimiento/detalles no. No se adoptó ningún User-Agent de
-  navegador; véase Cortesía e identificación.
 - **Project Euclid** sirve revistas del IMS y de estadística, y
   `journalArticle/Download?urlId=<doi>` sí devolvió PDF reales a un User-Agent honesto. Se
   rechaza por los dos lados del listón. Unpaywall ya aporta un enlace al PDF en seis de ocho DOI
@@ -427,3 +525,37 @@ funcionan:
 Cada una lleva su medición completa en
 [el ADR de alcance de fuentes y capacidades](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-source-and-capability-scope.md),
 así que ninguna se vuelve a litigar aquí.
+
+## Preguntas frecuentes
+
+### ¿De qué fuentes descarga libgen-mcp?
+
+La herramienta `download` de libgen-mcp usa veintiuna fuentes: cuatro resolutores de artículos
+de acceso abierto, siete fuentes directas de editor, tres de agregación y preservación, dos de
+libros abiertos y cinco shadow libraries: Sci-Hub, SciDB, Library Genesis, randombook y Anna's
+Archive. Los artículos van por DOI, los libros abiertos por ISBN o DOI y los de Library Genesis
+por md5.
+
+### ¿En qué orden prueba libgen-mcp las fuentes de descarga?
+
+libgen-mcp prueba sus fuentes en un orden fijado en el código: resolutores de artículos de
+acceso abierto, fuentes directas de editor, agregadores, libros abiertos y, al final, shadow
+libraries. Cada fuente solo recibe los elementos que admite: un artículo alcanza una shadow
+library solo cuando han declinado todas las legales anteriores, y un libro pedido por md5 empieza
+en `libgen`.
+
+### ¿Qué fuentes de libgen-mcp necesitan una clave de API?
+
+Dos de las veintiuna necesitan credencial: `unpaywall`, un email de contacto en
+`LIBGEN_MCP_UNPAYWALL_EMAIL`, y `core`, una clave gratuita de CORE en `LIBGEN_MCP_CORE_KEY`.
+`annas` acepta opcionalmente una clave de membresía de pago en `LIBGEN_MCP_ANNAS_KEY`; sin ella,
+recurre a IPFS. Las otras dieciocho no necesitan nada. Un email o una clave aportados
+por llamada se usan una vez y no se guardan.
+
+### ¿Puedo desactivar Sci-Hub u otras fuentes en libgen-mcp?
+
+Sí. [`LIBGEN_MCP_SOURCES`](/libgen-mcp/es/configuration/#libgen_mcp_sources-y-la-cadena-de-fuentes)
+recibe una lista separada por comas de las fuentes que se conservan, y cualquier fuente que no
+figure en ella, `scihub` incluida, sale de la cadena. Quita fuentes pero nunca las reordena: las
+que quedan se ejecutan en el orden fijo. Un nombre desconocido detiene el servidor al arrancar, y
+`unpaywall` y `core` siguen necesitando sus credenciales.

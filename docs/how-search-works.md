@@ -13,7 +13,9 @@ why it reaches beyond the catalog, and what comes back and how to act on it.
 
 An ordinary search asks the Library Genesis catalog and only the catalog. It sends no traffic
 to any third party, because it does not need to: the catalog holds millions of books, papers,
-comics, magazines, and standards, and it answers in a single fast round-trip. Whatever the
+comics, magazines, and standards (its own 2019 count,
+[cited on Wikipedia](https://en.wikipedia.org/wiki/Library_Genesis), was over 2.4 million
+non-fiction books and 80 million journal articles), and it answers in a single fast round-trip. Whatever the
 catalog returns — the result page, the match counts, the per-file metadata — is what you get
 back.
 

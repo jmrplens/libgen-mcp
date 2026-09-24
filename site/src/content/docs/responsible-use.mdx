@@ -1,6 +1,17 @@
 ---
 title: Responsible use
 description: What libgen-mcp does to prefer legally free sources, what it refuses to serve, and how to raise a concern.
+mentions:
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Open access"
+    wikidata: Q232932
+  - name: "Sci-Hub"
+    wikidata: Q21980377
+  - name: "Anna's Archive"
+    wikidata: Q115288326
+  - name: "Internet Archive"
+    wikidata: Q461
 chips:
   - text: "Open access first"
   - text: "Refuses what it may not redistribute"
@@ -8,6 +19,8 @@ chips:
     href: "/libgen-mcp/privacy/"
 datePublished: "2026-07-25"
 head:
+  - tag: title
+    content: "Responsible use of libgen-mcp: legal sources and limits"
   - tag: script
     attrs:
       type: application/ld+json
@@ -15,8 +28,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/responsible-use/#faq",
         "inLanguage": "en",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/responsible-use/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {
@@ -32,7 +46,7 @@ head:
             "name": "What does libgen-mcp do to prefer legally free sources?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the publisher's own Crossref-deposited link, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship."
+              "text": "It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the publisher's own Crossref-deposited link, then to OAPEN for an openly licensed monograph, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship."
             }
           },
           {
@@ -56,7 +70,7 @@ head:
             "name": "What does libgen-mcp send, and to whom?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
+              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
             }
           },
           {
@@ -100,35 +114,37 @@ That depends on what you ask it for and where you are. libgen-mcp is a client: i
 
 ## What does libgen-mcp do to prefer legally free sources?
 
-It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the publisher's own Crossref-deposited link, then to the openly licensed book sources OAPEN and the Internet Archive, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship.
+It orders the download chain so the open-access providers are tried first, and the order is fixed rather than advisory. An article requested by DOI is offered to Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar and CORE, then to the publisher's own Crossref-deposited link, then to OAPEN for an openly licensed monograph, before Sci-Hub or SciDB are considered at all. A book requested by ISBN is served only from OAPEN and public-domain Internet Archive scans; there is no shadow-library fallback on the ISBN path. The chain order is pinned by a test, so a future change that quietly demoted the legal sources would fail the build rather than ship.
 
 The full chain, in order:
 
-| #   | Source       | Keyed by  | Status                                 |
-| --- | ------------ | --------- | -------------------------------------- |
-| 1   | `unpaywall`  | DOI       | Open access                            |
-| 2   | `openalex`   | DOI       | Open access                            |
-| 3   | `europepmc`  | DOI       | Open access                            |
-| 4   | `biorxiv`    | DOI       | Open access (preprints)                |
-| 5   | `rfc`        | DOI       | Open standards (RFC Editor)            |
-| 6   | `nist`       | DOI       | Open standards (NIST)                  |
-| 7   | `dagstuhl`   | DOI       | Open access (Schloss Dagstuhl / DROPS) |
-| 8   | `acl`        | DOI       | Open access (ACL Anthology)            |
-| 9   | `zenodo`     | DOI       | Open access (Zenodo)                   |
-| 10  | `scielo`     | DOI       | Open access (SciELO Brazil)            |
-| 11  | `fao`        | DOI       | Open access (FAO Knowledge Repository) |
-| 12  | `fatcat`     | DOI       | Open access (Internet Archive Scholar) |
-| 13  | `core`       | DOI       | Open access (needs a free API key)     |
-| 14  | `crossref`   | DOI       | The publisher's own deposited link     |
-| 15  | `oapen`      | DOI, ISBN | Openly licensed books                  |
-| 16  | `archive`    | ISBN      | Public-domain scans only               |
-| 17  | `scihub`     | DOI       | Shadow library                         |
-| 18  | `scidb`      | DOI       | Shadow library                         |
-| 19  | `libgen`     | md5       | Library Genesis catalog                |
-| 20  | `randombook` | md5       | Library Genesis mirror                 |
-| 21  | `annas`      | md5       | Shadow library                         |
+| #   | Source       | Keyed by  | Status                                   |
+| --- | ------------ | --------- | ---------------------------------------- |
+| 1   | `unpaywall`  | DOI       | Open access                              |
+| 2   | `openalex`   | DOI       | Open access                              |
+| 3   | `europepmc`  | DOI       | Open access                              |
+| 4   | `biorxiv`    | DOI       | Open access (preprints)                  |
+| 5   | `rfc`        | DOI       | Open standards (RFC Editor)              |
+| 6   | `nist`       | DOI       | Open standards (NIST)                    |
+| 7   | `dagstuhl`   | DOI       | Open access (Schloss Dagstuhl / DROPS)   |
+| 8   | `acl`        | DOI       | Open access (ACL Anthology)              |
+| 9   | `zenodo`     | DOI       | Open access (Zenodo)                     |
+| 10  | `scielo`     | DOI       | Open access (SciELO Brazil)              |
+| 11  | `fao`        | DOI       | Open access (FAO Knowledge Repository)   |
+| 12  | `fatcat`     | DOI       | Open access (Internet Archive Scholar)   |
+| 13  | `core`       | DOI       | Open access (needs a free API key)       |
+| 14  | `crossref`   | DOI       | The publisher's own deposited link       |
+| 15  | `oapen`      | DOI, ISBN | Openly licensed books                    |
+| 16  | `archive`    | ISBN      | Public-domain scans only                 |
+| 17  | `scihub`     | DOI       | Shadow library                           |
+| 18  | `scidb`      | DOI       | Shadow library                           |
+| 19  | `libgen`     | md5       | Shadow library (Library Genesis catalog) |
+| 20  | `randombook` | md5       | Shadow library (Library Genesis mirror)  |
+| 21  | `annas`      | md5       | Shadow library                           |
 
-Positions 1–16 are exhausted before position 17 is tried. You can remove sources
+For an article, positions 1–16 are exhausted before position 17 is tried. A book
+asked for by md5 has no legal source in this chain: only positions 19–21 are keyed
+by md5, so it goes to Library Genesis first. You can remove sources
 with `LIBGEN_MCP_SOURCES`, but you cannot reorder them — a deployment can narrow
 the chain, never promote a fallback above the open-access providers.
 
@@ -147,7 +163,7 @@ No, and you should not read it that way. When search escalates beyond the Librar
 
 ## What does libgen-mcp send, and to whom?
 
-Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md).
+Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](/libgen-mcp/privacy/).
 
 ## How do I report a concern?
 

@@ -114,7 +114,7 @@ func stagedBinary(prebuilt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	info, err := os.Stat(abs)
+	info, err := os.Stat(abs) //#nosec G703 -- the binary the person running the suite chose to stage, named by them in its own variable
 	if err != nil {
 		return "", err
 	}

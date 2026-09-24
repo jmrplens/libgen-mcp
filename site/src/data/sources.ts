@@ -9,8 +9,9 @@
  *
  * This file is the single copy those renderings are built from. The order here
  * is `config.KnownSources` verbatim and it is load-bearing: the chain is fixed
- * in code, the legal open-access providers lead, and the shadow libraries are
- * reached only after all of them have declined.
+ * in code, the legal open-access providers lead for an article, and the shadow
+ * libraries are reached only after all of them have declined. An md5 is keyed
+ * by no legal source, so a book asked for by one goes to libgen first.
  *
  * It is deliberately NOT generated from the Go source yet. Adding a build-time
  * generator during a design change would mean two moving gates at once.

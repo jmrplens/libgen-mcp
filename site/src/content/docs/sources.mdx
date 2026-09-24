@@ -1,6 +1,25 @@
 ---
 title: Download sources
-description: Per-source reference for the twenty-one download sources — what each one reaches, how it resolves an identifier into a file, what it does not cover, and whether it needs a key.
+description: Reference for the twenty-one download sources, what each one reaches, how it resolves an identifier, what it does not cover and whether it needs a key.
+mentions:
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Open access"
+    wikidata: Q232932
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "Unpaywall"
+    wikidata: Q38352586
+  - name: "OpenAlex"
+    wikidata: Q107507571
+  - name: "Europe PubMed Central"
+    wikidata: Q5412157
+  - name: "Internet Archive"
+    wikidata: Q461
+  - name: "Sci-Hub"
+    wikidata: Q21980377
+  - name: "Anna's Archive"
+    wikidata: Q115288326
 chips:
   - text: "Open access first"
   - text: "Fixed chain order"
@@ -8,12 +27,63 @@ chips:
   - text: "Architecture"
     href: "/libgen-mcp/architecture/"
 datePublished: "2026-07-30"
+head:
+  - tag: title
+    content: "libgen-mcp download sources: open access first"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/sources/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/sources/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Which sources does libgen-mcp download from?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "libgen-mcp's download tool uses twenty-one sources: four open-access article resolvers, seven publisher-direct sources, three aggregator and preservation sources, two open-access book sources and five shadow-library fallbacks, namely Sci-Hub, SciDB, Library Genesis, randombook and Anna's Archive. Articles are keyed by DOI, the open-access books by ISBN or DOI, and Library Genesis books by md5."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "In what order does libgen-mcp try download sources?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "libgen-mcp tries its download sources in an order fixed in code: open-access article resolvers, publisher-direct sources, aggregators, open-access book sources and, last, shadow libraries. An item goes only to the sources that claim it, so an article reaches a shadow library only after every legal source before it has declined, and a book asked for by md5 starts at libgen."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which libgen-mcp sources need an API key?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Two of the twenty-one need a credential to run: unpaywall needs a contact email in LIBGEN_MCP_UNPAYWALL_EMAIL, and core needs a free CORE key in LIBGEN_MCP_CORE_KEY. annas takes an optional paid-membership key in LIBGEN_MCP_ANNAS_KEY and falls back to keyless IPFS without one. The other eighteen need nothing. A per-call Unpaywall email or Anna's key is used once and never stored."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I turn off Sci-Hub or other sources in libgen-mcp?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. LIBGEN_MCP_SOURCES takes a comma-separated list of the sources to keep, and any source left off it, scihub included, drops out of the chain. It removes sources but never reorders them: the ones kept run in the fixed order. An unknown name stops the server at startup, and unpaywall and core still need their credentials."
+            }
+          }
+        ]
+      }
 ---
 
 import Facts from "../../components/docs/Facts.astro";
 import Fact from "../../components/docs/Fact.astro";
+import SourceChain from "../../components/docs/SourceChain.astro";
 
-`download` resolves an item through an ordered chain of twenty-one sources.
+libgen-mcp's `download` tool resolves a book or a paper through an ordered chain of
+twenty-one sources, the legal open-access ones first for an article.
 [Architecture](/libgen-mcp/architecture/#multi-source-chain) describes the chain — how it is built,
 how failover works, and how a source that proves unreachable is cooled down. This page
 describes the sources themselves, one section each, in chain order: what each one reaches,
@@ -29,9 +99,41 @@ minutes); an untagged error is the neutral case, where the chain simply advances
 neither optimization. And MD5 verification is enabled only for md5-keyed items, because a DOI- or
 ISBN-keyed item carries no LibGen digest to check the streamed bytes against.
 
-The order comes from `config.KnownSources` and is fixed in code: the legal open-access
-providers lead, and the shadow libraries are reached only after all of them have declined.
+The order comes from `config.KnownSources` and is fixed in code: for an article, the legal
+open-access providers lead, and the shadow libraries are reached only after all of them have
+declined. A book asked for by md5 has no legal source to try first, since none is keyed by md5.
 `LIBGEN_MCP_SOURCES` can remove sources from the chain; it cannot reorder them.
+
+## At a glance
+
+Twenty-one sources, in the order the chain tries them, with the identifier each one is keyed
+by. The chain offers an item only to the sources that claim it, so a DOI, an ISBN and an md5
+each pass through their own entries in this list, in this order.
+
+{/* prettier-ignore */}
+<SourceChain variant="position" label="Role" keyedByLabel="Keyed by">
+	<Fragment slot="unpaywall">OurResearch's tracker of legally free copies of Crossref-registered DOIs.</Fragment>
+	<Fragment slot="openalex">OurResearch's open catalogue on the index behind Unpaywall, needing no credential.</Fragment>
+	<Fragment slot="europepmc">EMBL-EBI's mirror of PubMed Central and its European partner content.</Fragment>
+	<Fragment slot="biorxiv">Cold Spring Harbor Laboratory's bioRxiv and medRxiv preprint servers.</Fragment>
+	<Fragment slot="rfc">The RFC Editor, which publishes and archives the IETF's Internet standards.</Fragment>
+	<Fragment slot="nist">The US National Institute of Standards and Technology's own repository.</Fragment>
+	<Fragment slot="dagstuhl">DROPS, Schloss Dagstuhl's server for its open-access proceedings series.</Fragment>
+	<Fragment slot="acl">The ACL Anthology, the Association for Computational Linguistics' open proceedings archive.</Fragment>
+	<Fragment slot="zenodo">Zenodo, the general-purpose open repository run by CERN.</Fragment>
+	<Fragment slot="scielo">The Brazilian collection of SciELO, Latin American science's open-access platform.</Fragment>
+	<Fragment slot="fao">The FAO Knowledge Repository, the UN Food and Agriculture Organization's DSpace instance.</Fragment>
+	<Fragment slot="fatcat">The catalog behind Internet Archive Scholar, listing preserved publisher PDFs.</Fragment>
+	<Fragment slot="core">An aggregator of open-access papers from repositories worldwide.</Fragment>
+	<Fragment slot="crossref">Full-text links that publishers deposit with Crossref, the DOI registration agency.</Fragment>
+	<Fragment slot="oapen">The Directory of Open Access Books' platform for openly licensed monographs.</Fragment>
+	<Fragment slot="archive">The Internet Archive's book scans, reached through OpenLibrary.</Fragment>
+	<Fragment slot="scihub">Sci-Hub, a shadow library that stopped taking new material.</Fragment>
+	<Fragment slot="scidb">Anna's Archive's SciDB viewer, covering recent papers that Sci-Hub lacks.</Fragment>
+	<Fragment slot="libgen">Library Genesis through the `libgen.li` mirrors, the primary book provider.</Fragment>
+	<Fragment slot="randombook">randombook.org, a Library Genesis frontend used as a mirror-discovery fallback.</Fragment>
+	<Fragment slot="annas">Anna's Archive, the last md5-keyed rescue route in the chain.</Fragment>
+</SourceChain>
 
 ## Open-access article resolvers
 
@@ -266,9 +368,11 @@ The Internet Archive's book scans, reached through OpenLibrary.
 </Facts>
 ## Shadow-library fallbacks
 
-Everything below is reached only after every source above has declined, which is the whole
-point of the chain order: a freely licensed copy is always preferred when one exists, and the
-order is fixed in code and held by a test rather than left to configuration.
+For an article, everything below is reached only after every source above has declined, which
+is the whole point of the chain order: a freely licensed copy is always preferred when one
+exists, and the order is fixed in code and held by a test rather than left to configuration. A
+book asked for by md5 is different: no source above is keyed by md5, so `libgen`, `randombook`
+and `annas` are the only ones that can serve it, and Library Genesis is the first it meets.
 
 ### `scihub`
 
@@ -388,12 +492,6 @@ program, ETSI, ECMA, 3GPP, W3C, ITU-T (deferred rather than rejected), Anna's Ar
 DDoS-Guard-gated slow-download route, and — measured on 2026-07-30 — Project Euclid, DLA
 ASSIST and EverySpec. The last three are worth a line here because two of them work:
 
-- **Measured 2026-08-21: the record page is now challenged too.** `<mirror>/md5/<md5>` answers
-  403 with DDoS-Guard's "Checking your browser" interstitial, as `/search` does, so both HTML
-  routes are closed to a pure-Go client. The member fast-download API is unaffected — it
-  answered 200 with a real `download_url` under this project's own User-Agent — so a keyed
-  download still works while the keyless IPFS route and the discovery/details scrape do not.
-  No browser User-Agent was adopted in response; see Politeness and identification.
 - **Project Euclid** serves IMS and statistics journals, and
   `journalArticle/Download?urlId=<doi>` did return real PDFs to an honest User-Agent. It is
   rejected on both counts of the bar. Unpaywall already supplies a PDF link for six of eight
@@ -419,3 +517,36 @@ ASSIST and EverySpec. The last three are worth a line here because two of them w
 Each carries its full measurement in
 [the source-and-capability-scope ADR](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-source-and-capability-scope.md),
 so none of them is re-litigated here.
+
+## Frequently asked questions
+
+### Which sources does libgen-mcp download from?
+
+libgen-mcp's `download` tool uses twenty-one sources: four open-access article resolvers,
+seven publisher-direct sources, three aggregator and preservation sources, two open-access book
+sources and five shadow-library fallbacks, namely Sci-Hub, SciDB, Library Genesis, randombook
+and Anna's Archive. Articles are keyed by DOI, the open-access books by ISBN or DOI, and
+Library Genesis books by md5.
+
+### In what order does libgen-mcp try download sources?
+
+libgen-mcp tries its download sources in an order fixed in code: open-access article resolvers,
+publisher-direct sources, aggregators, open-access book sources and, last, shadow libraries. An
+item goes only to the sources that claim it, so an article reaches a shadow library only after
+every legal source before it has declined, and a book asked for by md5 starts at `libgen`.
+
+### Which libgen-mcp sources need an API key?
+
+Two of the twenty-one need a credential to run: `unpaywall` needs a contact email in
+`LIBGEN_MCP_UNPAYWALL_EMAIL`, and `core` needs a free CORE key in `LIBGEN_MCP_CORE_KEY`.
+`annas` takes an optional paid-membership key in `LIBGEN_MCP_ANNAS_KEY` and falls back to
+keyless IPFS without one. The other eighteen need nothing. A per-call Unpaywall email or Anna's
+key is used once and never stored.
+
+### Can I turn off Sci-Hub or other sources in libgen-mcp?
+
+Yes. [`LIBGEN_MCP_SOURCES`](/libgen-mcp/configuration/#libgen_mcp_sources-and-the-source-chain)
+takes a comma-separated list of the sources to keep, and any source left off it, `scihub`
+included, drops out of the chain. It removes sources but never reorders them: the ones kept run
+in the fixed order. An unknown name stops the server at startup, and `unpaywall` and `core`
+still need their credentials.

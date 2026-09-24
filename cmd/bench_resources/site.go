@@ -120,12 +120,15 @@ func replaceRegion(page, name, body string) (string, error) {
 // the img's own src, so a reader with no preference and a browser that ignores
 // the query still gets a figure rather than nothing.
 func figureBlock(name, alt string) string {
+	// width and height are the chart's own geometry, so a browser reserves the
+	// figure's box before the SVG arrives instead of reflowing the page around
+	// it; CSS still scales the rendered image to the column.
 	return fmt.Sprintf(`<figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/%s-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/%s-light.svg" alt="%s" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/%s-light.svg" alt="%s" width="%d" height="%d" loading="lazy" />
   </picture>
-</figure>`, name, name, escapeXML(alt))
+</figure>`, name, name, escapeXML(alt), chartWidth, chartHeight)
 }
 
 // siteBlocksEN is every generated region of the English page.

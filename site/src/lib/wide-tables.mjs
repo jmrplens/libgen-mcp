@@ -125,6 +125,46 @@ const cellsOf = (row) =>
 			(cell.tagName === "td" || cell.tagName === "th"),
 	);
 
+/**
+ * Code this short fits any column. A `<wbr>` is only an opportunity, taken when
+ * the column is too narrow for the whole word, so this is a floor against
+ * pointless markup rather than a judgement about where breaking reads well:
+ * at 16, `image/svg+xml` kept the icon table on architecture scrolling at 390px.
+ */
+const BREAKABLE_CODE_CHARS = 10;
+
+/**
+ * Gives the long identifiers in a table's code spans somewhere to wrap: a
+ * `<wbr>` after each `_`, `/` and `.` that has more of the identifier after it.
+ *
+ * An identifier is one unbreakable word to the browser, so a column holding
+ * `LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION` or `claude_desktop_config.json` can
+ * never be narrower than that word, whatever the rest of the table allows.
+ * Measured at 1280px, where the reading column is 632px beside the page's own
+ * table of contents, that alone pushed configuration's variable table 71px and
+ * architecture's source table 46px out of their containers, and at 390px it
+ * made a two-column table on http-server-mode scroll. The break opportunities
+ * add no characters, so what a reader copies and what the classifier below
+ * measures are both unchanged.
+ */
+function breakIdentifiers(table) {
+	for (const code of collect(table, "code")) {
+		if (textOf(code).length < BREAKABLE_CODE_CHARS) continue;
+		code.children = code.children.flatMap((child) => {
+			if (child.type !== "text") return [child];
+			const parts = child.value.split(/(?<=[_/.])(?=[^_/.])/);
+			return parts.flatMap((value, index) =>
+				index === 0
+					? [{ type: "text", value }]
+					: [
+							{ type: "element", tagName: "wbr", properties: {}, children: [] },
+							{ type: "text", value },
+						],
+			);
+		});
+	}
+}
+
 /** Adds properties to a hast element without dropping what it already has. */
 function set(node, props) {
 	node.properties = { ...node.properties, ...props };
@@ -140,6 +180,7 @@ export function rehypeWideTables() {
 		for (const table of collect(tree, "table")) {
 			const rows = collect(table, "tr");
 			if (rows.length === 0) continue;
+			breakIdentifiers(table);
 
 			const asText = rows.map((row) =>
 				cellsOf(row).map((cell) => textOf(cell).trim()),

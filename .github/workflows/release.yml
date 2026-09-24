@@ -855,7 +855,7 @@ jobs:
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.
-          for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.json npm/libgen-mcp/package.json; do
+          for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.json npm/libgen-mcp/package.json CITATION.cff; do
             if [ -f "${manifest}" ]; then git add "${manifest}"; fi
           done
           if git diff --cached --quiet; then

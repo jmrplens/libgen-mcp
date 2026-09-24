@@ -7,6 +7,42 @@ chips:
   - text: "Configuration"
     href: "/libgen-mcp/configuration/"
 datePublished: "2026-09-22"
+head:
+  - tag: title
+    content: "What libgen-mcp costs to run: memory, CPU and latency"
+  # Measurement results, published as a record anyone can fetch, so Dataset is
+  # the right type. Only what does not move between runs is written here: the
+  # build and the measured values live in the record and in the generated
+  # regions below, and a version typed into this block would go stale the first
+  # time the record is re-measured. The page node already carries a git-derived
+  # dateModified.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        "@id": "https://jmrplens.github.io/libgen-mcp/benchmarks/#dataset",
+        "name": "libgen-mcp resource benchmark",
+        "description": "What the libgen-mcp server costs to run, measured from the real binary on both transports against an in-process stand-in for the catalog: startup time, idle and per-caller memory, CPU and latency under concurrent callers, and the effect of the outbound rate limit.",
+        "inLanguage": "en",
+        "url": "https://jmrplens.github.io/libgen-mcp/benchmarks/",
+        "datePublished": "2026-09-22",
+        "license": "https://opensource.org/license/MIT",
+        "isAccessibleForFree": true,
+        "keywords": "Model Context Protocol, MCP server, resource usage, memory, latency, benchmark, Go",
+        "creator": { "@type": "Person", "@id": "https://jmrp.io/#person", "name": "José Manuel Requena Plens" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/benchmarks/#article" },
+        "measurementTechnique": "The release binary driven over stdio and streamable HTTP by an in-repo harness (cmd/bench_resources), with process memory and CPU sampled every 100 ms",
+        "distribution": {
+          "@type": "DataDownload",
+          "name": "Benchmark record (JSON)",
+          "encodingFormat": "application/json",
+          "contentUrl": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/docs/benchmarks/resource-benchmark.json"
+        }
+      }
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -33,7 +69,7 @@ server rather than its own network.
 {/* generated:host — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 GiB RAM, linux/amd64, kernel 6.1.0-53-amd64, go1.27.0, build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5), 35.8 MiB on disk, on 2026-09-22T00:42:49Z.
+Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 GiB RAM, linux/amd64, kernel 6.1.0-53-amd64, go1.27.0, build 2.0.1 (c5d9f3d1e07f4740e3e95ad00acb9579335331b1), 35.8 MiB on disk, on 2026-09-24T10:01:38Z.
 
 {/* end generated */}
 
@@ -45,7 +81,7 @@ Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 Gi
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/memory-by-scenario-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/memory-by-scenario-light.svg" alt="Resident set per scenario, idle and at peak" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/memory-by-scenario-light.svg" alt="Resident set per scenario, idle and at peak" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -56,12 +92,12 @@ Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 Gi
 {/* prettier-ignore */}
 | Scenario            | Idle (MiB) | Mean (MiB) | Peak (MiB) | CPU ms/call |
 | ------------------- | ---------: | ---------: | ---------: | ----------: |
-| stdio-1             |      21.47 |      24.39 |      24.39 |        7.78 |
-| stdio-8             |     172.65 |     204.02 |     204.21 |        7.92 |
-| http-1              |      24.14 |      26.41 |      26.41 |        7.78 |
-| http-8              |      22.87 |      36.79 |      39.00 |        7.85 |
-| http-8-otel         |      25.03 |      43.82 |      44.05 |        7.29 |
-| http-8-shipped-rate |      24.30 |      29.58 |      30.44 |       11.46 |
+| stdio-1             |      21.44 |      26.67 |      26.67 |        8.89 |
+| stdio-8             |     173.18 |     210.41 |     214.04 |        8.61 |
+| http-1              |      23.54 |      25.41 |      25.41 |        6.67 |
+| http-8              |      24.23 |      36.58 |      38.46 |        7.99 |
+| http-8-otel         |      25.26 |      42.76 |      43.71 |        7.50 |
+| http-8-shipped-rate |      25.78 |      29.99 |      30.86 |       10.69 |
 
 {/* end generated */}
 
@@ -73,7 +109,7 @@ Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 Gi
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/memory-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/memory-by-clients-light.svg" alt="Resident set and held heap as the client count grows" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/memory-by-clients-light.svg" alt="Resident set and held heap as the client count grows" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -82,7 +118,7 @@ Measured on AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 logical CPUs, 61 Gi
 {/* generated:series-summary — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-Fitted across the steps, **0.22 MiB per caller while every caller is working** and **91 KiB per caller held**, with nothing in flight. Reading the first as the second overstates a shared deployment by whatever its requests are carrying.
+Fitted across the steps, **0.22 MiB per caller while every caller is working** and **65 KiB per caller held**, with nothing in flight. Reading the first as the second overstates a shared deployment by whatever its requests are carrying.
 
 {/* end generated */}
 
@@ -94,7 +130,7 @@ Fitted across the steps, **0.22 MiB per caller while every caller is working** a
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/latency-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/latency-by-clients-light.svg" alt="Call latency as the client count grows" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/latency-by-clients-light.svg" alt="Call latency as the client count grows" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -103,7 +139,7 @@ Fitted across the steps, **0.22 MiB per caller while every caller is working** a
 {/* generated:latency-summary — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-At 500 client addresses the median call took **827 ms** and the tail **2596 ms**. The load is `tools/list`, paced at 5 calls a second per caller, which is a busy client rather than a spinning one.
+At 500 client addresses the median call took **830 ms** and the tail **1911 ms**. The load is `tools/list`, paced at 5 calls a second per caller, which is a busy client rather than a spinning one.
 
 {/* end generated */}
 

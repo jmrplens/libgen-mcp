@@ -11,6 +11,19 @@ export const collections = {
 		schema: docsSchema({
 			extend: z.object({
 				datePublished: z.string().optional(),
+				// The subjects a page's TechArticle names in `mentions`, as Wikidata
+				// entities. Without it every page named the same three (MCP, Library
+				// Genesis, open access), so the telemetry page claimed to be about
+				// open access and nothing said it was about OpenTelemetry. Each id is
+				// checked against Wikidata's own label before it is written here.
+				mentions: z
+					.array(
+						z.object({
+							name: z.string(),
+							wikidata: z.string().regex(/^Q\d+$/),
+						}),
+					)
+					.optional(),
 				// The chip row under the page title. Qualities, never counts —
 				// src/data/sources.ts owns the numbers, and a figure typed here
 				// would be a second copy of one. Capped at four because the row

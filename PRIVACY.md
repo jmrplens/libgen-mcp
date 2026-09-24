@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-09-17
+Last updated: 2026-09-24
 
 **libgen-mcp** is a Model Context Protocol (MCP) server you run yourself. In its
 normal use it runs entirely on your machine and acts as a bridge between your MCP
@@ -14,8 +14,9 @@ machine rather than yours. See [Hosted endpoint](#hosted-endpoint).
 
 ## What we collect
 
-**Nothing.** The server has no telemetry, no analytics, no crash reporting, and
-no backend of its own. There is no account to create and nothing to log in to.
+**Nothing.** The server sends no telemetry unless you turn it on, and even then
+only to a collector you run (see below). It has no analytics, no crash reporting,
+and no backend of its own. There is no account to create and nothing to log in to.
 When you run it yourself — which is how this documentation recommends using it —
 the maintainer never receives, stores, or has access to any of your data or usage
 information, because nothing is ever sent anywhere that the maintainer controls.
@@ -226,8 +227,8 @@ publishes the answer — whether telemetry is on, what each enabled signal recor
 and what it records about callers — so it can be read rather than asked for.
 
 That instance is operated as part of [mcp.jmrp.io](https://mcp.jmrp.io/) and its
-handling of requests is governed there, not by this policy, which describes the
-software. This document can only tell you what the software does; it cannot make
+handling of requests is governed by [that service's own policies](https://mcp.jmrp.io/policies/),
+not by this one, which describes the software. This document can only tell you what the software does; it cannot make
 promises on behalf of a server you are not running.
 
 If what you search for is sensitive to you, run the server locally. That is the

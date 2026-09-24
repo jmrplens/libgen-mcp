@@ -513,6 +513,90 @@ func TestDownloadSourcesNamesEveryKnownSource(t *testing.T) {
 	}
 }
 
+// TestDocPagesCoverEverySitePage verifies llms.txt links every page the site
+// publishes, in both languages, and nothing it does not.
+//
+// The list is written by hand because each entry carries two descriptions, and
+// it fell behind the site: installation, http-server-mode and benchmarks were
+// published for weeks with no link in either language section, so anything
+// reading llms.txt as the site's map had six pages it could not know existed.
+func TestDocPagesCoverEverySitePage(t *testing.T) {
+	const docsDir = "../../site/src/content/docs"
+	listed := map[string]bool{}
+	for _, p := range docPages("") {
+		listed[strings.TrimSuffix(p.slug, "/")] = true
+	}
+
+	for _, locale := range []struct{ name, dir string }{
+		{"en", docsDir},
+		{"es", filepath.Join(docsDir, "es")},
+	} {
+		t.Run(locale.name, func(t *testing.T) {
+			published := sitePageSlugs(t, locale.dir)
+			for slug := range published {
+				if !listed[slug] {
+					t.Errorf("the site publishes %s/%s and docPages() does not link it", locale.name, slug)
+				}
+			}
+			for slug := range listed {
+				if !published[slug] {
+					t.Errorf("docPages() links %s/%s and the site has no such page", locale.name, slug)
+				}
+			}
+		})
+	}
+}
+
+// TestParseDocPages covers the page list's reader: the tool names reach both
+// descriptions, and a file that would publish a nameless or pageless link is
+// refused rather than written.
+func TestParseDocPages(t *testing.T) {
+	t.Run("fills the tool names", func(t *testing.T) {
+		pages, err := parseDocPages([]byte(`[{"slug":"tools/","en":{"title":"Tools","description":"For {tools}"},"es":{"title":"Herramientas","description":"De {tools}"}}]`), "search, read")
+		if err != nil {
+			t.Fatalf("parseDocPages: %v", err)
+		}
+		if pages[0].enDesc != "For search, read" || pages[0].esDesc != "De search, read" {
+			t.Errorf("descriptions = %q / %q", pages[0].enDesc, pages[0].esDesc)
+		}
+	})
+	for _, bad := range []struct{ name, data string }{
+		{"not JSON", `{`},
+		{"no slug", `[{"en":{"title":"A"},"es":{"title":"B"}}]`},
+		{"no Spanish title", `[{"slug":"a/","en":{"title":"A"},"es":{}}]`},
+	} {
+		t.Run(bad.name, func(t *testing.T) {
+			if _, err := parseDocPages([]byte(bad.data), ""); err == nil {
+				t.Errorf("parseDocPages accepted %s", bad.data)
+			}
+		})
+	}
+}
+
+// sitePageSlugs returns the slug of every page in one locale's directory, less
+// the two that are not documentation: the landing page, which llms.txt already
+// links as the documentation site, and the 404.
+func sitePageSlugs(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	slugs := map[string]bool{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || (!strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".mdx")) {
+			continue
+		}
+		slug := strings.TrimSuffix(strings.TrimSuffix(name, ".mdx"), ".md")
+		if slug == "index" || slug == "404" {
+			continue
+		}
+		slugs[slug] = true
+	}
+	return slugs
+}
+
 // TestWriteMcpServersJSON_Forms covers the command-only and command+args forms.
 func TestWriteMcpServersJSON_Forms(t *testing.T) {
 	var noArgs strings.Builder

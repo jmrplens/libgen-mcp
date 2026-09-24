@@ -1,0 +1,248 @@
+---
+title: Descargar un artículo por DOI
+description: Pide a Claude un artículo por su DOI con libgen-mcp, primero las fuentes de acceso abierto. Qué preparar, qué llamada hace el modelo y qué hacer si falla.
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "Open access"
+    wikidata: Q232932
+  - name: "Unpaywall"
+    wikidata: Q38352586
+  - name: "Sci-Hub"
+    wikidata: Q21980377
+  - name: "PDF"
+    wikidata: Q42332
+chips:
+  - text: "Acceso abierto primero"
+  - text: "Sin clave de API"
+  - text: "Primeros pasos"
+    href: "/libgen-mcp/es/getting-started/"
+datePublished: "2026-09-24"
+head:
+  - tag: title
+    content: "Descargar un artículo por DOI con Claude y libgen-mcp"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#howto",
+        "name": "Cómo descargar un artículo por DOI con Claude y libgen-mcp",
+        "description": "Registra libgen-mcp en Claude, pide un artículo por su DOI y deja que la herramienta download pruebe los proveedores de acceso abierto antes que cualquier shadow library de reserva. No hace falta cuenta, clave de API ni token.",
+        "inLanguage": "es",
+        "totalTime": "PT5M",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "tool": [
+          {
+            "@type": "HowToTool",
+            "name": "Un cliente MCP como Claude Code o Claude Desktop"
+          },
+          {
+            "@type": "HowToTool",
+            "name": "libgen-mcp"
+          }
+        ],
+        "step": [
+          {
+            "@type": "HowToStep",
+            "position": 1,
+            "name": "Registra el servidor en tu cliente",
+            "text": "Añade libgen-mcp a tu cliente MCP. En Claude Code es un solo comando: claude mcp add libgen -- /usr/local/bin/libgen-mcp, cambiando la ruta por lo que arranque el servidor en tu máquina. Claude Desktop, Cursor y VS Code llevan el mismo comando en un archivo de configuración. Reinicia el cliente para que recoja el servidor.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 2,
+            "name": "Pide el artículo por su DOI",
+            "text": "Pídelo en lenguaje natural y da el DOI, por ejemplo: Descarga el artículo con DOI 10.1371/journal.pone.0000308. La herramienta download acepta un DOI directamente, así que no hace falta buscar antes.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 3,
+            "name": "Deja que el modelo llame a download",
+            "text": "El modelo llama a download con el DOI. El servidor lo ofrece a los proveedores de acceso abierto que pueden servirlo, después al enlace que depositó la propia editorial y a OAPEN, y solo al final a Sci-Hub y SciDB, pasando de una fuente a la siguiente cuando una falla. En un servidor local el archivo se guarda en el directorio de descargas y el resultado da su ruta, con verified a false porque un DOI no trae ningún digest con el que comprobar los bytes.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+          },
+          {
+            "@type": "HowToStep",
+            "position": 4,
+            "name": "Lee o resume el archivo guardado",
+            "text": "Pide al asistente que lea o resuma el artículo. La herramienta read acepta la ruta que devolvió download y lee el archivo guardado desde el disco sin volver a descargarlo. Devuelve el texto unas páginas cada vez, los pasajes que contienen una frase con find, o el índice con outline.",
+            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+          }
+        ]
+      }
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Puede Claude descargar un artículo por su DOI?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí, en cuanto libgen-mcp está registrado como servidor MCP en Claude Code, Claude Desktop u otro cliente MCP. Pide el artículo y da su DOI, y el modelo llama con él a la herramienta download. No hace falta buscar antes, y la cadena de artículos no necesita cuenta ni clave de API. En un servidor local el archivo se guarda en el directorio de descargas. En uno remoto, download devuelve en su lugar un enlace que descargar. Que aparezca una copia depende del artículo: la cadena llega primero a las copias de acceso abierto y al final a las shadow libraries de reserva, y cuando ninguna fuente lo tiene, el error da el motivo de cada una."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Usa libgen-mcp Sci-Hub?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Sí, como reserva. Para un DOI, scihub y después scidb, el visor SciDB de Anna's Archive, solo se prueban cuando todos los proveedores de acceso abierto, el enlace que depositó la propia editorial y OAPEN han declinado. El orden está fijado en el código y lo sujeta un test, así que un despliegue no puede adelantarlas. Un operador que no quiera ninguna de las dos puede dejar scihub y scidb fuera de LIBGEN_MCP_SOURCES, que enumera las fuentes que se conservan. Quita fuentes, pero no puede reordenarlas. Una llamada concreta se mantiene lejos de ambas fijando source en un proveedor de acceso abierto. El resultado nunca dice qué fuente sirvió un archivo, así que fijarla es también la forma de saberlo."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Dónde se guarda el PDF descargado?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "En el directorio que indica LIBGEN_MCP_DOWNLOAD_DIR, que por defecto es ~/Downloads en la máquina que ejecuta el servidor. Una llamada puede nombrar otro directorio con path, limitado al directorio de trabajo, el directorio temporal, el de descargas y LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS. El campo path del resultado da la ubicación del archivo guardado. Eso vale para un servidor local. Un servidor remoto no guarda nada: download devuelve un enlace, y el archivo acaba donde lo descargue tu cliente o tu agente. El directorio de descargas se crea al arrancar si no existe. Bajo Docker el servidor corre con el UID 10001, así que un directorio del host montado para las descargas tiene que permitir escribir a ese usuario."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Necesito una clave de API para descargar artículos?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. La cadena de artículos funciona sin configurar nada: OpenAlex, Europe PMC, Internet Archive Scholar, las fuentes de editores concretos, el enlace que depositó la propia editorial, OAPEN y las fuentes de reserva funcionan sin clave. Dos ajustes opcionales añaden una fuente cada uno: un email de contacto para Unpaywall y una clave gratuita de la API de CORE. LIBGEN_MCP_UNPAYWALL_EMAIL activa unpaywall y LIBGEN_MCP_CORE_KEY activa core. Sin ellas, las dos fuentes quedan fuera de la cadena en lugar de fallar. A un cliente que admite elicitation también se le puede pedir un email de Unpaywall en una descarga concreta, que se usa para esa petición y nunca se almacena."
+            }
+          }
+        ]
+      }
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Con libgen-mcp registrado en Claude, pide el artículo por su DOI. La herramienta `download` prueba primero hasta trece proveedores de acceso abierto, el enlace que depositó la propia editorial y OAPEN, y solo después Sci-Hub y SciDB. Guarda el archivo, normalmente un PDF, en tu directorio de descargas, o devuelve un enlace si el servidor es remoto.
+
+Esta página recorre esa petición en un servidor local, explica qué esperar cuando ninguna fuente tiene el artículo y qué cambia cuando el servidor es remoto. La cadena en sí se describe fuente a fuente en [Fuentes de descarga](/libgen-mcp/es/sources/).
+
+## Antes de empezar
+
+Necesitas tres cosas, y ninguna es una cuenta:
+
+- **Un cliente MCP.** Claude Code o Claude Desktop, o cualquier otro cliente que hable el Model Context Protocol, como Cursor o VS Code.
+- **libgen-mcp instalado** donde el cliente pueda arrancarlo. [Primeros pasos](/libgen-mcp/es/getting-started/#instalación) tiene un comando por canal (npm, PyPI, Homebrew, NuGet, un binario precompilado, Docker), e [Instalación](/libgen-mcp/es/installation/) la versión larga de cada uno.
+- **Nada más.** La cadena de artículos no necesita cuenta, clave de API ni token. Sin configurar nada, un DOI sigue llegando a OpenAlex, Europe PMC, Internet Archive Scholar, las fuentes de editores concretos, el enlace que depositó la propia editorial, OAPEN y las fuentes de reserva.
+
+Dos ajustes opcionales añaden una fuente cada uno a la cadena:
+
+- **`LIBGEN_MCP_UNPAYWALL_EMAIL`**, una dirección de contacto, activa `unpaywall` en cabeza de la cadena. La API de Unpaywall exige un email en cada consulta, y por eso la fuente queda desactivada sin él. Lee el mismo índice de acceso abierto que `openalex` ya consulta sin credencial, así que añade una segunda vía hacia esas copias, no una colección distinta. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_unpaywall_email).
+- **`LIBGEN_MCP_CORE_KEY`**, una clave gratuita de la API de CORE, activa `core`. Añade los artículos de acceso abierto que CORE agrega desde repositorios, y solo devuelve un enlace después de comprobar que sigue sirviendo un PDF. La clave se envía a la API de CORE y a ningún otro sitio. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_core_key).
+
+Los archivos se guardan en `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Downloads` en la máquina que ejecuta el servidor.
+
+## Pasos
+
+1. **Registra el servidor en tu cliente.** En Claude Code es un solo comando:
+
+   ```sh
+   claude mcp add libgen -- /usr/local/bin/libgen-mcp
+   ```
+
+   `/usr/local/bin/libgen-mcp` es donde las instrucciones del binario precompilado dejan el ejecutable. Usa el comando que arranque el servidor en tu máquina. Claude Desktop, Cursor y VS Code llevan el mismo comando en un archivo de configuración, que [Primeros pasos](/libgen-mcp/es/getting-started/#configurar-un-cliente-mcp) muestra para cada uno. Reinicia el cliente para que recoja el servidor nuevo.
+
+2. **Pide el artículo en lenguaje natural**, con su DOI:
+
+   > Descarga el artículo con DOI 10.1371/journal.pone.0000308.
+
+   No hace falta buscar antes: `download` acepta un DOI directamente. Si tu cliente ofrece los prompts de MCP, el prompt `get_paper` con el mismo DOI le da al modelo el mismo plan.
+
+3. **El modelo llama a `download` con el DOI.**
+
+   ```json
+   { "doi": "10.1371/journal.pone.0000308" }
+   ```
+
+   El servidor ofrece el DOI a cada fuente de su cadena que pueda servirlo, en un orden fijo: los proveedores de acceso abierto, después `crossref` (el enlace a texto completo que depositó la propia editorial), después `oapen` y solo al final las fuentes de reserva `scihub` y `scidb`. Ocho de las fuentes de acceso abierto solo aceptan DOI de su propio editor, como un preprint de bioRxiv o un RFC. Por eso, para este artículo de PLoS ONE, un servidor sin nada configurado lo ofrece a `openalex`, `europepmc`, `fatcat`, `crossref` y `oapen`, en ese orden, y a `scihub` y `scidb` solo si declinan las cinco.
+
+   La primera fuente que entrega un archivo válido cierra la cadena, y una que declina o falla pasa el turno a la siguiente. Una fuente que resulta inalcanzable se aparta cinco minutos para que las llamadas siguientes no la esperen. [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente) describe la cadena y su [enfriamiento](/libgen-mcp/es/architecture/#enfriamiento-por-fuente).
+
+   Si el cliente admite elicitation, se te pide confirmar antes de escribir el archivo, con su nombre y el directorio en la pregunta. Rechazar no escribe nada y devuelve en su lugar el enlace resuelto. `LIBGEN_MCP_CONFIRM_DOWNLOADS=false` desactiva la pregunta para todo el despliegue.
+
+   Lo que vuelve es la ruta del archivo guardado en `path` y su tamaño en `size_bytes`, más tres cosas que conviene leer:
+
+   - `verified` es `false`. Solo una descarga por md5 se contrasta con un digest. Un DOI nombra una obra, no un archivo, así que no hay nada con qué comparar los bytes.
+   - `name_origin` dice de dónde sale el nombre del archivo: `announced` cuando es el nombre que envió la fuente, limpio de marcas de mirror, o `identifier` cuando se construyó a partir del DOI. Nunca se construye con el título del artículo, porque nada ha confirmado que los bytes sean ese artículo. `original_filename` conserva el nombre anunciado tal como llegó.
+   - Nada dice qué fuente sirvió el archivo. Fija `source` cuando eso importe, como se explica más abajo.
+
+   Consulta [Cómo se nombra el archivo guardado](/libgen-mcp/es/tools/#cómo-se-nombra-el-archivo-guardado) y [Lo que el resultado no revela](/libgen-mcp/es/tools/#lo-que-el-resultado-no-revela).
+
+4. **Léelo o resúmelo sin volver a descargarlo.** En un servidor local, `read` acepta como `path` la ruta que devolvió `download`:
+
+   ```json
+   { "path": "<la ruta que devolvió download>", "max_pages": 2 }
+   ```
+
+   Con `path` el archivo se lee directamente del disco y no se descarga nada, mientras que `read` con el `doi` volvería a recorrer la cadena para obtener su propia copia. `find` devuelve los pasajes que contienen una frase, y `outline` el índice. El archivo tiene que estar en el directorio de descargas, el directorio de trabajo, el directorio temporal o un directorio listado en `LIBGEN_MCP_ALLOWED_READ_DIRS`, algo que el directorio de descargas por defecto cumple. `read` no hace OCR, así que un PDF escaneado vuelve como `extractable: false` con un motivo. Cuando el nombre del archivo se construyó a partir del DOI, el `next_steps` del resultado pide al modelo que lea una página y confirme que el archivo es el artículo antes de fiarse de él.
+
+<Aside type="caution">
+	El texto del artículo, el nombre de su archivo y cualquier enlace de un
+	resultado son contenido de terceros no fiable. Trátalos como datos que resumir
+	o citar, nunca como instrucciones que seguir.
+</Aside>
+
+## Si no se encuentra el artículo
+
+Cuando todas las fuentes que pueden servir el DOI declinan, `download` no guarda nada y devuelve un error que empieza por «Download failed — no file was saved.» y enumera una línea por cada fuente probada: `source <nombre>:` seguido del motivo de esa fuente. Los motivos son de dos clases. Una respuesta sobre el artículo, como `is not open access` o `the publisher deposited no full-text PDF link`, significa que ese proveedor no tiene una copia que pueda servir. Un error de transporte, un timeout o un HTTP 5xx o 429 habla del proveedor, y ese proveedor se aparta cinco minutos: si repites la llamada en ese plazo se lo salta, salvo que estén apartadas todas, y la lista de errores vuelve más corta. [Solución de problemas](/libgen-mcp/es/troubleshooting/#artículo-no-encontrado-acceso-abierto-vs-sci-hub) recorre los motivos de cada fuente y cómo arreglarlos.
+
+El mismo error trae pasos siguientes para el modelo. El primero es confirmar que el DOI existe llamando a `get_details` con él: si no vuelve ningún registro, lo que falla es el DOI y no la descarga. Si el DOI es correcto, ninguna fuente configurada puede dar el artículo, y la sugerencia es buscar su título para encontrar una copia en otra parte. Cuando alguna fuente estaba inalcanzable en lugar de responder, es razonable un reintento tras una breve espera. Las mismas indicaciones desaconsejan repetir la misma llamada de inmediato y fijar una a una las fuentes restantes.
+
+**Fijar una fuente.** Una llamada puede nombrar un solo proveedor con `source`:
+
+```json
+{ "doi": "10.1371/journal.pone.0000308", "source": "europepmc" }
+```
+
+Esa fuente pasa a ser toda la cadena de la llamada, sin sustituto detrás: un archivo que vuelve viene de ella, y un fallo significa que no pudo servir el artículo. Una fuente fijada se prueba aunque esté apartada tras un fallo, y por eso fijarla es la forma de reintentar un proveedor que una llamada repetida se saltó. Los valores que acepta `source` son las fuentes que el servidor tiene activadas, así que `unpaywall` solo está disponible con `LIBGEN_MCP_UNPAYWALL_EMAIL` fijada y `core` solo con `LIBGEN_MCP_CORE_KEY`. Cuando la cadena entera ya ha fallado, fijar una fuente que ya declinó no aporta nada.
+
+**La petición del email de Unpaywall.** En un servidor sin `LIBGEN_MCP_UNPAYWALL_EMAIL`, a un cliente que admite elicitation se le pide un email de contacto en cada descarga por DOI que no fije `source`. La pregunta llega antes de que corra la cadena, no después de que falle. La dirección que des se usa solo para esa petición, para poner `unpaywall` en cabeza de la cadena, y nunca se almacena. Rechazar, dejarla vacía o dar algo que no tiene forma de dirección deja la petición como estaba, y el resto de la cadena corre sin cambios. Fijar la variable pone fin a la pregunta. Consulta [Herramientas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+
+## En un servidor remoto
+
+Un servidor arrancado con `--http`, como el endpoint hospedado en `https://mcp.jmrp.io/libgen`, no puede escribir en tu disco, y tampoco un servidor stdio que corre con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. En cualquiera de los dos, `download` resuelve la misma cadena pero devuelve un enlace en lugar de guardar el archivo: un bloque de contenido `resource_link` y un objeto `resolved` con la `url`, la `source` que la resolvió, un `filename` sugerido, el `mime_type` y, cuando el host las exige, las `headers` que enviar con la petición, como un `Referer` para `scihub` y `scidb`. `resolve_only` va implícito, y no se pide confirmación porque no se escribe nada. Tu cliente, o la herramienta HTTP de tu agente, descarga la URL, así que el archivo acaba donde se ejecute esa descarga. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
+
+El servidor resuelve ese enlace sin descargar el archivo, así que las comprobaciones que una descarga local hace sobre los bytes, rechazar una página HTML en lugar del archivo y aplicar el tope de tamaño, no se han hecho. Comprueba lo que llega antes de tratarlo como el artículo. Un servidor local devuelve el mismo enlace en una llamada con `resolve_only: true`, y en todas con `LIBGEN_MCP_SERVER_FETCH=0`.
+
+`read` no se registra por defecto en un servidor remoto. `LIBGEN_MCP_SERVER_FETCH` está desactivada allí, porque devolver una página de texto obliga a descargar el archivo entero por una dirección de salida que comparten todos los usuarios del despliegue. Un cliente conectado a un servidor así ve tres herramientas, no cuatro. Descarga el enlace y lee el archivo en local. Un operador cuya salida no es compartida puede fijar `LIBGEN_MCP_SERVER_FETCH=1` para recuperar `read`, que en un servidor remoto acepta el `doi` pero no `path`. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch).
+
+## Preguntas frecuentes
+
+### ¿Puede Claude descargar un artículo por su DOI?
+
+Sí, en cuanto libgen-mcp está registrado como servidor MCP en Claude Code, Claude Desktop u otro cliente MCP. Pide el artículo y da su DOI, y el modelo llama con él a la herramienta `download`. No hace falta buscar antes, y la cadena de artículos no necesita cuenta ni clave de API.
+
+En un servidor local el archivo se guarda en el directorio de descargas. En uno remoto, `download` devuelve en su lugar un enlace que descargar. Que aparezca una copia depende del artículo: la cadena llega primero a las copias de acceso abierto y al final a las shadow libraries de reserva, y cuando ninguna fuente lo tiene, el error da el motivo de cada una.
+
+### ¿Usa libgen-mcp Sci-Hub?
+
+Sí, como reserva. Para un DOI, `scihub` y después `scidb`, el visor SciDB de Anna's Archive, solo se prueban cuando todos los proveedores de acceso abierto, el enlace que depositó la propia editorial y OAPEN han declinado. El orden está fijado en el código y lo sujeta un test, así que un despliegue no puede adelantarlas.
+
+Un operador que no quiera ninguna de las dos puede dejar `scihub` y `scidb` fuera de `LIBGEN_MCP_SOURCES`, que enumera las fuentes que se conservan. Quita fuentes, pero no puede reordenarlas. Una llamada concreta se mantiene lejos de ambas fijando `source` en un proveedor de acceso abierto. El resultado nunca dice qué fuente sirvió un archivo, así que fijarla es también la forma de saberlo.
+
+### ¿Dónde se guarda el PDF descargado?
+
+En el directorio que indica `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Downloads` en la máquina que ejecuta el servidor. Una llamada puede nombrar otro directorio con `path`, limitado al directorio de trabajo, el directorio temporal, el de descargas y `LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS`. El campo `path` del resultado da la ubicación del archivo guardado.
+
+Eso vale para un servidor local. Un servidor remoto no guarda nada: `download` devuelve un enlace, y el archivo acaba donde lo descargue tu cliente o tu agente. El directorio de descargas se crea al arrancar si no existe. Bajo Docker el servidor corre con el UID `10001`, así que un directorio del host montado para las descargas tiene que permitir escribir a ese usuario.
+
+### ¿Necesito una clave de API para descargar artículos?
+
+No. La cadena de artículos funciona sin configurar nada: OpenAlex, Europe PMC, Internet Archive Scholar, las fuentes de editores concretos, el enlace que depositó la propia editorial, OAPEN y las fuentes de reserva funcionan sin clave. Dos ajustes opcionales añaden una fuente cada uno: un email de contacto para Unpaywall y una clave gratuita de la API de CORE.
+
+`LIBGEN_MCP_UNPAYWALL_EMAIL` activa `unpaywall` y `LIBGEN_MCP_CORE_KEY` activa `core`. Sin ellas, las dos fuentes quedan fuera de la cadena en lugar de fallar. A un cliente que admite elicitation también se le puede pedir un email de Unpaywall en una descarga concreta, que se usa para esa petición y nunca se almacena.

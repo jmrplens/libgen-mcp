@@ -1,6 +1,6 @@
 ---
 title: Modo servidor HTTP
-description: "Desplegar libgen-mcp sobre HTTP en streaming: el nombre declarado, el par de flags del proxy de confianza y qué identidad tiene cada despliegue, los límites por llamante, la renovación de TLS, el drenaje y las sondas."
+description: "Desplegar libgen-mcp sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas."
 chips:
   - text: "Nombre declarado y proxy de confianza"
   - text: "Límites por llamante"
@@ -8,6 +8,9 @@ chips:
   - text: "Primeros pasos"
     href: "/libgen-mcp/es/getting-started/"
 datePublished: "2026-09-21"
+head:
+  - tag: title
+    content: "Ejecutar libgen-mcp como servidor MCP remoto por HTTP"
 ---
 
 Ejecutar `libgen-mcp` sobre HTTP en streaming convierte un servidor stdio de un cliente por proceso en un servicio compartido: varios clientes, un solo presupuesto de salida, un solo semáforo de descargas, una sola caché. Esta página es la guía de despliegue de ese modo — qué hay que decidir, en el orden en que unas decisiones dependen de otras, y qué cuesta cada una cuando se deja sin tomar.
