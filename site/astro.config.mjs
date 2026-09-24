@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
+import mdx from "@astrojs/mdx";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
@@ -715,5 +716,22 @@ export default defineConfig({
 				},
 			],
 		}),
+		// MDX is configured here rather than left to Starlight, which adds
+		// mdx({ optimize: true }) only when no MDX integration is present.
+		//
+		// Two plugins in @astrojs/markdown-remark 7.3 disagree about <style> and
+		// <script>. rehypeCollapseScriptStyle moves their contents into a set:html
+		// property, and rehypeOptimizeStatic then serializes the static subtree
+		// around them with toHtml, which prints that property as a literal
+		// attribute: <style set:html="…"> with nothing inside. Every MDX page
+		// shipped Expressive Code's and Mermaid's styles that way, unapplied, so
+		// code blocks lost their frame, diagrams drew their edges as black
+		// wedges, and several pages scrolled sideways on a phone.
+		//
+		// Naming the two elements as non-static keeps the optimization for
+		// everything else and leaves them to the MDX compiler, which renders
+		// set:html as the element's content. scripts/check-dist-html.mjs fails
+		// the build if the attribute ever reaches dist again.
+		mdx({ optimize: { ignoreElementNames: ["style", "script"] } }),
 	],
 });
