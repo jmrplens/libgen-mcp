@@ -1,6 +1,11 @@
 ---
 title: Privacy policy
 description: "What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default and goes to your own collector, and every network destination is listed per tool."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
 datePublished: "2026-09-24"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
 privacySource: "8f6eb0b44e2e3e90"

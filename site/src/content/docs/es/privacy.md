@@ -1,6 +1,11 @@
 ---
 title: Política de privacidad
 description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y va a tu colector, y cada destino de red está listado herramienta por herramienta."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
 datePublished: "2026-09-24"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y

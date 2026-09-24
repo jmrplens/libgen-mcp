@@ -47,6 +47,11 @@ const body = source
 const frontmatter = (title, description, extra = "") => `---
 title: ${title}
 description: "${description}"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
 datePublished: "${lastUpdated}"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
 privacySource: "${digest}"

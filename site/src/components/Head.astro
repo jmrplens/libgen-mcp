@@ -25,7 +25,12 @@ const API_REFERENCE_PAGES = ["/tools/", "/es/tools/"];
 // Minimal typed view of the Starlight route data we consume.
 interface RouteData {
   entry?: {
-    data?: { title?: string; description?: string; datePublished?: string };
+    data?: {
+      title?: string;
+      description?: string;
+      datePublished?: string;
+      mentions?: { name: string; wikidata: string }[];
+    };
   };
   lastUpdated?: Date;
 }
@@ -43,6 +48,25 @@ const isHome = rel === "/" || rel === "" || rel === "/es/" || rel === "/es";
 // structured-data guideline violation, and its breadcrumb advertises a
 // navigation path to a URL that answers 404.
 const isError = /^\/(es\/)?404\/?$/.test(rel);
+
+// The same page in the other language. Every page has one (the i18n parity check
+// holds that), so the two TechArticles can say they are translations of each
+// other, which hreflang says to a crawler and nothing said to the graph.
+const counterpartRel = lang === "es" ? rel.replace(/^\/es(\/|$)/, "/") : `/es${rel}`;
+const counterpart = new URL(`${BASE}${counterpartRel}`, SITE).href;
+
+// The subjects this page discusses: its own list when the frontmatter declares
+// one, and otherwise the three the whole site is about.
+const DEFAULT_MENTIONS = [
+  { name: "Model Context Protocol", wikidata: "Q133436854" },
+  { name: "Library Genesis", wikidata: "Q22017206" },
+  { name: "Open access", wikidata: "Q232932" },
+];
+const mentions = (data.mentions ?? DEFAULT_MENTIONS).map(({ name, wikidata }) => ({
+  "@type": "Thing",
+  name,
+  "@id": `http://www.wikidata.org/entity/${wikidata}`,
+}));
 
 // Git-derived last-updated date (Starlight `lastUpdated: true`).
 const updated =
@@ -62,6 +86,9 @@ const webPage = {
   inLanguage: lang,
   isPartOf: { "@id": WEBSITE_ID },
   about: { "@id": SOFTWARE_ID },
+  // The landing page is about the software and nothing else, which mainEntity
+  // says outright where `about` only says it is one subject among any.
+  ...(isHome ? { mainEntity: { "@id": SOFTWARE_ID } } : {}),
   primaryImageOfPage: {
     "@type": "ImageObject",
     url: OG_IMAGE,
@@ -113,23 +140,11 @@ const techArticle =
       // The domain entities this page discusses, resolved to Wikidata. Without
       // them a page is topically anonymous: only the site-wide graph carried
       // Q-ids, so an engine could place the project but not the page.
-      mentions: [
-        {
-          "@type": "Thing",
-          name: "Model Context Protocol",
-          "@id": "http://www.wikidata.org/entity/Q133436854",
-        },
-        {
-          "@type": "Thing",
-          name: "Library Genesis",
-          "@id": "http://www.wikidata.org/entity/Q22017206",
-        },
-        {
-          "@type": "Thing",
-          name: "Open access",
-          "@id": "http://www.wikidata.org/entity/Q232932",
-        },
-      ],
+      mentions,
+      // English is the original and Spanish the translation, both ways round.
+      ...(lang === "es"
+        ? { translationOfWork: { "@id": `${counterpart}#article` } }
+        : { workTranslation: { "@id": `${counterpart}#article` } }),
       // Git only knows when a page last changed. Deriving `datePublished` from
       // that same value claimed every page was first published on the day it was
       // last edited, so first publication is opt-in per page via frontmatter.
@@ -200,5 +215,4 @@ const ogLocaleAlt = lang === "es" ? "en" : "es";
 {!isError && <script type="application/ld+json" is:inline set:html={JSON.stringify(webPage)} />}
 {techArticle && <script type="application/ld+json" is:inline set:html={JSON.stringify(techArticle)} />}
 {breadcrumb && <script type="application/ld+json" is:inline set:html={JSON.stringify(breadcrumb)} />}
-<meta name="twitter:title" content={title} />
 {description && <meta name="twitter:description" content={description} />}

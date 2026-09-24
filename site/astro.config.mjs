@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
-import mdx from "@astrojs/mdx";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
@@ -36,6 +35,23 @@ const softwareVersion = (() => {
 	}
 })();
 
+// The title the registry and every package channel publish this server under.
+const registryTitle = (() => {
+	try {
+		return JSON.parse(
+			readFileSync(new URL("../server.json", import.meta.url), "utf8"),
+		).title;
+	} catch {
+		return undefined;
+	}
+})();
+
+// The versioned release page: `releases/latest` answers with a redirect, and a
+// URL in structured data should name the destination rather than a hop.
+const releaseUrl = softwareVersion
+	? `https://github.com/jmrplens/libgen-mcp/releases/tag/v${softwareVersion}`
+	: "https://github.com/jmrplens/libgen-mcp/releases/latest";
+
 const socialImage = {
 	"@type": "ImageObject",
 	url: socialImageUrl,
@@ -66,8 +82,8 @@ const dateModified = (() => {
 const featureList = [
 	"Federated search for books, papers, comics, magazines and standards across the Library Genesis catalog and open-access sources",
 	"Four MCP tools: search, get_details, download, read",
-	"Open access first: articles resolve through Unpaywall, Europe PMC, bioRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, Internet Archive Scholar, CORE and OAPEN before any shadow-library fallback",
-	"Refuses what it may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
+	"Open access first: articles resolve through Unpaywall, OpenAlex, Europe PMC, bioRxiv/medRxiv, the RFC Editor, NIST, Schloss Dagstuhl, the ACL Anthology, Zenodo, SciELO, the FAO Knowledge Repository, Internet Archive Scholar, CORE, the publisher's Crossref-deposited link and OAPEN before any shadow-library fallback",
+	"Books by ISBN only from openly licensed and public-domain sources, which refuse what they may not redistribute: OAPEN identifiers are confirmed, lending-restricted Internet Archive scans and permission-hosted Gutenberg records are skipped",
 	"Twenty-one download sources in a fixed chain with transparent per-source failover",
 	"Automatic mirror discovery, caching and transparent failover",
 	"Single cross-platform static Go binary (Linux, macOS, Windows; amd64 and arm64)",
@@ -246,13 +262,15 @@ const jsonLd = JSON.stringify({
 			// Three other GitHub projects are also called "libgen-mcp". The registry
 			// id is the only globally unique handle this server has, so it is
 			// declared alongside the names an engine is likely to see.
-			// "Library Genesis MCP Server" is the title the MCP registry publishes
-			// this server under. Declaring it here is what lets an engine following
-			// sameAs to that listing reconcile it with this entity instead of
-			// treating it as a different project.
+			// registryTitle is the title the MCP registry, the npm/PyPI/NuGet
+			// packages and LobeHub publish this server under, read from server.json
+			// so it cannot lag a rename again: it said "Library Genesis MCP Server"
+			// for a release after every listing had moved on. That older title is
+			// kept, since listings nobody has refreshed still show it.
 			alternateName: [
 				"LibGen MCP",
 				"libgen-mcp (Go)",
+				...(registryTitle ? [registryTitle] : []),
 				"Library Genesis MCP Server",
 			],
 			identifier: "io.github.jmrplens/libgen-mcp",
@@ -267,14 +285,18 @@ const jsonLd = JSON.stringify({
 			// targetProduct; `keywords` and `url` keep the Go/GitHub signal on this
 			// node without inventing a property that does not belong to it.
 			url: repositoryUrl,
-			downloadUrl: "https://github.com/jmrplens/libgen-mcp/releases/latest",
+			downloadUrl: releaseUrl,
 			installUrl: "https://jmrplens.github.io/libgen-mcp/getting-started/",
 			// Track the current release so this never lags behind softwareVersion.
-			releaseNotes: softwareVersion
-				? `https://github.com/jmrplens/libgen-mcp/releases/tag/v${softwareVersion}`
-				: "https://github.com/jmrplens/libgen-mcp/releases/latest",
+			releaseNotes: releaseUrl,
+			softwareHelp: {
+				"@type": "CreativeWork",
+				name: "libgen-mcp documentation",
+				url: `${fullUrl}/`,
+			},
 			image: socialImage,
-			license: "https://opensource.org/licenses/MIT",
+			// opensource.org/licenses/MIT answers with a 301 to this address.
+			license: "https://opensource.org/license/MIT",
 			isAccessibleForFree: true,
 			datePublished,
 			dateModified,
@@ -307,7 +329,7 @@ const jsonLd = JSON.stringify({
 				price: "0",
 				priceCurrency: "USD",
 				availability: "https://schema.org/InStock",
-				url: "https://github.com/jmrplens/libgen-mcp/releases/latest",
+				url: releaseUrl,
 			},
 			author: { "@id": authorId },
 			// Same three agents jmrp.io/projects/ emits for this @id, so the merged
@@ -315,17 +337,27 @@ const jsonLd = JSON.stringify({
 			creator: { "@id": authorId },
 			maintainer: { "@id": authorId },
 			// Every listing that carries this server, so an engine resolving the
-			// name lands on the same entity wherever it finds it.
+			// name lands on the same entity wherever it finds it. Each one names the
+			// entity itself, and none is a redirect: the registry entry is the
+			// server's own `versions/latest` record rather than a substring search
+			// (which took 37 s and listed v1.0.0 first), and pkg.go.dev is the /v2
+			// module path, since the unsuffixed one stops at v1.7.3.
 			sameAs: [
 				`${fullUrl}/`,
 				repositoryUrl,
-				"https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp",
+				"https://registry.modelcontextprotocol.io/v0.1/servers/io.github.jmrplens%2Flibgen-mcp/versions/latest",
+				"https://www.npmjs.com/package/@jmrp.io/libgen-mcp",
+				"https://pypi.org/project/libgen-mcp/",
+				"https://www.nuget.org/packages/libgen-mcp",
+				"https://pkg.go.dev/github.com/jmrplens/libgen-mcp/v2",
+				"https://github.com/jmrplens/libgen-mcp/pkgs/container/libgen-mcp",
+				"https://hub.docker.com/r/jmrplens/libgen-mcp",
 				"https://mcp.so/servers/libgen-mcp-d62341",
 				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
-				"https://pkg.go.dev/github.com/jmrplens/libgen-mcp",
-				"https://hub.docker.com/r/jmrplens/libgen-mcp",
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
+				"https://smithery.ai/servers/@jmrplens/libgen-mcp",
+				"https://deepwiki.com/jmrplens/libgen-mcp",
 				"https://verifymcp.io/servers/jmrplens-libgen-mcp/libgen",
 			],
 		},
@@ -336,7 +368,7 @@ const jsonLd = JSON.stringify({
 			codeRepository: repositoryUrl,
 			programmingLanguage: "Go",
 			runtimePlatform: "Windows, macOS, Linux",
-			license: "https://opensource.org/licenses/MIT",
+			license: "https://opensource.org/license/MIT",
 			isPartOf: { "@id": softwareId },
 			// The forward edge to the product; `isPartOf` alone only points back.
 			targetProduct: { "@id": softwareId },
@@ -716,22 +748,5 @@ export default defineConfig({
 				},
 			],
 		}),
-		// MDX is configured here rather than left to Starlight, which adds
-		// mdx({ optimize: true }) only when no MDX integration is present.
-		//
-		// Two plugins in @astrojs/markdown-remark 7.3 disagree about <style> and
-		// <script>. rehypeCollapseScriptStyle moves their contents into a set:html
-		// property, and rehypeOptimizeStatic then serializes the static subtree
-		// around them with toHtml, which prints that property as a literal
-		// attribute: <style set:html="…"> with nothing inside. Every MDX page
-		// shipped Expressive Code's and Mermaid's styles that way, unapplied, so
-		// code blocks lost their frame, diagrams drew their edges as black
-		// wedges, and several pages scrolled sideways on a phone.
-		//
-		// Naming the two elements as non-static keeps the optimization for
-		// everything else and leaves them to the MDX compiler, which renders
-		// set:html as the element's content. scripts/check-dist-html.mjs fails
-		// the build if the attribute ever reaches dist again.
-		mdx({ optimize: { ignoreElementNames: ["style", "script"] } }),
 	],
 });

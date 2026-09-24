@@ -7,6 +7,39 @@ chips:
   - text: "Configuración"
     href: "/libgen-mcp/es/configuration/"
 datePublished: "2026-09-22"
+head:
+  # Resultados de una medición, publicados como un registro que cualquiera puede
+  # descargar: Dataset es el tipo correcto. Aquí solo va lo que no cambia entre
+  # ejecuciones; la versión medida y los valores viven en el registro y en las
+  # regiones generadas, y una versión escrita en este bloque quedaría obsoleta la
+  # primera vez que se volviera a medir.
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/benchmarks/#dataset",
+        "name": "Benchmark de recursos de libgen-mcp",
+        "description": "Lo que cuesta ejecutar el servidor libgen-mcp, medido sobre el binario real en los dos transportes contra un sustituto del catálogo dentro del propio proceso: tiempo de arranque, memoria en reposo y por cliente, CPU y latencia con clientes concurrentes, y el efecto del límite de peticiones salientes.",
+        "inLanguage": "es",
+        "url": "https://jmrplens.github.io/libgen-mcp/es/benchmarks/",
+        "datePublished": "2026-09-22",
+        "license": "https://opensource.org/license/MIT",
+        "isAccessibleForFree": true,
+        "keywords": "Model Context Protocol, servidor MCP, consumo de recursos, memoria, latencia, benchmark, Go",
+        "creator": { "@type": "Person", "@id": "https://jmrp.io/#person", "name": "José Manuel Requena Plens" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/benchmarks/#article" },
+        "measurementTechnique": "El binario de la release, dirigido por stdio y por HTTP streamable con un arnés del propio repositorio (cmd/bench_resources), muestreando memoria y CPU del proceso cada 100 ms",
+        "distribution": {
+          "@type": "DataDownload",
+          "name": "Registro del benchmark (JSON)",
+          "encodingFormat": "application/json",
+          "contentUrl": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/docs/benchmarks/resource-benchmark.json"
+        }
+      }
 ---
 
 import { Aside } from "@astrojs/starlight/components";
