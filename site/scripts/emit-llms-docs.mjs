@@ -28,7 +28,9 @@ const llms = readFileSync(join(distDir, "llms.txt"), "utf8");
 // The address llms.txt gives the site. Every page link starts with it, and the
 // site's own root-relative links are rewritten onto it, so a link in the corpus
 // resolves to the same place as the page's entry in llms.txt.
-const base = llms.match(/^- \[Documentation site\]\((https:\/\/[^)]+\/)\)/m)?.[1];
+const base = llms.match(
+	/^- \[Documentation site\]\((https:\/\/[^)]+\/)\)/m,
+)?.[1];
 if (!base) fail("llms.txt does not link the documentation site");
 
 const section = llms

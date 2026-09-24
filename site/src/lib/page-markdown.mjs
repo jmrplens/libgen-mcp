@@ -51,6 +51,17 @@ function dedent(text) {
 	return lines.map((line) => line.slice(common)).join("\n");
 }
 
+/**
+ * How SourceChain prints each `keyedBy` value. The component keeps the same
+ * four entries; a .mjs cannot import them from a .astro file.
+ */
+const KEYED_BY = {
+	doi: "DOI",
+	md5: "MD5",
+	isbn: "ISBN",
+	"doi-or-isbn": "DOI / ISBN",
+};
+
 const unescape = (text) =>
 	text
 		.replace(/&#123;/g, "{")
@@ -61,7 +72,7 @@ const unescape = (text) =>
  * @param {string} source - The .mdx file's full text.
  * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
  * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
- * @param {string[]} [chain] - The download chain's source ids, in order.
+ * @param {{id: string, keyedBy: string}[]} [chain] - The download chain, in order.
  * @returns {string} Markdown.
  */
 export function toMarkdown(source, labels, schema, chain) {
@@ -70,6 +81,11 @@ export function toMarkdown(source, labels, schema, chain) {
 	// Frontmatter and the import block are machinery, not content.
 	text = text.replace(/^---\n[\s\S]*?\n---\n/, "");
 	text = text.replace(/^import .*$/gm, "");
+
+	// So is an MDX comment that stands on its own lines: `{/* prettier-ignore */}`
+	// and the generated-region markers are instructions to a formatter and a
+	// generator, and they reached every Markdown copy as literal text.
+	text = text.replace(/^[ \t]*\{\/\*[\s\S]*?\*\/\}[ \t]*\n/gm, "");
 
 	// <Home /> renders the landing from src/data/home.ts. There is no Markdown
 	// equivalent of a component-built page, and the rest of the landing (the
@@ -137,7 +153,7 @@ export function toMarkdown(source, labels, schema, chain) {
 	// state a different chain from the page.
 	text = text.replace(/<SourceChain([^>]*)\/>/g, (whole, tag) => {
 		if (attr(tag, "variant") !== "arrow" || !chain?.length) return whole;
-		return "`" + chain.join(" → ") + "`";
+		return "`" + chain.map((source) => source.id).join(" → ") + "`";
 	});
 	text = text.replace(
 		/<SourceChain([^>]*)>([\s\S]*?)<\/SourceChain>/g,
@@ -148,11 +164,13 @@ export function toMarkdown(source, labels, schema, chain) {
 					...body.matchAll(/<Fragment slot="([^"]+)">([\s\S]*?)<\/Fragment>/g),
 				].map((m) => [m[1], m[2].replace(/\s*\n\s*/g, " ").trim()]),
 			);
+			const keyedByLabel = attr(tag, "keyedByLabel");
 			return chain
-				.map(
-					(id, index) =>
-						`${index + 1}. \`${id}\` — ${unescape(described.get(id) ?? "")}`,
-				)
+				.map(({ id, keyedBy }, index) => {
+					const key = KEYED_BY[keyedBy] ?? keyedBy;
+					const keyed = keyedByLabel ? `${keyedByLabel}: ${key}` : key;
+					return `${index + 1}. \`${id}\` (${keyed}) — ${unescape(described.get(id) ?? "")}`;
+				})
 				.join("\n");
 		},
 	);
