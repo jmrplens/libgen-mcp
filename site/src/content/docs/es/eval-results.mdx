@@ -9,6 +9,8 @@ chips:
     href: "/libgen-mcp/es/tools/"
 datePublished: "2026-07-21"
 head:
+  - tag: title
+    content: "Evaluación de libgen-mcp con un modelo de lenguaje real"
   # Refleja literalmente la sección «Preguntas frecuentes» del pie de esta
   # página; ambos se editan juntos.
   - tag: script
@@ -44,7 +46,7 @@ head:
             "name": "¿Qué significa un SKIP en estos resultados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Que el modelo hizo lo correcto pero un servicio en vivo no estaba disponible — un host rotatorio de Sci-Hub, un fallo de descubrimiento de mirror fresco, un proveedor que en ese momento no devuelve nada. Es una condición de red, nunca un fallo del modelo. Los SKIP se tratan con sospecha más que con alivio: un escenario que se salta a menudo es una pregunta sin hacer, y quitar los SKIP fue lo que destapó a un modelo inventándose un índice de un fichero que no podía leer."
+              "text": "Que no había nada que evaluar: una fuente opcional de la que trata el escenario no aportó nada ese día, no se dio una condición previa, falta una capacidad sin configurar, o el modelo se quedó sin turnos. Nunca es un fallo del modelo, y una carga útil que no llega no es un SKIP: esas ejecuciones se evalúan por si la respuesta dice que no vino nada. Los SKIP se tratan con sospecha más que con alivio: un escenario que se salta a menudo es una pregunta sin hacer, y quitar los SKIP fue lo que destapó a un modelo inventándose un índice de un fichero que no podía leer."
             }
           }
         ]
@@ -128,10 +130,11 @@ Para cada escenario, el arnés:
    argumentos y si la respuesta MCP real está bien formada — nunca el contenido
    exacto del catálogo, que cambia con el tiempo.
 
-Cada escenario devuelve **PASS**, **FAIL** o **SKIP**. Un SKIP significa que el
-modelo hizo lo correcto pero un mirror en vivo no estaba disponible (p. ej. un
-host rotatorio de Sci-Hub o un fallo de descubrimiento de mirror fresco) — una
-condición de red, nunca un fallo del modelo.
+Cada escenario devuelve **PASS**, **FAIL** o **SKIP**. Un SKIP significa que no
+había nada que evaluar: una fuente opcional de la que trata el escenario no aportó
+nada ese día, no se dio una condición previa que el escenario necesita, falta una
+capacidad que el despliegue no ha configurado, o el modelo se quedó sin turnos
+antes de responder. Nunca es un fallo del modelo.
 
 <Aside type="note">
 	El arnés está detrás del build tag `eval` y solo se ejecuta con
@@ -282,8 +285,8 @@ controle, así que un fetch rechazado se registra en la fila como evidencia y no
 suspende el escenario. Una ejecución en la que no vuelva ningún enlace
 descargable sí lo suspende. S27–S31, y la mitad remota de S32–S37, forman un
 segundo bloque remoto: las comprobaciones de lectura, acceso abierto, citas,
-enriquecimiento y escalada repetidas sobre el mismo transporte `--http`, diez
-escenarios en total.
+enriquecimiento y escalada repetidas sobre el mismo transporte `--http`, ocho
+escenarios en total. Con S17 y S18, diez escenarios van por HTTP.
 
 ## Últimos resultados
 
@@ -293,6 +296,13 @@ escenarios en total.
 La tabla siguiente es una única ejecución en vivo de la suite completa el 2026-09-22 contra `claude-haiku-4-5-20251001` (API real de Anthropic, mirrors reales, descargas reales): **78 pasaron, 0 fallaron, 3 en SKIP** de 81 — todos los escenarios, incluidos los 10 que se ejecutan contra un servidor en modo remoto (`--http`). **28 de los 81 medidos están guiados** — su prompt nombraba la fuente, la colección o el campo que comprueba la aserción — así que dicen que el servidor obedece, no que se describa lo bastante bien como para usarlo sin ayuda. La tabla de escenarios de arriba marca cada uno.
 
 {/* end generated */}
+
+Nueve de esos aprobados evalúan una ausencia y no un resultado. S32–S37, S40, S41
+y S77 ejercitan Anna's Archive, cuyo sitio HTML respondió a todas las peticiones
+con un desafío de navegador el día de la ejecución, así que lo que midieron es que
+el modelo dijo con claridad que no llegó ningún resultado de Anna's en lugar de
+inventarse uno. Son aprobados por honestidad, y no dicen nada de la ruta de Anna's
+en sí.
 
 `libgen-mcp` solo llega a un pleno tras quitar las dos fuentes de falsa
 confianza que había en el arnés: escenarios que se saltaban ante cualquier
@@ -403,9 +413,11 @@ sirve al arnés — ya no salta un escenario. El comportamiento del modelo sigue
 siendo plenamente observable cuando la carga útil no llega, y el único movimiento
 equivocado que le queda es afirmar un resultado que nunca recibió, así que esas
 ejecuciones se evalúan por si la respuesta dice con claridad que no vino nada. El
-SKIP queda reservado a los dos casos en los que de verdad no hay nada que evaluar:
-una capacidad que el despliegue no ha configurado, y un modelo que se quedó sin
-turnos antes de responder.
+SKIP queda reservado a los casos en los que de verdad no hay nada que evaluar: una
+fuente opcional de la que trata el escenario que no aporta nada (los tres SKIP de
+la ejecución de arriba son Anna's Archive, Project Gutenberg y dblp sin resultados
+propios), una condición previa que no se dio, una capacidad que el despliegue no ha
+configurado, y un modelo que se quedó sin turnos antes de responder.
 
 ## Cómo ejecutarlo
 
@@ -441,4 +453,4 @@ No, deliberadamente. Está detrás del build tag `eval` y solo se ejecuta con `L
 
 ### ¿Qué significa un SKIP en estos resultados?
 
-Que el modelo hizo lo correcto pero un servicio en vivo no estaba disponible — un host rotatorio de Sci-Hub, un fallo de descubrimiento de mirror fresco, un proveedor que en ese momento no devuelve nada. Es una condición de red, nunca un fallo del modelo. Los SKIP se tratan con sospecha más que con alivio: un escenario que se salta a menudo es una pregunta sin hacer, y quitar los SKIP fue lo que destapó a un modelo inventándose un índice de un fichero que no podía leer.
+Que no había nada que evaluar: una fuente opcional de la que trata el escenario no aportó nada ese día, no se dio una condición previa, falta una capacidad sin configurar, o el modelo se quedó sin turnos. Nunca es un fallo del modelo, y una carga útil que no llega no es un SKIP: esas ejecuciones se evalúan por si la respuesta dice que no vino nada. Los SKIP se tratan con sospecha más que con alivio: un escenario que se salta a menudo es una pregunta sin hacer, y quitar los SKIP fue lo que destapó a un modelo inventándose un índice de un fichero que no podía leer.

@@ -24,6 +24,8 @@ chips:
     href: "/libgen-mcp/eval-results/"
 datePublished: "2026-07-19"
 head:
+  - tag: title
+    content: "libgen-mcp tools: search, get_details, download and read"
   # The page an AI reads to answer "what can libgen-mcp do?". Nothing in the
   # markup enumerated the tools, so each one now has a citable deep link.
   - tag: script
@@ -90,7 +92,7 @@ head:
             "name": "Which libgen-mcp tool should I use?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It depends on what you have and what you want. Use search when you have a title, an author or a topic and need to find the record. Use get_details when you already have an identifier and want the full metadata, a citation, or Crossref and OpenLibrary enrichment. Use download when you want the file on disk. Use read when you want the text but not the file — it extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing."
+              "text": "Use search to find a record from a title, an author or a topic, get_details for its full metadata and a citation, download to save the file, and read to get its text without saving it. In more detail: get_details takes an identifier you already have and can add Crossref and OpenLibrary enrichment. read extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing."
             }
           },
           {
@@ -197,6 +199,7 @@ Invalid input is rejected before any network call: an empty `query`, an unknown 
 Beyond the Library Genesis catalog, `search` can also consult **extra sources** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/), and [ERIC](https://eric.ed.gov/) — controlled by the `extra_sources` argument (`auto`/`always`/`never`) and its deployment default `LIBGEN_MCP_EXTRA_SOURCES` (itself `auto` — see [Configuration](/libgen-mcp/configuration/)). The default `auto` consults them only when the catalog returns nothing or fails; `always` consults them on every search, concurrently with the catalog; `never` restricts the search to the catalog, even on a miss. Anna's md5-keyed hits merge into `results` (labeled `origin: "annas"`); arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC hits appear in a separate `open_access` field alongside `results`.
 
 That field name predates the bibliographic indexes and is now a slight misnomer: dblp and PubMed describe a paper without asserting anything about its availability, and ERIC hosts only part of what it indexes, so **only a hit whose own `open_access` flag is `true` is known to be free to read**. A dblp or PubMed hit is a citation, not a download.
+
 And `open_access: true` is a statement about the **licence**, not about whether the file can be fetched right now. It is set from a Creative Commons licence (Crossref) or from a hosted free copy (arXiv, ERIC, Gutenberg, OpenLibrary); an openly licensed article can still sit behind a publisher that refuses automated clients, in which case `download`/`read` say so and name the browser as the route that remains. A Crossref hit's `pdf_url` is the link the **publisher** deposited and is **unverified** — most large commercial publishers serve it only to subscribers or refuse it outright — so pass the `doi` to `read`/`download` and let the source chain probe it rather than presenting that link as the full text.
 
 ```json title="search input"
@@ -500,7 +503,9 @@ A `filename` you pass always wins; it is used as given once sanitized into a sin
 | **Verified** (by `md5`)       | Built from the record: `Author - Title (Year).ext`. Falls back to the cleaned announced name, then to the md5.        | `metadata`                |
 | **Unverified** (`doi`/`isbn`) | The name the source announced, stripped of mirror and scraper marks. Falls back to the identifier that was requested. | `announced`, `identifier` |
 
-The asymmetry is the point, not an implementation detail. An md5 download is hashed before the file is renamed into place, so it provably **is** the requested record and a metadata name states a fact — and it is a better name than `[Incerto] Taleb… [10.1371_journal…] - libgen.li.epub`. A DOI or ISBN download has no digest to check, and renaming it after the record that was _asked for_ would dress a wrong delivery in the right name. That is not hypothetical: a source once served an unrelated preprint for a PLoS DOI, and a mis-keyed catalog record served Taleb's _Antifragile_ for an article by Ioannidis. Both were caught **because the announced filename disagreed with the request**. So an unverified download keeps that name whenever it carries any evidence at all, and falls back to the bare identifier — a neutral label that asserts nothing about the contents — rather than to metadata.
+The asymmetry is the point, not an implementation detail. An md5 download is hashed before the file is renamed into place, so it provably **is** the requested record and a metadata name states a fact — and it is a better name than `[Incerto] Taleb… [10.1371_journal…] - libgen.li.epub`.
+
+A DOI or ISBN download has no digest to check, and renaming it after the record that was _asked for_ would dress a wrong delivery in the right name. That is not hypothetical: a source once served an unrelated preprint for a PLoS DOI, and a mis-keyed catalog record served Taleb's _Antifragile_ for an article by Ioannidis. Both were caught **because the announced filename disagreed with the request**. So an unverified download keeps that name whenever it carries any evidence at all, and falls back to the bare identifier — a neutral label that asserts nothing about the contents — rather than to metadata.
 
 When a name still had to be derived on an unverified download (`name_origin` of `metadata` or `identifier`, `verified: false`), `next_steps` carries a warning saying the name reflects what was requested, not what arrived.
 
@@ -527,7 +532,9 @@ If every applicable source fails, the tool returns the joined per-source errors.
 
 By default `download` fetches the file to the machine **running the server**. With a **local** stdio/Docker server that is your own machine, so files land in your download directory (`LIBGEN_MCP_DOWNLOAD_DIR`, or `~/Downloads`) — ideal for autonomous local agents.
 
-A server flips into **remote download mode** when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set. The `--http` case is a server that runs elsewhere and cannot write to your disk. `LIBGEN_MCP_REMOTE_DOWNLOADS` covers the stdio equivalent: a **hosted stdio deployment** — for example the server running as stdio behind `mcp-proxy` on a catalog like Glama — whose process lives on a remote or ephemeral machine whose disk the client cannot reach, even though the transport itself is stdio. Either trigger has the same effect: every `download` call automatically returns a link — the direct URL as a `resource_link` plus a `resolved` object (with any required `headers`) — without saving a file. You don't need to set `resolve_only` there; it is implied, and the tool description says so. You — or your agent's own fetch/HTTP tool — retrieve that URL, so the file ends up wherever that fetch runs. On a **local** server you can still request the same behavior per call with `resolve_only: true`. MCP has no way for a tool to push bytes to the client, so a link is the only way a remote-mode server can deliver a multi-megabyte file.
+A server flips into **remote download mode** when it is started with `--http`, **or** when `LIBGEN_MCP_REMOTE_DOWNLOADS=1` is set. The `--http` case is a server that runs elsewhere and cannot write to your disk. `LIBGEN_MCP_REMOTE_DOWNLOADS` covers the stdio equivalent: a **hosted stdio deployment** — for example the server running as stdio behind `mcp-proxy` on a catalog like Glama — whose process lives on a remote or ephemeral machine whose disk the client cannot reach, even though the transport itself is stdio.
+
+Either trigger has the same effect: every `download` call automatically returns a link — the direct URL as a `resource_link` plus a `resolved` object (with any required `headers`) — without saving a file. You don't need to set `resolve_only` there; it is implied, and the tool description says so. You — or your agent's own fetch/HTTP tool — retrieve that URL, so the file ends up wherever that fetch runs. On a **local** server you can still request the same behavior per call with `resolve_only: true`. MCP has no way for a tool to push bytes to the client, so a link is the only way a remote-mode server can deliver a multi-megabyte file.
 
 A link is also all `download` returns when `LIBGEN_MCP_SERVER_FETCH` is off, even on a local server — see [read is not on every deployment](#read-is-not-on-every-deployment) for what that setting is and why a remote deployment defaults to it.
 
@@ -537,7 +544,9 @@ When the connected MCP client supports **elicitation** (asking you for input), `
 
 - **Unpaywall email on demand.** If you download an article by `doi` and the server has no `LIBGEN_MCP_UNPAYWALL_EMAIL` configured, an elicitation-capable client is asked for a contact email to look up an open-access copy via Unpaywall for _that request only_ — it is never stored, and the prompt is skipped whenever `source` was explicitly set. Declining, an empty answer, or an implausible address leaves the request unchanged: `unpaywall` stays out of the chain and the rest of it — the keyless open-access sources, then `scihub`/`scidb` — is tried instead, exactly as today.
 - **Anna's Archive member key on demand.** If you download a book by `md5` with `annas_member: true` and the server has no `LIBGEN_MCP_ANNAS_KEY` configured, an elicitation-capable client is asked for an account key to use the faster member download tier for _that request only_ — it is never stored, and the prompt is skipped when a `source` other than `annas` was pinned. Declining or an empty answer leaves the request unchanged: the `annas` source stays keyless and resolves over IPFS.
-- **Download confirmation.** Before `download` writes a file to the server's disk (i.e. not `resolve_only` and not a remote/HTTP server), an elicitation-capable client is asked to confirm, showing the destination file name and, when the catalog records one, its size. That size comes from the catalog record the call already looked up; the prompt never measures the file, so a download by `doi` or `isbn`, or one where you passed your own `filename`, is confirmed **without** a size clause rather than resolving the chain before you have agreed to anything. Declining writes nothing and returns the resolved direct link instead, so you can fetch it yourself. The prompt also carries an optional **"stop asking for the rest of this session"** checkbox: tick it and later downloads in that session save without prompting. The only other opt-out is `LIBGEN_MCP_CONFIRM_DOWNLOADS=false`, for the whole deployment. There is deliberately no per-call argument: both remaining opt-outs are asserted by someone who can consent — the user on the prompt, the operator in configuration — so a model cannot waive the prompt on its own reading of what you wanted. Any one of them is enough, and none of them can make a prompt appear where the client cannot be asked.
+- **Download confirmation.** Before `download` writes a file to the server's disk (i.e. not `resolve_only` and not a remote/HTTP server), an elicitation-capable client is asked to confirm, showing the destination file name and, when the catalog records one, its size. That size comes from the catalog record the call already looked up; the prompt never measures the file, so a download by `doi` or `isbn`, or one where you passed your own `filename`, is confirmed **without** a size clause rather than resolving the chain before you have agreed to anything. Declining writes nothing and returns the resolved direct link instead, so you can fetch it yourself.
+
+  The prompt also carries an optional **"stop asking for the rest of this session"** checkbox: tick it and later downloads in that session save without prompting. The only other opt-out is `LIBGEN_MCP_CONFIRM_DOWNLOADS=false`, for the whole deployment. There is deliberately no per-call argument: both remaining opt-outs are asserted by someone who can consent — the user on the prompt, the operator in configuration — so a model cannot waive the prompt on its own reading of what you wanted. Any one of them is enough, and none of them can make a prompt appear where the client cannot be asked.
 
 <Aside type="note">
 	None of these prompts is ever required: elicitation is entirely opt-in and
@@ -852,7 +861,9 @@ All arguments are optional. The resulting decision tree only names download prov
 
 ### Which libgen-mcp tool should I use?
 
-It depends on what you have and what you want. Use `search` when you have a title, an author or a topic and need to find the record. Use `get_details` when you already have an identifier and want the full metadata, a citation, or Crossref and OpenLibrary enrichment. Use `download` when you want the file on disk. Use `read` when you want the text but not the file — it extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing.
+Use `search` to find a record from a title, an author or a topic, `get_details` for its full metadata and a citation, `download` to save the file, and `read` to get its text without saving it.
+
+In more detail: `get_details` takes an identifier you already have and can add Crossref and OpenLibrary enrichment. `read` extracts and paginates a document server-side, so a model can summarize a paper or search inside a book without transferring the whole thing.
 
 ### Can libgen-mcp read a book without downloading it?
 
@@ -864,4 +875,6 @@ Use its DOI. Books in the Library Genesis catalog are keyed by MD5, but articles
 
 ### What happens when a download source fails?
 
-The chain moves on to the next source that can serve the item — when the call pinned no `source`, that is; a pinned call is restricted to that one source and fails rather than substituting another. The result does not name the one that succeeded, so the server log is where an operator sees the routing. A source that fails because it is unavailable — a transport error, a timeout, a 5xx or a 429 — is set aside for five minutes so it does not hold up later calls. A source that correctly answers that it does not hold the item is not penalised: that is a normal answer about one item and says nothing about the provider's health.
+The chain moves on to the next source that can serve the item — when the call pinned no `source`, that is; a pinned call is restricted to that one source and fails rather than substituting another. The result does not name the one that succeeded, so the server log is where an operator sees the routing.
+
+A source that fails because it is unavailable — a transport error, a timeout, a 5xx or a 429 — is set aside for five minutes so it does not hold up later calls. A source that correctly answers that it does not hold the item is not penalised: that is a normal answer about one item and says nothing about the provider's health.

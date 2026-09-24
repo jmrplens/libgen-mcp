@@ -1,6 +1,6 @@
 ---
 title: HTTP server mode
-description: "Deploying libgen-mcp over streamable HTTP: the declared host, the trusted-proxy pair and what identity a deployment has, the per-caller limits, TLS renewal, the drain delay and the probes."
+description: "Deploying libgen-mcp over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes."
 chips:
   - text: "Declared host, trusted proxies"
   - text: "Per-caller limits"
@@ -8,6 +8,9 @@ chips:
   - text: "Getting started"
     href: "/libgen-mcp/getting-started/"
 datePublished: "2026-09-21"
+head:
+  - tag: title
+    content: "Run libgen-mcp as a remote MCP server over HTTP"
 ---
 
 Running `libgen-mcp` over streamable HTTP turns a one-client-per-process stdio server into a shared service: several clients, one outbound budget, one download semaphore, one cache. This page is the deployment guide for that mode — what you have to decide, in the order the decisions depend on each other, and what each one costs when it is left out.

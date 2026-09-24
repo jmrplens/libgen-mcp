@@ -1,6 +1,6 @@
 ---
 title: Privacy policy
-description: "What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default and goes to your own collector, and every network destination is listed per tool."
+description: "What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default, and every destination is listed per tool."
 mentions:
   - name: "Model Context Protocol"
     wikidata: Q133436854
@@ -8,7 +8,7 @@ mentions:
     wikidata: Q121746046
 datePublished: "2026-09-24"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "8f6eb0b44e2e3e90"
+privacySource: "bdfeabc52bd95a6b"
 head:
   - tag: script
     attrs:
@@ -284,8 +284,8 @@ publishes the answer — whether telemetry is on, what each enabled signal recor
 and what it records about callers — so it can be read rather than asked for.
 
 That instance is operated as part of [mcp.jmrp.io](https://mcp.jmrp.io/) and its
-handling of requests is governed there, not by this policy, which describes the
-software. This document can only tell you what the software does; it cannot make
+handling of requests is governed by [that service's own policies](https://mcp.jmrp.io/policies/),
+not by this one, which describes the software. This document can only tell you what the software does; it cannot make
 promises on behalf of a server you are not running.
 
 If what you search for is sensitive to you, run the server locally. That is the

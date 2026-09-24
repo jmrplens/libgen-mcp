@@ -1,6 +1,6 @@
 ---
 title: Política de privacidad
-description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y va a tu colector, y cada destino de red está listado herramienta por herramienta."
+description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y cada destino está listado por herramienta."
 mentions:
   - name: "Model Context Protocol"
     wikidata: Q133436854
@@ -10,7 +10,7 @@ datePublished: "2026-09-24"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "8f6eb0b44e2e3e90"
+privacySource: "bdfeabc52bd95a6b"
 head:
   - tag: script
     attrs:
@@ -301,8 +301,8 @@ encendida, qué registra cada señal activada y qué registra sobre quien llama�
 que puede leerse en vez de preguntarse.
 
 Esa instancia se opera como parte de [mcp.jmrp.io](https://mcp.jmrp.io/) y su
-tratamiento de las peticiones se rige allí, no por esta política, que describe el
-software. Este documento solo puede contarte qué hace el software; no puede prometer
+tratamiento de las peticiones se rige por [las políticas de ese servicio](https://mcp.jmrp.io/policies/),
+no por esta, que describe el software. Este documento solo puede contarte qué hace el software; no puede prometer
 nada en nombre de un servidor que no ejecutas tú.
 
 Si lo que buscas es sensible para ti, ejecuta el servidor en local. Ese es todo el

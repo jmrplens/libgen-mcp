@@ -24,6 +24,8 @@ chips:
     href: "/libgen-mcp/es/eval-results/"
 datePublished: "2026-07-19"
 head:
+  - tag: title
+    content: "Herramientas de libgen-mcp: search, get_details, download y read"
   # La página que una IA lee para responder «¿qué puede hacer libgen-mcp?». El
   # marcado no enumeraba las herramientas; ahora cada una tiene un enlace citable.
   - tag: script
@@ -90,7 +92,7 @@ head:
             "name": "¿Qué herramienta de libgen-mcp debo usar?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Depende de lo que tengas y de lo que quieras. Usa search cuando tengas un título, un autor o un tema y necesites encontrar el registro. Usa get_details cuando ya tengas un identificador y quieras los metadatos completos, una cita, o el enriquecimiento de Crossref y OpenLibrary. Usa download cuando quieras el fichero en disco. Usa read cuando quieras el texto pero no el fichero — extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero."
+              "text": "Usa search para encontrar un registro a partir de un título, un autor o un tema, get_details para sus metadatos completos y una cita, download para guardar el fichero, y read para obtener su texto sin guardarlo. Con más detalle: get_details parte de un identificador que ya tienes y puede añadir el enriquecimiento de Crossref y OpenLibrary. read extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero."
             }
           },
           {
@@ -515,19 +517,13 @@ Un `filename` que pases siempre gana; se usa tal cual una vez saneado a un únic
 | **Verificada** (por `md5`)       | Construido con el registro: `Autor - Título (Año).ext`. Si no, el nombre anunciado ya limpio, y si no el md5.    | `metadata`                |
 | **Sin verificar** (`doi`/`isbn`) | El nombre que anunció la fuente, sin marcas de mirror ni de scraper. Si no sirve, el identificador que se pidió. | `announced`, `identifier` |
 
-La asimetría es justo el motivo, no un detalle de implementación. Una descarga por md5 se calcula por hash antes de renombrar el archivo a su sitio, así que demostrablemente **es** el registro pedido y un nombre de metadatos afirma un hecho — y es mejor nombre que `[Incerto] Taleb… [10.1371_journal…] - libgen.li.epub`. Una descarga por DOI o ISBN no tiene digest que comprobar, y renombrarla según el registro que se _pidió_ vestiría una entrega equivocada con el nombre correcto. No es hipotético: una fuente sirvió una vez un preprint ajeno para un DOI de PLoS, y un registro de catálogo mal indexado sirvió _Antifragile_ de Taleb para un artículo de Ioannidis. Ambos casos se detectaron **porque el nombre anunciado no cuadraba con lo pedido**. Por eso una descarga sin verificar conserva ese nombre siempre que aporte alguna evidencia, y recurre al identificador desnudo — una etiqueta neutra que no afirma nada sobre el contenido — en vez de a los metadatos.
+La asimetría es justo el motivo, no un detalle de implementación. Una descarga por md5 se calcula por hash antes de renombrar el archivo a su sitio, así que demostrablemente **es** el registro pedido y un nombre de metadatos afirma un hecho — y es mejor nombre que `[Incerto] Taleb… [10.1371_journal…] - libgen.li.epub`.
+
+Una descarga por DOI o ISBN no tiene digest que comprobar, y renombrarla según el registro que se _pidió_ vestiría una entrega equivocada con el nombre correcto. No es hipotético: una fuente sirvió una vez un preprint ajeno para un DOI de PLoS, y un registro de catálogo mal indexado sirvió _Antifragile_ de Taleb para un artículo de Ioannidis. Ambos casos se detectaron **porque el nombre anunciado no cuadraba con lo pedido**. Por eso una descarga sin verificar conserva ese nombre siempre que aporte alguna evidencia, y recurre al identificador desnudo — una etiqueta neutra que no afirma nada sobre el contenido — en vez de a los metadatos.
 
 Cuando aun así hubo que derivar un nombre en una descarga sin verificar (`name_origin` de `metadata` o `identifier`, `verified: false`), `next_steps` lleva un aviso de que el nombre refleja lo que se pidió, no lo que llegó.
 
 Mecánica: la extensión sale de los bytes que van por el cable, si no del nombre anunciado, y si no de la pista de la URL de la fuente — nunca de la columna de formato del catálogo, que es dato de terceros y falla a menudo. Los nombres generados se normalizan en Unicode, se les quitan caracteres de control y de anulación bidi, separadores y nombres de dispositivo de Windows, y se recortan a 200 **bytes** (no runas, porque un título CJK largo si no falla al crearse). Las marcas de mirror se eliminan por una lista explícita de sitios conocidos e identificadores entre corchetes, nunca por posición, así que un nombre de colección entre corchetes sobrevive. Una colisión añade el propio digest del contenido en vez de sobrescribir, y un archivo del mismo tamaño ya en el destino se trata como la misma descarga llegando dos veces.
-
-<Aside type="caution">
-	Solo las descargas identificadas por `md5` se comprueban por hash. Tanto una
-	descarga por `doi` (artículo) como una descarga de libro por `isbn` llegan sin
-	un digest de LibGen contra el que comparar, así que el campo `verified` del
-	resultado es `false` en ambos casos — incluidos los libros de OAPEN y del
-	Internet Archive.
-</Aside>
 
 ### Comportamiento y errores
 
@@ -537,13 +533,23 @@ Mecánica: la extensión sale de los bytes que van por el cable, si no del nombr
 - **Guardas.** Las páginas HTML de error se rechazan (por tipo de contenido e inspeccionando los primeros bytes), se aplica el límite de tamaño (`LIBGEN_MCP_MAX_DOWNLOAD_BYTES`), se comprueba el espacio libre en disco antes de transmitir, y el archivo completado se renombra atómicamente en su lugar.
 - **Progreso.** Cuando el cliente aporta un token de progreso, se emiten notificaciones de progreso limitadas durante el streaming.
 
+<Aside type="caution">
+	Solo las descargas identificadas por `md5` se comprueban por hash. Tanto una
+	descarga por `doi` (artículo) como una descarga de libro por `isbn` llegan sin
+	un digest de LibGen contra el que comparar, así que el campo `verified` del
+	resultado es `false` en ambos casos — incluidos los libros de OAPEN y del
+	Internet Archive.
+</Aside>
+
 Si todas las fuentes aplicables fallan, la herramienta devuelve los errores por fuente unidos. Consulta [Solución de problemas](/libgen-mcp/es/troubleshooting/) para saber cómo leerlos.
 
 ### Dónde acaba el archivo: local vs. remoto
 
 Por defecto `download` obtiene el archivo en la máquina que **ejecuta el servidor**. Con un servidor **local** por stdio o Docker esa máquina es la tuya, así que los archivos quedan en tu directorio de descargas (`LIBGEN_MCP_DOWNLOAD_DIR`, o `~/Downloads`) — ideal para agentes locales autónomos.
 
-Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio. Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
+Un servidor pasa a **modo de descarga remota** cuando se arranca con `--http`, **o** cuando se fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. El caso `--http` es un servidor que se ejecuta en otra máquina y no puede escribir en tu disco. `LIBGEN_MCP_REMOTE_DOWNLOADS` cubre el equivalente por stdio: un **despliegue stdio alojado** —por ejemplo el servidor ejecutándose como stdio detrás de `mcp-proxy` en un catálogo como Glama— cuyo proceso vive en una máquina remota o efímera cuyo disco el cliente no puede alcanzar, aunque el transporte en sí sea stdio.
+
+Cualquiera de los dos disparadores produce el mismo efecto: cada llamada a `download` **devuelve automáticamente un enlace** —la URL directa como `resource_link` más un objeto `resolved` (con las `headers` necesarias)— sin guardar el archivo. No necesitas fijar `resolve_only` en este caso; está implícito, y la propia descripción de la herramienta lo indica. Tú —o la herramienta de fetch/HTTP de tu propio agente— recuperas esa URL, así que el archivo acaba allí donde se ejecute ese fetch. En un servidor **local** aún puedes pedir el mismo comportamiento por llamada con `resolve_only: true`. MCP no tiene forma de que una herramienta empuje bytes al cliente, así que un enlace es la única manera en que un servidor en modo remoto puede entregar un archivo de varios megabytes.
 
 Un enlace es también lo único que devuelve `download` cuando `LIBGEN_MCP_SERVER_FETCH` está desactivada, incluso en un servidor local — consulta [read no está en todos los despliegues](#read-no-está-en-todos-los-despliegues) para saber qué es esa opción y por qué un despliegue remoto la trae así por defecto.
 
@@ -553,7 +559,9 @@ Cuando el cliente MCP conectado admite **elicitation** (pedir información al us
 
 - **Email de Unpaywall bajo demanda.** Si descargas un artículo por `doi` y el servidor no tiene configurado `LIBGEN_MCP_UNPAYWALL_EMAIL`, a un cliente compatible con elicitation se le pide un email de contacto para buscar una copia de acceso abierto vía Unpaywall solo para _esa petición_ — nunca se almacena, y la pregunta se omite siempre que se haya fijado explícitamente `source`. Rechazar, dejar la respuesta vacía o dar una dirección inverosímil deja la petición sin cambios: `unpaywall` queda fuera de la cadena y se prueba el resto de ella — las fuentes de acceso abierto sin clave y después `scihub`/`scidb` — exactamente como hoy.
 - **Clave de miembro de Anna's Archive bajo demanda.** Si descargas un libro por `md5` con `annas_member: true` y el servidor no tiene configurado `LIBGEN_MCP_ANNAS_KEY`, a un cliente compatible con elicitation se le pide una clave de cuenta para usar el nivel de descarga rápida de miembros solo para _esa petición_ — nunca se almacena, y la pregunta se omite cuando se ha fijado un `source` distinto de `annas`. Rechazar o dejar la respuesta vacía deja la petición sin cambios: la fuente `annas` sigue sin clave y resuelve por IPFS.
-- **Confirmación de descarga.** Antes de que `download` escriba un archivo en el disco del servidor (es decir, sin `resolve_only` y sin un servidor remoto/HTTP), a un cliente compatible con elicitation se le pide confirmar, mostrando el nombre del archivo de destino y, cuando el catálogo registra uno, su tamaño. Ese tamaño sale del registro del catálogo que la llamada ya había consultado; el aviso nunca mide el archivo, así que una descarga por `doi` o `isbn`, o una en la que hayas pasado tu propio `filename`, se confirma **sin** cláusula de tamaño en lugar de resolver la cadena antes de que hayas aceptado nada. Rechazar no escribe nada y devuelve en su lugar el enlace directo resuelto, para que puedas obtenerlo tú mismo. El aviso incluye además una casilla opcional **«dejar de preguntar durante el resto de esta sesión»**: márcala y las descargas posteriores de esa sesión se guardan sin preguntar. Otras dos exclusiones hacen lo mismo con distinto alcance: `LIBGEN_MCP_CONFIRM_DOWNLOADS=false` para todo el despliegue. Deliberadamente no hay ningún argumento por llamada: las dos renuncias que quedan las declara alguien que puede consentir — el usuario en el aviso, el operador en la configuración —, de modo que un modelo no puede saltarse el aviso según su propia lectura de lo que querías. Basta con cualquiera de ellas, y ninguna puede hacer aparecer un aviso allí donde no se puede preguntar al cliente.
+- **Confirmación de descarga.** Antes de que `download` escriba un archivo en el disco del servidor (es decir, sin `resolve_only` y sin un servidor remoto/HTTP), a un cliente compatible con elicitation se le pide confirmar, mostrando el nombre del archivo de destino y, cuando el catálogo registra uno, su tamaño. Ese tamaño sale del registro del catálogo que la llamada ya había consultado; el aviso nunca mide el archivo, así que una descarga por `doi` o `isbn`, o una en la que hayas pasado tu propio `filename`, se confirma **sin** cláusula de tamaño en lugar de resolver la cadena antes de que hayas aceptado nada. Rechazar no escribe nada y devuelve en su lugar el enlace directo resuelto, para que puedas obtenerlo tú mismo.
+
+  El aviso incluye además una casilla opcional **«dejar de preguntar durante el resto de esta sesión»**: márcala y las descargas posteriores de esa sesión se guardan sin preguntar. La única otra exclusión es `LIBGEN_MCP_CONFIRM_DOWNLOADS=false`, para todo el despliegue. Deliberadamente no hay ningún argumento por llamada: las dos renuncias que quedan las declara alguien que puede consentir — el usuario en el aviso, el operador en la configuración —, de modo que un modelo no puede saltarse el aviso según su propia lectura de lo que querías. Basta con cualquiera de ellas, y ninguna puede hacer aparecer un aviso allí donde no se puede preguntar al cliente.
 
 <Aside type="note">
 	Ninguna de estas peticiones es nunca obligatoria: elicitation es totalmente
@@ -879,7 +887,9 @@ Todos los argumentos son opcionales. El árbol de decisión resultante solo nomb
 
 ### ¿Qué herramienta de libgen-mcp debo usar?
 
-Depende de lo que tengas y de lo que quieras. Usa `search` cuando tengas un título, un autor o un tema y necesites encontrar el registro. Usa `get_details` cuando ya tengas un identificador y quieras los metadatos completos, una cita, o el enriquecimiento de Crossref y OpenLibrary. Usa `download` cuando quieras el fichero en disco. Usa `read` cuando quieras el texto pero no el fichero — extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero.
+Usa `search` para encontrar un registro a partir de un título, un autor o un tema, `get_details` para sus metadatos completos y una cita, `download` para guardar el fichero, y `read` para obtener su texto sin guardarlo.
+
+Con más detalle: `get_details` parte de un identificador que ya tienes y puede añadir el enriquecimiento de Crossref y OpenLibrary. `read` extrae y pagina un documento en el servidor, de modo que un modelo puede resumir un artículo o buscar dentro de un libro sin transferirlo entero.
 
 ### ¿Puede libgen-mcp leer un libro sin descargarlo?
 
@@ -891,4 +901,6 @@ Con su DOI. Los libros del catálogo de Library Genesis se identifican por MD5, 
 
 ### ¿Qué pasa cuando falla una fuente de descarga?
 
-La cadena pasa a la siguiente fuente que pueda servir el ítem, siempre que la llamada no haya fijado ninguna `source`; una llamada con fuente fijada queda restringida a esa sola y falla en vez de sustituirla por otra. El resultado no nombra a la que lo consiguió, así que el log del servidor es donde un operador ve el encaminamiento. Una fuente que falla porque no está disponible — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante cinco minutos para que no entorpezca llamadas posteriores. Una fuente que responde correctamente que no tiene el ítem no se penaliza: eso es una respuesta normal sobre un ítem y no dice nada sobre la salud del proveedor.
+La cadena pasa a la siguiente fuente que pueda servir el ítem, siempre que la llamada no haya fijado ninguna `source`; una llamada con fuente fijada queda restringida a esa sola y falla en vez de sustituirla por otra. El resultado no nombra a la que lo consiguió, así que el log del servidor es donde un operador ve el encaminamiento.
+
+Una fuente que falla porque no está disponible — un error de transporte, un timeout, un 5xx o un 429 — se aparta durante cinco minutos para que no entorpezca llamadas posteriores. Una fuente que responde correctamente que no tiene el ítem no se penaliza: eso es una respuesta normal sobre un ítem y no dice nada sobre la salud del proveedor.

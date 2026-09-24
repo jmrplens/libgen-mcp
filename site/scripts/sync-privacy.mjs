@@ -117,7 +117,7 @@ ${json
 
 const enPage = `${frontmatter(
 	"Privacy policy",
-	"What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default and goes to your own collector, and every network destination is listed per tool.",
+	"What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default, and every destination is listed per tool.",
 	faqSchema(
 		source,
 		"Frequently asked questions",

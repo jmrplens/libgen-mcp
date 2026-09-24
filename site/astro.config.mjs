@@ -10,7 +10,7 @@ import { devMarkdown } from "./src/lib/dev-markdown.mjs";
 import { rehypeWideTables } from "./src/lib/wide-tables.mjs";
 
 const siteDescription =
-	"Open-source MCP server in Go for federated search, citation and reading of books and papers: four tools spanning the Library Genesis catalog and open-access sources — no account required.";
+	"Open-source MCP server in Go to search, cite and read books and papers across the Library Genesis catalog and open-access sources. No account required.";
 
 // --- Identity, URLs and structured-data ids ------------------------------
 const siteUrl = "https://jmrplens.github.io";

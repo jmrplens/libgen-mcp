@@ -77,12 +77,20 @@ if (undescribed.length > 0) {
 	{
 		rows.map((row) => (
 			<div class="schema-row" data-field={row.name} data-required={row.required}>
+				{/*
+					The sr-only separators are for text extraction as much as for
+					screen readers: without them the row reads "querystringRequired"
+					to anything that takes the page as text, an AI crawler included.
+				*/}
 				<dt>
 					<code>{row.name}</code>
+					<span class="sr-only"> (</span>
 					<span class="schema-meta">
 						<span class="schema-type">{row.type}</span>
+						{row.required && <span class="sr-only">, </span>}
 						{row.required && <span class="schema-required">{requiredLabel}</span>}
 					</span>
+					<span class="sr-only">): </span>
 				</dt>
 				<dd>
 					<slot name={row.name} />
