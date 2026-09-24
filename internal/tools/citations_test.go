@@ -216,6 +216,76 @@ func TestCiteKey(t *testing.T) {
 	}
 }
 
+// TestSplitAuthors_Commas covers the comma-separated field, which is both how
+// the catalog lists several authors and how it writes one inverted name. The
+// last two cases are the ones a wrong reading gets wrong: splitting them would
+// invent an author called "Jr." or "Donald E.".
+func TestSplitAuthors_Commas(t *testing.T) {
+	cases := []struct {
+		name, in string
+		want     []string
+	}{
+		{
+			"a list of full names", "Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest",
+			[]string{"Thomas H. Cormen", "Charles E. Leiserson", "Ronald L. Rivest"},
+		},
+		{"inverted pairs", "Knuth, D. E., Graham, R. L.", []string{"Knuth, D. E.", "Graham, R. L."}},
+		{"one inverted name", "Knuth, Donald E.", []string{"Knuth, Donald E."}},
+		{"a suffix", "Donald E. Knuth, Jr.", []string{"Donald E. Knuth, Jr."}},
+		{"no comma", "Robert C. Martin", []string{"Robert C. Martin"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := splitAuthors(tc.in); strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Errorf("splitAuthors(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCiteKey_Surname checks the key takes the surname, not the last word of
+// the field: an inverted name keyed as its last initial, and a list keyed as its
+// last author.
+func TestCiteKey_Surname(t *testing.T) {
+	cases := []struct{ name, author, want string }{
+		{"inverted", "Knuth, Donald E.", "Knuth1997"},
+		{"a list", "Thomas H. Cormen, Charles E. Leiserson", "Cormen1997"},
+		{"a suffix", "Donald E. Knuth, Jr.", "Knuth1997"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := citeKey(citeFields{author: tc.author, year: "1997"}); got != tc.want {
+				t.Errorf("citeKey(%q) = %q, want %q", tc.author, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRenderBibTeX_JoinsAuthorsWithAnd checks the author field uses BibTeX's
+// own separator, whatever the catalog separated the names with.
+func TestRenderBibTeX_JoinsAuthorsWithAnd(t *testing.T) {
+	c := citationsFor(map[string]any{"md5": "x"}, map[string]any{"title": "Hallmarks", "author": "Hanahan; Weinberg", "year": "2011"})
+	if c == nil || !strings.Contains(c.BibTeX, "author = {Hanahan and Weinberg},") {
+		t.Fatalf("BibTeX author not joined with and:\n%v", c)
+	}
+}
+
+// TestBuildCitations_AnnasProvenance checks a record Anna's Archive answered in
+// the catalog's place names Anna's Archive as the source of its fields.
+func TestBuildCitations_AnnasProvenance(t *testing.T) {
+	file := map[string]any{"origin": "annas", "md5": "x", "title": "Antifragile", "author": "Nassim Nicholas Taleb"}
+	c := citationsFor(file, nil)
+	if c == nil {
+		t.Fatal("expected citations for an Anna's record with a title, got nil")
+	}
+	if !strings.HasPrefix(c.Provenance, "Bibliographic fields come from Anna's Archive's record") {
+		t.Errorf("provenance = %q, want it to name Anna's Archive", c.Provenance)
+	}
+	if strings.Contains(c.Provenance, "Library Genesis catalog") {
+		t.Errorf("provenance names the catalog for an Anna's record: %q", c.Provenance)
+	}
+}
+
 // TestFirstN covers firstN's two arms: a slice shorter than n is returned whole,
 // while a longer one is truncated to its first n characters.
 func TestFirstN(t *testing.T) {

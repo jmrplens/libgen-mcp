@@ -82,8 +82,20 @@ func buildCitations(ctx context.Context, v doiVerifier, knownCrossrefTitle strin
 		BibTeX:     renderBibTeX(f),
 		RIS:        renderRIS(f),
 		DOIStatus:  doiStatus(claimedDOI, check),
-		Provenance: citationProvenance(claimedDOI, check),
+		Provenance: citationProvenance(fieldsProvenance(file), claimedDOI, check),
 	}
+}
+
+// fieldsProvenance names where a record's bibliographic fields came from. An md5
+// the catalog does not carry is answered from Anna's Archive's own record of the
+// file (detailsFromAnnas labels it origin=annas), and a caveat naming the
+// Library Genesis catalog on that record sends the reader to check the wrong
+// source.
+func fieldsProvenance(file map[string]any) string {
+	if stringField(file, "origin") == "annas" {
+		return annasProvenance
+	}
+	return catalogProvenance
 }
 
 // corroborateDOI resolves the verdict for a record's DOI without ever failing:
@@ -130,24 +142,28 @@ func doiStatus(claimed string, check libgen.DOICheck) string {
 // work itself.
 const catalogProvenance = "Bibliographic fields come from the Library Genesis catalog, an unverified third-party source; check them against the work before publishing this citation."
 
+// annasProvenance is the same caveat for a record Anna's Archive answered in the
+// catalog's place.
+const annasProvenance = "Bibliographic fields come from Anna's Archive's record of this file, an unverified third-party source; check them against the work before publishing this citation."
+
 // citationProvenance explains, in one line the caller can relay verbatim, where
 // the citation's fields came from and what happened to the record's DOI. The
 // claimed DOI and the registry's title are untrusted text, so both are collapsed
 // to a single line and bounded in length before being quoted back.
-func citationProvenance(claimed string, check libgen.DOICheck) string {
+func citationProvenance(fields, claimed string, check libgen.DOICheck) string {
 	if claimed == "" {
-		return catalogProvenance
+		return fields
 	}
 	doi := truncateRunes(oneLine(claimed), 128)
 	switch check.Verdict {
 	case libgen.DOIConfirmed:
-		return catalogProvenance + " DOI " + doi + " was corroborated against Crossref, which registers it to this same title."
+		return fields + " DOI " + doi + " was corroborated against Crossref, which registers it to this same title."
 	case libgen.DOIMismatch:
-		return catalogProvenance + " The catalog lists DOI " + doi + ", but Crossref registers that DOI to a different work (" +
+		return fields + " The record lists DOI " + doi + ", but Crossref registers that DOI to a different work (" +
 			truncateRunes(oneLine(check.CrossrefTitle), 160) + "), so this record's DOI is wrong and has been left out of the entries above. " +
 			"Do not cite this record for that DOI."
 	default:
-		return catalogProvenance + " The catalog lists DOI " + doi + ", but it could not be corroborated against Crossref, so it has been left out of the entries above."
+		return fields + " The record lists DOI " + doi + ", but it could not be corroborated against Crossref, so it has been left out of the entries above."
 	}
 }
 
@@ -182,8 +198,11 @@ type kv struct{ k, v string }
 
 func renderBibTeX(f citeFields) string {
 	entry, key := "book", citeKey(f)
+	// BibTeX separates names at "and" and nowhere else: the catalog's own "A; B"
+	// or "A, B" reaches a bibliography as one author with a very long name.
+	author := strings.Join(splitAuthors(f.author), " and ")
 	fields := []kv{
-		{"author", f.author},
+		{"author", author},
 		{"title", f.title},
 		{"year", f.year},
 		{"publisher", f.publisher},
@@ -196,7 +215,7 @@ func renderBibTeX(f citeFields) string {
 	if f.isArticle {
 		entry = "article"
 		fields = []kv{
-			{"author", f.author},
+			{"author", author},
 			{"title", f.title},
 			{"year", f.year},
 			{"volume", f.volume},
@@ -256,15 +275,65 @@ func pageRange(f citeFields) string {
 	}
 }
 
+// splitAuthors returns a record's authors, one name each.
+//
+// The catalog separates names with " and ", with semicolons or with commas, and
+// a comma is also how one inverted name is written ("Knuth, Donald E."). So a
+// comma-separated field is a list only when every part is a full name of two or
+// more words ("Thomas H. Cormen, Charles E. Leiserson"), and parts that
+// alternate a one-word surname with given names ("Knuth, D. E., Graham, R. L.")
+// are paired back into inverted names. Anything else stays one name: splitting
+// a name that was never a list invents authors.
 func splitAuthors(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
 	}
-	sep := func(r rune) bool { return r == ';' }
 	if strings.Contains(s, " and ") {
 		return trimAll(strings.Split(s, " and "))
 	}
-	return trimAll(strings.FieldsFunc(s, sep))
+	if strings.Contains(s, ";") {
+		return trimAll(strings.Split(s, ";"))
+	}
+	return splitCommaAuthors(trimAll(strings.Split(s, ",")))
+}
+
+// splitCommaAuthors reads the parts of a field split at its commas.
+func splitCommaAuthors(parts []string) []string {
+	if len(parts) < 2 {
+		return parts
+	}
+	if allFullNames(parts) {
+		return parts
+	}
+	if len(parts)%2 == 0 && alternatesSurnames(parts) {
+		names := make([]string, 0, len(parts)/2)
+		for i := 0; i < len(parts); i += 2 {
+			names = append(names, parts[i]+", "+parts[i+1])
+		}
+		return names
+	}
+	return []string{strings.Join(parts, ", ")}
+}
+
+// allFullNames reports whether every part is a name of two or more words.
+func allFullNames(parts []string) bool {
+	for _, p := range parts {
+		if len(strings.Fields(p)) < 2 {
+			return false
+		}
+	}
+	return true
+}
+
+// alternatesSurnames reports whether every even-indexed part is a single word,
+// the surname half of an inverted name.
+func alternatesSurnames(parts []string) bool {
+	for i := 0; i < len(parts); i += 2 {
+		if len(strings.Fields(parts[i])) != 1 {
+			return false
+		}
+	}
+	return true
 }
 
 func trimAll(in []string) []string {
@@ -282,7 +351,11 @@ func trimAll(in []string) []string {
 func citeKey(f citeFields) string {
 	base := ""
 	if auths := splitAuthors(f.author); len(auths) > 0 {
-		parts := strings.Fields(auths[0])
+		// The surname is the last word before any comma: "Knuth, Donald E." and
+		// "Donald E. Knuth, Jr." both key as Knuth, where the last word of the
+		// whole name gave E and Jr.
+		before, _, _ := strings.Cut(auths[0], ",")
+		parts := strings.Fields(before)
 		if len(parts) > 0 {
 			base = parts[len(parts)-1]
 		}
