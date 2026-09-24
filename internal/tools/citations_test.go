@@ -229,9 +229,14 @@ func TestSplitAuthors_Commas(t *testing.T) {
 			"a list of full names", "Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest",
 			[]string{"Thomas H. Cormen", "Charles E. Leiserson", "Ronald L. Rivest"},
 		},
+		{"two-word names", "Ada Lovelace, Alan Turing", []string{"Ada Lovelace", "Alan Turing"}},
 		{"inverted pairs", "Knuth, D. E., Graham, R. L.", []string{"Knuth, D. E.", "Graham, R. L."}},
 		{"one inverted name", "Knuth, Donald E.", []string{"Knuth, Donald E."}},
 		{"a suffix", "Donald E. Knuth, Jr.", []string{"Donald E. Knuth, Jr."}},
+		// Neither a list of full names nor surname/given pairs: an odd part out,
+		// and suffixes after full names. Kept whole rather than guessed at.
+		{"an unpaired surname", "Knuth, D. E., Graham", []string{"Knuth, D. E., Graham"}},
+		{"suffixed full names", "Donald Knuth, Jr., Ronald Graham, Sr.", []string{"Donald Knuth, Jr., Ronald Graham, Sr."}},
 		{"no comma", "Robert C. Martin", []string{"Robert C. Martin"}},
 	}
 	for _, tc := range cases {
@@ -258,6 +263,46 @@ func TestCiteKey_Surname(t *testing.T) {
 				t.Errorf("citeKey(%q) = %q, want %q", tc.author, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCiteKey_NoSurnameFallsBackToTitle checks a first author with nothing
+// before its comma yields no surname, and the key falls back to the title
+// rather than indexing into an empty name.
+func TestCiteKey_NoSurnameFallsBackToTitle(t *testing.T) {
+	if got := citeKey(citeFields{author: ", Anon and Jane Doe", title: "Hello World", year: "2020"}); got != "Hello2020" {
+		t.Errorf("citeKey = %q, want %q", got, "Hello2020")
+	}
+}
+
+// TestTruncateRunes checks a string exactly at the limit is returned whole and
+// a longer one is cut at the limit with an ellipsis, counted in runes.
+func TestTruncateRunes(t *testing.T) {
+	if got := truncateRunes("añb", 3); got != "añb" {
+		t.Errorf("at the limit = %q, want it unchanged", got)
+	}
+	if got := truncateRunes("añbc", 3); got != "añb…" {
+		t.Errorf("over the limit = %q, want %q", got, "añb…")
+	}
+}
+
+// TestAlnum checks the cite-key filter keeps the ends of each range and drops
+// everything around them.
+func TestAlnum(t *testing.T) {
+	if got := alnum("`az{@AZ[/09:- ñ"); got != "azAZ09" {
+		t.Errorf("alnum = %q, want %q", got, "azAZ09")
+	}
+}
+
+// TestRenderRIS_MD5Line checks the RIS record carries the file's md5 only when
+// the record has one.
+func TestRenderRIS_MD5Line(t *testing.T) {
+	with := renderRIS(citeFields{title: "T", md5: "d48739b6"})
+	if !strings.Contains(with, "L1  - libgen md5: d48739b6\n") {
+		t.Errorf("RIS lacks the md5 line:\n%s", with)
+	}
+	if without := renderRIS(citeFields{title: "T"}); strings.Contains(without, "L1  -") {
+		t.Errorf("RIS carries an md5 line with no md5:\n%s", without)
 	}
 }
 

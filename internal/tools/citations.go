@@ -306,7 +306,7 @@ func splitCommaAuthors(parts []string) []string {
 		return parts
 	}
 	if len(parts)%2 == 0 && alternatesSurnames(parts) {
-		names := make([]string, 0, len(parts)/2)
+		var names []string
 		for i := 0; i < len(parts); i += 2 {
 			names = append(names, parts[i]+", "+parts[i+1])
 		}
@@ -383,8 +383,5 @@ func alnum(s string) string {
 }
 
 func firstN(s string, n int) string {
-	if len(s) < n {
-		return s
-	}
-	return s[:n]
+	return s[:min(len(s), n)]
 }
