@@ -52,6 +52,47 @@ function dedent(text) {
 }
 
 /**
+ * The site's published root, the host its canonical URLs name. Every link in a
+ * Markdown copy is written out against it, because the copies are read by agents
+ * that do not resolve a relative link: `](/libgen-mcp/tools/)` reaches them as a
+ * path with no host, and `](#search)` as a fragment of nothing.
+ */
+export const SITE_ROOT = "https://jmrplens.github.io/libgen-mcp/";
+
+/** The path every page and asset is served under, as the MDX sources write it. */
+const BASE_PATH = "/libgen-mcp/";
+
+/**
+ * Rewrites a Markdown copy's links, images and anchors to absolute URLs.
+ *
+ * Four forms reach the copies: a Markdown link to a sibling page, one to a
+ * heading on the same page, and the `src`/`srcset` of the figures a page carries
+ * as raw HTML. The anchor is resolved against the page's own URL, since that is
+ * the page it names.
+ *
+ * @param {string} markdown - A copy produced by toMarkdown.
+ * @param {string} pageUrl - The page's absolute URL, ending in `/`.
+ * @returns {string} The copy with every site-relative reference made absolute.
+ */
+export function absolutizeLinks(markdown, pageUrl) {
+	return markdown
+		.replaceAll(`](${BASE_PATH}`, `](${SITE_ROOT}`)
+		.replaceAll("](#", `](${pageUrl}#`)
+		.replace(/\b(src|srcset|href)="\/libgen-mcp\//g, `$1="${SITE_ROOT}`);
+}
+
+/**
+ * The absolute URL of the page a docs slug names: `es/sources` becomes
+ * `…/libgen-mcp/es/sources/`, and the landing page's empty slug the root.
+ *
+ * @param {string} slug - The page's slug, without leading or trailing slash.
+ * @returns {string}
+ */
+export function pageUrlFor(slug) {
+	return slug ? `${SITE_ROOT}${slug}/` : SITE_ROOT;
+}
+
+/**
  * How SourceChain prints each `keyedBy` value. The component keeps the same
  * four entries; a .mjs cannot import them from a .astro file.
  */

@@ -15,6 +15,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SITE_ROOT } from "../src/lib/page-markdown.mjs";
+
 const distDir = fileURLToPath(new URL("../dist", import.meta.url));
 const OUTPUT = "llms-docs.txt";
 
@@ -43,13 +45,12 @@ const pages = [...section.matchAll(/^- \[([^\]]+)\]\(([^)]+)\): .*$/gm)]
 	.filter(({ url }) => url.startsWith(base));
 if (pages.length === 0) fail("llms.txt links no page of the site");
 
-// The site is served under /libgen-mcp/ and every page links its siblings from
-// there. Anchors are rewritten too: `#search` means one heading on its own page
-// and any of several in a file holding every page.
-function absolutize(markdown, pageURL) {
-	return markdown
-		.replaceAll("](/libgen-mcp/", `](${base}`)
-		.replaceAll("](#", `](${pageURL}#`);
+// Each page's copy already writes its links out against the site's canonical
+// host, anchors included (emit-page-markdown.mjs), so they are unambiguous in a
+// file holding every page. They are moved onto the address llms.txt uses, the
+// same host the corpus's own "Source:" lines name.
+function rehost(markdown) {
+	return markdown.replaceAll(SITE_ROOT, base);
 }
 
 const missing = [];
@@ -70,7 +71,7 @@ for (const { title, url } of pages) {
 		missing.push(`${url} (no ${join(slug, "index.md")} in dist)`);
 		continue;
 	}
-	const body = absolutize(readFileSync(source, "utf8").trim(), url);
+	const body = rehost(readFileSync(source, "utf8").trim());
 	parts.push("", "---", "", `# ${title}`, "", `Source: ${url}`, "", body);
 }
 
