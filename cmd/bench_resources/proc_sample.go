@@ -117,11 +117,11 @@ func parseProcStatusRSS(status string) (uint64, error) {
 // the line. Splitting the whole line on whitespace is the classic way to read
 // the wrong two numbers.
 func parseProcStatCPU(stat string) (float64, error) {
-	closeParen := strings.LastIndex(stat, ")")
-	if closeParen < 0 {
+	_, afterName, found := strings.CutLast(stat, ")")
+	if !found {
 		return 0, errors.New("malformed stat line")
 	}
-	fields := strings.Fields(stat[closeParen+1:])
+	fields := strings.Fields(afterName)
 	// After the closing parenthesis, field 1 is state, so utime (the 14th field
 	// of the whole line) is index 11 here and stime is index 12.
 	const utimeIndex, stimeIndex = 11, 12
