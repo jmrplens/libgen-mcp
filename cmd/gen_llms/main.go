@@ -1,6 +1,8 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -396,87 +398,68 @@ type docPage struct {
 	esDesc  string
 }
 
+// docPagesJSON is the page list, in reading order, with a title and a
+// description per language. It is data rather than code: eighteen entries of
+// one shape are a table, and written as Go literals they read to a duplication
+// check as one block copied eighteen times.
+//
+//go:embed docpages.json
+var docPagesJSON []byte
+
+// docPageEntry is one element of docpages.json.
+type docPageEntry struct {
+	Slug string       `json:"slug"`
+	EN   docPageTexts `json:"en"`
+	ES   docPageTexts `json:"es"`
+}
+
+// docPageTexts is a page's title and description in one language.
+type docPageTexts struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// toolsPlaceholder in a description is replaced by the live tool names, so the
+// Tools entry cannot name a tool the server does not register.
+const toolsPlaceholder = "{tools}"
+
 // docPages returns the documented pages in reading order. Both language sections
 // are generated from this one list so a page cannot be added to one and forgotten
 // in the other. toolNameList carries the tool names into the Tools description,
 // which is derived from the live tool set rather than hardcoded.
 //
-//nolint:misspell // The es* fields are Spanish; misspell reads them as English.
+// The list is embedded at build time, so a malformed file is a programming error
+// the tests catch rather than a condition to report.
 func docPages(toolNameList string) []docPage {
-	return []docPage{
-		{
-			"getting-started/", "Getting started", "Installation and first-run guide",
-			"Primeros pasos", "Guía de instalación y primera ejecución",
-		},
-		{
-			"installation/", "Installation", "Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it",
-			"Instalación", "Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo",
-		},
-		{
-			"download-a-paper/", "Download a paper by DOI", "Step by step: ask an assistant for a paper by DOI, what the open-access-first chain does, and what comes back",
-			"Descargar un artículo por DOI", "Paso a paso: pedir un artículo por DOI a un asistente, qué hace la cadena con el acceso abierto primero y qué se recibe",
-		},
-		{
-			"citations/", "BibTeX and RIS citations", "Ready-to-paste BibTeX and RIS from get_details, and why a DOI appears only once Crossref confirms it",
-			"Citas BibTeX y RIS", "BibTeX y RIS listos para pegar desde get_details, y por qué un DOI solo aparece cuando Crossref lo confirma",
-		},
-		{
-			"configuration/", "Configuration", "Full environment-variable configuration reference",
-			"Configuración", "Referencia completa de configuración por variables de entorno",
-		},
-		{
-			"http-server-mode/", "HTTP server mode", "Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes",
-			"Modo servidor HTTP", "Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas",
-		},
-		{
-			"troubleshooting/", "Troubleshooting", "Common setup and runtime issues",
-			"Solución de problemas", "Problemas habituales de configuración y ejecución",
-		},
-		{
-			"tools/", "Tools", "Per-tool reference for " + toolNameList,
-			"Herramientas", "Referencia por herramienta de " + toolNameList,
-		},
-		{
-			"architecture/", "Architecture", "Internal architecture, mirror discovery and download sources",
-			"Arquitectura", "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga",
-		},
-		{
-			"sources/", "Download sources", "Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys",
-			"Fuentes de descarga", "Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves",
-		},
-		{
-			"how-search-works/", "How search works", "Catalog-first search, and when and how it escalates to the extra sources",
-			"Cómo funciona la búsqueda", "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra",
-		},
-		{
-			"telemetry/", "Telemetry", "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records",
-			"Telemetría", "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal",
-		},
-		{
-			"limitations/", "Known limitations", "What the server does not do or does only partially, why, and where each limit is documented",
-			"Limitaciones conocidas", "Qué no hace el servidor o hace solo en parte, por qué, y dónde se documenta cada límite",
-		},
-		{
-			"eval-results/", "LLM eval results", "Results of driving a real model over MCP against the live site, scenario by scenario",
-			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
-		},
-		{
-			"benchmarks/", "What it costs to run", "Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment",
-			"Lo que cuesta ejecutarlo", "Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido",
-		},
-		{
-			"comparison/", "Compared with other servers", "How it compares with other paper and book MCP servers, checked against each project's own repository",
-			"Comparado con otros servidores", "Cómo se compara con otros servidores MCP de artículos y libros, comprobado en el repositorio de cada proyecto",
-		},
-		{
-			"responsible-use/", "Responsible use", "Why the open-access providers are tried first, and what the server refuses to serve",
-			"Uso responsable", "Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor",
-		},
-		{
-			"privacy/", "Privacy policy", "Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own",
-			"Política de privacidad", "Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector",
-		},
+	pages, err := parseDocPages(docPagesJSON, toolNameList)
+	if err != nil {
+		panic(err)
 	}
+	return pages
+}
+
+// parseDocPages reads a page list and fills the tool names into its descriptions.
+// An entry missing its slug or either title is refused, because it would publish
+// a link with no page or no name in one of the two language sections.
+func parseDocPages(data []byte, toolNameList string) ([]docPage, error) {
+	var entries []docPageEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("docpages.json: %w", err)
+	}
+	pages := make([]docPage, 0, len(entries))
+	for i, e := range entries {
+		if e.Slug == "" || e.EN.Title == "" || e.ES.Title == "" {
+			return nil, fmt.Errorf("docpages.json: entry %d needs a slug and a title in both languages", i)
+		}
+		pages = append(pages, docPage{
+			slug:    e.Slug,
+			enTitle: e.EN.Title,
+			enDesc:  strings.ReplaceAll(e.EN.Description, toolsPlaceholder, toolNameList),
+			esTitle: e.ES.Title,
+			esDesc:  strings.ReplaceAll(e.ES.Description, toolsPlaceholder, toolNameList),
+		})
+	}
+	return pages, nil
 }
 
 // writePromptSummary writes the one-line prompt index for llms.txt. Prompts are

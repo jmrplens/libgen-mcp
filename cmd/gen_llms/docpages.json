@@ -1,0 +1,92 @@
+[
+  {
+    "slug": "getting-started/",
+    "en": { "title": "Getting started", "description": "Installation and first-run guide" },
+    "es": { "title": "Primeros pasos", "description": "Guía de instalación y primera ejecución" }
+  },
+  {
+    "slug": "installation/",
+    "en": { "title": "Installation", "description": "Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it" },
+    "es": { "title": "Instalación", "description": "Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo" }
+  },
+  {
+    "slug": "download-a-paper/",
+    "en": { "title": "Download a paper by DOI", "description": "Step by step: ask an assistant for a paper by DOI, what the open-access-first chain does, and what comes back" },
+    "es": { "title": "Descargar un artículo por DOI", "description": "Paso a paso: pedir un artículo por DOI a un asistente, qué hace la cadena con el acceso abierto primero y qué se recibe" }
+  },
+  {
+    "slug": "citations/",
+    "en": { "title": "BibTeX and RIS citations", "description": "Ready-to-paste BibTeX and RIS from get_details, and why a DOI appears only once Crossref confirms it" },
+    "es": { "title": "Citas BibTeX y RIS", "description": "BibTeX y RIS listos para pegar desde get_details, y por qué un DOI solo aparece cuando Crossref lo confirma" }
+  },
+  {
+    "slug": "configuration/",
+    "en": { "title": "Configuration", "description": "Full environment-variable configuration reference" },
+    "es": { "title": "Configuración", "description": "Referencia completa de configuración por variables de entorno" }
+  },
+  {
+    "slug": "http-server-mode/",
+    "en": { "title": "HTTP server mode", "description": "Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes" },
+    "es": { "title": "Modo servidor HTTP", "description": "Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas" }
+  },
+  {
+    "slug": "troubleshooting/",
+    "en": { "title": "Troubleshooting", "description": "Common setup and runtime issues" },
+    "es": { "title": "Solución de problemas", "description": "Problemas habituales de configuración y ejecución" }
+  },
+  {
+    "slug": "tools/",
+    "en": { "title": "Tools", "description": "Per-tool reference for {tools}" },
+    "es": { "title": "Herramientas", "description": "Referencia por herramienta de {tools}" }
+  },
+  {
+    "slug": "architecture/",
+    "en": { "title": "Architecture", "description": "Internal architecture, mirror discovery and download sources" },
+    "es": { "title": "Arquitectura", "description": "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga" }
+  },
+  {
+    "slug": "sources/",
+    "en": { "title": "Download sources", "description": "Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys" },
+    "es": { "title": "Fuentes de descarga", "description": "Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves" }
+  },
+  {
+    "slug": "how-search-works/",
+    "en": { "title": "How search works", "description": "Catalog-first search, and when and how it escalates to the extra sources" },
+    "es": { "title": "Cómo funciona la búsqueda", "description": "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra" }
+  },
+  {
+    "slug": "telemetry/",
+    "en": { "title": "Telemetry", "description": "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records" },
+    "es": { "title": "Telemetría", "description": "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal" }
+  },
+  {
+    "slug": "limitations/",
+    "en": { "title": "Known limitations", "description": "What the server does not do or does only partially, why, and where each limit is documented" },
+    "es": { "title": "Limitaciones conocidas", "description": "Qué no hace el servidor o hace solo en parte, por qué, y dónde se documenta cada límite" }
+  },
+  {
+    "slug": "eval-results/",
+    "en": { "title": "LLM eval results", "description": "Results of driving a real model over MCP against the live site, scenario by scenario" },
+    "es": { "title": "Resultados de la evaluación con LLM", "description": "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario" }
+  },
+  {
+    "slug": "benchmarks/",
+    "en": { "title": "What it costs to run", "description": "Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment" },
+    "es": { "title": "Lo que cuesta ejecutarlo", "description": "Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido" }
+  },
+  {
+    "slug": "comparison/",
+    "en": { "title": "Compared with other servers", "description": "How it compares with other paper and book MCP servers, checked against each project's own repository" },
+    "es": { "title": "Comparado con otros servidores", "description": "Cómo se compara con otros servidores MCP de artículos y libros, comprobado en el repositorio de cada proyecto" }
+  },
+  {
+    "slug": "responsible-use/",
+    "en": { "title": "Responsible use", "description": "Why the open-access providers are tried first, and what the server refuses to serve" },
+    "es": { "title": "Uso responsable", "description": "Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor" }
+  },
+  {
+    "slug": "privacy/",
+    "en": { "title": "Privacy policy", "description": "Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own" },
+    "es": { "title": "Política de privacidad", "description": "Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector" }
+  }
+]

@@ -547,6 +547,32 @@ func TestDocPagesCoverEverySitePage(t *testing.T) {
 	}
 }
 
+// TestParseDocPages covers the page list's reader: the tool names reach both
+// descriptions, and a file that would publish a nameless or pageless link is
+// refused rather than written.
+func TestParseDocPages(t *testing.T) {
+	t.Run("fills the tool names", func(t *testing.T) {
+		pages, err := parseDocPages([]byte(`[{"slug":"tools/","en":{"title":"Tools","description":"For {tools}"},"es":{"title":"Herramientas","description":"De {tools}"}}]`), "search, read")
+		if err != nil {
+			t.Fatalf("parseDocPages: %v", err)
+		}
+		if pages[0].enDesc != "For search, read" || pages[0].esDesc != "De search, read" {
+			t.Errorf("descriptions = %q / %q", pages[0].enDesc, pages[0].esDesc)
+		}
+	})
+	for _, bad := range []struct{ name, data string }{
+		{"not JSON", `{`},
+		{"no slug", `[{"en":{"title":"A"},"es":{"title":"B"}}]`},
+		{"no Spanish title", `[{"slug":"a/","en":{"title":"A"},"es":{}}]`},
+	} {
+		t.Run(bad.name, func(t *testing.T) {
+			if _, err := parseDocPages([]byte(bad.data), ""); err == nil {
+				t.Errorf("parseDocPages accepted %s", bad.data)
+			}
+		})
+	}
+}
+
 // sitePageSlugs returns the slug of every page in one locale's directory, less
 // the two that are not documentation: the landing page, which llms.txt already
 // links as the documentation site, and the 404.
