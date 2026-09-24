@@ -160,9 +160,9 @@ ER  -
 
 Los campos siguen un orden fijo, y uno vacío se descarta en lugar de escribirse en blanco. Una entrada de libro lleva `author`, `title`, `year`, `publisher`, `edition`, `series`, `address` (la ciudad que registra el catálogo) y `pages`. Una entrada de artículo lleva `author`, `title`, `year`, `volume`, `number`, `pages` y `doi`, donde `pages` es la primera y la última página unidas por `--`, o el número de páginas cuando el catálogo no tiene rango. Cuando el registro viene con un archivo, ambas terminan en `note = {libgen md5: …}`. Ninguna lleva ISBN.
 
-El registro RIS usa las etiquetas `TY`, `AU`, `TI`, `PY`, `PB`, `VL`, `IS`, `SP`, `EP`, `DO` y `L1`, en ese orden, con una línea `AU` por autor: la cadena de autores se parte por la palabra `and` cuando la contiene, y si no por los puntos y coma. La última línea es `ER  - `: la etiqueta de fin de registro y su separador, con el valor vacío. El servidor no escribe en RIS la edición, la serie, el lugar ni el número de páginas, así que el registro RIS de un libro es más corto que su entrada BibTeX.
+El registro RIS usa las etiquetas `TY`, `AU`, `TI`, `PY`, `PB`, `VL`, `IS`, `SP`, `EP`, `DO` y `L1`, en ese orden, con una línea `AU` por autor. La cadena de autores se parte por la palabra `and` cuando la contiene, y si no por los puntos y coma. Sin ninguno de los dos, se parte por las comas solo cuando cada parte es un nombre completo (`Thomas H. Cormen, Charles E. Leiserson`) o las partes se emparejan como apellido y nombre de pila (`Knuth, D. E., Graham, R. L.`). Cualquier otra cosa queda como un único nombre en lugar de adivinarse, y un solo nombre invertido como `Knuth, Donald E.` es un autor. La misma lista, unida con `and`, es el campo `author` de BibTeX, porque `and` es el único separador que BibTeX lee. La última línea es `ER  - `: la etiqueta de fin de registro y su separador, con el valor vacío. El servidor no escribe en RIS la edición, la serie, el lugar ni el número de páginas, así que el registro RIS de un libro es más corto que su entrada BibTeX.
 
-La clave de cita es la última palabra del nombre del primer autor seguida del año, reducida a letras y dígitos ASCII: `Knuth1997`. Sin autor, toma en su lugar la primera palabra del título. Cuando ni el nombre ni el año dejan una letra o un dígito, la clave recurre a `libgen` seguido de los ocho primeros caracteres del md5.
+La clave de cita es el apellido del primer autor seguido del año, reducida a letras y dígitos ASCII: `Knuth1997`, tanto si el catálogo escribe `Donald E. Knuth` como `Knuth, Donald E.`. El apellido es la última palabra antes de cualquier coma, así que `Donald E. Knuth, Jr.` también da `Knuth`. Sin autor, toma en su lugar la primera palabra del título. Cuando ni el nombre ni el año dejan una letra o un dígito, la clave recurre a `libgen` seguido de los ocho primeros caracteres del md5.
 
 ## Qué da cada identificador
 
@@ -189,12 +189,12 @@ La comparación trabaja con palabras de contenido. Se ignoran las mayúsculas, l
 
 El resultado está en `doi_status`, y `provenance` lo explica en una frase que puedes transmitir. El servidor la escribe en inglés:
 
-| `doi_status` | En las entradas                         | Lo que `provenance` añade tras la advertencia fija                                                                                                                                                  |
-| ------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `confirmed`  | El DOI, como `doi = {…}` y `DO  - …`    | «DOI … was corroborated against Crossref, which registers it to this same title.»                                                                                                                   |
-| `unverified` | Sin DOI                                 | «The catalog lists DOI …, but it could not be corroborated against Crossref, so it has been left out of the entries above.»                                                                         |
-| `mismatch`   | Sin DOI                                 | «The catalog lists DOI …, but Crossref registers that DOI to a different work (…), so this record's DOI is wrong and has been left out of the entries above. Do not cite this record for that DOI.» |
-| ausente      | Sin DOI, porque el registro no lo tiene | Nada                                                                                                                                                                                                |
+| `doi_status` | En las entradas                         | Lo que `provenance` añade tras la advertencia fija                                                                                                                                                 |
+| ------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `confirmed`  | El DOI, como `doi = {…}` y `DO  - …`    | «DOI … was corroborated against Crossref, which registers it to this same title.»                                                                                                                  |
+| `unverified` | Sin DOI                                 | «The record lists DOI …, but it could not be corroborated against Crossref, so it has been left out of the entries above.»                                                                         |
+| `mismatch`   | Sin DOI                                 | «The record lists DOI …, but Crossref registers that DOI to a different work (…), so this record's DOI is wrong and has been left out of the entries above. Do not cite this record for that DOI.» |
+| ausente      | Sin DOI, porque el registro no lo tiene | Nada                                                                                                                                                                                               |
 
 Un DOI queda como `unverified` cuando:
 
@@ -206,7 +206,7 @@ La comprobación cuesta poco. En el camino por defecto, sin `enrich`, es una ún
 
 ## Comprueba antes de publicar
 
-Una cita ya formateada suele pegarse en una bibliografía y no volver a mirarse, así que el servidor solo afirma lo que puede respaldar, y eso es menos que una referencia terminada. Toda línea `provenance` empieza con la misma advertencia, que el servidor escribe en inglés:
+Una cita ya formateada suele pegarse en una bibliografía y no volver a mirarse, así que el servidor solo afirma lo que puede respaldar, y eso es menos que una referencia terminada. Toda línea `provenance` empieza con una advertencia que nombra de dónde proceden los campos, y que el servidor escribe en inglés. Para un registro del catálogo dice:
 
 <Aside type="caution">
 	Bibliographic fields come from the Library Genesis catalog, an unverified
@@ -216,13 +216,13 @@ Una cita ya formateada suele pegarse en una bibliografía y no volver a mirarse,
 	publicar esta cita.)
 </Aside>
 
-Transmite esa línea junto con la cita y no presentes la entrada como verificada. Aparte del DOI, estas son las partes que conviene comprobar:
+Para un registro que respondió Anna's Archive en lugar del catálogo, nombra el registro del archivo en Anna's Archive, con el mismo consejo. Transmite esa línea junto con la cita y no presentes la entrada como verificada. Aparte del DOI, estas son las partes que conviene comprobar:
 
-- **Autores.** El campo `author` se copia tal cual lo trae el catálogo. BibTeX separa los nombres con `and`, así que una cadena que los separa con puntos y coma o con comas se lee en BibTeX como un único nombre.
-- **La clave de cita.** Toma la última palabra del nombre del primer autor, que solo es el apellido cuando el nombre de pila va delante. Un registro que escribe `Knuth, Donald E.` recibe la clave `E1997`.
+- **Autores.** Un campo que no es ni una lista de nombres completos ni pares de apellido y nombre de pila queda como un único nombre, así que `Donald Knuth, Jr., Ronald Graham, Sr.` llega a BibTeX como un solo autor. Partirlo habría sido adivinar.
+- **La clave de cita.** Dos obras del mismo primer autor en el mismo año reciben la misma clave.
 - **La revista.** Una entrada `@article` no tiene campo `journal`. Con `enrich: true` y un DOI que Crossref conozca, el título de la revista está en `enrichment.crossref.container_title`, y tienes que añadirlo tú.
 - **ISBN.** Ninguna de las dos entradas lo lleva, aunque el registro lo tenga.
-- **Registros de Anna's Archive.** Sus campos proceden de Anna's Archive y no del catálogo, y `author` es a veces la cadena del programa que generó el PDF en lugar de una persona.
+- **Registros de Anna's Archive.** Su `author` es a veces la cadena del programa que generó el PDF en lugar de una persona.
 - **El campo `doi` del registro.** Sigue mostrando lo que afirma el catálogo. Copiarlo a mano en la entrada anula la comprobación.
 
 ## Cómo citar libgen-mcp

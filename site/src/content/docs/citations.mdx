@@ -160,9 +160,9 @@ ER  -
 
 Fields keep a fixed order, and an empty one is dropped rather than written blank. A book entry takes `author`, `title`, `year`, `publisher`, `edition`, `series`, `address` (the catalog's city) and `pages`. An article entry takes `author`, `title`, `year`, `volume`, `number`, `pages` and `doi`, where `pages` is the first and last page joined by `--`, or the page count when the catalog has no range. When the record comes with a file, both end in `note = {libgen md5: …}`. Neither carries an ISBN.
 
-The RIS record uses the tags `TY`, `AU`, `TI`, `PY`, `PB`, `VL`, `IS`, `SP`, `EP`, `DO` and `L1`, in that order, with one `AU` line per author: the author string is split at the word `and` when it has one, and at semicolons otherwise. The last line is `ER  - `: the end-of-record tag and its separator, with an empty value. The server writes no RIS tag for edition, series, place or page count, so a book's RIS record is shorter than its BibTeX entry.
+The RIS record uses the tags `TY`, `AU`, `TI`, `PY`, `PB`, `VL`, `IS`, `SP`, `EP`, `DO` and `L1`, in that order, with one `AU` line per author. The author string is split at the word `and` when it has one, and at semicolons otherwise. With neither, it is split at its commas only when every part is a full name (`Thomas H. Cormen, Charles E. Leiserson`) or the parts pair up as surname and given names (`Knuth, D. E., Graham, R. L.`). Anything else stays one name rather than being guessed at, and a single inverted name such as `Knuth, Donald E.` is one author. The same list, joined by `and`, is the BibTeX `author` field, since `and` is the only separator BibTeX reads. The last line is `ER  - `: the end-of-record tag and its separator, with an empty value. The server writes no RIS tag for edition, series, place or page count, so a book's RIS record is shorter than its BibTeX entry.
 
-The cite key is the last word of the first author's name followed by the year, reduced to ASCII letters and digits: `Knuth1997`. With no author it takes the first word of the title instead. When neither the name nor the year leaves a letter or digit, the key falls back to `libgen` and the first eight characters of the md5.
+The cite key is the first author's surname followed by the year, reduced to ASCII letters and digits: `Knuth1997`, whether the catalog writes `Donald E. Knuth` or `Knuth, Donald E.`. The surname is the last word before any comma, so `Donald E. Knuth, Jr.` keys as `Knuth` too. With no author it takes the first word of the title instead. When neither the name nor the year leaves a letter or digit, the key falls back to `libgen` and the first eight characters of the md5.
 
 ## Which identifier gives what
 
@@ -189,12 +189,12 @@ The comparison works on content words. Case, punctuation, markup and short funct
 
 The outcome is in `doi_status`, and `provenance` explains it in a sentence you can relay:
 
-| `doi_status` | In the entries                        | What `provenance` adds after the standing caveat                                                                                                                                                    |
-| ------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `confirmed`  | The DOI, as `doi = {…}` and `DO  - …` | "DOI … was corroborated against Crossref, which registers it to this same title."                                                                                                                   |
-| `unverified` | No DOI                                | "The catalog lists DOI …, but it could not be corroborated against Crossref, so it has been left out of the entries above."                                                                         |
-| `mismatch`   | No DOI                                | "The catalog lists DOI …, but Crossref registers that DOI to a different work (…), so this record's DOI is wrong and has been left out of the entries above. Do not cite this record for that DOI." |
-| absent       | No DOI, because the record has none   | Nothing                                                                                                                                                                                             |
+| `doi_status` | In the entries                        | What `provenance` adds after the standing caveat                                                                                                                                                   |
+| ------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `confirmed`  | The DOI, as `doi = {…}` and `DO  - …` | "DOI … was corroborated against Crossref, which registers it to this same title."                                                                                                                  |
+| `unverified` | No DOI                                | "The record lists DOI …, but it could not be corroborated against Crossref, so it has been left out of the entries above."                                                                         |
+| `mismatch`   | No DOI                                | "The record lists DOI …, but Crossref registers that DOI to a different work (…), so this record's DOI is wrong and has been left out of the entries above. Do not cite this record for that DOI." |
+| absent       | No DOI, because the record has none   | Nothing                                                                                                                                                                                            |
 
 A DOI stays `unverified` when:
 
@@ -206,7 +206,7 @@ The check is cheap. On the default path, with `enrich` left out, it is one keyle
 
 ## Check before you publish
 
-A formatted citation tends to be pasted into a bibliography and never looked at again, so the server states only what it can stand behind, and that is less than a finished reference. Every `provenance` line opens with the same caveat:
+A formatted citation tends to be pasted into a bibliography and never looked at again, so the server states only what it can stand behind, and that is less than a finished reference. Every `provenance` line opens with a caveat naming where the fields came from. For a catalog record it reads:
 
 <Aside type="caution">
 	Bibliographic fields come from the Library Genesis catalog, an unverified
@@ -214,13 +214,13 @@ A formatted citation tends to be pasted into a bibliography and never looked at 
 	citation.
 </Aside>
 
-Relay that line with the citation, and do not present the entry as verified. Beyond the DOI, these are the parts worth checking:
+For a record Anna's Archive answered in the catalog's place, it names Anna's Archive's record of the file instead, with the same advice. Relay that line with the citation, and do not present the entry as verified. Beyond the DOI, these are the parts worth checking:
 
-- **Authors.** The `author` field is written exactly as the catalog spells it. BibTeX separates names with `and`, so a string that separates them with semicolons or commas reads to BibTeX as a single name.
-- **The cite key.** It takes the last word of the first author's name, which is the surname only when the name is written given name first. A record that writes `Knuth, Donald E.` gets the key `E1997`.
+- **Authors.** A field that is neither a list of full names nor surname and given-name pairs stays one name, so `Donald Knuth, Jr., Ronald Graham, Sr.` reaches BibTeX as a single author. Splitting it would have meant guessing.
+- **The cite key.** Two works by the same first author in the same year get the same key.
 - **The journal.** An `@article` entry has no `journal` field. With `enrich: true` and a DOI that Crossref knows, the journal title is in `enrichment.crossref.container_title`, and you add it yourself.
 - **ISBN.** Neither entry carries one, even when the record has it.
-- **Anna's Archive records.** Their fields come from Anna's Archive rather than the catalog, and `author` is occasionally a PDF producer string rather than a person.
+- **Anna's Archive records.** Their `author` is occasionally a PDF producer string rather than a person.
 - **The record's `doi` field.** It still shows what the catalog claims. Copying it into the entry by hand undoes the check.
 
 ## How to cite libgen-mcp itself
