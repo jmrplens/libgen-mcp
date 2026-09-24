@@ -112,7 +112,7 @@ export const en: HomeContent = {
 	honest: {
 		title: "What it is not",
 		items: [
-			"Not a way around what you may not read. It refuses material it cannot redistribute, and reports a refusal as a miss rather than dressing it up as a file.",
+			"Not a licence checker. An article by DOI and a book by ISBN go to the legally free copies first, and lending-restricted scans are refused, but a book asked for by md5 comes from Library Genesis whatever its copyright. Whether you may read it is yours to judge.",
 			"Not a mirror or an index of its own. It queries other people's services and identifies itself while doing so.",
 			"Not a guarantee. Third-party mirrors go down, and a source that has nothing for an identifier says so.",
 			"Not a legal opinion. The copyright law that applies where you live is yours to observe.",
@@ -162,7 +162,7 @@ export const en: HomeContent = {
 	},
 	chain: {
 		title: "The chain, in order",
-		lead: "A download tries each source that supports the item, in this order, and fails over to the next. The order is fixed in code: the legal open-access providers lead, and the shadow libraries are reached only after every one of them has declined.",
+		lead: "A download tries each source that supports the item, in this order, and fails over to the next. The order is fixed in code: for an article, the legal open-access providers lead, and the shadow libraries are reached only after every one of them has declined. A book asked for by md5 has no legal route here: only the Library Genesis family and Anna's Archive serve an md5.",
 		headers: ["Stage", "Sources"],
 		groups: [
 			{
@@ -193,7 +193,7 @@ export const en: HomeContent = {
 				id: "fallbacks",
 				name: "Shadow-library fallbacks",
 				summary:
-					"Reached last, and only after everything above has come up empty.",
+					"For a DOI, reached last, only after everything above has come up empty. For an md5, the only sources there are.",
 			},
 		],
 		keyedBy: {
@@ -266,7 +266,7 @@ export const es: HomeContent = {
 	honest: {
 		title: "Qué no es",
 		items: [
-			"No es una forma de saltarse lo que no puedes leer. Rechaza el material que no puede redistribuir, y da el rechazo como un fallo en vez de disfrazarlo de fichero.",
+			"No es un comprobador de licencias. Un artículo por DOI y un libro por ISBN van primero a las copias legalmente libres, y los escaneos de préstamo restringido se rechazan, pero un libro pedido por md5 viene de Library Genesis sea cual sea su copyright. Si puedes leerlo o no, lo juzgas tú.",
 			"No es un mirror ni un índice propio. Consulta servicios ajenos y se identifica al hacerlo.",
 			"No es una garantía. Los mirrors de terceros se caen, y una fuente que no tiene nada para un identificador lo dice.",
 			"No es una opinión jurídica. La ley de propiedad intelectual que se aplica donde vives es cosa tuya.",
@@ -306,7 +306,7 @@ export const es: HomeContent = {
 			],
 			[
 				"«Consígueme este libro por su ISBN»",
-				"Va a OAPEN y a los escaneos de dominio público del Internet Archive — nunca a una biblioteca en la sombra",
+				"Va a OAPEN y a los escaneos de dominio público del Internet Archive — nunca a una shadow library",
 			],
 			[
 				"«Dame el enlace directo, no lo descargues»",
@@ -316,7 +316,7 @@ export const es: HomeContent = {
 	},
 	chain: {
 		title: "La cadena, en orden",
-		lead: "Una descarga prueba cada fuente que admite el elemento, en este orden, y pasa a la siguiente si falla. El orden está fijado en el código: los proveedores legales de acceso abierto van primero, y las bibliotecas en la sombra solo se alcanzan cuando todos ellos han declinado.",
+		lead: "Una descarga prueba cada fuente que admite el elemento, en este orden, y pasa a la siguiente si falla. El orden está fijado en el código: para un artículo, los proveedores legales de acceso abierto van primero, y las shadow libraries solo se alcanzan cuando todos ellos han declinado. Un libro pedido por md5 no tiene ruta legal aquí: solo la familia Library Genesis y Anna's Archive sirven un md5.",
 		headers: ["Etapa", "Fuentes"],
 		groups: [
 			{
@@ -344,9 +344,9 @@ export const es: HomeContent = {
 			},
 			{
 				id: "fallbacks",
-				name: "Bibliotecas en la sombra",
+				name: "Shadow libraries",
 				summary:
-					"Se alcanzan las últimas, y solo cuando todo lo anterior ha salido vacío.",
+					"Para un DOI, se alcanzan las últimas, y solo cuando todo lo anterior ha salido vacío. Para un md5, son las únicas fuentes que hay.",
 			},
 		],
 		keyedBy: {

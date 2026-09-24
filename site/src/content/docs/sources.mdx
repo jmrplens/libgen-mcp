@@ -29,8 +29,9 @@ minutes); an untagged error is the neutral case, where the chain simply advances
 neither optimization. And MD5 verification is enabled only for md5-keyed items, because a DOI- or
 ISBN-keyed item carries no LibGen digest to check the streamed bytes against.
 
-The order comes from `config.KnownSources` and is fixed in code: the legal open-access
-providers lead, and the shadow libraries are reached only after all of them have declined.
+The order comes from `config.KnownSources` and is fixed in code: for an article, the legal
+open-access providers lead, and the shadow libraries are reached only after all of them have
+declined. A book asked for by md5 has no legal source to try first, since none is keyed by md5.
 `LIBGEN_MCP_SOURCES` can remove sources from the chain; it cannot reorder them.
 
 ## Open-access article resolvers
@@ -266,9 +267,11 @@ The Internet Archive's book scans, reached through OpenLibrary.
 </Facts>
 ## Shadow-library fallbacks
 
-Everything below is reached only after every source above has declined, which is the whole
-point of the chain order: a freely licensed copy is always preferred when one exists, and the
-order is fixed in code and held by a test rather than left to configuration.
+For an article, everything below is reached only after every source above has declined, which
+is the whole point of the chain order: a freely licensed copy is always preferred when one
+exists, and the order is fixed in code and held by a test rather than left to configuration. A
+book asked for by md5 is different: no source above is keyed by md5, so `libgen`, `randombook`
+and `annas` are the only ones that can serve it, and Library Genesis is the first it meets.
 
 ### `scihub`
 

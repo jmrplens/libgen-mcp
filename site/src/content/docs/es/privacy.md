@@ -147,7 +147,7 @@ destinos son:
   completo cuando se ha fijado `source` de forma explícita. Si lo rechazas, la
   petición continúa sin Unpaywall. No se envía ningún otro dato personal.
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
-  DOI).** Antes de cualquier alternativa de biblioteca en la sombra, la cadena de
+  DOI).** Antes de cualquier alternativa de shadow library, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con
   licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`,
   `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)

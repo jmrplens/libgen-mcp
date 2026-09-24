@@ -105,31 +105,33 @@ It orders the download chain so the open-access providers are tried first, and t
 
 The full chain, in order:
 
-| #   | Source       | Keyed by  | Status                                 |
-| --- | ------------ | --------- | -------------------------------------- |
-| 1   | `unpaywall`  | DOI       | Open access                            |
-| 2   | `openalex`   | DOI       | Open access                            |
-| 3   | `europepmc`  | DOI       | Open access                            |
-| 4   | `biorxiv`    | DOI       | Open access (preprints)                |
-| 5   | `rfc`        | DOI       | Open standards (RFC Editor)            |
-| 6   | `nist`       | DOI       | Open standards (NIST)                  |
-| 7   | `dagstuhl`   | DOI       | Open access (Schloss Dagstuhl / DROPS) |
-| 8   | `acl`        | DOI       | Open access (ACL Anthology)            |
-| 9   | `zenodo`     | DOI       | Open access (Zenodo)                   |
-| 10  | `scielo`     | DOI       | Open access (SciELO Brazil)            |
-| 11  | `fao`        | DOI       | Open access (FAO Knowledge Repository) |
-| 12  | `fatcat`     | DOI       | Open access (Internet Archive Scholar) |
-| 13  | `core`       | DOI       | Open access (needs a free API key)     |
-| 14  | `crossref`   | DOI       | The publisher's own deposited link     |
-| 15  | `oapen`      | DOI, ISBN | Openly licensed books                  |
-| 16  | `archive`    | ISBN      | Public-domain scans only               |
-| 17  | `scihub`     | DOI       | Shadow library                         |
-| 18  | `scidb`      | DOI       | Shadow library                         |
-| 19  | `libgen`     | md5       | Library Genesis catalog                |
-| 20  | `randombook` | md5       | Library Genesis mirror                 |
-| 21  | `annas`      | md5       | Shadow library                         |
+| #   | Source       | Keyed by  | Status                                   |
+| --- | ------------ | --------- | ---------------------------------------- |
+| 1   | `unpaywall`  | DOI       | Open access                              |
+| 2   | `openalex`   | DOI       | Open access                              |
+| 3   | `europepmc`  | DOI       | Open access                              |
+| 4   | `biorxiv`    | DOI       | Open access (preprints)                  |
+| 5   | `rfc`        | DOI       | Open standards (RFC Editor)              |
+| 6   | `nist`       | DOI       | Open standards (NIST)                    |
+| 7   | `dagstuhl`   | DOI       | Open access (Schloss Dagstuhl / DROPS)   |
+| 8   | `acl`        | DOI       | Open access (ACL Anthology)              |
+| 9   | `zenodo`     | DOI       | Open access (Zenodo)                     |
+| 10  | `scielo`     | DOI       | Open access (SciELO Brazil)              |
+| 11  | `fao`        | DOI       | Open access (FAO Knowledge Repository)   |
+| 12  | `fatcat`     | DOI       | Open access (Internet Archive Scholar)   |
+| 13  | `core`       | DOI       | Open access (needs a free API key)       |
+| 14  | `crossref`   | DOI       | The publisher's own deposited link       |
+| 15  | `oapen`      | DOI, ISBN | Openly licensed books                    |
+| 16  | `archive`    | ISBN      | Public-domain scans only                 |
+| 17  | `scihub`     | DOI       | Shadow library                           |
+| 18  | `scidb`      | DOI       | Shadow library                           |
+| 19  | `libgen`     | md5       | Shadow library (Library Genesis catalog) |
+| 20  | `randombook` | md5       | Shadow library (Library Genesis mirror)  |
+| 21  | `annas`      | md5       | Shadow library                           |
 
-Positions 1–16 are exhausted before position 17 is tried. You can remove sources
+For an article, positions 1–16 are exhausted before position 17 is tried. A book
+asked for by md5 has no legal source in this chain: only positions 19–21 are keyed
+by md5, so it goes to Library Genesis first. You can remove sources
 with `LIBGEN_MCP_SOURCES`, but you cannot reorder them — a deployment can narrow
 the chain, never promote a fallback above the open-access providers.
 

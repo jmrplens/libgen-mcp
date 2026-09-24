@@ -30,9 +30,10 @@ cadena simplemente avanza sin ganar ninguna de las dos optimizaciones. Y la veri
 identificados por md5, porque un elemento identificado por DOI o ISBN no lleva ningún digest de
 LibGen contra el que comprobar los bytes transmitidos.
 
-El orden viene de `config.KnownSources` y está fijado en el código: los proveedores legales de
-acceso abierto van delante, y a las bibliotecas en la sombra solo se llega cuando todos ellos
-han declinado. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena; no puede reordenarla.
+El orden viene de `config.KnownSources` y está fijado en el código: para un artículo, los
+proveedores legales de acceso abierto van delante, y a las shadow libraries solo se llega
+cuando todos ellos han declinado. Un libro pedido por md5 no tiene ninguna fuente legal que
+probar antes, porque ninguna va por md5. `LIBGEN_MCP_SOURCES` puede quitar fuentes de la cadena; no puede reordenarla.
 
 ## Resolutores de artículos de acceso abierto
 
@@ -237,7 +238,7 @@ los obtiene.
   <Fact label="Por qué sondea">un enlace depositado declara un acuerdo de sindicación, no un derecho de lectura. En una muestra de veinte registrantes, todos los enlaces `unspecified` (6 de 6) y todos los `syndication` (18 de 18) respondieron 403 a un cliente anónimo, mientras que eLife y las editoriales de acceso abierto pequeñas etiquetan su fichero orientado al lector como `text-mining` y se lo sirven a cualquiera. La etiqueta no predice nada; el registrante sí. Sin el sondeo, la canalización guardaría como `.pdf` la página de desafío de una editorial.</Fact>
   <Fact label="Por qué existe">`search` publica un resultado de Crossref con el `pdf_url` de la propia editorial, y antes de esta fuente nada en la cadena de descarga probaba ese enlace — `read` y `download` iban por los índices de acceso abierto —, de modo que los dos caminos podían llegar a conclusiones opuestas sobre un mismo artículo y el enlace que el servidor acababa de publicar solo era alcanzable por quien tuviera su propia herramienta HTTP.</Fact>
   <Fact kind="notCovered">las grandes editoriales comerciales. ACS, AIP, IOP, Wiley, SAGE, Taylor & Francis y Springer rechazan a los clientes anónimos depositen lo que depositen, así que para sus DOI esta fuente informa de una ausencia limpia y señala el navegador como la vía que queda — que a menudo es la verdad, incluso para artículos con licencia abierta: `10.1063/5.0282407` es CC-BY y se lee en un navegador mientras AIP responde 403 a todo cliente automático, y ningún repositorio guarda una copia.</Fact>
-  <Fact label="Dónde encaja">la última de las resolvedoras específicas de artículo, tras los índices de acceso abierto y los archivos: se prefiere una copia con licencia libre allá donde exista, pero un fichero que la propia editorial sirve abiertamente se prueba siempre antes que una biblioteca en la sombra. Solo la siguen las dos fuentes de libros (`oapen`, `archive`) y después las bibliotecas en la sombra.</Fact>
+  <Fact label="Dónde encaja">la última de las resolvedoras específicas de artículo, tras los índices de acceso abierto y los archivos: se prefiere una copia con licencia libre allá donde exista, pero un fichero que la propia editorial sirve abiertamente se prueba siempre antes que una shadow library. Solo la siguen las dos fuentes de libros (`oapen`, `archive`) y después las shadow libraries.</Fact>
   <Fact kind="keys">sin clave.</Fact>
 </Facts>
 ## Libros de acceso abierto y de dominio público
@@ -267,11 +268,14 @@ Los escaneos de libros de Internet Archive, alcanzados a través de OpenLibrary.
   <Fact kind="notCovered">un libro que OpenLibrary no conoce, uno que solo tiene en préstamo y uno cuyos candidatos están todos restringidos. Una consulta de metadatos que se _rompió_ en cualquiera de los dos saltos se reporta como indisponibilidad y nunca como «no existe copia libre».</Fact>
   <Fact kind="keys">sin clave.</Fact>
 </Facts>
-## Reservas de biblioteca en la sombra
+## Shadow libraries de reserva
 
-A todo lo que sigue solo se llega cuando todas las fuentes anteriores han declinado, que es el
-sentido entero del orden de la cadena: siempre se prefiere una copia con licencia libre cuando
-existe, y el orden está fijado en el código y sujeto por un test, no dejado a la configuración.
+Para un artículo, a todo lo que sigue solo se llega cuando todas las fuentes anteriores han
+declinado, que es el sentido entero del orden de la cadena: siempre se prefiere una copia con
+licencia libre cuando existe, y el orden está fijado en el código y sujeto por un test, no dejado
+a la configuración. Un libro pedido por md5 es distinto: ninguna fuente anterior va por md5, así
+que `libgen`, `randombook` y `annas` son las únicas que pueden servirlo, y Library Genesis es la
+primera con la que se encuentra.
 
 ### `scihub`
 
