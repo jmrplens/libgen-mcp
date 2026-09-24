@@ -8,6 +8,8 @@ chips:
     href: "/libgen-mcp/es/configuration/"
 datePublished: "2026-09-22"
 head:
+  - tag: title
+    content: "Lo que cuesta ejecutar libgen-mcp: memoria, CPU y latencia"
   # Resultados de una medición, publicados como un registro que cualquiera puede
   # descargar: Dataset es el tipo correcto. Aquí solo va lo que no cambia entre
   # ejecuciones; la versión medida y los valores viven en el registro y en las
@@ -66,7 +68,7 @@ este servidor y no su propia red.
 {/* generated:host — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB de RAM, linux/amd64, kernel 6.1.0-53-amd64, go1.27.0, build 1.7.3 (e572df62a1fc2d1896fdd9cd91f02cf2382539f5), 35.8 MiB en disco, el 2026-09-22T00:42:49Z.
+Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB de RAM, linux/amd64, kernel 6.1.0-53-amd64, go1.27.0, build 2.0.1 (c5d9f3d1e07f4740e3e95ad00acb9579335331b1), 35.8 MiB en disco, el 2026-09-24T10:01:38Z.
 
 {/* end generated */}
 
@@ -78,7 +80,7 @@ Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB 
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/memory-by-scenario-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/memory-by-scenario-light.svg" alt="Conjunto residente por escenario, en reposo y en el pico" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/memory-by-scenario-light.svg" alt="Conjunto residente por escenario, en reposo y en el pico" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -89,12 +91,12 @@ Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB 
 {/* prettier-ignore */}
 | Escenario           | Reposo (MiB) | Media (MiB) | Pico (MiB) | ms de CPU por llamada |
 | ------------------- | -----------: | ----------: | ---------: | --------------------: |
-| stdio-1             |        21.47 |       24.39 |      24.39 |                  7.78 |
-| stdio-8             |       172.65 |      204.02 |     204.21 |                  7.92 |
-| http-1              |        24.14 |       26.41 |      26.41 |                  7.78 |
-| http-8              |        22.87 |       36.79 |      39.00 |                  7.85 |
-| http-8-otel         |        25.03 |       43.82 |      44.05 |                  7.29 |
-| http-8-shipped-rate |        24.30 |       29.58 |      30.44 |                 11.46 |
+| stdio-1             |        21.44 |       26.67 |      26.67 |                  8.89 |
+| stdio-8             |       173.18 |      210.41 |     214.04 |                  8.61 |
+| http-1              |        23.54 |       25.41 |      25.41 |                  6.67 |
+| http-8              |        24.23 |       36.58 |      38.46 |                  7.99 |
+| http-8-otel         |        25.26 |       42.76 |      43.71 |                  7.50 |
+| http-8-shipped-rate |        25.78 |       29.99 |      30.86 |                 10.69 |
 
 {/* end generated */}
 
@@ -106,7 +108,7 @@ Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB 
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/memory-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/memory-by-clients-light.svg" alt="Conjunto residente y heap retenido según crece el número de clientes" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/memory-by-clients-light.svg" alt="Conjunto residente y heap retenido según crece el número de clientes" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -115,7 +117,7 @@ Medido en AMD Ryzen 5 3550H with Radeon Vega Mobile Gfx, 8 CPU lógicas, 61 GiB 
 {/* generated:series-summary — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-Ajustado sobre los escalones, **0.22 MiB por cliente mientras todos llaman** y **91 KiB por cliente retenido**, sin nada en vuelo. Leer el primero como el segundo sobreestima un despliegue compartido en lo que lleven sus peticiones.
+Ajustado sobre los escalones, **0.22 MiB por cliente mientras todos llaman** y **65 KiB por cliente retenido**, sin nada en vuelo. Leer el primero como el segundo sobreestima un despliegue compartido en lo que lleven sus peticiones.
 
 {/* end generated */}
 
@@ -127,7 +129,7 @@ Ajustado sobre los escalones, **0.22 MiB por cliente mientras todos llaman** y *
 <figure>
   <picture>
     <source srcset="/libgen-mcp/benchmarks/latency-by-clients-dark.svg" media="(prefers-color-scheme: dark)" />
-    <img src="/libgen-mcp/benchmarks/latency-by-clients-light.svg" alt="Latencia de las llamadas según crece el número de clientes" loading="lazy" />
+    <img src="/libgen-mcp/benchmarks/latency-by-clients-light.svg" alt="Latencia de las llamadas según crece el número de clientes" width="720" height="380" loading="lazy" />
   </picture>
 </figure>
 
@@ -136,7 +138,7 @@ Ajustado sobre los escalones, **0.22 MiB por cliente mientras todos llaman** y *
 {/* generated:latency-summary — run `make bench-resources-render`, do not edit by hand */}
 
 {/* prettier-ignore */}
-Con 500 direcciones de cliente la llamada mediana tardó **827 ms** y la cola **2596 ms**. La carga es `tools/list`, a 5 llamadas por segundo y cliente, que es un cliente ocupado y no uno que gira en vacío.
+Con 500 direcciones de cliente la llamada mediana tardó **830 ms** y la cola **1911 ms**. La carga es `tools/list`, a 5 llamadas por segundo y cliente, que es un cliente ocupado y no uno que gira en vacío.
 
 {/* end generated */}
 

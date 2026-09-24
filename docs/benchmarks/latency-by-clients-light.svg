@@ -4,17 +4,13 @@
 <text x="64" y="24" fill="#24292f" font-family="system-ui, sans-serif" font-size="16" font-weight="600">What it feels like as the callers pile up</text>
 <text x="64" y="40" fill="#59636e" font-family="system-ui, sans-serif" font-size="11">tools/list, nearest-rank percentiles over each step&apos;s steady phase.</text>
 <line x1="64" y1="48" x2="696" y2="48" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="52" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">3000</text>
-<line x1="64" y1="92" x2="696" y2="92" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="96" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">2500</text>
-<line x1="64" y1="137" x2="696" y2="137" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="141" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">2000</text>
+<text x="56" y="52" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">2000</text>
+<line x1="64" y1="115" x2="696" y2="115" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="119" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">1500</text>
 <line x1="64" y1="182" x2="696" y2="182" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="186" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">1500</text>
-<line x1="64" y1="226" x2="696" y2="226" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="230" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">1000</text>
-<line x1="64" y1="271" x2="696" y2="271" stroke="#d1d9e0" stroke-width="1"/>
-<text x="56" y="275" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">500</text>
+<text x="56" y="186" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">1000</text>
+<line x1="64" y1="249" x2="696" y2="249" stroke="#d1d9e0" stroke-width="1"/>
+<text x="56" y="253" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">500</text>
 <line x1="64" y1="316" x2="696" y2="316" stroke="#d1d9e0" stroke-width="1"/>
 <text x="56" y="320" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="end">0</text>
 <text x="14" y="182" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" transform="rotate(-90 14 182)" text-anchor="middle">ms</text>
@@ -28,26 +24,26 @@
 <text x="590" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">200</text>
 <text x="660" y="334" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">500</text>
 <text x="380" y="368" fill="#59636e" font-family="system-ui, sans-serif" font-size="11" text-anchor="middle">client addresses (steps evenly spaced)</text>
-<polyline fill="none" stroke="#8a5a12" stroke-width="2" stroke-linejoin="round" points="99,315.46 169,315.31 239,314.37 309,313.41 380,312.39 450,312.11 520,312.98 590,307.84 660,242.11"/>
-<circle cx="99" cy="315.46" r="3" fill="#8a5a12"/>
-<circle cx="169" cy="315.31" r="3" fill="#8a5a12"/>
-<circle cx="239" cy="314.37" r="3" fill="#8a5a12"/>
-<circle cx="309" cy="313.41" r="3" fill="#8a5a12"/>
-<circle cx="380" cy="312.39" r="3" fill="#8a5a12"/>
-<circle cx="450" cy="312.11" r="3" fill="#8a5a12"/>
-<circle cx="520" cy="312.98" r="3" fill="#8a5a12"/>
-<circle cx="590" cy="307.84" r="3" fill="#8a5a12"/>
-<circle cx="660" cy="242.11" r="3" fill="#8a5a12"/>
-<polyline fill="none" stroke="#0a58ca" stroke-width="2" stroke-linejoin="round" points="99,314.88 169,314.68 239,312.3 309,311.62 380,309.81 450,303.23 520,296.72 590,259.78 660,84.07"/>
-<circle cx="99" cy="314.88" r="3" fill="#0a58ca"/>
-<circle cx="169" cy="314.68" r="3" fill="#0a58ca"/>
-<circle cx="239" cy="312.3" r="3" fill="#0a58ca"/>
-<circle cx="309" cy="311.62" r="3" fill="#0a58ca"/>
-<circle cx="380" cy="309.81" r="3" fill="#0a58ca"/>
-<circle cx="450" cy="303.23" r="3" fill="#0a58ca"/>
-<circle cx="520" cy="296.72" r="3" fill="#0a58ca"/>
-<circle cx="590" cy="259.78" r="3" fill="#0a58ca"/>
-<circle cx="660" cy="84.07" r="3" fill="#0a58ca"/>
+<polyline fill="none" stroke="#8a5a12" stroke-width="2" stroke-linejoin="round" points="99,315.27 169,315.02 239,314.17 309,313.02 380,310.19 450,310.7 520,309.49 590,292.18 660,204.76"/>
+<circle cx="99" cy="315.27" r="3" fill="#8a5a12"/>
+<circle cx="169" cy="315.02" r="3" fill="#8a5a12"/>
+<circle cx="239" cy="314.17" r="3" fill="#8a5a12"/>
+<circle cx="309" cy="313.02" r="3" fill="#8a5a12"/>
+<circle cx="380" cy="310.19" r="3" fill="#8a5a12"/>
+<circle cx="450" cy="310.7" r="3" fill="#8a5a12"/>
+<circle cx="520" cy="309.49" r="3" fill="#8a5a12"/>
+<circle cx="590" cy="292.18" r="3" fill="#8a5a12"/>
+<circle cx="660" cy="204.76" r="3" fill="#8a5a12"/>
+<polyline fill="none" stroke="#0a58ca" stroke-width="2" stroke-linejoin="round" points="99,314.81 169,314.53 239,311.04 309,306.84 380,305.44 450,301.08 520,287.72 590,222.77 660,59.91"/>
+<circle cx="99" cy="314.81" r="3" fill="#0a58ca"/>
+<circle cx="169" cy="314.53" r="3" fill="#0a58ca"/>
+<circle cx="239" cy="311.04" r="3" fill="#0a58ca"/>
+<circle cx="309" cy="306.84" r="3" fill="#0a58ca"/>
+<circle cx="380" cy="305.44" r="3" fill="#0a58ca"/>
+<circle cx="450" cy="301.08" r="3" fill="#0a58ca"/>
+<circle cx="520" cy="287.72" r="3" fill="#0a58ca"/>
+<circle cx="590" cy="222.77" r="3" fill="#0a58ca"/>
+<circle cx="660" cy="59.91" r="3" fill="#0a58ca"/>
 <rect x="64" y="341" width="10" height="10" fill="#8a5a12"/>
 <text x="79" y="350" fill="#24292f" font-family="system-ui, sans-serif" font-size="11">p50</text>
 <rect x="105" y="341" width="10" height="10" fill="#0a58ca"/>

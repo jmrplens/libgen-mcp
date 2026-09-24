@@ -178,6 +178,8 @@ func TestFigureBlock_SwitchesSchemesWithoutJavaScript(t *testing.T) {
 	for _, want := range []string{
 		"memory-by-clients-dark.svg", "memory-by-clients-light.svg",
 		"(prefers-color-scheme: dark)", "&quot;quoted&quot;", `loading="lazy"`,
+		// Sized from the chart's own geometry, so the page reserves the box.
+		`width="720" height="380"`,
 	} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(got, want) {
