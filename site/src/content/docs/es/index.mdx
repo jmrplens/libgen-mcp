@@ -104,9 +104,9 @@ Varios proyectos sin relación comparten el nombre. Este es
 | Fuentes de descarga | Veintiuna, en una cadena fija, con el acceso abierto primero    |
 | Id de registro      | `io.github.jmrplens/libgen-mcp`                                 |
 
-Lo que lo distingue: la cadena de descarga está ordenada para agotar los
-proveedores de acceso abierto antes de consultar ninguna biblioteca en la
-sombra, y esos proveedores rechazan lo que no pueden entregar — un identificador
+Lo que lo distingue: para un artículo, la cadena de descarga agota los
+proveedores de acceso abierto antes de consultar ninguna shadow library, y esos
+proveedores rechazan lo que no pueden entregar — un identificador
 de OAPEN se confirma en vez de suponerse, los escaneos del Internet Archive
 restringidos a préstamo se omiten y los registros de Gutenberg alojados por
 permiso se descartan. Además, su superficie de herramientas se comprueba contra
@@ -117,11 +117,31 @@ lugar de darse por supuesta.
 
 <LegalNotice />
 
-libgen-mcp prueba los proveedores legales de acceso abierto antes que cualquier
-reserva de shadow library, y rechaza el material que no puede
-redistribuir. [Uso responsable](/libgen-mcp/es/responsible-use/) explica qué
-significa eso en la práctica, qué se niega a hacer el servidor y cómo plantear
-una duda.
+Para un artículo o un libro pedido por ISBN, libgen-mcp prueba los proveedores
+legales de acceso abierto antes que cualquier reserva de shadow library, y
+rechaza el material que no puede redistribuir. Un libro pedido por md5 viene de
+Library Genesis, porque ninguna fuente legal va por md5. [Uso
+responsable](/libgen-mcp/es/responsible-use/) explica qué significa eso en la
+práctica, qué se niega a hacer el servidor y cómo plantear una duda.
+
+## Quién mantiene libgen-mcp
+
+libgen-mcp lo escribe y lo mantiene [José Manuel Requena
+Plens](https://jmrp.io/), ingeniero de firmware y software en Valencia
+([ORCID](https://orcid.org/0000-0003-1250-6212),
+[GitHub](https://github.com/jmrplens)). Es un proyecto de código abierto bajo
+licencia MIT, desarrollado en público en
+[`jmrplens/libgen-mcp`](https://github.com/jmrplens/libgen-mcp).
+
+Cada cambio pasa las pruebas unitarias en Linux, macOS y Windows y las pruebas
+de extremo a extremo de los dos transportes, que arrancan el binario real, antes
+de fusionarse. La superficie de herramientas se mide además con un modelo real
+contra los mirrors en vivo, y el resultado se publica escenario a escenario en
+la [evaluación con LLM](/libgen-mcp/es/eval-results/), fallos incluidos. Los
+errores y las propuestas van a los [issues de
+GitHub](https://github.com/jmrplens/libgen-mcp/issues), y una vulnerabilidad,
+por la vía privada que describe la [política de
+seguridad](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md).
 
 ## Preguntas frecuentes
 

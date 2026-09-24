@@ -292,6 +292,16 @@ describes is always the one in [`VERSION`](https://github.com/jmrplens/libgen-mc
 
 Point your client at the binary. The command is `libgen-mcp` (or the absolute path to the `server` binary if you kept the default `go install` name). Over stdio no extra arguments are needed.
 
+Clients differ in where the configuration lives and in the key the server entry sits under:
+
+| Client                  | Where it is configured                                                         | Key             | Transport       |
+| ----------------------- | ------------------------------------------------------------------------------ | --------------- | --------------- |
+| Claude Code             | `.mcp.json` in the project, or `claude mcp add`                                | `mcpServers`    | stdio           |
+| Claude Desktop          | the `.mcpb` extension, or `claude_desktop_config.json`                         | `mcpServers`    | stdio           |
+| Cursor                  | `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json`                     | `mcpServers`    | stdio           |
+| VS Code, GitHub Copilot | `.vscode/mcp.json`, with `"type": "stdio"` on the entry                        | `servers`       | stdio           |
+| Any HTTP-capable client | the [hosted endpoint](#hosted-endpoint-no-install) or your own `--http` server | client-specific | streamable HTTP |
+
 ### Claude Code
 
 Add the server to your project's `.mcp.json` (or run `claude mcp add`):
@@ -581,6 +591,35 @@ The response's `text` field holds the extracted first chunk — up to `LIBGEN_MC
 </Aside>
 
 See [Tools](/libgen-mcp/tools/#read) for the full input/output reference.
+
+### A recorded session
+
+This exchange is scenario S19 of the [LLM evaluation](/libgen-mcp/eval-results/), recorded on 2026-09-22 with `claude-haiku-4-5-20251001` against the live mirrors. Nothing is edited but the answer's formatting. The prompt was:
+
+> Search Library Genesis articles for the paper "Hallmarks of Cancer: The Next Generation" by Hanahan and Weinberg, then read the first page of the PDF (do NOT download the whole file) and give me a two- or three-sentence summary of what it covers.
+
+The model called `search` once:
+
+```json
+{
+	"query": "Hallmarks of Cancer: The Next Generation Hanahan Weinberg",
+	"topics": ["articles"]
+}
+```
+
+took the DOI from the result, and called `read` with it rather than `download`:
+
+```json
+{
+	"doi": "10.1016/j.cell.2011.02.013",
+	"max_pages": 1,
+	"start_page": 1
+}
+```
+
+Its answer, from the 4,566 characters `read` returned:
+
+> The paper presents an updated framework of six core biological capabilities that cancer cells acquire during tumor development—including sustaining proliferative signaling, evading growth suppressors, resisting cell death, enabling replicative immortality, inducing angiogenesis, and activating invasion and metastasis. The authors also introduce two emerging hallmarks (reprogramming of energy metabolism and evading immune destruction) and emphasize that tumors are complex tissues containing recruited normal cells that form the "tumor microenvironment," which actively contribute to cancer development rather than being passive bystanders.
 
 ## Prompts
 

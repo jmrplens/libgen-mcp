@@ -413,6 +413,14 @@ func docPages(toolNameList string) []docPage {
 			"Instalación", "Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo",
 		},
 		{
+			"download-a-paper/", "Download a paper by DOI", "Step by step: ask an assistant for a paper by DOI, what the open-access-first chain does, and what comes back",
+			"Descargar un artículo por DOI", "Paso a paso: pedir un artículo por DOI a un asistente, qué hace la cadena con el acceso abierto primero y qué se recibe",
+		},
+		{
+			"citations/", "BibTeX and RIS citations", "Ready-to-paste BibTeX and RIS from get_details, and why a DOI appears only once Crossref confirms it",
+			"Citas BibTeX y RIS", "BibTeX y RIS listos para pegar desde get_details, y por qué un DOI solo aparece cuando Crossref lo confirma",
+		},
+		{
 			"configuration/", "Configuration", "Full environment-variable configuration reference",
 			"Configuración", "Referencia completa de configuración por variables de entorno",
 		},
@@ -445,12 +453,20 @@ func docPages(toolNameList string) []docPage {
 			"Telemetría", "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal",
 		},
 		{
+			"limitations/", "Known limitations", "What the server does not do or does only partially, why, and where each limit is documented",
+			"Limitaciones conocidas", "Qué no hace el servidor o hace solo en parte, por qué, y dónde se documenta cada límite",
+		},
+		{
 			"eval-results/", "LLM eval results", "Results of driving a real model over MCP against the live site, scenario by scenario",
 			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
 		},
 		{
 			"benchmarks/", "What it costs to run", "Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment",
 			"Lo que cuesta ejecutarlo", "Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido",
+		},
+		{
+			"comparison/", "Compared with other servers", "How it compares with other paper and book MCP servers, checked against each project's own repository",
+			"Comparado con otros servidores", "Cómo se compara con otros servidores MCP de artículos y libros, comprobado en el repositorio de cada proyecto",
 		},
 		{
 			"responsible-use/", "Responsible use", "Why the open-access providers are tried first, and what the server refuses to serve",

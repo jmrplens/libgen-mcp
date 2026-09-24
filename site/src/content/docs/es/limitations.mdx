@@ -1,0 +1,147 @@
+---
+title: Limitaciones conocidas
+description: Lo que libgen-mcp no hace o hace solo en parte, del OCR y la verificación por hash a Anna's Archive y la lectura remota, con su motivo y un enlace.
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Anna's Archive"
+    wikidata: Q115288326
+  - name: "PDF"
+    wikidata: Q42332
+  - name: "EPUB"
+    wikidata: Q475488
+chips:
+  - text: "Dichas, no escondidas"
+  - text: "Cada una con su motivo"
+  - text: "Solución de problemas"
+    href: "/libgen-mcp/es/troubleshooting/"
+datePublished: "2026-09-24"
+head:
+  - tag: title
+    content: "Limitaciones conocidas de libgen-mcp: lo que no hace"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/limitations/#faq",
+        "inLanguage": "es",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/limitations/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Puede libgen-mcp leer PDF escaneados?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. read solo extrae la capa de texto de un PDF, y un PDF escaneado o solo de imagen no la tiene, así que responde extractable: false y avisa de que no hay OCR. El OCR queda fuera por decisión: exigiría CGO o un servicio en la nube con clave, y rompería el binario estático y el uso sin clave. download sigue entregando el archivo en sí, así que se le puede pasar un OCR por otro lado. Consulta Herramientas → No extraíble."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Por qué mi descarga por DOI no está verificada?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Porque no hay nada con qué comprobarla. libgen-mcp verifica una descarga pasando sus bytes por un hash y comparándolos con el md5 pedido, y solo un libro pedido por md5 lo tiene. Una descarga por DOI o por ISBN no lleva ningún digest, así que su resultado indica verified: false. Nada demuestra entonces que el archivo sea la obra que pediste, y por eso su nombre por defecto conserva el que anunció la fuente en lugar del título del registro. Comprueba el archivo antes de fiarte de él. Consulta Herramientas → Comportamiento y errores."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Funciona libgen-mcp con Anna's Archive?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "En parte. Según la medición del 2026-09-22, las páginas de búsqueda y de cada elemento de Anna's Archive responden con un desafío de navegador de DDoS-Guard, así que la búsqueda no encuentra nada allí y la descarga sin clave por IPFS no puede empezar. Con una clave de membresía de pago en LIBGEN_MCP_ANNAS_KEY, su API de miembros sigue sirviendo descargas. Superar el desafío queda fuera de alcance, porque exigiría ejecutar el código antibot de Anna's para hacerse pasar por un navegador. Tras un desafío, el proveedor de búsqueda no pregunta nada durante quince minutos en lugar de volver a preguntar en cada búsqueda. Consulta Fuentes → annas."
+            }
+          }
+        ]
+      }
+---
+
+**libgen-mcp, un servidor de Model Context Protocol para Library Genesis, no hace OCR, solo verifica por hash las descargas pedidas por md5, no puede buscar en Anna's Archive tras su desafío de navegador y, en un despliegue remoto, devuelve enlaces y no archivos y por defecto no ofrece `read`.** Cada limitación dice qué es, por qué y dónde se documenta.
+
+Cuando los registros de diseño del proyecto dicen si una limitación es una decisión deliberada o trabajo pendiente, la entrada también lo dice. Esos registros son los registros de decisiones de arquitectura (ADR) de [`docs/decisions/`](https://github.com/jmrplens/libgen-mcp/tree/main/docs/decisions).
+
+## Lectura de documentos
+
+**No hay OCR.** `read` extrae texto en Go puro de la capa de texto de un PDF, de un EPUB o de un fichero TXT. Un PDF escaneado o solo de imagen no tiene capa de texto, así que `read` devuelve `extractable: false` con el motivo `no extractable text layer (likely a scanned or image-only PDF); OCR is not supported`, y el modelo puede recurrir a `download` para obtener el archivo en bruto. Es una decisión deliberada: los motores de OCR utilizables necesitan CGO (Tesseract) o un servicio en la nube con clave, y cualquiera de los dos rompería el binario estático único y el funcionamiento sin clave por defecto, como recoge el [ADR de alcance de fuentes y capacidades](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-source-and-capability-scope.md). Consulta [Herramientas → No extraíble](/libgen-mcp/es/tools/#no-extraíble).
+
+**Se leen tres formatos y el resto se declina.** Se extraen PDF, EPUB y TXT. DjVu, los archivos de cómic CBR y CBZ y los formatos de libro electrónico MOBI, AZW y AZW3 se informan como no soportados, con el mismo motivo en los tres modos de lectura (texto secuencial, `find` y `outline`), de modo que fallar en un modo no invita a reintentar en otro. Consulta [Herramientas → No extraíble](/libgen-mcp/es/tools/#no-extraíble).
+
+**El texto de TXT y EPUB tiene un tope de 8 MiB.** Un fichero TXT se lee hasta sus primeros 8 MiB, y cada documento de capítulo dentro de un EPUB hasta 8 MiB, para que la extracción se mantenga en una memoria acotada. El texto que queda más allá del tope no se alcanza paginando con `offset` o `cursor`, y `find` solo busca en ese mismo texto recortado. Una lectura secuencial avisa cuando ocurre: marca `truncated` y `reason` dice `document exceeds the 8 MiB extraction cap; text beyond it is not available`. Un resultado de `find` no lo indica. La lectura en streaming con desplazamiento para llegar más allá del tope figura como trabajo pendiente, no implementado, en el [ADR de limitaciones conocidas](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-known-limitations.md).
+
+**Algunas capas de texto extraen disparates.** Un PDF cuyas fuentes no tienen un mapa de caracteres utilizable se extrae sin error, pero en caracteres que no son los impresos en la página. `read` no puede recuperar el texto real. Mide el daño de forma heurística y rellena `text_quality_note`, y como los umbrales son conservadores, la nota es un indicio fuerte y no un veredicto. Consulta [Herramientas → Una capa de texto que extrae disparates](/libgen-mcp/es/tools/#una-capa-de-texto-que-extrae-disparates).
+
+**Cada lectura tiene un presupuesto de 90 segundos.** Un documento dañado o de estructura patológica que ningún parser termina en ese plazo se informa como ilegible en lugar de dejar la llamada abierta. Go no puede detener una goroutine, así que una lectura abandonada sigue corriendo, y cuando hay cuatro pendientes el servidor se niega a empezar otra hasta que retornen. Consulta [Herramientas → No extraíble](/libgen-mcp/es/tools/#no-extraíble).
+
+**La primera página cuesta el archivo entero, y la caché solo se barre al insertar.** Para devolver un fragmento de un libro o artículo identificado por `md5` o `doi`, `read` descarga el archivo entero a un fichero temporal del servidor y lo conserva para que las páginas siguientes reutilicen esa única descarga (`LIBGEN_MCP_READ_CACHE_TTL`, 10 minutos de inactividad por defecto, y `LIBGEN_MCP_READ_CACHE_BYTES`, 512 MiB en total por defecto). Las entradas caducadas solo se eliminan cuando entra un archivo nuevo en la caché, no con un temporizador, así que un archivo inactivo puede seguir en disco pasado su TTL hasta que el siguiente `read` descargue algo nuevo. El [ADR de limitaciones conocidas](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-22-known-limitations.md) lo acepta y deja un barrido periódico como trabajo pendiente. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_read_cache_bytes-y-libgen_mcp_read_cache_ttl).
+
+## Descargas y verificación
+
+**Solo se verifica por hash una descarga por md5.** En un libro pedido por `md5`, los bytes descargados se pasan por un hash y se comparan con el digest pedido, y una discrepancia borra el archivo parcial. Una descarga por `doi` o por `isbn` no tiene digest con el que compararse, así que su resultado indica `verified: false`, también para los libros de OAPEN y de Internet Archive. Nada demuestra entonces que el archivo sea la obra pedida, y por eso su nombre por defecto conserva el que anunció la fuente en lugar del título del registro. Cuando `download` devuelve un enlace en vez de un archivo, el servidor nunca ve los bytes, y el indicador `verify_md5` del objeto `resolved` deja la comprobación a quien los descargue. Consulta [Herramientas → Comportamiento y errores](/libgen-mcp/es/tools/#comportamiento-y-errores) y [Cómo se nombra el archivo guardado](/libgen-mcp/es/tools/#cómo-se-nombra-el-archivo-guardado).
+
+**Un libro pedido por md5 sale de una shadow library.** Solo `libgen`, `randombook` y `annas` se identifican por md5, y las tres son shadow libraries, así que para un libro así la cadena no tiene ninguna fuente legal que probar antes y Library Genesis es la primera que encuentra. El orden de acceso abierto primero se aplica a los artículos pedidos por DOI y a los libros pedidos por ISBN. Consulta [Uso responsable](/libgen-mcp/es/responsible-use/#qué-hace-libgen-mcp-para-priorizar-las-fuentes-legalmente-libres) y [Fuentes → Shadow libraries de reserva](/libgen-mcp/es/sources/#shadow-libraries-de-reserva).
+
+**Un libro pedido por ISBN tiene que tener licencia abierta.** Un `download` por `isbn` prueba OAPEN y después los escaneos de dominio público de Internet Archive, y nada más: en la ruta del ISBN no hay shadow library de reserva, y un escaneo de Archive con préstamo restringido se rechaza. Un libro comercial con derechos vigentes pedido por ISBN se informa por tanto como no encontrado, y la ruta hacia él es una `search` en el catálogo seguida de una descarga por `md5`. Es así por diseño, como explica [Uso responsable](/libgen-mcp/es/responsible-use/). Consulta [Solución de problemas → Libro no encontrado por ISBN](/libgen-mcp/es/troubleshooting/#libro-no-encontrado-por-isbn-solo-acceso-abierto).
+
+**La cadena se puede acortar, no reordenar.** `LIBGEN_MCP_SOURCES` quita fuentes de la cadena de descarga pero no puede cambiar su orden, que está fijado en el código y sujeto por un test, así que ningún despliegue puede subir una shadow library de reserva por encima de los proveedores de acceso abierto. Es deliberado. Consulta [Configuración → `LIBGEN_MCP_SOURCES`](/libgen-mcp/es/configuration/#libgen_mcp_sources-y-la-cadena-de-fuentes).
+
+**El resultado no dice qué fuente sirvió el archivo.** `download` devuelve la ruta guardada y el tamaño, y la fuente y el mirror que lo sirvieron solo quedan en el log del servidor. Quien necesite saberlo fija `source`, que convierte esa fuente en la cadena entera de la llamada. En la ruta del enlace el objeto `resolved` sí nombra su fuente, porque la URL ya identifica al proveedor. Es deliberado: el resultado solo revela lo que la llamada reveló, como recoge el [ADR de revelación del resultado](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md). Consulta [Herramientas → Lo que el resultado no revela](/libgen-mcp/es/tools/#lo-que-el-resultado-no-revela).
+
+## Fuentes y disponibilidad
+
+**Cada fuente es un servicio que este proyecto no gestiona.** libgen-mcp no aloja contenido ni opera ningún mirror. La lista de mirrors de Library Genesis se descubre en un directorio público y se guarda en caché 24 horas, los hosts de Sci-Hub rotan (para eso existe `LIBGEN_MCP_SCIHUB_HOSTS`) y cualquier proveedor puede cambiar sus páginas o caerse. Un mirror que falla se aparta y se prueba el siguiente, pero cuando fallan todos la llamada falla con un error que lo dice. Consulta [Arquitectura → Descubrimiento de mirrors](/libgen-mcp/es/architecture/#descubrimiento-de-mirrors) y [Solución de problemas → Todos los mirrors inalcanzables](/libgen-mcp/es/troubleshooting/#todos-los-mirrors-inalcanzables).
+
+**Anna's Archive está tras un desafío de navegador: sin búsqueda, y descargas solo con clave.** Según la medición del 2026-09-22, Anna's Archive responde a su página de búsqueda y a su página por elemento `/md5/` con un desafío de navegador de DDoS-Guard, que necesita un runtime de JavaScript para superarse. Mientras siga ahí:
+
+- el proveedor de búsqueda de Anna's Archive no devuelve nada, deja un aviso en el log y no vuelve a preguntar durante quince minutos;
+- la ruta de descarga sin clave no resuelve nada, porque toma la dirección IPFS del elemento de la página `/md5/` y ninguna petición a una pasarela puede empezar sin ella;
+- `get_details` no puede recurrir a los metadatos propios de Anna's para un registro que el catálogo no tiene, porque lee esa misma página;
+- la API de miembros no está tras el desafío, así que con `LIBGEN_MCP_ANNAS_KEY` fijada a una clave de membresía de pago, las descargas por ella siguen funcionando.
+
+Superar el desafío queda fuera de alcance por decisión: exigiría ejecutar el código antibot de Anna's para hacerse pasar por un navegador. Consulta [Fuentes → `annas`](/libgen-mcp/es/sources/#annas).
+
+**Algunos DOI no los alcanza ninguna fuente.** La cadena solo llega a lo que sus fuentes tienen y están dispuestas a servir a un cliente automático. Los artículos más antiguos de SciELO son solo HTML, y ninguna fuente alcanza el artículo de 1998 que cita la página de fuentes. De catorce DOI de SciELO muestreados, tres los servía scielo.br y ninguna otra fuente de la cadena, y según la medición del 2026-08-21 las páginas de artículo de scielo.br responden a los clientes automáticos con una comprobación de navegador. En general, Unpaywall puede marcar un artículo como acceso abierto sin ofrecer ningún archivo, y las grandes editoriales comerciales niegan a un cliente anónimo el enlace que depositan en Crossref. Consulta [Fuentes → `scielo`](/libgen-mcp/es/sources/#scielo) y [Solución de problemas → Artículo no encontrado](/libgen-mcp/es/troubleshooting/#artículo-no-encontrado-acceso-abierto-vs-sci-hub).
+
+**Dos fuentes de acceso abierto necesitan una credencial.** `unpaywall` solo entra en la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijada, porque su API exige una dirección de contacto, y `core` solo cuando `LIBGEN_MCP_CORE_KEY` contiene una clave gratuita de la API de CORE. A un cliente con elicitation se le puede pedir una dirección para Unpaywall válida para una sola petición. `openalex` lee el mismo índice de acceso abierto que Unpaywall sin credencial alguna, así que un despliegue sin ninguna de las dos sigue teniendo una ruta sin clave hacia él. Consulta [Fuentes](/libgen-mcp/es/sources/).
+
+**Los resultados de Project Gutenberg, ERIC y arXiv se descargan directamente, no con `download`.** Gutenberg y ERIC llegan a quien llama solo a través de `search` y no tienen fuente de descarga, por decisión. Un texto de Gutenberg no tiene DOI ni un ISBN fiable, así que una fuente de descarga solo podría emparejar por título y autor, con el riesgo de servir otro libro. ERIC identifica sus registros por un número de acceso y ya pone la URL del texto completo en el resultado. Un resultado de Gutenberg lleva una `full_text_url`, y uno de arXiv, o uno de ERIC con texto completo alojado, lleva una `pdf_url`, que descarga el propio cliente. `download` no acepta identificadores de arXiv. Consulta [Fuentes → Qué no es una fuente de descarga, a propósito](/libgen-mcp/es/sources/#qué-no-es-una-fuente-de-descarga-a-propósito).
+
+**El mirror limita los resultados de búsqueda.** Un mirror de Library Genesis informa de un número de coincidencias, `total_files`, a veces solo como `1000+`, pero solo sirve los primeros `reachable` resultados entre todas las páginas, y las páginas posteriores llegan vacías. El resultado marca entonces `truncated` y un `hint`, y el remedio es una consulta más precisa, no paginar más hondo. Consulta [Herramientas → Paginación y truncado](/libgen-mcp/es/tools/#paginación-y-truncado).
+
+## Despliegues remotos
+
+**`download` devuelve un enlace, no un archivo.** Un servidor arrancado con `--http`, o con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, no puede escribir en el disco del cliente, y MCP no tiene forma de que una herramienta empuje los bytes de un archivo al cliente. Ahí, cada `download` devuelve la URL resuelta como un `resource_link` más un objeto `resolved`, y la descarga la hace la propia herramienta HTTP del cliente. Consulta [Herramientas → Dónde acaba el archivo](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
+
+**`read` no se ofrece por defecto.** Para devolver una página de texto, `read` descarga el archivo entero por la conexión del servidor, y en un despliegue alojado esa conexión es una dirección de salida compartida por todos los llamantes: las descargas de uno podrían hacer que la limitaran o la bloquearan para todos. Por eso `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto en un despliegue remoto y `read` ni siquiera se registra. Un operador puede fijarla a `1` para asumir el coste de salida, y aun así el argumento `path` de `read` se rechaza, porque el servidor no ve el disco del cliente. Es deliberado, como recoge el [ADR de descarga en el servidor alojado](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-08-a-hosted-server-does-not-fetch-file-bodies.md). Consulta [Herramientas → read no está en todos los despliegues](/libgen-mcp/es/tools/#read-no-está-en-todos-los-despliegues).
+
+**El transporte HTTP no tiene autenticación.** El servidor no pide ninguna credencial a sus llamantes: cualquier cliente que alcance el endpoint puede llamar a todas las herramientas, y la tarjeta del servidor no declara ningún esquema de autenticación. Lo que el servidor acota es por llamante, según su dirección: un límite de tasa de entrada y un tope de descargas y lecturas en curso. El control de acceso, si un despliegue lo necesita, corresponde a lo que haya delante del servidor, como el proxy inverso que describe la guía de despliegue. Consulta [Arquitectura → Modo sin estado](/libgen-mcp/es/architecture/#modo-sin-estado) y [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+## Rendimiento
+
+**Una petición saliente por segundo, por defecto.** Cada petición a un mirror de Library Genesis y cada descarga de archivo espera una ficha de un único cubo compartido por todo el proceso, dimensionado por `LIBGEN_MCP_RATE_RPS` (1 por defecto, 20 como máximo) y `LIBGEN_MCP_RATE_BURST` (1 por defecto). Las llamadas concurrentes hacen cola unas detrás de otras en lugar de correr a la vez, y en un despliegue HTTP todos los llamantes tiran de ese mismo cubo, así que un límite de entrada por encima de él mueve la cola en lugar de acortarla. Una tasa más baja es más amable con los mirrors, y una más alta acelera las ráfagas. Consulta [Configuración → ¿Cómo limito la tasa de peticiones?](/libgen-mcp/es/configuration/#cómo-limito-la-tasa-de-peticiones) y [Modo servidor HTTP → Qué puede pedir un llamante](/libgen-mcp/es/http-server-mode/#qué-puede-pedir-un-llamante).
+
+**Una descarga que falla puede tardar un minuto en pasar a otra fuente.** El arranque de una transferencia se reintenta con un calendario escalonado, `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS`, por defecto ocho intentos a lo largo de unos 60 segundos, antes de que la cadena pruebe la siguiente fuente. Una fuente que responde con un fallo limpio o una negativa se salta el calendario, pero un fallo transitorio lo gasta, así que una descarga puede tardar cerca de un minuto en empezar o en pasar a la siguiente fuente. Consulta [Arquitectura → Reintentos de inicio y el guardián de estancamiento](/libgen-mcp/es/architecture/#reintentos-de-inicio-y-el-guardián-de-estancamiento).
+
+## Preguntas frecuentes
+
+### ¿Puede libgen-mcp leer PDF escaneados?
+
+No. `read` solo extrae la capa de texto de un PDF, y un PDF escaneado o solo de imagen no la tiene, así que responde `extractable: false` y avisa de que no hay OCR. El OCR queda fuera por decisión: exigiría CGO o un servicio en la nube con clave, y rompería el binario estático y el uso sin clave.
+
+`download` sigue entregando el archivo en sí, así que se le puede pasar un OCR por otro lado. Consulta [Herramientas → No extraíble](/libgen-mcp/es/tools/#no-extraíble).
+
+### ¿Por qué mi descarga por DOI no está verificada?
+
+Porque no hay nada con qué comprobarla. libgen-mcp verifica una descarga pasando sus bytes por un hash y comparándolos con el md5 pedido, y solo un libro pedido por md5 lo tiene. Una descarga por DOI o por ISBN no lleva ningún digest, así que su resultado indica `verified: false`.
+
+Nada demuestra entonces que el archivo sea la obra que pediste, y por eso su nombre por defecto conserva el que anunció la fuente en lugar del título del registro. Comprueba el archivo antes de fiarte de él. Consulta [Herramientas → Comportamiento y errores](/libgen-mcp/es/tools/#comportamiento-y-errores).
+
+### ¿Funciona libgen-mcp con Anna's Archive?
+
+En parte. Según la medición del 2026-09-22, las páginas de búsqueda y de cada elemento de Anna's Archive responden con un desafío de navegador de DDoS-Guard, así que la búsqueda no encuentra nada allí y la descarga sin clave por IPFS no puede empezar. Con una clave de membresía de pago en `LIBGEN_MCP_ANNAS_KEY`, su API de miembros sigue sirviendo descargas.
+
+Superar el desafío queda fuera de alcance, porque exigiría ejecutar el código antibot de Anna's para hacerse pasar por un navegador. Tras un desafío, el proveedor de búsqueda no pregunta nada durante quince minutos en lugar de volver a preguntar en cada búsqueda. Consulta [Fuentes → `annas`](/libgen-mcp/es/sources/#annas).

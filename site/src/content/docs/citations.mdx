@@ -1,0 +1,270 @@
+---
+title: Citations
+description: How to get a ready-to-paste BibTeX entry or RIS record for a book or paper from get_details, and why its DOI appears only once Crossref confirms it.
+mentions:
+  - name: "BibTeX"
+    wikidata: Q105859274
+  - name: "RIS"
+    wikidata: Q923990
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "Crossref"
+    wikidata: Q5188229
+  - name: "Library Genesis"
+    wikidata: Q22017206
+chips:
+  - text: "BibTeX"
+  - text: "RIS"
+  - text: "DOI checked against Crossref"
+  - text: "Tools"
+    href: "/libgen-mcp/tools/"
+datePublished: "2026-09-24"
+head:
+  - tag: title
+    content: "BibTeX and RIS citations for books and papers with libgen-mcp"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/citations/#faq",
+        "inLanguage": "en",
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/citations/#article" },
+        "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Can libgen-mcp export BibTeX?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. get_details returns a BibTeX entry in citations.bibtex for every record that has a title. It is an @article when the catalog classifies the record as an article or Crossref confirmed its DOI, and an @book otherwise. The Markdown text shows the same entry under a heading that reads Citation (BibTeX), with the provenance line after it."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does libgen-mcp support RIS for Zotero, Mendeley or EndNote?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. citations.ris holds a RIS record typed BOOK or JOUR, with one AU line per author and a closing ER line. RIS is a plain-text format that Zotero, Mendeley and EndNote all import: save the record to a file ending in .ris and import that file. The RIS record is in the structured output only, not in the Markdown text."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does my citation have no DOI?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Because Crossref did not confirm that the DOI names the same work. citations.doi_status says which case applies: unverified when the check could not be made or was inconclusive, mismatch when Crossref registers the DOI to a different work. Both leave the DOI out of the entries. With no doi_status at all, the record carries no DOI. A deployment that sets LIBGEN_MCP_ENRICH=false makes no outbound lookup, so every DOI on it stays unverified."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I get a citation for a paper found through arXiv or Crossref?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Only when the hit carries a DOI that the Library Genesis catalog holds. get_details looks a record up by md5, id or DOI, and an open-access hit has neither an md5 nor an id. A Crossref hit carries its DOI, and an arXiv hit carries one only when arXiv records one. Pass it as doi. When the catalog does not hold the DOI, get_details answers from Crossref instead: the record has file.origin set to crossref, Crossref's metadata is in enrichment, and there is no citations field, because the record it builds holds only the DOI and its origin. A deployment with LIBGEN_MCP_ENRICH=false returns the catalog's \"no record\" error instead."
+            }
+          }
+        ]
+      }
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**To get a citation from libgen-mcp, call `get_details` with the record's md5, its edition id or its DOI.** The `citations` field of the result carries a ready-to-paste BibTeX entry and a RIS record built from the record's metadata. The record's DOI appears in them only when Crossref confirms that the DOI names the same work.
+
+This page shows the call, what the two entries look like, which identifier gives which kind of entry, and why the DOI is sometimes left out on purpose.
+
+## Get a citation
+
+Take the identifier from a `search` result and pass exactly one of them to `get_details`: the `md5`, the `edition_id` as `id`, or the `doi`.
+
+```json
+{ "md5": "<md5 from a search result>" }
+```
+
+```json
+{ "doi": "10.1016/j.cell.2011.02.013" }
+```
+
+```json
+{ "id": "<edition_id from a search result>" }
+```
+
+The record comes back with a `citations` field whenever it has a title, which is the minimum for a usable citation. It holds four fields:
+
+| Field        | What it holds                                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `bibtex`     | A `@book` or `@article` entry.                                                                                         |
+| `ris`        | A RIS record, `TY  - BOOK` or `TY  - JOUR`, closed by an `ER` line.                                                    |
+| `doi_status` | `confirmed`, `unverified` or `mismatch`: what Crossref said about the record's DOI. Absent when the record has no DOI. |
+| `provenance` | One line on where the fields came from and what happened to the DOI, to relay with the citation.                       |
+
+The structured output carries all four fields. The Markdown text shows the BibTeX entry, under a _Citation (BibTeX)_ heading and followed by the provenance line, but not the RIS record.
+
+Here is what the two entries look like. The bibliographic values are illustrative and `<md5>` stands for the file's digest; the layout, the field order and the fixed text are what the server writes. For a book looked up by md5:
+
+```bibtex
+@book{Knuth1997,
+  author = {Donald E. Knuth},
+  title = {The Art of Computer Programming, Volume 1: Fundamental Algorithms},
+  year = {1997},
+  publisher = {Addison-Wesley},
+  edition = {3rd},
+  address = {Reading, Massachusetts},
+  pages = {650},
+  note = {libgen md5: <md5>}
+}
+```
+
+```text
+TY  - BOOK
+AU  - Donald E. Knuth
+TI  - The Art of Computer Programming, Volume 1: Fundamental Algorithms
+PY  - 1997
+PB  - Addison-Wesley
+L1  - libgen md5: <md5>
+ER  -
+```
+
+For an article looked up by DOI, whose DOI Crossref confirmed:
+
+```bibtex
+@article{Hanahan2011,
+  author = {Douglas Hanahan and Robert A. Weinberg},
+  title = {Hallmarks of Cancer: The Next Generation},
+  year = {2011},
+  volume = {144},
+  number = {5},
+  pages = {646--674},
+  doi = {10.1016/j.cell.2011.02.013},
+  note = {libgen md5: <md5>}
+}
+```
+
+```text
+TY  - JOUR
+AU  - Douglas Hanahan
+AU  - Robert A. Weinberg
+TI  - Hallmarks of Cancer: The Next Generation
+PY  - 2011
+VL  - 144
+IS  - 5
+SP  - 646
+EP  - 674
+DO  - 10.1016/j.cell.2011.02.013
+L1  - libgen md5: <md5>
+ER  -
+```
+
+Fields keep a fixed order, and an empty one is dropped rather than written blank. A book entry takes `author`, `title`, `year`, `publisher`, `edition`, `series`, `address` (the catalog's city) and `pages`. An article entry takes `author`, `title`, `year`, `volume`, `number`, `pages` and `doi`, where `pages` is the first and last page joined by `--`, or the page count when the catalog has no range. When the record comes with a file, both end in `note = {libgen md5: …}`. Neither carries an ISBN.
+
+The RIS record uses the tags `TY`, `AU`, `TI`, `PY`, `PB`, `VL`, `IS`, `SP`, `EP`, `DO` and `L1`, in that order, with one `AU` line per author: the author string is split at the word `and` when it has one, and at semicolons otherwise. The last line is `ER  - `: the end-of-record tag and its separator, with an empty value. The server writes no RIS tag for edition, series, place or page count, so a book's RIS record is shorter than its BibTeX entry.
+
+The cite key is the last word of the first author's name followed by the year, reduced to ASCII letters and digits: `Knuth1997`. With no author it takes the first word of the title instead. When neither the name nor the year leaves a letter or digit, the key falls back to `libgen` and the first eight characters of the md5.
+
+## Which identifier gives what
+
+Each identifier reaches a different record, and the record decides how much the citation can say.
+
+| You pass                                | Record looked up                                                                 | Entry type              | What the citation carries                                        |
+| --------------------------------------- | -------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------- |
+| `md5`                                   | The catalog's file record and its first related edition                          | The catalog rule below  | The fullest entry, with the md5 in `note` and `L1`               |
+| `md5` the catalog lacks                 | Anna's Archive's record, labeled `file.origin: "annas"`                          | Always `@book` / `BOOK` | Title, author, year and the md5. No DOI, so no `doi_status`      |
+| `id` (`object: "edition"`, the default) | The catalog's edition record                                                     | The catalog rule below  | No file comes back, so there is no md5 line                      |
+| `id` with `object: "file"`              | The catalog's file record alone                                                  | None                    | No `citations` field: the catalog keeps the title on the edition |
+| `doi`                                   | The catalog's edition for that DOI, matched exactly, and the first file it lists | The catalog rule below  | The md5 of that file. The DOI is still checked against Crossref  |
+| `doi` the catalog lacks                 | Crossref's metadata, labeled `file.origin: "crossref"`                           | None                    | No `citations` field. The metadata is in `enrichment`            |
+
+The catalog rule: an entry is `@article` and `JOUR` when the catalog classifies the record as an article or when Crossref confirmed its DOI, and `@book` and `BOOK` otherwise. The bare presence of a DOI never decides it. The catalog's copy of Nassim Nicholas Taleb's _Antifragile_, a Random House book, carries a DOI that belongs to a journal article, and choosing the entry type from that field would turn the book into an article on the strength of the same bad value the citation leaves out. A record the catalog classifies as an article stays one when its DOI could not be confirmed, only without the DOI.
+
+Both fallbacks are described under [Records the catalog does not carry](/libgen-mcp/tools/#records-the-catalog-does-not-carry). The Crossref one runs only when enrichment is allowed (`LIBGEN_MCP_ENRICH`, on by default); otherwise a DOI the catalog lacks returns the catalog's "no record" error.
+
+## Why a DOI can be missing from the citation
+
+A DOI in a catalog record is a claim, not a fact. Records exist whose DOI belongs to an entirely different work: the catalog's copy of _Antifragile_ carries `10.1371/journal.pmed.0020124`, which is the DOI of John P. A. Ioannidis's paper _Why Most Published Research Findings Are False_. Pasting that pairing into a bibliography produces a reference that looks authoritative and is false. So before a DOI reaches either entry, `get_details` asks Crossref, the agency that registers most journal and book DOIs, which title it holds for that DOI, and compares it with the record's title.
+
+The comparison works on content words. Case, punctuation, markup and short function words such as _the_ and _of_ are ignored, and what counts is how much of the shorter title appears in the longer one, so a catalog title that drops a subtitle still matches. At 60% or more the DOI is confirmed. At 20% or less, with at least two words in the shorter title, it is a mismatch. Anything between is left unverified: two papers in one series, _Hallmarks of Cancer_ and _Hallmarks of Aging_, land there.
+
+The outcome is in `doi_status`, and `provenance` explains it in a sentence you can relay:
+
+| `doi_status` | In the entries                        | What `provenance` adds after the standing caveat                                                                                                                                                    |
+| ------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `confirmed`  | The DOI, as `doi = {…}` and `DO  - …` | "DOI … was corroborated against Crossref, which registers it to this same title."                                                                                                                   |
+| `unverified` | No DOI                                | "The catalog lists DOI …, but it could not be corroborated against Crossref, so it has been left out of the entries above."                                                                         |
+| `mismatch`   | No DOI                                | "The catalog lists DOI …, but Crossref registers that DOI to a different work (…), so this record's DOI is wrong and has been left out of the entries above. Do not cite this record for that DOI." |
+| absent       | No DOI, because the record has none   | Nothing                                                                                                                                                                                             |
+
+A DOI stays `unverified` when:
+
+- Crossref could not be reached, did not answer in time, or has no record of the DOI, as with one registered through another agency such as DataCite.
+- The two titles are too close to call apart, or one of them has no words left to compare.
+- The deployment forbids enrichment with [`LIBGEN_MCP_ENRICH=false`](/libgen-mcp/configuration/#libgen_mcp_enrich). The server then makes no outbound lookup at all. It still builds the citation, without asserting a link it had no way to check.
+
+The check is cheap. On the default path, with `enrich` left out, it is one keyless request to Crossref, bounded at four seconds and made only when the record carries a DOI. With `enrich: true`, the Crossref answer fetched for [enrichment](/libgen-mcp/tools/#metadata-enrichment) settles the verdict as well, so the registry is asked once. A Crossref outage can leave a DOI out of a citation, but it never fails the call.
+
+## Check before you publish
+
+A formatted citation tends to be pasted into a bibliography and never looked at again, so the server states only what it can stand behind, and that is less than a finished reference. Every `provenance` line opens with the same caveat:
+
+<Aside type="caution">
+	Bibliographic fields come from the Library Genesis catalog, an unverified
+	third-party source; check them against the work before publishing this
+	citation.
+</Aside>
+
+Relay that line with the citation, and do not present the entry as verified. Beyond the DOI, these are the parts worth checking:
+
+- **Authors.** The `author` field is written exactly as the catalog spells it. BibTeX separates names with `and`, so a string that separates them with semicolons or commas reads to BibTeX as a single name.
+- **The cite key.** It takes the last word of the first author's name, which is the surname only when the name is written given name first. A record that writes `Knuth, Donald E.` gets the key `E1997`.
+- **The journal.** An `@article` entry has no `journal` field. With `enrich: true` and a DOI that Crossref knows, the journal title is in `enrichment.crossref.container_title`, and you add it yourself.
+- **ISBN.** Neither entry carries one, even when the record has it.
+- **Anna's Archive records.** Their fields come from Anna's Archive rather than the catalog, and `author` is occasionally a PDF producer string rather than a person.
+- **The record's `doi` field.** It still shows what the catalog claims. Copying it into the entry by hand undoes the check.
+
+## How to cite libgen-mcp itself
+
+The repository has a [`CITATION.cff`](https://github.com/jmrplens/libgen-mcp/blob/main/CITATION.cff) file at its root, in Citation File Format 1.2.0. GitHub reads it and shows a _Cite this repository_ link on the repository page, which copies an APA or a BibTeX reference. The BibTeX generated from the file is:
+
+```bibtex
+@software{Requena_Plens_libgen-mcp_2026,
+author = {Requena Plens, José Manuel},
+license = {MIT},
+month = sep,
+title = {{libgen-mcp}},
+url = {https://github.com/jmrplens/libgen-mcp},
+version = {2.0.1},
+year = {2026}
+}
+```
+
+And the APA form:
+
+```text
+Requena Plens, J. M. (2026). libgen-mcp (Version 2.0.1) [Computer software]. https://github.com/jmrplens/libgen-mcp
+```
+
+These are the entries for 2.0.1. Each release stamps its own version and date into the file, so it always names the latest one. If you used another release, change the version to match: `libgen-mcp --version` prints the one you have.
+
+## Frequently asked questions
+
+### Can libgen-mcp export BibTeX?
+
+Yes. `get_details` returns a BibTeX entry in `citations.bibtex` for every record that has a title. It is an `@article` when the catalog classifies the record as an article or Crossref confirmed its DOI, and an `@book` otherwise. The Markdown text shows the same entry under a heading that reads Citation (BibTeX), with the provenance line after it.
+
+### Does libgen-mcp support RIS for Zotero, Mendeley or EndNote?
+
+Yes. `citations.ris` holds a RIS record typed `BOOK` or `JOUR`, with one `AU` line per author and a closing `ER` line. RIS is a plain-text format that Zotero, Mendeley and EndNote all import: save the record to a file ending in `.ris` and import that file. The RIS record is in the structured output only, not in the Markdown text.
+
+### Why does my citation have no DOI?
+
+Because Crossref did not confirm that the DOI names the same work. `citations.doi_status` says which case applies: `unverified` when the check could not be made or was inconclusive, `mismatch` when Crossref registers the DOI to a different work. Both leave the DOI out of the entries. With no `doi_status` at all, the record carries no DOI.
+
+A deployment that sets `LIBGEN_MCP_ENRICH=false` makes no outbound lookup, so every DOI on it stays `unverified`.
+
+### Can I get a citation for a paper found through arXiv or Crossref?
+
+Only when the hit carries a DOI that the Library Genesis catalog holds. `get_details` looks a record up by md5, id or DOI, and an open-access hit has neither an md5 nor an id. A Crossref hit carries its DOI, and an arXiv hit carries one only when arXiv records one. Pass it as `doi`.
+
+When the catalog does not hold the DOI, `get_details` answers from Crossref instead: the record has `file.origin` set to `crossref`, Crossref's metadata is in `enrichment`, and there is no `citations` field, because the record it builds holds only the DOI and its origin. A deployment with `LIBGEN_MCP_ENRICH=false` returns the catalog's "no record" error instead.

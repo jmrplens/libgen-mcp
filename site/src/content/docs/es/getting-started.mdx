@@ -294,6 +294,16 @@ que describe esta documentación es siempre la de
 
 Apunta tu cliente al binario. El comando es `libgen-mcp` (o la ruta absoluta al binario `server` si mantuviste el nombre por defecto de `go install`). Sobre stdio no hacen falta argumentos adicionales.
 
+Los clientes difieren en dónde vive la configuración y en la clave bajo la que va la entrada del servidor:
+
+| Cliente                 | Dónde se configura                                                                           | Clave            | Transporte        |
+| ----------------------- | -------------------------------------------------------------------------------------------- | ---------------- | ----------------- |
+| Claude Code             | `.mcp.json` en el proyecto, o `claude mcp add`                                               | `mcpServers`     | stdio             |
+| Claude Desktop          | la extensión `.mcpb`, o `claude_desktop_config.json`                                         | `mcpServers`     | stdio             |
+| Cursor                  | `.cursor/mcp.json` en el proyecto, o `~/.cursor/mcp.json`                                    | `mcpServers`     | stdio             |
+| VS Code, GitHub Copilot | `.vscode/mcp.json`, con `"type": "stdio"` en la entrada                                      | `servers`        | stdio             |
+| Otro cliente con HTTP   | el [endpoint hospedado](#endpoint-hospedado-sin-instalar-nada) o tu propio servidor `--http` | según el cliente | HTTP en streaming |
+
 ### Claude Code
 
 Añade el servidor al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`):
@@ -585,6 +595,35 @@ El campo `text` de la respuesta contiene el primer fragmento extraído — hasta
 </Aside>
 
 Consulta [Herramientas](/libgen-mcp/es/tools/#read) para la referencia completa de entrada/salida.
+
+### Una sesión grabada
+
+Este intercambio es el escenario S19 de la [evaluación con LLM](/libgen-mcp/es/eval-results/), grabado el 2026-09-22 con `claude-haiku-4-5-20251001` contra los mirrors en vivo. No se ha editado nada salvo el formato de la respuesta, y se reproduce en inglés, el idioma en que se grabó. La petición fue:
+
+> Search Library Genesis articles for the paper "Hallmarks of Cancer: The Next Generation" by Hanahan and Weinberg, then read the first page of the PDF (do NOT download the whole file) and give me a two- or three-sentence summary of what it covers.
+
+El modelo llamó a `search` una vez:
+
+```json
+{
+	"query": "Hallmarks of Cancer: The Next Generation Hanahan Weinberg",
+	"topics": ["articles"]
+}
+```
+
+tomó el DOI del resultado y llamó con él a `read` en lugar de a `download`:
+
+```json
+{
+	"doi": "10.1016/j.cell.2011.02.013",
+	"max_pages": 1,
+	"start_page": 1
+}
+```
+
+Su respuesta, a partir de los 4566 caracteres que devolvió `read`:
+
+> The paper presents an updated framework of six core biological capabilities that cancer cells acquire during tumor development—including sustaining proliferative signaling, evading growth suppressors, resisting cell death, enabling replicative immortality, inducing angiogenesis, and activating invasion and metastasis. The authors also introduce two emerging hallmarks (reprogramming of energy metabolism and evading immune destruction) and emphasize that tumors are complex tissues containing recruited normal cells that form the "tumor microenvironment," which actively contribute to cancer development rather than being passive bystanders.
 
 ## Prompts
 

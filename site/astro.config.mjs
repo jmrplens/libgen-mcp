@@ -667,6 +667,16 @@ export default defineConfig({
 							translations: { es: "Instalación" },
 						},
 						{
+							slug: "download-a-paper",
+							label: "Download a paper by DOI",
+							translations: { es: "Descargar un artículo por DOI" },
+						},
+						{
+							slug: "citations",
+							label: "BibTeX and RIS citations",
+							translations: { es: "Citas BibTeX y RIS" },
+						},
+						{
 							slug: "configuration",
 							label: "Configuration",
 							translations: { es: "Configuración" },
@@ -713,6 +723,11 @@ export default defineConfig({
 							translations: { es: "Telemetría" },
 						},
 						{
+							slug: "limitations",
+							label: "Known limitations",
+							translations: { es: "Limitaciones conocidas" },
+						},
+						{
 							slug: "eval-results",
 							label: "LLM eval results",
 							translations: { es: "Resultados del eval con LLM" },
@@ -729,6 +744,11 @@ export default defineConfig({
 					translations: { es: "Proyecto" },
 					items: [
 						{
+							slug: "comparison",
+							label: "Compared with other servers",
+							translations: { es: "Comparado con otros servidores" },
+						},
+						{
 							slug: "responsible-use",
 							label: "Responsible use",
 							translations: { es: "Uso responsable" },
@@ -742,6 +762,15 @@ export default defineConfig({
 							label: "Security policy",
 							translations: { es: "Política de seguridad" },
 							link: "https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md",
+							attrs: { target: "_blank", rel: "noopener noreferrer" },
+						},
+						{
+							// The release notes GoReleaser writes for every tag. Linked
+							// rather than copied: a changelog page here would be a
+							// second record of every release, kept by hand.
+							label: "Release notes",
+							translations: { es: "Notas de versión" },
+							link: "https://github.com/jmrplens/libgen-mcp/releases",
 							attrs: { target: "_blank", rel: "noopener noreferrer" },
 						},
 					],

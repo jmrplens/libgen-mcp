@@ -52,6 +52,11 @@ const PAGES = [
 	{ slug: "getting-started", withId: true, isPartOf: "article" },
 	{ slug: "index", withId: true, isPartOf: "website" },
 	{ slug: "troubleshooting", withId: true, isPartOf: "article" },
+	{ slug: "sources", withId: true, isPartOf: "article" },
+	{ slug: "citations", withId: true, isPartOf: "article" },
+	{ slug: "download-a-paper", withId: true, isPartOf: "article" },
+	{ slug: "limitations", withId: true, isPartOf: "article" },
+	{ slug: "comparison", withId: true, isPartOf: "article" },
 	{
 		slug: "responsible-use",
 		withId: true,

@@ -27,6 +27,23 @@
 	white-space: nowrap;
 }
 
+/* The byline under the chips (src/components/docs/PageByline.astro): the
+   footer's muted ink and accent links, at the chips' size, so it reads as page
+   metadata rather than as the first line of the article. */
+.page-byline {
+	margin: 0.6rem 0 0;
+	font-size: var(--sl-text-xs);
+	color: var(--sl-color-gray-3);
+}
+.page-byline a {
+	color: var(--sl-color-text-accent);
+	text-decoration: none;
+}
+.page-byline a:hover,
+.page-byline a:focus-visible {
+	text-decoration: underline;
+}
+
 /* A chip that goes somewhere takes the accent ring, so the row reads as
    "these three are facts, that one is a door". */
 a.page-chip-link {
