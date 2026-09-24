@@ -5,8 +5,9 @@
 // reaches the built HTML is printed as an ordinary attribute and does nothing:
 // `<style set:html="…">` is an empty style element with its rules parked in an
 // attribute. That is how the whole of Expressive Code's and Mermaid's CSS went
-// out unapplied on every MDX page after the Astro 7.3 upgrade (see the mdx()
-// entry in astro.config.mjs). html-validate and htmlhint accept it, because an
+// out unapplied on every MDX page after the Astro 7.3 upgrade (see
+// restoreCollapsedContent in normalize-dist-html.mjs, which runs just before
+// this and mends that one shape). html-validate and htmlhint accept it, because an
 // unknown attribute with a colon in its name is still well-formed HTML, and the
 // page renders, only badly. So the check is made here, on the files that ship.
 //

@@ -1,6 +1,9 @@
 // Normalizes the built HTML in dist/ before the linters see it.
 //
-// Three passes, all of which fix output no source edit can reach:
+// Four passes, all of which fix output no source edit can reach. The fourth,
+// putting a style's rules back inside the element an MDX compile emptied, is
+// documented at restoreCollapsedContent below.
+//
 //
 //   1. Trailing whitespace on any line. Cosmetic, but it made real diffs of the
 //      built output unreadable.
@@ -64,8 +67,54 @@ function decodeFragments(html) {
 	});
 }
 
+/** Decodes the character references hast-util-to-html writes into an attribute. */
+function decodeAttribute(value) {
+	const named = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">" };
+	return value.replace(
+		/&(#x[0-9a-f]+|#\d+|amp|quot|apos|lt|gt);/gi,
+		(whole, ref) => {
+			if (ref[0] !== "#") return named[ref.toLowerCase()] ?? whole;
+			const code =
+				ref[1] === "x" || ref[1] === "X"
+					? Number.parseInt(ref.slice(2), 16)
+					: Number.parseInt(ref.slice(1), 10);
+			return String.fromCodePoint(code);
+		},
+	);
+}
+
+/**
+ * Puts a style or script back inside its element when an MDX compile left its
+ * contents in a `set:html` attribute.
+ *
+ * Two plugins in @astrojs/markdown-remark 7.3 disagree about these elements.
+ * rehypeCollapseScriptStyle moves a style's contents into a `set:html`
+ * property, and rehypeOptimizeStatic, which Starlight enables for MDX, then
+ * serializes the static subtree around it with toHtml, printing the property as
+ * an ordinary attribute: `<style set:html="…"></style>`, an empty style element
+ * with its rules parked where nothing reads them. Every MDX page shipped
+ * Expressive Code's and Mermaid's styles that way, so code blocks lost their
+ * frame, diagram edges drew as black wedges, and pages scrolled sideways on a
+ * phone.
+ *
+ * It is repaired here because the source cannot reach it. Taking style and
+ * script out of the optimization (mdx's `ignoreElementNames`) does move them
+ * back inside their elements, and in doing so compiles their SVG siblings as
+ * JSX, whose attributes Astro prints in camelCase: every Mermaid edge lost its
+ * arrowhead to `markerEnd`, an attribute no browser reads. So the one element
+ * is mended after the fact, and scripts/check-dist-html.mjs fails the build if
+ * a directive of any kind still reaches dist.
+ */
+function restoreCollapsedContent(html) {
+	return html.replace(
+		/<(style|script)(\s[^>]*?)?\sset:html="([^"]*)"([^>]*)>\s*<\/\1>/g,
+		(_, tag, before = "", value, after) =>
+			`<${tag}${before}${after}>${decodeAttribute(value)}</${tag}>`,
+	);
+}
+
 function normalize(html) {
-	return decodeFragments(html)
+	return decodeFragments(restoreCollapsedContent(html))
 		.split("\n")
 		.map((line) => line.replace(/[ \t\r]+$/, ""))
 		.join("\n")
