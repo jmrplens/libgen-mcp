@@ -473,6 +473,11 @@ release-check: ## Validate the GoReleaser config
 VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plugin.json \
                      plugin.json npm/libgen-mcp/package.json
 
+# The citation file GitHub's "Cite this repository" reads. YAML, so it is gated
+# by its top-level `version:` line rather than through jq; a citation naming the
+# wrong release is a wrong citation.
+CITATION_FILE := CITATION.cff
+
 check-manifests: ## Verify every version-bearing manifest parses and matches the VERSION file
 	@VF=$$(tr -d '[:space:]' < VERSION); \
 	for f in $(VERSION_MANIFESTS); do \
@@ -482,7 +487,12 @@ check-manifests: ## Verify every version-bearing manifest parses and matches the
 			echo "FAIL: $$f version ($$MV) != VERSION ($$VF)"; exit 1; \
 		fi; \
 		echo "$$f: valid JSON, version matches VERSION ($$VF)"; \
-	done
+	done; \
+	CV=$$(sed -n 's/^version: *//p' $(CITATION_FILE)); \
+	if [ "$$CV" != "$$VF" ]; then \
+		echo "FAIL: $(CITATION_FILE) version ($$CV) != VERSION ($$VF)"; exit 1; \
+	fi; \
+	echo "$(CITATION_FILE): version matches VERSION ($$VF)"
 
 check-stamper: ## Exercise the release stamper (server.json) against a fixture manifest
 	bash scripts/update-server-json-sha_test.sh

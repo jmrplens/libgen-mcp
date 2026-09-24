@@ -187,6 +187,27 @@ for manifest in lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.js
   fi
 done
 
+# 5b. CITATION.cff, the file GitHub's "Cite this repository" is built from.
+#
+# It names a version and a release date, and a citation that names the wrong
+# release is a wrong citation, so it is stamped like the manifests above. It is
+# YAML rather than JSON, so jq cannot write it: the two top-level lines are
+# replaced instead, and a file that has lost either line is refused rather than
+# left behind. The date is the day this runs, which is the day of the tag.
+CFF="CITATION.cff"
+if [[ -f "$CFF" ]]; then
+  if ! grep -q '^version: ' "$CFF" || ! grep -q '^date-released: ' "$CFF"; then
+    echo "ERROR: $CFF has no top-level version or date-released line to stamp" >&2
+    exit 1
+  fi
+  released=$(date -u +%Y-%m-%d)
+  sed -e "s/^version: .*/version: $VERSION/" \
+    -e "s/^date-released: .*/date-released: $released/" "$CFF" >tmp.$$.cff && mv tmp.$$.cff "$CFF"
+  echo "$CFF version set to $VERSION, released $released"
+else
+  echo "NOTE: $CFF not found, skipping"
+fi
+
 # 6. Update the npm launcher package version and its optionalDependency pins.
 #
 # The generator owns the whole mapping — the version and all six pins move
