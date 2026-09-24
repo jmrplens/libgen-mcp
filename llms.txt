@@ -119,14 +119,17 @@ Prompts (guided workflows a client can offer by name):
 ## Documentation
 
 - [Getting started](https://jmrp.io/docs/libgen-mcp/getting-started/): Installation and first-run guide
+- [Installation](https://jmrp.io/docs/libgen-mcp/installation/): Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it
 - [Configuration](https://jmrp.io/docs/libgen-mcp/configuration/): Full environment-variable configuration reference
+- [HTTP server mode](https://jmrp.io/docs/libgen-mcp/http-server-mode/): Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes
+- [Troubleshooting](https://jmrp.io/docs/libgen-mcp/troubleshooting/): Common setup and runtime issues
 - [Tools](https://jmrp.io/docs/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
 - [Architecture](https://jmrp.io/docs/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
 - [Download sources](https://jmrp.io/docs/libgen-mcp/sources/): Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys
 - [How search works](https://jmrp.io/docs/libgen-mcp/how-search-works/): Catalog-first search, and when and how it escalates to the extra sources
-- [LLM eval results](https://jmrp.io/docs/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
 - [Telemetry](https://jmrp.io/docs/libgen-mcp/telemetry/): OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records
-- [Troubleshooting](https://jmrp.io/docs/libgen-mcp/troubleshooting/): Common setup and runtime issues
+- [LLM eval results](https://jmrp.io/docs/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
+- [What it costs to run](https://jmrp.io/docs/libgen-mcp/benchmarks/): Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment
 - [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/): Why the open-access providers are tried first, and what the server refuses to serve
 - [Privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/): Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own
 - [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
@@ -135,18 +138,22 @@ Prompts (guided workflows a client can offer by name):
 ## Documentación (Español)
 
 - [Primeros pasos](https://jmrp.io/docs/libgen-mcp/es/getting-started/): Guía de instalación y primera ejecución
+- [Instalación](https://jmrp.io/docs/libgen-mcp/es/installation/): Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo
 - [Configuración](https://jmrp.io/docs/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
+- [Modo servidor HTTP](https://jmrp.io/docs/libgen-mcp/es/http-server-mode/): Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas
+- [Solución de problemas](https://jmrp.io/docs/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
 - [Herramientas](https://jmrp.io/docs/libgen-mcp/es/tools/): Referencia por herramienta de search, get_details, download, read
 - [Arquitectura](https://jmrp.io/docs/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
 - [Fuentes de descarga](https://jmrp.io/docs/libgen-mcp/es/sources/): Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves
 - [Cómo funciona la búsqueda](https://jmrp.io/docs/libgen-mcp/es/how-search-works/): Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra
-- [Resultados de la evaluación con LLM](https://jmrp.io/docs/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
 - [Telemetría](https://jmrp.io/docs/libgen-mcp/es/telemetry/): OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal
-- [Solución de problemas](https://jmrp.io/docs/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
+- [Resultados de la evaluación con LLM](https://jmrp.io/docs/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
+- [Lo que cuesta ejecutarlo](https://jmrp.io/docs/libgen-mcp/es/benchmarks/): Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido
 - [Uso responsable](https://jmrp.io/docs/libgen-mcp/es/responsible-use/): Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor
 - [Política de privacidad](https://jmrp.io/docs/libgen-mcp/es/privacy/): Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector
 
 ## Optional
 
 - [Full LLM reference](https://jmrp.io/docs/libgen-mcp/llms-full.txt): Generated companion reference with full tool schemas
+- [Full documentation](https://jmrp.io/docs/libgen-mcp/llms-docs.txt): Every English documentation page as Markdown in one file, in the order listed above
 - [Documentation site](https://jmrp.io/docs/libgen-mcp/): Rendered documentation site

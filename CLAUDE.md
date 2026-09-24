@@ -839,6 +839,12 @@ Docs are **bilingual and kept in parity**:
 - `llms.txt` / `llms-full.txt` are generated from the registered tools by
   `go run ./cmd/gen_llms/`; regenerate them whenever the tool surface changes
   (`make check-llms` verifies freshness).
+- **A new page means a `docPages()` entry in `cmd/gen_llms/main.go`**, with both
+  titles and descriptions. `TestDocPagesCoverEverySitePage` fails until it has
+  one, because that list is also the page list of `llms-docs.txt` — the whole
+  English documentation as one Markdown file, which the site assembles at build
+  time (`site/scripts/emit-llms-docs.mjs`) from the pages `llms.txt` links, and
+  which is therefore never committed.
 - The `tools` and `prompts` arrays in `lhm.plugin.json` are generated the same
   way by `go run ./cmd/gen_lhm_manifest/` (`make check-lhm-manifest` verifies).
   See the LobeHub section under Release Process for why they exist at all.

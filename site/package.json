@@ -11,7 +11,7 @@
     "dev": "astro dev",
     "prebuild": "node scripts/copy-llms.mjs && node scripts/sync-privacy.mjs",
     "build": "astro build",
-    "postbuild": "node scripts/normalize-dist-html.mjs && node scripts/check-dist-html.mjs && node scripts/add-sitemap-lastmod.mjs && node scripts/emit-page-markdown.mjs",
+    "postbuild": "node scripts/normalize-dist-html.mjs && node scripts/check-dist-html.mjs && node scripts/add-sitemap-lastmod.mjs && node scripts/emit-page-markdown.mjs && node scripts/emit-llms-docs.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "i18n:check": "node scripts/check-i18n-parity.mjs",

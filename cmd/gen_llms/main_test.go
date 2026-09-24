@@ -513,6 +513,64 @@ func TestDownloadSourcesNamesEveryKnownSource(t *testing.T) {
 	}
 }
 
+// TestDocPagesCoverEverySitePage verifies llms.txt links every page the site
+// publishes, in both languages, and nothing it does not.
+//
+// The list is written by hand because each entry carries two descriptions, and
+// it fell behind the site: installation, http-server-mode and benchmarks were
+// published for weeks with no link in either language section, so anything
+// reading llms.txt as the site's map had six pages it could not know existed.
+func TestDocPagesCoverEverySitePage(t *testing.T) {
+	const docsDir = "../../site/src/content/docs"
+	listed := map[string]bool{}
+	for _, p := range docPages("") {
+		listed[strings.TrimSuffix(p.slug, "/")] = true
+	}
+
+	for _, locale := range []struct{ name, dir string }{
+		{"en", docsDir},
+		{"es", filepath.Join(docsDir, "es")},
+	} {
+		t.Run(locale.name, func(t *testing.T) {
+			published := sitePageSlugs(t, locale.dir)
+			for slug := range published {
+				if !listed[slug] {
+					t.Errorf("the site publishes %s/%s and docPages() does not link it", locale.name, slug)
+				}
+			}
+			for slug := range listed {
+				if !published[slug] {
+					t.Errorf("docPages() links %s/%s and the site has no such page", locale.name, slug)
+				}
+			}
+		})
+	}
+}
+
+// sitePageSlugs returns the slug of every page in one locale's directory, less
+// the two that are not documentation: the landing page, which llms.txt already
+// links as the documentation site, and the 404.
+func sitePageSlugs(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	slugs := map[string]bool{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || (!strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".mdx")) {
+			continue
+		}
+		slug := strings.TrimSuffix(strings.TrimSuffix(name, ".mdx"), ".md")
+		if slug == "index" || slug == "404" {
+			continue
+		}
+		slugs[slug] = true
+	}
+	return slugs
+}
+
 // TestWriteMcpServersJSON_Forms covers the command-only and command+args forms.
 func TestWriteMcpServersJSON_Forms(t *testing.T) {
 	var noArgs strings.Builder

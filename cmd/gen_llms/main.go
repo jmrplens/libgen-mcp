@@ -38,6 +38,7 @@ const (
 	maxSummaryDescRunes   = 200
 	llmsFileName          = "llms.txt"
 	llmsFullFileName      = "llms-full.txt"
+	llmsDocsFileName      = "llms-docs.txt"
 	llmsSummaryItemFormat = "- %s: %s\n"
 	llmsBoldTitleFormat   = "**%s**\n\n"
 	// The personal domain, not the Pages host it 301s to, matching the repo
@@ -230,6 +231,9 @@ func writeLLMSTxt(version string, toolList []*mcp.Tool, promptList []*mcp.Prompt
 
 	b.WriteString("\n## Optional\n\n")
 	writeLLMSLink(&b, "Full LLM reference", docsSiteURL+llmsFullFileName, "Generated companion reference with full tool schemas")
+	// Built by the site (scripts/emit-llms-docs.mjs) from the pages linked above,
+	// so it is not written here and has no copy in the repository.
+	writeLLMSLink(&b, "Full documentation", docsSiteURL+llmsDocsFileName, "Every English documentation page as Markdown in one file, in the order listed above")
 	writeLLMSLink(&b, "Documentation site", docsSiteURL, "Rendered documentation site")
 
 	content := b.String()
@@ -405,8 +409,20 @@ func docPages(toolNameList string) []docPage {
 			"Primeros pasos", "Guía de instalación y primera ejecución",
 		},
 		{
+			"installation/", "Installation", "Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it",
+			"Instalación", "Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo",
+		},
+		{
 			"configuration/", "Configuration", "Full environment-variable configuration reference",
 			"Configuración", "Referencia completa de configuración por variables de entorno",
+		},
+		{
+			"http-server-mode/", "HTTP server mode", "Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes",
+			"Modo servidor HTTP", "Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas",
+		},
+		{
+			"troubleshooting/", "Troubleshooting", "Common setup and runtime issues",
+			"Solución de problemas", "Problemas habituales de configuración y ejecución",
 		},
 		{
 			"tools/", "Tools", "Per-tool reference for " + toolNameList,
@@ -425,16 +441,16 @@ func docPages(toolNameList string) []docPage {
 			"Cómo funciona la búsqueda", "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra",
 		},
 		{
-			"eval-results/", "LLM eval results", "Results of driving a real model over MCP against the live site, scenario by scenario",
-			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
-		},
-		{
 			"telemetry/", "Telemetry", "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records",
 			"Telemetría", "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal",
 		},
 		{
-			"troubleshooting/", "Troubleshooting", "Common setup and runtime issues",
-			"Solución de problemas", "Problemas habituales de configuración y ejecución",
+			"eval-results/", "LLM eval results", "Results of driving a real model over MCP against the live site, scenario by scenario",
+			"Resultados de la evaluación con LLM", "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario",
+		},
+		{
+			"benchmarks/", "What it costs to run", "Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment",
+			"Lo que cuesta ejecutarlo", "Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido",
 		},
 		{
 			"responsible-use/", "Responsible use", "Why the open-access providers are tried first, and what the server refuses to serve",
