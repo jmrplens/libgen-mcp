@@ -1,9 +1,9 @@
 ---
 title: Privacy policy
-description: "What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool."
-datePublished: "2026-09-17"
+description: "What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default and goes to your own collector, and every network destination is listed per tool."
+datePublished: "2026-09-24"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "3cc22c8c82267d84"
+privacySource: "8f6eb0b44e2e3e90"
 head:
   - tag: script
     attrs:
@@ -66,8 +66,9 @@ machine rather than yours. See [Hosted endpoint](#hosted-endpoint).
 
 ## What we collect
 
-**Nothing.** The server has no telemetry, no analytics, no crash reporting, and
-no backend of its own. There is no account to create and nothing to log in to.
+**Nothing.** The server sends no telemetry unless you turn it on, and even then
+only to a collector you run (see below). It has no analytics, no crash reporting,
+and no backend of its own. There is no account to create and nothing to log in to.
 When you run it yourself — which is how this documentation recommends using it —
 the maintainer never receives, stores, or has access to any of your data or usage
 information, because nothing is ever sent anywhere that the maintainer controls.
@@ -115,7 +116,7 @@ default nor a step anything takes for you.
 
 The full detail, including what each signal carries and the four traps in the
 standard `OTEL_*` variables, is in the
-[telemetry guide](https://jmrp.io/docs/libgen-mcp/telemetry/).
+[telemetry guide](/libgen-mcp/telemetry/).
 
 ## Data flows
 

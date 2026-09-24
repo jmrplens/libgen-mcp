@@ -15,8 +15,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/es/responsible-use/#faq",
         "inLanguage": "es",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/responsible-use/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {
@@ -56,7 +57,7 @@ head:
             "name": "¿Qué envía libgen-mcp, y a quién?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay telemetría, ni analítica, ni llamadas a casa: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la política de privacidad."
+              "text": "Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la política de privacidad."
             }
           },
           {
@@ -149,7 +150,7 @@ No, y no deberías leerlo así. Cuando la búsqueda escala más allá del catál
 
 ## ¿Qué envía libgen-mcp, y a quién?
 
-Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay telemetría, ni analítica, ni llamadas a casa: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la [política de privacidad](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md).
+Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la [política de privacidad](/libgen-mcp/es/privacy/).
 
 ## ¿Cómo comunico un problema?
 

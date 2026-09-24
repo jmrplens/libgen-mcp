@@ -109,8 +109,9 @@ wanted:
 
 ## Security practices in this project
 
-- No telemetry, no analytics and no backend of its own; every network request is
-  a direct consequence of a tool call. See the
+- No analytics and no backend of its own, and telemetry is off by default: every
+  network request is a direct consequence of a tool call. The opt-in
+  OpenTelemetry export goes only to a collector the operator runs. See the
   [privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/).
 - No credentials are required for any core capability. The two optional keys are
   opt-in, and a key supplied per call is used for that request and never stored.

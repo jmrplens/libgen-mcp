@@ -15,8 +15,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
+        "@id": "https://jmrplens.github.io/libgen-mcp/responsible-use/#faq",
         "inLanguage": "en",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/#website" },
+        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/responsible-use/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {
@@ -56,7 +57,7 @@ head:
             "name": "What does libgen-mcp send, and to whom?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
+              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
             }
           },
           {
@@ -147,7 +148,7 @@ No, and you should not read it that way. When search escalates beyond the Librar
 
 ## What does libgen-mcp send, and to whom?
 
-Only the requests a tool call actually needs, and only to the services that call reaches. There is no telemetry, no analytics and no phone-home: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](https://github.com/jmrplens/libgen-mcp/blob/main/PRIVACY.md).
+Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](/libgen-mcp/privacy/).
 
 ## How do I report a concern?
 

@@ -1,11 +1,11 @@
 ---
 title: Política de privacidad
 description: "Qué maneja libgen-mcp y a dónde va: nada llega al mantenedor, la telemetría está apagada por defecto y va a tu colector, y cada destino de red está listado herramienta por herramienta."
-datePublished: "2026-09-17"
+datePublished: "2026-09-24"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "3cc22c8c82267d84"
+privacySource: "8f6eb0b44e2e3e90"
 head:
   - tag: script
     attrs:
@@ -25,7 +25,7 @@ head:
             "name": "¿Recoge libgen-mcp telemetría o analíticas?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No. El servidor no tiene telemetría, ni analíticas, ni informes de fallos, ni backend propio. No crea ninguna base de datos ni ningún fichero de telemetría, y registra únicamente en la salida de error estándar, donde tu cliente MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus descargas ni ninguna información de uso."
+              "text": "No, salvo que lo actives tú, y nunca al mantenedor. No hay analíticas, ni informes de fallos, ni backend propio; el servidor no crea ninguna base de datos ni ningún fichero de telemetría, y registra en la salida de error estándar, donde tu cliente MCP los recoge si es que los recoge. El mantenedor nunca recibe tus consultas, tus descargas ni ninguna información de uso, configures lo que configures. LIBGEN_MCP_TELEMETRY te permite a ti exportar trazas, métricas y registros de OpenTelemetry a un colector que tú ejecutas; está apagado por defecto, el único destino por defecto de los exportadores es tu propio localhost, y lo que llevan describe operaciones y no lo que se buscó. Consulta OpenTelemetry, si lo activas."
             }
           },
           {
@@ -68,9 +68,10 @@ no en la tuya. Ver [Endpoint hospedado](#endpoint-hospedado).
 
 ## Qué recopilamos
 
-**Nada.** El servidor no tiene telemetría, ni analítica, ni informes de fallos,
-ni backend propio. No hay ninguna cuenta que crear ni nada a lo que iniciar
-sesión. Cuando lo ejecutas tú — que es como esta documentación recomienda usarlo —
+**Nada.** El servidor no envía telemetría salvo que la actives tú, y aun entonces
+solo a un colector que ejecutas tú (ver más abajo). No tiene analítica, ni
+informes de fallos, ni backend propio. No hay ninguna cuenta que crear ni nada a
+lo que iniciar sesión. Cuando lo ejecutas tú — que es como esta documentación recomienda usarlo —
 el mantenedor nunca recibe, almacena ni tiene acceso a ninguno de tus datos ni a tu
 información de uso, porque nada se envía jamás a ningún sitio que el mantenedor
 controle.

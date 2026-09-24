@@ -31,9 +31,14 @@ const digest = createHash("sha256").update(source).digest("hex").slice(0, 16);
 // Drop the H1 and the "Last updated" line: Starlight renders the title from
 // frontmatter, and the date belongs in the frontmatter too.
 const lastUpdated = /^Last updated:\s*(\S+)/m.exec(source)?.[1] ?? "";
+// A link to the documentation is written with the jmrp.io address in the repo,
+// which is where a reader of PRIVACY.md on GitHub should land. On the site
+// itself that address is a redirect to the page next door, so it becomes a
+// site-relative link and a reader, or a crawler, takes no hop to get there.
 const body = source
 	.replace(/^#\s+.*\n/, "")
 	.replace(/^Last updated:.*\n/m, "")
+	.replaceAll("https://jmrp.io/docs/libgen-mcp/", "/libgen-mcp/")
 	.trim();
 
 // The description carries a colon, so it has to be quoted to stay valid YAML.
@@ -52,10 +57,13 @@ ${extra}---
 // answers are the visible prose verbatim, as everywhere else on the site — an
 // answer that exists only in markup is a guideline violation, and this page in
 // particular is the one an assistant consults before recommending the tool.
-// Derived from the source so the two cannot drift: a question renamed in
-// PRIVACY.md renames it here too.
-function faqSchema(sectionHeading, inLanguage, pageUrl) {
-	const section = source.split(`## ${sectionHeading}`)[1]?.split("\n## ")[0];
+// Derived from the prose it describes so the two cannot drift: a question
+// renamed in PRIVACY.md renames it here too, and the Spanish page's block is
+// derived from the Spanish page's own FAQ section the same way. That page's
+// block used to be written by hand, and it kept answering "no" to the telemetry
+// question after its prose had learned about the opt-in exporter.
+function faqSchema(text, sectionHeading, inLanguage, pageUrl) {
+	const section = text.split(`## ${sectionHeading}`)[1]?.split("\n## ")[0];
 	if (!section) return "";
 	// Split on the H3s rather than matching them: an `$` under /m matches at the
 	// blank line that follows every question, so a lookahead-terminated capture
@@ -104,8 +112,9 @@ ${json
 
 const enPage = `${frontmatter(
 	"Privacy policy",
-	"What libgen-mcp handles and where it goes: no telemetry, no analytics, and every network destination listed per tool.",
+	"What libgen-mcp handles and where it goes: nothing reaches the maintainer, telemetry is off by default and goes to your own collector, and every network destination is listed per tool.",
 	faqSchema(
+		source,
 		"Frequently asked questions",
 		"en",
 		"https://jmrplens.github.io/libgen-mcp/privacy/",
@@ -113,6 +122,24 @@ const enPage = `${frontmatter(
 )}
 ${body}
 `;
+
+// The Spanish page as it should be: its hand-translated frontmatter and body
+// untouched, and its `head:` block, which closes the frontmatter, regenerated
+// from its own "Preguntas frecuentes" section.
+function expectedEsPage() {
+	const page = readFileSync(PAGE_ES, "utf8");
+	const end = page.indexOf("\n---\n", 4);
+	const head = page.indexOf("\nhead:\n");
+	if (end < 0 || head < 0 || head > end) return page;
+	const esBody = page.slice(end + "\n---\n".length);
+	const block = faqSchema(
+		esBody,
+		"Preguntas frecuentes",
+		"es",
+		"https://jmrplens.github.io/libgen-mcp/es/privacy/",
+	);
+	return `${page.slice(0, head + 1)}${block}${page.slice(end + 1)}`;
+}
 
 function readDigest(path) {
 	try {
@@ -134,6 +161,11 @@ if (check) {
 			`${PAGE_ES} was translated from an older PRIVACY.md — review it and update its privacySource to ${digest}`,
 		);
 	}
+	if (readFileSync(PAGE_ES, "utf8") !== expectedEsPage()) {
+		problems.push(
+			`${PAGE_ES}: its FAQ structured data no longer matches its own "Preguntas frecuentes" prose`,
+		);
+	}
 	if (problems.length > 0) {
 		console.error(problems.join("\n"));
 		console.error(
@@ -145,6 +177,8 @@ if (check) {
 } else {
 	writeFileSync(PAGE_EN, enPage);
 	console.log(`wrote ${PAGE_EN} (source digest ${digest})`);
+	writeFileSync(PAGE_ES, expectedEsPage());
+	console.log(`regenerated the FAQ structured data of ${PAGE_ES}`);
 	if (readDigest(PAGE_ES) !== digest) {
 		console.log(
 			`note: ${PAGE_ES} still records digest ${readDigest(PAGE_ES) || "none"}; review the translation and set privacySource to ${digest}`,
