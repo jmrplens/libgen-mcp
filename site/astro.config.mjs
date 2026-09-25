@@ -295,8 +295,10 @@ const jsonLd = JSON.stringify({
 				url: `${fullUrl}/`,
 			},
 			image: socialImage,
-			// opensource.org/licenses/MIT answers with a 301 to this address.
-			license: "https://opensource.org/license/MIT",
+			// The same IRI jmrp.io and the other project sites state for this @id.
+			// opensource.org 301s it to /license/MIT; the identifier, not the
+			// fetch, is what has to match.
+			license: "https://opensource.org/licenses/MIT",
 			isAccessibleForFree: true,
 			datePublished,
 			dateModified,
@@ -356,7 +358,7 @@ const jsonLd = JSON.stringify({
 				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
-				"https://smithery.ai/servers/@jmrplens/libgen-mcp",
+				"https://smithery.ai/servers/jmrp/libgen-mcp",
 				"https://deepwiki.com/jmrplens/libgen-mcp",
 				"https://verifymcp.io/servers/jmrplens-libgen-mcp/libgen",
 			],
@@ -368,7 +370,7 @@ const jsonLd = JSON.stringify({
 			codeRepository: repositoryUrl,
 			programmingLanguage: "Go",
 			runtimePlatform: "Windows, macOS, Linux",
-			license: "https://opensource.org/license/MIT",
+			license: "https://opensource.org/licenses/MIT",
 			isPartOf: { "@id": softwareId },
 			// The forward edge to the product; `isPartOf` alone only points back.
 			targetProduct: { "@id": softwareId },
