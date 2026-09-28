@@ -776,10 +776,17 @@ and `dist/schemas/head.js` both `import yaml from 'js-yaml'` — and it declares
 inside its own tree rather than ours.
 
 **The pin is what makes that copy and ours the same one.** pnpm deduplicates a
-dependency whose range the root already satisfies, so with `4.3.1` at the root
+dependency whose range the root already satisfies, so with `4.3.2` at the root
 `node_modules/.pnpm/@astrojs+starlight@…/node_modules/js-yaml` is a symlink to
-`node_modules/.pnpm/js-yaml@4.3.1/node_modules/js-yaml` — one instance, at a
-version chosen here. Verified on 2026-09-22 against Starlight 0.42.2.
+`node_modules/.pnpm/js-yaml@4.3.2/node_modules/js-yaml` — one instance, at a
+version chosen here. Verified on 2026-09-28 against Starlight 0.42.4.
+
+Astro declares its own range too, and it is the one that moves: 7.3.5 asks for
+`^4.3.2`, which a root pin of 4.3.1 does not satisfy, so bumping Astro alone
+leaves the tree with two copies. Move the pin to satisfy both, then run
+`pnpm dedupe` — an existing lockfile keeps Starlight on the copy it already
+resolved until something asks it to reconsider. `pnpm why js-yaml` must report
+one version.
 
 It was not always this mechanism, and the difference matters when reading an
 older note. Before 0.42 Starlight shipped TypeScript source that Vite compiled

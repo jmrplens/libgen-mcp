@@ -30,7 +30,7 @@ on:
 permissions: {}
 
 env:
-  GO_VERSION: "1.27.0"
+  GO_VERSION: "1.27.1"
   # The switch every step reads. Its companion, RELEASE_TAG, is the version
   # whichever way the run started, so a step stamps, tags or compares against
   # one name; that one is a job-level variable fed from preflight's output
@@ -55,7 +55,7 @@ env:
   # does not see a curl, so these move when somebody moves them — deliberately
   # a release old rather than the newest, which is the same window the
   # `cooldown: 3` on every Dependabot ecosystem buys.
-  SYFT_VERSION: "v1.51.1"
+  SYFT_VERSION: "v1.52.0"
   ORAS_VERSION: "1.3.4"
 
 jobs:
@@ -188,7 +188,7 @@ jobs:
       # and the certificate asset is base64-wrapped.
       - name: Install syft
         env:
-          SYFT_SHA256: "8fcb33017a0dc1058298c923c436d19dfa68ae93968e0b423248542e3afb9fc3"
+          SYFT_SHA256: "caeedb81fb0491615f1ebd1761e4145d41ee86dd2cc7bf80669f9f5ad9d6133d"
         run: |
           set -euo pipefail
           # In the runner's temp directory, not the checkout: GoReleaser
@@ -1076,7 +1076,7 @@ jobs:
       # fail for the first time on a release, after the image was pushed.
       - name: Install syft
         env:
-          SYFT_SHA256: "8fcb33017a0dc1058298c923c436d19dfa68ae93968e0b423248542e3afb9fc3"
+          SYFT_SHA256: "caeedb81fb0491615f1ebd1761e4145d41ee86dd2cc7bf80669f9f5ad9d6133d"
         run: |
           set -euo pipefail
           # In the runner's temp directory, not the checkout: GoReleaser
