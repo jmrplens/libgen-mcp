@@ -268,6 +268,28 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 </Facts>
 
+## Un servidor stdio dice que un flag no tiene efecto
+
+<Facts>
+	<Fact kind="symptom">
+		Un servidor stdio registra `this flag is read by the HTTP transport only, so
+		it has no effect on a stdio server`, o lo mismo sobre una variable, con un
+		`flag` como `--rate-limit-rps` y la variable `LIBGEN_MCP_*` que lo rellena.
+	</Fact>
+	<Fact kind="meaning">
+		El listener, los presupuestos por llamante, la lista de orígenes, los
+		ajustes de proxy, TLS y los ajustes de sesión configuran el transporte HTTP,
+		y un servidor stdio no tiene ninguno de ellos: un solo cliente al otro lado
+		de una tubería. Un valor válido se ignora y el servidor sirve igualmente, porque ignorar cualquiera de ellos no es peligroso, y los nombra uno a uno al arrancar. El valor se sigue validando antes: uno inválido o que contradice otro ajuste detiene el arranque en stdio igual que en HTTP, antes de cualquier línea de este tipo, como `--session-timeout` con el modo sin estado por defecto, `--trusted-proxy-header` sin `--trusted-proxies`, o un `--tls-cert` que nombra un fichero inexistente. La línea es un `WARN` para un flag escrito en una ejecución stdio, y un `INFO` bajo `--transport auto` (una línea de órdenes escrita para cualquiera de los dos transportes, como la de la imagen de contenedor) y para una variable fijada en el entorno (que un fichero dotenv compartido lleva a todos los procesos). La excepción es `--max-request-body-bytes`, que sigue siendo un `WARN` venga de donde venga, porque stdio tiene un ajuste propio para el mismo límite y un valor escrito para cualquiera de los dos transportes probablemente iba dirigido a ambos.
+	</Fact>
+	<Fact kind="fixes">
+		- Quita el flag de los `args` del cliente, o la variable de su `env`, si venía de un despliegue HTTP.
+    	- `--max-request-body-bytes` es el único con equivalente en stdio: la línea lo nombra como `on_stdio_set`, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`.
+    	- Si querías servir HTTP, da a `--http` una dirección o pasa `--transport http`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+    </Fact>
+
+</Facts>
+
 ## Todas las rutas HTTP responden 404 (despliegues con `--http`)
 
 <Facts>

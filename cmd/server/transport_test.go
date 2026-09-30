@@ -340,7 +340,7 @@ func TestTransportDecisionExplainsItselfOnlyWhenThereIsSomethingToSay(t *testing
 
 	// An operator who typed --transport http told the process what to do and
 	// does not need to be told back.
-	transportDecision{HTTP: true, Addr: defaultHTTPAddr}.explain()
+	transportDecision{HTTP: true, Addr: defaultHTTPAddr}.explain(t.Context())
 	if captured.Len() != 0 {
 		t.Errorf("a stated transport was explained back to the operator: %s", captured.String())
 	}
@@ -351,7 +351,7 @@ func TestTransportDecisionExplainsItselfOnlyWhenThereIsSomethingToSay(t *testing
 	transportDecision{
 		Inference: "stdin is a pipe",
 		Override:  "--http 127.0.0.1:9000 is the address an HTTP run binds",
-	}.explain()
+	}.explain(t.Context())
 	logged := captured.String()
 	for _, want := range []string{
 		"127.0.0.1:9000", "transport inferred from stdin", `"transport":"stdio"`, "stdin is a pipe",
@@ -369,7 +369,7 @@ func TestTransportDecisionExplainsItselfOnlyWhenThereIsSomethingToSay(t *testing
 	// A stated stdio transport that drops an address is a contradiction the
 	// operator wrote, and that one stays a warning.
 	captured.Reset()
-	transportDecision{Override: "--http 127.0.0.1:9000 was given but this process is serving stdio"}.explain()
+	transportDecision{Override: "--http 127.0.0.1:9000 was given but this process is serving stdio"}.explain(t.Context())
 	if !strings.Contains(captured.String(), `"level":"WARN"`) {
 		t.Errorf("a stated stdio transport dropping an address was not warned about:\n%s", captured.String())
 	}

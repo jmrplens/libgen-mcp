@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -69,13 +70,19 @@ type transportDecision struct {
 	// Interactive records that this is a stdio session with a person at the
 	// other end, which is the one case that gets a word of explanation.
 	Interactive bool
+	// Ignored lists the HTTP-only flags a stdio run was given, in name order,
+	// and is empty on HTTP. See http_only_flags.go.
+	Ignored []ignoredHTTPFlag
 }
 
 // explain writes the decision to the log.
 //
 // Called once the real handler is in place. A run that exits before then never
 // started a transport, so there is nothing to explain.
-func (d transportDecision) explain() {
+//
+// The ignored flags come last, after the inference line, because under
+// --transport=auto their severity rests on that inference.
+func (d transportDecision) explain(ctx context.Context) {
 	// Under auto the address is not a contradiction: --transport auto --http
 	// ADDR answers two questions, and the image runs exactly that, so every
 	// `docker run -i` of it would otherwise start with a warning about its own
@@ -83,12 +90,15 @@ func (d transportDecision) explain() {
 	switch {
 	case d.Override == "":
 	case d.Inference != "":
-		slog.Info(d.Override)
+		slog.InfoContext(ctx, d.Override)
 	default:
-		slog.Warn(d.Override)
+		slog.WarnContext(ctx, d.Override)
 	}
 	if d.Inference != "" {
-		slog.Info("transport inferred from stdin", "transport", transportName(d.HTTP), "reason", d.Inference)
+		slog.InfoContext(ctx, "transport inferred from stdin", "transport", transportName(d.HTTP), "reason", d.Inference)
+	}
+	for _, ignored := range d.Ignored {
+		logIgnoredHTTPFlag(ctx, ignored, d.Inference != "")
 	}
 }
 
