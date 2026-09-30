@@ -510,8 +510,9 @@ func TestServerCardRoutesServeTheirOwnDocument(t *testing.T) {
 	cards := testCards(t, enumerating)
 	handler := newHTTPHandler(teapotHandler(), cards, nil, "/", false, testHealth())
 
-	bodies := make(map[string][]byte, 2)
-	for _, path := range []string{serverCardPath, serverCardCurrentPath} {
+	aliasCardPath := mcpAliasPath + serverCardCurrentPath
+	bodies := make(map[string][]byte, 3)
+	for _, path := range []string{serverCardPath, serverCardCurrentPath, aliasCardPath} {
 		t.Run(path, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
@@ -530,6 +531,11 @@ func TestServerCardRoutesServeTheirOwnDocument(t *testing.T) {
 	}
 	if !bytes.Equal(bodies[serverCardCurrentPath], cards.discovery) {
 		t.Errorf("%s served %s, want the bytes buildDiscoveryCard produced", serverCardCurrentPath, bodies[serverCardCurrentPath])
+	}
+	// One document after every form of the endpoint, so the validator a client
+	// holds for one card URL revalidates the other.
+	if !bytes.Equal(bodies[aliasCardPath], cards.discovery) {
+		t.Errorf("%s served %s, want the same card as %s", aliasCardPath, bodies[aliasCardPath], serverCardCurrentPath)
 	}
 }
 

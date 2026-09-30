@@ -5,6 +5,7 @@ package httpe2e
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 )
 
@@ -178,4 +179,71 @@ func TestServerCard_TheDiscoveryCardOmitsARemoteItCannotName(t *testing.T) {
 	if card["name"] == nil {
 		t.Error("the card carries no identity either, so it says nothing at all")
 	}
+}
+
+// TestServerCard_TheURLItAdvertisesServesTheCard closes the loop a client walks.
+//
+// The extension reserves `<streamable-http-url>/server-card`, so a client given
+// an endpoint derives the card's URL by appending the suffix to it, and a card
+// whose own remotes[0].url does not lead back to it is a card a client cannot
+// find. The endpoint answers at the base path and at its /mcp alias, so each
+// row publishes one of those forms and fetches the card the way a client would:
+// the advertised URL, the suffix, and the advertised host.
+func TestServerCard_TheURLItAdvertisesServesTheCard(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		publicURL string
+		base      string
+	}{
+		{name: "at the root", publicURL: "https://mcp.example.org"},
+		{name: "at the root, as /mcp", publicURL: "https://mcp.example.org/mcp"},
+		{name: "under a prefix", publicURL: "https://mcp.example.org/libgen", base: "/libgen"},
+		{name: "under a prefix, as /mcp", publicURL: "https://mcp.example.org/libgen/mcp", base: "/libgen"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flags := []string{"--public-url", tc.publicURL}
+			if tc.base != "" {
+				flags = append(flags, "--http-path", tc.base)
+			}
+			s := startServer(t, nil, flags...)
+
+			advertised, err := url.Parse(advertisedRemote(t, s, tc.base))
+			if err != nil {
+				t.Fatalf("remotes[0].url is not a URL: %v", err)
+			}
+			reply := s.do(t, request{
+				method: http.MethodGet,
+				path:   advertised.Path + serverCardCurrentPath,
+				host:   advertised.Host,
+			})
+			if reply.status != http.StatusOK {
+				t.Fatalf("GET %s%s = %d, want %d", advertised.Path, serverCardCurrentPath, reply.status, http.StatusOK)
+			}
+			if ct := reply.header.Get("Content-Type"); ct != "application/mcp-server-card+json" {
+				t.Errorf("Content-Type = %q, want the card's own media type", ct)
+			}
+		})
+	}
+}
+
+// advertisedRemote reads remotes[0].url off the card at the base path, which is
+// the one location every configuration serves.
+func advertisedRemote(t *testing.T, s *server, base string) string {
+	t.Helper()
+	reply := s.do(t, request{method: http.MethodGet, path: base + serverCardCurrentPath})
+	if reply.status != http.StatusOK {
+		t.Fatalf("GET %s%s = %d, want %d", base, serverCardCurrentPath, reply.status, http.StatusOK)
+	}
+	var card struct {
+		Remotes []struct {
+			URL string `json:"url"`
+		} `json:"remotes"`
+	}
+	if err := json.Unmarshal([]byte(reply.body), &card); err != nil {
+		t.Fatalf("the card is not JSON: %v", err)
+	}
+	if len(card.Remotes) != 1 {
+		t.Fatalf("remotes = %v, want exactly one entry", card.Remotes)
+	}
+	return card.Remotes[0].URL
 }

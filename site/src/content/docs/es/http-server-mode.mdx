@@ -191,7 +191,48 @@ Un registro o un directorio quiere la primera. Un escáner que enumera lo que ex
 
 Las dos son sin autenticación, las dos responden `Access-Control-Allow-Origin: *` para que un directorio basado en navegador pueda leerlas, y las dos llevan un `ETag` fuerte sobre sus propios bytes — así que dos réplicas que rindieron el mismo documento publican el mismo validador y revalidar tras la hora que permite su `Cache-Control` cuesta un `304`. Las dos se mueven con `--http-path`.
 
+**La tarjeta de descubrimiento responde tras cada forma del endpoint.** La extensión server-card reserva `<streamable-http-url>/server-card`: el sufijo va sobre la URL del endpoint, no sobre el host. El endpoint responde en el montaje y en su [alias `/mcp`](#el-alias-mcp), así que la tarjeta también — `GET /server-card` y `GET /mcp/server-card`, o `GET /libgen/server-card` y `GET /libgen/mcp/server-card` bajo `--http-path=/libgen` —, con los mismos bytes y el mismo `ETag` en cada una. Publique `--public-url` la forma que publique, la URL de la tarjeta que un cliente deriva de ella responde.
+
 **`remotes` no aparece si no se da `--public-url`**, y esa ausencia es deliberada: una dirección de escucha es muchas veces loopback o un socket detrás de un proxy, y publicarla mandaría al cliente a donde no puede ir. Si un directorio informa de que este despliegue no tiene endpoint remoto, ese flag es la respuesta. Qué contiene cada documento, y por qué la tarjeta de descubrimiento no lista herramientas, está en [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado).
+
+### Publicar un AI Catalog
+
+Un cliente que hace descubrimiento a nivel de dominio empieza en `https://<host>/.well-known/ai-catalog.json`, un [AI Catalog](https://github.com/Agent-Card/ai-catalog) que lista lo que publica el host, y sigue las entradas cuyo `type` es `application/mcp-server-card+json` hasta sus tarjetas de servidor. Es el mecanismo de descubrimiento que describe la [extensión server-card](https://github.com/modelcontextprotocol/experimental-ext-server-card/blob/main/docs/discovery.md).
+
+**El binario no sirve un catálogo, y es deliberado.** `GET /.well-known/ai-catalog.json` responde el mismo `404` que cualquier otra ruta que el servidor no sirve. Un catálogo describe todo lo que publica un host, y eso solo lo sabe quien lo opera: este servidor es a menudo una entrada entre varias, detrás de un prefijo, en un host que sirve otras cosas. El catálogo pertenece al despliegue, y el proxy que tiene delante es el sitio natural desde el que servirlo.
+
+La entrada de este servidor son tres miembros:
+
+```json
+{
+	"specVersion": "1.0",
+	"entries": [
+		{
+			"identifier": "urn:air:example.org:mcp:libgen",
+			"type": "application/mcp-server-card+json",
+			"url": "https://mcp.example.org/libgen/server-card"
+		}
+	]
+}
+```
+
+- **`url` es `<--public-url>/server-card`.** Con `--public-url=https://mcp.example.org/libgen` es `https://mcp.example.org/libgen/server-card`, la misma URL que un cliente deriva del `remotes[0].url` de la propia tarjeta.
+- **`identifier`** sigue la forma `urn:air:{publisher}:{namespace}:{name}` que la especificación del catálogo exige para sistemas abiertos, donde `{publisher}` es el dominio de la organización que publica el artefacto. El artefacto que lista esta entrada es la tarjeta de tu despliegue, que publicas tú, así que `{publisher}` es tu dominio y no el de este proyecto. Derivarlo del `name` de la tarjeta nombraría al proyecto, y dos despliegues que lo hicieran listarían un mismo identificador para dos endpoints distintos.
+- **Sin `displayName` ni `description`.** La tarjeta ya lleva `title` y `description`, y la especificación del catálogo dice que una entrada que apunta a un artefacto que se nombra a sí mismo debería omitir los dos: una copia en el catálogo se desincroniza de la tarjeta en la siguiente actualización y, cuando está, se impone a la de la tarjeta.
+
+Sirve el fichero desde el proxy con su propio tipo de medio. En nginx eso necesita `types { }` además de `default_type`: nginx elige el tipo por la extensión del fichero primero, y `mime.types` asocia `.json` a `application/json`, así que `default_type` por sí solo nunca se alcanza. Vaciar el mapa de extensiones en esta única location es lo que permite que se aplique:
+
+```nginx
+location = /.well-known/ai-catalog.json {
+    alias /etc/nginx/ai-catalog.json;
+    types { }
+    default_type application/ai-catalog+json;
+    add_header Access-Control-Allow-Origin "*" always;
+    add_header Cache-Control "public, max-age=3600" always;
+}
+```
+
+Es la única location en la que el proxy responde CORS por sí mismo, porque es el único documento que el proxy sirve en vez de reenviar. Cada ruta que reenvía recibe sus cabeceras CORS del servidor, y un segundo juego puesto por el proxy produce una respuesta que el navegador rechaza. El catálogo puede incluso vivir en otro dominio: el `url` de una entrada puede nombrar una tarjeta en cualquier host.
 
 ## Dónde escucha el servidor
 
@@ -273,7 +314,7 @@ La inferencia pregunta "¿le ha dado alguien una stdin a este proceso?", no "¿e
 
 El endpoint MCP es el propio montaje — `POST /` por defecto — y `POST /mcp` es un alias suyo. Bastantes clientes y bastantes guías dan por hecha esa ruta como para que una URL base pegada con ella o sin ella llegue al mismo sitio en vez de a un `404` que se lee como "este servidor no habla MCP".
 
-Viaja con `--http-path`, así que bajo `--http-path=/libgen` el endpoint es `POST /libgen` y el alias es `POST /libgen/mcp`. Tanto `/mcp` como `/mcp/` se montan como coincidencias exactas. La grafía canónica sigue siendo el propio montaje: es lo que anuncia la tarjeta y lo que usan todos los ejemplos de aquí.
+Viaja con `--http-path`, así que bajo `--http-path=/libgen` el endpoint es `POST /libgen` y el alias es `POST /libgen/mcp`. Tanto `/mcp` como `/mcp/` se montan como coincidencias exactas. La grafía canónica sigue siendo el propio montaje: es lo que usan todos los ejemplos de aquí. La tarjeta de descubrimiento sigue a las dos formas, así que `GET /mcp/server-card` responde la misma tarjeta que `GET /server-card`.
 
 ## Con qué se niega a arrancar el servidor
 

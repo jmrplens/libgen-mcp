@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -57,6 +58,35 @@ func TestDiscoveryCardCarriesIdentityAndNothingElse(t *testing.T) {
 	// ours to vary even while it answers 404 upstream.
 	if card["$schema"] != discoveryCardSchema {
 		t.Errorf("$schema = %v, want the exact string the format pins", card["$schema"])
+	}
+}
+
+// TestDiscoveryCardHoldsTheConstraintsTheExtensionDeclares holds the identity
+// constants to what a checker of the wire format accepts, rather than to
+// themselves.
+//
+// The patterns and caps are the extension's own, copied from its schema.ts. The
+// description is the field most likely to break one: it is shared with the
+// handshake and server.json, and the card alone caps it at 100 characters, so a
+// longer rewrite for either of the others would publish a card no validator
+// accepts while every other test here still passes.
+func TestDiscoveryCardHoldsTheConstraintsTheExtensionDeclares(t *testing.T) {
+	card := decodeDiscoveryCard(t, "", true)
+
+	schemaPattern := regexp.MustCompile(`^https://static\.modelcontextprotocol\.io/schemas/v1/server-card\.schema\.json$`)
+	if got, _ := card["$schema"].(string); !schemaPattern.MatchString(got) {
+		t.Errorf("$schema = %q, want the one string the extension's pattern allows", got)
+	}
+	namePattern := regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$`)
+	if got, _ := card["name"].(string); !namePattern.MatchString(got) {
+		t.Errorf("name = %q, want reverse-DNS with exactly one slash", got)
+	}
+	description, _ := card["description"].(string)
+	if n := len(description); n < 1 || n > 100 {
+		t.Errorf("description is %d characters, want 1 to 100", n)
+	}
+	if title, found := card["title"].(string); found && len(title) > 100 {
+		t.Errorf("title is %d characters, want at most 100", len(title))
 	}
 }
 

@@ -11,6 +11,7 @@
 #      GET /server-card      → 200 application/mcp-server-card+json, the SEP-2127
 #                              card: identity and how to connect, no primitives.
 #                              A DIFFERENT document, and both carry an ETag.
+#      GET /mcp/server-card  → the same SEP-2127 card, after the endpoint's alias
 #   2. POST / tools/list     → 200, no Mcp-Session-Id, lists `search`
 #                              (a bare POST is a complete request: no initialize,
 #                               no session handshake)
@@ -217,6 +218,15 @@ if printf '%s' "$CARD_CURRENT" | grep -q '"name"' && ! printf '%s' "$CARD_CURREN
   pass "GET /server-card carries identity and no primitives"
 else
   fail "GET /server-card is not a SEP-2127 card"
+fi
+
+# The extension reserves <streamable-http-url>/server-card, and the endpoint
+# also answers at /mcp, so the card is after that form too: same bytes.
+CARD_ALIAS=$(curl -fsS "${BASE}/mcp/server-card" 2>/dev/null || true)
+if [ -n "$CARD_ALIAS" ] && [ "$CARD_ALIAS" = "$CARD_CURRENT" ]; then
+  pass "GET /mcp/server-card serves the same SEP-2127 card"
+else
+  fail "GET /mcp/server-card does not serve the card /server-card serves"
 fi
 
 # Both documents carry a validator, so the revalidation after their one-hour
