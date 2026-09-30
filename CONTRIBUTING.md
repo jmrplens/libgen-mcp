@@ -227,7 +227,7 @@ the CORE API key`.
 - [ ] Formatting is applied: `make fmt` and `make format-md-tables`
 - [ ] LLM-discovery files are current: `make check-llms`
 - [ ] Doc comments pass: `make godoc-check`
-- [ ] Local doc links resolve: `make check-doc-links`
+- [ ] Local doc links and their anchors resolve: `make check-doc-links`
 - [ ] The tool surface holds its conventions: `make audit-surface-quality`
 - [ ] Docs updated if behavior or configuration changed
 - [ ] Commit messages follow Conventional Commits

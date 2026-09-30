@@ -728,7 +728,7 @@ make cover-check                                           # internal/ + cmd/ >=
 make check-md-tables                                       # Markdown tables normalized
 make check-llms                                            # llms.txt fresh + valid
 make check-lhm-manifest                                    # lhm.plugin.json matches the surface
-make check-doc-links                                       # local doc links resolve
+make check-doc-links                                       # local doc links and anchors resolve
 make audit-surface-quality                                 # tool surface conventions
 make check-install-buttons                                 # the one-click buttons agree
 make check-gateway-chars                                   # served text stays gateway-safe

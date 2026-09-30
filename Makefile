@@ -302,7 +302,7 @@ format-md-tables: ## Normalize Markdown pipe tables in README.md and docs/
 check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
 	go run ./cmd/format_md_tables/ --check
 
-check-doc-links: ## Fail if any tracked Markdown/MDX local link or path is broken
+check-doc-links: ## Fail if any tracked Markdown/MDX local link, path or anchor is broken
 	node scripts/check-doc-links.mjs
 
 godoc-audit: ## Report missing/malformed Go doc comments (Markdown)
