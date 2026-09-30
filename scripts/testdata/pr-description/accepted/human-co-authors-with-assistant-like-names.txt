@@ -1,0 +1,7 @@
+Fix the retry budget.
+
+Co-authored-by: Claude Monet <claude@monet.fr>
+Co-authored-by: Devin Smith <devin@example.com>
+Co-authored-by: Ali Haider <ali.haider@example.com>
+Co-authored-by: Alex Gemini <alex.gemini@example.org>
+Co-authored-by: Jane Cursorino <jane@cursorino.dev>

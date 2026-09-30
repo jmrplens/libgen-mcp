@@ -1,0 +1,3 @@
+A hand-written description.
+
+<!-- sourcery-ai-summary -->
