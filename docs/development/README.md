@@ -17,6 +17,7 @@ it.
 | [testing.md](testing.md)                         | You are deciding which of the five test surfaces a change needs.                                                            |
 | [release-chain.md](release-chain.md)             | You are about to change `.github/workflows/release.yml`, or want to know why a job waits for another.                       |
 | [repository-settings.md](repository-settings.md) | Something failed for a reason CI cannot see: a ruleset, a trusted publisher, an environment, a secret.                      |
+| [upstream-bugs.md](upstream-bugs.md)             | You are bumping a dependency, or found code that works around one and want to know when it can go.                          |
 
 ## What is not here
 

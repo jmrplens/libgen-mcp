@@ -95,7 +95,7 @@ func (c *clientRecords) limitHeavyCalls(ceiling heavyCeiling) mcp.Middleware {
 				// this the metric would show a fast successful tools/call, which
 				// is what a refusal looks like from the outside.
 				mcpotel.RecordRefusal(ctx, mcpotel.ReasonInflightCeiling)
-				return toolutil.RefusalResult(refusal), nil
+				return toolutil.RefusalResult(req, refusal), nil
 			}
 			defer leave()
 			return next(ctx, method, req)
