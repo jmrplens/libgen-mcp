@@ -101,6 +101,29 @@ func TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash(t *testing.T) {
 	}
 }
 
+// TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry verifies an extracted
+// table-of-contents title is written as text at the start of its bullet: one
+// opening with a heading, list, quote or fence marker used to become that
+// block inside the list instead of an entry of it.
+func TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry(t *testing.T) {
+	var b strings.Builder
+	renderOutline(&b, ReadOutput{
+		Format: "pdf",
+		Outline: []extract.OutlineEntry{
+			{Title: "# Part One", Page: 1}, {Title: "1. Intro", Level: 1}, {Title: "> Note"}, {Title: "```"},
+		},
+	})
+	md := b.String()
+
+	for _, want := range []string{"- \\# Part One (p.1)\n", "  - 1\\. Intro\n", "- \\> Note\n", "- \\```\n"} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("outline = %q, want it to contain %q", md, want)
+			}
+		})
+	}
+}
+
 // TestRenderOutline_NoPageEntry covers the level-only arm of renderOutline: an
 // entry with no known page (Page == 0) renders as an indented bullet without a
 // "(p.N)" suffix, and its untrusted title still passes through mdCell.

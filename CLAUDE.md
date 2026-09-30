@@ -453,7 +453,7 @@ Pick by where the value lands, never by interpolating it directly:
 | Where | Helper | What it takes away |
 | --- | --- | --- |
 | a table cell | `EscapeMdTableCell` | a pipe ends the cell, a newline ends the row |
-| a list item, a card row, a paragraph | `EscapeMdInline` | a newline opening a heading, a list item or a block of its own |
+| a list item, a card row, a paragraph | `EscapeMdInline` | a newline or a leading marker opening a heading, a list item or a block of its own |
 | a heading | `EscapeMdHeading` | a leading `#` changes the level, a newline splits it |
 | a code block | `MarkdownFencedBlock` | content closing the fence and being read as Markdown |
 | a link's two halves | `MdTitleLink` | either half ending the link it is in |

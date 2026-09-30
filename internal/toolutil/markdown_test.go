@@ -1,6 +1,7 @@
 package toolutil
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -431,6 +432,53 @@ func TestEscapeMdInline_ShowsTheValueAsSentInAListItem(t *testing.T) {
 			}
 			if got := gfmInline("- " + rendered); got != "- "+tc.want {
 				t.Errorf("EscapeMdInline(%q) = %q, which a list item shows as %q, want %q", tc.value, rendered, got, "- "+tc.want)
+			}
+		})
+	}
+}
+
+// gfmBlockStart matches the line starts CommonMark reads as a block of their
+// own rather than as text: an ATX heading, a bullet or ordered list item, a
+// block quote, a code fence, a thematic break, a setext underline and an HTML
+// block opener.
+var gfmBlockStart = regexp.MustCompile("^(#{1,6}([ \t]|$)|[-*+]([ \t]|$)|[0-9]{1,9}[.)]([ \t]|$)|>|`{3,}|~{3,}|([-*_][ \t]*){3,}$|=+[ \t]*$|<)")
+
+// blockMarkerValues are extracted text that opens with a block marker, each
+// with what the reader must see instead of the structure.
+var blockMarkerValues = []string{
+	"# Chapter", "###### deep", "#", "- item", "* item", "+ item", "-",
+	"1. first", "1) first", "123456789. long", "> quoted", "```go", "~~~",
+	"---", "***", "___", "- - -", "===", "=", "<div>x</div>", "<!-- c -->",
+}
+
+// TestEscapeMdInline_ALeadingBlockMarkerIsText pins the other half of the
+// inline form: the value can be the first thing on its line (a table-of-
+// contents entry is written straight after its bullet), and extracted text
+// opening with a block marker there became a heading, a nested list, a quote
+// or a fence. Each value must open no block, in a list item or on a line of
+// prose, and must read as sent.
+func TestEscapeMdInline_ALeadingBlockMarkerIsText(t *testing.T) {
+	for _, value := range blockMarkerValues {
+		t.Run(value, func(t *testing.T) {
+			rendered := EscapeMdInline(value)
+			if gfmBlockStart.MatchString(rendered) {
+				t.Errorf("EscapeMdInline(%q) = %q, which opens a block in a list item or a paragraph", value, rendered)
+			}
+			if got := gfmInline(rendered); got != value {
+				t.Errorf("EscapeMdInline(%q) = %q, which reads as %q", value, rendered, got)
+			}
+		})
+	}
+}
+
+// TestEscapeMdInline_TextThatOpensNoBlockIsLeftAlone verifies the escape is
+// asked only of a marker: a leading code span, a number with no marker after
+// it and a hash that is not a heading are written as they are.
+func TestEscapeMdInline_TextThatOpensNoBlockIsLeftAlone(t *testing.T) {
+	for _, value := range []string{"``x|y``", "`code` then", "1999 edition", "1.5 kg", "#hashtag", "plain"} {
+		t.Run(value, func(t *testing.T) {
+			if got := EscapeMdInline(value); got != value {
+				t.Errorf("EscapeMdInline(%q) = %q, want it unchanged", value, got)
 			}
 		})
 	}

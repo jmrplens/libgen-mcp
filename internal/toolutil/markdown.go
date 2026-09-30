@@ -3,6 +3,7 @@ package toolutil
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -67,12 +68,40 @@ func EscapeMdTableCell(s string) string {
 // EscapeMdInline sanitizes a value for a line that is not a table row: a list
 // item, which is what a card row and a guidance step are, or a paragraph. The
 // line breaks are collapsed and the control bytes dropped, so the value stays
-// on the line it was written into and cannot open a heading, a list item or a
-// block of its own on the next one. Nothing else is escaped. A pipe splits no
-// list item, and escaping one would show a backslash inside any code span the
-// value carries.
+// on the line it was written into and cannot open a block on the next one, and
+// a block marker it opens with is escaped, so it cannot open one on this line
+// either. Nothing else is escaped. A pipe splits no list item, and escaping one
+// would show a backslash inside any code span the value carries.
 func EscapeMdInline(s string) string {
-	return oneLine(s)
+	return escapeBlockStart(oneLine(s))
+}
+
+// mdBlockStart matches the starts of a line CommonMark reads as a block of its
+// own rather than as text: an ATX heading, a bullet or an ordered list item, a
+// block quote, a code fence, a thematic break, a setext underline and an HTML
+// block opener. The second group is the ordered list's delimiter, which is the
+// character escaped for one, since the digits before it are not punctuation.
+var mdBlockStart = regexp.MustCompile("^(?:#{1,6}(?:[ \t]|$)|[-*+](?:[ \t]|$)|[0-9]{1,9}([.)])(?:[ \t]|$)|>|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|=+[ \t]*$|<)")
+
+// escapeBlockStart backslash-escapes the marker a line opens with when that
+// line would otherwise be read as a block: "# Chapter" as a heading, "1. x" as
+// an ordered list, "---" as a thematic break. A value is often the first thing
+// on its line (a table-of-contents entry follows its bullet directly), and
+// extracted text is untrusted, so a marker there would change the document's
+// shape. Every marker is ASCII punctuation, which a backslash turns into the
+// literal character in CommonMark and GFM alike, so the reader sees the value
+// as sent. Only the start is asked about, because the caller has already
+// collapsed every line break.
+func escapeBlockStart(s string) string {
+	match := mdBlockStart.FindStringSubmatchIndex(s)
+	if match == nil {
+		return s
+	}
+	// The delimiter group's start is -1 unless the line is an ordered list item,
+	// so the escape goes before the delimiter there and before the first byte
+	// otherwise.
+	at := max(match[2], 0)
+	return s[:at] + `\` + s[at:]
 }
 
 // oneLine drops the control bytes, collapses every line ending to a space and
