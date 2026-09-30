@@ -570,6 +570,25 @@ The same applies to a resolved file URL, which on Anna's member path is itself a
 working credential: a presigned URL published in an error is usable by whoever
 reads the log.
 
+### The destination guard behind an outbound proxy
+
+With `HTTP_PROXY`/`HTTPS_PROXY` set the dialer is handed the proxy's address, so
+`internal/netguard` recognizes that dial (`guardedDial`, tier A only) and judges
+the destination per request instead (`judgeProxiedDestination`). Two things hold
+it together, and breaking either fails **open** for an address-literal
+destination, not closed:
+
+- **`policyTransport.base` must be the `*http.Transport` itself.**
+  `proxyDialAddress` type-asserts it to read its `Proxy` function; a wrapper
+  inserted between the two makes every request look direct, so the destination
+  behind a proxy is never judged. Wrap outside `policyTransport`, as the
+  outbound observer does.
+- **The destination check is per request, never per dial.** `net/http` keys a
+  plain-HTTP connection through a proxy on the proxy alone, so a pooled
+  connection carries requests to many destinations and most of them are never
+  dialed. Moving the check into the dialer would let the first request's answer
+  serve every later one.
+
 ### Telemetry: whose namespace a name is in, and what may leave the process
 
 **A name goes in a namespace its owner defines.** A span attribute, a metric or a

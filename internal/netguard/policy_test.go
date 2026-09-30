@@ -560,6 +560,29 @@ func TestMetadataAddressesAreRefusedWhenMappedIntoIPv6(t *testing.T) {
 	}
 }
 
+// TestMetadataAddressesAreRefusedWithAZone covers the other spelling of one
+// address. The table holds fd00:ec2::254 bare, and fd00:ec2::254%eth0 is the
+// same address with an interface named. An operating system ignores the zone of
+// a destination that is not link-local, so a lookup that kept it reached the
+// endpoint the table exists to refuse whenever the allowance lifted tier B.
+func TestMetadataAddressesAreRefusedWithAZone(t *testing.T) {
+	t.Run("dialer", func(t *testing.T) {
+		err := control(true)(t.Context(), "tcp", "[fd00:ec2::254%eth0]:80", nil)
+		if !errors.Is(err, ErrBlockedAddress) {
+			t.Errorf("err = %v, want the zoned metadata address refused under the allowance", err)
+		}
+	})
+	t.Run("redirect", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://[fd00:ec2::254%25eth0]/latest/", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rerr := CheckRedirect(true)(req, nil); !errors.Is(rerr, ErrBlockedAddress) {
+			t.Errorf("err = %v, want a redirect to the zoned metadata address refused under the allowance", rerr)
+		}
+	})
+}
+
 // TestMetadataRedirectIsRefusedUnderTheAllowance covers the cheaper half of the
 // same attack. A URL in an index need only redirect once, and the redirect check
 // short-circuited on the same flag the dialer did, so the two halves of one

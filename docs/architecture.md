@@ -64,6 +64,22 @@ on and hand them back as a file. The four are named individually rather than der
 ranges around them, because a rule that holds even for a deployment which has deliberately
 opened its own network must be as narrow as it can be.
 
+**Behind `HTTP_PROXY` or `HTTPS_PROXY` the dialer sees only the proxy**, so the guard splits
+its two questions. The dial to the proxy is the operator's own configuration and answers to
+the metadata tier alone: a corporate proxy on `10.x` is not refused for its own address, as it
+was before, when it was judged under the destination's rule and every host the operator had
+not named — Crossref, arXiv, Unpaywall, every download URL — failed on the proxy's address.
+The destination behind the proxy is judged per request, before anything is sent, under both
+tiers, as far as its URL spells it: an address literal gets exactly the rule the dialer would
+have applied to it, so `http://169.254.169.254/` or a private address nobody named is refused
+behind a proxy as it is without one; a hostname is resolved by the proxy, not by this server,
+and what it reaches is the proxy's decision. Per request rather than per dial because
+`net/http` keys a plain-HTTP connection through a proxy on the proxy alone, so one pooled
+connection carries requests to many destinations. The proxy is recognized by comparing the
+address the dialer is asked for with the one `net/http` will dial for the request's proxy, as
+strings; a spelling the two disagree about falls back to judging the proxy as the destination,
+which can refuse more, never permit more.
+
 ### Mirror discovery
 
 Candidate mirrors are supplied by a `Manager`:

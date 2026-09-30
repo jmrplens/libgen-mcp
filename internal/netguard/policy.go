@@ -227,12 +227,24 @@ var lookupHostAddrs = func(ctx context.Context, host string) ([]netip.Addr, erro
 type dialDecision struct {
 	policy        *Policy
 	operatorNamed bool
+	// proxy is the address the transport will dial for this request when it
+	// sends it through a proxy, spelled as net/http spells the address it hands
+	// the dialer, and empty when the request is dialed directly. [guardedDial]
+	// reads it, because only the dialer knows which address it was asked for
+	// before resolution.
+	proxy string
+	// proxyDial marks the dial to that proxy, which [guardedDial] re-stamps
+	// with this alone. The proxy is the operator's configuration, so it answers
+	// to tier A only.
+	proxyDial bool
 }
 
 // permitsPrivate reports whether the operator's own configuration answers for a
-// private destination on this request.
+// private destination on this request: the destination is a host they named,
+// some host they named is itself private, or the address is the proxy they
+// configured.
 func (d dialDecision) permitsPrivate(ctx context.Context) bool {
-	return d.operatorNamed || d.policy.NamesPrivateHost(ctx)
+	return d.proxyDial || d.operatorNamed || d.policy.NamesPrivateHost(ctx)
 }
 
 // dialDecisionKey is the private context key for [dialDecision].
@@ -258,13 +270,47 @@ func dialDecisionFrom(ctx context.Context) (dialDecision, bool) {
 // net/http hands each redirect hop to the transport as a request of its own, so
 // a hop that leaves an operator-named host is stamped as not operator-named
 // without anything having to track the chain.
+//
+// # Connection reuse
+//
+// A request served from an idle connection is not dialed, so the decision it
+// carries is never read. That is safe here because the pool and the decision
+// are keyed on the same thing: each client has a transport, and so a pool, of
+// its own, net/http keys a direct connection on scheme, host and port, and the
+// decision depends on the host alone (whether the operator named it) and on a
+// policy-wide answer that only ever widens. A connection dialed for one request
+// is therefore only handed to a request that would have been allowed to dial
+// it. The one exception is a proxy, whose connection is keyed on the proxy and
+// carries requests to many destinations, which is why a proxied destination is
+// judged per request rather than at the dial.
 type policyTransport struct {
 	base   http.RoundTripper
 	policy *Policy
+	// allowPrivate is the tier B opt-out the client was built with, the same
+	// value its dialer and redirect check hold, so the per-request judgement of
+	// a proxied destination agrees with them.
+	allowPrivate bool
 }
 
 // RoundTrip stamps the request and delegates.
+//
+// A request the base transport will send through a proxy is stamped with the
+// proxy's address as well, so the dialer can tell that dial from the
+// destination's, and its destination is judged here before anything is sent,
+// because the dialer will never see it.
 func (t *policyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	decision := dialDecision{policy: t.policy, operatorNamed: t.policy.Names(req.URL.Hostname())}
-	return t.base.RoundTrip(req.WithContext(withDialDecision(req.Context(), decision)))
+	ctx := withDialDecision(req.Context(), decision)
+	proxy, err := proxyDialAddress(t.base, req)
+	if err != nil {
+		return nil, refuseUnsent(req, err)
+	}
+	if proxy != "" {
+		if err = judgeProxiedDestination(ctx, req.URL, t.allowPrivate); err != nil {
+			return nil, refuseUnsent(req, err)
+		}
+		decision.proxy = proxy
+		ctx = withDialDecision(req.Context(), decision)
+	}
+	return t.base.RoundTrip(req.WithContext(ctx))
 }
