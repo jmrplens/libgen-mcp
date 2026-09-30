@@ -4,7 +4,7 @@
 # golangci-lint (bundles govet, staticcheck, gosec, ...) + govulncheck.
 
 .PHONY: all build build-probe build-all run version \
-        coverage-conditions coverage-mutants \
+        coverage-conditions coverage-mutants check-coverage-recipes \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
         lint golangci-lint govulncheck analyze analyze-fix fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
@@ -168,51 +168,89 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 	@echo "Merging those scenarios into the results pages..."
 	go run ./cmd/gen_eval_pages/
 
-coverage-conditions: ## Report the boolean conditions of PKG never evaluated both ways (gobco; PKG=./internal/netguard)
-	@test -n "$(PKG)" || { echo "usage: make coverage-conditions PKG=./internal/netguard"; exit 2; }
-	cd $(PKG) && go run github.com/rillig/gobco@v1.3.4
+# The recipe is scripts/coverage-conditions.sh, which also pins gobco's
+# version. gobco parses and type-checks every .go file of a directory together,
+# whatever its build constraint says, so a package declaring one function per
+# platform (cmd/server, internal/libgen, internal/pathguard) died with a
+# redeclaration panic before measuring anything. The script stages such a
+# package in a copy of the module under the temporary directory, holding only
+# the files the go command builds here, blanks the constraint lines of the kept
+# files whose constraint names more than the platform (a tag, a release, cgo),
+# which gobco's own narrower build context would decline to instrument, runs
+# gobco there, names the files it left out, and removes the copy whatever
+# happens. A package gobco could already read is run where it is, as before.
+# TAGS names build tags for a package behind one, passed to go list and to
+# gobco's go test alike, and a report that measured no condition (0/0) is
+# refused.
+coverage-conditions: ## Report the boolean conditions of PKG never evaluated both ways (gobco; PKG=./internal/netguard [TAGS=e2e])
+	@test -n "$(PKG)" || { echo "usage: make coverage-conditions PKG=./internal/netguard [TAGS=e2e]"; exit 2; }
+	@scripts/coverage-conditions.sh $(PKG) $(TAGS)
 
+# The recipe is scripts/coverage-mutants.sh, and the reasons below are written
+# out beside the code there as well.
+#
+# A package main is measured through a staged copy. gremlins picks the package
+# whose tests decide a mutant's verdict by walking up from the mutated file
+# until a directory name ends in the package clause's name, and falls back to
+# the module path when none does. For `package main` in cmd/<tool> nothing
+# matches, so every mutant ran `go test` on the module root, package libgenmcp,
+# which has no test file and exits 0: cmd/format_md_tables reported 32 LIVED
+# in under a second without its own tests ever running. The script copies such
+# a package beside itself into <dir>.mutants-main, runs gremlins there, and
+# removes the copy whatever happens.
+#
 # The per-mutant timeout is derived from PKG's own baseline, because gremlins
-# computes it as that baseline times a coefficient and applies no floor. On a
-# fast package that product is smaller than the fixed cost of starting `go test`
-# at all, so every mutant is reported TIMED OUT having never run — and a timeout
-# is not a kill, so the default flatters exactly the packages it never managed
-# to test.
+# computes it as that baseline times a coefficient and applies no floor. The
+# baseline is a run of the command gremlins times, `go test -cover
+# -coverprofile ./<pkg>/...` from the module root under the tags and -coverpkg
+# GREMLINS_FLAGS gives it, timed by the clock. It used to be read off the last
+# line of an untagged `go test`, which is the test binary's run without the
+# build, and guessed at 0.010s when that line carried no duration: on
+# internal/version, which has no test file, that was a coefficient of 3001. A
+# package with no test file under its tags is now refused instead, unless an
+# integration run with a -coverpkg naming it lets the module's other tests
+# measure it.
 #
-# MUTANT_BUDGET is the floor in seconds and the coefficient is whatever reaches
-# it, never below 8 so a slow package still gets a real multiple of its own
-# runtime. A timeout that survives a budget this size is a finding rather than a
-# setting: it is a mutant that made the package pathologically slow, which is
-# what mutating a memo does, and the answer is a test that asserts the memo.
+# MUTANT_BUDGET is the per-mutant budget in seconds and the coefficient is
+# whatever reaches it, never below 8 so a slow package still gets a real
+# multiple of its own runtime. MUTANT_BUDGET_FLOOR is what the budget may not go
+# under: below it the budget is smaller than the cost of starting `go test` and
+# every mutant is reported TIMED OUT having never run, which is not a kill, so
+# it flatters exactly the packages it never managed to test. MUTANT_DEADLINE_MAX
+# holds each mutant's deadline to about that many seconds, so a mutant that
+# makes the tests hang is reported within the hour rather than holding a worker
+# for as long as the coefficient allows. All three are plain numbers of seconds.
 #
-# A package that does not pass its own tests is refused rather than measured.
+# The budget is sized for a compile as well as a run. gremlins copies the module
+# into a directory per worker, and without -trimpath Go keys a compile on the
+# package's directory, so the first mutant on each worker recompiled every
+# package its test imports inside its own deadline. The script runs every go
+# command, and gremlins, under -trimpath, and runs the per-mutant command once
+# before gremlins starts, so a worker's copy finds everything compiled. Under
+# -trimpath a binary no longer records where the toolchain is installed, so the
+# script also exports GOROOT as `go env GOROOT` names it.
+#
+# A package that does not pass its own tests is refused rather than measured,
+# and so is one whose subtree does not, or whose per-mutant command fails.
 # Gremlins would otherwise run against a suite that already fails, where every
 # mutant is reported KILLED: a perfect score over a broken package.
 #
 # -count=1 is what makes the coefficient mean what it says. Gremlins multiplies
-# it by the elapsed time of its OWN coverage run, and that run is a plain
-# `go test -cover`, which Go's test cache answers instantly for a package whose
-# files have not changed — so a second invocation would derive the budget from a
-# fraction of a second and report a well-tested package as entirely timed out.
-MUTANT_BUDGET ?= 30
+# it by the elapsed time of its OWN coverage run, which Go's test cache answers
+# instantly for a package whose files have not changed, so a second invocation
+# would derive the budget from a fraction of a second and report a well-tested
+# package as entirely timed out. The script exports it in GOFLAGS beside
+# -trimpath.
+MUTANT_BUDGET ?= 300
 MUTANT_BUDGET_FLOOR ?= 10
+MUTANT_DEADLINE_MAX ?= 3600
 coverage-mutants: ## Mutation-test PKG with gremlins (PKG=./internal/netguard). The gate on a changed package is Lived 0 and Not covered 0
 	@test -n "$(PKG)" || { echo "usage: make coverage-mutants PKG=./internal/netguard"; exit 2; }
-	@budget=$$(awk -v want="$(MUTANT_BUDGET)" -v floor="$(MUTANT_BUDGET_FLOOR)" \
-		'BEGIN{print (want+0 < floor+0) ? floor : want}'); \
-	[ "$$budget" = "$(MUTANT_BUDGET)" ] || \
-		echo "gremlins: MUTANT_BUDGET=$(MUTANT_BUDGET)s is under the $(MUTANT_BUDGET_FLOOR)s floor and would report untested mutants as timeouts; using $${budget}s"; \
-	baseline=$$(go test -count=1 $(PKG) 2>&1) || { \
-		printf '%s\n' "$$baseline" >&2; \
-		echo "gremlins: $(PKG) does not pass its own tests, so every mutant would read as killed; refusing to measure" >&2; \
-		exit 1; \
-	}; \
-	base=$$(printf '%s\n' "$$baseline" | tail -1 | grep -oE '[0-9]+\.[0-9]+s$$' | tr -d 's'); \
-	[ -n "$$base" ] || base=0.010; \
-	coeff=$$(awk -v b="$$base" -v f="$$budget" 'BEGIN{c=int(f/b)+1; if(c<8)c=8; if(c>6000)c=6000; print c}'); \
-	echo "gremlins: $(PKG) tests take $${base}s, so -timeout-coefficient $$coeff for a ~$${budget}s budget"; \
-	GOFLAGS="$${GOFLAGS} -count=1" go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 \
-		unleash --invert-logical --workers 4 --timeout-coefficient $$coeff $(GREMLINS_FLAGS) $(PKG)
+	@scripts/coverage-mutants.sh $(PKG) $(MUTANT_BUDGET) $(MUTANT_BUDGET_FLOOR) $(MUTANT_DEADLINE_MAX)
+
+check-coverage-recipes: ## Exercise the coverage-mutants and coverage-conditions scripts against a stand-in go (offline)
+	python3 -m unittest discover -s scripts -p 'coverage_mutants_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'coverage_conditions_sh_test.py'
 
 coverage: test ## Generate an HTML coverage report (coverage.html)
 	go tool cover -html=coverage.out -o coverage.html

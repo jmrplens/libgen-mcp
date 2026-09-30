@@ -159,8 +159,21 @@ make coverage-mutants    PKG=./internal/netguard   # gremlins: mutants no test k
 - The per-mutant timeout is derived from the package's own baseline, because
   gremlins applies no floor and a budget under the cost of starting `go test`
   reports every mutant as TIMED OUT having never run — which is not a kill, so
-  the default flatters exactly the packages it never tested. `MUTANT_BUDGET`
-  raises it; the floor beneath it is not negotiable.
+  the default flatters exactly the packages it never tested. The baseline is
+  the command gremlins itself times (`go test -cover` over the package from the
+  module root, under the tags `GREMLINS_FLAGS` passes), **timed by the clock**,
+  never read off `go test`'s summary line. `MUTANT_BUDGET` raises it,
+  `MUTANT_DEADLINE_MAX` caps it; the floor beneath it is not negotiable.
+- **Both recipes are scripts** (`scripts/coverage-mutants.sh`,
+  `scripts/coverage-conditions.sh`, tested by `make check-coverage-recipes`),
+  because each stages a copy and removes it whatever happens. A `package main`
+  is mutated through a copy beside it named `<dir>.mutants-main`: gremlins
+  otherwise resolves it to the module root, package `libgenmcp`, whose absent
+  tests report every mutant LIVED. A package with a file per platform
+  (`cmd/server`, `internal/libgen`, `internal/pathguard`) has its conditions
+  measured in a copy of the module holding only the files that build here,
+  because gobco type-checks every `.go` file together and panics on the
+  duplicate — so the other platform's halves are named and not measured.
 
 ## Key Development Patterns
 
