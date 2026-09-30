@@ -437,8 +437,8 @@ func TestRateLimiterRefusalAtModernRevisionCarriesResultType(t *testing.T) {
 
 // sdkLabelFix is what a failure of the pin below asks the go-sdk bump to do.
 const sdkLabelFix = "Delete labeledRefusal and declaresResultTypeRevision from internal/toolutil/rate_limit.go, " +
-	"let RefusalResult return the plain result, delete this test, and remove the entry from " +
-	"docs/development/upstream-bugs.md, in this same pull request."
+	"let RefusalResult return the plain result, delete this test, and mark the entry in " +
+	"docs/development/upstream-bugs.md merged in the go-sdk release that carries it, in this same pull request."
 
 // TestSDKLeavesAMiddlewareMadeToolResultUnlabeled pins the go-sdk behavior
 // RefusalResult works around: a tools/call result a receiving middleware makes
