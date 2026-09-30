@@ -116,9 +116,12 @@ func TestBusyLog_WritesOncePerWindow(t *testing.T) {
 	if b.last.Load() != first {
 		t.Error("a second refusal inside the window was logged")
 	}
-	b.last.Store(time.Now().Add(-2 * busyLogWindow).UnixNano())
+	// Compared with the backdated stamp rather than with first: Windows' clock
+	// is coarse enough that the third write can land on the first's instant.
+	backdated := time.Now().Add(-2 * busyLogWindow).UnixNano()
+	b.last.Store(backdated)
 	b.log(t.Context(), "third")
-	if b.last.Load() == first {
+	if b.last.Load() == backdated {
 		t.Error("a refusal after the window was not logged")
 	}
 }
