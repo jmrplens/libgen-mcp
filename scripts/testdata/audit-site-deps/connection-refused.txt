@@ -1,0 +1,9 @@
+Error: ERR_PNPM_AUDIT_BAD_RESPONSE
+
+  × Failed to request the audit endpoint (at http://127.0.0.1:18599/-/npm/v1/
+  │ security/advisories/bulk): error sending request for url
+  │ (http://127.0.0.1:18599/-/npm/v1/security/advisories/bulk)
+  ├─▶ client error (Connect)
+  ├─▶ tcp connect error
+  ╰─▶ Connection refused (os error 111)
+

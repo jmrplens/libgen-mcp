@@ -1,0 +1,5 @@
+A hand-written description.
+
+<!-- walkthrough_start -->
+Some generated walkthrough.
+<!-- walkthrough_end -->

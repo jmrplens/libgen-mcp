@@ -1,0 +1,10 @@
+## What changed
+
+A hand-written description.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added a thing.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->

@@ -1,0 +1,4 @@
+## What changed
+
+The Pages fixture commits its output with `[skip ci]` so the push it makes does
+not start another deployment.

@@ -1,0 +1,10 @@
+Bumps the actions-all group with 2 updates.
+
+<!-- This is an auto-generated description by cubic. -->
+---
+## Summary by cubic
+Updates the CodeQL GitHub Actions in `.github/workflows/codeql.yml`.
+
+<sup>Written for commit 33e9411. Summary will update on new commits.</sup>
+
+<!-- End of auto-generated description by cubic. -->

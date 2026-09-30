@@ -1,0 +1,5 @@
+Error: ERR_PNPM_AUDIT_BAD_RESPONSE
+
+  × The audit endpoint (at https://registry.example.com/-/npm/v1/security/
+  │ advisories/bulk) responded with 404: Not Found
+

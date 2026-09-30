@@ -1,0 +1,4 @@
+The gate refuses the five skip commands GitHub documents (skip ci, ci skip, no
+ci, skip actions and actions skip, each in square brackets), and GitHub also
+reads a skip-checks: true trailer, which this sentence names without being one.
+Links in square brackets such as [the docs](https://example.com/ci) still pass.

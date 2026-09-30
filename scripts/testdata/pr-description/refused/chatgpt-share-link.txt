@@ -1,0 +1,2 @@
+Rewrite the sources page, following
+[this conversation](https://chatgpt.com/share/6801a2b3-c4d5-e6f7-8901-23456789abcd).

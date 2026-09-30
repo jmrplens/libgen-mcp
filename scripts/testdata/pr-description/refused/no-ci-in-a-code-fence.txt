@@ -1,0 +1,5 @@
+The fixture runs:
+
+```sh
+git commit -m "chore: regenerate [no ci]"
+```

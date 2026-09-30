@@ -688,10 +688,43 @@ ruleset, which is a step nobody remembers and which quietly leaves every new job
 ungated.
 
 The script refuses `skipped` as well as `failure`: a job that did not run is not
-a job that passed, and a skipped one otherwise reports a green tick. The one
-legitimate skip is paired with the event it is legitimate on
-(`docker:push` — the image build is pull-request-only), so a job meant to skip on
-a push is still required on a pull request.
+a job that passed, and a skipped one otherwise reports a green tick. The two
+legitimate skips are paired with the event they are legitimate on
+(`docker:push` — the image build is pull-request-only; `pr-description:push` — a
+push has no description), so a job meant to skip on a push is still required on a
+pull request.
+
+**The pull request description is gated, because it becomes main's history.**
+The `PR description` job (`scripts/check-pr-description.sh`, `make
+check-pr-description`) refuses, in the title or body, a command that makes GitHub
+skip workflows (the five bracketed ones, or a skip-checks trailer — in the squash
+commit it turns off every push workflow on main and the release of any tag on
+that commit), a summary block a review bot injected (cubic, CodeRabbit and
+Sourcery have all written one here, and 63 commits on main carry one), and an
+assistant's attribution. Three things hold it together:
+
+- **The text reaches the script through `env`, never through `${{ }}` in a `run:`
+  line.** A description is attacker-controlled, and an expression expanded inside
+  the script is a shell injection.
+- **`edited` is among the `pull_request` types and a newer run cancels an older
+  one** (the workflow's `concurrency` block). The description changes without a
+  push and a bot writes into it after the author did, so without both the verdict
+  would judge stale text, or two runs on one commit could finish in either order.
+  The whole pipeline reruns on an edit, deliberately: a run that judged only the
+  description would publish a `CI verdict` blind to a red test on the same commit.
+- **Its rules are tested against fixtures** (`scripts/testdata/pr-description/`,
+  `make check-ci-scripts`): add a body under `refused/` or `accepted/` for any new
+  rule, and name its rule in the test's `REFUSED` table.
+
+The fix for a finding is `gh pr edit`, not a commit. A bot whose block keeps
+coming back is turned off in its own configuration rather than raced by hand.
+
+**The site's dependencies are audited at high and above** (`make
+audit-site-deps`, a step of the `Docs Site` job). An advisory judged not to apply
+goes under `auditConfig.ignoreGhsas` in `site/pnpm-workspace.yaml` with its
+reason. pnpm exits non-zero both for a finding and for an npm advisory endpoint
+that did not answer; the script tells them apart by what pnpm printed, so an
+outage is a warning and a finding is always a failure.
 
 **The unit suite runs on all three platforms on every pull request**, not only on
 `main` and at release. That is the more expensive shape and it is chosen
@@ -743,6 +776,9 @@ npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no ma
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
 make check-manifests && make check-stamper                 # only if you touched a version-bearing manifest
 make check-mcpb                                            # only if you touched mcpb/ or scripts/build-mcpb.sh
+make check-ci-scripts                                      # only if you touched the PR description gate or the site audit
+make audit-site-deps                                       # only if you touched site/package.json or its lockfile (needs network)
+make check-pr-description                                  # once the pull request is open: its title and body land on main
 make check-server-json-packages                            # only if you touched server.json (needs network; CI runs it on push)
 ```
 

@@ -30,7 +30,8 @@ fi
 # fine" hole gets reopened a job at a time.
 #
 #   docker:push — the image build runs on pull requests only.
-ALLOWED_SKIPS="docker:push"
+#   pr-description:push — a push has no pull request title or body to judge.
+ALLOWED_SKIPS="docker:push pr-description:push"
 
 results="$(cat)"
 
