@@ -76,7 +76,15 @@ type transportDecision struct {
 // Called once the real handler is in place. A run that exits before then never
 // started a transport, so there is nothing to explain.
 func (d transportDecision) explain() {
-	if d.Override != "" {
+	// Under auto the address is not a contradiction: --transport auto --http
+	// ADDR answers two questions, and the image runs exactly that, so every
+	// `docker run -i` of it would otherwise start with a warning about its own
+	// command. A stated transport that drops the address is still a WARN.
+	switch {
+	case d.Override == "":
+	case d.Inference != "":
+		slog.Info(d.Override)
+	default:
 		slog.Warn(d.Override)
 	}
 	if d.Inference != "" {
@@ -116,11 +124,16 @@ func resolveTransport(selector, httpAddr string) (transportDecision, error) {
 // An address given to a run that serves stdio is warned about rather than
 // ignored: it is the one combination where the operator asked for something the
 // process is not going to do, and a listener that never appears is the hardest
-// kind of thing to notice is missing.
+// kind of thing to notice is missing. Under auto it is noted rather than warned
+// about, since there the address was given for the HTTP case stdin did not pick.
 func decide(useHTTP bool, httpAddr, inference string) transportDecision {
 	if !useHTTP {
 		d := transportDecision{Inference: inference, Interactive: stdinIsTerminal()}
-		if httpAddr != "" {
+		switch {
+		case httpAddr == "":
+		case inference != "":
+			d.Override = "--http " + httpAddr + " is the address an HTTP run binds; stdin chose stdio, so it is not used"
+		default:
 			d.Override = "--http " + httpAddr + " was given but this process is serving stdio; remove one of them to say plainly which transport you meant"
 		}
 		return d
