@@ -311,6 +311,26 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 </Facts>
 
+## Las llamadas vuelven con `This server is busy. Retry later.` (despliegues con `--http`)
+
+<Facts>
+	<Fact kind="symptom">
+		Un `tools/call` devuelve un resultado `isError` con ese texto, un `prompts/get` o un `initialize` recibe un error JSON-RPC con código `-50300`, o una petición se responde `503` con `Retry-After: 30`. El log lleva `request refused: too many calls held across the process` o `request refused: too many stateful sessions across the process`.
+	</Fact>
+	<Fact kind="meaning">
+		El proceso retiene tantas llamadas, o mantiene tantas sesiones con estado, como le permite su límite de descriptores, y rechaza la siguiente en vez de quedarse sin descriptores y dejar de responder del todo. Las llamadas hacen cola tras el cubo de salida (`LIBGEN_MCP_RATE_RPS`), así que una ráfaga de búsquedas queda retenida mientras esa cola tarde en vaciarse.
+	</Fact>
+	<Fact kind="fixes">
+		La línea de arranque dice qué recibió este proceso:
+
+    	- Lee `process ceilings`: `held_calls_per_process` y `descriptor_limit`. Un `descriptor_limit` de `1024` es un límite duro pequeño, y subirlo (`ulimit -n`, `LimitNOFILE=`, `--ulimit nofile=`) sube los dos techos. Ninguna bandera de este servidor los mueve.
+    	- Si un solo llamante lo retiene todo, lo que lo frena es el límite de tasa de entrada, y solo funciona por llamante detrás de un proxy nombrado con `--trusted-proxy-header` y `--trusted-proxies`.
+    	- Con `--stateless=false`, las sesiones que nadie borra conservan sus plazas hasta que `--session-timeout` las cierra. Con `--session-timeout=0` no las cierra nunca: pon un timeout.
+    	- Las cifras y las formas del rechazo están en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+    </Fact>
+
+</Facts>
+
 ## El proxy da `502` en un socket unix (`permission denied`)
 
 <Facts>

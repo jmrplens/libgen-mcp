@@ -733,6 +733,12 @@ shapes there is no per-caller identity to bound. That, the figures, the per-addr
 eviction policy and the startup refusal are on
 [HTTP server mode](http-server-mode.md#what-identity-this-deployment-has).
 
+**Behind both sits a bound on the process itself**: how many calls it holds open at once, and
+how many stateful sessions it keeps, both derived at startup from the descriptor limit it runs
+under and set by no flag, because a call queued behind the outbound bucket holds its connection
+for as long as the queue takes. The figures, what counts and how a full process refuses are on
+[HTTP server mode](http-server-mode.md#what-the-whole-process-may-hold).
+
 A refused `tools/call` comes back as a **successful** JSON-RPC result flagged `isError`, so the
 model gets a structured diagnostic and the agent loop can back off; the other three have no error
 flag of their own, so their refusal is a JSON-RPC error with code `-42900`, mirroring HTTP 429 the
@@ -915,17 +921,17 @@ indistinguishable from a call that ran and succeeded, which is exactly what it w
 on the metric. The reasons are a closed set, because the value lands on a metric dimension and
 a dimension cannot be withdrawn without breaking every dashboard built on it:
 
-| Reason                | What decided it                                                   |
-| --------------------- | ----------------------------------------------------------------- |
-| `consent_declined`    | The user answered no to a download prompt.                        |
-| `source_not_in_chain` | The caller named a source this deployment does not have enabled.  |
-| `download_too_large`  | The size cap refused a transfer.                                  |
-| `download_stalled`    | No bytes arrived for the stall window.                            |
-| `blocked_address`     | The outbound destination guard refused a host.                    |
-| `invalid_params`      | An argument was rejected before any work was done.                |
-| `rate_limited`        | The per-caller inbound rate limit refused a method.               |
-| `inflight_ceiling`    | The per-caller or per-process ceiling on heavy calls refused one. |
-| `action_timeout`      | The wall-clock cap on one tool call ended it.                     |
+| Reason                | What decided it                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `consent_declined`    | The user answered no to a download prompt.                                                                                   |
+| `source_not_in_chain` | The caller named a source this deployment does not have enabled.                                                             |
+| `download_too_large`  | The size cap refused a transfer.                                                                                             |
+| `download_stalled`    | No bytes arrived for the stall window.                                                                                       |
+| `blocked_address`     | The outbound destination guard refused a host.                                                                               |
+| `invalid_params`      | An argument was rejected before any work was done.                                                                           |
+| `rate_limited`        | The per-caller inbound rate limit refused a method.                                                                          |
+| `inflight_ceiling`    | A ceiling on calls in flight refused one: per caller or per process on heavy calls, or the process's own on every held call. |
+| `action_timeout`      | The wall-clock cap on one tool call ended it.                                                                                |
 
 A source skipped for cooldown is deliberately **not** on that list. Cooldown here is routing
 rather than refusal: the chain either passes over a cooled source and continues, or — when

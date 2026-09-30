@@ -130,6 +130,19 @@ type httpPolicy struct {
 	// about a caller, which is the one question a caller of a public endpoint
 	// cannot otherwise ask — there is nobody to ask.
 	identity telemetry.IdentityPolicy
+	// ceilings are the process-wide ceilings on held calls and stateful
+	// sessions this listener counts against. Nil means [processWide], which is
+	// what every production listener uses: a field only so a test can serve
+	// against a ceiling small enough to fill.
+	ceilings *processCeilings
+}
+
+// processCeilings returns the ceilings this policy counts against.
+func (p httpPolicy) processCeilings() *processCeilings {
+	if p.ceilings == nil {
+		return processWide
+	}
+	return p.ceilings
 }
 
 // servesTLS reports whether this process terminates TLS itself, rather than

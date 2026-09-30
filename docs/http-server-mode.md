@@ -246,6 +246,94 @@ Every refusal here uses the same `isError` result shape the rate limit uses, so 
 one answer for "this is your side to fix" rather than reading a ceiling as a mirror failure and
 retrying into it forever.
 
+## What the whole process may hold
+
+A `tools/call` holds its `POST` open for as long as the call runs, and on this server that is
+mostly time spent **queued**: every call that reaches a mirror or a provider waits for a token of
+the one outbound bucket (`LIBGEN_MCP_RATE_RPS`, one a second by default), so sixteen searches
+in flight take fifteen seconds to drain and a thousand take over a quarter of an hour. The rate
+limit bounds how often a caller asks, and the ceiling above bounds `download` and `read`, but
+nothing bounded how many `search` and `get_details` calls were waiting. Each held call costs a
+file descriptor for the caller's connection and another for the upstream one once its token
+comes, and a process out of descriptors accepts no connection at all, **`/health` included**.
+
+So the process holds at most a number of calls **derived from its descriptor limit**, read once
+at startup: an eighth of the limit is left spare, one descriptor is reserved for each of the 64
+byte-moving slots (a download writes a file and a read opens one), and each held call is
+counted at two. The Go runtime raises the soft limit to the hard one before `main`, so the
+figure follows the **hard** limit:
+
+| Hard `RLIMIT_NOFILE`               | Held calls | Stateful sessions |
+| ---------------------------------- | ---------: | ----------------: |
+| 1024                               |        416 |               208 |
+| 4096                               |       1760 |               880 |
+| 524288 (a default systemd service) |     229344 |            114672 |
+| 1048576 (a common container limit) |     458720 |            229360 |
+
+Windows has no such limit to read and is sized as 1024. **No flag moves it**, for the reason the
+ceiling of 64 has none: an operator who could raise it could configure away the one bound that
+keeps the process answering. Raising the descriptor limit (`ulimit -n`, `LimitNOFILE=` on a
+systemd unit, `--ulimit nofile=` for a container) raises it together with what it protects.
+The startup line `process ceilings` says what this process was given, as
+`held_calls_per_process`, `descriptor_limit` and `descriptor_limit_source`.
+
+**What counts.** A `tools/call` or a `prompts/get` that arrived on an HTTP `POST`, from the
+moment the SDK dispatches it until its handler returns. Each call of a batch counts on its own;
+a listing, `initialize`, a notification or a `ping` never does, and neither does anything on
+stdio, which serves one caller over one pipe. A `download` or `read` counts here **and** against
+the ceiling above, and the 64 is the tighter of the two except on a very small limit.
+
+**How it refuses.** Always with the words `This server is busy. Retry later.`, naming no bound
+and no other caller. On protocol `2026-07-28` or later, where the `Mcp-Method` header proves
+what a `POST` carries, the refusal happens before the SDK reads the body: `503`, a JSON-RPC
+error with code `-50300` (the status times -100, like the other transport refusals) and the
+request's id, and `Retry-After: 30`. On an older revision the body has to be read first, so the
+refusal is the rate limit's shape: a `tools/call` comes back as a result flagged `isError`, and
+a `prompts/get` as a JSON-RPC error with code `-50300`. Either way the **connection is closed**
+with the reply, because a refused caller that kept it would hold a descriptor of the very limit
+that refused it. A refused call spends nothing of its caller's rate: the process being full is
+nothing that caller did. The operator's line is
+`request refused: too many calls held across the process`, with `scope=process` and
+`limit_held_calls`, written at most once every ten seconds.
+
+**One caller can fill it.** There is no per-caller partner, because an address is something a
+caller can have many of, and a per-caller number multiplies with every one. Where the limit is
+small that is quick: at the default inbound limit (a burst of 40, then ten a second) one address
+reaches 416 held calls in under forty seconds. The inbound limit is what slows it, and a proxy
+that charges the real client address is what keeps it per caller.
+
+**`/health` keeps answering.** It is not counted, and the spare eighth is what it, the idle
+process and the connections being refused live in. Two things are **not** bounded here: idle
+kept-alive connections, which `--http-idle-timeout` reclaims, and memory, which a held call
+costs whatever the descriptor limit says — under a large limit the container's memory limit (or
+`MemoryMax=` on a systemd unit) is the bound that arrives first.
+
+### Stateful sessions
+
+On `--stateless=false` a session lives until its client deletes it or `--session-timeout`
+closes it, and `initialize` is metered to no bucket, so sessions were bounded by nothing. Each
+may also hold its standalone stream, a `GET` the SDK serves for the session's whole life, and
+enough of those take every descriptor too.
+
+So the process keeps at most **half the held-call figure** in sessions, and each session
+**reserves one held-call slot for its stream when it opens**, whether the stream is ever opened
+or not. That keeps the descriptor budget above whole, leaves calls at least half the held slots
+when every session is open, and means a session the process keeps is never refused its stream —
+which matters, because a client refused its standalone stream does not ask again and silently
+loses everything the server sends outside a response.
+
+A `POST` with no `Mcp-Session-Id` is what opens a session, and it is refused past the ceiling
+in the words and the shape of the `2026-07-28` refusal above: `503`, `-50300`, `Retry-After: 30`,
+the connection closed, and no session id. A request on a session that is already open is never
+refused by this ceiling. The line is `request refused: too many stateful sessions across the
+process`, with `limit_stateful_sessions`, and the startup line adds
+`stateful_sessions_per_process`.
+
+**Filling it costs a caller nothing**, since `initialize` spends no rate and an idle session
+holds no connection, so one caller can hold every session for up to `--session-timeout`. With
+`--session-timeout=0` a session nobody deletes keeps its slot until the process restarts, and
+once every slot is held that way every new client is refused; startup warns about exactly that.
+
 ## Draining before the listener closes
 
 On shutdown, `GET /health` flips to `503` with `{"status":"draining"}` and `--drain-delay`
@@ -286,7 +374,8 @@ default transport **fails startup** rather than being quietly ignored. Where ses
 survive, the only other thing that ends one is a `DELETE` the client may never send, so a client
 that crashed holds its session for the life of the process. The default is 30 minutes, `0`
 closes none, and it is capped at 24 hours; past a day the setting is not reclaiming anything a
-deployment outlives.
+deployment outlives. A session held that way also holds one of the process's
+[session slots](#stateful-sessions), which is why `0` is warned about at startup.
 
 ## The configuration digest
 

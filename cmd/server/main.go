@@ -652,6 +652,12 @@ func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeil
 		toolutil.AttachRateLimit(server, limiterFrom)
 		server.AddReceivingMiddleware(records.meter)
 	}
+	// The process-wide ceilings go outside the per-caller trio, so a call the
+	// process is too full to hold spends none of its caller's rate: the process
+	// being full is nothing that caller did. It counts only requests that
+	// arrived on a POST the HTTP gate saw, which is none on stdio, so it is
+	// installed whatever this deployment keeps per caller.
+	server.AddReceivingMiddleware(processCeilingsMiddleware)
 	// Then the carrier, so a handler runs under the bound context. The layers
 	// above it have nothing to cancel — cachehints annotates a result and
 	// capguard refuses a method outright — and all of them still run under
@@ -1375,16 +1381,20 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 	// The Host guard is outermost of the two: a request naming a host this
 	// deployment does not serve is refused before anything else is done with
 	// it, the body read for a JSON-RPC id included. The version guard sits
-	// directly in front of the SDK because that is the answer it replaces.
+	// in front of the process gate because both refuse for free, and the gate
+	// sits in front of the carrier because the carrier's registry is how what
+	// the gate took reaches the calls on the POST.
+	ceilings := policy.processCeilings()
 	mcpHandler := hostGuarded(guard, protocolVersionGuarded(opts.Stateless,
-		carriedMCPHandler(charge,
+		processGate(ceilings, opts.Stateless, carriedMCPHandler(charge,
 			mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)),
-		)))
+		))))
 	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {
 		log.Print("stateless mode is off: legacy compatibility transport, clients negotiate MCP protocol 2025-11-25 or older")
 	}
+	announceProcessCeilings(ceilings, opts)
 	// ReadHeaderTimeout guards against Slowloris; body/write timeouts stay
 	// unset so long-lived streamable HTTP (SSE) sessions are not cut short.
 	// Built once here rather than per request: it only changes with a release.

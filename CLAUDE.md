@@ -359,6 +359,26 @@ Starlight twins, with the operational recipes (nginx, docker-compose) in
 `## Transports` block in `cmd/gen_llms/main.go` also names these flags — change it there and
 re-run `make gen-llms`, never edit `llms.txt`/`llms-full.txt` by hand.
 
+### What the whole process may hold
+
+`cmd/server/held.go` and `sessions.go` bound the calls the process holds open and the stateful
+sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (416
+calls and 208 sessions under a hard limit of 1024). Three things fail open, silently, if
+undone:
+
+- **`processGate` wraps `carriedMCPHandler`, never the other way round.** What the gate took
+  reaches the calls through the POST context the carrier registers, so a gate placed inside it
+  hands the middleware no claim and **every call goes uncounted**, with every test of the
+  arithmetic still green.
+- **`processCeilingsMiddleware` goes on outside the per-caller trio** in `newMCPServer`, so a
+  call the full process refuses spends none of its caller's rate. It is installed whatever
+  `records` is; stdio carries no carrier token and counts nothing.
+- **A stateful session reserves a held slot for its stream when it opens.** Counting the `GET`
+  when it arrives instead refuses a stream the client never asks for again, and the session
+  then loses every message outside a response without anything reporting it.
+
+The prose is in `docs/http-server-mode.md` § *What the whole process may hold* and its twins.
+
 ### Error handling in handlers
 
 Handlers return `(*mcp.CallToolResult, Out, error)`. Return a real `error` for

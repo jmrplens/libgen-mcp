@@ -180,8 +180,9 @@ const (
 	ReasonInvalidParams RefusalReason = "invalid_params"
 	// ReasonRateLimited is the inbound per-caller rate limit refusing a method.
 	ReasonRateLimited RefusalReason = "rate_limited"
-	// ReasonInflightCeiling is the per-caller or per-process ceiling on heavy
-	// calls refusing one.
+	// ReasonInflightCeiling is a ceiling on calls in flight refusing one: the
+	// per-caller or per-process one on heavy calls, or the process's own on
+	// every call it holds open.
 	ReasonInflightCeiling RefusalReason = "inflight_ceiling"
 	// ReasonActionTimeout is the wall-clock cap on one tool call ending it.
 	ReasonActionTimeout RefusalReason = "action_timeout"

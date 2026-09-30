@@ -336,6 +336,32 @@ return. Two configurations produce it:
   mounted on a path it can never match would answer `404` to everything, which reads as a
   proxy fault.
 
+## Calls come back `This server is busy. Retry later.` (`--http` deployments)
+
+**Symptom.** A `tools/call` returns an `isError` result with that text, a `prompts/get` or an
+`initialize` gets a JSON-RPC error with code `-50300`, or a request is answered `503` with
+`Retry-After: 30`. The log carries `request refused: too many calls held across the process`
+or `request refused: too many stateful sessions across the process`.
+
+**Meaning.** The process is holding as many calls, or keeping as many stateful sessions, as its
+descriptor limit allows, and refuses the next one rather than run out of descriptors and stop
+answering altogether. Calls queue behind the outbound bucket (`LIBGEN_MCP_RATE_RPS`), so a
+burst of searches is held for as long as that queue takes to drain.
+
+**Fixes.**
+
+- Read the startup line `process ceilings`: `held_calls_per_process` and `descriptor_limit`
+  say what this process was given. A `descriptor_limit` of `1024` is a small hard limit, and
+  raising it (`ulimit -n`, `LimitNOFILE=`, `--ulimit nofile=`) raises both ceilings. No flag of
+  this server moves them.
+- If one caller is holding everything, the inbound rate limit is what slows it, and it only
+  works per caller behind a proxy named with `--trusted-proxy-header` and `--trusted-proxies`.
+- On `--stateless=false`, sessions nobody deletes hold their slots until `--session-timeout`
+  closes them. With `--session-timeout=0` they never do: set a timeout.
+
+The figures and the refusal shapes are in
+[HTTP server mode](http-server-mode.md#what-the-whole-process-may-hold).
+
 ## The proxy gets `502` on a unix socket (`permission denied`)
 
 **Symptom.** The server logs `listening on unix socket /run/mcp-libgen.sock (http)` and stays
