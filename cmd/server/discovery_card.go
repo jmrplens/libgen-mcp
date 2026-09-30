@@ -16,8 +16,15 @@
 // /server-card — the location SEP-2127 reserves. Now the binary serves the right
 // shape at each path:
 //
-//	/server-card                          this document, SEP-2127
+//	/server-card, /mcp/server-card        this document, SEP-2127
 //	/.well-known/mcp/server-card.json     the enumerating SEP-1649 document
+//	/.well-known/ai-catalog.json          nothing: the catch-all's 404
+//
+// Every path is mounted under --http-path as well. The SEP-2127 card is at two
+// paths because the extension reserves `<streamable-http-url>/server-card` and
+// the endpoint answers at the base path and at its /mcp alias. The AI Catalog
+// that would list the card belongs to the deployment rather than the binary: it
+// describes everything a host publishes, which only whoever runs the host knows.
 //
 // The legacy path keeps the enumerating document byte for byte, because scanners
 // written against that draft already fetch it and because it is the only

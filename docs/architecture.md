@@ -528,6 +528,14 @@ enumerated the surface would be answering a question only a live `tools/list` ca
 enumerating document is where a directory gets that, and the standard pre-connection channel is
 `server/discover`, which this server also answers.
 
+The discovery card is also served at `/mcp/server-card`, byte for byte. The extension reserves
+`<streamable-http-url>/server-card`, the suffix on the endpoint's URL rather than on the host,
+and the endpoint answers at its `/mcp` alias as well, so a deployment published as
+`https://host/mcp` would otherwise answer `404` at the one card URL a client derives from it.
+`/.well-known/ai-catalog.json` is not served: an AI Catalog lists everything a host publishes,
+which only the deployment knows
+([Publishing an AI Catalog](http-server-mode.md#publishing-an-ai-catalog)).
+
 `remotes` is absent unless `--public-url` is given, and that absence is deliberate: a listen
 address is not an answer, since it is frequently loopback or a unix socket behind a proxy, and
 publishing it would send a client somewhere it cannot go. The protocol versions the entry

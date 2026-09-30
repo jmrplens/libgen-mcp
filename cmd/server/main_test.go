@@ -1676,6 +1676,12 @@ func mountedRoutes(prefix string) []routeCase {
 		{name: "health", method: http.MethodGet, path: prefix + "/health", wantStatus: http.StatusOK, wantType: "application/json"},
 		{name: "legacy card path", method: http.MethodGet, path: prefix + serverCardPath, wantStatus: http.StatusOK, wantType: "application/json", wantCache: "public, max-age=3600"},
 		{name: "current card path", method: http.MethodGet, path: prefix + serverCardCurrentPath, wantStatus: http.StatusOK, wantType: serverCardMediaType, wantCache: "public, max-age=3600"},
+		// The card after the alias form of the endpoint, which is the URL a
+		// client derives from an endpoint published as .../mcp.
+		{name: "current card path after the mcp alias", method: http.MethodGet, path: prefix + mcpAliasPath + serverCardCurrentPath, wantStatus: http.StatusOK, wantType: serverCardMediaType, wantCache: "public, max-age=3600"},
+		// An AI Catalog lists everything a host publishes, which only the
+		// deployment knows, so the binary serves none.
+		{name: "ai catalog", method: http.MethodGet, path: prefix + "/.well-known/ai-catalog.json", wantStatus: http.StatusNotFound, wantType: "application/json"},
 		{name: "mcp endpoint with a trailing slash", method: http.MethodPost, path: prefix + "/", wantStatus: http.StatusTeapot},
 		// The alias, in both spellings, and the path beneath it that must NOT
 		// reach the endpoint: mounted as a bare "/mcp/" subtree, ServeMux would

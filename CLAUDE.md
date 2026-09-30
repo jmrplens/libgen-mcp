@@ -64,8 +64,10 @@ serves it, and asserts the wire-level promises an HTTP deployment makes — no
 `Mcp-Session-Id`; `GET` on the MCP endpoint → 405 with `Allow: POST`; an unknown path → 404
 with a JSON body naming the endpoint, never the 405 a catch-all used to give; the five
 security headers, checked on a response an inner layer writes itself (the 404) as well as on
-a plain route; both server-card locations answering the same bytes under their own media
-types, with the card's `Cache-Control` override; and the `--json-response` content type. Run
+a plain route; each server-card location answering its own document under its own media type,
+with the card's `Cache-Control` override, and the SEP-2127 card answering again after the
+`/mcp` alias (the extension reserves `<endpoint-url>/server-card`, so the card follows every
+form of the endpoint); and the `--json-response` content type. Run
 it after touching `internal/transport` or the HTTP wiring in `cmd/server`.
 
 Coverage is scoped to `./internal/...` and `./cmd/...` — everything this module

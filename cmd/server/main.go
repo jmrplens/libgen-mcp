@@ -1033,7 +1033,13 @@ func newHTTPHandler(mcpHandler http.Handler, cards serverCards, trusted []string
 		body      []byte
 	}{
 		{serverCardPath, mediaTypeJSON, cards.enumerating},
+		// The extension reserves <streamable-http-url>/server-card: the suffix
+		// goes on the endpoint's URL, not on the host. The endpoint answers at
+		// the base path and at its /mcp alias, so the card is mounted after
+		// both, or a deployment published as https://host/mcp answers 404 at the
+		// one card URL a client derives from it.
 		{serverCardCurrentPath, serverCardMediaType, cards.discovery},
+		{mcpAliasPath + serverCardCurrentPath, serverCardMediaType, cards.discovery},
 	} {
 		// Each route is mounted only when its own document exists. The
 		// enumerating one is built by listing the live server and can fail; the
