@@ -193,7 +193,7 @@ func TestResolveTransportSettlesTheAddressAsWellAsTheTransport(t *testing.T) {
 			wantWarn: "127.0.0.1:9000",
 		},
 		{
-			name: "auto resolving to stdio with an address warns", selector: "auto", httpAddr: "127.0.0.1:9000",
+			name: "auto resolving to stdio with an address notes it", selector: "auto", httpAddr: "127.0.0.1:9000",
 			pipedStdin: true, wantWarn: "127.0.0.1:9000",
 		},
 	}
@@ -345,22 +345,33 @@ func TestTransportDecisionExplainsItselfOnlyWhenThereIsSomethingToSay(t *testing
 		t.Errorf("a stated transport was explained back to the operator: %s", captured.String())
 	}
 
-	// Both lines the other two cases owe: what was inferred, and what was
-	// dropped. Each is the only record of a decision the operator did not make.
+	// Both lines auto owes: what was inferred, and the address it left unused.
+	// Each is the only record of a decision the operator did not make, and
+	// neither is a warning: auto with an address is the image's own command.
 	transportDecision{
 		Inference: "stdin is a pipe",
-		Override:  "--http 127.0.0.1:9000 was given but this process is serving stdio",
+		Override:  "--http 127.0.0.1:9000 is the address an HTTP run binds",
 	}.explain()
 	logged := captured.String()
 	for _, want := range []string{
-		`"level":"WARN"`, "127.0.0.1:9000",
-		`"level":"INFO"`, "transport inferred from stdin", `"transport":"stdio"`, "stdin is a pipe",
+		"127.0.0.1:9000", "transport inferred from stdin", `"transport":"stdio"`, "stdin is a pipe",
 	} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(logged, want) {
 				t.Errorf("the explanation does not carry %q:\n%s", want, logged)
 			}
 		})
+	}
+	if strings.Contains(logged, `"level":"WARN"`) {
+		t.Errorf("auto with an address was warned about; it is the image's own command:\n%s", logged)
+	}
+
+	// A stated stdio transport that drops an address is a contradiction the
+	// operator wrote, and that one stays a warning.
+	captured.Reset()
+	transportDecision{Override: "--http 127.0.0.1:9000 was given but this process is serving stdio"}.explain()
+	if !strings.Contains(captured.String(), `"level":"WARN"`) {
+		t.Errorf("a stated stdio transport dropping an address was not warned about:\n%s", captured.String())
 	}
 
 	if got := transportName(true); got != transportHTTP {

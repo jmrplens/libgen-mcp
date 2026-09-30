@@ -399,7 +399,10 @@ a person from a container started without `-i`. Only `/dev/null` means HTTP; a p
 client), a terminal (a person), a regular file (a replayed session) and a socket (a
 supervisor) all mean stdio. An unrecognized shape means stdio too, because that error is
 visible in seconds while the other one is a client hanging with no output at all. Whatever it
-decides, it logs the observation it decided on.
+decides, it logs the observation it decided on. When it chooses stdio, an address `--http`
+supplied is noted at `INFO` rather than warned about: under `auto` the address answers the HTTP
+case stdin did not pick, and the image's own command gives one. A stated `--transport stdio`
+that drops an address is still a `WARN`.
 
 Everything downstream reads the **resolved** answer rather than the flag: the socket mode, the
 listener, whether `download` returns links instead of files, whether the server may fetch file
