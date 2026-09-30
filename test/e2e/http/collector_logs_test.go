@@ -3,6 +3,7 @@
 package httpe2e
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -93,6 +94,86 @@ func TestCollector_AStrippedFieldIsAbsentFromTheExportedRecord(t *testing.T) {
 	payloads := c.awaitPayloadContaining(t, "callers cannot be told apart", 30*time.Second)
 	if strings.Contains(payloads, "charged_address") {
 		t.Error("charged_address reached the collector; the strip list is applied on the wrong leg or not at all")
+	}
+}
+
+// plantedHost is a Host header no deployment declares, shaped like the name a
+// rebinding page or a scanner would send.
+const plantedHost = "planted-host-9f3a.attacker.example"
+
+// TestCollector_ARefusedHostNeverLeaves is the host guard's refusal, through
+// the real binary, with every signal that could carry it switched on.
+//
+// The guard logs the Host of a request it refuses, because a proxy forwarding
+// the wrong one is diagnosed by reading what arrived. On a published endpoint
+// that value is whatever a caller chose to send, and it went to the collector
+// under "host" for as long as the guard had logged it: the field was not on
+// the strip list, and the rule is applied by name.
+//
+// The wait is on the record's message, which is the safe half of it, never on
+// the host: synchronizing on the value this asserts the absence of would be
+// waiting for the failure it is looking for.
+func TestCollector_ARefusedHostNeverLeaves(t *testing.T) {
+	c := startCollector(t)
+	m := startMirror(t, func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "nothing here", http.StatusNotFound)
+	})
+
+	s := startServer(t, withEnv(mirrorEnv(m), collectorEnv(c), map[string]string{
+		"LIBGEN_MCP_TELEMETRY_SIGNALS": "traces,metrics,logs",
+		"LIBGEN_MCP_EXTRA_SOURCES":     "never",
+	}))
+
+	if got := s.do(t, request{body: toolsListBody, host: plantedHost}); got.status != http.StatusForbidden {
+		t.Fatalf("the Host guard answered %d for %s, want %d: there is no refusal to assert about",
+			got.status, plantedHost, http.StatusForbidden)
+	}
+
+	c.awaitPayloadContaining(t, "the Host header names a host this deployment does not serve", 30*time.Second)
+	c.assertNoPayloadContains(t, plantedHost)
+
+	// stderr keeps it: it is the operator's own terminal, and the line exists
+	// to be read there.
+	if logs := s.logs(); !strings.Contains(logs, plantedHost) {
+		t.Errorf("the refused host is missing from stderr, where an operator reads it to fix a proxy:\n%s", tail(logs))
+	}
+}
+
+// TestCollector_AFailedHandshakeNeverNamesThePeer is net/http's own error log,
+// which names the peer it failed with.
+//
+// With no ErrorLog of its own, http.Server writes through the log package, and
+// once slog is the default the log package writes through the bridge with
+// net/http's line as the record's message: "http: TLS handshake error from"
+// the peer's address and port, on every scanner that opens a connection and
+// sends something that is not TLS. The export leg does not rewrite messages,
+// so that line would reach the collector whole.
+func TestCollector_AFailedHandshakeNeverNamesThePeer(t *testing.T) {
+	c := startCollector(t)
+	s := startTLSServer(t, withEnv(collectorEnv(c), map[string]string{
+		"LIBGEN_MCP_TELEMETRY_SIGNALS": "logs",
+	}))
+
+	host := strings.TrimPrefix(s.baseURL, "https://")
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(t.Context(), "tcp", host)
+	if err != nil {
+		t.Fatalf("dial %s: %v", host, err)
+	}
+	peer := conn.LocalAddr().String()
+	// Not a TLS record, and not one of the prefixes net/http recognizes as
+	// plain HTTP and answers with a 400 rather than logging.
+	if _, err = conn.Write([]byte("hello, neither TLS nor HTTP\r\n\r\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, _ = conn.Read(make([]byte, 64))
+	_ = conn.Close()
+
+	c.awaitPayloadContaining(t, "the HTTP server reported an error", 30*time.Second)
+	c.assertNoPayloadContains(t, peer, "TLS handshake error")
+
+	if logs := s.logs(); !strings.Contains(logs, "TLS handshake error from "+peer) {
+		t.Errorf("stderr lost net/http's line, which is what an operator reads to debug a certificate:\n%s", tail(logs))
 	}
 }
 

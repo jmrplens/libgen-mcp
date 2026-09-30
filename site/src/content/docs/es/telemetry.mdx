@@ -149,7 +149,7 @@ Cada registro va primero a stderr, sin cambios, y —por encima de un umbral INF
 
 La copia exportada es el registro de stderr menos tres cosas:
 
-- **los campos de la lista de exclusión**: una consulta de búsqueda, el título de un registro, una credencial por llamada, la dirección a la que se cargó la petición, y un panic recuperado con su traza de pila;
+- **los campos de la lista de exclusión**: una consulta de búsqueda, el título de un registro, una credencial por llamada, la dirección a la que se cargó la petición, un panic recuperado con su traza de pila, la cabecera `Host` de una petición que la comprobación de Host rechazó, y la línea que net/http escribe en su registro de errores (un handshake TLS fallido se registra con la dirección y el puerto del otro extremo). stderr conserva estas dos últimas, porque son lo que lees para averiguar qué reenvía un proxy mal configurado o por qué falla el handshake de un cliente, y el mensaje bajo el que se registra la línea de net/http es una constante, así que tampoco ahí viaja el otro extremo;
 - **el texto de todo error**, sustituido por su tipo. Si no, el puente promocionaría el error a `exception.message` con el valor de `err.Error()`, que en este servidor es el `GET esquema://host/ruta: motivo` de net/http — un mirror, y una ruta que en una descarga es el identificador del ítem;
 - **todo lo que pase del presupuesto de un atributo**, truncado con una marca y reparado a UTF-8 válido, ya que un solo carácter partido hace fallar la subida de todo un lote.
 

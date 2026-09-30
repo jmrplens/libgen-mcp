@@ -577,7 +577,10 @@ func renderAttrs(attrs []slog.Attr) string {
 func TestExportStrippedFieldsNamesEverySensitiveField(t *testing.T) {
 	t.Parallel()
 
-	want := []string{"annas_key", "charged_address", "panic", "query", "stack", "title", "unpaywall_email"}
+	want := []string{
+		"annas_key", "charged_address", "host", "http_server_error",
+		"panic", "query", "stack", "title", "unpaywall_email",
+	}
 	got := make([]string, 0, len(ExportStrippedFields))
 	for name := range ExportStrippedFields {
 		got = append(got, name)

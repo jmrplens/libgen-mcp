@@ -190,6 +190,10 @@ func TestAStrippedFieldNeverLeavesTheProcess(t *testing.T) {
 		{LogFieldChargedAddress, "203.0.113.7"},
 		{LogFieldPanic, "runtime error: the-planted-panic-value"},
 		{LogFieldStack, "goroutine 1 [running]: /home/planted/path/main.go:42"},
+		// A Host header the guard refused: whatever a caller chose to send.
+		{LogFieldRequestHost, "planted-host.attacker.example"},
+		// net/http's own error line, which names the peer it failed with.
+		{LogFieldHTTPServerError, "http: TLS handshake error from 198.51.100.23:40211: EOF"},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
 			logger, exporter, stderr := bridged(t, slog.LevelInfo)
