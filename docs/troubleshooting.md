@@ -271,6 +271,30 @@ instance, or one that is not shared — set `LIBGEN_MCP_SERVER_FETCH=1`. On a lo
 the tool is present by default; if it is missing there, something has set that variable to a
 false value. See [Configuration](configuration.md#libgen_mcp_server_fetch).
 
+## A stdio server says a flag "has no effect"
+
+**Symptom.** A stdio server logs `this flag is read by the HTTP transport only, so it has no
+effect on a stdio server`, or the same about a variable, with a `flag` such as
+`--rate-limit-rps` and the `LIBGEN_MCP_*` variable that fills it.
+
+**Meaning.** The listener, the per-caller budgets, the origin list, the proxy settings, TLS
+and the session settings configure the HTTP transport, and a stdio server has none of them:
+one client on the other end of a pipe. The server serves anyway, since none of these is
+dangerous to ignore, and names each one once at startup so a setting that does nothing is not
+also a setting nobody hears about. The line is a `WARN` for a flag typed on a stdio run, and an
+`INFO` under `--transport auto` (a command line written for either transport, as the container
+image's is) and for a variable set in the environment (which a shared dotenv file carries to
+every process).
+
+**Fixes.**
+
+- Remove the flag from the client's `args`, or the variable from its `env`, if it was carried
+  over from an HTTP deployment.
+- `--max-request-body-bytes` is the one with a stdio counterpart: the line names it as
+  `on_stdio_set`, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`.
+- If you meant to serve HTTP, give `--http` an address or pass `--transport http`. See
+  [HTTP server mode](http-server-mode.md).
+
 ## Every HTTP path answers 404 (`--http` deployments)
 
 **Symptom.** A server started with `--http` answers `404` and

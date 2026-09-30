@@ -564,7 +564,9 @@ that error is visible in seconds while the other one is a client hanging with no
 `--transport stdio` and `--transport http` state the choice outright for a deployment that
 would rather not depend on how it was started; `--transport stdio` alongside a `--http` value
 warns rather than ignoring it, because an address that quietly does nothing is the hardest kind
-of misconfiguration to notice.
+of misconfiguration to notice. The other HTTP-only flags are named the same way when the
+transport resolves to stdio, one line each on stderr, and the server serves anyway (see
+[Troubleshooting](troubleshooting.md#a-stdio-server-says-a-flag-has-no-effect)).
 
 ## The `/mcp` alias
 

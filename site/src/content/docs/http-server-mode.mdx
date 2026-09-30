@@ -308,7 +308,7 @@ CMD ["--transport", "auto", "--http", "0.0.0.0:8080"]
 
 The inference asks "did anybody hand this process a stdin at all", not "is this a terminal": a terminal and `/dev/null` are both character devices. Only `/dev/null` means HTTP; a pipe, a terminal, a regular file and a socket all mean stdio, and so does an unrecognized shape, because that error is visible in seconds while the other one is a client hanging with no output.
 
-**Any argument replaces `CMD` wholesale**, so `docker run <image> --http :9000` drops `--transport auto` with it — which is fine, since naming a listener is deciding the transport. `--transport stdio` and `--transport http` state the choice outright for a deployment that would rather not depend on how it was started; `--transport stdio` alongside a `--http` value warns rather than ignoring it, because an address that quietly does nothing is the hardest kind of misconfiguration to notice.
+**Any argument replaces `CMD` wholesale**, so `docker run <image> --http :9000` drops `--transport auto` with it — which is fine, since naming a listener is deciding the transport. `--transport stdio` and `--transport http` state the choice outright for a deployment that would rather not depend on how it was started; `--transport stdio` alongside a `--http` value warns rather than ignoring it, because an address that quietly does nothing is the hardest kind of misconfiguration to notice. The other HTTP-only flags are named the same way when the transport resolves to stdio, one line each on stderr, and the server serves anyway (see [Troubleshooting](/libgen-mcp/troubleshooting/#a-stdio-server-says-a-flag-has-no-effect)).
 
 ## The `/mcp` alias
 

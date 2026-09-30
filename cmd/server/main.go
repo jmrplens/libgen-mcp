@@ -277,6 +277,10 @@ func mainWithExit() int {
 	httpIdleTimeout := flag.Duration("http-idle-timeout", defaultHTTPIdleTimeout, "close a kept-alive connection that has gone this long between requests. 0 (default) never closes one, which is what this server did before the flag existed. It bounds the gap between requests, never a response being written, so an SSE stream is not what it reclaims")
 	registerEnvBackedFlags()
 	flag.Parse()
+	// Asked now, before the environment overlay sets flags through the same
+	// set, so a stdio run can say which ignored flag was typed and which came
+	// from a variable.
+	typed := flagsPassedIn(flag.CommandLine)
 
 	// Before anything reads configuration, and before the dotenv loader resolves
 	// LIBGEN_MCP_ENV_FILE — which it does once per process, so a write after
@@ -337,6 +341,9 @@ func mainWithExit() int {
 		log.Print(transportErr)
 		return 1
 	}
+	// Named in run, once the configured handler is in place, never refused:
+	// see http_only_flags.go.
+	decision.Ignored = httpOnlyFlagsIgnored(decision.HTTP, flag.CommandLine, typed)
 	mode, modeErr := resolveSocketMode(decision.Addr, *socketMode)
 	if modeErr != nil {
 		log.Print(modeErr)
@@ -1110,7 +1117,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	// decision is explained here rather than where it was taken, so it arrives
 	// as a JSON record on a stream of JSON records.
 	logging.Setup(cfg.LogLevel)
-	decision.explain()
+	decision.explain(ctx)
 
 	// Before anything is served, so a span can cover the startup it is measuring,
 	// and after the configured log level so the announcement is filtered the way
