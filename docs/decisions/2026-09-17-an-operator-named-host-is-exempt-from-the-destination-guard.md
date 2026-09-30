@@ -140,9 +140,13 @@ Negative:
   flag meaning both would let a deployment that needs the first silently acquire
   the second.
 - A proxy named by `HTTP_PROXY` or `HTTPS_PROXY` is what gets dialed, so the
-  guard judges the proxy rather than the destination behind it. A deployment that
-  proxies its outbound traffic has delegated that decision to the proxy, which is
-  where a rule about destinations belongs in that topology.
+  dialer sees the proxy rather than the destination behind it. A destination
+  spelled as a hostname is resolved by the proxy, and a deployment that proxies
+  its outbound traffic has delegated the private-address decision to the proxy,
+  which is where a rule about names belongs in that topology. *Amended
+  2026-10-01*, below: the proxy is no longer judged under the destination's rule,
+  a destination spelled as an address is still judged here, and a hostname still
+  gets tier A from a local lookup.
 - A refusal may cost one DNS lookup. It is bounded at two seconds for the whole
   decision rather than per host, memoized per host, and a resolver that could not
   answer is not memoized at all — silence is not an answer, and remembering it
@@ -171,3 +175,66 @@ names a metadata endpoint as an operator host with the flag on and still expects
 a refusal; and `TestManagerReachesTheMirrorTheOperatorConfigured` and
 `TestClientsCarryTheOperatorNamedDestinations` assert the wiring against a real
 server on a real private address.
+
+## Amendment — 2026-10-01 (outbound proxies)
+
+The proxy bullet under *Consequences* described what the dialer sees and left
+out what it did with it: the proxy's address was judged under the destination's
+rule. A proxy on a private address, which is what a corporate `HTTP_PROXY`
+usually is, was therefore refused for every request tier B refuses a private
+address, whatever that request was going to reach. Every host the operator did
+not name failed on the proxy's own address, which is Crossref, arXiv, Unpaywall,
+OpenLibrary and every download URL. And under the flag, or behind a proxy on a
+public address, the opposite held: nothing judged the destination at all, so
+`http://169.254.169.254/` went to the proxy. And a plain-HTTP connection
+through a proxy, which `net/http` keys on the proxy alone, carried a request to
+a private address nobody named once a request to the operator's own mirror had
+opened it.
+
+- **The proxy's own dial answers to tier A alone.** It is the operator's
+  configuration, as much as `LIBGEN_MIRROR` is. `policyTransport` asks the base
+  transport's `Proxy` function which proxy the request goes through and stamps
+  the address `net/http` will dial for it. `guardedDial`, the `DialContext` of
+  every transport the package builds, re-stamps a dial to exactly that address as
+  the proxy's. The comparison is between two strings, so a spelling they disagree
+  about falls back to the older, stricter rule.
+- **The destination behind a proxy is judged per request**, before anything is
+  sent, by the same two tiers, when the URL spells it as an address.
+- **"Spelled as an address" is read the way a C resolver reads it.**
+  getaddrinfo parses a host through `inet_aton`, which accepts one to four
+  dot-separated parts in decimal, octal or hex, so `2852039166`, `0xa9fea9fe`,
+  `0251.0376.0251.0376` and `169.254.43518` are each `169.254.169.254` to the
+  proxy's resolver while `netip` rejects all four. `addressLiteral` parses those
+  forms and judges the result, and refuses a host whose last label is numeric
+  but which is no valid form, since no registered name ends in such a label. The
+  redirect check reads hosts the same way.
+- **A hostname behind a proxy gets tier A from a local lookup.** Tier B stays the
+  proxy's decision, as the bullet above says: the proxy may see a view of DNS
+  this machine does not, so a private answer here says nothing about where it
+  connects. Tier A holds for every client and every hop, so the name is resolved
+  here as well, under the two-second bound the sibling concession uses, and
+  refused if any address it answers with is a metadata endpoint. A lookup that
+  fails does **not** refuse. A machine behind a proxy is often one whose own
+  resolver cannot see the outside world, and refusing on silence would refuse
+  every request such a deployment makes, which is the defect this amendment
+  exists to remove. What remains is a name this machine cannot resolve and the
+  proxy resolves to a metadata address, and there the proxy is the only party
+  that sees the answer. The cost is one lookup per proxied request to a name.
+- **The metadata table is consulted without an IPv6 zone.** `fd00:ec2::254%eth0`
+  is the table's address with an interface named, and an operating system ignores
+  the zone of a destination that is not link-local.
+
+Connection reuse without a proxy needed nothing. A connection dialed for one
+request is handed only to a request with the same scheme, host and port on the
+same client, and the decision reads the host and a policy-wide answer that only
+widens, so such a request would have been allowed to dial it.
+`TestAPooledConnectionIsOnlyHandedToARequestAllowedToDialIt` holds that with a
+real idle connection. The proxy half lives in `internal/netguard/proxy.go`, and
+`TestAPrivateProxyIsNotJudgedAsTheDestination`,
+`TestTheDestinationBehindAProxyIsStillJudged` and
+`TestAPooledProxyConnectionDoesNotCarryTheNextRequestPastTheGuard` drive it
+through a real forward proxy on loopback, and
+`TestAnHTTPSRequestTunnelsThroughAPrivateProxy` through a CONNECT tunnel. The
+host parse lives in `internal/netguard/hostaddr.go`, held by
+`TestAddressLiteralReadsHostsAsACResolverDoes` and, on the redirect path, by
+`TestCheckRedirectJudgesEveryNumericSpelling`.

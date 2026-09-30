@@ -127,14 +127,6 @@ var metadataAddresses = map[netip.Addr]string{
 	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address", // NOSONAR
 }
 
-// addressLiteral parses host as an IP address, reporting whether it was spelled
-// as one at all. A host that is a name is nobody's decision to make before the
-// dialer: what it resolves to is the only thing worth judging.
-func addressLiteral(host string) (netip.Addr, bool) {
-	addr, err := netip.ParseAddr(host)
-	return addr, err == nil
-}
-
 // metadataEndpoint returns what an address is the metadata endpoint of, and
 // whether it is one at all.
 //
@@ -142,8 +134,14 @@ func addressLiteral(host string) (netip.Addr, bool) {
 // address wearing an IPv6 coat (::ffff:169.254.169.254) is judged as the IPv4
 // address it is, which is the standard way past a filter that only reasons
 // about one family.
+//
+// The zone is dropped as well as the mapping, for the same reason: the table
+// holds each address once, bare, and fd00:ec2::254%eth0 is that address with an
+// interface named. An operating system ignores the zone of a destination that
+// is not link-local, so a lookup that kept it would let the spelling reach the
+// endpoint the table exists to refuse.
 func metadataEndpoint(addr netip.Addr) (string, bool) {
-	what, ok := metadataAddresses[addr.Unmap()]
+	what, ok := metadataAddresses[addr.WithZone("").Unmap()]
 	return what, ok
 }
 
@@ -177,14 +175,24 @@ func control(allowPrivate bool) func(ctx context.Context, network, address strin
 		if err != nil {
 			return fmt.Errorf("%w: unparseable destination %q", ErrBlockedAddress, host)
 		}
-		if what, ok := metadataEndpoint(addr); ok {
-			return fmt.Errorf("%w: %s is %s", ErrBlockedAddress, addr, what)
-		}
-		if !Blocked(addr) {
-			return nil
-		}
-		return tierB(ctx, addr, allowPrivate)
+		return judge(ctx, addr, allowPrivate)
 	}
+}
+
+// judge applies both tiers to one address a request would reach, under the
+// decision stamped on ctx.
+//
+// It is the dialer's rule, and it is also applied, per request, to a
+// destination a proxy is asked to reach (see [judgeProxiedDestination]), so a
+// proxy is never a way around it.
+func judge(ctx context.Context, addr netip.Addr, allowPrivate bool) error {
+	if what, ok := metadataEndpoint(addr); ok {
+		return fmt.Errorf("%w: %s is %s", ErrBlockedAddress, addr, what)
+	}
+	if !Blocked(addr) {
+		return nil
+	}
+	return tierB(ctx, addr, allowPrivate)
 }
 
 // tierB decides a private destination, which is the tier the operator's own
@@ -215,6 +223,12 @@ func tierB(ctx context.Context, addr netip.Addr, allowPrivate bool) error {
 // address policy. It starts from a clone of http.DefaultTransport so the
 // connection pooling, proxy support, HTTP/2 upgrade and timeouts the standard
 // library tunes are kept, and replaces only the dialer.
+//
+// Proxy is kept as the clone carries it, [http.ProxyFromEnvironment]. The dial
+// to the proxy is told apart from a dial to a destination only for a request
+// [ClientFor]'s transport stamped (see [guardedDial]); a caller borrowing this
+// transport bare gets the older, stricter rule, under which a proxy on a
+// private address is judged as the destination.
 func Transport(allowPrivate bool) *http.Transport {
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -229,7 +243,7 @@ func Transport(allowPrivate bool) *http.Transport {
 		// context, and Control cannot see it.
 		ControlContext: control(allowPrivate),
 	}
-	t.DialContext = dialer.DialContext
+	t.DialContext = guardedDial(dialer)
 	return t
 }
 
@@ -284,8 +298,14 @@ func checkRedirectFor(allowPrivate bool, policy *Policy) func(req *http.Request,
 // they named, or a named host that is itself private. A redirect is the cheaper
 // half of the attack, since a URL deposited in an index need only bounce once,
 // so the two halves of one client must not disagree about what is reachable.
+//
+// "Spelled as an address" includes every numeric form a C resolver accepts
+// (see [addressLiteral]), and a host that only looks numeric is refused outright.
 func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy) error {
-	addr, spelledAsAddress := addressLiteral(req.URL.Hostname())
+	addr, spelledAsAddress, err := addressLiteral(req.URL.Hostname())
+	if err != nil {
+		return fmt.Errorf("%w: redirect to %s, %w", ErrBlockedAddress, req.URL.Scheme+"://"+req.URL.Host, err)
+	}
 	if !spelledAsAddress {
 		return nil
 	}
@@ -299,7 +319,7 @@ func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy
 	if decision.permitsPrivate(req.Context()) {
 		return nil
 	}
-	return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
+	return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, RedactURLString(req.URL.String()))
 }
 
 // stripSensitiveHeaders removes the headers that must not follow a redirect off
@@ -400,7 +420,7 @@ func ClientFor(timeout time.Duration, policy *Policy) *http.Client {
 		// observer, if one was installed, wraps that in turn — outermost, so it
 		// sees the request as it was asked for and the guard still decides
 		// whether it is dialed.
-		Transport:     observe(&policyTransport{base: Transport(allow), policy: policy}),
+		Transport:     observe(&policyTransport{base: Transport(allow), policy: policy, allowPrivate: allow}),
 		CheckRedirect: checkRedirectFor(allow, policy),
 	}
 	if timeout > 0 {

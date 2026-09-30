@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -526,6 +527,123 @@ type observingRoundTripper struct {
 // guard underneath must still decide.
 func (o observingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return o.base.RoundTrip(req)
+}
+
+// TestCheckRedirectJudgesEveryNumericSpelling holds the redirect check to the
+// same reading of a host the proxy path uses. A hop to 2852039166 is a hop to
+// 169.254.169.254 for any C resolver, so the allowance must not let it through
+// as a name, and a host that only looks numeric is refused without a guess.
+func TestCheckRedirectJudgesEveryNumericSpelling(t *testing.T) {
+	for _, host := range []string{
+		"2852039166", "0xa9fea9fe", "0251.0376.0251.0376", "169.254.43518", "2852039166.",
+		"[::ffff:169.254.169.254]", "[::ffff:a9fe:a9fe]", "1.2.3.4.5",
+	} {
+		t.Run(host, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+host+"/latest/?token=s3cret", http.NoBody)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rerr := CheckRedirect(true)(req, nil)
+			if !errors.Is(rerr, ErrBlockedAddress) {
+				t.Fatalf("err = %v, want a redirect to %s refused under the allowance", rerr, host)
+			}
+			if strings.Contains(rerr.Error(), "s3cret") {
+				t.Errorf("the refusal carries the query string: %v", rerr)
+			}
+		})
+	}
+}
+
+// TestCheckRedirectRefusalCarriesNoSecret holds the private-address refusal to
+// the rule every URL in a message follows: a presigned hop or a keyed query is
+// a credential, and this error reaches both the log and the model's transcript.
+func TestCheckRedirectRefusalCarriesNoSecret(t *testing.T) {
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://user:pw@10.0.0.7/file.pdf?key=s3cret#frag", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rerr := CheckRedirect(false)(req, nil)
+	if !errors.Is(rerr, ErrBlockedAddress) {
+		t.Fatalf("err = %v, want the private redirect refused", rerr)
+	}
+	for _, secret := range []string{"s3cret", "pw", "frag"} {
+		t.Run(secret, func(t *testing.T) {
+			if strings.Contains(rerr.Error(), secret) {
+				t.Errorf("the refusal carries %q: %v", secret, rerr)
+			}
+		})
+	}
+	if !strings.Contains(rerr.Error(), "10.0.0.7/file.pdf") {
+		t.Errorf("the refusal no longer names the hop: %v", rerr)
+	}
+}
+
+// getReused issues a GET and reports whether net/http served it from an idle
+// connection rather than dialing, so a test can prove the pool it is asking
+// about was actually in play.
+func getReused(t *testing.T, c *http.Client, rawURL string) (bool, error) {
+	t.Helper()
+	var reused atomic.Bool
+	trace := &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) }}
+	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodGet, rawURL, http.NoBody)
+	if err != nil {
+		t.Fatalf("NewRequestWithContext(%q) error = %v", rawURL, err)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return false, err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	return reused.Load(), nil
+}
+
+// TestAPooledConnectionIsOnlyHandedToARequestAllowedToDialIt pins why reuse
+// cannot walk past the guard.
+//
+// The decision rides on the request's context and is read only at the dial, and
+// a request served from an idle connection is not dialed. Reuse is safe only
+// while the pool and the decision are keyed on the same thing: each client has
+// a transport of its own, net/http keys a direct connection on scheme, host and
+// port, and the decision reads the host. Both halves are asserted with a real
+// idle connection left behind. A client whose operator named "localhost" reuses
+// its connection, and the same address spelled 127.0.0.1, which nobody named,
+// is dialed afresh and refused. A strict client is refused an address a
+// permissive client holds an idle connection to. A shared transport, or a
+// decision keyed on something the pool is not, fails one of the two.
+func TestAPooledConnectionIsOnlyHandedToARequestAllowedToDialIt(t *testing.T) {
+	// localhost answers public here, so the private-sibling concession is off
+	// and only the name itself answers for the loopback dial.
+	stubResolver(t, map[string][]string{"localhost": {"93.184.215.14"}})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+	port := mustParse(t, srv.URL).Port()
+
+	t.Run("one client, two spellings", func(t *testing.T) {
+		client := ClientFor(5*time.Second, NewPolicy([]string{"localhost"}, false))
+		named := "http://localhost:" + port + "/"
+		if _, err := getReused(t, client, named); err != nil {
+			t.Fatalf("Get(%q) error = %v, want the operator's host reached", named, err)
+		}
+		reused, err := getReused(t, client, named)
+		if err != nil || !reused {
+			t.Fatalf("second Get(%q) reused = %v, error = %v; the pool was not in play, so this asserts nothing", named, reused, err)
+		}
+		if _, err = getReused(t, client, srv.URL); !errors.Is(err, ErrBlockedAddress) {
+			t.Errorf("Get(%q) error = %v, want the unnamed spelling refused rather than served the pooled connection", srv.URL, err)
+		}
+	})
+
+	t.Run("two clients, one address", func(t *testing.T) {
+		if _, err := getReused(t, Client(5*time.Second, true), srv.URL); err != nil {
+			t.Fatalf("Get(%q) under the allowance error = %v", srv.URL, err)
+		}
+		if _, err := getReused(t, Client(5*time.Second, false), srv.URL); !errors.Is(err, ErrBlockedAddress) {
+			t.Errorf("Get(%q) error = %v, want the strict client refused", srv.URL, err)
+		}
+	})
 }
 
 // TestCheckRedirectLogsThePortThatMadeItOffOrigin keeps the log from reporting

@@ -570,6 +570,30 @@ The same applies to a resolved file URL, which on Anna's member path is itself a
 working credential: a presigned URL published in an error is usable by whoever
 reads the log.
 
+### The destination guard behind an outbound proxy
+
+With `HTTP_PROXY`/`HTTPS_PROXY` set the dialer is handed the proxy's address, so
+`internal/netguard` recognizes that dial (`guardedDial`, tier A only) and judges
+the destination per request instead (`judgeProxiedDestination`). Two things hold
+it together, and breaking either fails **open** for an address-literal
+destination, not closed:
+
+- **`policyTransport.base` must be the `*http.Transport` itself.**
+  `proxyDialAddress` type-asserts it to read its `Proxy` function; a wrapper
+  inserted between the two makes every request look direct, so the destination
+  behind a proxy is never judged. Wrap outside `policyTransport`, as the
+  outbound observer does.
+- **The destination check is per request, never per dial.** `net/http` keys a
+  plain-HTTP connection through a proxy on the proxy alone, so a pooled
+  connection carries requests to many destinations and most of them are never
+  dialed. Moving the check into the dialer would let the first request's answer
+  serve every later one.
+- **A host is an address when a C resolver says so, not when `netip` does.**
+  `addressLiteral` (`hostaddr.go`) reads `2852039166`, `0xa9fea9fe` and the
+  other `inet_aton` forms as the address they are, because that is how the
+  proxy's getaddrinfo reads them. "Simplifying" it to `netip.ParseAddr` passes
+  every one of them to the proxy as a name.
+
 ### Telemetry: whose namespace a name is in, and what may leave the process
 
 **A name goes in a namespace its owner defines.** A span attribute, a metric or a
