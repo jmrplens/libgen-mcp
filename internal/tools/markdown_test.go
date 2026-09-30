@@ -452,6 +452,59 @@ func TestRenderSearchMarkdown_ALinkCannotEndTheRowItIsIn(t *testing.T) {
 	}
 }
 
+// livePipes counts the pipes that end a cell the way GFM splits a row: a
+// backslash takes the byte after it along, so a pipe after an odd run of
+// backslashes is text and one after an even run is a cell boundary. Counting
+// the two-byte pair alone reads the second as text, which is the defect this
+// counter exists to see.
+func livePipes(row string) int {
+	live := 0
+	for i := 0; i < len(row); i++ {
+		switch row[i] {
+		case '\\':
+			i++
+		case '|':
+			live++
+		}
+	}
+	return live
+}
+
+// TestRenderSearchMarkdown_ABackslashedPipeCannotEndTheRowItIsIn pins the case
+// the pair count above cannot see: a mirror's link label carrying a pipe went
+// through the link-label escaper after the cell escaper, which doubled the
+// backslash in front of the pipe and left the pipe live, and a title that
+// already held a backslash in front of a pipe did the same through the cell
+// escaper alone.
+func TestRenderSearchMarkdown_ABackslashedPipeCannotEndTheRowItIsIn(t *testing.T) {
+	out := renderSearchMarkdown(SearchOutput{
+		Page: 1, Mirror: "https://libgen.li",
+		Results: []libgen.Result{{
+			Title:   `Row Title a\|b`,
+			Authors: `C:\dir|x`,
+			MD5:     "d48739b6ac9e01d70dda1de46805d797",
+			Downloads: []libgen.DownloadOption{
+				{Label: "mirror | one", URL: "https://mirror.example/a"},
+				{Label: "two", URL: `ftp://mirror.example/a\|b`},
+			},
+		}},
+	})
+
+	row := ""
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "Row Title") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("no result row in:\n%s", out)
+	}
+	if got := livePipes(row); got != 10 {
+		t.Errorf("row = %q has %d live pipes, want 10 for a nine-column row", row, got)
+	}
+}
+
 // TestRenderResolvedMarkdown_TheURLLineIsNotRaw covers the second site the same
 // leak had: a resolved link written as "- URL: <raw>", where a newline in the
 // address ended the line and the rest rendered as prose.

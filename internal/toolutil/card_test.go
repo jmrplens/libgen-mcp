@@ -208,8 +208,8 @@ func TestCard_SecretIsShownOnceAndSaysSo(t *testing.T) {
 	card.End("Call download again with the same identifier.")
 	got := b.String()
 
-	if !strings.Contains(got, "- **Per-call key**: `sk-abc\\|def`") {
-		t.Errorf("card = %q, want the secret in a code span", got)
+	if !strings.Contains(got, "- **Per-call key**: `sk-abc|def`") {
+		t.Errorf("card = %q, want the secret in a code span, its pipe as sent", got)
 	}
 	if !strings.Contains(got, "is shown once and is not stored") {
 		t.Errorf("card = %q, want the guidance to say the value is not stored", got)
@@ -225,14 +225,22 @@ func TestCard_CodeAndLinkTakeTheirOwnContainment(t *testing.T) {
 	var b strings.Builder
 	card := NewCard(&b, "")
 	card.Code("md5", "abc`def")
+	card.Code("Path", `C:\dir|x`)
 	card.Link("Record", "A title", "https://example.org/x(y)")
+	card.Link("Mirror", "a|b", "https://example.org/")
 	card.URL("URL", "javascript:alert(1)")
+	card.URL("FTP", "ftp://example.org/a|b")
 	got := b.String()
 
+	// A card row is a list item, so a pipe in it is text and a backslash put in
+	// front of one inside a code span would be shown to the reader.
 	testCases := []struct{ name, want string }{
 		{name: "a code span outruns the backtick inside it", want: "- **md5**: ``abc`def``\n"},
+		{name: "a code span carries a pipe as sent", want: "- **Path**: `C:\\dir|x`\n"},
 		{name: "a link's destination is encoded", want: "- **Record**: [A title](https://example.org/x%28y%29)\n"},
+		{name: "a link's label carries a pipe as sent", want: "- **Mirror**: [a|b](https://example.org/)\n"},
 		{name: "an address no client should open is shown, not linked", want: "- **URL**: `javascript:alert(1)`\n"},
+		{name: "an address shown in a span carries a pipe as sent", want: "- **FTP**: `ftp://example.org/a|b`\n"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

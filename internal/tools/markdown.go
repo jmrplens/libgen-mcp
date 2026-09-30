@@ -85,7 +85,8 @@ func resultIdentifier(r libgen.Result) string {
 
 // resultLinks renders a result's download options as space-separated Markdown
 // links so a client that shows the text can offer clickable navigation. Empty
-// when the result carries no links.
+// when the result carries no links. The value lands in a table cell, so each
+// link is the cell form: a label's pipe ends no cell there.
 func resultLinks(r libgen.Result) string {
 	parts := make([]string, 0, len(r.Downloads))
 	for _, d := range r.Downloads {
@@ -96,7 +97,7 @@ func resultLinks(r libgen.Result) string {
 		if label == "" {
 			label = "download"
 		}
-		parts = append(parts, toolutil.MdTitleLink(label, d.URL))
+		parts = append(parts, toolutil.MdTitleLinkCell(label, d.URL))
 	}
 	return strings.Join(parts, " ")
 }

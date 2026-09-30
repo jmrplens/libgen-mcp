@@ -182,8 +182,10 @@ func (c *Card) Text(label, body string) {
 // no verb and no construct of its own, so the gate would have to judge the
 // call site instead, which is a rule this repository's audit does not have. A
 // renderer that needs to compose a value out of escaped parts builds it with
-// [MdTitleLink] or [MdCodeSpan] and passes it to [Card.Field], which escaping
-// again does not change.
+// [MdTitleLink] or [MdCodeSpan] and passes it to [Card.Field]. Escaping again
+// changes nothing but a pipe, and a pipe inside a code span would then show
+// the reader a backslash, so such a composition wants a member of its own
+// rather than Field the day a renderer needs one.
 
 // Section writes a heading one level below the card's own and returns the card
 // that writes the rows under it. The title is the server's own words, escaped

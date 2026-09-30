@@ -47,9 +47,51 @@ const maxDepth = 24
 // the classifier and the entry-point list read it.
 const toolutilDir = "internal/toolutil"
 
-// escaperNames are the toolutil functions whose result is safe to interpolate.
-// Each neutralizes a superset of what the weakest construct needs, so a value
-// that has been through any of them is safe in any context.
+// escaperFit is the set of contexts an escaper's result is correct in.
+type escaperFit int
+
+const (
+	// anyContext is an escaper whose result is correct wherever it lands: it
+	// neutralizes a superset of what the weakest construct needs.
+	anyContext escaperFit = iota
+	// cellOnly is an escaper written for a table cell. Its pipe is escaped
+	// for a row GFM splits before it reads any code span, and outside a table
+	// that escape is a backslash the reader sees.
+	cellOnly
+	// outsideCell is an escaper whose result holds a pipe as sent inside a
+	// code span, which is right in a list item or a paragraph and ends the
+	// cell in a table row.
+	outsideCell
+)
+
+// fits reports whether a result escaped this way is correct in ctx.
+func (f escaperFit) fits(ctx mdContext) bool {
+	switch f {
+	case cellOnly:
+		return ctx == ctxCell
+	case outsideCell:
+		return ctx != ctxCell
+	default:
+		return true
+	}
+}
+
+// misfit explains why a result escaped this way is wrong in the context it
+// landed in, naming the helper that belongs there instead.
+func (f escaperFit) misfit(name string) string {
+	if f == cellOnly {
+		return name + " is written for a table cell, and outside one its escaped pipe is a backslash the reader sees"
+	}
+	return name + " leaves a pipe live inside a code span, which ends a table cell: a cell takes toolutil.MdCodeSpanCell or toolutil.MdTitleLinkCell"
+}
+
+// escaperNames are the toolutil functions whose result is safe to interpolate,
+// each with the contexts it is correct in. Most neutralize a superset of what
+// the weakest construct needs, so a value that has been through them is safe
+// in any context. The code-span helpers and the two helpers that fall back to
+// one are split by where they land, because the pipe a table row needs escaped
+// is one a code span anywhere else must not escape, and the classifier accepts
+// each only where it is correct.
 //
 // StripControlBytes is deliberately absent. It drops the control bytes and
 // leaves both the pipe and the angle bracket, so accepting it as an answer
@@ -57,19 +99,21 @@ const toolutilDir = "internal/toolutil"
 // is absent for the opposite reason: it returns a fence, not a contained
 // value.
 //
-// The two code-span helpers are here although they write no entity: a code
-// span is its own containment, and each sizes its fence past the longest
-// backtick run in the value, so nothing inside can end the span or open a
-// construct of its own.
-var escaperNames = map[string]bool{
-	"toolutil.EscapeMdTableCell":       true,
-	"toolutil.EscapeMdHeading":         true,
-	"toolutil.EscapeMdLinkLabel":       true,
-	"toolutil.EscapeMdLinkDestination": true,
-	"toolutil.MdTitleLink":             true,
-	"toolutil.MdAutolink":              true,
-	"toolutil.MdCodeSpan":              true,
-	"toolutil.MarkdownFencedBlock":     true,
+// The code-span helpers are here although they write no entity: a code span
+// is its own containment, and each sizes its fence past the longest backtick
+// run in the value, so nothing inside can end the span or open a construct of
+// its own.
+var escaperNames = map[string]escaperFit{
+	"toolutil.EscapeMdTableCell":       anyContext,
+	"toolutil.EscapeMdHeading":         anyContext,
+	"toolutil.EscapeMdLinkLabel":       anyContext,
+	"toolutil.EscapeMdLinkDestination": anyContext,
+	"toolutil.MdTitleLink":             outsideCell,
+	"toolutil.MdTitleLinkCell":         cellOnly,
+	"toolutil.MdAutolink":              outsideCell,
+	"toolutil.MdCodeSpan":              outsideCell,
+	"toolutil.MdCodeSpanCell":          cellOnly,
+	"toolutil.MarkdownFencedBlock":     anyContext,
 }
 
 // externalSafe names functions outside the swept packages whose result cannot
@@ -164,6 +208,9 @@ type classifier struct {
 	// visiting guards the recursion against a function that reaches itself and
 	// a name assigned from itself.
 	visiting map[visit]bool
+	// ctx is the context the hole being judged sits in, which decides whether
+	// an escaper written for one context is an answer there.
+	ctx mdContext
 }
 
 // visit names one thing the classifier is in the middle of answering for.
@@ -184,6 +231,13 @@ func worse(a verdict, whyA string, b verdict, whyB string) (outcome verdict, exp
 		return b, whyB
 	}
 	return a, whyA
+}
+
+// classifyIn answers for a hole's value as [classifier.classify] does, with
+// the escapers judged against the context the hole sits in.
+func (c *classifier) classifyIn(expr ast.Expr, s scope, ctx mdContext) (outcome verdict, explanation string) {
+	c.ctx = ctx
+	return c.classify(expr, s, 0)
 }
 
 // classify answers whether the value expr produces can carry a character that

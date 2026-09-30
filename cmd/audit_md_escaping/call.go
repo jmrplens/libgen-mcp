@@ -5,14 +5,21 @@ import (
 	"go/token"
 )
 
-// classifyCall answers for a call: an escaper makes its result safe, a
-// conversion or a string transform passes the question to its operand, and a
-// function declared in the swept tree is answered by what its returns are,
-// with its parameters bound to what this call site passed.
+// classifyCall answers for a call: an escaper makes its result safe in the
+// contexts it is written for and unescaped in any other, a conversion or a
+// string transform passes the question to its operand, and a function
+// declared in the swept tree is answered by what its returns are, with its
+// parameters bound to what this call site passed.
 func (c *classifier) classifyCall(call *ast.CallExpr, s scope, depth int) (outcome verdict, explanation string) {
 	name := c.callName(call, s)
+	if fit, isEscaper := escaperNames[name]; isEscaper {
+		if fit.fits(c.ctx) {
+			return safe, ""
+		}
+		return unescaped, fit.misfit(name)
+	}
 	switch {
-	case escaperNames[name], externalSafe[name], builtinSafe[name]:
+	case externalSafe[name], builtinSafe[name]:
 		return safe, ""
 	case builtinCarries[name]:
 		return c.worstOf(call.Args, s, depth)

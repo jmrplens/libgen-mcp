@@ -132,3 +132,73 @@ func TestAudit_AFindingNamesTheFunctionAndTheFileItIsIn(t *testing.T) {
 		t.Errorf("finding = %+v, want a line and a reason", finding)
 	}
 }
+
+// TestClassify_AcceptsASpanHelperOnlyWhereItIsCorrect pins the split between
+// the two forms of the code-span and link helpers: the cell form escapes a pipe
+// for a row GFM splits before it reads a span, which outside a table is a
+// backslash the reader sees, and the plain form leaves a pipe live, which ends
+// a cell. Each is an answer only in the context it is written for.
+func TestClassify_AcceptsASpanHelperOnlyWhereItIsCorrect(t *testing.T) {
+	const cell, item = "| %s |\\n", "- Path: %s\\n"
+	testCases := []struct {
+		name, template, value string
+		want                  []string
+	}{
+		{name: "a cell span in a cell", template: cell, value: "toolutil.MdCodeSpanCell(r.URL)"},
+		{name: "a plain span in a list item", template: item, value: "toolutil.MdCodeSpan(r.URL)"},
+		{name: "a cell link in a cell", template: cell, value: "toolutil.MdTitleLinkCell(r.Title, r.URL)"},
+		{name: "a plain link in a list item", template: item, value: "toolutil.MdTitleLink(r.Title, r.URL)"},
+		{
+			name: "a plain span in a cell", template: cell, value: "toolutil.MdCodeSpan(r.URL)",
+			want: []string{"unescaped table-cell toolutil.MdCodeSpan(r.URL)"},
+		},
+		{
+			name: "a cell span in a list item", template: item, value: "toolutil.MdCodeSpanCell(r.URL)",
+			want: []string{"unescaped list-item toolutil.MdCodeSpanCell(r.URL)"},
+		},
+		{
+			name: "a plain link in a cell", template: cell, value: "toolutil.MdTitleLink(r.Title, r.URL)",
+			want: []string{"unescaped table-cell toolutil.MdTitleLink(r.Title, r.URL)"},
+		},
+		{
+			name: "a cell link in a list item", template: item, value: "toolutil.MdTitleLinkCell(r.Title, r.URL)",
+			want: []string{"unescaped list-item toolutil.MdTitleLinkCell(r.Title, r.URL)"},
+		},
+		{
+			name: "a plain span reached through a helper, in a cell", template: cell, value: "span(r.URL)",
+			want: []string{"unescaped table-cell span(r.URL)"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "// span is the package's own spelling of the plain span.\nfunc span(s string) string { return toolutil.MdCodeSpan(s) }\n\n" +
+				"// row writes one value.\nfunc row(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"" + tc.template + "\", " + tc.value + ")\n}"
+			got := verdicts(auditFixture(t, body))
+			if strings.Join(got, "; ") != strings.Join(tc.want, "; ") {
+				t.Errorf("audit reported %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEscaperFit_ExplainsAMisfitByTheHelperThatBelongs verifies a finding for
+// a helper in the wrong context says which way it is wrong, so the reader is
+// sent to the right form rather than to the context's generic escaper.
+func TestEscaperFit_ExplainsAMisfitByTheHelperThatBelongs(t *testing.T) {
+	testCases := []struct {
+		name string
+		fit  escaperFit
+		want string
+	}{
+		{name: "a cell form outside a cell", fit: cellOnly, want: "written for a table cell"},
+		{name: "a plain form in a cell", fit: outsideCell, want: "toolutil.MdCodeSpanCell"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.fit.misfit("toolutil.X"); !strings.Contains(got, tc.want) {
+				t.Errorf("misfit() = %q, want it to mention %q", got, tc.want)
+			}
+		})
+	}
+}

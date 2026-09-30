@@ -72,7 +72,8 @@ var markdownEntryPoints = map[string][]string{
 		"researchTopicText", "writeSection",
 	},
 	toolutilDir: {
-		"MdTitleLink", "MdAutolink", "MdCodeSpan", "MarkdownFencedBlock",
+		"MdTitleLink", "MdTitleLinkCell", "MdAutolink", "MdCodeSpan",
+		"MdCodeSpanCell", "MarkdownFencedBlock",
 	},
 }
 
@@ -128,7 +129,7 @@ func (p *auditPass) judge(hole sinkHole) {
 		return
 	}
 	p.report.Summary.Judged++
-	result, why := p.classifier.classify(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, 0)
+	result, why := p.classifier.classifyIn(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, hole.ctx)
 	if result == safe {
 		p.report.Summary.Safe++
 		return

@@ -213,17 +213,237 @@ func TestMarkdownFencedBlock_ContentCannotCloseTheFence(t *testing.T) {
 }
 
 // TestMdCodeSpan_ContentCannotCloseTheSpan verifies the same rule for a span,
-// and that an empty value writes nothing rather than an empty pair of ticks.
+// in both of its forms, and that an empty value writes nothing rather than an
+// empty pair of ticks.
 func TestMdCodeSpan_ContentCannotCloseTheSpan(t *testing.T) {
-	if got := MdCodeSpan("  "); got != "" {
-		t.Errorf("MdCodeSpan(blank) = %q, want the empty string", got)
+	helpers := []struct {
+		name string
+		span func(string) string
+	}{
+		{name: "MdCodeSpan", span: MdCodeSpan},
+		{name: "MdCodeSpanCell", span: MdCodeSpanCell},
 	}
-	got := MdCodeSpan("a ` b `` c")
-	if !strings.HasPrefix(got, "```") || !strings.HasSuffix(got, "```") {
-		t.Errorf("MdCodeSpan() = %q, want a fence longer than the run inside", got)
+	for _, h := range helpers {
+		t.Run(h.name, func(t *testing.T) {
+			if got := h.span(" \n "); got != "" {
+				t.Errorf("%s(blank) = %q, want the empty string", h.name, got)
+			}
+			got := h.span("a ` b `` c")
+			if !strings.HasPrefix(got, "```") || !strings.HasSuffix(got, "```") {
+				t.Errorf("%s() = %q, want a fence longer than the run inside", h.name, got)
+			}
+			if lines := h.span("a\r\nb\rc"); strings.ContainsAny(lines, "\r\n") {
+				t.Errorf("%s() = %q, want every line ending collapsed", h.name, lines)
+			}
+		})
 	}
-	if strings.Contains(got, "|") {
-		t.Errorf("MdCodeSpan() = %q, want a pipe escaped for the cell it sits in", got)
+}
+
+// gfmPunctuation is the ASCII punctuation CommonMark lets a backslash escape.
+const gfmPunctuation = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+
+// gfmTableCells splits one table row into its cells the way cmark-gfm does,
+// which is the order that decides whether a pipe inside a code span survives:
+// the row is split before any inline content is read. A backslash takes the
+// byte after it along, so only a pipe no backslash took ends a cell, and every
+// backslash-pipe pair in a cell is then replaced by a bare pipe, inside a code
+// span as much as outside one.
+func gfmTableCells(row string) []string {
+	row = strings.TrimPrefix(strings.TrimSpace(row), "|")
+	var cells []string
+	var cell strings.Builder
+	for i := 0; i < len(row); i++ {
+		switch {
+		case row[i] == '\\' && i+1 < len(row):
+			cell.WriteString(row[i : i+2])
+			i++
+		case row[i] == '|':
+			cells = append(cells, gfmUnescapePipes(strings.TrimSpace(cell.String())))
+			cell.Reset()
+		default:
+			cell.WriteByte(row[i])
+		}
+	}
+	if rest := strings.TrimSpace(cell.String()); rest != "" {
+		cells = append(cells, gfmUnescapePipes(rest))
+	}
+	return cells
+}
+
+// gfmUnescapePipes is cmark-gfm's unescape_pipes: every backslash directly in
+// front of a pipe is dropped, with no regard for a backslash in front of it.
+func gfmUnescapePipes(cell string) string {
+	return strings.ReplaceAll(cell, `\|`, "|")
+}
+
+// gfmInline renders the inline text a reader sees, for the two constructs the
+// helpers under test write: a backslash escape, which a code span does not
+// process, and a code span, whose content is shown as it stands. Everything
+// else is taken as literal text, which is why the cases below hold no
+// emphasis.
+func gfmInline(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); {
+		switch {
+		case s[i] == '\\' && i+1 < len(s) && strings.IndexByte(gfmPunctuation, s[i+1]) >= 0:
+			out.WriteByte(s[i+1])
+			i += 2
+		case s[i] == '`':
+			content, next := gfmCodeSpanAt(s, i)
+			out.WriteString(content)
+			i = next
+		default:
+			out.WriteByte(s[i])
+			i++
+		}
+	}
+	return out.String()
+}
+
+// gfmCodeSpanAt reads the code span a backtick run at i opens: the content up
+// to the next run of the same length, with one space stripped from each end
+// when both ends have one. A run nothing closes is literal backticks.
+func gfmCodeSpanAt(s string, i int) (content string, next int) {
+	n := backtickRunAt(s, i)
+	for j := i + n; j < len(s); {
+		if s[j] != '`' {
+			j++
+			continue
+		}
+		m := backtickRunAt(s, j)
+		if m == n {
+			content = s[i+n : j]
+			if len(content) >= 2 && content[0] == ' ' && content[len(content)-1] == ' ' && strings.TrimSpace(content) != "" {
+				content = content[1 : len(content)-1]
+			}
+			return content, j + m
+		}
+		j += m
+	}
+	return s[i : i+n], i + n
+}
+
+// backtickRunAt counts the backticks starting at i.
+func backtickRunAt(s string, i int) int {
+	n := 0
+	for i+n < len(s) && s[i+n] == '`' {
+		n++
+	}
+	return n
+}
+
+// spanValues are values a code span has to carry as sent, each chosen for the
+// pipe or the backslash in it.
+var spanValues = []string{
+	"a|b",
+	`a\|b`,
+	`a\\|b`,
+	`C:\dir|x`,
+	`trailing\`,
+	"a`|b",
+	`\|`,
+	"`x\\|y`",
+	`*a*\|b`,
+	"`leading|tick",
+	"trailing|tick`",
+}
+
+// TestMdCodeSpan_ShowsTheValueAsSentInAListItem pins the defect a list row had:
+// a card row is a list item, not a table cell, and a backslash in front of a
+// pipe inside a code span there is shown, because a code span processes no
+// backslash escape. The value is rendered as a reader sees it and compared
+// with what was sent.
+func TestMdCodeSpan_ShowsTheValueAsSentInAListItem(t *testing.T) {
+	for _, value := range spanValues {
+		t.Run(value, func(t *testing.T) {
+			span := MdCodeSpan(value)
+			if got := gfmInline(span); got != value {
+				t.Errorf("MdCodeSpan(%q) = %q, which a list item shows as %q", value, span, got)
+			}
+		})
+	}
+}
+
+// TestMdCodeSpanCell_KeepsTheCellWholeAndTheValueAsSent pins the defect a table
+// cell had: the row is split before any code span is read, so a backslash
+// already in front of a pipe takes the added one along and leaves the pipe
+// live. Each value is placed in the middle of a three-cell row, which must
+// still be three cells, the middle one showing the value as sent.
+func TestMdCodeSpanCell_KeepsTheCellWholeAndTheValueAsSent(t *testing.T) {
+	for _, value := range spanValues {
+		t.Run(value, func(t *testing.T) {
+			rendered := MdCodeSpanCell(value)
+			cells := gfmTableCells("| before | " + rendered + " | after |")
+			if len(cells) != 3 {
+				t.Fatalf("MdCodeSpanCell(%q) = %q splits the row into %d cells %q, want 3", value, rendered, len(cells), cells)
+			}
+			if got := gfmInline(cells[1]); got != value {
+				t.Errorf("MdCodeSpanCell(%q) = %q, which the cell shows as %q", value, rendered, got)
+			}
+		})
+	}
+}
+
+// TestEscapeMdTableCell_KeepsABackslashedPipeInItsCell pins the same defect in
+// the plain cell escaper: a backslash already in front of a pipe takes the one
+// the escaper adds, so the pipe ends the cell. The row must stay three cells,
+// and the value must read as sent both there and in a list item, where the
+// same text lands through a card row.
+func TestEscapeMdTableCell_KeepsABackslashedPipeInItsCell(t *testing.T) {
+	for _, value := range []string{"a|b", `a\|b`, `a\\|b`, `\|`, `C:\dir|x`, `trailing\`} {
+		t.Run(value, func(t *testing.T) {
+			rendered := EscapeMdTableCell(value)
+			cells := gfmTableCells("| before | " + rendered + " | after |")
+			if len(cells) != 3 {
+				t.Fatalf("EscapeMdTableCell(%q) = %q splits the row into %d cells %q, want 3", value, rendered, len(cells), cells)
+			}
+			if got := gfmInline(cells[1]); got != value {
+				t.Errorf("EscapeMdTableCell(%q) = %q, which the cell shows as %q", value, rendered, got)
+			}
+			if got := gfmInline(rendered); got != value {
+				t.Errorf("EscapeMdTableCell(%q) = %q, which a list item shows as %q", value, rendered, got)
+			}
+		})
+	}
+}
+
+// titleLinkCases are link titles and addresses whose pipe or backslash must
+// reach the reader as sent, through the link path and through the fallback
+// that shows an address no client should open.
+var titleLinkCases = []struct{ name, title, url, want string }{
+	{name: "a pipe in a linked title", title: "a|b", url: "https://example.org/", want: "[a|b](https://example.org/)"},
+	{name: "a backslash-pipe in a linked title", title: `a\|b`, url: "https://example.org/", want: `[a\|b](https://example.org/)`},
+	{name: "a pipe in an unlinkable address", title: "mirror", url: "ftp://example.org/a|b", want: "mirror ftp://example.org/a|b"},
+	{name: "a backslash-pipe in an unlinkable address", title: "", url: `ftp://example.org/a\|b`, want: `ftp://example.org/a\|b`},
+}
+
+// TestMdTitleLink_ShowsTheValueAsSentInAListItem is the list-item half for a
+// link: neither the title nor a fallback address gains a backslash.
+func TestMdTitleLink_ShowsTheValueAsSentInAListItem(t *testing.T) {
+	for _, tc := range titleLinkCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered := MdTitleLink(tc.title, tc.url)
+			if got := gfmInline(rendered); got != tc.want {
+				t.Errorf("MdTitleLink(%q, %q) = %q, which a list item shows as %q, want %q", tc.title, tc.url, rendered, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMdTitleLinkCell_KeepsTheCellWholeAndTheValueAsSent is the table half for
+// a link: the row stays one cell and the cell shows what was sent.
+func TestMdTitleLinkCell_KeepsTheCellWholeAndTheValueAsSent(t *testing.T) {
+	for _, tc := range titleLinkCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rendered := MdTitleLinkCell(tc.title, tc.url)
+			cells := gfmTableCells("| " + rendered + " |")
+			if len(cells) != 1 {
+				t.Fatalf("MdTitleLinkCell(%q, %q) = %q splits the row into %d cells %q, want 1", tc.title, tc.url, rendered, len(cells), cells)
+			}
+			if got := gfmInline(cells[0]); got != tc.want {
+				t.Errorf("MdTitleLinkCell(%q, %q) = %q, which the cell shows as %q, want %q", tc.title, tc.url, rendered, got, tc.want)
+			}
+		})
 	}
 }
 

@@ -51,14 +51,56 @@ func StripControlBytes(s string) string {
 // newlines and escapes pipes so the value cannot break the table layout.
 //
 // A finished link does not survive this function. A link is built by
-// [MdTitleLink] from its raw halves and is never escaped afterwards.
+// [MdTitleLink] or [MdTitleLinkCell] from its raw halves and is never escaped
+// afterwards.
+//
+// The result reads the same in a list item, which is where a card row puts it:
+// every escape written is a backslash escape, and outside a code span both
+// places process those alike.
 func EscapeMdTableCell(s string) string {
+	return escapeCellPipes(oneLine(s))
+}
+
+// oneLine drops the control bytes, collapses every line ending to a space and
+// trims the result, so a value stays on the line it was written into.
+func oneLine(s string) string {
 	s = StripControlBytes(s)
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\r", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "|", "\\|")
 	return strings.TrimSpace(s)
+}
+
+// escapeCellPipes backslash-escapes every pipe, doubling the backslashes
+// already in front of one.
+//
+// The doubling is the part that matters. GFM splits a row before it reads any
+// inline content, and a backslash there takes the byte after it along, so a
+// backslash the value already had in front of a pipe takes the added one and
+// leaves the pipe live: `a\|b` escaped to `a\\|b` is two cells. With each such
+// backslash doubled, every backslash pairs with its copy, the added one pairs
+// with the pipe, and the reader sees the backslashes the value had. A
+// backslash anywhere else is left as it was.
+func escapeCellPipes(s string) string {
+	if !strings.Contains(s, "|") {
+		return s
+	}
+	var b strings.Builder
+	run := 0
+	for i := range len(s) {
+		switch s[i] {
+		case '\\':
+			run++
+		case '|':
+			b.WriteString(strings.Repeat(`\`, run))
+			b.WriteByte('\\')
+			run = 0
+		default:
+			run = 0
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 // EscapeMdHeading sanitizes a value for a Markdown heading: it strips the
@@ -139,24 +181,72 @@ func LinkableDestination(rawURL string) bool {
 }
 
 // MdCodeSpan renders s inside a code span long enough that s cannot close it,
-// and returns "" for a value with nothing in it.
+// and returns "" for a value with nothing in it. It is for anywhere but a
+// table cell, which takes [MdCodeSpanCell].
 //
-// It is what an address that may not be linked is written as: the reader keeps
-// the bytes the source sent, and nothing in them is live.
+// It is what an address that may not be linked is written as, and what a card
+// row writes a value the reader copies as: the reader keeps the bytes the
+// source sent, and nothing in them is live. No pipe is escaped, because a code
+// span processes no backslash escape and a list item splits on no pipe, so an
+// escaped pipe here is a backslash the value never had.
 func MdCodeSpan(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(StripControlBytes(s), "\n", " "))
+	s = oneLine(s)
 	if s == "" {
 		return ""
 	}
+	return backtickSpan(s)
+}
+
+// mdLiteralEscaper backslash-escapes every ASCII punctuation character but the
+// pipe, which is every character a backslash can escape in CommonMark, so the
+// text it produces is read as the characters it holds and opens nothing: no
+// code span, no emphasis, no link, no escape of its own. The pipe is left for
+// the cell layer.
+var mdLiteralEscaper = strings.NewReplacer(
+	`\`, `\\`, "`", "\\`", "!", `\!`, `"`, `\"`, "#", `\#`, "$", `\$`,
+	"%", `\%`, "&", `\&`, "'", `\'`, "(", `\(`, ")", `\)`, "*", `\*`,
+	"+", `\+`, ",", `\,`, "-", `\-`, ".", `\.`, "/", `\/`, ":", `\:`,
+	";", `\;`, "<", `\<`, "=", `\=`, ">", `\>`, "?", `\?`, "@", `\@`,
+	"[", `\[`, "]", `\]`, "^", `\^`, "_", `\_`, "{", `\{`, "}", `\}`,
+	"~", `\~`,
+)
+
+// MdCodeSpanCell renders s as [MdCodeSpan] does, for a table cell.
+//
+// GFM splits a row on its pipes before it reads any code span, and it honors a
+// backslash-escaped pipe inside one, so the pipe is escaped and the span is
+// otherwise the same. The one value a span cannot carry there is a backslash
+// already in front of a pipe: a backslash takes the byte after it along when
+// the row is split, so one added backslash leaves the pipe live, and two show a
+// backslash the value never had, since the span keeps both. That value is
+// written as text instead, every punctuation character backslash-escaped and
+// each pipe escaped once more for the row, and the reader keeps the bytes the
+// source sent at the cost of the monospace.
+func MdCodeSpanCell(s string) string {
+	s = oneLine(s)
+	if s == "" {
+		return ""
+	}
+	if strings.Contains(s, `\|`) {
+		return strings.ReplaceAll(mdLiteralEscaper.Replace(s), "|", `\|`)
+	}
+	return backtickSpan(strings.ReplaceAll(s, "|", `\|`))
+}
+
+// backtickSpan wraps s in a code span whose fence outruns every backtick run
+// inside it, padded when s starts or ends with a backtick, or the fence and the
+// value would run together and the span would not close where it should.
+func backtickSpan(s string) string {
 	fence := strings.Repeat("`", longestBacktickRun(s)+1)
 	pad := ""
 	if strings.HasPrefix(s, "`") || strings.HasSuffix(s, "`") {
 		pad = " "
 	}
-	return fence + pad + strings.ReplaceAll(s, "|", "\\|") + pad + fence
+	return fence + pad + s + pad + fence
 }
 
-// MdTitleLink renders title as a Markdown link to rawURL.
+// MdTitleLink renders title as a Markdown link to rawURL, for anywhere but a
+// table cell, which takes [MdTitleLinkCell].
 //
 // Both halves are escaped, so neither the title nor the URL can end the link
 // they are in — which is the hole this function exists to close: a download
@@ -169,17 +259,34 @@ func MdCodeSpan(s string) string {
 // something else, so the reader keeps what the source sent and nothing in it
 // is live.
 func MdTitleLink(title, rawURL string) string {
-	escaped := EscapeMdTableCell(title)
+	return titleLink(title, rawURL, EscapeMdLinkLabel(oneLine(title)), MdCodeSpan(rawURL))
+}
+
+// MdTitleLinkCell renders title as [MdTitleLink] does, for a table cell.
+//
+// The label escaper doubles every backslash, so a pipe escaped for the row
+// after it is always one backslash past a pair and ends no cell, and the
+// address that may not be linked goes through [MdCodeSpanCell].
+func MdTitleLinkCell(title, rawURL string) string {
+	label := strings.ReplaceAll(EscapeMdLinkLabel(oneLine(title)), "|", `\|`)
+	return titleLink(title, rawURL, label, MdCodeSpanCell(rawURL))
+}
+
+// titleLink is the decision [MdTitleLink] and [MdTitleLinkCell] share, handed
+// the label and the fallback span each has already escaped for where it lands.
+// The title shown beside a span goes through [EscapeMdTableCell], whose
+// backslash escapes read the same in a cell and in a list item.
+func titleLink(title, rawURL, label, span string) string {
 	if strings.TrimSpace(rawURL) == "" {
-		return escaped
+		return EscapeMdTableCell(title)
 	}
 	if !LinkableDestination(rawURL) {
 		if strings.TrimSpace(title) == "" || title == rawURL {
-			return MdCodeSpan(rawURL)
+			return span
 		}
-		return escaped + " " + MdCodeSpan(rawURL)
+		return EscapeMdTableCell(title) + " " + span
 	}
-	return fmt.Sprintf("[%s](%s)", EscapeMdLinkLabel(escaped), EscapeMdLinkDestination(rawURL))
+	return fmt.Sprintf("[%s](%s)", label, EscapeMdLinkDestination(rawURL))
 }
 
 // MdAutolink renders rawURL as an address a reader both sees and can click.
@@ -187,7 +294,8 @@ func MdTitleLink(title, rawURL string) string {
 // It is the right shape when the address is the whole of what is being shown:
 // a link whose label is its own destination writes the address twice, and a
 // code span alone is not clickable. An address that may not be linked falls
-// back to a code span, so nothing a third party sent is ever live.
+// back to a code span, so nothing a third party sent is ever live. The span
+// is [MdCodeSpan]'s, so this is not for a table cell.
 func MdAutolink(rawURL string) string {
 	if !LinkableDestination(rawURL) {
 		return MdCodeSpan(rawURL)

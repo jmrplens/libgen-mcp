@@ -23,6 +23,18 @@ func EscapeMdHeading(s string) string { return s }
 
 // StripControlBytes removes the control bytes and nothing else.
 func StripControlBytes(s string) string { return s }
+
+// MdCodeSpan writes a code span for anywhere but a table cell.
+func MdCodeSpan(s string) string { return s }
+
+// MdCodeSpanCell writes a code span for a table cell.
+func MdCodeSpanCell(s string) string { return s }
+
+// MdTitleLink writes a link for anywhere but a table cell.
+func MdTitleLink(title, url string) string { return title + url }
+
+// MdTitleLinkCell writes a link for a table cell.
+func MdTitleLinkCell(title, url string) string { return title + url }
 `
 
 // fixtureRenderer wraps one renderer body in a package that imports what a

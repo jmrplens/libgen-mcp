@@ -456,9 +456,23 @@ Pick by where the value lands, never by interpolating it directly:
 | a heading | `EscapeMdHeading` | a leading `#` changes the level, a newline splits it |
 | a code block | `MarkdownFencedBlock` | content closing the fence and being read as Markdown |
 | a link's two halves | `MdTitleLink` | either half ending the link it is in |
+| a link in a table cell | `MdTitleLinkCell` | the same, and a pipe in either half ending the cell |
 | an address shown on its own | `MdAutolink` | the same, without writing the address twice |
-| an address that must not be live | `MdCodeSpan` | a scheme a client would execute |
+| an address that must not be live, a value copied exactly | `MdCodeSpan` | a scheme a client would execute |
+| the same in a table cell | `MdCodeSpanCell` | the same, and a pipe inside the span ending the cell |
 | a body that runs to lines | `WrapQuotedBody` | a heading or a list item inside it becoming one |
+
+**A code span has two forms, and the difference is the pipe.** GFM splits a
+table row on its pipes before it reads any code span, so inside a cell the pipe
+must be backslash-escaped even within the span, and a backslash the value
+already had in front of a pipe takes that escape along and leaves the pipe
+live. Anywhere else — a card row is a list item, not a cell — a code span
+processes no backslash escape, so the same escape is a backslash the reader
+sees and the value never had. `MdCodeSpan`, `MdTitleLink` and `MdAutolink` are
+for anywhere but a table; `MdCodeSpanCell` and `MdTitleLinkCell` are for a cell
+only, and the cell form writes a value holding a backslash in front of a pipe as
+escaped text rather than a span. `make check-md-escaping` accepts each form only
+in the context it is written for.
 
 **A result about one record is a card, and `toolutil.Card` writes it.** A row
 written by hand decides for itself what to escape, whether to write anything
