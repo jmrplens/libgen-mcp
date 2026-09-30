@@ -58,6 +58,19 @@ func (p *forwardProxy) destinations() []string {
 func proxiedClient(t *testing.T, policy *Policy, proxy *forwardProxy) *http.Client {
 	t.Helper()
 	c := ClientFor(5*time.Second, policy)
+	base := guardedBase(t, c)
+	proxyURL, err := url.Parse(proxy.srv.URL)
+	if err != nil {
+		t.Fatalf("url.Parse(%q) error = %v", proxy.srv.URL, err)
+	}
+	base.Proxy = http.ProxyURL(proxyURL)
+	t.Cleanup(base.CloseIdleConnections)
+	return c
+}
+
+// guardedBase returns the *http.Transport inside a client ClientFor built.
+func guardedBase(t *testing.T, c *http.Client) *http.Transport {
+	t.Helper()
 	stamping, ok := c.Transport.(*policyTransport)
 	if !ok {
 		t.Fatalf("client transport is %T, want *policyTransport", c.Transport)
@@ -66,12 +79,100 @@ func proxiedClient(t *testing.T, policy *Policy, proxy *forwardProxy) *http.Clie
 	if !ok {
 		t.Fatalf("guarded transport is %T, want *http.Transport", stamping.base)
 	}
-	proxyURL, err := url.Parse(proxy.srv.URL)
-	if err != nil {
-		t.Fatalf("url.Parse(%q) error = %v", proxy.srv.URL, err)
+	return base
+}
+
+// newConnectProxy starts a forwardProxy that answers CONNECT, the way an https
+// destination is reached through an http proxy, and tunnels every one to
+// target whatever host it names, recording the host it was asked for.
+func newConnectProxy(t *testing.T, target string) *forwardProxy {
+	t.Helper()
+	p := &forwardProxy{}
+	p.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			http.Error(w, "this proxy only tunnels", http.StatusMethodNotAllowed)
+			return
+		}
+		p.mu.Lock()
+		p.asked = append(p.asked, r.Host)
+		p.mu.Unlock()
+		tunnel(w, r, target)
+	}))
+	t.Cleanup(p.srv.Close)
+	return p
+}
+
+// tunnel connects the hijacked client connection to target in both directions
+// until either side closes. It runs on the proxy's handler goroutine, so every
+// failure is answered on the wire rather than reported to a test.
+func tunnel(w http.ResponseWriter, r *http.Request, target string) {
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "connection cannot be hijacked", http.StatusInternalServerError)
+		return
 	}
-	base.Proxy = http.ProxyURL(proxyURL)
-	return c
+	upstream, err := (&net.Dialer{}).DialContext(r.Context(), "tcp", target)
+	if err != nil {
+		http.Error(w, "dialing the origin failed", http.StatusBadGateway)
+		return
+	}
+	conn, buffered, err := hijacker.Hijack()
+	if err != nil {
+		_ = upstream.Close()
+		return
+	}
+	_, _ = io.WriteString(conn, "HTTP/1.1 200 Connection established\r\n\r\n")
+	go func() {
+		_, _ = io.Copy(upstream, buffered)
+		_ = upstream.Close()
+	}()
+	_, _ = io.Copy(conn, upstream)
+	_ = conn.Close()
+}
+
+// TestAnHTTPSRequestTunnelsThroughAPrivateProxy covers the https path, where
+// net/http opens a CONNECT tunnel through the proxy instead of forwarding the
+// request. The tunnel is dialed to the proxy's address like any proxied
+// request, so it gets the same answer: a private proxy is not refused for its
+// own address, and a metadata destination is refused before a CONNECT is sent.
+func TestAnHTTPSRequestTunnelsThroughAPrivateProxy(t *testing.T) {
+	stubResolver(t, map[string][]string{"example.com": {"93.184.215.14"}})
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "tunneled")
+	}))
+	t.Cleanup(origin.Close)
+	proxy := newConnectProxy(t, origin.Listener.Addr().String())
+	client := proxiedClient(t, NewPolicy(nil, false), proxy)
+	originTransport, ok := origin.Client().Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("origin client transport is %T, want *http.Transport", origin.Client().Transport)
+	}
+	// The test certificate names example.com, so that is the host asked for,
+	// and the proxy tunnels it to the origin on loopback.
+	guardedBase(t, client).TLSClientConfig = originTransport.TLSClientConfig.Clone()
+	destination := "example.com:" + mustParse(t, origin.URL).Port()
+
+	resp, err := get(t, client, "https://"+destination+"/")
+	if err != nil {
+		t.Fatalf("Get() through a CONNECT tunnel error = %v, want the origin reached", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(body) != "tunneled" {
+		t.Errorf("body = %q, want the origin's answer", body)
+	}
+
+	resp, err = get(t, client, "https://0xa9fea9fe/latest/")
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("a metadata destination was tunneled through the proxy")
+	}
+	if !errors.Is(err, ErrBlockedAddress) {
+		t.Errorf("err = %v, want ErrBlockedAddress", err)
+	}
+	if got := proxy.destinations(); !slices.Equal(got, []string{destination}) {
+		t.Errorf("proxy was asked to tunnel to %v, want only [%s]", got, destination)
+	}
 }
 
 // TestAPrivateProxyIsNotJudgedAsTheDestination is the regression test for a
@@ -84,6 +185,7 @@ func proxiedClient(t *testing.T, policy *Policy, proxy *forwardProxy) *http.Clie
 // to reach. The proxy is the operator's own configuration, so its dial answers
 // to tier A alone.
 func TestAPrivateProxyIsNotJudgedAsTheDestination(t *testing.T) {
+	stubResolver(t, map[string][]string{"api.crossref.test": {"93.184.215.14"}})
 	proxy := newForwardProxy(t)
 	client := proxiedClient(t, NewPolicy(nil, false), proxy)
 
@@ -122,8 +224,30 @@ func TestTheDestinationBehindAProxyIsStillJudged(t *testing.T) {
 		{name: "private literal under the allowance", policy: NewPolicy(nil, true), rawURL: "http://10.1.2.3/file.pdf", refused: false},
 		{name: "private literal the operator named", policy: NewPolicy([]string{"10.1.2.3"}, false), rawURL: "http://10.1.2.3/file.pdf", refused: false},
 		{name: "public literal, strict", policy: NewPolicy(nil, false), rawURL: "http://93.184.215.14/file.pdf", refused: false},
+		// Every spelling getaddrinfo reads as 169.254.169.254 through inet_aton,
+		// none of which netip accepts, plus the two IPv6 coats it can wear.
+		{name: "metadata as one decimal part", policy: NewPolicy(nil, true), rawURL: "http://2852039166/latest/", refused: true},
+		{name: "metadata as one hex part", policy: NewPolicy(nil, true), rawURL: "http://0xa9fea9fe/latest/", refused: true},
+		{name: "metadata in octal", policy: NewPolicy(nil, true), rawURL: "http://0251.0376.0251.0376/latest/", refused: true},
+		{name: "metadata as three parts", policy: NewPolicy(nil, true), rawURL: "http://169.254.43518/latest/", refused: true},
+		{name: "metadata with a trailing dot", policy: NewPolicy(nil, true), rawURL: "http://2852039166./latest/", refused: true},
+		{name: "metadata mapped into IPv6", policy: NewPolicy(nil, true), rawURL: "http://[::ffff:169.254.169.254]/latest/", refused: true},
+		{name: "metadata mapped into IPv6 in hex", policy: NewPolicy(nil, true), rawURL: "http://[::ffff:a9fe:a9fe]/latest/", refused: true},
+		{name: "a numeric host that is no address", policy: NewPolicy(nil, true), rawURL: "http://1.2.3.4.5/latest/", refused: true},
+		{name: "loopback as one decimal part, strict", policy: NewPolicy(nil, false), rawURL: "http://2130706433/", refused: true},
+		{name: "public as one decimal part", policy: NewPolicy(nil, false), rawURL: "http://1572394766/file.pdf", refused: false},
+		// A name gets tier A from a local lookup, and nothing else.
+		{name: "a name resolving to metadata", policy: NewPolicy(nil, true), rawURL: "http://169.254.169.254.nip.test/latest/", refused: true},
+		{name: "a name the operator named resolving to metadata", policy: NewPolicy([]string{"meta.operator.test"}, true), rawURL: "http://meta.operator.test/latest/", refused: true},
+		{name: "a name resolving private", policy: NewPolicy(nil, false), rawURL: "http://intranet.corp.test/file.pdf", refused: false},
+		{name: "a name this machine cannot resolve", policy: NewPolicy(nil, false), rawURL: "http://only.the-proxy-knows.test/file.pdf", refused: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			stubResolver(t, map[string][]string{
+				"169.254.169.254.nip.test": {"93.184.215.14", "169.254.169.254"},
+				"meta.operator.test":       {"169.254.169.254"},
+				"intranet.corp.test":       {"10.20.30.40"},
+			})
 			proxy := newForwardProxy(t)
 			resp, err := get(t, proxiedClient(t, tc.policy, proxy), tc.rawURL)
 			if err == nil {

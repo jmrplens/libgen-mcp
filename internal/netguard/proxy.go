@@ -4,6 +4,7 @@ package netguard
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -95,14 +96,18 @@ var proxySchemePorts = map[string]string{
 // judgeProxiedDestination applies the guard to the destination of a request
 // sent through a proxy, which the dialer never sees because it dials the proxy.
 //
-// ctx carries the request's own decision. Only a destination spelled as an
-// address can be judged here, and it is judged by exactly the rule the dialer
-// would have applied to it, so a URL naming 169.254.169.254 is refused behind a
-// proxy as it is without one, and so is a private address tier B refuses this
-// request. A destination spelled as a name is resolved by the proxy, not by
-// this server, so what it reaches is the proxy's decision: a deployment that
-// sends its outbound traffic through a proxy has made the proxy the place a
-// rule about names belongs.
+// ctx carries the request's own decision. A destination spelled as an address,
+// in any spelling a C resolver accepts (see [addressLiteral]), is judged by
+// exactly the rule the dialer would have applied to it, so a URL naming
+// 169.254.169.254, or 2852039166, is refused behind a proxy as it is without
+// one, and so is a private address tier B refuses this request.
+//
+// A destination spelled as a name gets tier A only, from a local lookup (see
+// [nameReachesMetadata]). Tier B stays the proxy's decision: the proxy
+// resolves the name, possibly against a view of DNS this machine does not
+// share, so a private answer here says nothing about where the proxy connects,
+// and a deployment that sends its outbound traffic through a proxy has made
+// the proxy the place a rule about names belongs.
 //
 // It runs per request rather than per dial for two reasons. Behind any proxy
 // the dialer only ever sees the proxy's address. And net/http keys a
@@ -110,11 +115,48 @@ var proxySchemePorts = map[string]string{
 // so one pooled connection carries requests to many destinations, and a
 // request served from it is never dialed at all.
 func judgeProxiedDestination(ctx context.Context, dest *url.URL, allowPrivate bool) error {
-	addr, spelledAsAddress := addressLiteral(dest.Hostname())
+	host := dest.Hostname()
+	addr, spelledAsAddress, err := addressLiteral(host)
+	if err != nil {
+		return fmt.Errorf("%w: %q is %w", ErrBlockedAddress, host, err)
+	}
 	if !spelledAsAddress {
-		return nil
+		return nameReachesMetadata(ctx, host)
 	}
 	return judge(ctx, addr, allowPrivate)
+}
+
+// nameReachesMetadata refuses a name that this machine resolves to a cloud
+// metadata address, which is tier A applied to a destination behind a proxy.
+//
+// Without a proxy the dialer applies tier A to what the name resolved to; with
+// one, the name leaves this process unresolved, and a public name that answers
+// 169.254.169.254 (the wildcard services that echo an address back as a name
+// exist for exactly this) would be forwarded unjudged. So the name is resolved
+// here, under the same two-second bound [Policy.NamesPrivateHost] uses, and
+// refused if any address it answers with is a metadata endpoint.
+//
+// A lookup that fails does not refuse. A deployment behind a proxy is often one
+// whose own resolver cannot see the outside world at all, and its proxy
+// resolves names this machine cannot; refusing on silence would break every
+// such deployment for every request, which is the refusal this path exists to
+// remove. What that leaves is a name this machine cannot resolve and the proxy
+// resolves to a metadata address, and there the proxy is the only party that
+// can see the answer. The lookup is also a snapshot: a name that answers
+// differently to the proxy a moment later is the proxy's to judge.
+func nameReachesMetadata(ctx context.Context, host string) error {
+	lookupCtx, cancel := context.WithTimeout(ctx, operatorLookupTimeout)
+	defer cancel()
+	addrs, err := lookupHostAddrs(lookupCtx, host)
+	if err != nil {
+		return nil
+	}
+	for _, addr := range addrs {
+		if what, ok := metadataEndpoint(addr); ok {
+			return fmt.Errorf("%w: %s resolves to %s, %s", ErrBlockedAddress, host, addr, what)
+		}
+	}
+	return nil
 }
 
 // refuseUnsent closes the body of a request this package declines to send and

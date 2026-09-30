@@ -529,6 +529,31 @@ func (o observingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	return o.base.RoundTrip(req)
 }
 
+// TestCheckRedirectJudgesEveryNumericSpelling holds the redirect check to the
+// same reading of a host the proxy path uses. A hop to 2852039166 is a hop to
+// 169.254.169.254 for any C resolver, so the allowance must not let it through
+// as a name, and a host that only looks numeric is refused without a guess.
+func TestCheckRedirectJudgesEveryNumericSpelling(t *testing.T) {
+	for _, host := range []string{
+		"2852039166", "0xa9fea9fe", "0251.0376.0251.0376", "169.254.43518", "2852039166.",
+		"[::ffff:169.254.169.254]", "[::ffff:a9fe:a9fe]", "1.2.3.4.5",
+	} {
+		t.Run(host, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+host+"/latest/?token=s3cret", http.NoBody)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rerr := CheckRedirect(true)(req, nil)
+			if !errors.Is(rerr, ErrBlockedAddress) {
+				t.Fatalf("err = %v, want a redirect to %s refused under the allowance", rerr, host)
+			}
+			if strings.Contains(rerr.Error(), "s3cret") {
+				t.Errorf("the refusal carries the query string: %v", rerr)
+			}
+		})
+	}
+}
+
 // getReused issues a GET and reports whether net/http served it from an idle
 // connection rather than dialing, so a test can prove the pool it is asking
 // about was actually in play.

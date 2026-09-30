@@ -588,6 +588,11 @@ destination, not closed:
   connection carries requests to many destinations and most of them are never
   dialed. Moving the check into the dialer would let the first request's answer
   serve every later one.
+- **A host is an address when a C resolver says so, not when `netip` does.**
+  `addressLiteral` (`hostaddr.go`) reads `2852039166`, `0xa9fea9fe` and the
+  other `inet_aton` forms as the address they are, because that is how the
+  proxy's getaddrinfo reads them. "Simplifying" it to `netip.ParseAddr` passes
+  every one of them to the proxy as a name.
 
 ### Telemetry: whose namespace a name is in, and what may leave the process
 

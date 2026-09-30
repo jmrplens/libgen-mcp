@@ -70,10 +70,17 @@ the metadata tier alone: a corporate proxy on `10.x` is not refused for its own 
 was before, when it was judged under the destination's rule and every host the operator had
 not named — Crossref, arXiv, Unpaywall, every download URL — failed on the proxy's address.
 The destination behind the proxy is judged per request, before anything is sent, under both
-tiers, as far as its URL spells it: an address literal gets exactly the rule the dialer would
-have applied to it, so `http://169.254.169.254/` or a private address nobody named is refused
-behind a proxy as it is without one; a hostname is resolved by the proxy, not by this server,
-and what it reaches is the proxy's decision. Per request rather than per dial because
+tiers, as far as its URL spells it: an address gets exactly the rule the dialer would have
+applied to it, so `http://169.254.169.254/` or a private address nobody named is refused behind
+a proxy as it is without one. "An address" means every spelling a C resolver reads as one
+through `inet_aton` — `2852039166`, `0xa9fea9fe`, `0251.0376.0251.0376` and `169.254.43518`
+are all `169.254.169.254` to it — and a host whose last label only looks numeric is refused
+outright; the redirect check reads hosts the same way. A hostname is resolved by the proxy, so
+the private-address tier behind it is the proxy's decision, but the metadata tier is not: the
+name is also resolved here, under a two-second bound, and refused if any address it answers
+with is a metadata endpoint. A lookup that fails does not refuse, because a machine behind a
+proxy often cannot resolve what its proxy can, and refusing on silence would break every such
+deployment. Per request rather than per dial because
 `net/http` keys a plain-HTTP connection through a proxy on the proxy alone, so one pooled
 connection carries requests to many destinations. The proxy is recognized by comparing the
 address the dialer is asked for with the one `net/http` will dial for the request's proxy, as

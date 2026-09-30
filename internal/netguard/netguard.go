@@ -127,14 +127,6 @@ var metadataAddresses = map[netip.Addr]string{
 	netip.MustParseAddr("100.100.100.200"): "the Alibaba Cloud instance metadata address", // NOSONAR
 }
 
-// addressLiteral parses host as an IP address, reporting whether it was spelled
-// as one at all. A host that is a name is nobody's decision to make before the
-// dialer: what it resolves to is the only thing worth judging.
-func addressLiteral(host string) (netip.Addr, bool) {
-	addr, err := netip.ParseAddr(host)
-	return addr, err == nil
-}
-
 // metadataEndpoint returns what an address is the metadata endpoint of, and
 // whether it is one at all.
 //
@@ -306,8 +298,14 @@ func checkRedirectFor(allowPrivate bool, policy *Policy) func(req *http.Request,
 // they named, or a named host that is itself private. A redirect is the cheaper
 // half of the attack, since a URL deposited in an index need only bounce once,
 // so the two halves of one client must not disagree about what is reachable.
+//
+// "Spelled as an address" includes every numeric form a C resolver accepts
+// (see [addressLiteral]), and a host that only looks numeric is refused outright.
 func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy) error {
-	addr, spelledAsAddress := addressLiteral(req.URL.Hostname())
+	addr, spelledAsAddress, err := addressLiteral(req.URL.Hostname())
+	if err != nil {
+		return fmt.Errorf("%w: redirect to %s, %w", ErrBlockedAddress, req.URL.Scheme+"://"+req.URL.Host, err)
+	}
 	if !spelledAsAddress {
 		return nil
 	}
