@@ -13,8 +13,10 @@
 // None of these is dangerous to ignore on stdio. Each configures a listener, a
 // per-caller budget keyed on an address, a browser origin, a proxy or TLS, and a
 // stdio server has one caller on the other end of a pipe and none of those
-// things. So the run is not refused: it names each flag once, on stderr, and
-// carries on.
+// things. So a valid value does not stop the run: it names each flag once, on
+// stderr, and carries on. The value is still validated before that, on either
+// transport, and one that is invalid or contradicts another setting still stops
+// startup, because a value that is set but wrong is an error wherever it is.
 
 package main
 
@@ -77,7 +79,7 @@ const answeredBeforeTransport = "answered and exited before a transport is chose
 // transport.
 var stdioFlags = map[string]string{
 	"transport":     "decides the transport",
-	"http":          "decides the transport, and an address given to a run that serves stdio is already warned about by decide",
+	"http":          "decides the transport, and an address given to a run that serves stdio is reported by decide",
 	"version":       answeredBeforeTransport,
 	"healthcheck":   answeredBeforeTransport,
 	"shutdown":      answeredBeforeTransport,

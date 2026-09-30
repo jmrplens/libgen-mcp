@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,15 +21,24 @@ import (
 )
 
 // nonLiteralFlagNames are the expressions a registration in this package may
-// name its flag by other than a string literal, each with the table that
-// classifies what it names. A registration by any other expression fails
-// [TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag] until it is added here, since
-// the sweep cannot tell what it names.
+// name its flag by other than a string literal, keyed by the function the
+// registration is in and the expression, each with the table that classifies
+// what it names. A registration by any other expression, or by the same one in
+// another function, fails [TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag] until
+// it is added here, since the sweep cannot tell what it names.
 var nonLiteralFlagNames = map[string]string{
-	"entry.flagName":  "the envBackedFlags loop in registerEnvBackedFlags",
-	"mirrorFlagName":  "stdioFlags",
-	"envFileFlagName": "stdioFlags",
+	"registerEnvBackedFlags:entry.flagName":  "the envBackedFlags loop",
+	"registerEnvBackedFlags:mirrorFlagName":  "stdioFlags",
+	"registerEnvBackedFlags:envFileFlagName": "stdioFlags",
 }
+
+// notFlagRegistrations are calls shaped like a flag registration (one of
+// [registrationFuncs], with at least three arguments) on a receiver that is
+// neither the flag package nor flag.CommandLine, keyed the way the sweep reports
+// them, each with why it registers nothing on the process's command line. It is
+// empty: a helper handed a *flag.FlagSet, or a flag set of its own, is exactly
+// the registration the sweep would otherwise miss.
+var notFlagRegistrations = map[string]string{}
 
 // TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag holds [httpOnlyFlags] and
 // [stdioFlags] to the flags this package registers, in both directions.
@@ -40,7 +50,8 @@ var nonLiteralFlagNames = map[string]string{
 // ignores it passes every other test. So the registrations are read from the
 // source rather than kept as a third list here.
 func TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag(t *testing.T) {
-	literal, other := flagRegistrations(t)
+	sweep := sweepFlagRegistrations(t)
+	literal := sweep.literal
 	// A floor rather than a count: the sweep has to have found main's
 	// registrations at all, or the comparisons below prove nothing.
 	if len(literal) < 20 {
@@ -51,9 +62,16 @@ func TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag(t *testing.T) {
 		checkClassifiedOnce(t, literal)
 	})
 	t.Run("every other registration is one this test knows", func(t *testing.T) {
-		for _, expr := range other {
-			if _, known := nonLiteralFlagNames[expr]; !known {
-				t.Errorf("a flag is registered under %s, which this test cannot resolve to a name: classify it in httpOnlyFlags or stdioFlags and add the expression to nonLiteralFlagNames", expr)
+		for _, key := range sweep.other {
+			if _, known := nonLiteralFlagNames[key]; !known {
+				t.Errorf("a flag is registered as %s, which this test cannot resolve to a name: classify it in httpOnlyFlags or stdioFlags and add the key to nonLiteralFlagNames", key)
+			}
+		}
+	})
+	t.Run("every registration-shaped call has a receiver this test knows", func(t *testing.T) {
+		for _, key := range sweep.unresolved {
+			if _, known := notFlagRegistrations[key]; !known {
+				t.Errorf("%s looks like a flag registration on a receiver that is neither the flag package nor flag.CommandLine, so this sweep cannot see what it registers: register on flag.CommandLine, or add the key to notFlagRegistrations with the reason it registers nothing", key)
 			}
 		}
 	})
@@ -98,15 +116,29 @@ func checkEntriesRegistered(t *testing.T, literal []string) {
 	}
 }
 
-// flagRegistrations reads every flag.Xxx registration in this package's
-// non-test files and returns the names given as string literals, sorted, and
-// the source text of every name given any other way.
-func flagRegistrations(t *testing.T) (literal, other []string) {
+// flagSweep is what [sweepFlagRegistrations] found.
+type flagSweep struct {
+	// literal holds the names registered as string literals, sorted.
+	literal []string
+	// other holds every registration naming its flag any other way, as
+	// "function:expression".
+	other []string
+	// unresolved holds every registration-shaped call on a receiver that is
+	// neither the flag package nor flag.CommandLine, as
+	// "function:receiver.Method".
+	unresolved []string
+}
+
+// sweepFlagRegistrations reads every registration on the flag package or on
+// flag.CommandLine in this package's non-test files, under whatever name the
+// file imports flag as, and every call shaped like one on any other receiver.
+func sweepFlagRegistrations(t *testing.T) flagSweep {
 	t.Helper()
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("reading the package directory: %v", err)
 	}
+	var sweep flagSweep
 	fset := token.NewFileSet()
 	for _, entry := range entries {
 		file := entry.Name()
@@ -117,30 +149,128 @@ func flagRegistrations(t *testing.T) (literal, other []string) {
 		if parseErr != nil {
 			t.Fatalf("parsing %s: %v", file, parseErr)
 		}
-		ast.Inspect(parsed, func(n ast.Node) bool {
-			nameArg, ok := flagNameArgument(n)
-			if !ok {
-				return true
+		imports := importNames(t, parsed)
+		for _, decl := range parsed.Decls {
+			scope := "package scope"
+			if fn, isFunc := decl.(*ast.FuncDecl); isFunc {
+				scope = fn.Name.Name
 			}
-			if lit, isLit := nameArg.(*ast.BasicLit); isLit && lit.Kind == token.STRING {
-				name, unquoteErr := strconv.Unquote(lit.Value)
-				if unquoteErr != nil {
-					t.Errorf("unquoting the flag name %s: %v", lit.Value, unquoteErr)
-					return true
-				}
-				literal = append(literal, name)
+			ast.Inspect(decl, func(n ast.Node) bool {
+				sweep.record(t, scope, imports, n)
 				return true
-			}
-			other = append(other, exprText(nameArg))
-			return true
-		})
+			})
+		}
 	}
-	slices.Sort(literal)
-	return literal, other
+	slices.Sort(sweep.literal)
+	return sweep
+}
+
+// fileImports is how one file names its imports: the name it imports flag
+// under, and every other package name it can call through.
+type fileImports struct {
+	flag   string
+	others map[string]bool
+}
+
+// importNames reads the names a file imports its packages under. A dot import
+// of flag would hide every registration from the sweep, so it fails.
+func importNames(t *testing.T, file *ast.File) fileImports {
+	t.Helper()
+	names := fileImports{others: map[string]bool{}}
+	for _, spec := range file.Imports {
+		importPath, _ := strconv.Unquote(spec.Path.Value)
+		name := path.Base(importPath)
+		if len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {
+			name = path.Base(path.Dir(importPath))
+		}
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		switch {
+		case importPath == "flag" && name == ".":
+			t.Errorf("a file dot-imports flag, so its registrations cannot be told from any other call")
+		case importPath == "flag":
+			names.flag = name
+		default:
+			names.others[name] = true
+		}
+	}
+	return names
+}
+
+// record files n under the sweep when it is a registration or shaped like one.
+func (s *flagSweep) record(t *testing.T, scope string, imports fileImports, n ast.Node) {
+	t.Helper()
+	call, isCall := n.(*ast.CallExpr)
+	if !isCall {
+		return
+	}
+	sel, isSel := call.Fun.(*ast.SelectorExpr)
+	if !isSel {
+		return
+	}
+	index, shaped := registrationFuncs[sel.Sel.Name]
+	if !shaped || len(call.Args) < 3 {
+		return
+	}
+	switch receiverKind(sel.X, imports) {
+	case receiverFlag:
+		s.recordName(t, scope, call.Args[index])
+	case receiverOther:
+		s.unresolved = append(s.unresolved, scope+":"+exprText(sel.X)+"."+sel.Sel.Name)
+	case receiverPackage:
+	}
+}
+
+// recordName files the argument naming a registered flag.
+func (s *flagSweep) recordName(t *testing.T, scope string, nameArg ast.Expr) {
+	t.Helper()
+	lit, isLit := nameArg.(*ast.BasicLit)
+	if !isLit || lit.Kind != token.STRING {
+		s.other = append(s.other, scope+":"+exprText(nameArg))
+		return
+	}
+	name, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		t.Errorf("unquoting the flag name %s: %v", lit.Value, err)
+		return
+	}
+	s.literal = append(s.literal, name)
+}
+
+// The three things the receiver of a registration-shaped call can be.
+const (
+	// receiverFlag is the flag package or flag.CommandLine.
+	receiverFlag = iota
+	// receiverPackage is another imported package, whose functions of these
+	// names (slog.String, attribute.Int) are not flag registrations.
+	receiverPackage
+	// receiverOther is anything else: a flag set of its own, or a value the
+	// sweep cannot see the type of.
+	receiverOther
+)
+
+// receiverKind classifies the receiver of a registration-shaped call.
+func receiverKind(receiver ast.Expr, imports fileImports) int {
+	switch x := receiver.(type) {
+	case *ast.Ident:
+		if imports.flag != "" && x.Name == imports.flag {
+			return receiverFlag
+		}
+		if imports.others[x.Name] {
+			return receiverPackage
+		}
+	case *ast.SelectorExpr:
+		if pkg, isIdent := x.X.(*ast.Ident); isIdent && imports.flag != "" && pkg.Name == imports.flag && x.Sel.Name == "CommandLine" {
+			return receiverFlag
+		}
+	}
+	return receiverOther
 }
 
 // registrationFuncs are the flag package's registration functions, each with
-// the index of the argument naming the flag.
+// the index of the argument naming the flag. Every one takes at least three
+// arguments, which is what tells them apart from slog.String and the like.
 var registrationFuncs = map[string]int{
 	"String": 0, "Bool": 0, "Int": 0, "Int64": 0, "Uint": 0, "Uint64": 0, "Float64": 0, "Duration": 0,
 	"Func": 0, "BoolFunc": 0,
@@ -148,25 +278,40 @@ var registrationFuncs = map[string]int{
 	"Float64Var": 1, "DurationVar": 1, "TextVar": 1, "Var": 1,
 }
 
-// flagNameArgument returns the argument naming the flag when n is a call to
-// one of [registrationFuncs] on the flag package.
-func flagNameArgument(n ast.Node) (ast.Expr, bool) {
-	call, isCall := n.(*ast.CallExpr)
-	if !isCall {
-		return nil, false
+// TestSweepFlagRegistrations_SeesEveryShape holds the sweep to the shapes a
+// registration can take beyond flag.Xxx: flag.CommandLine, an import alias, and
+// a flag set handed to a helper, which it cannot resolve and must report.
+func TestSweepFlagRegistrations_SeesEveryShape(t *testing.T) {
+	const src = `package main
+
+import (
+	fl "flag"
+	"log/slog"
+)
+
+func register(fs *fl.FlagSet) {
+	fl.CommandLine.Int("via-commandline", 0, "")
+	fl.Bool("via-alias", false, "")
+	fs.String("via-helper", "", "")
+	slog.String("not-a-flag", "")
+}
+`
+	parsed, err := parser.ParseFile(token.NewFileSet(), "probe.go", src, 0)
+	if err != nil {
+		t.Fatalf("parsing the probe: %v", err)
 	}
-	sel, isSel := call.Fun.(*ast.SelectorExpr)
-	if !isSel {
-		return nil, false
+	imports := importNames(t, parsed)
+	var sweep flagSweep
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		sweep.record(t, "register", imports, n)
+		return true
+	})
+	if want := []string{"via-commandline", "via-alias"}; !slices.Equal(sweep.literal, want) {
+		t.Errorf("literal = %v, want %v", sweep.literal, want)
 	}
-	if pkg, isIdent := sel.X.(*ast.Ident); !isIdent || pkg.Name != "flag" {
-		return nil, false
+	if want := []string{"register:fs.String"}; !slices.Equal(sweep.unresolved, want) {
+		t.Errorf("unresolved = %v, want %v", sweep.unresolved, want)
 	}
-	index, registers := registrationFuncs[sel.Sel.Name]
-	if !registers || len(call.Args) <= index {
-		return nil, false
-	}
-	return call.Args[index], true
 }
 
 // exprText spells an identifier or a selector the way the source does, which

@@ -279,12 +279,19 @@ effect on a stdio server`, or the same about a variable, with a `flag` such as
 
 **Meaning.** The listener, the per-caller budgets, the origin list, the proxy settings, TLS
 and the session settings configure the HTTP transport, and a stdio server has none of them:
-one client on the other end of a pipe. The server serves anyway, since none of these is
-dangerous to ignore, and names each one once at startup so a setting that does nothing is not
-also a setting nobody hears about. The line is a `WARN` for a flag typed on a stdio run, and an
-`INFO` under `--transport auto` (a command line written for either transport, as the container
-image's is) and for a variable set in the environment (which a shared dotenv file carries to
-every process).
+one client on the other end of a pipe. A valid value is ignored and the server serves anyway,
+since none of these is dangerous to ignore, and names each one once at startup so a setting
+that does nothing is not also a setting nobody hears about. The value is still validated first:
+one that is invalid or contradicts another setting stops startup on stdio exactly as on HTTP,
+before any such line, as with `--session-timeout` under the default stateless mode,
+`--trusted-proxy-header` without `--trusted-proxies`, or a `--tls-cert` naming a missing file.
+
+The line is a `WARN` for a flag typed on a stdio run, and an `INFO` under `--transport auto` (a
+command line written for either transport, as the container image's is) and for a variable set
+in the environment (which a shared dotenv file carries to every process). The exception is
+`--max-request-body-bytes`, which stays a `WARN` from any source, because stdio has a setting
+of its own for the same bound and a value written for either transport was plausibly meant for
+both.
 
 **Fixes.**
 
