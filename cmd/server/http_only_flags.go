@@ -67,6 +67,10 @@ var httpOnlyFlags = map[string]httpOnlyFlag{
 	"max-request-body-bytes": {stdioVariable: "STDIO_MAX_LINE_BYTES"},
 }
 
+// answeredBeforeTransport is why a flag that answers and exits is not one a
+// stdio run ignores.
+const answeredBeforeTransport = "answered and exited before a transport is chosen"
+
 // stdioFlags names every other flag, each with why a stdio run is not ignoring
 // it. The flags [envBackedFlags] registers belong here too and are not repeated:
 // each writes its variable before anything reads configuration, on either
@@ -74,9 +78,9 @@ var httpOnlyFlags = map[string]httpOnlyFlag{
 var stdioFlags = map[string]string{
 	"transport":     "decides the transport",
 	"http":          "decides the transport, and an address given to a run that serves stdio is already warned about by decide",
-	"version":       "answered and exited before a transport is chosen",
-	"healthcheck":   "answered and exited before a transport is chosen",
-	"shutdown":      "answered and exited before a transport is chosen",
+	"version":       answeredBeforeTransport,
+	"healthcheck":   answeredBeforeTransport,
+	"shutdown":      answeredBeforeTransport,
 	mirrorFlagName:  "writes LIBGEN_MIRROR, which config.Load reads on either transport",
 	envFileFlagName: "names a dotenv file config.Load reads on either transport",
 }
