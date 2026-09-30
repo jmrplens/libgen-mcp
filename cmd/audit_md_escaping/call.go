@@ -16,7 +16,9 @@ func (c *classifier) classifyCall(call *ast.CallExpr, s scope, depth int) (outco
 		if fit.fits(c.ctx) {
 			return safe, ""
 		}
-		return unescaped, fit.misfit(name)
+		why := fit.misfit(name)
+		c.misfits = append(c.misfits, why)
+		return unescaped, why
 	}
 	switch {
 	case externalSafe[name], builtinSafe[name]:

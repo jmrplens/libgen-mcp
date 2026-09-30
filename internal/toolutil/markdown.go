@@ -48,17 +48,31 @@ func StripControlBytes(s string) string {
 }
 
 // EscapeMdTableCell sanitizes a value for a Markdown table cell: it collapses
-// newlines and escapes pipes so the value cannot break the table layout.
+// newlines and escapes pipes so the value cannot break the table layout. It is
+// for a table cell only. Anywhere else takes [EscapeMdInline].
 //
 // A finished link does not survive this function. A link is built by
 // [MdTitleLink] or [MdTitleLinkCell] from its raw halves and is never escaped
 // afterwards.
 //
-// The result reads the same in a list item, which is where a card row puts it:
-// every escape written is a backslash escape, and outside a code span both
-// places process those alike.
+// The pipe escape is what makes this the wrong helper outside a table. A value
+// that carries a code span of its own around a pipe, a`|`b, keeps the escape
+// inside that span, which a table row removes before the span is read and a
+// list item or a paragraph never removes, so there it shows a backslash the
+// value never had.
 func EscapeMdTableCell(s string) string {
 	return escapeCellPipes(oneLine(s))
+}
+
+// EscapeMdInline sanitizes a value for a line that is not a table row: a list
+// item, which is what a card row and a guidance step are, or a paragraph. The
+// line breaks are collapsed and the control bytes dropped, so the value stays
+// on the line it was written into and cannot open a heading, a list item or a
+// block of its own on the next one. Nothing else is escaped. A pipe splits no
+// list item, and escaping one would show a backslash inside any code span the
+// value carries.
+func EscapeMdInline(s string) string {
+	return oneLine(s)
 }
 
 // oneLine drops the control bytes, collapses every line ending to a space and
@@ -79,8 +93,10 @@ func oneLine(s string) string {
 // backslash the value already had in front of a pipe takes the added one and
 // leaves the pipe live: `a\|b` escaped to `a\\|b` is two cells. With each such
 // backslash doubled, every backslash pairs with its copy, the added one pairs
-// with the pipe, and the reader sees the backslashes the value had. A
-// backslash anywhere else is left as it was.
+// with the pipe, and the reader sees the backslashes the value had in front of
+// the pipe. A backslash anywhere else is left as it was, and is read as the
+// escape it is: a\* shows a*, as it would in any Markdown the value was
+// written into.
 func escapeCellPipes(s string) string {
 	if !strings.Contains(s, "|") {
 		return s
@@ -141,8 +157,12 @@ func EscapeMdLinkLabel(s string) string {
 // rather than for the link itself: a destination is not escaped by
 // [EscapeMdTableCell], so a URL carrying a pipe ends the cell in the middle of
 // the link, and one carrying a line break ends the row.
+//
+// The backslash is encoded because a destination processes backslash escapes:
+// an address ending in one escaped the parenthesis that closes the link, and
+// the link was lost with its label.
 var mdLinkDestEscaper = strings.NewReplacer(
-	"(", "%28", ")", "%29", "<", "%3C", ">", "%3E",
+	"(", "%28", ")", "%29", "<", "%3C", ">", "%3E", `\`, "%5C",
 	" ", "%20", `"`, "%22", "|", "%7C", "\r", "%0D", "\n", "%0A",
 )
 
@@ -274,17 +294,21 @@ func MdTitleLinkCell(title, rawURL string) string {
 
 // titleLink is the decision [MdTitleLink] and [MdTitleLinkCell] share, handed
 // the label and the fallback span each has already escaped for where it lands.
-// The title shown beside a span goes through [EscapeMdTableCell], whose
-// backslash escapes read the same in a cell and in a list item.
+//
+// The title is written as the label wherever it appears, linked or not. The
+// label escaper takes away the backtick, the bracket and the angle bracket,
+// which matters most beside a span: a backtick left in the title paired with
+// the span's fence, so part of an address no client should open left the span
+// it was contained in.
 func titleLink(title, rawURL, label, span string) string {
 	if strings.TrimSpace(rawURL) == "" {
-		return EscapeMdTableCell(title)
+		return label
 	}
 	if !LinkableDestination(rawURL) {
 		if strings.TrimSpace(title) == "" || title == rawURL {
 			return span
 		}
-		return EscapeMdTableCell(title) + " " + span
+		return label + " " + span
 	}
 	return fmt.Sprintf("[%s](%s)", label, EscapeMdLinkDestination(rawURL))
 }

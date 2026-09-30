@@ -407,6 +407,35 @@ func TestEscapeMdTableCell_KeepsABackslashedPipeInItsCell(t *testing.T) {
 	}
 }
 
+// inlineValues are values a list item or a paragraph has to show as sent: a
+// pipe inside a code span the value carries is where the cell escaper's escape
+// becomes a backslash the reader sees, since a list item splits on no pipe and
+// a code span processes no escape.
+var inlineValues = []struct{ value, want string }{
+	{value: "a|b", want: "a|b"},
+	{value: "a`|`b", want: "a|b"},
+	{value: "``x|y``", want: "x|y"},
+	{value: `a\|b`, want: "a|b"},
+	{value: "one\ntwo\r\nthree", want: "one two three"},
+}
+
+// TestEscapeMdInline_ShowsTheValueAsSentInAListItem pins the list-item form of
+// the cell escaper: every value stays on its line and reads as it would had
+// it been written there by hand.
+func TestEscapeMdInline_ShowsTheValueAsSentInAListItem(t *testing.T) {
+	for _, tc := range inlineValues {
+		t.Run(tc.value, func(t *testing.T) {
+			rendered := EscapeMdInline(tc.value)
+			if strings.ContainsAny(rendered, "\r\n") {
+				t.Fatalf("EscapeMdInline(%q) = %q, want one line", tc.value, rendered)
+			}
+			if got := gfmInline("- " + rendered); got != "- "+tc.want {
+				t.Errorf("EscapeMdInline(%q) = %q, which a list item shows as %q, want %q", tc.value, rendered, got, "- "+tc.want)
+			}
+		})
+	}
+}
+
 // titleLinkCases are link titles and addresses whose pipe or backslash must
 // reach the reader as sent, through the link path and through the fallback
 // that shows an address no client should open.
@@ -415,6 +444,14 @@ var titleLinkCases = []struct{ name, title, url, want string }{
 	{name: "a backslash-pipe in a linked title", title: `a\|b`, url: "https://example.org/", want: `[a\|b](https://example.org/)`},
 	{name: "a pipe in an unlinkable address", title: "mirror", url: "ftp://example.org/a|b", want: "mirror ftp://example.org/a|b"},
 	{name: "a backslash-pipe in an unlinkable address", title: "", url: `ftp://example.org/a\|b`, want: `ftp://example.org/a\|b`},
+	// A backtick in the title beside the span used to pair with the span's
+	// fence, so part of the address left the span and the containment around
+	// an address no client should open was gone.
+	{name: "a backtick in a title beside a span", title: "Mirror `x", url: "ftp://evil.example/a`b", want: "Mirror `x ftp://evil.example/a`b"},
+	{name: "a backtick in a title with no address", title: "Mirror `x", url: "", want: "Mirror `x"},
+	// A destination ending in a backslash used to escape the parenthesis that
+	// closes it, and the link was lost with its label.
+	{name: "a backslash ending a destination", title: "Mirror", url: `https://m.example/a\`, want: "[Mirror](https://m.example/a%5C)"},
 }
 
 // TestMdTitleLink_ShowsTheValueAsSentInAListItem is the list-item half for a

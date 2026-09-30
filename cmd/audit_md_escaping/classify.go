@@ -82,16 +82,18 @@ func (f escaperFit) misfit(name string) string {
 	if f == cellOnly {
 		return name + " is written for a table cell, and outside one its escaped pipe is a backslash the reader sees"
 	}
-	return name + " leaves a pipe live inside a code span, which ends a table cell: a cell takes toolutil.MdCodeSpanCell or toolutil.MdTitleLinkCell"
+	return name + " leaves a pipe live, which ends a table cell: a cell takes toolutil.EscapeMdTableCell, toolutil.MdCodeSpanCell or toolutil.MdTitleLinkCell"
 }
 
 // escaperNames are the toolutil functions whose result is safe to interpolate,
-// each with the contexts it is correct in. Most neutralize a superset of what
+// each with the contexts it is correct in. Some neutralize a superset of what
 // the weakest construct needs, so a value that has been through them is safe
-// in any context. The code-span helpers and the two helpers that fall back to
-// one are split by where they land, because the pipe a table row needs escaped
-// is one a code span anywhere else must not escape, and the classifier accepts
-// each only where it is correct.
+// in any context. The rest are split by where they land, because the pipe a
+// table row needs escaped is one a list item or a paragraph must not escape: a
+// code span keeps the escape as a backslash the reader sees. So the cell
+// escaper, the code-span helpers and the two helpers that fall back to a span
+// each come in a cell form and a form for everywhere else, and the classifier
+// accepts each only where it is correct.
 //
 // StripControlBytes is deliberately absent. It drops the control bytes and
 // leaves both the pipe and the angle bracket, so accepting it as an answer
@@ -104,7 +106,8 @@ func (f escaperFit) misfit(name string) string {
 // run in the value, so nothing inside can end the span or open a construct of
 // its own.
 var escaperNames = map[string]escaperFit{
-	"toolutil.EscapeMdTableCell":       anyContext,
+	"toolutil.EscapeMdTableCell":       cellOnly,
+	"toolutil.EscapeMdInline":          outsideCell,
 	"toolutil.EscapeMdHeading":         anyContext,
 	"toolutil.EscapeMdLinkLabel":       anyContext,
 	"toolutil.EscapeMdLinkDestination": anyContext,
@@ -211,6 +214,11 @@ type classifier struct {
 	// ctx is the context the hole being judged sits in, which decides whether
 	// an escaper written for one context is an answer there.
 	ctx mdContext
+	// misfits records every escaper the current hole reached that is not
+	// written for its context. It is what prose is judged by: a paragraph
+	// holds a raw value without changing shape, so a raw value there is not a
+	// finding, but a cell form there is the wrong helper all the same.
+	misfits []string
 }
 
 // visit names one thing the classifier is in the middle of answering for.
@@ -237,6 +245,7 @@ func worse(a verdict, whyA string, b verdict, whyB string) (outcome verdict, exp
 // the escapers judged against the context the hole sits in.
 func (c *classifier) classifyIn(expr ast.Expr, s scope, ctx mdContext) (outcome verdict, explanation string) {
 	c.ctx = ctx
+	c.misfits = nil
 	return c.classify(expr, s, 0)
 }
 

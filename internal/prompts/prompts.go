@@ -83,6 +83,15 @@ func cell(s string) string {
 	return toolutil.EscapeMdTableCell(s)
 }
 
+// inline renders a catalog value on a line that is not a table row: a line of
+// prose or a numbered step, often inside a code span. The line breaks are
+// collapsed so the value cannot push text onto a line of its own, and no pipe
+// is escaped, since neither place splits on one and a code span would show the
+// escape as a backslash. The rule is [toolutil.EscapeMdInline].
+func inline(s string) string {
+	return toolutil.EscapeMdInline(s)
+}
+
 // registerAcquireBook registers the acquire_book workflow prompt.
 func registerAcquireBook(server *mcp.Server, client *libgen.Client) {
 	server.AddPrompt(&mcp.Prompt{
@@ -171,15 +180,15 @@ func candidateText(title, author, format, language string, results []libgen.Resu
 	b.WriteString(".\n\n")
 	b.WriteString(renderCandidates(results))
 	// The chosen result's Title and MD5 come from the untrusted catalog, so they
-	// are neutralized with cell() (collapsing newlines/tabs, escaping pipes)
-	// before being interpolated into this user-role instruction prose. Otherwise
-	// a Title/MD5 containing a newline could push forged text onto its own line
-	// ahead of the untrusted caveat. The request title is the user's own input.
+	// are neutralized with inline() (collapsing line breaks) before being
+	// interpolated into this user-role instruction prose. Otherwise a Title/MD5
+	// containing a newline could push forged text onto its own line ahead of the
+	// untrusted caveat. The request title is the user's own input.
 	bestMatch := title
 	if strings.TrimSpace(chosen.Title) != "" {
-		bestMatch = cell(chosen.Title)
+		bestMatch = inline(chosen.Title)
 	}
-	md5 := cell(chosen.MD5)
+	md5 := inline(chosen.MD5)
 	b.WriteString("\nThe best match appears to be **")
 	b.WriteString(bestMatch)
 	b.WriteString("** (md5 `")
@@ -439,7 +448,7 @@ func doiText(doi string) string {
 	// The DOI is the caller's own argument, not this server's text, and every
 	// use of it below sits on a numbered line: a value carrying a newline
 	// would end that line and write the rest as a step of its own.
-	escaped := cell(doi)
+	escaped := inline(doi)
 	b.WriteString("Fetching paper by DOI **")
 	b.WriteString(escaped)
 	b.WriteString("**.\n\n")

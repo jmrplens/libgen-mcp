@@ -289,13 +289,13 @@ func readNextSteps(out ReadOutput) []string {
 func notExtractableSteps(out ReadOutput) []string {
 	if out.OutlineRequested {
 		return []string{
-			"This file can't be read at all (" + mdCell(out.Reason) + "), so it has no readable table of contents either.",
+			"This file can't be read at all (" + mdInline(out.Reason) + "), so it has no readable table of contents either.",
 			"Do not retry read in text or find mode — every mode fails on this file for the same reason. Use the download tool to fetch the raw file instead.",
 			"Nothing was returned. Tell the user the file could not be read; do not describe, summarize or list chapters you did not receive.",
 		}
 	}
 	return []string{
-		"This file's text can't be extracted (" + mdCell(out.Reason) + "). Use the download tool to fetch the raw file instead.",
+		"This file's text can't be extracted (" + mdInline(out.Reason) + "). Use the download tool to fetch the raw file instead.",
 		"No text was returned. Tell the user the file could not be read; do not describe, summarize or list contents you did not receive.",
 	}
 }

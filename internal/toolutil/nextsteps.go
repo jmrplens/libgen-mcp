@@ -43,7 +43,7 @@ func DefuseNextStepsHeading(s string) string {
 //
 // The section separates itself from whatever precedes it, so a renderer that
 // stopped mid-line does not turn the heading into a continuation of its last
-// paragraph. Each step goes through the cell escaper: a step is one line of a
+// paragraph. Each step goes through the inline escaper: a step is one line of a
 // list by construction, and every builder of one quotes something a third
 // party sent — a pinned source name, a resolved mirror URL, the path a file
 // was saved under — so a value carrying a newline would end its bullet and

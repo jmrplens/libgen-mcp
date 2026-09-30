@@ -65,6 +65,42 @@ func TestWriteOpenAccess_NoHits(t *testing.T) {
 	}
 }
 
+// TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash pins the list-item
+// half of the escaping split: a snippet and a table-of-contents title are
+// bullets, not table cells, so a pipe inside a code span the value carries is
+// written as sent. The cell escaper put a backslash there, which a list item
+// never removes and a code span shows.
+func TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash(t *testing.T) {
+	const value = "use a`|`b\nhere"
+	var b strings.Builder
+	renderMatches(&b, ReadOutput{
+		Format: "txt", Query: "a", MatchCount: 2,
+		Matches: []extract.Match{{Page: 3, Snippet: value}, {Snippet: value}},
+	})
+	renderOutline(&b, ReadOutput{
+		Format:  "pdf",
+		Outline: []extract.OutlineEntry{{Title: value, Page: 4}, {Title: value, Level: 1}},
+	})
+	md := b.String()
+
+	testCases := []struct{ name, want string }{
+		{name: "a paged snippet", want: "- p.3 (offset 0): use a`|`b here\n"},
+		{name: "an offset-only snippet", want: "- offset 0: use a`|`b here\n"},
+		{name: "a paged outline entry", want: "- use a`|`b here (p.4)\n"},
+		{name: "a nested outline entry", want: "  - use a`|`b here\n"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(md, tc.want) {
+				t.Errorf("rendered = %q, want it to contain %q", md, tc.want)
+			}
+		})
+	}
+	if strings.Contains(md, `\|`) {
+		t.Errorf("rendered = %q, want no pipe escaped on a list line", md)
+	}
+}
+
 // TestRenderOutline_NoPageEntry covers the level-only arm of renderOutline: an
 // entry with no known page (Page == 0) renders as an indented bullet without a
 // "(p.N)" suffix, and its untrusted title still passes through mdCell.
@@ -532,8 +568,10 @@ func TestWriteNextSteps_AStepCannotForgeAStepOfItsOwn(t *testing.T) {
 	if got := strings.Count(out, "\n- "); got != 1 {
 		t.Errorf("next steps = %q has %d bullets, want the one that was written", out, got)
 	}
-	if !strings.Contains(out, `\|`) {
-		t.Errorf("next steps = %q, want the pipe escaped for the line it is on", out)
+	// A bullet is a list item, which splits on no pipe, so the pipe is left as
+	// sent: an escape here would show inside any code span the step carries.
+	if !strings.Contains(out, "run it | now") {
+		t.Errorf("next steps = %q, want the pipe as sent on the line it is on", out)
 	}
 }
 

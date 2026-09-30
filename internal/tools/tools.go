@@ -1705,7 +1705,7 @@ func enrichmentNextStep(e *libgen.Enrichment) string {
 	cr := e.Crossref
 	var parts []string
 	if cr.ContainerTitle != "" {
-		parts = append(parts, "the journal is "+mdCell(cr.ContainerTitle))
+		parts = append(parts, "the journal is "+mdInline(cr.ContainerTitle))
 	}
 	if cr.PublishedYear > 0 {
 		parts = append(parts, fmt.Sprintf("published %d", cr.PublishedYear))

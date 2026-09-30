@@ -139,7 +139,7 @@ func TestAudit_AFindingNamesTheFunctionAndTheFileItIsIn(t *testing.T) {
 // backslash the reader sees, and the plain form leaves a pipe live, which ends
 // a cell. Each is an answer only in the context it is written for.
 func TestClassify_AcceptsASpanHelperOnlyWhereItIsCorrect(t *testing.T) {
-	const cell, item = "| %s |\\n", "- Path: %s\\n"
+	const cell, item, prose = "| %s |\\n", "- Path: %s\\n", "Saved to %s today.\\n"
 	testCases := []struct {
 		name, template, value string
 		want                  []string
@@ -168,6 +168,29 @@ func TestClassify_AcceptsASpanHelperOnlyWhereItIsCorrect(t *testing.T) {
 			name: "a plain span reached through a helper, in a cell", template: cell, value: "span(r.URL)",
 			want: []string{"unescaped table-cell span(r.URL)"},
 		},
+		{name: "the inline escaper in a list item", template: item, value: "toolutil.EscapeMdInline(r.Title)"},
+		{
+			name: "the cell escaper in a list item", template: item, value: "toolutil.EscapeMdTableCell(r.Title)",
+			want: []string{"unescaped list-item toolutil.EscapeMdTableCell(r.Title)"},
+		},
+		{
+			name: "the inline escaper in a cell", template: cell, value: "toolutil.EscapeMdInline(r.Title)",
+			want: []string{"unescaped table-cell toolutil.EscapeMdInline(r.Title)"},
+		},
+		// A paragraph holds a raw value without changing shape, so only the
+		// wrong helper is a finding there: a cell form escapes a pipe no
+		// paragraph removes.
+		{name: "a raw value in prose", template: prose, value: "r.Title"},
+		{name: "the inline escaper in prose", template: prose, value: "toolutil.EscapeMdInline(r.Title)"},
+		{name: "a plain span in prose", template: prose, value: "toolutil.MdCodeSpan(r.URL)"},
+		{
+			name: "a cell span in prose", template: prose, value: "toolutil.MdCodeSpanCell(r.URL)",
+			want: []string{"unescaped prose toolutil.MdCodeSpanCell(r.URL)"},
+		},
+		{
+			name: "the cell escaper in prose", template: prose, value: "toolutil.EscapeMdTableCell(r.Title)",
+			want: []string{"unescaped prose toolutil.EscapeMdTableCell(r.Title)"},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -175,6 +198,28 @@ func TestClassify_AcceptsASpanHelperOnlyWhereItIsCorrect(t *testing.T) {
 			body := "// span is the package's own spelling of the plain span.\nfunc span(s string) string { return toolutil.MdCodeSpan(s) }\n\n" +
 				"// row writes one value.\nfunc row(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"" + tc.template + "\", " + tc.value + ")\n}"
 			got := verdicts(auditFixture(t, body))
+			if strings.Join(got, "; ") != strings.Join(tc.want, "; ") {
+				t.Errorf("audit reported %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAudit_JudgesProseOnlyWhenCellsAreJudged verifies the prose question is
+// staged with the context its forms belong to: a run that judges no table cell
+// reports no cell form in a paragraph, and the one that does reports it.
+func TestAudit_JudgesProseOnlyWhenCellsAreJudged(t *testing.T) {
+	body := "// lead writes a sentence.\nfunc lead(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"Saved to %s today.\\n\", toolutil.EscapeMdTableCell(r.Title))\n}"
+	testCases := []struct {
+		name, contexts string
+		want           []string
+	}{
+		{name: "a run judging cells", contexts: "table-cell", want: []string{"unescaped prose toolutil.EscapeMdTableCell(r.Title)"}},
+		{name: "a run judging headings only", contexts: "heading", want: nil},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := verdicts(auditFixtureContexts(t, tc.contexts, body))
 			if strings.Join(got, "; ") != strings.Join(tc.want, "; ") {
 				t.Errorf("audit reported %v, want %v", got, tc.want)
 			}

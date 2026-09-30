@@ -23,7 +23,7 @@ func TestCard_AValueCannotReshapeTheCardItIsIn(t *testing.T) {
 		text string
 	}{
 		{name: "the heading is the one the card wrote", want: true, text: "## Record\n"},
-		{name: "the hostile value is on its own row", want: true, text: "- **Authors**: Title \\| with a pipe"},
+		{name: "the hostile value is on its own row", want: true, text: "- **Authors**: Title | with a pipe"},
 		{name: "the next field is still a row", want: true, text: "- **Year**: 2020\n"},
 		{name: "no forged heading", want: false, text: "\n# a heading"},
 		{name: "no forged row", want: false, text: "\n- and a row"},
@@ -230,6 +230,7 @@ func TestCard_CodeAndLinkTakeTheirOwnContainment(t *testing.T) {
 	card.Link("Mirror", "a|b", "https://example.org/")
 	card.URL("URL", "javascript:alert(1)")
 	card.URL("FTP", "ftp://example.org/a|b")
+	card.Field("Title", "a`|`b")
 	got := b.String()
 
 	// A card row is a list item, so a pipe in it is text and a backslash put in
@@ -241,6 +242,7 @@ func TestCard_CodeAndLinkTakeTheirOwnContainment(t *testing.T) {
 		{name: "a link's label carries a pipe as sent", want: "- **Mirror**: [a|b](https://example.org/)\n"},
 		{name: "an address no client should open is shown, not linked", want: "- **URL**: `javascript:alert(1)`\n"},
 		{name: "an address shown in a span carries a pipe as sent", want: "- **FTP**: `ftp://example.org/a|b`\n"},
+		{name: "a field's own code span carries a pipe as sent", want: "- **Title**: a`|`b\n"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
