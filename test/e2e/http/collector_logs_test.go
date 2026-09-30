@@ -107,7 +107,7 @@ const plantedHost = "planted-host-9f3a.attacker.example"
 // The guard logs the Host of a request it refuses, because a proxy forwarding
 // the wrong one is diagnosed by reading what arrived. On a published endpoint
 // that value is whatever a caller chose to send, and it went to the collector
-// under "host" for as long as the guard had logged it: the field was not on
+// under a "host" key for as long as the guard had logged it: the field was not on
 // the strip list, and the rule is applied by name.
 //
 // The wait is on the record's message, which is the safe half of it, never on
@@ -169,12 +169,33 @@ func TestCollector_AFailedHandshakeNeverNamesThePeer(t *testing.T) {
 	_, _ = conn.Read(make([]byte, 64))
 	_ = conn.Close()
 
-	c.awaitPayloadContaining(t, "the HTTP server reported an error", 30*time.Second)
+	// Waited for by either form of the record, so the leak assertion below is
+	// what fails on a server without the rewrite: that server never writes the
+	// constant, and waiting on it alone would time out before asserting
+	// anything. Neither marker is the peer, which is the value under test.
+	awaitHandshakeRecord(t, c, 30*time.Second)
 	c.assertNoPayloadContains(t, peer, "TLS handshake error")
 
 	if logs := s.logs(); !strings.Contains(logs, "TLS handshake error from "+peer) {
 		t.Errorf("stderr lost net/http's line, which is what an operator reads to debug a certificate:\n%s", tail(logs))
 	}
+}
+
+// awaitHandshakeRecord blocks until an exported payload carries net/http's
+// handshake failure in either form: the rewritten record's constant message,
+// or the raw line a server without the rewrite exports as its message.
+func awaitHandshakeRecord(t *testing.T, c *collector, within time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		all := c.payloads()
+		if strings.Contains(all, "the HTTP server reported an error") || strings.Contains(all, "TLS handshake error") {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("no exported payload carried the handshake failure within %s; %d payload(s) arrived", within, len(c.received()))
 }
 
 // pathsOf renders the OTLP paths a set of exports arrived on.

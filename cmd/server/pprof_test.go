@@ -84,6 +84,12 @@ func TestPprofListenerServesTheHandlers(t *testing.T) {
 	}
 	t.Cleanup(l.stop)
 
+	// net/http's own lines name the peer; left to the log package they would
+	// reach the collector as a record's message (see http_error_log.go).
+	if l.srv.ErrorLog == nil {
+		t.Error("the profile listener has no ErrorLog, so net/http writes through the log package")
+	}
+
 	for _, path := range []string{"/debug/pprof/", "/debug/pprof/cmdline", "/debug/pprof/symbol"} {
 		t.Run(path, func(t *testing.T) {
 			body, status := getPprof(t, l.addr, path)

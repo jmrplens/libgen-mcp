@@ -212,12 +212,14 @@ The exported copy is the stderr record minus three things:
 
 - **the fields on the strip list**: a search query, a record title, a per-call
   credential, the address a request was charged to, a recovered panic and its
-  stack, the `Host` header of a request the host guard refused, and the line
+  stack, the `Host` header of a request the host guard refused, the line
   net/http writes to its error log (a failed TLS handshake is logged with the
-  peer's address and port). stderr keeps the last two, because they are what you
-  read to find out what a misconfigured proxy forwards or why a client's
-  handshake fails, and the message net/http's line is recorded under is a
-  constant, so the peer is not carried there either;
+  peer's address and port), and any message the MCP SDK composed around an
+  error (a failed write names both ends of the connection). stderr keeps the
+  last three, because they are what you read to find out what a misconfigured
+  proxy forwards or why a client's handshake or session fails. The net/http and
+  SDK lines are recorded under a constant message, so the peer is not carried
+  there either;
 - **every error's text**, replaced by its type. The bridge would otherwise promote
   an error into `exception.message` equal to `err.Error()`, which on this server
   is net/http's `GET scheme://host/path: reason` — a mirror, and a path that for a

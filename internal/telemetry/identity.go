@@ -163,7 +163,11 @@ const (
 	// says never leaves this process. It did, from the day the guard began
 	// logging it, because the rule is applied by field name and nobody had
 	// told the list about this one.
-	LogFieldRequestHost = "host"
+	//
+	// The name is specific on purpose. The list strips by key at any depth, so
+	// a bare "host" would also take every future field of that name, such as
+	// the mirror host an operator does want in the collector.
+	LogFieldRequestHost = "request_host"
 	// LogFieldHTTPServerError is the line net/http writes to its error log,
 	// which this server routes through slog (`cmd/server/http_error_log.go`).
 	//
@@ -175,6 +179,16 @@ const (
 	// rewrite messages, so the text rides under this field instead and the
 	// message is a constant.
 	LogFieldHTTPServerError = "http_server_error"
+	// LogFieldSDKMessage is a message the go-sdk composed at run time, which
+	// the server's SDK logger moves out of the record's message
+	// (`cmd/server/sdk_log.go`).
+	//
+	// The SDK builds some of its lines with fmt around an error: "calling %s:
+	// %v", "failed to connect: %v", "Writing close event: %v", the last of
+	// which carries a *net.OpError naming both ends of the connection. Error
+	// values are exported as their type, but a message is exported verbatim,
+	// so the text rides under this field and the message is a constant.
+	LogFieldSDKMessage = "sdk_message"
 )
 
 // ExportStrippedFields are the log fields removed from the exported copy at any
@@ -207,6 +221,7 @@ var ExportStrippedFields = map[string]bool{
 	LogFieldStack:           true,
 	LogFieldRequestHost:     true,
 	LogFieldHTTPServerError: true,
+	LogFieldSDKMessage:      true,
 }
 
 // StripExported removes every field in [ExportStrippedFields] from a set of log

@@ -578,8 +578,8 @@ func TestExportStrippedFieldsNamesEverySensitiveField(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
-		"annas_key", "charged_address", "host", "http_server_error",
-		"panic", "query", "stack", "title", "unpaywall_email",
+		"annas_key", "charged_address", "http_server_error", "panic",
+		"query", "request_host", "sdk_message", "stack", "title", "unpaywall_email",
 	}
 	got := make([]string, 0, len(ExportStrippedFields))
 	for name := range ExportStrippedFields {

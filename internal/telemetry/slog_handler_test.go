@@ -194,6 +194,8 @@ func TestAStrippedFieldNeverLeavesTheProcess(t *testing.T) {
 		{LogFieldRequestHost, "planted-host.attacker.example"},
 		// net/http's own error line, which names the peer it failed with.
 		{LogFieldHTTPServerError, "http: TLS handshake error from 198.51.100.23:40211: EOF"},
+		// A line the go-sdk composed around an error naming both ends.
+		{LogFieldSDKMessage, "Writing close event: write tcp 127.0.0.1:8080->198.51.100.23:40211: broken pipe"},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
 			logger, exporter, stderr := bridged(t, slog.LevelInfo)
