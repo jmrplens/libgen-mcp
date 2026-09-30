@@ -178,7 +178,9 @@ eval-only: ## Re-run named eval scenarios and merge them into the published tabl
 # files whose constraint names more than the platform (a tag, a release, cgo),
 # which gobco's own narrower build context would decline to instrument, runs
 # gobco there, names the files it left out, and removes the copy whatever
-# happens. A package gobco could already read is run where it is, as before.
+# happens. The copy holds what `git ls-files -co --exclude-standard` lists, so
+# no gitignored build output and no .env reaches the temporary directory. A
+# package gobco could already read is run where it is, as before.
 # TAGS names build tags for a package behind one, passed to go list and to
 # gobco's go test alike, and a report that measured no condition (0/0) is
 # refused.
@@ -197,7 +199,10 @@ coverage-conditions: ## Report the boolean conditions of PKG never evaluated bot
 # which has no test file and exits 0: cmd/format_md_tables reported 32 LIVED
 # in under a second without its own tests ever running. The script copies such
 # a package beside itself into <dir>.mutants-main, runs gremlins there, and
-# removes the copy whatever happens.
+# removes the copy whatever happens: gremlins and every go test run in the
+# background in a process group of their own, so an INT or TERM (what `docker
+# stop` sends) stops them within seconds and the cleanup runs, rather than
+# waiting behind a foreground child until the SIGKILL that skips it.
 #
 # The per-mutant timeout is derived from PKG's own baseline, because gremlins
 # computes it as that baseline times a coefficient and applies no floor. The

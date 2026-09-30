@@ -68,11 +68,13 @@ DEFAULT_CEILING = 3600
 # the baseline would then time. The stand-in needs the standard library only.
 STUB_GO = r'''import json
 import os
+import signal
 import sys
 import time
 
 args = sys.argv[1:]
 env = os.environ
+GREMLINS = "github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"
 
 
 def tags_of(argv):
@@ -104,19 +106,32 @@ def import_path(directory):
     return "example.com/m" if below == "." else "example.com/m/" + below.replace(os.sep, "/")
 
 
-def import_paths(pattern):
-    """The packages a pattern names, as go list resolves it from the working
-    directory: a directory, or one ending in /... that takes every package
-    below it. A pattern matching nothing names nothing."""
+def package_dirs(pattern):
+    """The package directories a pattern names, as go list resolves it from
+    the working directory: a directory, or one ending in /... that takes
+    every package below it. A pattern matching nothing names nothing."""
     recursive = pattern.endswith("/...")
     base = os.path.normpath(os.path.join(os.getcwd(), pattern[:-4] if recursive else pattern))
     found = []
     for directory, _, files in os.walk(base):
         if any(name.endswith(".go") for name in files):
-            found.append(import_path(directory))
+            found.append(directory)
         if not recursive:
             break
     return found
+
+
+def import_paths(pattern):
+    return [import_path(directory) for directory in package_dirs(pattern)]
+
+
+def started():
+    """Marks the long child as running, with its pid, and makes it ignore
+    SIGTERM when the case asks for a child that outlives the signal."""
+    if env.get("STUB_IGNORE_TERM"):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    with open(env["STUB_STARTED"], "w", encoding="utf-8") as fh:
+        fh.write(str(os.getpid()))
 
 
 entry = {"argv": args, "cwd": os.getcwd(), "goflags": env.get("GOFLAGS", ""), "goroot": env.get("GOROOT")}
@@ -141,6 +156,19 @@ elif args[:1] == ["list"] and args[args.index("-f") + 1] == "{{.ImportPath}}":
         for pattern in patterns:
             for listed in import_paths(pattern):
                 print(listed)
+elif args[:1] == ["list"] and args[args.index("-f") + 1] == "{{.Dir}}":
+    # How many packages PKG matches: one directory per line.
+    for directory in package_dirs(args[-1]):
+        print(directory)
+elif args[:1] == ["install"]:
+    # gremlins built into GOBIN: a wrapper that comes back here as the
+    # `go run` the script used to make, so every case reads its run the same
+    # way. It execs, so the process the script signals is this stand-in.
+    entry["gobin"] = env.get("GOBIN")
+    wrapper = os.path.join(env["GOBIN"], "gremlins")
+    with open(wrapper, "w", encoding="utf-8") as fh:
+        fh.write('#!/bin/sh\nexec "%s" run %s "$@"\n' % (os.path.abspath(sys.argv[0]), args[-1]))
+    os.chmod(wrapper, 0o755)
 elif args[:1] == ["list"]:
     pkgdir = os.path.normpath(os.path.join(os.getcwd(), args[-1]))
     name = env.get("STUB_PKG_NAME") or os.path.basename(pkgdir)
@@ -181,7 +209,7 @@ elif args[:1] == ["test"]:
         with open(env["STUB_LOG"], encoding="utf-8") as fh:
             run = 1 + sum(1 for line in fh if json.loads(line)["argv"][:1] == ["test"])
         if env.get("STUB_STARTED_ON") == "test":
-            open(env["STUB_STARTED"], "w", encoding="utf-8").close()
+            started()
         time.sleep(float(env.get("STUB_TEST_SLEEP", "0")))
         if "-coverprofile" in args:
             with open(args[args.index("-coverprofile") + 1], "w", encoding="utf-8") as fh:
@@ -193,10 +221,10 @@ elif args[:1] == ["test"]:
         else:
             print(env.get("STUB_TEST_LAST_LINE",
                           "ok  \t%s\t0.912s\tcoverage: 71.4%% of statements" % pattern))
-elif args[:2] == ["run", "github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"]:
+elif args[:2] == ["run", GREMLINS]:
     entry["target_exists"] = os.path.isdir(os.path.join(os.getcwd(), args[-1]))
     if env.get("STUB_STARTED_ON") == "run":
-        open(env["STUB_STARTED"], "w", encoding="utf-8").close()
+        started()
     time.sleep(float(env.get("STUB_GREMLINS_SLEEP", "0")))
 else:
     sys.stderr.write("stub go: unexpected call %r\n" % (args,))
@@ -747,10 +775,14 @@ class CoverageMutantsTest(unittest.TestCase):
                 self.assertEqual("this is an integration run because GREMLINS_FLAGS asks for one" in proc.stdout,
                                  "GREMLINS_UNLEASH_INTEGRATION" in env and scan == "./...", proc.stdout)
                 sequence = [c["argv"][0] for c in calls if c["argv"][:1] != ["list"]]
-                # The toolchain's root first, then downloads, the untimed gate,
-                # the per-mutant command, and the timed run, which finds the
-                # cache as warm as gremlins' own coverage run will.
-                self.assertEqual(sequence, ["env", "mod", "test", "test", "test", "run"])
+                # The toolchain's root first, then downloads, the build of
+                # gremlins, the untimed gate, the per-mutant command, and the
+                # timed run, which finds the cache as warm as gremlins' own
+                # coverage run will.
+                self.assertEqual(sequence, ["env", "mod", "install", "test", "test", "test", "run"])
+                install = self.of(calls, "install")[0]
+                self.assertEqual(install["argv"], ["install", "github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"])
+                self.assertFalse(os.path.exists(install["gobin"]), "the directory gremlins was built into was left behind")
                 mod = self.of(calls, "mod", "download")[0]
                 self.assertEqual(mod["cwd"], self.root)
                 tests = self.of(calls, "test")
@@ -835,7 +867,76 @@ class CoverageMutantsTest(unittest.TestCase):
             proc, calls = self.run_script("./cmd/tool", env={"STUB_PKG_NAME": "main"})
             self.assert_refused_before_gremlins(proc, calls)
             self.assertIn("cmd/tool.mutants-main is already there", proc.stderr)
+            self.assertIn("remove it with: rm -rf '%s'" % leftover, proc.stderr)
             self.assertTrue(os.path.exists(marker), "the script removed a directory it did not create")
+        with self.subTest("a leftover copy is ignored by git"):
+            with open(os.path.join(ROOT, ".gitignore"), encoding="utf-8") as fh:
+                self.assertIn("*.mutants-*/", fh.read().splitlines())
+
+    def test_a_pattern_matching_several_packages_is_refused_by_name(self):
+        # PKG is read as one package; a pattern that lists several used to be
+        # read record by record as though it were one, and refused for a
+        # reason about a package that does not exist.
+        os.makedirs(os.path.join(self.root, "internal", "other"))
+        with open(os.path.join(self.root, "internal", "other", "doc.go"), "w", encoding="utf-8") as fh:
+            fh.write("package other\n")
+        proc, calls = self.run_script("./internal/...")
+        self.assert_refused_before_gremlins(proc, calls)
+        self.assertEqual(self.of(calls, "test"), [])
+        self.assertIn("./internal/... matches 2 packages, and this recipe measures one package at a time",
+                      proc.stderr)
+
+    def test_a_signal_stops_a_child_that_ignores_it_and_removes_the_staged_copy(self):
+        # bash runs no trap while it waits on a foreground child, so a
+        # SIGTERM during gremlins waited for the whole run, and the SIGKILL
+        # `docker stop` sends ten seconds later left the staged copy behind.
+        # The child here ignores SIGTERM and would sleep for a minute: the
+        # script has to end within seconds, remove the copy, and leave the
+        # child dead rather than orphaned.
+        for during in ("test", "run"):
+            with self.subTest(during=during):
+                open(self.log, "w", encoding="utf-8").close()
+                started = os.path.join(self.scratch, "started")
+                if os.path.exists(started):
+                    os.remove(started)
+                run_env = {k: v for k, v in os.environ.items()
+                           if not k.startswith("GREMLINS_") and k != "GOFLAGS" and not k.startswith("STUB_")}
+                run_env.update({
+                    "PATH": self.bin + os.pathsep + os.environ.get("PATH", ""),
+                    "STUB_LOG": self.log,
+                    "STUB_ROOT": self.root,
+                    "STUB_PKG_NAME": "main",
+                    "STUB_STARTED": started,
+                    "STUB_STARTED_ON": during,
+                    "STUB_IGNORE_TERM": "1",
+                    "STUB_TEST_SLEEP" if during == "test" else "STUB_GREMLINS_SLEEP": "60",
+                })
+                proc = subprocess.Popen([SCRIPT, "./cmd/tool"], cwd=self.root, env=run_env,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline:
+                    if os.path.exists(started) and os.path.getsize(started) > 0:
+                        break
+                    time.sleep(0.02)
+                with open(started, encoding="utf-8") as fh:
+                    pid = int(fh.read())
+                staged = os.path.join(self.root, "cmd", "tool.mutants-main")
+                self.assertTrue(os.path.isdir(staged))
+                sent = time.monotonic()
+                proc.send_signal(signal.SIGTERM)
+                out, err = proc.communicate(timeout=20)
+                self.assertLess(time.monotonic() - sent, 6, "the script waited on its child")
+                self.assertEqual(proc.returncode, 143, out + err)
+                self.assertFalse(os.path.exists(staged), "the staged copy was left behind")
+                gone = time.monotonic() + 3
+                while time.monotonic() < gone:
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(0.05)
+                with self.assertRaises(ProcessLookupError, msg="the child outlived the script"):
+                    os.kill(pid, 0)
 
     def test_staged_package_main_baseline_carries_the_tags_and_is_removed(self):
         staged = "./cmd/tool.mutants-main"
@@ -860,8 +961,8 @@ class CoverageMutantsTest(unittest.TestCase):
         # a signal during the baseline would go on to start gremlins on a
         # directory that was gone, and one during gremlins would let the run
         # exit 0. A signal sent to the script alone is what tells a returning
-        # handler from one that ends the run, since the child it waits for
-        # finishes normally.
+        # handler from one that ends the run, since the child, in a process
+        # group of its own, does not receive it from the sender.
         cases = [
             ("SIGTERM during the baseline", signal.SIGTERM, "test", 143),
             ("SIGINT during gremlins", signal.SIGINT, "run", 130),
@@ -897,12 +998,12 @@ class CoverageMutantsTest(unittest.TestCase):
                 self.assertFalse(os.path.exists(staged), "the staged copy was left behind")
                 with open(self.log, encoding="utf-8") as fh:
                     calls = [json.loads(line) for line in fh]
-                runs = self.of(calls, "run")
+                # The stand-in logs a call when it finishes, and the handler
+                # stops the child rather than waiting for it, so neither a
+                # gremlins run nor the interrupted go test finished.
+                self.assertEqual(self.of(calls, "run"), [], "gremlins ran to completion after the signal")
                 if during == "test":
-                    self.assertEqual(runs, [], "gremlins was started after the signal")
-                else:
-                    self.assertEqual(len(runs), 1)
-                    self.assertTrue(runs[0]["target_exists"])
+                    self.assertEqual(self.of(calls, "test"), [], "the baseline ran to completion after the signal")
 
     @staticmethod
     def trimpath_hint(proc):

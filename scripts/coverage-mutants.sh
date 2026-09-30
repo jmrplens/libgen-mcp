@@ -301,6 +301,16 @@ covered_by_coverpkg() {
   grep -qxF -- "$1" <<<"$listed"
 }
 
+# PKG names one package. A pattern matching several (./internal/...) would be
+# listed as several records below and read as one, so the refusal that came
+# out of it described a package that does not exist. It is refused here, by
+# name, before anything else is read from the listing.
+matched=$(go list -e ${tag_args[@]+"${tag_args[@]}"} -f '{{.Dir}}' "$PKG" | awk 'END{print NR}')
+if [ "$matched" -gt 1 ]; then
+  echo "gremlins: $PKG matches $matched packages, and this recipe measures one package at a time; name one, such as PKG=./internal/netguard, and run it once per package" >&2
+  exit 1
+fi
+
 # The package is loaded under those tags, and -e keeps one go cannot load
 # (every file behind a tag nobody passed, a path that is not there) from ending
 # the script with go's own message, which does not say what to do about it.
@@ -388,23 +398,84 @@ fi
 # baseline would remove the copy and then go on to time it and start gremlins
 # on a directory that was gone, and one during gremlins would let the run exit
 # 0. Exiting from the handler runs the EXIT trap, which cleans up.
+#
+# And the handler has to run when the signal arrives, not hours later. bash
+# runs no trap while it waits for a foreground child, so a SIGTERM during
+# gremlins (what `docker stop` sends) used to wait for the whole run to end,
+# and the SIGKILL that follows ten seconds later meant the EXIT trap never ran
+# and the staged copy stayed in the module. `go run` made it worse: it dies on
+# SIGTERM without passing it on, so gremlins, orphaned, kept mutating. So every
+# long child, the go test runs and gremlins itself, is started in the
+# background, in a process group of its own where setsid exists, and waited
+# for with `wait`, which a trapped signal interrupts at once. The handler then
+# stops the whole group, TERM first and KILL two seconds later for a child that
+# ignores it, reaps it, and exits. gremlins is a binary built into a temporary
+# directory beforehand, so the process the handler stops is gremlins and not a
+# `go run` wrapper around it.
 staged=""
 out=""
 profile=""
+timing=""
+tooldir=""
+child=""
+own_group=""
+if command -v setsid >/dev/null 2>&1; then
+  own_group=yes
+fi
 cleanup() {
   if [ -n "$staged" ] && [ -d "$staged" ]; then
     rm -rf "$staged"
   fi
-  if [ -n "$out" ]; then
-    rm -f "$out"
+  if [ -n "$tooldir" ] && [ -d "$tooldir" ]; then
+    rm -rf "$tooldir"
   fi
-  if [ -n "$profile" ]; then
-    rm -f "$profile"
+  for file in "$out" "$profile" "$timing"; do
+    if [ -n "$file" ]; then
+      rm -f "$file"
+    fi
+  done
+}
+# run_in runs a command in the directory it is given, in the background and in
+# a process group of its own where setsid exists, and returns its status. The
+# subshell execs setsid, which as a background job's process is not a group
+# leader and so execs the command in place: $! is the command, and its process
+# group.
+run_in() {
+  local dir=$1 status=0
+  shift
+  if [ -n "$own_group" ]; then
+    (cd "$dir" && exec setsid "$@") &
+  else
+    (cd "$dir" && exec "$@") &
   fi
+  child=$!
+  wait "$child" || status=$?
+  child=""
+  return "$status"
+}
+# stop_child ends the running child and everything it started: TERM to its
+# group, up to two seconds for it to go, then KILL, then a wait to reap it.
+stop_child() {
+  local target i=0
+  [ -n "$child" ] || return 0
+  target=$child
+  [ -z "$own_group" ] || target="-$child"
+  kill -TERM -- "$target" 2>/dev/null || true
+  while kill -0 -- "$target" 2>/dev/null && [ "$i" -lt 20 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  kill -KILL -- "$target" 2>/dev/null || true
+  wait "$child" 2>/dev/null || true
+  child=""
+}
+on_signal() {
+  stop_child
+  exit "$1"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 
 target=$PKG
 # A package whose directory ends in its name is one gremlins resolves on its
@@ -421,7 +492,7 @@ if [ -n "$stage" ]; then
   # see rather than have quietly overwritten.
   staged="$(dirname "$pkgdir")/$(basename "$pkgdir").mutants-${pkgname}"
   if [ -e "$staged" ]; then
-    echo "gremlins: ${staged#"$root"/} is already there, which means a previous staged run did not clean up after itself; remove it and try again" >&2
+    echo "gremlins: ${staged#"$root"/} is already there, which means a previous staged run did not clean up after itself; remove it with: rm -rf '$staged'" >&2
     staged=""
     exit 1
   fi
@@ -468,9 +539,10 @@ dir=$pkgdir
 patterns_for "$dir"
 out=$(mktemp)
 profile=$(mktemp)
+timing=$(mktemp)
 baseline() {
-  (cd "$root" && go test -count=1 ${tag_args[@]+"${tag_args[@]}"} ${cover_args[@]+"${cover_args[@]}"} \
-    -cover -coverprofile "$profile" "$scan") >"$out" 2>&1
+  run_in "$root" go test -count=1 ${tag_args[@]+"${tag_args[@]}"} ${cover_args[@]+"${cover_args[@]}"} \
+    -cover -coverprofile "$profile" "$scan" >"$out" 2>&1
 }
 
 # The first run is the gate, and it is not timed. A package whose suite fails
@@ -482,6 +554,11 @@ baseline() {
 # build instead makes the base too long on a package just edited, and the
 # per-mutant deadline too short to run a mutant in.
 (cd "$root" && go mod download)
+# gremlins as a binary of its own, built under the same GOFLAGS as everything
+# else (go install ignores the -count=1 it does not know), so the process the
+# signal handler stops is gremlins itself.
+tooldir=$(mktemp -d)
+GOBIN="$tooldir" go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 # Said after either refusal of a suite that fails here, since -trimpath is a
 # cause the output above cannot name: a test that finds its files through its
 # own compiled source path (runtime.Caller) is handed a module-relative path
@@ -527,7 +604,7 @@ fi
 # It is also a gate. gremlins reads a failing run of this command as a killed
 # mutant, and it is not the command the coverage run is: a test that behaves
 # differently when coverage is on passes one and fails the other.
-if ! (cd "$root" && go test -count=1 ${tag_args[@]+"${tag_args[@]}"} -failfast "$each") >"$out" 2>&1; then
+if ! run_in "$root" go test -count=1 ${tag_args[@]+"${tag_args[@]}"} -failfast "$each" >"$out" 2>&1; then
   cat "$out" >&2
   echo "gremlins: $PKG passes its tests under -cover and fails go test -failfast $each, the command gremlins runs against each mutant, so every mutant would read as killed; refusing to measure" >&2
   trimpath_hint "$shown_each"
@@ -540,9 +617,12 @@ fi
 # rather than a duration, and a package with no tests under the tags given
 # prints `[no test files]` and exits 0. Reading that line, and falling back to
 # a guess of 0.010s when it carried no duration, is what the recipe used to do.
+# It is timed in this shell rather than in a command substitution, whose
+# subshell would be the foreground child a signal waits behind.
 TIMEFORMAT=%3R
 status=0
-base=$({ time baseline; } 2>&1) || status=$?
+{ time baseline; } 2>"$timing" || status=$?
+base=$(cat "$timing")
 if [ "$status" != 0 ]; then
   cat "$out" >&2
   echo "gremlins: $PKG passed its tests and then failed them on the timed run, so a mutant's verdict would depend on which way the suite fell; refusing to measure" >&2
@@ -616,5 +696,5 @@ if [ -z "$excluded" ]; then
   gremlins_flags+=(--exclude-files=/)
 fi
 
-go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 \
+run_in "$PWD" "$tooldir/gremlins" \
   unleash --invert-logical --workers 4 ${coeff_args[@]+"${coeff_args[@]}"} ${gremlins_flags[@]+"${gremlins_flags[@]}"} "$target"

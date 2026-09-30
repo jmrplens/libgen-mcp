@@ -33,10 +33,15 @@
 # package and the build fails. Tests also read files by paths relative to their
 # own directory (docs/, the root's server.json, their testdata). In a copy of
 # the module every import path, relative path and directory name is the
-# original's. It leaves out .git, .claude/worktrees (complete worktrees of this
-# repository), node_modules and dist, which no package's test reads and which
-# gobco would otherwise copy again into its own work directory, and it lives
-# outside the tree, so a run killed before its trap leaves a copy in the
+# original's. In a git checkout it holds what `git ls-files -co
+# --exclude-standard` lists, tracked files and untracked ones nothing ignores,
+# so none of the gitignored build output (the npm, PyPI and NuGet package
+# trees, root binaries, coverage profiles, hundreds of megabytes that gobco
+# would copy a second time into its own work directory) and no .env with its
+# credentials ends up in the temporary directory. Outside a checkout, where
+# there is no ignore list to read, it copies the tree without .git,
+# .claude/worktrees, node_modules and dist. A .env is left out either way. It
+# lives outside the tree, so a run killed before its trap leaves a copy in the
 # temporary directory rather than a second copy of every package in the tree.
 #
 # The files to remove are the complement of what go list says it builds
@@ -95,6 +100,14 @@ fi
 # `go test` gobco runs. -e keeps a package go cannot load (a path that is not
 # there, a directory every file of which a constraint leaves out) from ending
 # the script with go's own message, which does not say what the run needed.
+#
+# PKG names one package: a pattern matching several would be listed as several
+# records and read as one, so it is refused by name first.
+matched=$(go list -e ${tag_args[@]+"${tag_args[@]}"} -f '{{.Dir}}' "$PKG" | awk 'END{print NR}')
+if [ "$matched" -gt 1 ]; then
+  echo "gobco: $PKG matches $matched packages, and this recipe measures one package at a time; name one, such as PKG=./internal/netguard, and run it once per package" >&2
+  exit 1
+fi
 listing=$(go list -e ${tag_args[@]+"${tag_args[@]}"} -f '{{.Dir}}
 {{with .Module}}{{.Dir}}{{end}}
 {{len .TestGoFiles}} {{len .XTestGoFiles}}
@@ -191,20 +204,99 @@ fi
 # The staged module and the captured report are removed whatever happens. An
 # interrupt ends the run rather than returning to it: a handler that only
 # cleaned up would let the script carry on against a copy it had just removed.
+#
+# The handler also has to run when the signal arrives. bash runs no trap while
+# it waits for a foreground child, and `go run` dies on SIGTERM without passing
+# it on, so a signal during gobco used to wait for the run to end, or leave
+# gobco and its go test orphaned. gobco is therefore a binary built into a
+# temporary directory, started in the background in a process group of its own
+# where setsid exists, and waited for with `wait`, which a trapped signal
+# interrupts at once; the handler stops the group, TERM and then KILL two
+# seconds later, reaps it, and exits.
 workdir=""
 report=""
+tooldir=""
+child=""
+own_group=""
+if command -v setsid >/dev/null 2>&1; then
+  own_group=yes
+fi
 cleanup() {
   if [ -n "$workdir" ] && [ -d "$workdir" ]; then
     rm -rf "$workdir"
+  fi
+  if [ -n "$tooldir" ] && [ -d "$tooldir" ]; then
+    rm -rf "$tooldir"
   fi
   if [ -n "$report" ]; then
     rm -f "$report"
   fi
 }
+# run_in runs a command in the directory it is given, in the background and in
+# a process group of its own where setsid exists, and returns its status.
+run_in() {
+  local dir=$1 status=0
+  shift
+  if [ -n "$own_group" ]; then
+    (cd "$dir" && exec setsid "$@") &
+  else
+    (cd "$dir" && exec "$@") &
+  fi
+  child=$!
+  wait "$child" || status=$?
+  child=""
+  return "$status"
+}
+# stop_child ends the running child and everything it started.
+stop_child() {
+  local target i=0
+  [ -n "$child" ] || return 0
+  target=$child
+  [ -z "$own_group" ] || target="-$child"
+  kill -TERM -- "$target" 2>/dev/null || true
+  while kill -0 -- "$target" 2>/dev/null && [ "$i" -lt 20 ]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  kill -KILL -- "$target" 2>/dev/null || true
+  wait "$child" 2>/dev/null || true
+  child=""
+}
+on_signal() {
+  stop_child
+  exit "$1"
+}
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 report=$(mktemp)
+tooldir=$(mktemp -d)
+GOBIN="$tooldir" go install "$GOBCO"
+
+# copy_module writes the module's files into the directory it is given: the
+# files git lists in a checkout (module_files, which drops the directories git
+# lists for a nested repository, other worktrees, and any .env it would
+# otherwise pass), the tree less the usual build directories outside one, and
+# never a .env (see the top of this file).
+module_files() {
+  local file
+  while IFS= read -r -d '' file; do
+    case "$file" in
+      */ | .claude/worktrees/* | .env | */.env | .env.* | */.env.*) continue ;;
+    esac
+    if [ -e "$moddir/$file" ] || [ -L "$moddir/$file" ]; then
+      printf '%s\0' "$file"
+    fi
+  done < <(cd "$moddir" && git ls-files -z -co --exclude-standard)
+}
+copy_module() {
+  if (cd "$moddir" && git rev-parse --is-inside-work-tree) >/dev/null 2>&1; then
+    module_files | (cd "$moddir" && tar --null -T - -cf -) | (cd "$1" && tar -xf -)
+  else
+    (cd "$moddir" && tar -cf - --exclude=./.git --exclude=./.claude/worktrees --exclude=node_modules \
+      --exclude=./dist --exclude=.env --exclude='.env.*' .) | (cd "$1" && tar -xf -)
+  fi
+}
 
 target=$pkgdir
 staged=""
@@ -221,8 +313,7 @@ if [ "${#left_out[@]}" -gt 0 ] || [ "${#constrained[@]}" -gt 0 ]; then
   workdir=$(mktemp -d)
   module="$workdir/$(basename "$moddir")"
   mkdir "$module"
-  (cd "$moddir" && tar -cf - --exclude=./.git --exclude=./.claude/worktrees --exclude=node_modules --exclude=./dist .) |
-    (cd "$module" && tar -xf -)
+  copy_module "$module"
   target=$module
   if [ "$pkgdir" != "$moddir" ]; then
     target="$module/${pkgdir#"$moddir"/}"
@@ -242,8 +333,13 @@ fi
 # fails, so a failure is said out loud rather than left to an exit status a
 # reader of the report may not see, in one line a caller can pick out. A
 # staged run then names what the staging itself changed, most likely first.
-(cd "$target" && go run "$GOBCO" ${gobco_args[@]+"${gobco_args[@]}"}) | tee "$report" || {
-  status=$?
+# The report is written to a file and shown once gobco ends, rather than piped
+# through tee, because a pipeline is a foreground job a signal would wait
+# behind.
+status=0
+run_in "$target" "$tooldir/gobco" ${gobco_args[@]+"${gobco_args[@]}"} >"$report" || status=$?
+cat "$report"
+if [ "$status" != 0 ]; then
   if [ -z "$staged" ]; then
     echo "gobco: gobco exited $status on $PKG, so any figure above is not a measurement: its go test failed, or it could not instrument the package" >&2
     exit "$status"
@@ -252,9 +348,9 @@ fi
   if [ "${#constrained[@]}" -gt 0 ]; then
     echo "gobco: the copy blanked the build constraint lines of ${constrained[*]}, so a test that reads its own files' headers finds them blank there and fails; that is the likeliest cause, and a package whose tests do that cannot be measured this way until gobco honours build constraints" >&2
   fi
-  echo "gobco: a test that reads something the copy leaves out (.git, .claude/worktrees, node_modules, dist) fails there too, and the package's own tests run where it is are what to compare against" >&2
+  echo "gobco: a test that reads something the copy leaves out (.git, gitignored files such as a .env, or outside a git checkout .claude/worktrees, node_modules and dist) fails there too, and the package's own tests run where it is are what to compare against" >&2
   exit "$status"
-}
+fi
 
 if ! grep -qE '^Condition coverage: [0-9]+/[1-9][0-9]*$' "$report"; then
   echo "gobco: the report above measured no condition of $PKG (Condition coverage: 0/0, or no figure at all), which is what gobco prints when no test wrote its counts or when it declined to instrument every file; refusing to pass it on as a measurement" >&2

@@ -51,6 +51,7 @@ GOBCO = "github.com/rillig/gobco@v1.3.4"
 # initialisation slows every call down.
 STUB_GO = r'''import json
 import os
+import signal
 import sys
 import time
 
@@ -147,6 +148,25 @@ elif args == ["tool", "dist", "list"]:
                  "js/wasm", "linux/386", "linux/amd64", "linux/arm64", "openbsd/amd64",
                  "windows/amd64", "windows/arm64"):
         print(pair)
+elif args[:2] == ["install", GOBCO]:
+    # gobco built into GOBIN: a wrapper that comes back here as the `go run`
+    # the script used to make, and execs, so the process the script signals
+    # is this stand-in.
+    entry["gobin"] = env.get("GOBIN")
+    wrapper = os.path.join(env["GOBIN"], "gobco")
+    with open(wrapper, "w", encoding="utf-8") as fh:
+        fh.write('#!/bin/sh\nexec "%s" run %s "$@"\n' % (os.path.abspath(sys.argv[0]), GOBCO))
+    os.chmod(wrapper, 0o755)
+elif args[:2] == ["list", "-e"] and args[args.index("-f") + 1] == "{{.Dir}}":
+    # How many packages PKG matches: one directory per line.
+    pattern = args[-1]
+    recursive = pattern.endswith("/...")
+    base = os.path.normpath(os.path.join(os.getcwd(), pattern[:-4] if recursive else pattern))
+    for directory, _, names in os.walk(base):
+        if any(name.endswith(".go") for name in names):
+            print(directory)
+        if not recursive:
+            break
 elif args[:2] == ["list", "-e"]:
     tags = tags_of(args)
     pkgdir = os.path.normpath(os.path.join(os.getcwd(), args[-1]))
@@ -179,8 +199,11 @@ elif args[:2] == ["list", "-e"]:
 elif args[:2] == ["run", GOBCO]:
     here = os.getcwd()
     tags = tags_of(args)
+    if env.get("STUB_IGNORE_TERM"):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
     if env.get("STUB_STARTED"):
-        open(env["STUB_STARTED"], "w", encoding="utf-8").close()
+        with open(env["STUB_STARTED"], "w", encoding="utf-8") as fh:
+            fh.write(str(os.getpid()))
     files = go_files(here)
     entry["files"] = files
     entry["constrained"] = [n for n in files if header_constraint(os.path.join(here, n))]
@@ -284,12 +307,15 @@ FILES = {
     "node_modules/pkg/index.js": "module.exports = 1\n",
     "site/node_modules/pkg/index.js": "module.exports = 1\n",
     "dist/libgen-mcp": "binary\n",
+    # Credentials, which no copy may carry whether or not git ignores them.
+    ".env": "LIBGEN_MCP_CORE_KEY=secret\n",
+    "cmd/tool/.env": "LIBGEN_MCP_CORE_KEY=secret\n",
 }
 
 # The module's files a staged copy keeps and leaves out.
 KEPT = ["docs/guide.md", "docs/dist/kept.md", "server.json", "site/page.md", ".claude/settings.json", "go.mod"]
 LEFT_OUT = [".git/HEAD", ".claude/worktrees/other/stray.go", "node_modules/pkg/index.js",
-            "site/node_modules/pkg/index.js", "dist/libgen-mcp"]
+            "site/node_modules/pkg/index.js", "dist/libgen-mcp", ".env", "cmd/tool/.env"]
 
 
 def dictionary_locale():
@@ -337,7 +363,9 @@ class CoverageConditionsTest(unittest.TestCase):
         os.makedirs(self.tmp)
 
     def environment(self, env=None):
-        run_env = {k: v for k, v in os.environ.items() if not k.startswith("STUB_")}
+        # Without the caller's GIT_* variables, which would point the
+        # script's git at another repository than the fixture.
+        run_env = {k: v for k, v in os.environ.items() if not k.startswith(("STUB_", "GIT_"))}
         run_env.update({
             "PATH": self.bin + os.pathsep + os.environ.get("PATH", ""),
             "STUB_LOG": self.log,
@@ -653,6 +681,89 @@ class CoverageConditionsTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assert_staged(self.gobco(calls)[0], os.path.join("cmd", "tool"))
         self.assertEqual(self.staged_copies(), [])
+
+    def test_in_a_git_checkout_the_copy_holds_only_what_git_lists(self):
+        # A checkout of this repository holds hundreds of megabytes of
+        # gitignored build output and a .env with live credentials; the copy
+        # in the temporary directory, which gobco copies again, holds the
+        # tracked files and the untracked ones nothing ignores, and never a
+        # .env, ignored or not.
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("git is not installed")
+        shutil.rmtree(os.path.join(self.root, ".git"))
+        extra = {
+            ".gitignore": "/dist/\nnode_modules/\n/npm/packages/\n/libgen-mcp\n.claude/worktrees/\n",
+            "npm/packages/linux-x64/libgen-mcp": "binary\n",
+            "libgen-mcp": "root binary\n",
+            "notes/untracked.md": "untracked, not ignored\n",
+        }
+        for rel, content in extra.items():
+            path = os.path.join(self.root, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+        git_env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        for argv in (["init", "-q"], ["add", "go.mod", "cmd", "docs", "server.json", ".gitignore"]):
+            subprocess.run([git, *argv], cwd=self.root, env=git_env, check=True, capture_output=True)
+        # A tracked file deleted from the working tree is listed by git and
+        # has nothing to copy.
+        os.remove(os.path.join(self.root, "docs", "guide.md"))
+        proc, calls = self.run_script("./cmd/tool")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        run = self.gobco(calls)[0]
+        files = run["module_files"]
+        for kept in ("go.mod", "server.json", "docs/dist/kept.md", "site/page.md", "notes/untracked.md",
+                     ".gitignore", "cmd/tool/main.go", "cmd/tool/testdata/fixture.txt"):
+            self.assertIn(kept, files)
+        for dropped in (".env", "cmd/tool/.env", "dist/libgen-mcp", "node_modules/pkg/index.js",
+                        "site/node_modules/pkg/index.js", "npm/packages/linux-x64/libgen-mcp", "libgen-mcp",
+                        ".claude/worktrees/other/stray.go", "docs/guide.md"):
+            self.assertNotIn(dropped, files)
+        self.assertFalse(any(f.startswith(".git/") for f in files), files)
+        self.assertEqual(run["files"], ["main.go", "main_test.go", "proc_unix.go", "proc_unix_test.go"])
+        self.assertEqual(self.staged_copies(), [])
+
+    def test_a_pattern_matching_several_packages_is_refused_by_name(self):
+        proc, calls = self.run_script("./internal/...")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertEqual(self.gobco(calls), [])
+        self.assertRegex(proc.stderr, r"\./internal/\.\.\. matches [0-9]+ packages, and this recipe measures one")
+
+    def test_a_signal_stops_a_gobco_that_ignores_it_and_removes_the_copy(self):
+        # bash runs no trap while it waits on a foreground child, and `go run`
+        # does not pass SIGTERM on, so a signal during gobco used to wait for
+        # the run or orphan it. This gobco ignores SIGTERM and would sleep a
+        # minute: the script has to end within seconds, remove the copy, and
+        # leave the child dead.
+        open(self.log, "w", encoding="utf-8").close()
+        started = os.path.join(self.scratch, "started")
+        proc = subprocess.Popen(
+            [SCRIPT, "./cmd/tool"], cwd=self.root,
+            env=self.environment({"STUB_GOBCO_SLEEP": "60", "STUB_STARTED": started, "STUB_IGNORE_TERM": "1"}),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if os.path.exists(started) and os.path.getsize(started) > 0:
+                break
+            time.sleep(0.02)
+        with open(started, encoding="utf-8") as fh:
+            pid = int(fh.read())
+        sent = time.monotonic()
+        proc.send_signal(signal.SIGTERM)
+        out, err = proc.communicate(timeout=20)
+        self.assertLess(time.monotonic() - sent, 6, "the script waited on gobco")
+        self.assertEqual(proc.returncode, 143, out + err)
+        self.assertEqual(self.staged_copies(), [])
+        gone = time.monotonic() + 3
+        while time.monotonic() < gone:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        with self.assertRaises(ProcessLookupError, msg="gobco outlived the script"):
+            os.kill(pid, 0)
 
     def test_an_interrupt_ends_the_run_and_removes_the_copy(self):
         # A handler that only cleaned up would return to the script, which
