@@ -554,6 +554,30 @@ func TestCheckRedirectJudgesEveryNumericSpelling(t *testing.T) {
 	}
 }
 
+// TestCheckRedirectRefusalCarriesNoSecret holds the private-address refusal to
+// the rule every URL in a message follows: a presigned hop or a keyed query is
+// a credential, and this error reaches both the log and the model's transcript.
+func TestCheckRedirectRefusalCarriesNoSecret(t *testing.T) {
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://user:pw@10.0.0.7/file.pdf?key=s3cret#frag", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rerr := CheckRedirect(false)(req, nil)
+	if !errors.Is(rerr, ErrBlockedAddress) {
+		t.Fatalf("err = %v, want the private redirect refused", rerr)
+	}
+	for _, secret := range []string{"s3cret", "pw", "frag"} {
+		t.Run(secret, func(t *testing.T) {
+			if strings.Contains(rerr.Error(), secret) {
+				t.Errorf("the refusal carries %q: %v", secret, rerr)
+			}
+		})
+	}
+	if !strings.Contains(rerr.Error(), "10.0.0.7/file.pdf") {
+		t.Errorf("the refusal no longer names the hop: %v", rerr)
+	}
+}
+
 // getReused issues a GET and reports whether net/http served it from an idle
 // connection rather than dialing, so a test can prove the pool it is asking
 // about was actually in play.

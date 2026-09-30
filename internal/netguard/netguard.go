@@ -319,7 +319,7 @@ func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy
 	if decision.permitsPrivate(req.Context()) {
 		return nil
 	}
-	return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, req.URL.Redacted())
+	return fmt.Errorf("%w: redirect to %s", ErrBlockedAddress, RedactURLString(req.URL.String()))
 }
 
 // stripSensitiveHeaders removes the headers that must not follow a redirect off
