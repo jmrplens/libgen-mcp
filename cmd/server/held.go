@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/jmrplens/libgen-mcp/v2/internal/discovery"
 	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 	"github.com/jmrplens/libgen-mcp/v2/internal/transport"
@@ -22,17 +23,15 @@ import (
 // The ceiling on the calls the process holds open at once, across every caller.
 //
 // A tools/call holds its POST for as long as the call runs, and on this server
-// that is mostly time spent queued rather than working: every call that reaches
-// a mirror or a provider waits for a token of the one outbound bucket
-// (LIBGEN_MCP_RATE_RPS, one a second by default), so sixteen searches in flight
-// take fifteen seconds to drain and a thousand take over a quarter of an hour. The
-// inbound rate limit bounds how often a caller asks, not how many of its calls
-// are still waiting, and the ceiling on download and read bounds those two tools
-// and nothing else. So nothing bounded how many search and get_details calls
-// one caller, or all of them, could keep open. Each costs the process a
-// descriptor for the caller's connection, and another for the upstream one once
-// its token comes, and a process that runs out of descriptors stops accepting
-// connections at all, /health among them.
+// that is mostly time spent queued rather than working: every catalog request
+// waits for a token of the one outbound bucket (LIBGEN_MCP_RATE_RPS, one a
+// second by default), so sixteen searches in flight take fifteen seconds to
+// drain and a thousand take over a quarter of an hour. The inbound rate limit
+// bounds how often a caller asks, not how many of its calls are still waiting,
+// and the ceiling on download and read bounds those two tools and nothing else.
+// So nothing bounded how many search and get_details calls one caller, or all
+// of them, could keep open, and a process that runs out of descriptors stops
+// accepting connections at all, /health among them.
 //
 // So the ceiling is sized from the descriptors the process may open, read once
 // at startup, rather than written as a number. A Go program does not keep the
@@ -42,11 +41,6 @@ import (
 // for 1024 would cut such a process to a fraction of what it can hold, and
 // sized from the limit it bounds exactly what runs out.
 const (
-	// heldCallDescriptors is what one held call costs at most: the caller's
-	// connection, and the upstream one once its outbound token comes. A call
-	// still queued for its token holds only the first, so the figure is the
-	// bound rather than the typical cost.
-	heldCallDescriptors = 2
 	// descriptorSpareDivisor leaves an eighth of the limit spare, for the idle
 	// process, /health, the connections being refused and the idle upstream
 	// connections the HTTP client keeps.
@@ -56,21 +50,42 @@ const (
 	fallbackDescriptorLimit = 1024
 )
 
+// heldCallDescriptors is what one held call can cost at once, which is the
+// widest fan-out a call has: an escalated search.
+//
+// Such a search holds the caller's connection, the catalog request, and one
+// connection per searcher beyond the catalog, all at the same moment:
+// discovery.Federate runs every provider in its own goroutine with its own
+// client, and none of them waits on the outbound bucket, so none of them is
+// paced behind another. Under extra_sources=always the catalog and the
+// federation run together too. Counted from the provider list rather than
+// written down, so a provider added there moves the ceiling with it: 2 + 8 is
+// 10 today.
+//
+// Most held calls cost far less (a search still queued for its catalog token
+// holds only the caller's connection), so the figure is the bound rather than
+// the typical cost, which is what a ceiling that must not be outrun needs.
+// Every provider connection closes once its response is read (see
+// internal/discovery's newDiscoveryClient), so none of them outlives the call
+// that opened it.
+var heldCallDescriptors = uint64(2 + discovery.ExtraProviderCount())
+
 // heldCallsFor is the ceiling for a process that may open descriptors file
 // descriptors.
 //
 // An eighth of the limit is left spare, and one descriptor is reserved for each
 // byte-moving call the process allows ([maxHeavyPerProcess]): a download writes
 // the file it fetches and a read opens the one it extracts from, a descriptor
-// on top of the two every held call costs. What is left is divided by what one
-// held call costs. Under a limit of 1024 that is (1024 - 128 - 64) / 2 = 416.
+// on top of what every held call costs. What is left is divided by what one
+// held call costs ([heldCallDescriptors]). Under a limit of 1024 that is
+// (1024 - 128 - 64) / 10 = 83.
 //
 // A limit too small to leave room for one held call after the reservation still
 // serves one at a time: a ceiling of zero would refuse every call a process
 // under such a limit could have served.
 func heldCallsFor(descriptors uint64) int64 {
 	reserved := min(descriptors, descriptors/descriptorSpareDivisor+maxHeavyPerProcess)
-	return max(1, int64((descriptors-reserved)/heldCallDescriptors)) //nolint:gosec // G115: a uint64 halved fits an int64
+	return max(1, int64((descriptors-reserved)/heldCallDescriptors)) //nolint:gosec // G115: heldCallDescriptors is at least 2, so the quotient fits an int64
 }
 
 // processSlots counts what the process holds against a ceiling of its own.

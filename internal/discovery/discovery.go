@@ -98,8 +98,39 @@ type Provider interface {
 // nothing in this package reads a base URL from the environment. So a provider
 // gets netguard's strict tier on every address it reaches, which is right — a
 // result deposited in an open-access index is the archetypal third-party URL.
+//
+// Every request it makes closes its connection once the response is read. A
+// provider is built per federated search, so its pool is never reused by the
+// next one: a kept-alive connection would only sit idle in a transport nobody
+// will ask again until the standard library's idle timeout, a minute and a
+// half later. That is a descriptor per provider per search held past the call
+// that opened it, and the process ceiling on held calls (cmd/server) sizes a
+// call's cost on the descriptors ending with the call.
 func newDiscoveryClient() *http.Client {
-	return netguard.ClientFor(discoveryTimeout+time.Second, netguard.NewPolicy(nil, allowPrivateAddresses.Load()))
+	c := netguard.ClientFor(discoveryTimeout+time.Second, netguard.NewPolicy(nil, allowPrivateAddresses.Load()))
+	c.Transport = closingTransport{base: c.Transport}
+	return c
+}
+
+// closingTransport asks for each request's connection to be closed once its
+// response is read, rather than returned to a pool nobody will draw on.
+type closingTransport struct {
+	base http.RoundTripper
+}
+
+// RoundTrip marks a copy of the request Close and delegates. The request is
+// copied because a RoundTripper must not modify the one it was handed.
+func (t closingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	once := req.Clone(req.Context())
+	once.Close = true
+	return t.base.RoundTrip(once)
+}
+
+// ExtraProviderCount is how many searchers one escalated search runs at once
+// beside the catalog: the length of [ExtraProviders], counted from the list
+// itself so a provider added there moves every figure sized from it.
+func ExtraProviderCount() int {
+	return len(ExtraProviders("", nil))
 }
 
 // allowPrivateAddresses mirrors the deployment's LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES

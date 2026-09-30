@@ -249,26 +249,34 @@ retrying into it forever.
 ## What the whole process may hold
 
 A `tools/call` holds its `POST` open for as long as the call runs, and on this server that is
-mostly time spent **queued**: every call that reaches a mirror or a provider waits for a token of
-the one outbound bucket (`LIBGEN_MCP_RATE_RPS`, one a second by default), so sixteen searches
-in flight take fifteen seconds to drain and a thousand take over a quarter of an hour. The rate
-limit bounds how often a caller asks, and the ceiling above bounds `download` and `read`, but
-nothing bounded how many `search` and `get_details` calls were waiting. Each held call costs a
-file descriptor for the caller's connection and another for the upstream one once its token
-comes, and a process out of descriptors accepts no connection at all, **`/health` included**.
+mostly time spent **queued**: every catalog request waits for a token of the one outbound bucket
+(`LIBGEN_MCP_RATE_RPS`, one a second by default), so sixteen searches in flight take fifteen
+seconds to drain and a thousand take over a quarter of an hour. The rate limit bounds how often
+a caller asks, and the ceiling above bounds `download` and `read`, but nothing bounded how many
+`search` and `get_details` calls were waiting, and a process out of descriptors accepts no
+connection at all, **`/health` included**.
 
 So the process holds at most a number of calls **derived from its descriptor limit**, read once
 at startup: an eighth of the limit is left spare, one descriptor is reserved for each of the 64
 byte-moving slots (a download writes a file and a read opens one), and each held call is
-counted at two. The Go runtime raises the soft limit to the hard one before `main`, so the
-figure follows the **hard** limit:
+counted at **ten**. That is the widest fan-out one call has: an escalated `search` holds the
+caller's connection, the catalog request and one connection for each of the eight searchers
+beyond the catalog, all at once, because the federation runs every provider concurrently and
+none of them waits on the outbound bucket. The figure is counted from the provider list, so a
+provider added there lowers the ceiling with it, and each provider's connection closes as soon
+as its response is read, so none outlives the call. The Go runtime raises the soft limit to the
+hard one before `main`, so the figure follows the **hard** limit:
 
 | Hard `RLIMIT_NOFILE`               | Held calls | Stateful sessions |
 | ---------------------------------- | ---------: | ----------------: |
-| 1024                               |        416 |               208 |
-| 4096                               |       1760 |               880 |
-| 524288 (a default systemd service) |     229344 |            114672 |
-| 1048576 (a common container limit) |     458720 |            229360 |
+| 1024                               |         83 |                41 |
+| 4096                               |        352 |               176 |
+| 524288 (a default systemd service) |      45868 |             22934 |
+| 1048576 (a common container limit) |      91744 |             45872 |
+
+Ten is the bound, not the typical cost: a search still queued for its catalog token holds only
+the caller's connection. The ceiling is sized so that it cannot be outrun, which is why it is
+counted at the worst case.
 
 Windows has no such limit to read and is sized as 1024. **No flag moves it**, for the reason the
 ceiling of 64 has none: an operator who could raise it could configure away the one bound that
@@ -277,11 +285,17 @@ systemd unit, `--ulimit nofile=` for a container) raises it together with what i
 The startup line `process ceilings` says what this process was given, as
 `held_calls_per_process`, `descriptor_limit` and `descriptor_limit_source`.
 
-**What counts.** A `tools/call` or a `prompts/get` that arrived on an HTTP `POST`, from the
-moment the SDK dispatches it until its handler returns. Each call of a batch counts on its own;
-a listing, `initialize`, a notification or a `ping` never does, and neither does anything on
-stdio, which serves one caller over one pipe. A `download` or `read` counts here **and** against
-the ceiling above, and the 64 is the tighter of the two except on a very small limit.
+**What counts.** A `tools/call` or a `prompts/get` that arrived on an HTTP `POST`. A listing,
+`initialize`, a notification or a `ping` never does, and neither does anything on stdio, which
+serves one caller over one pipe. A `download` or `read` counts here **and** against the ceiling
+above. A slot is held for one of two lifetimes, depending on where it was taken:
+
+- **On protocol `2026-07-28` or later** the headers name the method, so the slot is taken in
+  front of the SDK, **before the body is read**, and given back when the HTTP handler returns.
+  A client that sends its body slowly therefore holds a slot for as long as the upload takes.
+- **On an older revision** the body has to be read to know what it carries, so each call is
+  counted where the SDK dispatches it and holds its slot **from dispatch until its handler
+  returns**. Each call of a batch counts on its own.
 
 **How it refuses.** Always with the words `This server is busy. Retry later.`, naming no bound
 and no other caller. On protocol `2026-07-28` or later, where the `Mcp-Method` header proves
@@ -299,14 +313,19 @@ nothing that caller did. The operator's line is
 **One caller can fill it.** There is no per-caller partner, because an address is something a
 caller can have many of, and a per-caller number multiplies with every one. Where the limit is
 small that is quick: at the default inbound limit (a burst of 40, then ten a second) one address
-reaches 416 held calls in under forty seconds. The inbound limit is what slows it, and a proxy
+reaches 83 held calls in about five seconds. The inbound limit is what slows it, and a proxy
 that charges the real client address is what keeps it per caller.
 
-**`/health` keeps answering.** It is not counted, and the spare eighth is what it, the idle
-process and the connections being refused live in. Two things are **not** bounded here: idle
-kept-alive connections, which `--http-idle-timeout` reclaims, and memory, which a held call
-costs whatever the descriptor limit says — under a large limit the container's memory limit (or
-`MemoryMax=` on a systemd unit) is the bound that arrives first.
+**What `/health` still needs.** It takes no call slot, so a full ceiling does not refuse it, and
+the spare eighth is what it, the idle process and the connections being refused live in. But it
+still needs a free descriptor to be accepted on, and the ceiling bounds **calls**, not
+connections: an idle kept-alive connection holds its descriptor between requests, and with
+`--http-idle-timeout` at its default of `0` nothing ever closes one. Enough idle connections can
+therefore exhaust the descriptors this ceiling leaves free, and `/health` with them. Set
+`--http-idle-timeout` on a listener exposed to clients you do not control. The other thing not
+bounded here is memory, which a held call costs whatever the descriptor limit says: under a
+large limit the container's memory limit (or `MemoryMax=` on a systemd unit) is the bound that
+arrives first.
 
 ### Stateful sessions
 

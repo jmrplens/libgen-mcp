@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
 
@@ -250,6 +251,50 @@ func TestSetBasesForTest(t *testing.T) {
 	restore()
 	if got := currentBases(); got != orig {
 		t.Errorf("restore did not reinstate originals: got %+v, want %+v", got, orig)
+	}
+}
+
+// TestNewDiscoveryClient_ClosesEachConnectionAfterItsResponse pins that a
+// provider's connection ends with its request rather than idling in a pool no
+// later search draws on: the server sees Connection: close on every request,
+// and a second request arrives on a new connection.
+func TestNewDiscoveryClient_ClosesEachConnectionAfterItsResponse(t *testing.T) {
+	var (
+		mu         sync.Mutex
+		closeAsked []bool
+		remotes    []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		closeAsked = append(closeAsked, r.Close)
+		remotes = append(remotes, r.RemoteAddr)
+		mu.Unlock()
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	client := newDiscoveryClient()
+	// sequential: the second request is what shows the first connection closed
+	for range 2 {
+		if _, _, err := boundedGet(t.Context(), client, srv.URL); err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(closeAsked) != 2 || !closeAsked[0] || !closeAsked[1] {
+		t.Errorf("requests asked to close = %v, want both", closeAsked)
+	}
+	if len(remotes) == 2 && remotes[0] == remotes[1] {
+		t.Errorf("both requests arrived on %s, want the first connection closed", remotes[0])
+	}
+}
+
+// TestExtraProviderCount_IsTheLengthOfTheList keeps the count the process
+// ceiling is sized from tied to the list it counts.
+func TestExtraProviderCount_IsTheLengthOfTheList(t *testing.T) {
+	if got, want := ExtraProviderCount(), len(ExtraProviders("x@example.org", nil)); got != want || got == 0 {
+		t.Errorf("ExtraProviderCount() = %d, want %d", got, want)
 	}
 }
 

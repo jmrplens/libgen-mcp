@@ -362,10 +362,17 @@ re-run `make gen-llms`, never edit `llms.txt`/`llms-full.txt` by hand.
 ### What the whole process may hold
 
 `cmd/server/held.go` and `sessions.go` bound the calls the process holds open and the stateful
-sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (416
-calls and 208 sessions under a hard limit of 1024). Three things fail open, silently, if
+sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (83
+calls and 41 sessions under a hard limit of 1024). Four things fail open, silently, if
 undone:
 
+- **A held call is costed at its widest fan-out**, `heldCallDescriptors` = 2 +
+  `discovery.ExtraProviderCount()`: an escalated search holds the caller's connection, the
+  catalog request and every extra provider at once, since none of them waits on the outbound
+  bucket. Adding a provider lowers the ceiling, and `TestHeldCallDescriptors_IsTheWidestFanOut`
+  fails so the documented figures get redone. The cost only holds because discovery clients
+  close each connection after its response (`closingTransport`): a provider is built per
+  search, and a pooled connection would idle for 90 s after the slot is given back.
 - **`processGate` wraps `carriedMCPHandler`, never the other way round.** What the gate took
   reaches the calls through the POST context the carrier registers, so a gate placed inside it
   hands the middleware no claim and **every call goes uncounted**, with every test of the
