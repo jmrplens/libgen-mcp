@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -350,7 +351,36 @@ func TestTheRefusalIsAShapeAModelCanAct(t *testing.T) {
 	}
 	// The same shape the rate limiter and the wall-clock cap use, so a model
 	// meets one answer for "this is your side to fix".
-	if text := refusalText(t, result); text == "" || text != toolutil.RefusalResult(text).Content[0].(*mcp.TextContent).Text {
+	if text := refusalText(t, result); text == "" || text != toolutil.RefusalResult(nil, text).Content[0].(*mcp.TextContent).Text {
 		t.Errorf("the refusal is not the shared refusal shape: %q", text)
+	}
+}
+
+// TestTheCeilingRefusalCarriesResultTypeAtTheModernRevision holds the ceiling
+// to the field revision 2026-07-28 requires on every result, which the SDK does
+// not add to a result a middleware makes. The refusal is handed the request so
+// it can tell which revision it is answering.
+func TestTheCeilingRefusalCarriesResultTypeAtTheModernRevision(t *testing.T) {
+	records, _ := testRecords(t, 8)
+	ceiling := heavyCeiling{perClient: 1, perProcess: maxHeavyPerProcess}
+	params := &mcp.CallToolParamsRaw{Name: "download"}
+	params.SetMeta(map[string]any{mcp.MetaKeyProtocolVersion: "2026-07-28"})
+	modern := &mcp.CallToolRequest{Params: params}
+
+	_, finish := startCall(t, records, ceiling, "203.0.113.7", modern)
+	defer finish()
+	done, finishSecond := startCall(t, records, ceiling, "203.0.113.7", modern)
+	defer finishSecond()
+
+	wire, err := json.Marshal(<-done)
+	if err != nil {
+		t.Fatalf("the refusal does not marshal: %v", err)
+	}
+	var fields map[string]any
+	if err = json.Unmarshal(wire, &fields); err != nil {
+		t.Fatalf("the refusal is not a JSON object: %v (%s)", err, wire)
+	}
+	if fields["isError"] != true || fields["resultType"] != "complete" {
+		t.Errorf("the ceiling refusal at 2026-07-28 is %s, want isError true and resultType \"complete\"", wire)
 	}
 }

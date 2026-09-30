@@ -4,6 +4,7 @@ package toolutil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -255,7 +256,7 @@ func refuse(ctx context.Context, limiter *RateLimiter, method string, req mcp.Re
 	if what == "" {
 		what = methodToolsCall
 	}
-	return RefusalResult(RateLimitRefusalPrefix + what + rateLimitRetrySuffix), true
+	return RefusalResult(req, RateLimitRefusalPrefix+what+rateLimitRetrySuffix), true
 }
 
 // RefusalResult is a tool result a model is meant to read and act on.
@@ -265,11 +266,99 @@ func refuse(ctx context.Context, limiter *RateLimiter, method string, req mcp.Re
 // nothing in the loop learns to wait. Every refusal the deployment makes about a
 // tool call — the bucket, the ceiling, the wall-clock cap — uses this one, so a
 // model meets one shape for "this is your side to fix".
-func RefusalResult(message string) *mcp.CallToolResult {
+//
+// req is the call being refused, and it decides one field: a call made under
+// revision 2026-07-28 or later gets resultType "complete", which that revision
+// requires on every result. The SDK sets the field only inside its own tool
+// dispatcher, and a refusal is made by a receiving middleware before the
+// dispatcher runs, so without this the refusal is the one tools/call result on
+// the surface that goes out without it. An older call gets no resultType, which
+// is what the SDK does for the results it makes itself. See
+// docs/development/upstream-bugs.md for when this retires.
+func RefusalResult(req mcp.Request, message string) *mcp.CallToolResult {
+	if declaresResultTypeRevision(req) {
+		if labeled, err := labeledRefusal(message); err == nil {
+			return labeled
+		}
+	}
 	return &mcp.CallToolResult{
 		IsError: true,
 		Content: []mcp.Content{&mcp.TextContent{Text: message}},
 	}
+}
+
+// resultTypeRevision is the first protocol revision whose results carry
+// resultType.
+const resultTypeRevision = "2026-07-28"
+
+// declaresResultTypeRevision reports whether a request speaks a revision whose
+// results must carry resultType.
+//
+// It asks the question the SDK asks before it labels a result of its own: the
+// revision the request names in its _meta, compared as a string, which is how
+// the dated revisions order. A request without one is from a client that
+// negotiated an earlier revision at initialize, since a 2026-07-28 client names
+// its revision on every request.
+//
+// The params are read by type, the way [ToolNameOf] reads them, because a
+// typed nil behind the Params interface would panic in GetMeta.
+func declaresResultTypeRevision(req mcp.Request) bool {
+	if req == nil {
+		return false
+	}
+	var meta map[string]any
+	switch p := req.GetParams().(type) {
+	case *mcp.CallToolParamsRaw:
+		if p != nil {
+			meta = p.GetMeta()
+		}
+	case *mcp.CallToolParams:
+		if p != nil {
+			meta = p.GetMeta()
+		}
+	}
+	version, _ := meta[mcp.MetaKeyProtocolVersion].(string)
+	return version >= resultTypeRevision
+}
+
+// refusalWire is a refusal as it travels, with the resultType the SDK gives
+// no Go-side way to set.
+type refusalWire struct {
+	// Content is the one text block the model reads.
+	Content []refusalText `json:"content"`
+	// IsError marks the result as the model's side to fix.
+	IsError bool `json:"isError"`
+	// ResultType is the field 2026-07-28 requires on every result.
+	ResultType string `json:"resultType"`
+}
+
+// refusalText is a text content block as it travels.
+type refusalText struct {
+	// Type is the content kind, always "text".
+	Type string `json:"type"`
+	// Text is the refusal's message.
+	Text string `json:"text"`
+}
+
+// labeledRefusal returns the refusal for message with resultType "complete".
+//
+// The SDK keeps the field unexported, and its own JSON decoding is the one
+// public way to set it, so the refusal is written in its wire form and read
+// back through CallToolResult.UnmarshalJSON. The round-trip is a few hundred
+// bytes on a path that has already decided not to do the expensive thing. It
+// cannot fail for a struct of strings, and if it ever did the caller sends the
+// unlabeled refusal, which is what the SDK would have sent.
+func labeledRefusal(message string) (*mcp.CallToolResult, error) {
+	wire, err := json.Marshal(refusalWire{
+		Content:    []refusalText{{Type: "text", Text: message}},
+		IsError:    true,
+		ResultType: "complete",
+	})
+	var labeled mcp.CallToolResult
+	if err == nil {
+		err = labeled.UnmarshalJSON(wire)
+	}
+	return &labeled, err
 }
 
 // refuseWithError answers the methods whose result carries no error flag, and
