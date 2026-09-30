@@ -1,0 +1,6 @@
+Error: ERR_PNPM_AUDIT_BAD_RESPONSE
+
+  × The audit endpoint (at http://127.0.0.1:18503/-/npm/v1/security/
+  │ advisories/bulk) responded with 503: <html>Service Unavailable, see
+  │ https://status.npmjs.org</html>
+

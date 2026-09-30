@@ -1,0 +1,5 @@
+A hand-written description.
+
+**Summary by Sourcery**
+
+Adds a thing.

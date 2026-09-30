@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+# Refuse a pull request title or body that would put something into main's
+# history that must not be there.
+#
+# This repository squash merges, so the pull request title and body become the
+# commit message on main. Editing the pull request after the merge does not
+# reach that commit, and no later commit can take the text back out. What the
+# description says is therefore judged before the merge, on four counts:
+#
+#   skip command   A bracketed command that makes GitHub skip every workflow a
+#                  push triggers, or a skip-checks trailer. In the squash
+#                  commit it turns off CI, CodeQL and Pages on main for that
+#                  merge, and a release tag later put on the commit starts no
+#                  release. GitHub reads the command inside backticks as
+#                  readily as in plain text, so quoting one to explain it is
+#                  enough: the sibling project's v3.1.0 tag ran nothing for
+#                  exactly that reason.
+#
+#   injected block A summary a review bot writes into the description after
+#                  the author wrote it. The bot finds its own block again by
+#                  its markers and puts it back after an author deletes it, so
+#                  a block stripped once can still be in the body at merge.
+#
+#   attribution    A Co-authored-by trailer naming a model or an assistant, a
+#                  "Generated with" footer, or a link to an assistant's session.
+#                  A commit message describes the change, not how it was
+#                  produced.
+#
+# Where the text comes from is printed on every run, because a gate that
+# silently judged the wrong text is worse than one that did not run at all:
+#
+#   PR_TITLE_FILE / PR_BODY_FILE  text on disk, which is how the gate is
+#                                 rehearsed and how its test drives it.
+#   PR_TITLE / PR_BODY            text in the environment, which is how CI
+#                                 hands over the workflow event payload. It
+#                                 is never interpolated into a shell line: a
+#                                 description is attacker-controlled text.
+#   neither                       the pull request PR_NUMBER names, or the one
+#                                 open for the current branch, read through gh.
+
+set -euo pipefail
+
+# The five bracketed commands GitHub documents for push and pull_request
+# events, matched in any case, with any spacing inside the brackets and
+# wherever they appear: backticks and code fences do not hide them from GitHub,
+# so they do not hide them from this check either.
+SKIP_CI_PATTERN='\[[[:space:]]*(skip[[:space:]]+ci|ci[[:space:]]+skip|no[[:space:]]+ci|skip[[:space:]]+actions|actions[[:space:]]+skip)[[:space:]]*\]'
+
+# The trailer form. Matched at the start of any line, indented, quoted or in
+# backticks included, rather than on the last line only: the description is not
+# the end of the squash commit's message, and where GitHub honours the trailer
+# is not something to rely on. Only at the start, so a sentence can still name
+# it.
+SKIP_CHECKS_PATTERN='^[[:space:]>]*`?skip-checks[[:space:]]*:[[:space:]]*true'
+
+# Markers a review bot writes around the block it injects. The HTML comments
+# are the vendor-neutral half and the ones that matter, since a bot re-finds
+# its block by them: the generic auto-generated and walkthrough markers, and
+# any comment that opens with a review bot's own name (cubic:attribution,
+# sourcery-ai-summary and the like). The summary line names the bots that write
+# one and must be the whole line, heading or not, because "Summary by" is
+# something a person might reasonably write in a sentence.
+#
+# None of this is hypothetical. cubic's markers are in more than a hundred of
+# this repository's pull request descriptions, Sourcery's and CodeRabbit's
+# headings in dozens, and 63 commits on main carry one of them because the
+# block was still in the description when the pull request was squash merged.
+REVIEW_BOTS='(coderabbit|sourcery|cubic|copilot)'
+INJECTED_BLOCK_PATTERNS=(
+	'<!--[[:space:]]*(this is an[[:space:]]+)?auto-generated (comment|description)'
+	'<!--[[:space:]]*end of auto-generated (comment|description)'
+	'<!--[[:space:]]*(walkthrough|description|summary|changed_files)_(start|end)[[:space:]]*-->'
+	"<!--[[:space:]]*${REVIEW_BOTS}([-_:.[:space:]]|-->)"
+	"^[[:space:]>#*_]*summary by ${REVIEW_BOTS}[[:space:]*_:.]*\$"
+)
+
+# The addresses and bot accounts assistants sign a Co-authored-by trailer with.
+# The trailer is matched by address rather than by name, because a name is a
+# person's: Claude Monet, Devin Smith, Ali Haider and Alex Gemini are all
+# co-authors a human commit can carry. Each entry is the identity the tool
+# itself writes: Claude Code signs as noreply@anthropic.com, GitHub's Copilot
+# agent as <id>+Copilot@users.noreply.github.com, Cursor's agent as
+# cursoragent@cursor.com, aider as noreply@aider.chat, and the app-based agents
+# (Claude, Copilot, Devin, Codex, Jules, Gemini Code Assist, Amazon Q, Sweep,
+# Cursor) as their [bot] accounts.
+ASSISTANT_ADDRESSES='(@anthropic\.com|@openai\.com|[0-9]+\+copilot@users\.noreply\.github\.com|copilot@github\.com|@cursor\.(com|sh)|@aider\.chat|@codeium\.com|@windsurf\.com|(claude|copilot|github-copilot|copilot-swe-agent|devin-ai-integration|chatgpt-codex-connector|openai-codex|google-labs-jules|gemini-code-assist|amazon-q-developer|sweep-ai|cursor)\[bot\])'
+
+# Assistant and model names a "Generated with" footer ends in, each a whole
+# word: "Generated with a cursor-based pager" and "generated using AI-free
+# code" are prose. What may follow the name is only what a footer carries: a
+# product or model suffix, a version, a link, punctuation.
+ASSISTANT_NAMES='(claude|anthropic|openai|chatgpt|gpt-?[0-9][0-9.a-z]*|copilot|gemini|cursor|codex|devin|aider|codeium|windsurf|tabnine|codewhisperer|amazon q|ai|llm)'
+NAME_SUFFIX='([[:space:]-]+(code|cli|agent|assistant|chat|opus|sonnet|haiku|pro|flash|mini|[0-9][0-9.]*))*'
+
+ATTRIBUTION_PATTERNS=(
+	# The trailer, at the start of a line like every trailer.
+	"^[[:space:]>]*\`?co-authored-by[[:space:]]*:.*${ASSISTANT_ADDRESSES}"
+	# The footer, on a line of its own: "Generated with [Claude Code](...)",
+	# led by an emoji or not, "Generated by ChatGPT", "This description was
+	# generated by AI." A sentence that goes on after the name ("answers
+	# generated by Claude against the rubric", which the evaluator here
+	# produces) is prose, and so is the phrase in the middle of a line.
+	"^[^[:alnum:]]*((this|the)[[:space:]]+(pr|pull request|description|change|commit|code|patch|summary)[[:space:]]+(was|is|has been)[[:space:]]+)?generated[[:space:]]+(with|by|using)[[:space:]]+\\[?((an?|the)[[:space:]]+)?${ASSISTANT_NAMES}${NAME_SUFFIX}\\]?(\\([^)]*\\))?[^[:alnum:]]*\$"
+	# A link to the session or conversation the change came out of.
+	'claude\.(ai|com)/(code/)?(session_|sessions?/|chat/|share/)'
+	'(chatgpt\.com|chat\.openai\.com)/(share|c|codex/tasks)/'
+	'(gemini\.google\.com/(share|app)/|g\.co/gemini/share/)'
+	'github\.com/[^[:space:]]*/copilot/(c|share|tasks|sessions?)/'
+)
+
+usage() {
+	cat << 'USAGE'
+Usage: scripts/check-pr-description.sh
+
+Fail when the pull request title or body carries a command that makes GitHub
+skip workflows, a skip-checks trailer, a block a review bot injected, or an
+assistant's attribution (a Co-authored-by trailer naming a model or a tool, a
+"Generated with" footer, a session link).
+
+The text is read from PR_TITLE_FILE and PR_BODY_FILE when either is set, else
+from PR_TITLE and PR_BODY when either is set, else from the pull request
+PR_NUMBER names (or the one open for the current branch) through gh.
+USAGE
+}
+
+# Where the description came from, and what it says. Returns 2 when there is no
+# pull request to judge, which the caller treats as nothing to do.
+read_description() {
+	if [[ -n "${PR_TITLE_FILE:-}" || -n "${PR_BODY_FILE:-}" ]]; then
+		PR_SOURCE="files on disk"
+		PR_TITLE=""
+		PR_BODY=""
+		[[ -z "${PR_TITLE_FILE:-}" ]] || PR_TITLE=$(cat "$PR_TITLE_FILE")
+		[[ -z "${PR_BODY_FILE:-}" ]] || PR_BODY=$(cat "$PR_BODY_FILE")
+		return 0
+	fi
+
+	if [[ -n "${PR_TITLE+set}" || -n "${PR_BODY+set}" ]]; then
+		PR_SOURCE="${PR_SOURCE_LABEL:-the environment}"
+		PR_TITLE="${PR_TITLE:-}"
+		PR_BODY="${PR_BODY:-}"
+		return 0
+	fi
+
+	if ! command -v gh > /dev/null 2>&1; then
+		echo "ERROR: gh is needed to read the pull request description." >&2
+		echo "Install it, or set PR_TITLE_FILE and PR_BODY_FILE to judge text from disk." >&2
+		return 1
+	fi
+
+	local repo="${GITHUB_REPOSITORY:-}"
+	[[ -n "$repo" ]] || repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+
+	local number="${PR_NUMBER:-}"
+	if [[ -z "$number" ]]; then
+		number=$(gh pr view --json number --jq .number 2> /dev/null || echo "")
+	fi
+	if [[ -z "$number" ]]; then
+		echo "No pull request is open for this branch, so there is no description to judge." >&2
+		echo "Name one with PR_NUMBER=<n>, or rehearse with PR_BODY_FILE=<path>." >&2
+		return 2
+	fi
+
+	local payload
+	payload=$(gh api "repos/$repo/pulls/$number")
+	PR_SOURCE="$repo#$number, read from the API just now"
+	PR_TITLE=$(jq -r '.title // ""' <<< "$payload")
+	PR_BODY=$(jq -r '.body // ""' <<< "$payload")
+}
+
+# Print every line of the title and the body that matches an extended regular
+# expression, case-insensitively, as "title:<line>" or "body:<n>:<line>".
+#
+# grep reads its input as text (-a): a byte that is not valid in the locale's
+# encoding would otherwise turn a match into "binary file matches" on stderr
+# and nothing on stdout, and the gate would pass a line it never judged.
+matches() {
+	local pattern="$1"
+	if grep -aqEi -- "$pattern" <<< "$PR_TITLE"; then
+		printf 'title: %s\n' "$PR_TITLE"
+	fi
+	printf '%s\n' "$PR_BODY" | { grep -anEi -- "$pattern" || true; } | sed 's/^/body:/'
+}
+
+# The findings of several patterns, in the body's own order and each line once:
+# a line that carries two forms of the same problem is one thing to fix.
+matches_any() {
+	local pattern
+	for pattern in "$@"; do
+		matches "$pattern"
+	done | sort -u -t: -k1,1 -k2,2n
+}
+
+# Print one rule's findings and why they fail, and return non-zero when there
+# were any, so the caller can report every rule before it decides.
+report() {
+	local hits="$1" heading="$2" advice="$3"
+	[[ -n "$hits" ]] || return 0
+	printf '%s\n' "$hits"
+	printf '\nFAIL: %s\n\n%s\n\n' "$heading" "$advice" >&2
+	return 1
+}
+
+main() {
+	case "${1:-}" in
+		"") ;;
+		-h | --help | help)
+			usage
+			return 0
+			;;
+		*)
+			usage >&2
+			return 2
+			;;
+	esac
+
+	# PR_TITLE, PR_BODY and PR_SOURCE stay global: declaring them local here
+	# would unset the environment's values before read_description looks.
+	local status=0
+	read_description || {
+		status=$?
+		# Nothing to judge is not a failure: a branch with no pull request yet
+		# has no description to land in main.
+		[[ "$status" -eq 2 ]] && return 0
+		return "$status"
+	}
+
+	# A description edited in the browser arrives with Windows line endings. The
+	# patterns do not depend on it, but a finding printed with a carriage
+	# return in it overwrites its own line in a terminal.
+	PR_TITLE=${PR_TITLE//$'\r'/}
+	PR_BODY=${PR_BODY//$'\r'/}
+
+	echo "Judging the pull request title and body ($PR_SOURCE)."
+
+	local failed=0
+
+	report "$(matches_any "$SKIP_CI_PATTERN" "$SKIP_CHECKS_PATTERN")" \
+		"the pull request title or body carries a command that makes GitHub skip workflows." \
+		"GitHub skips every workflow a push triggers when the commit it lands on carries
+one of the bracketed commands anywhere in its message, backticks included, or a
+skip-checks trailer. A squash merge makes this description that message, so the
+merge would run nothing on main and a release tag put on it would release
+nothing. Name the command without its square brackets, or the trailer inside a
+sentence rather than at the start of a line." || failed=1
+
+	report "$(matches_any "${INJECTED_BLOCK_PATTERNS[@]}")" \
+		"the pull request description carries a block a review bot generated." \
+		"Delete the block named above and everything down to its closing marker. The
+bot finds its block again by those markers and writes it back after an edit, so
+if it keeps returning, turn off the bot's description summary in its
+configuration rather than racing it by hand." || failed=1
+
+	report "$(matches_any "${ATTRIBUTION_PATTERNS[@]}")" \
+		"the pull request title or body attributes the change to an assistant." \
+		"Remove the Co-authored-by trailer, the \"Generated with\" footer or the session
+link named above. The description becomes the commit message on main, and a
+commit message describes the change, not how it was produced." || failed=1
+
+	if [[ "$failed" -ne 0 ]]; then
+		cat >&2 << 'EOF'
+Edit the pull request description itself, not a commit: the squash merge copies
+it into main's history, and editing the pull request afterwards does not reach
+the commit.
+
+    gh pr edit <number>
+
+Re-check with: make check-pr-description
+EOF
+		return 1
+	fi
+
+	echo "OK: no skip command, no injected block and no assistant attribution."
+}
+
+main "$@"

@@ -71,8 +71,8 @@ the job was added to.
 Two details keep it honest. The job carries `if: always()`, without which it is
 skipped the moment anything it needs fails — and a skipped check is not a failing
 one as far as a ruleset is concerned. And the script **refuses `skipped` as well
-as `failure`**, with one paired exception: `docker` is pull-request-only, so its
-skip is legitimate on a push and only there.
+as `failure`**, with two paired exceptions: `docker` and `pr-description` are
+pull-request-only, so their skip is legitimate on a push and only there.
 
 ## Trusted publishers, and the blank environment
 

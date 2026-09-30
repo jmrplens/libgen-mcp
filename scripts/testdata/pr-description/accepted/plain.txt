@@ -1,0 +1,13 @@
+## What was wrong
+
+The download chain retried a source that had already declined the item.
+
+## What changed
+
+- `Client.Download` records a decline and moves on.
+- The Claude Desktop bundle and the docs are unchanged.
+
+## Checks
+
+- `go test ./...`
+- `make cover-check`

@@ -2,7 +2,8 @@
 #
 # Runs on: every pull request whatever its base branch, pushes to main
 # Jobs: test (+coverage gate), build, golangci-lint, godoc, govulncheck, markdown,
-#       hadolint, docker build (PR + Docker changes only), docs-site (Astro lint + a11y-less checks)
+#       hadolint, docker build (PR + Docker changes only), docs-site (Astro lint,
+#       dependency audit), pr-description (PR only)
 
 name: CI
 
@@ -12,9 +13,28 @@ on:
   # silently gives every layer but the bottom one no CI at all — the checks do
   # not fail, they never run, which reads as "nothing to report". Pushes stay
   # filtered: a branch that is not yet a pull request has nothing to gate.
+  #
+  # `edited` is added to the three default types for the pr-description job:
+  # the title and body become the squash commit's message, they change without
+  # a push, and a review bot writes into the body after the author did. Without
+  # it the verdict would keep judging the text the last push saw. It reruns the
+  # whole pipeline rather than that one job, because a run that judged only the
+  # description would publish a "CI verdict" newer than, and blind to, a red
+  # test on the same commit. It also fires when the base branch changes, which
+  # is when a stacked layer is retargeted and wants a fresh run anyway.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
+
+# One run per pull request at a time. A push or an edit supersedes the run
+# before it, so the verdict that stands is always the one that saw the latest
+# commit and the latest description; without this, two runs racing on one
+# commit could finish in either order and the older text could have the last
+# word. Pushes to main are never cancelled: every merge is its own group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -173,6 +193,13 @@ jobs:
       # skips when one is missing; here, where GitHub sets CI, it fails instead.
       - name: The Claude Desktop bundle starts on every platform it lists
         run: make check-mcpb
+      # The pr-description job and the site audit judge text that is not in the
+      # tree, a pull request description and an npm advisory report, so their
+      # rules are driven here against fixtures, on every event: the description gate
+      # over bodies that must fail and bodies that must pass, and the site
+      # audit over pnpm's captured output for a finding and for an outage.
+      - name: The PR description gate and the site audit refuse what they claim
+        run: make check-ci-scripts
       - name: Validate server.json against the MCP Registry schema
         run: |
           set -euo pipefail
@@ -499,6 +526,15 @@ jobs:
           # Playwright's browser is a separate install, handled below — Mermaid
           # needs it and puppeteer's copy would not satisfy that.
           PUPPETEER_SKIP_DOWNLOAD: "true"
+      # Advisories rated high or critical in anything the site installs. The
+      # ones already judged live in site/pnpm-workspace.yaml under
+      # auditConfig.ignoreGhsas, each with its reason. pnpm exits non-zero both
+      # for a finding and for an npm advisory endpoint that did not answer, and
+      # a red check that means "npm had an outage" teaches people to read a red
+      # audit as noise, so the script tells the two apart by what pnpm printed:
+      # an unanswered run is annotated and passes, a finding always fails.
+      - name: Audit the site's dependencies (high and above)
+        run: make audit-site-deps
       # rehype-mermaid renders each diagram to inline SVG during the build, which
       # needs a real browser. Same cache key as the Pages workflow, so the two
       # jobs share one download.
@@ -603,6 +639,41 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
 
+  # The pull request title and body, judged before the merge because this
+  # repository squash merges: they become the commit message on main, and
+  # neither a later commit nor an edit to the pull request after the merge can
+  # reach that commit. It refuses a command that makes GitHub skip workflows
+  # (in the squash commit it turns off CI on main and the release of any tag put
+  # on that commit), a summary block a review bot injected, and an assistant's
+  # attribution.
+  #
+  # The text comes from the event payload through env and is never written
+  # into a run line: a description is attacker-controlled, and an expression
+  # expanded inside the script is a shell injection. The payload is the text as
+  # of the event that started this run, which is why `edited` is among the
+  # triggers above and why a newer run cancels this one.
+  #
+  # Pull request only: a push has no description. needs-verdict.sh allows
+  # exactly that skip, pr-description:push, and no other.
+  pr-description:
+    name: PR description
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: No skip command, injected block or assistant attribution in the title or body
+        run: bash scripts/check-pr-description.sh
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_SOURCE_LABEL: "the ${{ github.event.action }} event's payload"
+
   # One check for branch protection to require.
   #
   # Naming every job in the ruleset means a job added later is not a gate until
@@ -636,6 +707,7 @@ jobs:
       - docs-site
       - cross-platform
       - cross-compile
+      - pr-description
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Every job that fed this one must have passed

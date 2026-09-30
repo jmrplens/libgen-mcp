@@ -21,6 +21,7 @@
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published check-mcpb \
+        check-pr-description audit-site-deps check-ci-scripts \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
         gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi \
@@ -510,6 +511,22 @@ check-mcpb: ## Exercise the Claude Desktop bundle: its manifest, its Linux launc
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/
+
+# The squash merge makes the description the commit message on main, so this is
+# the half of a change no later commit can fix. Reads the open pull request
+# through gh, PR_NUMBER=<n> names one, and PR_TITLE_FILE/PR_BODY_FILE judge text
+# from disk. A branch with no pull request passes, having nothing to land.
+check-pr-description: ## Refuse a skip command, a bot-injected block or assistant attribution in the PR title/body
+	bash scripts/check-pr-description.sh
+
+# Needs the npm registry. A registry that does not answer is a warning rather
+# than a failure, since it says nothing about the tree; a finding always fails.
+audit-site-deps: ## pnpm audit of site/ at high and above, tolerant of an npm outage (needs network)
+	bash scripts/audit-site-deps.sh
+
+check-ci-scripts: ## Exercise the PR description gate and the site audit's outage rule against fixtures (offline)
+	python3 -m unittest discover -s scripts -p 'check_pr_description_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'audit_site_deps_sh_test.py'
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)

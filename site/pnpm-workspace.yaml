@@ -10,3 +10,25 @@ allowBuilds:
 
 # Disable pnpm 11's supply-chain release-age gate so deps resolve to published versions.
 minimumReleaseAge: 0
+
+# chevrotain 11.1.2 (mermaid's parser) pins lodash-es to exactly 4.17.23, which
+# GHSA-r5fr-rjxr-66jc rates high (code injection through _.template). 4.18.1 is
+# the fixed release on the same major, and the version mermaid already loads
+# through dagre-d3-es, so the override leaves one copy in the tree rather than
+# introducing a new one. Drop it once chevrotain releases with the fix.
+overrides:
+  lodash-es@4.17.23: 4.18.1
+
+# Advisories judged and accepted, each with its reason. This is the only place
+# pnpm reads them from: a `pnpm` field in package.json is ignored with a
+# warning, so an exception written there looks applied and is not.
+auditConfig:
+  ignoreGhsas:
+    # extract-zip <=2.0.1, symlink path traversal and arbitrary file write, with
+    # no fixed release. Its only path here is pa11y-ci > puppeteer >
+    # @puppeteer/browsers, which uses it to unpack the Chromium archive
+    # puppeteer downloads from Google's own HTTPS endpoint on a developer's
+    # machine. CI never runs that download (PUPPETEER_SKIP_DOWNLOAD), nothing
+    # it unpacks is attacker-chosen, and none of it reaches the built site.
+    - GHSA-jmr9-qjv8-65gv
+    - GHSA-7pqw-9j4j-h8q3
