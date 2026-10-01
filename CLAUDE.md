@@ -359,6 +359,33 @@ Starlight twins, with the operational recipes (nginx, docker-compose) in
 `## Transports` block in `cmd/gen_llms/main.go` also names these flags — change it there and
 re-run `make gen-llms`, never edit `llms.txt`/`llms-full.txt` by hand.
 
+### What the whole process may hold
+
+`cmd/server/held.go` and `sessions.go` bound the calls the process holds open and the stateful
+sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (83
+calls and 41 sessions under a hard limit of 1024). Four things fail open, silently, if
+undone:
+
+- **A held call is costed at its widest fan-out**, `heldCallDescriptors` = 2 +
+  `discovery.ExtraProviderCount()`: an escalated search holds the caller's connection, the
+  catalog request and every extra provider at once, since none of them waits on the outbound
+  bucket. Adding a provider lowers the ceiling, and `TestHeldCallDescriptors_IsTheWidestFanOut`
+  fails so the documented figures get redone. The cost only holds because discovery clients
+  close each connection after its response (`closingTransport`): a provider is built per
+  search, and a pooled connection would idle for 90 s after the slot is given back.
+- **`processGate` wraps `carriedMCPHandler`, never the other way round.** What the gate took
+  reaches the calls through the POST context the carrier registers, so a gate placed inside it
+  hands the middleware no claim and **every call goes uncounted**, with every test of the
+  arithmetic still green.
+- **`processCeilingsMiddleware` goes on outside the per-caller trio** in `newMCPServer`, so a
+  call the full process refuses spends none of its caller's rate. It is installed whatever
+  `records` is; stdio carries no carrier token and counts nothing.
+- **A stateful session reserves a held slot for its stream when it opens.** Counting the `GET`
+  when it arrives instead refuses a stream the client never asks for again, and the session
+  then loses every message outside a response without anything reporting it.
+
+The prose is in `docs/http-server-mode.md` § *What the whole process may hold* and its twins.
+
 ### Error handling in handlers
 
 Handlers return `(*mcp.CallToolResult, Out, error)`. Return a real `error` for

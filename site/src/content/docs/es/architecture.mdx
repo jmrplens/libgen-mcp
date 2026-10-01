@@ -365,6 +365,8 @@ Los códigos son su estado HTTP por `-100` (`-40300` para `403`), lo que cae fue
 
 Ninguna de las dos cotas vale más que la identidad que tiene debajo, y en dos de las tres formas de despliegue no hay identidad por llamante que acotar — eso, las cifras, la política de desalojo de la tabla por dirección y el rechazo al arrancar están en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-identidad-tiene-este-despliegue). Un `tools/call` rechazado vuelve como un resultado JSON-RPC **correcto** marcado `isError`, para que el modelo reciba un diagnóstico estructurado y el bucle del agente pueda esperar; los otros tres no tienen marca de error propia, así que su rechazo es un error JSON-RPC con código `-42900`, que refleja el HTTP 429 igual que lo hacen los códigos de las barreras de transporte. Los rechazos se reportan como mucho una vez cada diez segundos, con la cuenta de todo lo que la línea representa: su ritmo es el de llegada menos el límite, así que una línea por cada uno sería una inundación.
 
+**Detrás de ambas hay una cota sobre el propio proceso**: cuántas llamadas retiene abiertas a la vez y cuántas sesiones con estado mantiene, las dos derivadas al arrancar del límite de descriptores con el que corre y fijadas por ninguna bandera, porque una llamada en cola tras el cubo de salida retiene su conexión mientras dure la cola. Las cifras, qué cuenta y cómo rechaza un proceso lleno están en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+
 **A qué `Host` responde este servidor.** A todo servidor MCP se le pide que rechace un `Host` que no sirve, como defensa frente al DNS rebinding: un atacante resuelve un nombre que controla a la dirección en la que escucha un servidor, y un navegador que ya tiene cargado llega hasta él con ese nombre. La regla que aplica el SDK es que una conexión **aceptada en** una dirección de loopback solo puede llevar un `Host` de loopback — y la dirección que mira es la de la conexión, no la del bind, así que un bind comodín alcanzado por `127.0.0.1` cae en ella igual que uno de loopback. Eso es exactamente toda receta con proxy inverso tras la que se despliega este servidor: el proxy reenvía el `Host` del cliente y conecta por loopback, y qué hay que poner para que una petición que pasa por un proxy no se rechace está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#el-nombre-que-usan-los-clientes-y-por-qué-sin-él-se-rechaza-una-petición-que-pasa-por-un-proxy).
 
 Así que este servidor responde él mismo a esa pregunta, con los flags del despliegue en la mano, y la copia del SDK se desactiva en `internal/transport` — **en el mismo cambio, porque cualquiera de las dos mitades por separado está mal**. Responde a los nombres de loopback, al host que `--http` liga cuando nombra uno, al host que anuncia `--public-url` y a lo que reenvíe un par de `--trusted-proxies`. Una petición sin `Host` se sirve: ningún navegador lo omite, y lo que sí lo omite es una comprobación de salud — el `option httpchk` de HAProxy no envía ninguno salvo que se configure, y rechazarlo marca como caída una instancia que funciona. Un socket unix no declara ningún host y responde a cualquiera, porque ningún nombre resuelve a un fichero en disco.
@@ -419,17 +421,17 @@ Apagada salvo que `LIBGEN_MCP_TELEMETRY` diga lo contrario, y apagada por defect
 
 **Un rechazo se registra allí donde se decide**, porque un rechazo viaja como una respuesta JSON-RPC correcta que lleva dentro un fallo destinado al modelo — desde fuera del handler es indistinguible de una llamada que se ejecutó y salió bien, que es exactamente lo que parecería en la métrica. Las razones son un conjunto cerrado, porque el valor acaba en una dimensión de métrica y una dimensión no se puede retirar sin romper todos los cuadros de mando construidos sobre ella:
 
-| Razón                 | Qué la decidió                                                       |
-| --------------------- | -------------------------------------------------------------------- |
-| `consent_declined`    | La persona dijo que no en el aviso de descarga.                      |
-| `source_not_in_chain` | Quien llamó nombró una fuente que este despliegue no tiene activada. |
-| `download_too_large`  | El límite de tamaño rechazó una transferencia.                       |
-| `download_stalled`    | No llegaron bytes durante la ventana de atasco.                      |
-| `blocked_address`     | El guardián de destinos salientes rechazó un host.                   |
-| `invalid_params`      | Se rechazó un argumento antes de hacer nada.                         |
-| `rate_limited`        | El límite de tasa entrante por llamante rechazó un método.           |
-| `inflight_ceiling`    | El techo por llamante o por proceso de llamadas pesadas rechazó una. |
-| `action_timeout`      | El tope de reloj de pared sobre una llamada la terminó.              |
+| Razón                 | Qué la decidió                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `consent_declined`    | La persona dijo que no en el aviso de descarga.                                                                                                        |
+| `source_not_in_chain` | Quien llamó nombró una fuente que este despliegue no tiene activada.                                                                                   |
+| `download_too_large`  | El límite de tamaño rechazó una transferencia.                                                                                                         |
+| `download_stalled`    | No llegaron bytes durante la ventana de atasco.                                                                                                        |
+| `blocked_address`     | El guardián de destinos salientes rechazó un host.                                                                                                     |
+| `invalid_params`      | Se rechazó un argumento antes de hacer nada.                                                                                                           |
+| `rate_limited`        | El límite de tasa entrante por llamante rechazó un método.                                                                                             |
+| `inflight_ceiling`    | Un techo de llamadas en vuelo rechazó una: por llamante o por proceso sobre las llamadas pesadas, o el del propio proceso sobre toda llamada retenida. |
+| `action_timeout`      | El tope de reloj de pared sobre una llamada la terminó.                                                                                                |
 
 Una fuente saltada por enfriamiento **no** está en esa lista, y es a propósito. Aquí el enfriamiento es encaminamiento y no rechazo: la cadena o pasa de largo de una fuente enfriada y sigue, o — cuando todas las que podrían servir están enfriadas — se salta el enfriamiento y lo intenta igual. Ninguna de las dos declina una llamada, así que una razón registrada ahí marcaría como rechazadas llamadas que salieron bien.
 

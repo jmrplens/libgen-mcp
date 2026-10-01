@@ -365,6 +365,8 @@ The codes mirror their HTTP status times `-100` (`-40300` for `403`), which land
 
 Neither bound is worth more than the identity underneath it, and on two of the three deployment shapes there is no per-caller identity to bound — that, the figures, the per-address table's eviction policy and the startup refusal are on [HTTP server mode](/libgen-mcp/http-server-mode/#what-identity-this-deployment-has). A refused `tools/call` comes back as a **successful** JSON-RPC result flagged `isError`, so the model gets a structured diagnostic and the agent loop can back off; the other three have no error flag of their own, so their refusal is a JSON-RPC error with code `-42900`, mirroring HTTP 429 the way the transport gates' codes mirror their statuses. Refusals are reported at most once per ten seconds, with a count of everything the line stands for — their rate is the arrival rate minus the limit, so one line each would be a flood.
 
+**Behind both sits a bound on the process itself**: how many calls it holds open at once, and how many stateful sessions it keeps, both derived at startup from the descriptor limit it runs under and set by no flag, because a call queued behind the outbound bucket holds its connection for as long as the queue takes. The figures, what counts and how a full process refuses are on [HTTP server mode](/libgen-mcp/http-server-mode/#what-the-whole-process-may-hold).
+
 **Which `Host` this server answers.** Every MCP server is asked to refuse a `Host` it does not serve, against DNS rebinding: an attacker resolves a name they control to the address a server listens on, and a browser they have already loaded then reaches it under that name. The rule the SDK applies is that a connection **accepted on** a loopback address may only carry a loopback `Host` — and the address it looks at is the connection's, not the bind, so a wildcard bind reached over `127.0.0.1` is caught by it exactly as a loopback bind is. That is every reverse-proxy recipe this server is deployed behind: the proxy forwards the client's `Host` and connects over loopback, and what to set so a proxied request is not refused is on [HTTP server mode](/libgen-mcp/http-server-mode/#the-name-clients-use-and-why-a-proxied-request-is-refused-without-it).
 
 So this server answers the question itself, with the deployment's own flags in hand, and the SDK's copy is switched off in `internal/transport` — **in the same change, because either half alone is wrong**. It answers to the loopback names, the host `--http` binds when it names one, the host `--public-url` advertises, and anything a peer in `--trusted-proxies` forwards. A request carrying no `Host` at all is served: no browser omits it, and what does is a health check — HAProxy's `option httpchk` sends none unless one is configured, and refusing it marks a working instance down. A unix socket declares no host and answers any, since no name resolves to a file on disk.
@@ -419,17 +421,17 @@ Off unless `LIBGEN_MCP_TELEMETRY` says otherwise, and off is the default for pri
 
 **A refusal is recorded from where it is decided**, because a refusal travels as a successful JSON-RPC response carrying a failure meant for the model — from outside the handler it is indistinguishable from a call that ran and succeeded, which is exactly what it would look like on the metric. The reasons are a closed set, because the value lands on a metric dimension and a dimension cannot be withdrawn without breaking every dashboard built on it:
 
-| Reason                | What decided it                                                   |
-| --------------------- | ----------------------------------------------------------------- |
-| `consent_declined`    | The user answered no to a download prompt.                        |
-| `source_not_in_chain` | The caller named a source this deployment does not have enabled.  |
-| `download_too_large`  | The size cap refused a transfer.                                  |
-| `download_stalled`    | No bytes arrived for the stall window.                            |
-| `blocked_address`     | The outbound destination guard refused a host.                    |
-| `invalid_params`      | An argument was rejected before any work was done.                |
-| `rate_limited`        | The per-caller inbound rate limit refused a method.               |
-| `inflight_ceiling`    | The per-caller or per-process ceiling on heavy calls refused one. |
-| `action_timeout`      | The wall-clock cap on one tool call ended it.                     |
+| Reason                | What decided it                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `consent_declined`    | The user answered no to a download prompt.                                                                                   |
+| `source_not_in_chain` | The caller named a source this deployment does not have enabled.                                                             |
+| `download_too_large`  | The size cap refused a transfer.                                                                                             |
+| `download_stalled`    | No bytes arrived for the stall window.                                                                                       |
+| `blocked_address`     | The outbound destination guard refused a host.                                                                               |
+| `invalid_params`      | An argument was rejected before any work was done.                                                                           |
+| `rate_limited`        | The per-caller inbound rate limit refused a method.                                                                          |
+| `inflight_ceiling`    | A ceiling on calls in flight refused one: per caller or per process on heavy calls, or the process's own on every held call. |
+| `action_timeout`      | The wall-clock cap on one tool call ended it.                                                                                |
 
 A source skipped for cooldown is deliberately **not** on that list. Cooldown here is routing rather than refusal: the chain either passes over a cooled source and continues, or — when every supporting source is cooled — bypasses the cooldown and tries anyway. Neither declines a call, so a reason recorded there would mark calls that succeeded as refused.
 

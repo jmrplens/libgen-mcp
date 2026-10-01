@@ -174,11 +174,24 @@ func startServerOnPort(t *testing.T, port int, env map[string]string, flags ...s
 // means the default one, which is what every TCP caller has always used.
 func launchServer(t *testing.T, baseURL string, client *http.Client, env map[string]string, args []string) *server {
 	t.Helper()
+	return launchServerVia(t, nil, baseURL, client, env, args)
+}
+
+// launchServerVia is launchServer with the binary started through wrapper, a
+// command that receives the binary's path and its arguments after its own, and
+// is expected to exec it. Nil starts the binary directly.
+//
+// It exists for the one property a flag cannot set: the descriptor limit the
+// process runs under, which only a shell's ulimit ahead of the exec can lower
+// for that process alone.
+func launchServerVia(t *testing.T, wrapper []string, baseURL string, client *http.Client, env map[string]string, args []string) *server {
+	t.Helper()
 
 	bin := serverBinary(t)
+	argv := append(append(append([]string{}, wrapper...), bin), args...)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // G204: argv is the built binary behind a wrapper this package's own tests spell out
 	// A download directory inside the test's own tree keeps a stray write from
 	// landing in the runner's home, and the log level keeps the process output
 	// useful when a startup failure has to explain itself.
@@ -353,6 +366,10 @@ type response struct {
 	// NextProtos every client silently negotiates HTTP/1.1 and every other
 	// assertion in this suite still passes.
 	proto string
+	// closed reports that the server closed the connection with the reply. It
+	// is the only place that is visible: net/http's client consumes the
+	// Connection header rather than leaving it in header.
+	closed bool
 }
 
 // do issues the request and returns the response, failing the test only when
@@ -402,7 +419,7 @@ func (s *server) do(t *testing.T, r request) response {
 	if err != nil && !errors.Is(err, io.EOF) {
 		t.Fatalf("reading the response body: %v", err)
 	}
-	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto}
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto, closed: resp.Close}
 }
 
 // try issues the request from a goroutine safely, returning the response or the
@@ -451,7 +468,7 @@ func (s *server) try(t *testing.T, r request) (response, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return response{}, err
 	}
-	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto}, nil
+	return response{status: resp.StatusCode, header: resp.Header, body: string(raw), proto: resp.Proto, closed: resp.Close}, nil
 }
 
 // mcpPOST is the common case: a tools/list call with the headers a real client
