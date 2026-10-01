@@ -28,7 +28,7 @@ import (
 //
 // Every value is escaped at the write that renders it, by the helper the
 // value's shape needs, and a caller passes catalog text as it arrived: the
-// cell escaper for an inline value, [MdCodeSpan] for an identifier, [MdTitleLink]
+// inline escaper for an inline value, [MdCodeSpan] for an identifier, [MdTitleLink]
 // for a link, [WrapQuotedBody] for prose. An empty, blank or absent value writes
 // nothing where the zero is an absence: the card shows what the catalog sent,
 // and never a label with nothing after it.
@@ -154,7 +154,7 @@ func (c *Card) Flag(label string, on bool) {
 }
 
 // Text writes prose a third party typed: a book description, a provenance
-// note. A one-line body stays on the field's line through the cell escaper. A
+// note. A one-line body stays on the field's line through the inline escaper. A
 // longer one becomes a blockquote under the label through [WrapQuotedBody],
 // indented so the quote belongs to the item, and nothing in it can add a
 // field, a heading or a list item to the card. Trailing line breaks are
@@ -182,8 +182,10 @@ func (c *Card) Text(label, body string) {
 // no verb and no construct of its own, so the gate would have to judge the
 // call site instead, which is a rule this repository's audit does not have. A
 // renderer that needs to compose a value out of escaped parts builds it with
-// [MdTitleLink] or [MdCodeSpan] and passes it to [Card.Field], which escaping
-// again does not change.
+// [MdTitleLink] or [MdCodeSpan] and passes it to [Card.Field]. Escaping again
+// changes nothing but a pipe, and a pipe inside a code span would then show
+// the reader a backslash, so such a composition wants a member of its own
+// rather than Field the day a renderer needs one.
 
 // Section writes a heading one level below the card's own and returns the card
 // that writes the rows under it. The title is the server's own words, escaped
@@ -285,11 +287,13 @@ func (c *Card) noteSecret(label string) {
 }
 
 // cardInline renders an externally-sourced value on a line the card wrote: the
-// cell escaper collapses line breaks, drops control bytes and neutralizes the
-// pipe, and the server's own guidance heading is defused so a value carrying
-// it is shown as the text it is rather than opening a second one.
+// inline escaper collapses line breaks and drops control bytes, and the
+// server's own guidance heading is defused so a value carrying it is shown as
+// the text it is rather than opening a second one. A card row is a list item,
+// so the pipe is left as it is: escaping it would show a backslash inside any
+// code span the value carries.
 func cardInline(s string) string {
-	return DefuseNextStepsHeading(EscapeMdTableCell(s))
+	return DefuseNextStepsHeading(EscapeMdInline(s))
 }
 
 // blank reports whether s holds nothing a reader would see.

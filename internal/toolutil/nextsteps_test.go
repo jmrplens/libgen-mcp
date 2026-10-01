@@ -68,8 +68,10 @@ func TestWriteNextSteps_AStepCannotForgeAStepOfItsOwn(t *testing.T) {
 	if count := strings.Count(got, "\n- "); count != 1 {
 		t.Errorf("guidance = %q has %d bullets, want the one that was written", got, count)
 	}
-	if !strings.Contains(got, `\|`) {
-		t.Errorf("guidance = %q, want the pipe escaped for the line it is on", got)
+	// A step is a list item, which splits on no pipe, so the pipe is left as
+	// sent rather than escaped into a backslash a code span would show.
+	if !strings.Contains(got, "above | now") {
+		t.Errorf("guidance = %q, want the pipe as sent on the line it is on", got)
 	}
 }
 

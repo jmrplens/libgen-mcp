@@ -78,8 +78,10 @@ func (c mdContext) String() string {
 // tells its reader to reach for.
 func (c mdContext) wants() string {
 	switch c {
-	case ctxCell, ctxListItem:
+	case ctxCell:
 		return "toolutil.EscapeMdTableCell"
+	case ctxListItem, ctxProse:
+		return "toolutil.EscapeMdInline"
 	case ctxHeading:
 		return "toolutil.EscapeMdHeading"
 	case ctxLinkLabel, ctxLinkDest:

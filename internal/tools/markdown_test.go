@@ -65,6 +65,65 @@ func TestWriteOpenAccess_NoHits(t *testing.T) {
 	}
 }
 
+// TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash pins the list-item
+// half of the escaping split: a snippet and a table-of-contents title are
+// bullets, not table cells, so a pipe inside a code span the value carries is
+// written as sent. The cell escaper put a backslash there, which a list item
+// never removes and a code span shows.
+func TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash(t *testing.T) {
+	const value = "use a`|`b\nhere"
+	var b strings.Builder
+	renderMatches(&b, ReadOutput{
+		Format: "txt", Query: "a", MatchCount: 2,
+		Matches: []extract.Match{{Page: 3, Snippet: value}, {Snippet: value}},
+	})
+	renderOutline(&b, ReadOutput{
+		Format:  "pdf",
+		Outline: []extract.OutlineEntry{{Title: value, Page: 4}, {Title: value, Level: 1}},
+	})
+	md := b.String()
+
+	testCases := []struct{ name, want string }{
+		{name: "a paged snippet", want: "- p.3 (offset 0): use a`|`b here\n"},
+		{name: "an offset-only snippet", want: "- offset 0: use a`|`b here\n"},
+		{name: "a paged outline entry", want: "- use a`|`b here (p.4)\n"},
+		{name: "a nested outline entry", want: "  - use a`|`b here\n"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(md, tc.want) {
+				t.Errorf("rendered = %q, want it to contain %q", md, tc.want)
+			}
+		})
+	}
+	if strings.Contains(md, `\|`) {
+		t.Errorf("rendered = %q, want no pipe escaped on a list line", md)
+	}
+}
+
+// TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry verifies an extracted
+// table-of-contents title is written as text at the start of its bullet: one
+// opening with a heading, list, quote or fence marker used to become that
+// block inside the list instead of an entry of it.
+func TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry(t *testing.T) {
+	var b strings.Builder
+	renderOutline(&b, ReadOutput{
+		Format: "pdf",
+		Outline: []extract.OutlineEntry{
+			{Title: "# Part One", Page: 1}, {Title: "1. Intro", Level: 1}, {Title: "> Note"}, {Title: "```"},
+		},
+	})
+	md := b.String()
+
+	for _, want := range []string{"- \\# Part One (p.1)\n", "  - 1\\. Intro\n", "- \\> Note\n", "- \\```\n"} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("outline = %q, want it to contain %q", md, want)
+			}
+		})
+	}
+}
+
 // TestRenderOutline_NoPageEntry covers the level-only arm of renderOutline: an
 // entry with no known page (Page == 0) renders as an indented bullet without a
 // "(p.N)" suffix, and its untrusted title still passes through mdCell.
@@ -452,6 +511,59 @@ func TestRenderSearchMarkdown_ALinkCannotEndTheRowItIsIn(t *testing.T) {
 	}
 }
 
+// livePipes counts the pipes that end a cell the way GFM splits a row: a
+// backslash takes the byte after it along, so a pipe after an odd run of
+// backslashes is text and one after an even run is a cell boundary. Counting
+// the two-byte pair alone reads the second as text, which is the defect this
+// counter exists to see.
+func livePipes(row string) int {
+	live := 0
+	for i := 0; i < len(row); i++ {
+		switch row[i] {
+		case '\\':
+			i++
+		case '|':
+			live++
+		}
+	}
+	return live
+}
+
+// TestRenderSearchMarkdown_ABackslashedPipeCannotEndTheRowItIsIn pins the case
+// the pair count above cannot see: a mirror's link label carrying a pipe went
+// through the link-label escaper after the cell escaper, which doubled the
+// backslash in front of the pipe and left the pipe live, and a title that
+// already held a backslash in front of a pipe did the same through the cell
+// escaper alone.
+func TestRenderSearchMarkdown_ABackslashedPipeCannotEndTheRowItIsIn(t *testing.T) {
+	out := renderSearchMarkdown(SearchOutput{
+		Page: 1, Mirror: "https://libgen.li",
+		Results: []libgen.Result{{
+			Title:   `Row Title a\|b`,
+			Authors: `C:\dir|x`,
+			MD5:     "d48739b6ac9e01d70dda1de46805d797",
+			Downloads: []libgen.DownloadOption{
+				{Label: "mirror | one", URL: "https://mirror.example/a"},
+				{Label: "two", URL: `ftp://mirror.example/a\|b`},
+			},
+		}},
+	})
+
+	row := ""
+	for line := range strings.SplitSeq(out, "\n") {
+		if strings.Contains(line, "Row Title") {
+			row = line
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("no result row in:\n%s", out)
+	}
+	if got := livePipes(row); got != 10 {
+		t.Errorf("row = %q has %d live pipes, want 10 for a nine-column row", row, got)
+	}
+}
+
 // TestRenderResolvedMarkdown_TheURLLineIsNotRaw covers the second site the same
 // leak had: a resolved link written as "- URL: <raw>", where a newline in the
 // address ended the line and the rest rendered as prose.
@@ -479,8 +591,10 @@ func TestWriteNextSteps_AStepCannotForgeAStepOfItsOwn(t *testing.T) {
 	if got := strings.Count(out, "\n- "); got != 1 {
 		t.Errorf("next steps = %q has %d bullets, want the one that was written", out, got)
 	}
-	if !strings.Contains(out, `\|`) {
-		t.Errorf("next steps = %q, want the pipe escaped for the line it is on", out)
+	// A bullet is a list item, which splits on no pipe, so the pipe is left as
+	// sent: an escape here would show inside any code span the step carries.
+	if !strings.Contains(out, "run it | now") {
+		t.Errorf("next steps = %q, want the pipe as sent on the line it is on", out)
 	}
 }
 

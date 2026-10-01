@@ -18,11 +18,29 @@ const Dash = "—"
 // EscapeMdTableCell neutralizes a value for a table cell.
 func EscapeMdTableCell(s string) string { return s }
 
+// EscapeMdInline neutralizes a value for a line that is not a table row.
+func EscapeMdInline(s string) string { return s }
+
+// EscapeMdLinkLabel neutralizes a value for a link's label.
+func EscapeMdLinkLabel(s string) string { return s }
+
 // EscapeMdHeading neutralizes a value for a heading.
 func EscapeMdHeading(s string) string { return s }
 
 // StripControlBytes removes the control bytes and nothing else.
 func StripControlBytes(s string) string { return s }
+
+// MdCodeSpan writes a code span for anywhere but a table cell.
+func MdCodeSpan(s string) string { return s }
+
+// MdCodeSpanCell writes a code span for a table cell.
+func MdCodeSpanCell(s string) string { return s }
+
+// MdTitleLink writes a link for anywhere but a table cell.
+func MdTitleLink(title, url string) string { return title + url }
+
+// MdTitleLinkCell writes a link for a table cell.
+func MdTitleLinkCell(title, url string) string { return title + url }
 `
 
 // fixtureRenderer wraps one renderer body in a package that imports what a
@@ -134,7 +152,7 @@ func TestAudit_JudgesAValueByTheConstructItLandsIn(t *testing.T) {
 		},
 		{
 			name: "a raw URL in a link destination",
-			body: "// link writes a link.\nfunc link(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"[%s](%s)\\n\", toolutil.EscapeMdTableCell(r.Title), r.URL)\n}",
+			body: "// link writes a link.\nfunc link(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"[%s](%s)\\n\", toolutil.EscapeMdLinkLabel(r.Title), r.URL)\n}",
 			want: []string{"unescaped link-destination r.URL"},
 		},
 		{
@@ -213,7 +231,7 @@ func TestAudit_FollowsAValueToWhereItCameFrom(t *testing.T) {
 		},
 		{
 			name: "a label read out of the literal that holds it",
-			body: "// fields writes one row per field.\nfunc fields(b *strings.Builder, r record) {\n\tfor _, f := range []struct{ label, key string }{{\"Title\", \"title\"}} {\n\t\tfmt.Fprintf(b, \"- %s: %s\\n\", f.label, toolutil.EscapeMdTableCell(r.Title))\n\t}\n}",
+			body: "// fields writes one row per field.\nfunc fields(b *strings.Builder, r record) {\n\tfor _, f := range []struct{ label, key string }{{\"Title\", \"title\"}} {\n\t\tfmt.Fprintf(b, \"- %s: %s\\n\", f.label, toolutil.EscapeMdInline(r.Title))\n\t}\n}",
 			want: nil,
 		},
 		{
@@ -329,13 +347,13 @@ func TestAudit_ReportsACardRowComposedByHand(t *testing.T) {
 		{
 			name:     "a hand-written row is reported under the rule",
 			contexts: "all,card",
-			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
-			want:     []string{"hand-written card toolutil.EscapeMdTableCell(r.Title)"},
+			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdInline(r.Title))\n}",
+			want:     []string{"hand-written card toolutil.EscapeMdInline(r.Title)"},
 		},
 		{
 			name:     "and not under a run that did not ask for it",
 			contexts: allContexts,
-			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			body:     "// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdInline(r.Title))\n}",
 			want:     nil,
 		},
 		{
@@ -347,19 +365,19 @@ func TestAudit_ReportsACardRowComposedByHand(t *testing.T) {
 		{
 			name:     "an unbolded list item is not a card row",
 			contexts: "all,card",
-			body:     "// matches writes one entry per hit.\nfunc matches(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- p.%d: %s\\n\", r.Pages, toolutil.EscapeMdTableCell(r.Title))\n}",
+			body:     "// matches writes one entry per hit.\nfunc matches(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- p.%d: %s\\n\", r.Pages, toolutil.EscapeMdInline(r.Title))\n}",
 			want:     nil,
 		},
 		{
 			name:     "a bold word in prose is not a card row",
 			contexts: "all,card",
-			body:     "// lead writes a sentence.\nfunc lead(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"Downloaded **%s** today.\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			body:     "// lead writes a sentence.\nfunc lead(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"Downloaded **%s** today.\\n\", toolutil.EscapeMdInline(r.Title))\n}",
 			want:     nil,
 		},
 		{
 			name:     "a declaration excuses the row",
 			contexts: "all,card",
-			body:     "//libgen:allow-raw toolutil.EscapeMdTableCell(r.Title): the fixture writes this row before the card exists\n// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdTableCell(r.Title))\n}",
+			body:     "//libgen:allow-raw toolutil.EscapeMdInline(r.Title): the fixture writes this row before the card exists\n// card writes a record.\nfunc card(b *strings.Builder, r record) {\n\tfmt.Fprintf(b, \"- **Title**: %s\\n\", toolutil.EscapeMdInline(r.Title))\n}",
 			want:     nil,
 		},
 	}

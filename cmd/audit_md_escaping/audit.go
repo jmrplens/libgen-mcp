@@ -72,7 +72,8 @@ var markdownEntryPoints = map[string][]string{
 		"researchTopicText", "writeSection",
 	},
 	toolutilDir: {
-		"MdTitleLink", "MdAutolink", "MdCodeSpan", "MarkdownFencedBlock",
+		"MdTitleLink", "MdTitleLinkCell", "MdAutolink", "MdCodeSpan",
+		"MdCodeSpanCell", "MarkdownFencedBlock",
 	},
 }
 
@@ -113,6 +114,10 @@ const handwritten = "hand-written"
 // judge classifies one hole and files it where its verdict belongs.
 func (p *auditPass) judge(hole sinkHole) {
 	p.report.Summary.Holes++
+	if hole.ctx == ctxProse {
+		p.judgeProse(hole)
+		return
+	}
 	if !p.sel.judges(hole.ctx) {
 		return
 	}
@@ -128,12 +133,33 @@ func (p *auditPass) judge(hole sinkHole) {
 		return
 	}
 	p.report.Summary.Judged++
-	result, why := p.classifier.classify(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, 0)
+	result, why := p.classifier.classifyIn(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, hole.ctx)
 	if result == safe {
 		p.report.Summary.Safe++
 		return
 	}
 	p.file(hole, p.newFinding(hole, result.String(), why))
+}
+
+// judgeProse asks the one question a paragraph has: whether a value reached it
+// through a helper written for a table cell. A raw value is not a finding
+// there, since a paragraph holds a pipe or an angle bracket without the
+// document changing shape, but a cell form escapes a pipe no paragraph
+// removes, and inside a code span the value carries that escape is a
+// backslash the reader sees. It is asked whenever the run judges table cells,
+// because that is the context the cell forms belong to, and a hole counts as
+// judged only when it is reported, so the summary's count stays the count of
+// the structural contexts it names.
+func (p *auditPass) judgeProse(hole sinkHole) {
+	if !p.sel.chosen[ctxCell] || !hole.escapable() {
+		return
+	}
+	p.classifier.classifyIn(hole.expr, scope{pkg: hole.fn.pkg, fn: hole.fn}, hole.ctx)
+	if len(p.classifier.misfits) == 0 {
+		return
+	}
+	p.report.Summary.Judged++
+	p.file(hole, p.newFinding(hole, unescaped.String(), p.classifier.misfits[0]))
 }
 
 // file puts one finding in the list its verdict belongs to, or in the excused
