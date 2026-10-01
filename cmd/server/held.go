@@ -440,7 +440,7 @@ func processCeilingsMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		held := claim.ceilings.held
 		if !held.acquire() {
 			claim.refused.Store(true)
-			return refuseHeldCall(ctx, method, held.limit)
+			return refuseHeldCall(ctx, method, req, held.limit)
 		}
 		defer held.release()
 		return next(ctx, method, req)
@@ -451,11 +451,11 @@ func processCeilingsMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 // rate limit carries its own refusal of the same method: a tools/call as a
 // result flagged isError, so the model reads a retryable diagnostic, and a
 // prompts/get as a JSON-RPC error, since a prompt result has no error flag.
-func refuseHeldCall(ctx context.Context, method string, limit int64) (mcp.Result, error) {
+func refuseHeldCall(ctx context.Context, method string, req mcp.Request, limit int64) (mcp.Result, error) {
 	logHeldRefusal(ctx, limit)
 	mcpotel.RecordRefusal(ctx, mcpotel.ReasonInflightCeiling)
 	if method == methodToolsCall {
-		return toolutil.RefusalResult(processBusyText), nil
+		return toolutil.RefusalResult(req, processBusyText), nil
 	}
 	return nil, &jsonrpc.Error{Code: codeServiceUnavailable, Message: processBusyText}
 }
