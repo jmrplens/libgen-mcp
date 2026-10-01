@@ -47,6 +47,9 @@ __pycache__/
 coverage.out
 coverage.internal.out
 coverage.html
+# The copy scripts/coverage-mutants.sh stages beside a package main, left
+# behind only when a run was killed before its trap could remove it.
+*.mutants-*/
 *.test
 .superpowers/
 
