@@ -28,6 +28,8 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // loggedHostPrefixBytes bounds what a refused Host header contributes to a log
@@ -218,8 +220,11 @@ func hostGuarded(guard hostGuard, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Under the field name the export leg strips: the host is what an
+		// operator reads to fix a proxy, and it is also a value the caller
+		// chose, which is never sent to a collector.
 		slog.WarnContext(r.Context(), "request refused: the Host header names a host this deployment does not serve",
-			"host", loggedHostPrefix(r.Host), "host_len", len(r.Host))
+			telemetry.LogFieldRequestHost, loggedHostPrefix(r.Host), "host_len", len(r.Host))
 		// JSON-RPC rather than http.Error's plain text, for the reason
 		// refusal.go states: an unreadable 4xx on this route reads to a
 		// Streamable HTTP client as a pre-negotiation server, and it downgrades

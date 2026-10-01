@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // hostRequest builds a request as net/http delivers it: a Host header, the peer
@@ -335,6 +338,32 @@ func TestHostGuardedRefusesWithSomethingActionable(t *testing.T) {
 				t.Errorf("the refusal does not name %s, so it does not say how to fix it: %q", want, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestHostGuardedLogsTheHostUnderTheFieldTheExportLegStrips pins the name the
+// refused Host is written under, from the side that writes it.
+//
+// The strip is applied by field name, so a Host logged under any other key
+// reaches the collector however complete the list is: that is how it did,
+// until the field was named from the list rather than spelled at the call
+// site. stderr still has to carry it, because reading which host a proxy
+// forwarded is the whole reason the line exists.
+func TestHostGuardedLogsTheHostUnderTheFieldTheExportLegStrips(t *testing.T) {
+	_, records := sdkStream(t, slog.LevelInfo)
+	handler := hostGuarded(newHostGuard("0.0.0.0:8080", "", trustedProxies{}), teapotHandler())
+
+	handler.ServeHTTP(httptest.NewRecorder(), hostRequest(t, publicName, proxyPeer, loopbackLocal))
+
+	record, found := sdkRecord(records(), "request refused: the Host header names a host this deployment does not serve")
+	if !found {
+		t.Fatalf("the refusal was not logged: %v", records())
+	}
+	if got := record[telemetry.LogFieldRequestHost]; got != publicName {
+		t.Errorf("record[%q] = %v, want the refused host %q on stderr", telemetry.LogFieldRequestHost, got, publicName)
+	}
+	if !telemetry.ExportStrippedFields[telemetry.LogFieldRequestHost] {
+		t.Errorf("%q is not on the export strip list, so the host a caller chose reaches the collector", telemetry.LogFieldRequestHost)
 	}
 }
 

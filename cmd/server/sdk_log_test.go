@@ -3,12 +3,15 @@ package main
 import (
 	"encoding/json"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // sdkStream points the process logger at a buffer and returns the SDK's logger
@@ -230,6 +233,56 @@ func TestANonChatterRecordKeepsItsLevel(t *testing.T) {
 			}
 			if record["level"] != tc.level {
 				t.Errorf("%q is at %v, want %s", tc.message, record["level"], tc.level)
+			}
+		})
+	}
+}
+
+// TestAComposedSDKMessageMovesOffTheMessage is the SDK's share of the rule that
+// a message leaving the process is a constant.
+//
+// The SDK composes some messages with fmt around an error, and "Writing close
+// event: %v" carries a *net.OpError naming both ends of the connection. The
+// export leg does not rewrite messages, so the text moves under a field it
+// strips, and stderr still has every byte of it.
+func TestAComposedSDKMessageMovesOffTheMessage(t *testing.T) {
+	logger, records := sdkStream(t, slog.LevelInfo)
+	const line = "Writing close event: write tcp 127.0.0.1:8080->198.51.100.23:40211: broken pipe"
+
+	logger.Warn(line)
+
+	record, found := sdkRecord(records(), sdkComposedMessage)
+	if !found {
+		t.Fatalf("no record carries the constant message: %v", records())
+	}
+	if got := sdkGroup(t, record)[telemetry.LogFieldSDKMessage]; got != line {
+		t.Errorf("sdk.%s = %v, want the SDK's line whole on stderr", telemetry.LogFieldSDKMessage, got)
+	}
+	if record["level"] != "WARN" {
+		t.Errorf("level = %v, want the SDK's own WARN", record["level"])
+	}
+	for _, other := range records() {
+		if msg, _ := other["msg"].(string); strings.Contains(msg, "198.51.100.23") {
+			t.Errorf("the peer's address is in a record's message, which the export leg carries verbatim: %v", other)
+		}
+	}
+	if !telemetry.ExportStrippedFields[telemetry.LogFieldSDKMessage] {
+		t.Errorf("%q is not on the export strip list", telemetry.LogFieldSDKMessage)
+	}
+}
+
+// TestEveryDemotedSDKMessageIsAConstant keeps the two lists in agreement.
+//
+// A chatter message missing from the constants would still be demoted, since
+// the level is decided on the SDK's own text, but it would be rewritten too,
+// and the constant message would then hide which session event it was from
+// everybody reading the collector.
+func TestEveryDemotedSDKMessageIsAConstant(t *testing.T) {
+	demoted := append(slices.Collect(maps.Keys(sdkSessionChatter)), sdkRunCanceled)
+	for _, message := range demoted {
+		t.Run(message, func(t *testing.T) {
+			if !sdkConstantMessages[message] {
+				t.Errorf("%q is demoted but not listed as a constant, so it is also rewritten", message)
 			}
 		})
 	}

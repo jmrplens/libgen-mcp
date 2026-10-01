@@ -153,6 +153,42 @@ const (
 	// is their content and not their length.
 	LogFieldPanic = "panic"
 	LogFieldStack = "stack"
+	// LogFieldRequestHost is the Host header of a request the host guard
+	// refused, as the caller sent it (`cmd/server/host_guard.go`).
+	//
+	// stderr keeps it, because a reverse proxy forwarding the wrong host is
+	// diagnosed by reading what arrived. The collector does not get it: on a
+	// published endpoint the value is whatever a caller chose to put on the
+	// wire, and a header a client sent is exactly what the telemetry guide
+	// says never leaves this process. It did, from the day the guard began
+	// logging it, because the rule is applied by field name and nobody had
+	// told the list about this one.
+	//
+	// The name is specific on purpose. The list strips by key at any depth, so
+	// a bare "host" would also take every future field of that name, such as
+	// the mirror host an operator does want in the collector.
+	LogFieldRequestHost = "request_host"
+	// LogFieldHTTPServerError is the line net/http writes to its error log,
+	// which this server routes through slog (`cmd/server/http_error_log.go`).
+	//
+	// The standard library composes that line itself, and the ones a caller
+	// provokes name the caller: a failed TLS handshake is logged "from" the
+	// peer's address and port, and a handler panic with the peer's address,
+	// the panic value and the whole stack. Left as the record's message it
+	// would reach the collector verbatim, because the export leg does not
+	// rewrite messages, so the text rides under this field instead and the
+	// message is a constant.
+	LogFieldHTTPServerError = "http_server_error"
+	// LogFieldSDKMessage is a message the go-sdk composed at run time, which
+	// the server's SDK logger moves out of the record's message
+	// (`cmd/server/sdk_log.go`).
+	//
+	// The SDK builds some of its lines with fmt around an error: "calling %s:
+	// %v", "failed to connect: %v", "Writing close event: %v", the last of
+	// which carries a *net.OpError naming both ends of the connection. Error
+	// values are exported as their type, but a message is exported verbatim,
+	// so the text rides under this field and the message is a constant.
+	LogFieldSDKMessage = "sdk_message"
 )
 
 // ExportStrippedFields are the log fields removed from the exported copy at any
@@ -176,13 +212,16 @@ const (
 // and `netguard.RedactURLString`, and not here. A reader who finds this list
 // will otherwise assume it covers that case, so: it does not.
 var ExportStrippedFields = map[string]bool{
-	LogFieldQuery:          true,
-	LogFieldTitle:          true,
-	LogFieldAnnasKey:       true,
-	LogFieldUnpaywallEmail: true,
-	LogFieldChargedAddress: true,
-	LogFieldPanic:          true,
-	LogFieldStack:          true,
+	LogFieldQuery:           true,
+	LogFieldTitle:           true,
+	LogFieldAnnasKey:        true,
+	LogFieldUnpaywallEmail:  true,
+	LogFieldChargedAddress:  true,
+	LogFieldPanic:           true,
+	LogFieldStack:           true,
+	LogFieldRequestHost:     true,
+	LogFieldHTTPServerError: true,
+	LogFieldSDKMessage:      true,
 }
 
 // StripExported removes every field in [ExportStrippedFields] from a set of log

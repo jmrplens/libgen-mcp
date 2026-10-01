@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"log/slog"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/telemetry"
 )
 
 // sdkLogGroup nests everything the SDK says under one key.
@@ -88,22 +90,35 @@ func (h *sdkLogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 // Handle implements [slog.Handler].
+//
+// Two rewrites, each made only when it applies: a record in the per-session
+// chatter is demoted (see [sdkLevelFor]), and a message that is not one of the
+// SDK's constants moves under [telemetry.LogFieldSDKMessage] with
+// [sdkComposedMessage] in its place (see [sdkConstantMessages]).
 func (h *sdkLogHandler) Handle(ctx context.Context, record slog.Record) error {
 	base := h.current()
 	level := sdkLevelFor(record)
-	if level == record.Level {
+	constant := sdkConstantMessages[record.Message]
+	if level == record.Level && constant {
 		return base.Handle(ctx, record)
 	}
 	if !base.Enabled(ctx, level) {
 		return nil
 	}
 
-	demoted := slog.NewRecord(record.Time, level, record.Message, record.PC)
+	message := record.Message
+	if !constant {
+		message = sdkComposedMessage
+	}
+	rewritten := slog.NewRecord(record.Time, level, message, record.PC)
+	if !constant {
+		rewritten.AddAttrs(slog.String(telemetry.LogFieldSDKMessage, record.Message))
+	}
 	record.Attrs(func(attr slog.Attr) bool {
-		demoted.AddAttrs(attr)
+		rewritten.AddAttrs(attr)
 		return true
 	})
-	return base.Handle(ctx, demoted)
+	return base.Handle(ctx, rewritten)
 }
 
 // WithAttrs implements [slog.Handler].
@@ -120,6 +135,58 @@ func (h *sdkLogHandler) WithGroup(name string) slog.Handler {
 	return &sdkLogHandler{
 		derive: func(base slog.Handler) slog.Handler { return derive(base).WithGroup(name) },
 	}
+}
+
+// sdkComposedMessage is the message a record is written under when the SDK
+// composed its own at run time. The SDK's text is the value of
+// [telemetry.LogFieldSDKMessage].
+const sdkComposedMessage = "the MCP SDK logged a message it composed at run time"
+
+// sdkConstantMessages is every message go-sdk v1.8.0 passes to its logger as a
+// literal, and the only messages this handler leaves where the SDK put them.
+//
+// # Why the rest are moved
+//
+// The export leg does not rewrite messages, and the SDK composes some of its
+// own with fmt: "calling %s: %v", "failed to connect: %v", "Writing close
+// event: %v" — whose error is a *net.OpError naming both ends of the
+// connection — and the priming-event and protocol-version lines beside them.
+// Left as the message, that text would reach the collector verbatim, error
+// text and peer address included, whatever the strip list says.
+//
+// # Why a list of constants and not a list of the composed ones
+//
+// It fails in the safe direction. A message the SDK adds in a later release
+// is not on this list, so it is moved: stderr still carries it whole under the
+// field, and the collector sees the constant until somebody reads the new line
+// and adds it here. A list of the composed messages would do the opposite, and
+// they cannot be matched by text anyway.
+var sdkConstantMessages = map[string]bool{
+	"server run start":                                  true,
+	"server connecting":                                 true,
+	"server session connected":                          true,
+	"session initialized":                               true,
+	"client log level set":                              true,
+	"server session disconnected":                       true,
+	"server session ended":                              true,
+	"server session ended with error":                   true,
+	"server connect failed":                             true,
+	"server connect error":                              true,
+	sdkRunCanceled:                                      true,
+	"initialized before initialize":                     true,
+	"duplicate initialized notification":                true,
+	"duplicate initialize request":                      true,
+	"method removed in the new protocol":                true,
+	"method invalid during initialization":              true,
+	"resource updated notification sent":                true,
+	"resource subscribed":                               true,
+	"resource unsubscribed":                             true,
+	"jsonrpc2 internal error":                           true,
+	"keepalive ping failed; tolerating below threshold": true,
+	"keepalive ping failed; closing session":            true,
+	"handler returned both content and inputRequests":   true,
+	"excluding nil tool from tools/list":                true,
+	"excluding tool from tools/list":                    true,
 }
 
 // sdkSessionChatter is the set of messages the SDK emits once per session.

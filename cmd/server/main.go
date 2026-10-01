@@ -1422,6 +1422,9 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 		// connection for nothing. Before the writer existed there was no
 		// deadline at all, which is why this lands with it rather than before.
 		WriteTimeout: httpWriteTimeout,
+		// net/http's own lines name the peer they failed with; see
+		// http_error_log.go for why they are not left to the log package.
+		ErrorLog: httpServerErrorLog(),
 	}
 
 	serveErr := make(chan error, 1)

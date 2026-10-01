@@ -122,7 +122,7 @@ func startPprofListener(ctx context.Context, addr string) (*pprofListener, error
 
 	l := &pprofListener{
 		addr: ln.Addr().String(),
-		srv:  &http.Server{Handler: mux, ReadHeaderTimeout: pprofReadHeaderTimeout},
+		srv:  &http.Server{Handler: mux, ReadHeaderTimeout: pprofReadHeaderTimeout, ErrorLog: httpServerErrorLog()},
 		done: make(chan struct{}),
 	}
 	slog.InfoContext(ctx, "pprof listener started", "component", "pprof", "addr", l.addr)

@@ -120,10 +120,13 @@ func (h *fanOutHandler) Handle(ctx context.Context, record slog.Record) error {
 //   - every error's text, replaced by its type (see [errorTypeName]);
 //   - every value's length, bounded and made valid UTF-8.
 //
-// The message is not rewritten. Every call site in this tree passes a compile-
-// time constant, the go-sdk's own records do too, and slog offers no other way
-// to build one — so nothing a caller chose can be in it, and the values are
-// where untrusted content arrives.
+// The message is not rewritten here, so a message must be a constant by the
+// time it arrives. Every call site in this tree passes one. Two writers this
+// tree does not own compose theirs at run time, around an error that can name
+// a peer: net/http's error log and the go-sdk. The server hands each a logger
+// that writes a constant message and moves the composed text under a field
+// this leg strips, [LogFieldHTTPServerError] and [LogFieldSDKMessage], so the
+// rule is kept where the record is written rather than guessed at here.
 func exportRecord(record slog.Record) slog.Record {
 	exported := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
 
