@@ -1,6 +1,402 @@
 ---
 title: Contenedores y orquestación
 description: "Desplegar la imagen de libgen-mcp con Compose o con un orquestador: puertos, el volumen de descargas, el usuario sin privilegios, la comprobación de salud y las señales de parada."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Docker"
+    wikidata: Q15206305
+  - name: "Kubernetes"
+    wikidata: Q22661306
+chips:
+  - text: "Raíz de solo lectura, UID 10001"
+  - text: "Compose y Kubernetes"
+  - text: "Ejecutar con Docker"
+    href: "/libgen-mcp/es/install/docker/"
 ---
 
-Esta página reunirá despliegues completos de la imagen: un fichero de Compose y manifiestos para un orquestador, el puerto y el volumen de descargas, el usuario con el que se ejecuta la imagen, la comprobación de salud que incluye y cómo llega al servidor una señal de parada. Cómo descargar y verificar la imagen está en [Ejecutar con Docker](/libgen-mcp/es/install/docker/), y el comportamiento HTTP en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+import { Aside } from "@astrojs/starlight/components";
+
+Esta página despliega la imagen publicada como un servicio HTTP: dos ficheros de Compose, uno con el servidor solo y otro detrás de nginx con un socket unix compartido, y un Deployment de Kubernetes con su Service, su Ingress, su ConfigMap y su Secret. Descargar, verificar y fijar la imagen está en [Ejecutar con Docker](/libgen-mcp/es/install/docker/); las configuraciones de proxy, en [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/); qué hace cada opción, en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+## Lo que la imagen necesita de la plataforma
+
+La imagen es `ghcr.io/jmrplens/libgen-mcp` (y `docker.io/jmrplens/libgen-mcp`). Corre con UID y GID `10001`, escucha en `8080`, y su orden por defecto es `--transport auto --http 0.0.0.0:8080`. Seis cosas deciden si funciona bien:
+
+| Asunto                                   | Qué hacer                                                                                                  | Qué pasa si no                                                                                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| La entrada estándar                      | Déjala cerrada: sin `stdin_open`, sin `tty`, sin `-i`. O pasa `--transport http`                           | Con una tubería en stdin, `--transport auto` sirve stdio: nada escucha en `8080`, y la comprobación de salud sigue diciendo que está sano |
+| Un directorio de descargas con escritura | Dale un volumen a `/home/appuser`, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` a una ruta con escritura             | Con la raíz en solo lectura el servidor se niega a arrancar: `LIBGEN_MCP_DOWNLOAD_DIR "/home/appuser/Downloads" is not usable`            |
+| El propietario de los volúmenes          | Monta los volúmenes donde el UID `10001` pueda escribir                                                    | Un volumen que Docker crea para una ruta que la imagen no tiene pertenece a root, y el servidor no puede escribir en él                   |
+| El límite de descriptores                | Fija `nofile` si el valor por defecto del runtime es bajo                                                  | El proceso retiene menos llamadas: 83 con un límite de 1024                                                                               |
+| El periodo de gracia al parar            | Más largo que `--drain-delay` más 8 segundos                                                               | El runtime mata el proceso a mitad del drenaje: `docker stop` espera 10 segundos por defecto, Kubernetes 30                               |
+| La dirección del llamante                | Nombra el proxy con `--trusted-proxies` y `--trusted-proxy-header`, usando la dirección que ve el servidor | A todos los llamantes se les carga como al proxy o a la pasarela del bridge, y el servidor registra un aviso diciéndolo                   |
+
+La regla de la entrada estándar es la que falla en silencio. Un contenedor arrancado con una tubería en stdin, que es lo que le dan `stdin_open: true` en Compose y `docker run -i`, es un servidor stdio; su comprobación de salud lo da por en marcha, porque una instancia que sirve stdio no tiene listener que sondear, mientras el puerto publicado rechaza todas las conexiones. Medido con la orden por defecto:
+
+```text
+$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:2.1.0
+$ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
+000
+$ docker exec <container> libgen-mcp --healthcheck
+healthcheck: pid 1 serves stdio (--transport=auto and stdin is not /dev/null) and is running
+```
+
+Por qué la imagen decide a partir de stdin, y cómo lo lee `auto`, está en [Una imagen, dos transportes](/libgen-mcp/es/http-server-mode/#una-imagen-dos-transportes).
+
+## Docker Compose: el servidor solo
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    command:
+      - --http=0.0.0.0:8080
+      - --public-url=https://mcp.example.org
+      - --drain-delay=10s
+    environment:
+      LIBGEN_MCP_HTTP_IDLE_TIMEOUT: "5m"
+    env_file:
+      - path: ./libgen-mcp.env
+        required: false
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - home:/home/appuser
+    ulimits:
+      nofile: 65536
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  home:
+```
+
+Para qué sirve cada parte:
+
+- **`command:` sustituye a la orden por defecto de la imagen**, así que nombrar aquí un listener es también elegir HTTP. `--transport auto` desaparece con ella, y stdin deja de importar.
+- **`read_only: true` funciona con dos sitios con escritura.** El volumen con nombre en `/home/appuser` contiene el directorio personal del servidor: el directorio de descargas que comprueba al arrancar y la caché de mirrors en `.cache/libgen-mcp`. Docker llena un volumen con nombre nuevo a partir del directorio de la imagen, propietario incluido, y el `/home/appuser` de la imagen pertenece a `10001`, así que el volumen tiene escritura sin ningún `chown`. El `tmpfs` en `/tmp` recoge los ficheros que trae `read` cuando `LIBGEN_MCP_SERVER_FETCH` está activo. No se escribe nada más: el lector de índices de PDF ejecuta pdfcpu con una configuración propia y nunca crea su directorio de configuración.
+- **`ulimits: nofile` dimensiona el proceso.** Con 65536 el servidor retiene hasta 5728 llamadas a la vez; la fórmula está en [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#el-límite-de-descriptores-dimensiona-el-proceso). Muchos runtimes ya traen un límite alto por defecto, y la línea de arranque `process ceilings` dice qué recibió el contenedor.
+- **`stop_grace_period: 30s`** cubre el drenaje de 10 segundos y los 8 segundos que lo siguen. Medido, `docker compose stop` tardó 11 segundos y el contenedor salió con 0.
+- **El `HEALTHCHECK` propio de la imagen sigue vigente**: `libgen-mcp --healthcheck` cada 30 segundos, que lee el listener de la línea de órdenes en marcha, así que sigue a un puerto, un socket o `--http-path` sin que se lo digan.
+- **Las claves van en `libgen-mcp.env`**, una `LIBGEN_MCP_*` por línea, legible solo por ti. Una clave en `environment:` acaba en la salida de `docker inspect` y en el historial del fichero de Compose.
+
+Publicado en el loopback del host, el servidor ve a todos los llamantes como la pasarela del bridge de Docker, una dirección que ningún cliente público podría tener, y registra un aviso para decirlo: `callers cannot be told apart: the address requests are charged to is one no public client could have`. Un proxy en el host lo arregla con `--trusted-proxies` nombrando esa pasarela (`docker network inspect` la muestra) y `--trusted-proxy-header X-Real-IP`. Un proxy en el mismo proyecto de Compose es más sencillo, y es el siguiente fichero.
+
+<Aside type="caution" title="Montar un volumen en otro sitio">
+	Un volumen montado en una ruta que la imagen no tiene, como `/data`, se crea
+	con root como propietario. El servidor no puede escribir ahí: como
+	`LIBGEN_MCP_DOWNLOAD_DIR` se niega a arrancar, y como `XDG_CACHE_HOME`
+	funciona sin caché de mirrors sin avisar. Usa `/home/appuser`, haz `chown
+	10001:10001` de un directorio montado desde el host, o ejecuta el contenedor
+	como el propietario del directorio con `user:`.
+</Aside>
+
+## nginx delante, con un socket unix compartido
+
+El servidor escucha en un socket dentro de un volumen que montan los dos contenedores, y solo se publica nginx:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    # 101 es el grupo de nginx en las imágenes oficiales de nginx. El socket se
+    # crea 0660 con el grupo de este proceso, así que los workers de nginx
+    # pueden abrirlo tal cual.
+    user: "10001:101"
+    command:
+      - --http=/run/libgen-mcp/libgen.sock
+      - --public-url=https://mcp.example.org
+      - --trusted-proxies=unix
+      - --trusted-proxy-header=X-Real-IP
+      - --drain-delay=10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - socket:/run/libgen-mcp
+      - home:/home/appuser
+    ulimits:
+      nofile: 65536
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.29-alpine
+    depends_on:
+      libgen-mcp:
+        condition: service_healthy
+    ports:
+      - "443:443"
+    volumes:
+      - socket:/run/libgen-mcp
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+
+volumes:
+  # El directorio del socket: un tmpfs que montan los dos contenedores, cuyo
+  # propietario es el usuario del servidor y el grupo de nginx, para que
+  # ninguno de los dos contenedores tenga que ser root para llegar a él.
+  socket:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "uid=10001,gid=101,mode=0750"
+  home:
+```
+
+`nginx.conf` es la [configuración por socket unix](/libgen-mcp/es/deploy/reverse-proxy/#upstream-por-socket-unix) con las rutas de los certificados bajo `/etc/nginx/certs`:
+
+```nginx
+upstream libgen_mcp {
+    server unix:/run/libgen-mcp/libgen.sock;
+    keepalive 16;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name mcp.example.org;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+
+    client_max_body_size 4m;
+
+    location / {
+        proxy_pass         http://libgen_mcp;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}
+```
+
+El grupo es la parte en la que es fácil equivocarse:
+
+- **Ejecuta el servidor con el grupo del proxy** (`user: "10001:101"`) en lugar de meter el proxy en el grupo del servidor. nginx reinicia los grupos de sus workers a partir de su propio `/etc/group` al soltar privilegios, así que un `group_add` de Compose en el proxy se descarta, y el argumento de grupo de la directiva `user` de nginx es un nombre: `user nginx 10001;` falla con `getgrnam("10001") failed` en una imagen sin un grupo con ese nombre. Con el servidor en el grupo `101`, nginx no necesita ningún cambio. El UID `10001` conserva su directorio personal, `/home/appuser`, sea cual sea el grupo.
+- **El directorio también tiene que poder atravesarlo ese grupo.** El volumen `socket` es un tmpfs creado con `0750` y propietario `10001:101`. Un `./run` montado desde el host funciona igual una vez hecho `chown 10001:101` y `chmod 0750`; si se queda con root como propietario, el servidor no puede crear el socket.
+- **`depends_on: service_healthy`** arranca nginx solo cuando el servidor responde a su comprobación de salud, que en un socket significa que el socket existe.
+
+Una parada limpia borra el socket, y un socket que deja atrás un fallo se borra en el siguiente arranque. El resto de lo que hace el listener por socket está en [Dónde escucha el servidor](/libgen-mcp/es/http-server-mode/#dónde-escucha-el-servidor).
+
+## Configurar mediante el entorno
+
+Cada opción HTTP tiene una variable `LIBGEN_MCP_*`, que es con lo que tiene que apañarse una plataforma que solo acepta variables de entorno: la opción en mayúsculas y con los guiones como guiones bajos, bajo `LIBGEN_MCP_`, salvo `--http`, cuya variable es `LIBGEN_MCP_HTTP_ADDR` porque `LIBGEN_MCP_HTTP` se leería como un interruptor y no como una dirección. La lista completa está en [Configuración](/libgen-mcp/es/configuration/#listener-http).
+
+{/* libgen:allow-name LIBGEN_MCP_HTTP: se nombra arriba como la grafia que este servidor deliberadamente no usa */}
+
+**Una opción en la línea de órdenes gana a su variable, y la orden por defecto de la imagen es una línea de órdenes.** Escribe `--http 0.0.0.0:8080`, así que un `LIBGEN_MCP_HTTP_ADDR` puesto en un contenedor que conserva la orden por defecto se ignora, sin ningún aviso, y el servidor escucha en `0.0.0.0:8080` de todos modos. Sustituye la orden por defecto por una que no nombre ningún listener:
+
+```yaml
+services:
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    command: ["--transport", "http"]
+    environment:
+      LIBGEN_MCP_HTTP_ADDR: "0.0.0.0:8080"
+      LIBGEN_MCP_PUBLIC_URL: "https://mcp.example.org"
+      LIBGEN_MCP_DRAIN_DELAY: "10s"
+      LIBGEN_MCP_HTTP_IDLE_TIMEOUT: "5m"
+    ports:
+      - "127.0.0.1:8080:8080"
+    stop_grace_period: 30s
+```
+
+El fichero del socket de arriba se convierte igual: `LIBGEN_MCP_HTTP_ADDR` con la ruta del socket, `LIBGEN_MCP_TRUSTED_PROXIES` a `unix`, `LIBGEN_MCP_TRUSTED_PROXY_HEADER` a `X-Real-IP`, y conservando su `user:` y sus volúmenes.
+
+El log de arranque nombra las variables que configuraron el listener, bajo `HTTP settings taken from the environment`, que es la respuesta más rápida a por qué escucha donde escucha. Un valor que no se puede interpretar detiene el servidor, nombrando la variable y la opción.
+
+## Kubernetes
+
+Un solo manifiesto con todo lo que necesita un clúster: los ajustes, las claves opcionales, el Deployment, su Service y un Ingress.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: libgen-mcp
+  labels:
+    app.kubernetes.io/name: libgen-mcp
+data:
+  LIBGEN_MCP_HTTP_ADDR: "0.0.0.0:8080"
+  LIBGEN_MCP_PUBLIC_URL: "https://mcp.example.org"
+  # Los pods del controlador de ingress, tal como los ve el servidor. Lee el
+  # rango de tu clúster: es la red de pods, no un valor para copiar.
+  LIBGEN_MCP_TRUSTED_PROXIES: "10.244.0.0/16"
+  LIBGEN_MCP_TRUSTED_PROXY_HEADER: "X-Forwarded-For"
+  LIBGEN_MCP_DRAIN_DELAY: "15s"
+  LIBGEN_MCP_HTTP_IDLE_TIMEOUT: "5m"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: libgen-mcp-keys
+  labels:
+    app.kubernetes.io/name: libgen-mcp
+type: Opaque
+stringData:
+  # Todas opcionales: borra las que no tengas, y el servidor sigue sin claves.
+  LIBGEN_MCP_UNPAYWALL_EMAIL: "you@example.org"
+  LIBGEN_MCP_CORE_KEY: ""
+  LIBGEN_MCP_ANNAS_KEY: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: libgen-mcp
+  labels:
+    app.kubernetes.io/name: libgen-mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: libgen-mcp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: libgen-mcp
+    spec:
+      # Más que --drain-delay (15s) más la fase ordenada de 8 s que lo sigue.
+      terminationGracePeriodSeconds: 40
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: libgen-mcp
+          image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+          # Sustituye a la orden por defecto de la imagen, cuyo --http ganaría
+          # si no a LIBGEN_MCP_HTTP_ADDR.
+          args: ["--transport=http"]
+          envFrom:
+            - configMapRef:
+                name: libgen-mcp
+            - secretRef:
+                name: libgen-mcp-keys
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: home
+              mountPath: /home/appuser
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: libgen-mcp
+  labels:
+    app.kubernetes.io/name: libgen-mcp
+spec:
+  selector:
+    app.kubernetes.io/name: libgen-mcp
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: libgen-mcp
+  labels:
+    app.kubernetes.io/name: libgen-mcp
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "4m"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [mcp.example.org]
+      secretName: mcp-example-org-tls
+  rules:
+    - host: mcp.example.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: libgen-mcp
+                port:
+                  name: http
+```
+
+Cómo encajan las piezas:
+
+- **La configuración sale solo del entorno**, del ConfigMap y del Secret mediante `envFrom`. `args: ["--transport=http"]` sustituye a la orden por defecto de la imagen, así que el listener sale de `LIBGEN_MCP_HTTP_ADDR`, y el transporte deja de depender de stdin (el de un pod es `/dev/null`, que `auto` habría leído como HTTP de todos modos). Una clave vacía en el Secret equivale a no tener clave.
+- **La sonda de disponibilidad es lo que hace funcionar el drenaje.** Con `SIGTERM`, `/health` responde `503` durante `LIBGEN_MCP_DRAIN_DELAY`; una sonda cada 5 segundos que falla una vez saca el pod de los endpoints del Service mucho antes de 15 segundos, y solo entonces se cierra el listener. `terminationGracePeriodSeconds` cubre el retardo más los 8 segundos que lo siguen, y `maxUnavailable: 0` mantiene sirviendo cada pod antiguo hasta que su sustituto está listo. La sonda de vida es más lenta y más tolerante, para que no se reinicie un pod ocupado por una respuesta lenta. `/health` no ocupa ranura de llamada, así que un pod en su techo de llamadas sigue pasando las dos.
+- **El contexto de seguridad es el perfil restringido de Pod Security**: un UID que no es root, el sistema de archivos raíz en solo lectura, sin escalado de privilegios, sin capabilities, el perfil seccomp del runtime. Los dos volúmenes `emptyDir` son las únicas rutas con escritura, `/home/appuser` para el directorio de descargas y la caché de mirrors, `/tmp` para lo que se trae. `fsGroup: 10001` les da escritura para el grupo del servidor.
+- **Kubernetes no tiene un límite de descriptores por pod.** El contenedor hereda el del runtime, a menudo 1048576, que dimensiona el proceso en 91744 llamadas retenidas; el límite de memoria es la cota que llega antes, así que fíjalo.
+- **Las réplicas no necesitan afinidad.** El transporte por defecto es sin estado: cada `POST` está completo y cualquier réplica puede responderlo, así que ni el Service ni el Ingress necesitan afinidad de sesión. Todas las réplicas tienen que correr la misma configuración, cosa que `config_digest` en `/health` permite comprobar; consulta [Escalado y capacidad](/libgen-mcp/es/deploy/scaling/).
+
+**La dirección del llamante detrás del ingress.** El servidor ve los pods del controlador de ingress como sus pares, así que `LIBGEN_MCP_TRUSTED_PROXIES` nombra sus direcciones, normalmente el rango de la red de pods, y `X-Forwarded-For` lleva al cliente. Esa cabecera solo contiene la dirección real del cliente si el controlador la ve: detrás de un balanceador de carga en la nube, el Service del controlador necesita `externalTrafficPolicy: Local` o el protocolo PROXY, o todos los llamantes llegan como un nodo. Con todo el rango de la red de pods como de confianza, cualquier pod del clúster puede poner la cabecera, así que estréchalo a las direcciones del propio controlador donde la red lo permita.
+
+**Las anotaciones del Ingress** son las de ingress-nginx, que el proyecto Kubernetes retiró en marzo de 2026; las instalaciones existentes las siguen respetando. Cada una corresponde a un [requisito de cualquier proxy](/libgen-mcp/es/deploy/reverse-proxy/#lo-que-tiene-que-hacer-el-proxy): sin búfer de respuesta, un tiempo de lectura de una hora, un límite de cuerpo de 4 MiB en lugar del de 1 MiB del controlador, y HTTP/1.1 hacia el pod. Con otro controlador o con la Gateway API valen los mismos cuatro ajustes con los nombres de ese controlador; en un `HTTPRoute`, `timeouts.request` tiene que cubrir la llamada más larga.
+
+### Cómo se probaron
+
+Los ficheros de Compose se levantaron tal como están escritos, salvo los puertos publicados y un nombre de host de prueba, con Docker Engine 29 y Compose v2. El servidor solo respondió a `/health` y a `tools/list`, ejecutó un `search` en vivo con la raíz en solo lectura, y se paró en 11 segundos con estado de salida 0 tras su drenaje. El fichero del socket respondió a `/health`, a `tools/list` en el montaje y en `/mcp`, y a la server card a través de nginx con el nombre público. El fichero solo de entorno escuchó donde decía `LIBGEN_MCP_HTTP_ADDR` y registró las cuatro variables que tomó. El manifiesto de Kubernetes se validó con kubeconform 0.7.0 contra los esquemas de Kubernetes 1.33 en modo estricto, y sus ajustes de pod (usuario, raíz en solo lectura, los dos montajes con escritura, capabilities eliminadas, configuración desde el entorno, `--transport=http`) se ejecutaron con Docker; no se aplicó a un clúster.

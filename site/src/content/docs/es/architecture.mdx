@@ -266,7 +266,7 @@ Cuál de los dos elegir, qué significa el modo del socket, qué pasa con un arc
 
 La línea de arranque nombra lo que realmente se abrió — `listening on unix socket /run/mcp-libgen.sock (http)`, o `listening on https://127.0.0.1:8443` — porque la dirección propia del listener engaña justo en estos dos modos. Un listener unix informa de una ruta pelada, sin nada que la marque como socket, y un listener TLS informa de la dirección del listener en claro que envuelve, así que un endpoint https se imprimiría como un `host:port` sin más.
 
-Las recetas de nginx y docker-compose para las dos clases de listener están en [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming).
+Las configuraciones de proxy para las dos clases de listener están en [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/), y los ficheros de Compose en [Contenedores y orquestación](/libgen-mcp/es/deploy/containers/).
 
 ### Modo sin estado
 

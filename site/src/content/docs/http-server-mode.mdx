@@ -18,7 +18,7 @@ Running `libgen-mcp` over streamable HTTP turns a one-client-per-process stdio s
 Three documents share the subject and do not repeat each other:
 
 - **This page** says how to deploy it, and owns the operational prose.
-- [Getting started](/libgen-mcp/getting-started/#remote-streamable-http) has the copy-and-run recipes: nginx, docker-compose, the socket, TLS.
+- [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/), [Run as a service](/libgen-mcp/deploy/service/) and [Containers and orchestration](/libgen-mcp/deploy/containers/) have the complete, tested configurations: every common proxy, systemd units, Compose and Kubernetes.
 - [Architecture → Transports](/libgen-mcp/architecture/#transports) explains how the transport is built and carries the **[full flag table](/libgen-mcp/architecture/#stateless-mode)**. Every flag named here is defined there, together with its `LIBGEN_MCP_*` variable.
 
 ## Pick a listener first
@@ -53,7 +53,7 @@ There are three deployment shapes and they give three different answers. Find yo
 
 ### A TCP listener behind a proxy
 
-This is the common shape, it is what [Getting started](/libgen-mcp/getting-started/#remote-streamable-http) recommends, and it is what the hosted endpoint at `mcp.jmrp.io/libgen` runs.
+This is the common shape, it is what [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/) configures, and it is what the hosted endpoint at `mcp.jmrp.io/libgen` runs.
 
 Without `--trusted-proxies`, **every request arrives from the proxy**, so every caller is the same caller: the rate limit is one bucket for the whole world, the in-flight ceiling is a second process-wide ceiling wearing a per-caller name, and `user.hash` is one constant. Nothing about that is subtle or rare — it is the default outcome of the recommended shape.
 
@@ -279,7 +279,7 @@ One thing surprises people: a unix socket is still a non-empty `--http` value, s
 
 `--http-socket-mode` sets the mode as octal with or without a leading `0`, and defaults to `0660`: read and write for the owner and the group, nothing for anyone else. Group-only is the default because a socket is reached through the filesystem, so the alternative to it is not "localhost only" but "every local account". The proxy joins the socket's group instead.
 
-In nginx that means the _worker_ processes, which is the second argument of the `user` directive (`user nginx 10001;`): nginx calls `initgroups()` when it drops privileges and so does not inherit a container-level `group_add`. The blunter alternative is `--http-socket-mode 0666`, reasonable only when the socket's own directory is already restricted, since traversal permission on the directory gates access before the socket's mode is consulted.
+In nginx that means the _worker_ processes: nginx calls `initgroups()` when it drops privileges, so on a host it picks up a group its user was added to in `/etc/group`, and in a container it discards a container-level `group_add`. The group argument of nginx's `user` directive is a name, so `user nginx 10001;` fails at startup with `getgrnam("10001") failed` unless the proxy's image has a group of that name; in a container it is simpler to run the server with the proxy's group, as [Containers](/libgen-mcp/deploy/containers/#nginx-in-front-over-a-shared-unix-socket) does. The blunter alternative is `--http-socket-mode 0666`, reasonable only when the socket's own directory is already restricted, since traversal permission on the directory gates access before the socket's mode is consulted.
 
 The mode is applied twice and both halves matter. The kernel creates the inode as `0777 &^ umask`, so the bind runs under a narrowed umask to keep the socket from ever existing world-connectable, and a `chmod` right after makes the mode exact, since a umask can only clear bits. An explicit value is refused at startup when `--http` is a TCP address, and on a platform with no file permission modes, rather than accepted and quietly ignored.
 
@@ -378,7 +378,9 @@ The first one deserves a note, because the container case is easy to miss: the i
 | --------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Every flag and its `LIBGEN_MCP_*` variable, with defaults | [Architecture → Stateless mode](/libgen-mcp/architecture/#stateless-mode) |
 | Routes, security headers, CORS, cancellation, cache hints | [Architecture → Transports](/libgen-mcp/architecture/#transports)         |
-| Copy-and-run nginx and docker-compose recipes             | [Getting started](/libgen-mcp/getting-started/#remote-streamable-http)    |
+| Complete proxy configurations                             | [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/)               |
+| systemd units, launchd and Windows services               | [Run as a service](/libgen-mcp/deploy/service/)                           |
+| Compose files and Kubernetes manifests                    | [Containers and orchestration](/libgen-mcp/deploy/containers/)            |
 | Every environment variable this server reads              | [Configuration](/libgen-mcp/configuration/#http-listener)                 |
 | What a remote deployment does to `download` and `read`    | [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote)           |
 | What an exported signal may say about a caller            | [Telemetry](/libgen-mcp/telemetry/)                                       |

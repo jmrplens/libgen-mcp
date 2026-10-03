@@ -215,7 +215,7 @@ What follows is one command per channel. **[Installation](/libgen-mcp/install/ov
     	Two settings that meet in a container and surprise people apart:
 
     	- A container binding `0.0.0.0` **with `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` set is refused at startup**, and the default command above is exactly that listener. The refusal is deliberate — that variable lets a caller steer the server at addresses only this host can reach, which is not a power to hand to whoever finds the published port — so pass `--http 127.0.0.1:8080` and put a proxy in front, or leave the variable unset.
-    	- A container on the **host's** network namespace (`--network host`) behind a proxy on that same host is reached over loopback, so it looks to the server like a local client. On a bridge network — the default — it is not, and the proxy's address is what arrives. See [Remote (streamable HTTP)](#remote-streamable-http) for which flags each shape needs.
+    	- A container on the **host's** network namespace (`--network host`) behind a proxy on that same host is reached over loopback, so it looks to the server like a local client. On a bridge network — the default — it is not, and the proxy's address is what arrives. See [The caller's address](/libgen-mcp/deploy/reverse-proxy/#the-callers-address) for which flags each shape needs.
     </TabItem>
     <TabItem label="go install">
     	If you already have Go 1.27 or newer and prefer building from source:
@@ -331,175 +331,20 @@ It is the fastest way to try the server; running it locally remains the better w
 
 ### Remote (streamable HTTP)
 
-To run the server centrally and connect over HTTP instead of stdio, start it with an address and point HTTP-capable clients at it:
+To run the server centrally and connect HTTP-capable clients to it instead of starting one process per client, give it a listener:
 
 ```bash
-libgen-mcp --http :8080
+libgen-mcp --http 127.0.0.1:8080
 ```
 
-The endpoint is the mount itself — `POST /` here — and `POST /mcp` is an alias for it, because enough clients and guides assume that path that a base URL pasted with or without it should reach the same place. Under `--http-path` the alias moves with the mount (`/libgen/mcp`).
+The endpoint is the mount itself, `POST /`, with `POST /mcp` as an alias, and `GET /health` answers while the server runs. The transport is stateless, so any number of replicas can sit behind one balancer. Over HTTP the server's disk and connection are not the client's: `download` returns a link instead of saving a file, and `read` is not registered unless `LIBGEN_MCP_SERVER_FETCH` turns it back on (see [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote)).
 
-**Behind a reverse proxy, declare the name clients use.** A proxy forwards the client's `Host` and connects over loopback, and a server that never heard that name refuses the request with `403` — the DNS-rebinding check every MCP server is asked to make. Tell it the name with `--public-url`, or vouch for the proxy with `--trusted-proxies`; either is enough, and neither is optional on a wildcard bind, which declares no name of its own:
+A deployment other people reach needs more than that one flag: a proxy that forwards the name clients use and passes the stream through unbuffered, the server told that name and which peer is the proxy, and a supervisor that lets it drain when it stops. Each has its own page, with configurations that were run as written:
 
-```bash
-libgen-mcp --http :8080 --public-url https://mcp.example.org
-```
-
-**And name the proxy, or every caller is one caller.** Declaring the name gets the request served; it does not tell this server who sent it. Behind a proxy every connection comes from the proxy, so the per-caller rate limit and the per-caller in-flight ceiling become one budget for the whole deployment until the proxy is named and its header believed:
-
-```bash
-libgen-mcp --http 127.0.0.1:8080 \
-  --public-url https://mcp.example.org \
-  --trusted-proxies 127.0.0.1/32 \
-  --trusted-proxy-header X-Real-IP
-```
-
-```nginx
-location / {
-    proxy_pass         http://127.0.0.1:8080;
-    proxy_http_version 1.1;
-    proxy_buffering    off;   # the POST response is a real SSE stream
-    proxy_read_timeout 1h;    # downloads emit progress for minutes
-    proxy_set_header   X-Real-IP $remote_addr;
-}
-```
-
-Both flags or neither — either one alone fails startup. `--trusted-proxies` names the peer **this server accepts connections from**, which behind a published container port is the bridge gateway rather than the `127.0.0.1` the `proxy_pass` line uses; get it wrong and the header is silently ignored. [HTTP server mode](/libgen-mcp/http-server-mode/) works through the three deployment shapes, what each one does to the limits, and how to read that address off your own deployment.
-
-In HTTP mode the server also exposes a `GET /health` readiness endpoint that returns `200` while serving, handy for container and load-balancer health checks. It answers whatever `Host` a prober sends, including none at all — HAProxy's `option httpchk` sends no `Host` unless one is configured, and a refused probe marks a working instance down.
-
-In HTTP mode the server also publishes **two server cards**, one per location, because the two specifications that reserve those paths describe different documents:
-
-- `GET /server-card`, served as `application/mcp-server-card+json`, is the **discovery card** SEP-2127 describes. It carries identity and nothing else — the registry name `io.github.jmrplens/libgen-mcp`, the running version, the description, the website and the repository — plus, when `--public-url` names one, a `remotes` entry giving that URL, the `streamable-http` type and the protocol versions _this_ deployment negotiates. It lists no tools and no prompts: what a server exposes can vary per session, so a card cannot answer that honestly.
-- `GET /.well-known/mcp/server-card.json`, served as `application/json`, is the **enumerating card** the earlier SEP-1649 draft described, kept because scanners already fetch it there. It carries `serverInfo`, the `capabilities` the handshake negotiates, an `authentication` block (this server takes none), and the full `tools` and `prompts` listings, so a directory can read the whole surface — the four prompts included — without opening an MCP session.
-
-Both are served unauthenticated, answer CORS preflight and carry `Access-Control-Allow-Origin: *` so a browser-based directory can read them, and both are unaffected by stateless mode's `405` on the MCP endpoint. Both also carry a strong `ETag` derived from the document's own bytes, so the revalidation after their one-hour `Cache-Control` costs a `304` instead of the whole document — and because the tag depends on the bytes alone, two replicas behind one balancer publish the same one.
-
-The transport is **stateless by default**: there is no `Mcp-Session-Id`, each POST is a complete request, and `GET`/`DELETE` on the MCP endpoint return `405` (`/health` is unaffected). That is what MCP protocol `2026-07-28` requires over HTTP, and it lets any number of replicas sit behind a plain load balancer with no sticky routing. Two more flags tune the transport — `--json-response` returns `application/json` instead of SSE, and `--max-request-body-bytes` tightens the 4 MiB body cap:
-
-```bash
-libgen-mcp --http :8080 --json-response --max-request-body-bytes 1048576
-```
-
-Those routes — the MCP endpoint, `/health` and the two card paths — are the whole HTTP surface. **Every other path answers `404`**, with a JSON body naming the endpoint it should have asked for; a `405` now means only what it says, that the MCP endpoint was reached with the wrong method. If a reverse proxy forwards its prefix to this server instead of stripping it, mount the whole set under that prefix with `--http-path`:
-
-```bash
-libgen-mcp --http :8080 --http-path /libgen
-```
-
-The endpoint is then `POST /libgen`, the probe `GET /libgen/health`, and the cards live under `/libgen` too; `libgen`, `/libgen` and `/libgen/` all mean the same mount, while a value with a query, a fragment, a `..` segment or a percent-escape is refused at startup. Every response — the `404` and the `405` included — carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The card overrides the cache header with its own one-hour lifetime. `Strict-Transport-Security` joins them only when this process terminates TLS itself (`--tls-cert`, below); behind a proxy that terminates it, the proxy is the layer that sends it.
-
-If a client of yours still needs the old session-based transport, pass `--stateless=false`; it then negotiates MCP protocol `2025-11-25` or older. See [Architecture](/libgen-mcp/architecture/#stateless-mode) for what else changes, including the elicitation note.
-
-Because an HTTP server answers clients whose disk it cannot write to, `download` returns a link (a `resource_link` plus a `resolved` object) instead of saving a file — you don't need to set `resolve_only` in this mode. See [Tools](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote) for details.
-
-An HTTP server also serves **three** tools rather than four by default: `read` is not registered, because returning a page of text means fetching the whole file over an egress IP shared by everyone using your deployment. Clients fetch the link `download` gives them and read the file themselves. If the egress is yours to spend, `LIBGEN_MCP_SERVER_FETCH=1` turns the tool back on — see [Configuration](/libgen-mcp/configuration/#libgen_mcp_server_fetch).
-
-<Aside type="note">
-	Hosting a **stdio** server instead — for example behind `mcp-proxy` on a
-	catalog like Glama — puts it on a remote or ephemeral machine too, just
-	without an HTTP listener. Set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` to put that
-	stdio server into the same remote-download mode `--http` gets automatically.
-</Aside>
-
-#### Behind a proxy on the same machine: a unix socket
-
-If the only thing that talks to this server is a reverse proxy on the same host, `--http` also takes a filesystem path and binds a unix socket there instead of a port:
-
-```bash
-libgen-mcp --http /run/mcp-libgen.sock
-```
-
-The rule is that a value containing `/` is a path: `/run/mcp-libgen.sock` and `./mcp.sock` are sockets, while `:8080`, `127.0.0.1:8080` and — deliberately — a bare `mcp.sock` are addresses, because a bare name cannot be told apart from a hostname. Prefer this over TLS for a same-host proxy: it does not encrypt the hop, it removes it. There is no bridge to read, no `docker-proxy` hop, no port another local process can reach, and no certificate to issue or rotate.
-
-The socket is created `0660` — owner and group only — so the proxy reaches it by sharing the group rather than by being any local account at all; `--http-socket-mode 0600` (or any other octal mode) changes that. nginx points an upstream straight at the path:
-
-```nginx
-upstream libgen {
-    server unix:/run/mcp-libgen.sock;
-}
-
-server {
-    listen 443 ssl;
-    server_name mcp.example.org;
-
-    location / {
-        proxy_pass         http://libgen;
-        proxy_http_version 1.1;
-        proxy_buffering    off;   # the POST response is a real SSE stream
-        proxy_read_timeout 1h;    # downloads emit progress for minutes
-        proxy_set_header   X-Real-IP $remote_addr;
-    }
-}
-```
-
-That last header is only worth sending if the server is told to read it. A unix-socket peer is a path rather than an address, so the trust is stated with the literal `unix`: `--trusted-proxy-header X-Real-IP --trusted-proxies unix`. Both flags or neither — either one alone fails startup — and without them every caller is told apart by the socket, which is to say not at all. Over TCP, name the address the server accepts connections from instead of `unix`; behind a published container port that is the bridge gateway, not the `127.0.0.1` the upstream line uses.
-
-Under Docker the two containers share the socket's directory and publish nothing:
-
-```yaml
-services:
-  libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:latest
-    command: ["--http", "/run/mcp/libgen.sock"]
-    user: "10001:10001"
-    volumes:
-      - ./run:/run/mcp # the socket lives here; no ports are published
-  proxy:
-    image: nginx:1.29-alpine
-    ports:
-      - "443:443"
-    volumes:
-      - ./run:/run/mcp
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-```
-
-The proxy's worker processes have to run in the socket's group (GID `10001` here) to open a `0660` socket — in nginx that is the second argument of the `user` directive, `user nginx 10001;`, since nginx re-initializes its groups when it drops privileges.
-
-<Aside type="caution">
-	A unix socket is still a non-empty `--http` value, so `download` stays in
-	remote (link-only) mode. That is correct — a socket behind a proxy serves
-	clients that are not on this machine — but "unix socket" reads like "local",
-	and it is not.
-</Aside>
-
-#### Configuring the listener without a command line
-
-Every HTTP flag also has a variable, so the same deployment can be written with no `command:` at all — which is what a Kubernetes ConfigMap, a systemd unit's `Environment=` or an image somebody else's platform runs for you has to work with:
-
-```yaml
-services:
-  libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:latest
-    environment:
-      LIBGEN_MCP_HTTP_ADDR: "/run/mcp/libgen.sock"
-      LIBGEN_MCP_TRUSTED_PROXY_HEADER: "X-Real-IP"
-      LIBGEN_MCP_TRUSTED_PROXIES: "unix"
-      LIBGEN_MCP_DRAIN_DELAY: "10s"
-    user: "10001:10001"
-    volumes:
-      - ./run:/run/mcp
-```
-
-The name is the flag in upper case with dashes as underscores, under `LIBGEN_MCP_`. The one exception is `--http` itself, whose variable is `LIBGEN_MCP_HTTP_ADDR`: `LIBGEN_MCP_HTTP` would read as a switch rather than as an address. The full list is in [Configuration → HTTP listener](/libgen-mcp/configuration/#http-listener).
-
-{/* libgen:allow-name LIBGEN_MCP_HTTP: named above as the spelling this server deliberately does not use */}
-
-**A flag you type still wins**, so a base image that sets its defaults in `environment:` and a `command:` that overrides one of them behaves the way it looks. Typing a flag counts even when you type its default value: `--stateless=true` beats `LIBGEN_MCP_STATELESS=0`, because the question is whether you asked, not whether the answer differs. A variable that does not parse fails startup naming both the variable and the flag, rather than silently leaving the default in place — and the startup log names the variables that configured the listener, which is the quickest answer to "why is it on that port".
-
-#### Terminating TLS in this process
-
-When the proxy is on **another** host, there is a network segment that has to exist, and this server can terminate TLS itself:
-
-```bash
-libgen-mcp --http 0.0.0.0:8443 --tls-cert /etc/ssl/mcp.crt --tls-key /etc/ssl/mcp.key
-```
-
-Both flags or neither — a certificate without a key fails startup, as does a file that cannot be read or a key that does not match its certificate, because the pair is loaded at startup rather than at the first handshake. **A renewal written to the same two paths needs no restart**: each handshake checks whether the files have moved and re-reads them when they have, so certbot, Vault's agent or a remounted Kubernetes secret is picked up on the next connection, and a half-written pair keeps the previous certificate rather than failing the handshake. The listener requires TLS 1.2 or better and negotiates HTTP/2 with clients that offer it. Every response then carries `Strict-Transport-Security: max-age=31536000; includeSubDomains`, which only the endpoint that actually terminated the connection is in a position to claim.
-
-If the certificate comes from a private CA, the proxy in front has to be pointed at that CA — in nginx, `proxy_ssl_verify on;` **together with** `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` and a `proxy_ssl_name` matching the certificate. nginx does not verify upstream certificates by default, so leaving `proxy_ssl_verify` off hides a bad chain, and turning it on without the CA file fails every request instead.
-
-See [Configuration](/libgen-mcp/configuration/) for the environment variables you can set on any of these, [Architecture](/libgen-mcp/architecture/) for how the transports work, and [HTTP server mode](/libgen-mcp/http-server-mode/) for the decisions a deployment has to make on top of these recipes: the trusted-proxy pair, the rate limit and the in-flight ceiling, the drain delay, the configuration digest, and what the server refuses to start with.
+- [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/): what every proxy has to do, and complete configurations for nginx, Caddy, Traefik, Apache httpd, HAProxy and Cloudflare Tunnel, over TCP, a unix socket or TLS.
+- [Run as a service](/libgen-mcp/deploy/service/): systemd units for a port and a socket, the environment file, the descriptor limit, stopping and upgrading, launchd and Windows.
+- [Containers and orchestration](/libgen-mcp/deploy/containers/): Compose files, on their own and behind nginx over a shared socket, and a Kubernetes Deployment with its probes and Ingress.
+- [HTTP server mode](/libgen-mcp/http-server-mode/): how the transport behaves, flag by flag, and what the server refuses to start with.
 
 ## Your first search
 

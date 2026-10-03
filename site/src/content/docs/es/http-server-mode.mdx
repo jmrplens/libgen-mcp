@@ -18,7 +18,7 @@ Ejecutar `libgen-mcp` sobre HTTP en streaming convierte un servidor stdio de un 
 Tres documentos comparten el tema y no se repiten entre sí:
 
 - **Esta página** explica cómo desplegarlo, y es la dueña de la prosa operativa.
-- [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming) tiene las recetas listas para copiar: nginx, docker-compose, el socket, TLS.
+- [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/), [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/) y [Contenedores y orquestación](/libgen-mcp/es/deploy/containers/) tienen las configuraciones completas y probadas: los proxies habituales, unidades de systemd, Compose y Kubernetes.
 - [Arquitectura → Transportes](/libgen-mcp/es/architecture/#transportes) explica cómo está construido el transporte y lleva la **[tabla completa de flags](/libgen-mcp/es/architecture/#modo-sin-estado)**. Cada flag que se nombra aquí está definido allí, junto con su variable `LIBGEN_MCP_*`.
 
 ## Primero, elige un listener
@@ -53,7 +53,7 @@ Hay tres formas de despliegue y dan tres respuestas distintas. Averigua cuál es
 
 ### Un listener TCP detrás de un proxy
 
-Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint alojado en `mcp.jmrp.io/libgen`.
+Es la forma habitual, es la que configura [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/), y es la que corre el endpoint alojado en `mcp.jmrp.io/libgen`.
 
 Sin `--trusted-proxies`, **todas las peticiones llegan desde el proxy**, así que todos los llamantes son el mismo llamante: el límite de tasa es un solo cubo para el mundo entero, el techo de llamadas en vuelo es un segundo techo de proceso disfrazado de techo por llamante, y `user.hash` es una constante. No hay nada sutil ni raro en ello: es el resultado por defecto de la forma que se recomienda.
 
@@ -279,7 +279,7 @@ Una cosa sorprende: un socket unix sigue siendo un valor no vacío de `--http`, 
 
 `--http-socket-mode` fija el modo en octal con o sin cero delante, y vale `0660` por defecto: lectura y escritura para el propietario y el grupo, nada para nadie más. Solo-grupo es el valor por defecto porque a un socket se llega a través del sistema de ficheros, así que la alternativa no es "solo localhost" sino "toda cuenta local". El proxy se une al grupo del socket en su lugar.
 
-En nginx eso significa los procesos _worker_, que es el segundo argumento de la directiva `user` (`user nginx 10001;`): nginx llama a `initgroups()` al soltar privilegios y por tanto no hereda un `group_add` del contenedor. La alternativa más burda es `--http-socket-mode 0666`, razonable solo cuando el directorio del propio socket ya está restringido, porque el permiso de travesía del directorio controla el acceso antes de que se consulte el modo del socket.
+En nginx eso significa los procesos _worker_: nginx llama a `initgroups()` al soltar privilegios, así que en un host recoge un grupo al que se añadió su usuario en `/etc/group`, y en un contenedor descarta un `group_add` del contenedor. El argumento de grupo de la directiva `user` de nginx es un nombre, así que `user nginx 10001;` falla al arrancar con `getgrnam("10001") failed` salvo que la imagen del proxy tenga un grupo con ese nombre; en un contenedor es más sencillo ejecutar el servidor con el grupo del proxy, como hace [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido). La alternativa más burda es `--http-socket-mode 0666`, razonable solo cuando el directorio del propio socket ya está restringido, porque el permiso de travesía del directorio controla el acceso antes de que se consulte el modo del socket.
 
 El modo se aplica dos veces y las dos mitades importan. El kernel crea el inodo como `0777 &^ umask`, así que el bind corre bajo un umask estrechado para que el socket nunca llegue a existir abierto al mundo, y un `chmod` justo después deja el modo exacto, porque un umask solo puede quitar bits. Un valor explícito se rechaza al arrancar cuando `--http` es una dirección TCP, y en una plataforma sin modos de fichero, en vez de aceptarse y perderse en silencio.
 
@@ -378,7 +378,9 @@ El primero merece una nota, porque el caso del contenedor se pasa por alto fáci
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | Cada flag y su variable `LIBGEN_MCP_*`, con sus valores por defecto | [Arquitectura → Modo sin estado](/libgen-mcp/es/architecture/#modo-sin-estado) |
 | Rutas, cabeceras de seguridad, CORS, cancelación, pistas de caché   | [Arquitectura → Transportes](/libgen-mcp/es/architecture/#transportes)         |
-| Recetas de nginx y docker-compose listas para copiar                | [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming)     |
+| Configuraciones completas de proxy                                  | [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/)             |
+| Unidades de systemd, launchd y servicios de Windows                 | [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/)                     |
+| Ficheros de Compose y manifiestos de Kubernetes                     | [Contenedores y orquestación](/libgen-mcp/es/deploy/containers/)               |
 | Todas las variables de entorno que lee este servidor                | [Configuración](/libgen-mcp/es/configuration/#listener-http)                   |
 | Qué le hace un despliegue remoto a `download` y a `read`            | [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto)   |
 | Qué puede decir una señal exportada sobre un llamante               | [Telemetría](/libgen-mcp/es/telemetry/)                                        |
