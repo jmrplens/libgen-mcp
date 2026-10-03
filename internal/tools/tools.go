@@ -1789,6 +1789,12 @@ func attachCitations(ctx context.Context, c *libgen.Client, cfg *config.Config, 
 		verifier = c
 	}
 	out.Citations = buildCitations(ctx, verifier, crossrefTitle, out.File, out.Edition)
+	// On the enrich path the Crossref work was fetched by enrichment, so its
+	// journal is taken from there, and only for a DOI that work confirmed.
+	if c := out.Citations; c != nil && c.fields != nil && c.fields.doi != "" && c.fields.container == "" &&
+		out.Enrichment != nil && out.Enrichment.Crossref != nil {
+		c.fields.container = oneLine(out.Enrichment.Crossref.ContainerTitle)
+	}
 }
 
 // enrichedCrossrefTitle returns the title Crossref supplied during enrichment, or

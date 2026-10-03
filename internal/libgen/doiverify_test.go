@@ -154,7 +154,7 @@ func newVerifyClient(t *testing.T, base string) *Client {
 // a blank DOI, a blank record title, a failing registry — yields DOIUnverified
 // without an error, because corroboration is advisory and must never break a call.
 func TestVerifyDOI(t *testing.T) {
-	const body = `{"message":{"title":["Why Most Published Research Findings Are False"]}}`
+	const body = `{"message":{"title":["Why Most Published Research Findings Are False"],"container-title":["PLoS Medicine"]}}`
 	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(body))
 	}))
@@ -179,6 +179,9 @@ func TestVerifyDOI(t *testing.T) {
 			got := newVerifyClient(t, tc.base).VerifyDOI(context.Background(), tc.doi, tc.title)
 			if got.Verdict != tc.want {
 				t.Errorf("verdict = %q, want %q", got.Verdict, tc.want)
+			}
+			if got.Verdict == DOIConfirmed && got.CrossrefContainer != "PLoS Medicine" {
+				t.Errorf("container = %q, want the journal Crossref named", got.CrossrefContainer)
 			}
 		})
 	}

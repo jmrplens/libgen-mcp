@@ -39,6 +39,10 @@ const (
 type DOICheck struct {
 	Verdict       DOIVerdict
 	CrossrefTitle string
+	// CrossrefContainer is the journal, proceedings or book Crossref registers
+	// the work in, when the lookup returned one. It is only worth repeating
+	// when Verdict is DOIConfirmed, since otherwise it describes another work.
+	CrossrefContainer string
 }
 
 // VerifyDOI asks Crossref which work owns doi and compares its title with
@@ -57,7 +61,9 @@ func (c *Client) VerifyDOI(ctx context.Context, doi, recordTitle string) DOIChec
 	if work == nil {
 		return DOICheck{Verdict: DOIUnverified}
 	}
-	return CheckDOITitle(recordTitle, work.Title)
+	check := CheckDOITitle(recordTitle, work.Title)
+	check.CrossrefContainer = strings.TrimSpace(work.ContainerTitle)
+	return check
 }
 
 // CheckDOITitle is the pure half of VerifyDOI: it judges a record title against

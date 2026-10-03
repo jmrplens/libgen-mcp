@@ -50,7 +50,12 @@ type FormattedCitation struct {
 type citeFields struct {
 	author, title, year, publisher, address, edition, series, pages string
 	volume, number, startPg, endPg, doi, md5                        string
-	isArticle                                                       bool
+	// container is the journal or book an article appeared in. The catalog
+	// does not state it, so it comes from a record that does (one built from
+	// the DOI's registry) or from Crossref once the DOI is confirmed. Only the
+	// cite_as styles write it: the BibTeX and RIS entries are unchanged.
+	container string
+	isArticle bool
 }
 
 // doiVerifier corroborates that a DOI really names the work a record claims it
@@ -103,6 +108,10 @@ func buildCitations(ctx context.Context, v doiVerifier, knownCrossrefTitle strin
 		volume: get("issue_volume"), number: get("issue_number"),
 		startPg: get("issue_first_page"), endPg: get("issue_last_page"),
 		doi: doiForCitation(claimedDOI, check), md5: oneLine(stringField(file, "md5")),
+		container: get("container_title"),
+	}
+	if f.container == "" && check.Verdict == libgen.DOIConfirmed {
+		f.container = oneLine(check.CrossrefContainer)
 	}
 	// The entry type is decided by the catalog's own classification, never by the
 	// bare presence of a DOI: an uncorroborated DOI would otherwise re-typeset a
